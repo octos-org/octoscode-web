@@ -201,6 +201,7 @@ export function useOctosSession(): OctosSessionRuntime {
   const deletingSessionRef = useRef<string | null>(null);
   const launchOpeningRef = useRef(false);
   const sessionEstablishedRef = useRef(false);
+  const launchResolutionRequiredRef = useRef(false);
   const manualDisconnectRef = useRef(false);
   const connectionConfigRef = useRef<SessionConnectionInput | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -261,6 +262,13 @@ export function useOctosSession(): OctosSessionRuntime {
   };
 
   const connect = (input: SessionConnectionInput) => {
+    beginConnection(input, true);
+  };
+
+  const beginConnection = (
+    input: SessionConnectionInput,
+    resolveWorkspaceLaunch: boolean,
+  ) => {
     manualDisconnectRef.current = true;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -296,9 +304,11 @@ export function useOctosSession(): OctosSessionRuntime {
     deletingSessionRef.current = null;
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
+    launchResolutionRequiredRef.current =
+      resolveWorkspaceLaunch && Boolean(config.cwd);
     setWorkspace(EMPTY_WORKSPACE_PRODUCT);
     setLaunch(
-      config.cwd
+      launchResolutionRequiredRef.current
         ? { phase: "resolving", cwd: config.cwd, decision: null }
         : EMPTY_LAUNCH_RUNTIME,
     );
@@ -340,9 +350,10 @@ export function useOctosSession(): OctosSessionRuntime {
       await client.connect();
       if (clientRef.current !== client) return;
       const openConfig =
-        reconnecting && sessionEstablishedRef.current
-          ? config
-          : await resolveInitialLaunch(client, config);
+        launchResolutionRequiredRef.current &&
+        !(reconnecting && sessionEstablishedRef.current)
+          ? await resolveInitialLaunch(client, config)
+          : config;
       if (!openConfig || clientRef.current !== client) return;
       await openConnectedSession(client, openConfig, resumeCursor);
     } catch (reason) {
@@ -395,6 +406,7 @@ export function useOctosSession(): OctosSessionRuntime {
   ) {
     connectionConfigRef.current = config;
     sessionIdRef.current = config.sessionId;
+    launchResolutionRequiredRef.current = false;
     if (!resumeCursor) {
       durableProjectionRef.current.reset(config.sessionId);
       syncRecovery();
@@ -707,6 +719,7 @@ export function useOctosSession(): OctosSessionRuntime {
     deletingSessionRef.current = null;
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
+    launchResolutionRequiredRef.current = false;
     setWorkspace(EMPTY_WORKSPACE_PRODUCT);
     setLaunch(EMPTY_LAUNCH_RUNTIME);
   };
@@ -1471,7 +1484,7 @@ export function useOctosSession(): OctosSessionRuntime {
       }));
       return;
     }
-    connect({ ...config, sessionId: target });
+    beginConnection({ ...config, sessionId: target }, false);
   };
 
   const chooseLaunchProfile = async (profileId: string) => {

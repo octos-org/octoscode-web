@@ -2,7 +2,13 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
-const http = createServer((_request, response) => {
+const http = createServer((request, response) => {
+  if (request.url === "/health") {
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end('{"ok":true}');
+    return;
+  }
   response.writeHead(404).end("Octoscode AppUI fixture only");
 });
 const sockets = new WebSocketServer({

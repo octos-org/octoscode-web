@@ -13,12 +13,16 @@
     "build": "pnpm --filter @octos-org/octoscode-web build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "oxlint --deny-warnings apps packages",
+    "lint": "oxlint --deny-warnings apps packages e2e playwright.config.ts",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.62.1",
     "oxlint": "1.76.0",
     "prettier": "^3.9.0",
     "typescript": "~5.9.3",

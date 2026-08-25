@@ -111,3 +111,13 @@ Octos runtime plugins and skills stay server-side. A future browser extension
 API may contribute only presentation elements such as tool renderers, panels,
 commands, and artifact viewers. It must not load arbitrary remote code by
 default or create a second agent/service container in the browser.
+
+## Product verification
+
+Unit tests validate parsers, reducers, queues, and static feature rendering.
+Playwright then starts the mock AppUI server and the real Vite application to
+exercise the user-visible launch decisions, an actual turn, explicit session
+switching with draft restoration, and the responsive supervision drawer. An
+axe pass gates WCAG 2/2.1 A/AA rules on the blocking no-profile launch surface.
+CI runs browser checks separately from the fast compile/test/build job and
+uploads traces, error context, and screenshots only on failure.

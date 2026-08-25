@@ -86,7 +86,14 @@ Copied or adapted third-party portions are listed in
 
 ```sh
 pnpm check
+pnpm exec playwright install chromium
+pnpm test:e2e
 ```
+
+The Playwright product suite starts the checked mock AppUI server and Web app,
+then exercises launch resolution, durable session switching, a live turn,
+responsive supervision, and WCAG 2/2.1 A/AA axe checks. CI runs it in a separate
+Chromium job and retains traces and screenshots when it fails.
 
 ## License
 
