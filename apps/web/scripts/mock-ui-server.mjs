@@ -30,6 +30,8 @@ const capabilities = {
   version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
   capabilities_schema_version: 1,
   supported_methods: [
+    "config/capabilities/list",
+    "launch/resolve",
     "session/open",
     "session/hydrate",
     "turn/start",
@@ -73,6 +75,27 @@ sockets.on("connection", (socket) => {
   socket.on("message", (bytes) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
+    if (request.method === "config/capabilities/list") {
+      reply(socket, request.id, { capabilities });
+      return;
+    }
+    if (request.method === "launch/resolve") {
+      const cwd = request.params?.cwd ?? "";
+      const profile = request.params?.profile_id || "_main";
+      const result = cwd.endsWith("/no-profile")
+        ? { decision: "no_profile" }
+        : cwd.endsWith("/cross")
+          ? {
+              decision: "cross_profile",
+              resolved_profile: profile,
+              existing_profiles: ["review"],
+            }
+          : cwd.endsWith("/new")
+            ? { decision: "activate", resolved_profile: profile }
+            : { decision: "resume", resolved_profile: profile };
+      reply(socket, request.id, result);
+      return;
+    }
     if (request.method === "session/open") {
       if (!mockSessions.some((session) => session.id === sessionId)) {
         mockSessions = [

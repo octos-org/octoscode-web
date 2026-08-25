@@ -82,6 +82,16 @@ offers it for the active session. Live context and cost come from typed
 `token_cost_update` progress metadata and are merged with the latest
 `session/status/read` usage snapshot.
 
+For a path-based first launch, the Web client requests
+`config/capabilities/list` before opening a session. It calls `launch/resolve`
+only when the method and `session.workspace_cwd.v1` are both advertised. A
+`resume` decision opens the exact Octoscode coding identity
+`<profile>:local:tui#coding`; `activate` and `cross_profile` require the same
+user choices as the TUI launch menu; `no_profile` points to `octoscode onboard`.
+An older server without the capability falls back to the explicitly entered
+session id. A reconnect before the user chooses repeats resolution instead of
+silently opening that fallback session.
+
 ## Browser constraints
 
 - A browser cannot spawn `octos serve`; standalone use requires an existing

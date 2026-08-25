@@ -31,7 +31,7 @@
 ## Milestone 3 — workspace product
 
 - [x] Session list/create/switch/delete (Core has no archive RPC)
-- [ ] Workspace/repository launcher using server-owned paths
+- [x] Workspace/repository launcher using server-owned `launch/resolve`
 - [x] Server-owned session file metadata and paged task artifacts
 - [x] Context/cost/model status
 - [x] Responsive supervision drawer and keyboard dismissal

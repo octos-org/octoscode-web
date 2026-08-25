@@ -6,6 +6,9 @@ import type {
   ConnectionStatus,
   DiffPreviewGetParams,
   DiffPreviewGetResult,
+  ConfigCapabilitiesListResult,
+  LaunchResolveParams,
+  LaunchResolveResult,
   PermissionProfileListParams,
   PermissionProfileListResult,
   PermissionProfileSetParams,
@@ -51,6 +54,8 @@ import {
   parseTaskOutputReadResult,
 } from "./supervision.ts";
 import {
+  parseConfigCapabilitiesListResult,
+  parseLaunchResolveResult,
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
@@ -372,6 +377,24 @@ export class OctosUiClient {
       "session/list",
       params,
       parseSessionListResult,
+    );
+  }
+
+  async listConfigCapabilities(): Promise<ConfigCapabilitiesListResult> {
+    return this.validatedRequest(
+      "config/capabilities/list",
+      {},
+      parseConfigCapabilitiesListResult,
+    );
+  }
+
+  async resolveLaunch(
+    params: LaunchResolveParams,
+  ): Promise<LaunchResolveResult> {
+    return this.validatedRequest(
+      "launch/resolve",
+      params,
+      parseLaunchResolveResult,
     );
   }
 

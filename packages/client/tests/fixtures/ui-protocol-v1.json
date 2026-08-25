@@ -152,6 +152,48 @@
       ]
     }
   },
+  "config_capabilities_list": {
+    "result": {
+      "capabilities": {
+        "version": {
+          "protocol": "octos.ui.v1",
+          "schema_version": 1,
+          "jsonrpc": "2.0"
+        },
+        "capabilities_schema_version": 1,
+        "supported_methods": [
+          "config/capabilities/list",
+          "launch/resolve",
+          "session/open"
+        ],
+        "supported_notifications": ["projection/envelope"],
+        "supported_features": ["session.workspace_cwd.v1"]
+      }
+    }
+  },
+  "launch_resolve": {
+    "request": {
+      "cwd": "/srv/work/octoscode-web"
+    },
+    "results": {
+      "resume": {
+        "decision": "resume",
+        "resolved_profile": "deepseek"
+      },
+      "activate": {
+        "decision": "activate",
+        "resolved_profile": "deepseek"
+      },
+      "cross_profile": {
+        "decision": "cross_profile",
+        "resolved_profile": "deepseek",
+        "existing_profiles": ["glm"]
+      },
+      "no_profile": {
+        "decision": "no_profile"
+      }
+    }
+  },
   "session_list": {
     "request": { "cwd": "/srv/work/octoscode-web" },
     "result": {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseConfigCapabilitiesListResult,
+  parseLaunchResolveResult,
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
@@ -10,6 +12,48 @@ import type { RpcNotification } from "../src/index.ts";
 import fixture from "./fixtures/ui-protocol-v1.json";
 
 describe("workspace product contract", () => {
+  it("decodes pre-session capabilities and every launch decision", () => {
+    expect(
+      parseConfigCapabilitiesListResult(
+        fixture.config_capabilities_list.result,
+      ),
+    ).toEqual(fixture.config_capabilities_list.result);
+    expect(
+      parseLaunchResolveResult(fixture.launch_resolve.results.resume),
+    ).toEqual({
+      ...fixture.launch_resolve.results.resume,
+      existing_profiles: [],
+    });
+    expect(
+      parseLaunchResolveResult(fixture.launch_resolve.results.activate),
+    ).toEqual({
+      ...fixture.launch_resolve.results.activate,
+      existing_profiles: [],
+    });
+    expect(
+      parseLaunchResolveResult(fixture.launch_resolve.results.cross_profile),
+    ).toEqual(fixture.launch_resolve.results.cross_profile);
+    expect(
+      parseLaunchResolveResult(fixture.launch_resolve.results.no_profile),
+    ).toEqual({ decision: "no_profile", existing_profiles: [] });
+  });
+
+  it("rejects contradictory launch decisions", () => {
+    expect(parseLaunchResolveResult({ decision: "resume" })).toBeNull();
+    expect(
+      parseLaunchResolveResult({
+        decision: "cross_profile",
+        resolved_profile: "deepseek",
+      }),
+    ).toBeNull();
+    expect(
+      parseLaunchResolveResult({
+        decision: "no_profile",
+        resolved_profile: "deepseek",
+      }),
+    ).toBeNull();
+  });
+
   it("decodes session rows and file handles without exposing host paths", () => {
     expect(parseSessionListResult(fixture.session_list.result)).toMatchObject({
       sessions: [{ message_count: 12 }],

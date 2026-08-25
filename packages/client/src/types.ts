@@ -403,6 +403,24 @@ export interface SessionListParams {
   cwd?: string;
 }
 
+export interface ConfigCapabilitiesListResult {
+  capabilities: UiProtocolCapabilities;
+}
+
+export interface LaunchResolveParams {
+  cwd: string;
+  profile_id?: string;
+}
+
+export type LaunchDecisionKind =
+  "resume" | "activate" | "cross_profile" | "no_profile";
+
+export interface LaunchResolveResult {
+  decision: LaunchDecisionKind;
+  resolved_profile?: string;
+  existing_profiles: string[];
+}
+
 export interface SessionListEntry {
   id: string;
   message_count: number;

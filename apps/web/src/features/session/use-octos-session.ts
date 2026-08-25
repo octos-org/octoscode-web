@@ -12,6 +12,7 @@ import {
   isRecord,
   notificationDiffPreviewId,
   OctosUiClient,
+  OctosUiProtocolError,
   parseApprovalRequested,
   parsePlanUpdated,
   parseTaskOutputDelta,
@@ -70,6 +71,11 @@ import {
   sortSessions,
   type WorkspaceProductState,
 } from "../workspace/model.ts";
+import {
+  codingSessionIdForProfile,
+  EMPTY_LAUNCH_RUNTIME,
+  type LaunchRuntimeState,
+} from "../workspace/launch-model.ts";
 
 const REQUIRED_DURABLE_FEATURES = [
   "state.session_hydrate.v1",
@@ -112,6 +118,7 @@ export interface OctosSessionRuntime {
   diffReview: DiffReviewRuntimeState;
   supervision: SupervisionRuntimeState;
   workspace: WorkspaceProductState;
+  launch: LaunchRuntimeState;
   connected: boolean;
   connect: (input: SessionConnectionInput) => void;
   disconnect: () => void;
@@ -136,6 +143,7 @@ export interface OctosSessionRuntime {
   refreshWorkspace: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => Promise<void>;
+  chooseLaunchProfile: (profileId: string) => Promise<void>;
 }
 
 export interface PermissionRuntimeState {
@@ -191,6 +199,8 @@ export function useOctosSession(): OctosSessionRuntime {
   const supervisionRequestRef = useRef(0);
   const workspaceRequestRef = useRef(0);
   const deletingSessionRef = useRef<string | null>(null);
+  const launchOpeningRef = useRef(false);
+  const sessionEstablishedRef = useRef(false);
   const manualDisconnectRef = useRef(false);
   const connectionConfigRef = useRef<SessionConnectionInput | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -220,6 +230,8 @@ export function useOctosSession(): OctosSessionRuntime {
   const [workspace, setWorkspace] = useState<WorkspaceProductState>(
     EMPTY_WORKSPACE_PRODUCT,
   );
+  const [launch, setLaunch] =
+    useState<LaunchRuntimeState>(EMPTY_LAUNCH_RUNTIME);
 
   useEffect(
     () => () => {
@@ -282,11 +294,17 @@ export function useOctosSession(): OctosSessionRuntime {
     setSupervision(EMPTY_SUPERVISION);
     workspaceRequestRef.current += 1;
     deletingSessionRef.current = null;
+    launchOpeningRef.current = false;
+    sessionEstablishedRef.current = false;
     setWorkspace(EMPTY_WORKSPACE_PRODUCT);
+    setLaunch(
+      config.cwd
+        ? { phase: "resolving", cwd: config.cwd, decision: null }
+        : EMPTY_LAUNCH_RUNTIME,
+    );
     capabilitiesRef.current = undefined;
     sessionIdRef.current = config.sessionId;
     durableProjectionRef.current.reset(config.sessionId);
-    durableProjectionRef.current.beginHydrate();
     syncRecovery();
     recoveringRef.current = true;
     recoveryBufferRef.current = [];
@@ -321,42 +339,114 @@ export function useOctosSession(): OctosSessionRuntime {
     try {
       await client.connect();
       if (clientRef.current !== client) return;
-      const result = await client.openSession({
-        session_id: config.sessionId,
-        ...(config.profileId ? { profile_id: config.profileId } : {}),
-        ...(config.cwd ? { cwd: config.cwd } : {}),
-        ...(resumeCursor ? { after: resumeCursor } : {}),
-      });
-      if (clientRef.current !== client) return;
-      if (result.opened.session_id !== sessionIdRef.current) {
-        durableProjectionRef.current.reset(result.opened.session_id);
-      }
-      sessionIdRef.current = result.opened.session_id;
-      capabilitiesRef.current = result.opened.capabilities;
-      setOpened(result.opened);
-      await hydrateSessionState(client, result.opened.capabilities);
-      configureCodingSurfaces(result.opened.capabilities);
-      if (
-        supportsMethod(result.opened.capabilities, "permission/profile/list")
-      ) {
-        void loadPermissionProfiles(client);
-      }
-      void refreshSupervisionWith(client);
-      void refreshWorkspaceWith(client);
-      reconnectAttemptRef.current = 0;
-      setConnectionError(null);
+      const openConfig =
+        reconnecting && sessionEstablishedRef.current
+          ? config
+          : await resolveInitialLaunch(client, config);
+      if (!openConfig || clientRef.current !== client) return;
+      await openConnectedSession(client, openConfig, resumeCursor);
     } catch (reason) {
-      if (clientRef.current !== client) return;
-      const message = reason instanceof Error ? reason.message : String(reason);
-      const fatalContractError = isFatalSessionContractError(message);
-      if (fatalContractError) manualDisconnectRef.current = true;
-      durableProjectionRef.current.fail(message);
-      syncRecovery();
-      recoveringRef.current = false;
-      setConnectionError(message);
-      client.disconnect();
-      if (reconnecting && !fatalContractError) scheduleReconnect();
+      failSessionConnection(client, reason, reconnecting);
     }
+  }
+
+  async function resolveInitialLaunch(
+    client: OctosUiClient,
+    config: SessionConnectionInput,
+  ): Promise<SessionConnectionInput | null> {
+    if (!config.cwd) return config;
+    let capabilities;
+    try {
+      capabilities = (await client.listConfigCapabilities()).capabilities;
+    } catch (reason) {
+      if (reason instanceof OctosUiProtocolError && reason.code === -32601) {
+        setLaunch(EMPTY_LAUNCH_RUNTIME);
+        return config;
+      }
+      throw reason;
+    }
+    if (
+      !supportsFeature(capabilities, "session.workspace_cwd.v1") ||
+      !supportsMethod(capabilities, "launch/resolve")
+    ) {
+      setLaunch(EMPTY_LAUNCH_RUNTIME);
+      return config;
+    }
+    const decision = await client.resolveLaunch({
+      cwd: config.cwd,
+      ...(config.profileId ? { profile_id: config.profileId } : {}),
+    });
+    if (decision.decision === "resume" && decision.resolved_profile) {
+      setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
+      return launchProfileConfig(config, decision.resolved_profile);
+    }
+    setLaunch({
+      phase: "awaiting_choice",
+      cwd: config.cwd,
+      decision,
+    });
+    return null;
+  }
+
+  async function openConnectedSession(
+    client: OctosUiClient,
+    config: SessionConnectionInput,
+    resumeCursor?: SessionRecoverySnapshot["cursor"],
+  ) {
+    connectionConfigRef.current = config;
+    sessionIdRef.current = config.sessionId;
+    if (!resumeCursor) {
+      durableProjectionRef.current.reset(config.sessionId);
+      syncRecovery();
+    }
+    recoveringRef.current = true;
+    const result = await client.openSession({
+      session_id: config.sessionId,
+      ...(config.profileId ? { profile_id: config.profileId } : {}),
+      ...(config.cwd ? { cwd: config.cwd } : {}),
+      ...(resumeCursor ? { after: resumeCursor } : {}),
+    });
+    if (clientRef.current !== client) return;
+    if (result.opened.session_id !== sessionIdRef.current) {
+      durableProjectionRef.current.reset(result.opened.session_id);
+    }
+    sessionIdRef.current = result.opened.session_id;
+    sessionEstablishedRef.current = true;
+    connectionConfigRef.current = {
+      ...config,
+      sessionId: result.opened.session_id,
+      profileId: result.opened.active_profile_id ?? config.profileId,
+    };
+    capabilitiesRef.current = result.opened.capabilities;
+    setOpened(result.opened);
+    await hydrateSessionState(client, result.opened.capabilities);
+    configureCodingSurfaces(result.opened.capabilities);
+    if (supportsMethod(result.opened.capabilities, "permission/profile/list")) {
+      void loadPermissionProfiles(client);
+    }
+    void refreshSupervisionWith(client);
+    void refreshWorkspaceWith(client);
+    reconnectAttemptRef.current = 0;
+    setConnectionError(null);
+    setLaunch(EMPTY_LAUNCH_RUNTIME);
+  }
+
+  function failSessionConnection(
+    client: OctosUiClient,
+    reason: unknown,
+    reconnecting: boolean,
+  ) {
+    if (clientRef.current !== client) return;
+    const message = reason instanceof Error ? reason.message : String(reason);
+    const fatalContractError = isFatalSessionContractError(message);
+    if (fatalContractError) manualDisconnectRef.current = true;
+    durableProjectionRef.current.fail(message);
+    syncRecovery();
+    recoveringRef.current = false;
+    setConnectionError(message);
+    setLaunch(EMPTY_LAUNCH_RUNTIME);
+    client.disconnect();
+    if (reconnecting && !fatalContractError) scheduleReconnect();
   }
 
   function configureCodingSurfaces(
@@ -615,7 +705,10 @@ export function useOctosSession(): OctosSessionRuntime {
     setSupervision(EMPTY_SUPERVISION);
     workspaceRequestRef.current += 1;
     deletingSessionRef.current = null;
+    launchOpeningRef.current = false;
+    sessionEstablishedRef.current = false;
     setWorkspace(EMPTY_WORKSPACE_PRODUCT);
+    setLaunch(EMPTY_LAUNCH_RUNTIME);
   };
 
   const enqueuePrompt = (text: string) => {
@@ -1381,6 +1474,37 @@ export function useOctosSession(): OctosSessionRuntime {
     connect({ ...config, sessionId: target });
   };
 
+  const chooseLaunchProfile = async (profileId: string) => {
+    const target = profileId.trim();
+    const decision = launch.decision;
+    const client = clientRef.current;
+    const config = connectionConfigRef.current;
+    const allowed = decision
+      ? [decision.resolved_profile, ...decision.existing_profiles].filter(
+          (candidate): candidate is string => Boolean(candidate),
+        )
+      : [];
+    if (
+      !target ||
+      !client ||
+      !config ||
+      !decision ||
+      !allowed.includes(target) ||
+      launchOpeningRef.current
+    ) {
+      return;
+    }
+    launchOpeningRef.current = true;
+    setLaunch((current) => ({ ...current, phase: "opening" }));
+    try {
+      await openConnectedSession(client, launchProfileConfig(config, target));
+    } catch (reason) {
+      failSessionConnection(client, reason, false);
+    } finally {
+      launchOpeningRef.current = false;
+    }
+  };
+
   const deleteSession = async (sessionId: string) => {
     const client = clientRef.current;
     if (
@@ -1633,6 +1757,7 @@ export function useOctosSession(): OctosSessionRuntime {
     diffReview,
     supervision,
     workspace,
+    launch,
     connected:
       status === "connected" && opened !== null && recovery.phase === "healthy",
     connect,
@@ -1655,6 +1780,18 @@ export function useOctosSession(): OctosSessionRuntime {
     refreshWorkspace,
     switchSession,
     deleteSession,
+    chooseLaunchProfile,
+  };
+}
+
+function launchProfileConfig(
+  config: SessionConnectionInput,
+  profileId: string,
+): SessionConnectionInput {
+  return {
+    ...config,
+    profileId,
+    sessionId: codingSessionIdForProfile(profileId),
   };
 }
 

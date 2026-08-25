@@ -24,7 +24,10 @@ permanently deletes server-owned sessions while preserving a draft per session;
 it also exposes safe session-file metadata. Runtime usage combines the typed
 status snapshot with live model cost and context-window updates. On narrower
 screens, the supervision surface remains available as a keyboard-dismissible
-drawer.
+drawer. When a server-side workspace path is supplied, startup follows
+Octoscode's `launch/resolve` contract: resume is automatic, activation is
+confirmed, cross-profile folders offer the same explicit choice, and a server
+with no profile points to canonical onboarding.
 
 ## Run locally
 
@@ -74,6 +77,8 @@ Plans, tasks, output, and artifacts follow the
 [supervised work decision](docs/adr/0008-supervised-work-surfaces.md).
 Session navigation, safe file metadata, and usage follow the
 [workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
+Pre-session repository launch follows the
+[workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 

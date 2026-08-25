@@ -1,5 +1,7 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
 import type {
+  ConfigCapabilitiesListResult,
+  LaunchResolveResult,
   SessionDeleteResult,
   SessionFileInfo,
   SessionFilesListResult,
@@ -7,6 +9,52 @@ import type {
   SessionListResult,
   TokenCostUpdate,
 } from "./types.ts";
+
+const LAUNCH_DECISIONS = new Set([
+  "resume",
+  "activate",
+  "cross_profile",
+  "no_profile",
+]);
+
+export function parseConfigCapabilitiesListResult(
+  value: unknown,
+): ConfigCapabilitiesListResult | null {
+  if (!isRecord(value)) return null;
+  const capabilities = parseCapabilities(value.capabilities);
+  return capabilities ? { capabilities } : null;
+}
+
+export function parseLaunchResolveResult(
+  value: unknown,
+): LaunchResolveResult | null {
+  if (
+    !isRecord(value) ||
+    typeof value.decision !== "string" ||
+    !LAUNCH_DECISIONS.has(value.decision) ||
+    (value.resolved_profile !== undefined &&
+      !isNonEmptyString(value.resolved_profile)) ||
+    (value.existing_profiles !== undefined &&
+      (!Array.isArray(value.existing_profiles) ||
+        !value.existing_profiles.every(isNonEmptyString)))
+  ) {
+    return null;
+  }
+  const existingProfiles = value.existing_profiles ?? [];
+  if (
+    (value.decision === "no_profile" && value.resolved_profile !== undefined) ||
+    (value.decision !== "no_profile" &&
+      !isNonEmptyString(value.resolved_profile)) ||
+    (value.decision === "cross_profile" && existingProfiles.length === 0)
+  ) {
+    return null;
+  }
+  return {
+    decision: value.decision as LaunchResolveResult["decision"],
+    ...optionalString(value.resolved_profile, "resolved_profile"),
+    existing_profiles: existingProfiles,
+  };
+}
 
 export function parseSessionListResult(
   value: unknown,
@@ -109,6 +157,45 @@ function parseSessionEntry(value: unknown): SessionListEntry | null {
   };
 }
 
+function parseCapabilities(value: unknown) {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.version) ||
+    typeof value.version.protocol !== "string" ||
+    !isNonNegativeInteger(value.version.schema_version) ||
+    typeof value.version.jsonrpc !== "string" ||
+    !isNonNegativeInteger(value.capabilities_schema_version) ||
+    !isStringArray(value.supported_methods) ||
+    !isStringArray(value.supported_notifications) ||
+    (value.supported_features !== undefined &&
+      !isStringArray(value.supported_features)) ||
+    (value.unsupported !== undefined &&
+      (!Array.isArray(value.unsupported) ||
+        !value.unsupported.every(
+          (entry) =>
+            isRecord(entry) &&
+            typeof entry.method === "string" &&
+            typeof entry.reason === "string",
+        )))
+  ) {
+    return null;
+  }
+  return {
+    version: {
+      protocol: value.version.protocol,
+      schema_version: value.version.schema_version,
+      jsonrpc: value.version.jsonrpc,
+    },
+    capabilities_schema_version: value.capabilities_schema_version,
+    supported_methods: value.supported_methods,
+    supported_notifications: value.supported_notifications,
+    ...(value.supported_features
+      ? { supported_features: value.supported_features }
+      : {}),
+    ...(value.unsupported ? { unsupported: value.unsupported } : {}),
+  };
+}
+
 function parseSessionFile(value: unknown): SessionFileInfo | null {
   if (
     !isRecord(value) ||
@@ -154,4 +241,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
 }

@@ -19,6 +19,7 @@ import { DiffReviewDialog } from "../features/review/DiffReviewDialog.tsx";
 import { WorkInspector } from "../features/supervision/WorkInspector.tsx";
 import { TaskDetailDialog } from "../features/supervision/TaskDetailDialog.tsx";
 import { SessionNavigator } from "../features/workspace/SessionNavigator.tsx";
+import { LaunchDecisionPanel } from "../features/workspace/LaunchDecisionPanel.tsx";
 
 const initialConnection: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -264,10 +265,15 @@ export function App() {
           <header className="conversation-header">
             <div className="workspace-title">
               <span>
-                {session.opened?.workspace_root ?? "No workspace connected"}
+                {session.opened?.workspace_root ??
+                  session.launch.cwd ??
+                  "No workspace connected"}
               </span>
               <small>
-                {session.opened?.session_id ?? "Octos AppUI client"}
+                {session.opened?.session_id ??
+                  (session.launch.phase === "resolving"
+                    ? "Resolving workspace launch"
+                    : "Octos AppUI client")}
               </small>
             </div>
             <div className="header-actions">
@@ -312,12 +318,24 @@ export function App() {
             </div>
           </header>
           <div className="conversation-scroll">
-            <Timeline
-              entries={session.timeline}
-              connected={session.connected}
-            />
+            {session.launch.decision ? (
+              <LaunchDecisionPanel
+                state={session.launch}
+                onChooseProfile={(profileId) =>
+                  void session.chooseLaunchProfile(profileId)
+                }
+                onCancel={session.disconnect}
+              />
+            ) : (
+              <Timeline
+                entries={session.timeline}
+                connected={session.connected}
+              />
+            )}
           </div>
-          <div className="composer-wrap">
+          <div
+            className={`composer-wrap${session.launch.decision ? " is-hidden" : ""}`}
+          >
             {session.opened && session.recovery.phase !== "healthy" ? (
               <div
                 className={`recovery-banner recovery-${session.recovery.phase}`}

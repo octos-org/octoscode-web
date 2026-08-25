@@ -181,6 +181,8 @@ describe("OctosUiClient", () => {
       client.listSessions(fixture.session_list.request),
       client.listSessionFiles(fixture.session_files_list.request),
       client.deleteSession(fixture.session_delete.request),
+      client.listConfigCapabilities(),
+      client.resolveLaunch(fixture.launch_resolve.request),
     ];
     const frames = socket.send.mock.calls.map(([frame]) =>
       JSON.parse(String(frame)),
@@ -210,6 +212,14 @@ describe("OctosUiClient", () => {
         method: "session/delete",
         params: fixture.session_delete.request,
       },
+      {
+        method: "config/capabilities/list",
+        params: {},
+      },
+      {
+        method: "launch/resolve",
+        params: fixture.launch_resolve.request,
+      },
     ]);
 
     const results = [
@@ -219,6 +229,8 @@ describe("OctosUiClient", () => {
       fixture.session_list.result,
       fixture.session_files_list.result,
       fixture.session_delete.result,
+      fixture.config_capabilities_list.result,
+      fixture.launch_resolve.results.resume,
     ];
     for (const [index, frame] of frames.entries()) {
       socket.onmessage?.({
@@ -229,7 +241,7 @@ describe("OctosUiClient", () => {
         }),
       } as MessageEvent);
     }
-    await expect(Promise.all(pending)).resolves.toHaveLength(6);
+    await expect(Promise.all(pending)).resolves.toHaveLength(8);
   });
 });
 

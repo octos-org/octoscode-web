@@ -32,6 +32,8 @@ export {
   parseTaskUpdated,
 } from "./supervision.ts";
 export {
+  parseConfigCapabilitiesListResult,
+  parseLaunchResolveResult,
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
@@ -53,6 +55,7 @@ export type {
   ApprovalRespondResult,
   ApprovalScope,
   ConnectionStatus,
+  ConfigCapabilitiesListResult,
   DiffPreview,
   DiffPreviewFile,
   DiffPreviewGetParams,
@@ -105,6 +108,9 @@ export type {
   ReplayLossyEvent,
   HydratedMessage,
   HydratedTurn,
+  LaunchDecisionKind,
+  LaunchResolveParams,
+  LaunchResolveResult,
   SessionHydrateParams,
   SessionHydrateResult,
   SessionOpened,
