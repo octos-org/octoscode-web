@@ -9,9 +9,7 @@ import {
   approvalResolutionId,
   coreProtocolCompatibilityError,
   DEFAULT_UI_FEATURES,
-  isPreviewId,
   isRecord,
-  notificationDiffPreviewId,
   OctosUiClient,
   OctosUiProtocolError,
   parseApprovalRequested,
@@ -23,8 +21,6 @@ import {
   type ApprovalRequested,
   type ApprovalScope,
   type ConnectionStatus,
-  type DiffPreviewGetResult,
-  type PermissionProfileListResult,
   type PermissionProfileUpdate,
   type RpcNotification,
   type SessionHydrateResult,
@@ -35,6 +31,11 @@ import {
   type TaskArtifactRecord,
 } from "@octos-org/octoscode-client";
 import type { ObservedEvent } from "../inspector/EventInspector.tsx";
+import {
+  useCodingSafety,
+  type DiffReviewRuntimeState,
+  type PermissionRuntimeState,
+} from "../review/use-coding-safety.ts";
 import {
   PromptTurnQueue,
   type PromptTurn,
@@ -61,6 +62,11 @@ import {
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
 } from "../workspace/launch-model.ts";
+
+export type {
+  DiffReviewRuntimeState,
+  PermissionRuntimeState,
+} from "../review/use-coding-safety.ts";
 
 const REQUIRED_DURABLE_FEATURES = [
   "state.session_hydrate.v1",
@@ -131,42 +137,6 @@ export interface OctosSessionRuntime {
   chooseLaunchProfile: (profileId: string) => Promise<void>;
 }
 
-export interface PermissionRuntimeState {
-  available: boolean;
-  editable: boolean;
-  loading: boolean;
-  busy: boolean;
-  result: PermissionProfileListResult | null;
-  error: string | null;
-}
-
-export interface DiffReviewRuntimeState {
-  available: boolean;
-  latestPreviewId: string | null;
-  active: boolean;
-  loading: boolean;
-  result: DiffPreviewGetResult | null;
-  error: string | null;
-}
-
-const EMPTY_PERMISSION: PermissionRuntimeState = {
-  available: false,
-  editable: false,
-  loading: false,
-  busy: false,
-  result: null,
-  error: null,
-};
-
-const EMPTY_DIFF_REVIEW: DiffReviewRuntimeState = {
-  available: false,
-  latestPreviewId: null,
-  active: false,
-  loading: false,
-  result: null,
-  error: null,
-};
-
 export function useOctosSession(): OctosSessionRuntime {
   const clientRef = useRef<OctosUiClient | null>(null);
   const eventId = useRef(0);
@@ -179,8 +149,6 @@ export function useOctosSession(): OctosSessionRuntime {
   const recoveryBufferRef = useRef<RpcNotification[]>([]);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
-  const diffRequestRef = useRef(0);
-  const permissionBusyRef = useRef(false);
   const launchOpeningRef = useRef(false);
   const sessionEstablishedRef = useRef(false);
   const launchResolutionRequiredRef = useRef(false);
@@ -204,16 +172,22 @@ export function useOctosSession(): OctosSessionRuntime {
   const [recovery, setRecovery] = useState<SessionRecoverySnapshot>(() =>
     durableProjectionRef.current.snapshot(),
   );
-  const [permission, setPermission] =
-    useState<PermissionRuntimeState>(EMPTY_PERMISSION);
-  const [diffReview, setDiffReview] =
-    useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
   const supervisionController = useSupervision({
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
     capabilities: () => capabilitiesRef.current,
   });
   const supervision = supervisionController.state;
+  const codingSafetyController = useCodingSafety({
+    client: () => clientRef.current,
+    sessionId: () => sessionIdRef.current,
+    capabilities: () => capabilitiesRef.current,
+    onPermissionApplied: (client) => {
+      void supervisionController.refresh(client);
+    },
+  });
+  const permission = codingSafetyController.permission;
+  const diffReview = codingSafetyController.diffReview;
   const workspaceController = useWorkspaceProduct({
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
@@ -284,10 +258,7 @@ export function useOctosSession(): OctosSessionRuntime {
     setTimeline([]);
     resetQueue();
     resetBlockingInteraction();
-    setPermission(EMPTY_PERMISSION);
-    permissionBusyRef.current = false;
-    diffRequestRef.current += 1;
-    setDiffReview(EMPTY_DIFF_REVIEW);
+    codingSafetyController.reset();
     supervisionController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
@@ -422,9 +393,7 @@ export function useOctosSession(): OctosSessionRuntime {
     setOpened(result.opened);
     await hydrateSessionState(client, result.opened.capabilities);
     configureCodingSurfaces(result.opened.capabilities);
-    if (supportsMethod(result.opened.capabilities, "permission/profile/list")) {
-      void loadPermissionProfiles(client);
-    }
+    void codingSafetyController.refreshPermission(client);
     void supervisionController.refresh(client);
     void workspaceController.refresh(client);
     reconnectAttemptRef.current = 0;
@@ -453,62 +422,9 @@ export function useOctosSession(): OctosSessionRuntime {
   function configureCodingSurfaces(
     capabilities: UiProtocolCapabilities | undefined,
   ) {
-    const permissionAvailable = supportsMethod(
-      capabilities,
-      "permission/profile/list",
-    );
-    setPermission((current) => ({
-      ...current,
-      available: permissionAvailable,
-      editable:
-        permissionAvailable &&
-        supportsMethod(capabilities, "permission/profile/set"),
-    }));
-    setDiffReview((current) => ({
-      ...current,
-      available: supportsMethod(capabilities, "diff/preview/get"),
-    }));
+    codingSafetyController.configureCapabilities(capabilities);
     supervisionController.configureCapabilities(capabilities);
     workspaceController.configureCapabilities(capabilities);
-  }
-
-  async function loadPermissionProfiles(client = clientRef.current) {
-    const sessionId = sessionIdRef.current;
-    if (
-      !client ||
-      !sessionId ||
-      !supportsMethod(capabilitiesRef.current, "permission/profile/list")
-    ) {
-      return;
-    }
-    setPermission((current) => ({
-      ...current,
-      loading: true,
-      error: null,
-    }));
-    try {
-      const result = await client.listPermissionProfiles({
-        session_id: sessionId,
-      });
-      if (clientRef.current !== client || sessionIdRef.current !== sessionId) {
-        return;
-      }
-      if (result.session_id !== sessionId) {
-        throw new Error("permission/profile/list returned another session");
-      }
-      setPermission((current) => ({
-        ...current,
-        loading: false,
-        result,
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      setPermission((current) => ({
-        ...current,
-        loading: false,
-        error: reason instanceof Error ? reason.message : String(reason),
-      }));
-    }
   }
 
   async function hydrateSessionState(
@@ -682,10 +598,7 @@ export function useOctosSession(): OctosSessionRuntime {
     syncRecovery();
     resetQueue();
     resetBlockingInteraction();
-    setPermission(EMPTY_PERMISSION);
-    permissionBusyRef.current = false;
-    diffRequestRef.current += 1;
-    setDiffReview(EMPTY_DIFF_REVIEW);
+    codingSafetyController.reset();
     supervisionController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
@@ -829,153 +742,6 @@ export function useOctosSession(): OctosSessionRuntime {
     }
   };
 
-  const refreshPermission = async () => {
-    await loadPermissionProfiles();
-  };
-
-  const updatePermission = async (update: PermissionProfileUpdate) => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    if (
-      !client ||
-      !sessionId ||
-      !permission.available ||
-      !permission.editable ||
-      permissionBusyRef.current
-    ) {
-      return;
-    }
-    const current = permission.result?.current;
-    const next = current
-      ? {
-          mode: update.mode ?? current.mode,
-          network: update.network ?? current.network,
-        }
-      : null;
-    if (
-      !next ||
-      !permission.result?.profiles.some(
-        (profile) =>
-          profile.mode === next.mode && profile.network === next.network,
-      )
-    ) {
-      setPermission((state) => ({
-        ...state,
-        error:
-          "The requested permission profile was not advertised for this session",
-      }));
-      return;
-    }
-    permissionBusyRef.current = true;
-    setPermission((current) => ({ ...current, busy: true, error: null }));
-    try {
-      const result = await client.setPermissionProfile({
-        session_id: sessionId,
-        update,
-      });
-      if (clientRef.current !== client || sessionIdRef.current !== sessionId) {
-        return;
-      }
-      if (result.session_id !== sessionId) {
-        throw new Error("permission/profile/set returned another session");
-      }
-      if (!result.applied) {
-        throw new Error("The server did not apply the permission change");
-      }
-      setPermission((current) => ({
-        ...current,
-        busy: false,
-        result: current.result
-          ? { ...current.result, current: result.current }
-          : {
-              session_id: result.session_id,
-              current: result.current,
-              profiles: [],
-            },
-      }));
-      permissionBusyRef.current = false;
-      await loadPermissionProfiles(client);
-      void supervisionController.refresh(client);
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      permissionBusyRef.current = false;
-      setPermission((current) => ({
-        ...current,
-        busy: false,
-        error: reason instanceof Error ? reason.message : String(reason),
-      }));
-    }
-  };
-
-  const openDiffReview = async (requestedPreviewId?: string) => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    const previewId = requestedPreviewId ?? diffReview.latestPreviewId;
-    if (
-      !client ||
-      !sessionId ||
-      !previewId ||
-      !isPreviewId(previewId) ||
-      !supportsMethod(capabilitiesRef.current, "diff/preview/get")
-    ) {
-      return;
-    }
-    const request = diffRequestRef.current + 1;
-    diffRequestRef.current = request;
-    setDiffReview((current) => ({
-      ...current,
-      latestPreviewId: previewId,
-      active: true,
-      loading: true,
-      result: null,
-      error: null,
-    }));
-    try {
-      const result = await client.getDiffPreview({
-        session_id: sessionId,
-        preview_id: previewId,
-      });
-      if (
-        clientRef.current !== client ||
-        diffRequestRef.current !== request ||
-        sessionIdRef.current !== sessionId
-      ) {
-        return;
-      }
-      if (
-        result.preview.session_id !== sessionId ||
-        result.preview.preview_id !== previewId
-      ) {
-        throw new Error("diff/preview/get returned a mismatched preview");
-      }
-      setDiffReview((current) => ({
-        ...current,
-        loading: false,
-        result,
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client || diffRequestRef.current !== request) {
-        return;
-      }
-      setDiffReview((current) => ({
-        ...current,
-        loading: false,
-        error: reason instanceof Error ? reason.message : String(reason),
-      }));
-    }
-  };
-
-  const closeDiffReview = () => {
-    diffRequestRef.current += 1;
-    setDiffReview((current) => ({
-      ...current,
-      active: false,
-      loading: false,
-      result: null,
-      error: null,
-    }));
-  };
-
   const refreshWorkspace = async () => {
     await workspaceController.refresh();
   };
@@ -1097,13 +863,7 @@ export function useOctosSession(): OctosSessionRuntime {
       return;
     }
 
-    const previewId = notificationDiffPreviewId(notification);
-    if (previewId) {
-      setDiffReview((current) => ({
-        ...current,
-        latestPreviewId: previewId,
-      }));
-    }
+    codingSafetyController.observeNotification(notification);
     supervisionController.observeNotification(notification);
     const tokenCost = parseTokenCostUpdate(notification);
     if (tokenCost && tokenCost.sessionId === sessionIdRef.current) {
@@ -1226,10 +986,10 @@ export function useOctosSession(): OctosSessionRuntime {
     interrupt,
     respondApproval,
     respondQuestion,
-    refreshPermission,
-    updatePermission,
-    openDiffReview,
-    closeDiffReview,
+    refreshPermission: codingSafetyController.refreshPermission,
+    updatePermission: codingSafetyController.updatePermission,
+    openDiffReview: codingSafetyController.openDiffReview,
+    closeDiffReview: codingSafetyController.closeDiffReview,
     refreshSupervision: supervisionController.refresh,
     openTaskDetail: supervisionController.openTaskDetail,
     closeTaskDetail: supervisionController.closeTaskDetail,
