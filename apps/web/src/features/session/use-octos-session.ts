@@ -15,9 +15,6 @@ import {
   OctosUiClient,
   OctosUiProtocolError,
   parseApprovalRequested,
-  parsePlanUpdated,
-  parseTaskOutputDelta,
-  parseTaskUpdated,
   parseTokenCostUpdate,
   parseUserQuestionRequested,
   supportsFeature,
@@ -55,16 +52,8 @@ import {
   DurableSessionProjection,
   type SessionRecoverySnapshot,
 } from "./durable-session.ts";
-import {
-  appendTaskArtifactPage,
-  appendTaskOutputDelta,
-  applyTaskUpdated,
-  EMPTY_SUPERVISION,
-  EMPTY_TASK_DETAIL,
-  taskIsCancellable,
-  tasksFromList,
-  type SupervisionRuntimeState,
-} from "../supervision/model.ts";
+import { type SupervisionRuntimeState } from "../supervision/model.ts";
+import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
 import { useWorkspaceProduct } from "../workspace/use-workspace-product.ts";
 import {
@@ -192,7 +181,6 @@ export function useOctosSession(): OctosSessionRuntime {
   const reconnectAttemptRef = useRef(0);
   const diffRequestRef = useRef(0);
   const permissionBusyRef = useRef(false);
-  const supervisionRequestRef = useRef(0);
   const launchOpeningRef = useRef(false);
   const sessionEstablishedRef = useRef(false);
   const launchResolutionRequiredRef = useRef(false);
@@ -220,8 +208,12 @@ export function useOctosSession(): OctosSessionRuntime {
     useState<PermissionRuntimeState>(EMPTY_PERMISSION);
   const [diffReview, setDiffReview] =
     useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
-  const [supervision, setSupervision] =
-    useState<SupervisionRuntimeState>(EMPTY_SUPERVISION);
+  const supervisionController = useSupervision({
+    client: () => clientRef.current,
+    sessionId: () => sessionIdRef.current,
+    capabilities: () => capabilitiesRef.current,
+  });
+  const supervision = supervisionController.state;
   const workspaceController = useWorkspaceProduct({
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
@@ -296,8 +288,7 @@ export function useOctosSession(): OctosSessionRuntime {
     permissionBusyRef.current = false;
     diffRequestRef.current += 1;
     setDiffReview(EMPTY_DIFF_REVIEW);
-    supervisionRequestRef.current += 1;
-    setSupervision(EMPTY_SUPERVISION);
+    supervisionController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
     launchResolutionRequiredRef.current =
@@ -434,7 +425,7 @@ export function useOctosSession(): OctosSessionRuntime {
     if (supportsMethod(result.opened.capabilities, "permission/profile/list")) {
       void loadPermissionProfiles(client);
     }
-    void refreshSupervisionWith(client);
+    void supervisionController.refresh(client);
     void workspaceController.refresh(client);
     reconnectAttemptRef.current = 0;
     setConnectionError(null);
@@ -477,18 +468,7 @@ export function useOctosSession(): OctosSessionRuntime {
       ...current,
       available: supportsMethod(capabilities, "diff/preview/get"),
     }));
-    setSupervision((current) => ({
-      ...current,
-      available:
-        supportsMethod(capabilities, "task/list") &&
-        supportsMethod(capabilities, "task/output/read"),
-      cancelAvailable: supportsMethod(capabilities, "task/cancel"),
-      artifactsAvailable:
-        supportsFeature(capabilities, "harness.task_artifacts.v1") &&
-        supportsMethod(capabilities, "task/artifact/list") &&
-        supportsMethod(capabilities, "task/artifact/read"),
-      statusAvailable: supportsMethod(capabilities, "session/status/read"),
-    }));
+    supervisionController.configureCapabilities(capabilities);
     workspaceController.configureCapabilities(capabilities);
   }
 
@@ -706,8 +686,7 @@ export function useOctosSession(): OctosSessionRuntime {
     permissionBusyRef.current = false;
     diffRequestRef.current += 1;
     setDiffReview(EMPTY_DIFF_REVIEW);
-    supervisionRequestRef.current += 1;
-    setSupervision(EMPTY_SUPERVISION);
+    supervisionController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
     launchResolutionRequiredRef.current = false;
@@ -916,7 +895,7 @@ export function useOctosSession(): OctosSessionRuntime {
       }));
       permissionBusyRef.current = false;
       await loadPermissionProfiles(client);
-      void refreshSupervisionWith(client);
+      void supervisionController.refresh(client);
     } catch (reason) {
       if (clientRef.current !== client) return;
       permissionBusyRef.current = false;
@@ -995,397 +974,6 @@ export function useOctosSession(): OctosSessionRuntime {
       result: null,
       error: null,
     }));
-  };
-
-  async function refreshSupervisionWith(client = clientRef.current) {
-    const sessionId = sessionIdRef.current;
-    if (!client || !sessionId) return;
-    const canList = supportsMethod(capabilitiesRef.current, "task/list");
-    const canReadStatus = supportsMethod(
-      capabilitiesRef.current,
-      "session/status/read",
-    );
-    if (!canList && !canReadStatus) return;
-    setSupervision((current) => ({
-      ...current,
-      loading: true,
-      error: null,
-    }));
-    const [tasks, runtimeStatus] = await Promise.allSettled([
-      canList
-        ? client.listTasks({ session_id: sessionId })
-        : Promise.resolve(null),
-      canReadStatus
-        ? client.readSessionStatus(sessionId)
-        : Promise.resolve(null),
-    ]);
-    if (clientRef.current !== client || sessionIdRef.current !== sessionId) {
-      return;
-    }
-    const errors: string[] = [];
-    if (tasks.status === "rejected") {
-      errors.push(
-        tasks.reason instanceof Error
-          ? tasks.reason.message
-          : String(tasks.reason),
-      );
-    }
-    if (runtimeStatus.status === "rejected") {
-      errors.push(
-        runtimeStatus.reason instanceof Error
-          ? runtimeStatus.reason.message
-          : String(runtimeStatus.reason),
-      );
-    }
-    const taskResult = tasks.status === "fulfilled" ? tasks.value : null;
-    const statusResult =
-      runtimeStatus.status === "fulfilled" ? runtimeStatus.value : null;
-    if (taskResult && taskResult.session_id !== sessionId) {
-      errors.push("task/list returned another session");
-    }
-    if (statusResult && statusResult.session_id !== sessionId) {
-      errors.push("session/status/read returned another session");
-    }
-    setSupervision((current) => ({
-      ...current,
-      loading: false,
-      error: errors.length ? errors.join(" · ") : null,
-      ...(taskResult?.session_id === sessionId
-        ? { tasks: tasksFromList(taskResult.tasks) }
-        : {}),
-      ...(statusResult?.session_id === sessionId
-        ? { runtimeStatus: statusResult }
-        : {}),
-    }));
-  }
-
-  const refreshSupervision = async () => {
-    await refreshSupervisionWith();
-  };
-
-  const openTaskDetail = async (taskId: string) => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    if (
-      !client ||
-      !sessionId ||
-      !supervision.available ||
-      !supervision.tasks.some((task) => task.id === taskId)
-    ) {
-      return;
-    }
-    const request = supervisionRequestRef.current + 1;
-    supervisionRequestRef.current = request;
-    setSupervision((current) => ({
-      ...current,
-      detail: {
-        ...EMPTY_TASK_DETAIL,
-        active: true,
-        taskId,
-        loading: true,
-      },
-    }));
-    const [output, artifacts] = await Promise.allSettled([
-      client.readTaskOutput({
-        session_id: sessionId,
-        task_id: taskId,
-        limit_bytes: 131_072,
-      }),
-      supervision.artifactsAvailable
-        ? client.listTaskArtifacts({ session_id: sessionId, task_id: taskId })
-        : Promise.resolve(null),
-    ]);
-    if (
-      clientRef.current !== client ||
-      supervisionRequestRef.current !== request ||
-      sessionIdRef.current !== sessionId
-    ) {
-      return;
-    }
-    const errors: string[] = [];
-    if (output.status === "rejected") {
-      errors.push(
-        output.reason instanceof Error
-          ? output.reason.message
-          : String(output.reason),
-      );
-    }
-    if (artifacts.status === "rejected") {
-      errors.push(
-        artifacts.reason instanceof Error
-          ? artifacts.reason.message
-          : String(artifacts.reason),
-      );
-    }
-    const outputResult = output.status === "fulfilled" ? output.value : null;
-    const artifactResult =
-      artifacts.status === "fulfilled" ? artifacts.value : null;
-    if (
-      outputResult &&
-      (outputResult.session_id !== sessionId || outputResult.task_id !== taskId)
-    ) {
-      errors.push("task/output/read returned a mismatched task");
-    }
-    if (
-      artifactResult &&
-      (artifactResult.session_id !== sessionId ||
-        artifactResult.task_id !== taskId)
-    ) {
-      errors.push("task/artifact/list returned a mismatched task");
-    }
-    setSupervision((current) => ({
-      ...current,
-      detail: {
-        ...current.detail,
-        loading: false,
-        output:
-          outputResult?.session_id === sessionId &&
-          outputResult.task_id === taskId
-            ? outputResult
-            : null,
-        text:
-          outputResult?.session_id === sessionId &&
-          outputResult.task_id === taskId
-            ? outputResult.text
-            : "",
-        artifacts:
-          artifactResult?.session_id === sessionId &&
-          artifactResult.task_id === taskId
-            ? artifactResult
-            : null,
-        error: errors.length ? errors.join(" · ") : null,
-      },
-    }));
-  };
-
-  const closeTaskDetail = () => {
-    supervisionRequestRef.current += 1;
-    setSupervision((current) => ({
-      ...current,
-      detail: EMPTY_TASK_DETAIL,
-    }));
-  };
-
-  const loadMoreTaskOutput = async () => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    const detail = supervision.detail;
-    if (
-      !client ||
-      !sessionId ||
-      !detail.taskId ||
-      !detail.output ||
-      detail.output.complete ||
-      detail.loadingMore
-    ) {
-      return;
-    }
-    const taskId = detail.taskId;
-    setSupervision((current) => ({
-      ...current,
-      detail: { ...current.detail, loadingMore: true, error: null },
-    }));
-    try {
-      const result = await client.readTaskOutput({
-        session_id: sessionId,
-        task_id: taskId,
-        cursor: detail.output.next_cursor,
-        limit_bytes: 131_072,
-      });
-      if (
-        clientRef.current !== client ||
-        sessionIdRef.current !== sessionId ||
-        result.session_id !== sessionId ||
-        result.task_id !== taskId
-      ) {
-        return;
-      }
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          loadingMore: false,
-          output: result,
-          text: `${current.detail.text}${result.text}`,
-        },
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          loadingMore: false,
-          error: reason instanceof Error ? reason.message : String(reason),
-        },
-      }));
-    }
-  };
-
-  const cancelTask = async (taskId: string) => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    const task = supervision.tasks.find((candidate) => candidate.id === taskId);
-    if (
-      !client ||
-      !sessionId ||
-      !supervision.cancelAvailable ||
-      !task ||
-      !taskIsCancellable(task)
-    ) {
-      return;
-    }
-    setSupervision((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) =>
-        item.id === taskId
-          ? { ...item, state: "cancelling", status: "cancelling" }
-          : item,
-      ),
-    }));
-    try {
-      const result = await client.cancelTask({
-        task_id: taskId,
-        session_id: sessionId,
-      });
-      if (clientRef.current !== client || result.task_id !== taskId) return;
-      setSupervision((current) => ({
-        ...current,
-        tasks: current.tasks.map((item) =>
-          item.id === taskId
-            ? { ...item, state: result.status, status: result.status }
-            : item,
-        ),
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      setSupervision((current) => ({
-        ...current,
-        tasks: current.tasks.map((item) =>
-          item.id === taskId && item.state === "cancelling" ? task : item,
-        ),
-        error: reason instanceof Error ? reason.message : String(reason),
-      }));
-    }
-  };
-
-  const readTaskArtifact = async (artifact: TaskArtifactRecord) => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    const taskId = supervision.detail.taskId;
-    if (!client || !sessionId || !taskId || !supervision.artifactsAvailable)
-      return;
-    if (artifact.content !== undefined) {
-      const content = artifact.content;
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          selectedArtifact: {
-            session_id: sessionId,
-            task_id: taskId,
-            artifact,
-            content,
-            has_more: false,
-          },
-        },
-      }));
-      return;
-    }
-    setSupervision((current) => ({
-      ...current,
-      detail: { ...current.detail, artifactLoading: true, error: null },
-    }));
-    try {
-      const result = await client.readTaskArtifact({
-        session_id: sessionId,
-        task_id: taskId,
-        artifact_id: artifact.id,
-        limit_bytes: 262_144,
-      });
-      if (
-        clientRef.current !== client ||
-        result.session_id !== sessionId ||
-        result.task_id !== taskId
-      ) {
-        return;
-      }
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          artifactLoading: false,
-          selectedArtifact: result,
-        },
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          artifactLoading: false,
-          error: reason instanceof Error ? reason.message : String(reason),
-        },
-      }));
-    }
-  };
-
-  const loadMoreTaskArtifact = async () => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    const taskId = supervision.detail.taskId;
-    const selected = supervision.detail.selectedArtifact;
-    if (
-      !client ||
-      !sessionId ||
-      !taskId ||
-      !selected?.has_more ||
-      !selected.next_cursor ||
-      supervision.detail.artifactLoading
-    ) {
-      return;
-    }
-    setSupervision((current) => ({
-      ...current,
-      detail: { ...current.detail, artifactLoading: true, error: null },
-    }));
-    try {
-      const result = await client.readTaskArtifact({
-        session_id: sessionId,
-        task_id: taskId,
-        artifact_id: selected.artifact.id,
-        cursor: selected.next_cursor,
-        limit_bytes: 262_144,
-      });
-      if (
-        clientRef.current !== client ||
-        result.session_id !== sessionId ||
-        result.task_id !== taskId
-      ) {
-        return;
-      }
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          artifactLoading: false,
-          selectedArtifact: current.detail.selectedArtifact
-            ? appendTaskArtifactPage(current.detail.selectedArtifact, result)
-            : result,
-        },
-      }));
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      setSupervision((current) => ({
-        ...current,
-        detail: {
-          ...current.detail,
-          artifactLoading: false,
-          error: reason instanceof Error ? reason.message : String(reason),
-        },
-      }));
-    }
   };
 
   const refreshWorkspace = async () => {
@@ -1516,24 +1104,7 @@ export function useOctosSession(): OctosSessionRuntime {
         latestPreviewId: previewId,
       }));
     }
-    const taskUpdate = parseTaskUpdated(notification);
-    if (taskUpdate && taskUpdate.sessionId === sessionIdRef.current) {
-      setSupervision((current) => ({
-        ...current,
-        tasks: applyTaskUpdated(current.tasks, taskUpdate),
-      }));
-    }
-    const planUpdate = parsePlanUpdated(notification);
-    if (planUpdate && planUpdate.sessionId === sessionIdRef.current) {
-      setSupervision((current) => ({ ...current, plan: planUpdate }));
-    }
-    const outputDelta = parseTaskOutputDelta(notification);
-    if (outputDelta && outputDelta.sessionId === sessionIdRef.current) {
-      setSupervision((current) => ({
-        ...current,
-        detail: appendTaskOutputDelta(current.detail, outputDelta),
-      }));
-    }
+    supervisionController.observeNotification(notification);
     const tokenCost = parseTokenCostUpdate(notification);
     if (tokenCost && tokenCost.sessionId === sessionIdRef.current) {
       workspaceController.observeTokenCost(tokenCost);
@@ -1659,13 +1230,13 @@ export function useOctosSession(): OctosSessionRuntime {
     updatePermission,
     openDiffReview,
     closeDiffReview,
-    refreshSupervision,
-    openTaskDetail,
-    closeTaskDetail,
-    loadMoreTaskOutput,
-    cancelTask,
-    readTaskArtifact,
-    loadMoreTaskArtifact,
+    refreshSupervision: supervisionController.refresh,
+    openTaskDetail: supervisionController.openTaskDetail,
+    closeTaskDetail: supervisionController.closeTaskDetail,
+    loadMoreTaskOutput: supervisionController.loadMoreTaskOutput,
+    cancelTask: supervisionController.cancelTask,
+    readTaskArtifact: supervisionController.readTaskArtifact,
+    loadMoreTaskArtifact: supervisionController.loadMoreTaskArtifact,
     refreshWorkspace,
     switchSession,
     deleteSession: workspaceController.deleteSession,
