@@ -17,7 +17,7 @@
 - [x] `projection.envelope.v2` reducer with cursor, dedupe, and session scope
 - [x] `session/hydrate` plus reconnect replay and gap repair
 - [x] User, assistant, reasoning, tool, warning, and terminal rows
-- [ ] Markdown and code rendering
+- [x] Safe GFM Markdown, tables, task lists, and lazy Shiki code rendering
 
 ## Milestone 2 — safe coding loop
 

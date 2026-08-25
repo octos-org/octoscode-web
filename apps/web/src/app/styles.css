@@ -180,7 +180,8 @@ label > span {
   font-weight: 500;
 }
 
-input {
+.connection-card input,
+.question-other input {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -194,11 +195,13 @@ input {
   font-size: 11px;
 }
 
-input:focus {
+.connection-card input:focus,
+.question-other input:focus {
   border-color: var(--dsw-alias-state-business-primary);
 }
 
-input:disabled {
+.connection-card input:disabled,
+.question-other input:disabled {
   color: var(--dsw-alias-label-tertiary);
 }
 

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @octos-org/octoscode-web dev",
+    "mock:server": "pnpm --filter @octos-org/octoscode-web mock:server",
     "build": "pnpm --filter @octos-org/octoscode-web build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

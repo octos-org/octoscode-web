@@ -1,4 +1,11 @@
+import { lazy, Suspense } from "react";
 import type { TimelineEntry } from "./model.ts";
+
+const MarkdownBody = lazy(() =>
+  import("../markdown/MarkdownBody.tsx").then((module) => ({
+    default: module.MarkdownBody,
+  })),
+);
 
 interface TimelineProps {
   entries: readonly TimelineEntry[];
@@ -43,7 +50,16 @@ export function Timeline({ entries, connected }: TimelineProps) {
               ) : null}
             </div>
             {entry.body ? (
-              <pre>{entry.body}</pre>
+              entry.kind === "assistant" ? (
+                <Suspense fallback={<pre>{entry.body}</pre>}>
+                  <MarkdownBody
+                    text={entry.body}
+                    streaming={entry.status === "running"}
+                  />
+                </Suspense>
+              ) : (
+                <pre>{entry.body}</pre>
+              )
             ) : (
               <span className="muted">No output yet</span>
             )}

@@ -14,9 +14,9 @@ approvals, sessions, tasks, and replay.
 The first product slice is usable against a current Octos server. It negotiates
 capabilities, hydrates durable transcript state, resumes with a cursor, detects
 projection gaps and lossy replay, reconnects with backoff, preserves the FIFO
-prompt contract, and renders typed approvals and structured user questions.
-Diff, task, artifact, session-switching, and rich Markdown surfaces follow in
-the MVP plan.
+prompt contract, renders typed approvals and structured user questions, and
+shows settled GFM with lazy syntax highlighting. Diff, task, artifact, and
+session-switching surfaces follow in the MVP plan.
 
 ## Run locally
 
@@ -31,6 +31,14 @@ Run an Octos server separately and enter its origin (for example
 `http://127.0.0.1:50080`), auth token, server-side workspace path, and session
 id in the connection panel. A browser cannot spawn or auto-provision the Octos
 binary, so the server must already be running.
+
+For UI development without a local Octos data directory, run the narrow AppUI
+fixture in a second terminal. It serves only the protocol methods used by the
+current product slice and includes a Markdown/code transcript:
+
+```sh
+pnpm mock:server
+```
 
 ## Repository shape
 

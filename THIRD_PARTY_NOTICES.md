@@ -1,10 +1,12 @@
 # Third-party notices
 
-## DeepSeek Harness UI Theme
+## DeepSeek Harness UI and Markdown primitives
 
-Parts of the visual token values and the layout treatment in this repository
-are adapted from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-revision `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+Parts of the visual token values, layout treatment, Markdown styling,
+code-block chrome, and syntax-highlighter structure in this repository are
+adapted from
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) revision
+`b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
 
 MIT License
 
