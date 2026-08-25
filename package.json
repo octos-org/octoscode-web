@@ -1,0 +1,26 @@
+{
+  "name": "@octos-org/octoscode-web-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @octos-org/octoscode-web dev",
+    "build": "pnpm --filter @octos-org/octoscode-web build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "oxlint --deny-warnings apps packages",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "oxlint": "1.76.0",
+    "prettier": "^3.9.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.8"
+  }
+}
