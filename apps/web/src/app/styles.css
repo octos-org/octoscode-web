@@ -19,6 +19,86 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+noscript,
+.fatal-shell {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+}
+
+noscript {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+}
+
+.fatal-shell {
+  background: var(--dsw-alias-bg-base);
+}
+
+.fatal-card {
+  display: grid;
+  width: min(100%, 620px);
+  gap: 13px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  padding: 30px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.fatal-card .brand-mark {
+  margin-bottom: 7px;
+}
+
+.fatal-card h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+
+.fatal-card > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.fatal-card pre {
+  max-height: 200px;
+  overflow: auto;
+  margin: 4px 0;
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-secondary);
+  font: 400 10px/16px var(--ds-font-family-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fatal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.fatal-actions .button {
+  width: auto;
+  min-width: 120px;
+}
+
+.fatal-card > a {
+  width: fit-content;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.fatal-card > a:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 button,
 input,
 textarea {

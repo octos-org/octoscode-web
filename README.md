@@ -95,6 +95,10 @@ then exercises launch resolution, durable session switching, a live turn,
 responsive supervision, and WCAG 2/2.1 A/AA axe checks. CI runs it in a separate
 Chromium job and retains traces and screenshots when it fails.
 
+A top-level render boundary replaces white screens with a safe reload path and
+a copyable diagnostic capped at 4 KB. Query-token and bearer-shaped values are
+redacted before display; no auth token is persisted for crash reporting.
+
 ## License
 
 Apache-2.0.

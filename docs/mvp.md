@@ -41,7 +41,7 @@
 - [x] Chromium E2E for launch, session switching, live turn, and narrow layout
 - [x] Automated WCAG 2/2.1 A/AA axe gate on a blocking launch surface
 - [x] CI failure traces and screenshots
-- [ ] Application error boundary and recoverable crash screen
+- [x] Application error boundary and recoverable, redacted crash screen
 - [ ] Versioned release artifact and deployment contract
 - [ ] Generated protocol contract from Octos Core
 - [ ] Background multi-session supervision parity with Octoscode

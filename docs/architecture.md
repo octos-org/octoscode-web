@@ -121,3 +121,9 @@ switching with draft restoration, and the responsive supervision drawer. An
 axe pass gates WCAG 2/2.1 A/AA rules on the blocking no-profile launch surface.
 CI runs browser checks separately from the fast compile/test/build job and
 uploads traces, error context, and screenshots only on failure.
+
+An unexpected React render or lifecycle exception is contained by the root
+error boundary. Its recovery screen states the durable-state boundary, offers
+reload and issue-report actions, and produces a bounded diagnostic with query
+tokens and bearer-shaped credentials redacted. It does not introduce a remote
+crash collector or persist connection credentials.
