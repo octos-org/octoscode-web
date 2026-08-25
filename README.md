@@ -79,6 +79,9 @@ Session navigation, safe file metadata, and usage follow the
 [workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
 Pre-session repository launch follows the
 [workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
+Versioned artifacts follow the
+[static release decision](docs/adr/0011-versioned-static-releases.md) and the
+[deployment contract](docs/deployment.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 
@@ -98,6 +101,14 @@ Chromium job and retains traces and screenshots when it fails.
 A top-level render boundary replaces white screens with a safe reload path and
 a copyable diagnostic capped at 4 KB. Query-token and bearer-shaped values are
 redacted before display; no auth token is persisted for crash reporting.
+
+## Releases
+
+A SemVer-like `v*` tag runs the full check and Chromium E2E gates before GitHub
+publishes a versioned static archive and SHA-256 file. Each build contains
+`octoscode-web-build.json`, which records its Web revision and the exact Octos
+Core protocol contract covered by the fixtures. See the
+[deployment contract](docs/deployment.md) before hosting or embedding it.
 
 ## License
 

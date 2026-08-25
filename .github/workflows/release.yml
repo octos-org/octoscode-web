@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "${RELEASE_TAG:?}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a SemVer-like tag such as v0.1.0 or v0.1.0-rc.1" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Build versioned distribution
+        env:
+          OCTOSCODE_WEB_RELEASE: ${{ github.ref_name }}
+          OCTOSCODE_WEB_REVISION: ${{ github.sha }}
+        run: pnpm build
+      - name: Package distribution
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact="octoscode-web-${RELEASE_TAG:?}.tar.gz"
+          stage="release-stage-${RELEASE_TAG}"
+          test ! -e "$stage"
+          mkdir "$stage"
+          cp -R apps/web/dist/. "$stage/"
+          cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
+          cp docs/deployment.md "$stage/DEPLOYMENT.md"
+          tar -C "$stage" -czf "$artifact" .
+          sha256sum "$artifact" > "$artifact.sha256"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact="octoscode-web-${RELEASE_TAG:?}.tar.gz"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$artifact" "$artifact.sha256" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$artifact" "$artifact.sha256" \
+              --verify-tag \
+              --generate-notes \
+              --title "octoscode-web $RELEASE_TAG"
+          fi

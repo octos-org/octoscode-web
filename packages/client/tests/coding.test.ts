@@ -7,17 +7,14 @@ import {
   parseDiffPreviewGetResult,
   parsePermissionProfileListResult,
   parsePermissionProfileSetResult,
+  SUPPORTED_OCTOS_CONTRACT,
   type ApprovalRequested,
 } from "../src/index.ts";
 
 describe("authoritative coding contract fixtures", () => {
   it("pins each fixture to an exact octos core contract blob", () => {
-    expect(fixture.source).toEqual({
-      repository: "https://github.com/octos-org/octos",
-      revision: "04cb5596ec0935926d2e8afdd0826bfa18e0c4bb",
-      contract_blob: "853140d45c3e59e1c4ab2e4445c0282dbb09a8bc",
-      path: "crates/octos-core/src/ui_protocol.rs",
-    });
+    const { protocol: _protocol, ...contractSource } = SUPPORTED_OCTOS_CONTRACT;
+    expect(fixture.source).toEqual(contractSource);
   });
 
   it("decodes permission list and mutation results", () => {
