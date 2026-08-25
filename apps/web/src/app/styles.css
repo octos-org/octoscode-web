@@ -536,6 +536,30 @@ input:disabled {
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.3);
 }
 
+.prompt-queue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #2c3339;
+  padding: 9px 16px;
+  background: #171b1f;
+  color: #9099a3;
+  font:
+    400 9px/1.4 "DM Mono",
+    monospace;
+}
+
+.prompt-queue strong {
+  flex: 0 0 auto;
+  color: #c8df9c;
+}
+
+.prompt-queue span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .composer:focus-within {
   border-color: #5d6c43;
 }
@@ -573,6 +597,12 @@ input:disabled {
     monospace;
 }
 
+.composer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
 .send-button,
 .stop-button {
   min-width: 70px;
@@ -598,6 +628,11 @@ input:disabled {
   border: 1px solid #643b37;
   background: #2c1d1b;
   color: #ffaaa2;
+}
+
+.stop-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .compact-heading {

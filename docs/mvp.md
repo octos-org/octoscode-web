@@ -7,6 +7,8 @@
 - [x] Browser query-token and feature negotiation
 - [x] `session/open`, capability inspection, and `turn/start`
 - [x] Raw fail-closed event inspector
+- [x] Octoscode-compatible FIFO prompt queue and interrupt aliases
+- [x] Fail-closed slash/bang command dispatch before prompts
 
 ## Milestone 1 — durable chat
 

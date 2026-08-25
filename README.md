@@ -44,7 +44,8 @@ with DSH's full plugin graph or octos-web's product surface.
 
 Read [the architecture](docs/architecture.md), [the MVP](docs/mvp.md), and the
 [DSH evaluation](docs/adr/0002-dsh-evaluation.md) before expanding the package
-graph.
+graph. Web interaction behavior follows the
+[Octoscode semantic parity contract](docs/adr/0003-octoscode-semantic-parity.md).
 
 ## Checks
 
