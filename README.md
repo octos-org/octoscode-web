@@ -1,150 +1,110 @@
+<div align="center">
+
 # octoscode-web
 
-The focused browser client for [Octoscode](https://github.com/octos-org/octoscode)
-and the Octos coding UI Protocol.
+**Octoscode, in the browser.**
 
-This repository is deliberately separate from
-[`octos-web`](https://github.com/octos-org/octos-web). It is a coding workspace,
-not the general Octos product dashboard. It is also not a second harness:
-`octos serve` remains the only owner of agents, models, tools, sandboxes,
-approvals, sessions, tasks, and replay.
+A focused Web client for the Octos coding UI Protocol.
 
-## Status
+[![CI](https://github.com/octos-org/octoscode-web/actions/workflows/ci.yml/badge.svg)](https://github.com/octos-org/octoscode-web/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/octos-org/octoscode-web?include_prereleases&sort=semver)](https://github.com/octos-org/octoscode-web/releases)
+[![License](https://img.shields.io/github/license/octos-org/octoscode-web)](LICENSE)
 
-The first product slice is usable against a current Octos server. It negotiates
-capabilities, hydrates durable transcript state, resumes with a cursor, detects
-projection gaps and lossy replay, reconnects with backoff, preserves the FIFO
-prompt contract, renders typed approvals and structured user questions, and
-shows settled GFM with lazy syntax highlighting. It also exposes server-confirmed
-per-session permission profiles and authoritative diff previews discovered from
-typed coding events. The supervised-work surface renders the server's live plan,
-runtime policy stamp, task lifecycle, cursor-safe output, cancellation, and
-paged task artifacts. The workspace sidebar lists, creates, switches, and
-permanently deletes server-owned sessions while preserving a draft per session;
-it also exposes safe session-file metadata. Runtime usage combines the typed
-status snapshot with live model cost and context-window updates. On narrower
-screens, the supervision surface remains available as a keyboard-dismissible
-drawer. When a server-side workspace path is supplied, startup follows
-Octoscode's `launch/resolve` contract: resume is automatic, activation is
-confirmed, cross-profile folders offer the same explicit choice, and a server
-with no profile can complete canonical solo profile/provider onboarding in the
-browser when Core advertises that surface. Provider families, models, and
-routes come from Core; the Web tests the credential before saving it, never
-persists the API key, and opens the exact TUI coding session. Older servers keep
-the truthful `octoscode onboard` fallback.
-The session navigator also performs a bounded, read-only `task/list` scan so
-running or failed work in another recent session remains visible without
-changing the foreground subscription. `/activity` opens the same task truth as
-a searchable, status-filtered cross-session navigator and switches sessions
-only after an explicit user action.
+[Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [Releases](https://github.com/octos-org/octoscode-web/releases)
+
+</div>
+
+octoscode-web brings the interaction model of
+[Octoscode](https://github.com/octos-org/octoscode) to a browser workspace. It
+is intentionally separate from the general-purpose
+[`octos-web`](https://github.com/octos-org/octos-web) product.
+
+```text
+ Octoscode TUI ──┐
+                 ├── Octos UI Protocol ── octos serve
+octoscode-web ───┘                        agents · tools · sessions · tasks
+```
+
+The two clients share server-owned runtime truth. The Web app does not contain
+a second agent loop, plugin host, sandbox, or session store.
+
+## What is included
+
+- Octoscode-compatible launch, prompt queue, interrupt, approval, question,
+  command, and session behavior.
+- Durable hydrate, cursor replay, deduplication, gap recovery, and reconnect.
+- Safe Markdown and code rendering, permission profiles, and authoritative
+  diff review.
+- Plans, tasks, output, artifacts, context, cost, model status, and bounded
+  cross-session activity.
+- Browser onboarding for an empty solo server, with transient credentials and
+  a truthful TUI fallback on older Core versions.
+- A responsive coding workspace informed by
+  [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), with its
+  MIT attribution preserved.
+
+See [Product scope](docs/product.md) for the supported surface and deliberate
+non-goals.
 
 ## Run locally
 
-Requirements: Node.js 22+ and pnpm 11.
+Requires Node.js 22+ and pnpm 11.5.2.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run an Octos server separately and enter its origin (for example
-`http://127.0.0.1:50080`), auth token, server-side workspace path, and session
-id in the connection panel. A browser cannot spawn or auto-provision the Octos
-binary, so the server must already be running.
+Run `octos serve` separately, then enter its origin, optional auth token,
+server-side workspace path, and session id in the connection panel. The browser
+cannot start or provision the Octos binary.
 
-For UI development without a local Octos data directory, run the narrow AppUI
-fixture in a second terminal. It serves only the protocol methods used by the
-current product slice and includes a Markdown/code transcript:
+For UI work without a local Octos installation, start the deterministic AppUI
+fixture in another terminal:
 
 ```sh
 pnpm mock:server
 ```
 
-## Repository shape
+The [getting-started guide](docs/getting-started.md) explains both paths.
+
+## Documentation
+
+| Read this                                  | When you need to…                                    |
+| ------------------------------------------ | ---------------------------------------------------- |
+| [Getting started](docs/getting-started.md) | run the app or connect a server                      |
+| [Product scope](docs/product.md)           | understand features, boundaries, and roadmap         |
+| [Architecture](docs/architecture.md)       | understand ownership and package boundaries          |
+| [Protocol integration](docs/protocol.md)   | change transport, projections, or Core compatibility |
+| [Deployment](docs/deployment.md)           | host or roll back a release safely                   |
+| [ADR index](docs/adr/README.md)            | find the reasoning behind durable decisions          |
+
+The [documentation index](docs/README.md) is the complete map. Contributors
+should also read [CONTRIBUTING.md](CONTRIBUTING.md) and
+[SECURITY.md](SECURITY.md).
+
+## Project layout
 
 ```text
-apps/web          React product shell and feature UI
+apps/web          React application and feature UI
 packages/client   React-free JSON-RPC/WebSocket client
-docs/adr          architectural decisions and rejected alternatives
+docs              product, architecture, protocol, and deployment guides
+docs/adr          accepted architectural decisions
 ```
 
-The intentionally small workspace leaves room for a generated protocol package
-and reusable UI primitives when those boundaries are proven. It does not start
-with DSH's full plugin graph or octos-web's product surface.
-
-Read [the architecture](docs/architecture.md), [the MVP](docs/mvp.md), and the
-[DSH evaluation](docs/adr/0002-dsh-evaluation.md) before expanding the package
-graph. Web interaction behavior follows the
-[Octoscode semantic parity contract](docs/adr/0003-octoscode-semantic-parity.md),
-while product structure and visual language follow the
-[DSH reference decision](docs/adr/0004-dsh-product-and-visual-reference.md).
-Reconnect and hydrate follow the
-[durable session decision](docs/adr/0005-durable-session-recovery.md).
-Permission and diff review follow the
-[coding safety surfaces decision](docs/adr/0007-coding-safety-surfaces.md).
-Plans, tasks, output, and artifacts follow the
-[supervised work decision](docs/adr/0008-supervised-work-surfaces.md).
-Session navigation, safe file metadata, and usage follow the
-[workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
-Pre-session repository launch follows the
-[workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
-Empty solo-server setup follows the
-[Web onboarding decision](docs/adr/0015-solo-web-onboarding.md).
-Background session indicators follow the
-[background activity decision](docs/adr/0012-background-session-activity.md).
-The generated protocol vocabulary and Core blob gate follow the
-[contract index decision](docs/adr/0013-generated-core-contract-index.md).
-Versioned artifacts follow the
-[static release decision](docs/adr/0011-versioned-static-releases.md) and the
-[deployment contract](docs/deployment.md).
-Copied or adapted third-party portions are listed in
-[the notices](THIRD_PARTY_NOTICES.md).
-Contributors should also read [the contribution guide](CONTRIBUTING.md), and
-security-sensitive findings should follow [the security policy](SECURITY.md).
-
-## Checks
+## Verify a change
 
 ```sh
 pnpm check
 pnpm contract:verify
-OCTOS_BINARY=/path/to/pinned/octos pnpm integration:core
 pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-The Playwright product suite starts the checked mock AppUI server and Web app,
-then exercises launch resolution, durable session switching, a live turn,
-responsive supervision, and WCAG 2/2.1 A/AA axe checks. CI runs it in a separate
-Chromium job and retains traces and screenshots when it fails.
-
-`contract:verify` downloads the immutable Core revision, recomputes its Git blob
-SHA, and compares the generated method/feature/protocol index. To update an
-intentional Core pin, edit `packages/client/contract-source.json` and run
-`pnpm contract:update`; reviewers should inspect the generated diff.
-
-`integration:core` rejects a binary that does not match the release and commit
-in `packages/client/core-runtime.json`, then launches a real isolated
-`octos serve` and exercises the shipped AppUI transport without making a model
-turn. A local OpenAI-compatible fixture verifies the provider test request and
-response without contacting an external service. CI downloads that release
-asset and verifies its SHA-256 first. The
-checked mock remains the deterministic browser-flow fixture, not compatibility
-proof.
-
-A top-level render boundary replaces white screens with a safe reload path and
-a copyable diagnostic capped at 4 KB. Query-token and bearer-shaped values are
-redacted before display; no auth token is persisted for crash reporting.
-
-## Releases
-
-A SemVer-like `v*` tag runs the full check and Chromium E2E gates before GitHub
-publishes a versioned static archive and SHA-256 file. The release gate also
-passes the pinned real-Core smoke. Each build contains
-`octoscode-web-build.json`, which records its Web revision and the exact Octos
-Core protocol contract covered by the fixtures plus the released Core runtime
-baseline exercised by CI. See the
-[deployment contract](docs/deployment.md) before hosting or embedding it.
+Compatibility changes should also pass the pinned real-Core integration gate;
+see [Protocol integration](docs/protocol.md#compatibility-gates).
 
 ## License
 
-Apache-2.0.
+Apache-2.0. Copied or substantially adapted third-party work is recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

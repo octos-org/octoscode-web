@@ -30,4 +30,5 @@ misrepresents or bypasses them.
 The browser keeps connection and model credentials in memory only. The current
 UI Protocol may carry an auth token in the WebSocket query, so non-loopback
 deployments must use HTTPS/WSS and access logs must omit query strings. See
-[`docs/deployment.md`](docs/deployment.md) for the production contract.
+[`deployment contract`](docs/deployment.md) for production requirements and
+[`protocol integration`](docs/protocol.md) for client-side trust boundaries.

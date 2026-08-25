@@ -1,10 +1,11 @@
 # Contributing
 
-octoscode-web is the focused browser sibling of Octoscode. Before changing a
-flow, read [`AGENTS.md`](AGENTS.md),
-[`docs/architecture.md`](docs/architecture.md), and the relevant ADR. Octoscode
-is the interaction-semantics source; DSH is the product/visual reference; Octos
-Core remains the runtime authority.
+octoscode-web is the focused browser sibling of Octoscode. Start with the
+[`documentation index`](docs/README.md). Before changing a flow, read
+[`AGENTS.md`](AGENTS.md), [`docs/architecture.md`](docs/architecture.md),
+[`docs/protocol.md`](docs/protocol.md), and the relevant ADR. Octoscode is the
+interaction-semantics source; DSH is the product/visual reference; Octos Core
+remains the runtime authority.
 
 ## Development
 
@@ -19,7 +20,8 @@ pnpm test:e2e
 
 `pnpm mock:server` runs the deterministic browser fixture. Protocol changes
 must also pass `pnpm contract:verify`. Compatibility changes should run the
-checksummed pinned runtime gate described in the README.
+checksummed pinned runtime gate described in
+[`docs/protocol.md`](docs/protocol.md#compatibility-gates).
 
 ## Change rules
 
