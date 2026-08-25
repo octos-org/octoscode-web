@@ -23,6 +23,7 @@ describe("MarkdownBody", () => {
 
     expect(html).toContain("<h2>Result</h2>");
     expect(html).toContain('type="checkbox"');
+    expect(html).toContain('aria-label="Completed task"');
     expect(html).toContain('class="md-table-scroll"');
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");

@@ -139,6 +139,7 @@ test("matches activate and cross-profile launch choices", async ({ page }) => {
 test("onboards an empty solo server and opens the canonical coding session", async ({
   page,
 }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await launchWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
@@ -163,6 +164,7 @@ test("onboards an empty solo server and opens the canonical coding session", asy
     page.getByText("coding:local:tui#coding", { exact: true }),
   ).toBeVisible();
   await expect(onboarding).toBeHidden();
+  await expect(page.locator(".shiki")).toBeVisible();
 
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

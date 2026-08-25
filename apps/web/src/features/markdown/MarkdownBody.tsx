@@ -44,6 +44,17 @@ const components: Components = {
     if (!src) return <span className="md-image-alt">{alt ?? "Image"}</span>;
     return <img src={src} alt={alt ?? ""} loading="lazy" />;
   },
+  input({ type, checked, ...props }) {
+    if (type !== "checkbox") return <input type={type} {...props} />;
+    return (
+      <input
+        type="checkbox"
+        checked={checked}
+        {...props}
+        aria-label={checked ? "Completed task" : "Incomplete task"}
+      />
+    );
+  },
   pre({ children }) {
     return <>{children}</>;
   },
