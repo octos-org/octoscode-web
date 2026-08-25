@@ -60,6 +60,33 @@ test("preserves unsent drafts across explicit session switches", async ({
   await expect(composer).toHaveValue("draft for coding");
 });
 
+test("resolves approval and structured-question takeovers", async ({
+  page,
+}) => {
+  await launchWorkspace(page, "/srv/work/project");
+  const composer = page.getByPlaceholder(
+    "Ask Octos to change, explain, or review code…",
+  );
+
+  await composer.fill("Request approval fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  const approval = page.getByRole("dialog", { name: "Run product checks?" });
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText("pnpm check");
+  await approval.getByRole("button", { name: /Yes/ }).click();
+  await expect(approval).toBeHidden();
+
+  await composer.fill("Request question fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  const question = page.getByRole("dialog", {
+    name: "Choose verification depth",
+  });
+  await expect(question).toBeVisible();
+  await question.getByLabel(/Full/).check();
+  await question.getByRole("button", { name: "Continue" }).click();
+  await expect(question).toBeHidden();
+});
+
 test("searches cross-session task activity and opens its session", async ({
   page,
 }) => {

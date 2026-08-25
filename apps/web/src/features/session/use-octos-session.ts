@@ -6,15 +6,11 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  approvalResolutionId,
   coreProtocolCompatibilityError,
   DEFAULT_UI_FEATURES,
-  isRecord,
   OctosUiClient,
   OctosUiProtocolError,
-  parseApprovalRequested,
   parseTokenCostUpdate,
-  parseUserQuestionRequested,
   supportsFeature,
   supportsMethod,
   type ApprovalDecision,
@@ -31,6 +27,7 @@ import {
   type TaskArtifactRecord,
 } from "@octos-org/octoscode-client";
 import type { ObservedEvent } from "../inspector/EventInspector.tsx";
+import { useBlockingInteractions } from "../interaction/use-blocking-interactions.ts";
 import {
   useCodingSafety,
   type DiffReviewRuntimeState,
@@ -53,6 +50,7 @@ import {
   DurableSessionProjection,
   type SessionRecoverySnapshot,
 } from "./durable-session.ts";
+import { notificationMatchesSessionScope } from "./scope.ts";
 import { type SupervisionRuntimeState } from "../supervision/model.ts";
 import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
@@ -165,10 +163,26 @@ export function useOctosSession(): OctosSessionRuntime {
   const [interruptingTurnId, setInterruptingTurnId] = useState<string | null>(
     null,
   );
-  const [approval, setApproval] = useState<ApprovalRequested | null>(null);
-  const [question, setQuestion] = useState<UserQuestionRequested | null>(null);
-  const [decisionBusy, setDecisionBusy] = useState(false);
-  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const interactionController = useBlockingInteractions({
+    client: () => clientRef.current,
+    sessionId: () => sessionIdRef.current,
+    capabilities: () => capabilitiesRef.current,
+    onInvalid: (title, body) => {
+      setTimeline((current) =>
+        addSystemMessage(
+          current,
+          `invalid-interaction:${crypto.randomUUID()}`,
+          title,
+          body,
+          "error",
+        ),
+      );
+    },
+  });
+  const approval = interactionController.approval;
+  const question = interactionController.question;
+  const decisionBusy = interactionController.busy;
+  const decisionError = interactionController.error;
   const [recovery, setRecovery] = useState<SessionRecoverySnapshot>(() =>
     durableProjectionRef.current.snapshot(),
   );
@@ -218,13 +232,6 @@ export function useOctosSession(): OctosSessionRuntime {
     syncQueue();
   };
 
-  const resetBlockingInteraction = () => {
-    setApproval(null);
-    setQuestion(null);
-    setDecisionBusy(false);
-    setDecisionError(null);
-  };
-
   const connect = (input: SessionConnectionInput) => {
     beginConnection(input, true);
   };
@@ -257,7 +264,7 @@ export function useOctosSession(): OctosSessionRuntime {
     setEvents([]);
     setTimeline([]);
     resetQueue();
-    resetBlockingInteraction();
+    interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
     launchOpeningRef.current = false;
@@ -459,7 +466,7 @@ export function useOctosSession(): OctosSessionRuntime {
 
     durableProjectionRef.current.commitHydrate(hydrated);
     setTimeline(timelineFromHydrate(hydrated));
-    restoreBlockingInteractions(hydrated, capabilities);
+    interactionController.restore(hydrated, capabilities);
     const nextTurn = reconcileQueueFromHydrate(hydrated);
     recoveringRef.current = false;
     syncRecovery();
@@ -471,59 +478,6 @@ export function useOctosSession(): OctosSessionRuntime {
       if (recoveringRef.current) break;
     }
     if (nextTurn && !recoveringRef.current) void startTurn(nextTurn);
-  }
-
-  function restoreBlockingInteractions(
-    hydrated: SessionHydrateResult,
-    capabilities: UiProtocolCapabilities | undefined,
-  ) {
-    const pendingApproval = (hydrated.pending_approvals ?? [])
-      .map((params) =>
-        parseApprovalRequested({
-          jsonrpc: "2.0",
-          method: "approval/requested",
-          params,
-        }),
-      )
-      .find(
-        (request) =>
-          request &&
-          matchesSessionScope(
-            sessionIdRef.current,
-            request.sessionId,
-            request.topic,
-          ),
-      );
-    const pendingQuestion = (hydrated.pending_questions ?? [])
-      .map((params) =>
-        parseUserQuestionRequested({
-          jsonrpc: "2.0",
-          method: "user_question/requested",
-          params,
-        }),
-      )
-      .find(
-        (request) =>
-          request &&
-          matchesSessionScope(
-            sessionIdRef.current,
-            request.sessionId,
-            request.topic,
-          ),
-      );
-    setApproval(
-      supportsMethod(capabilities, "approval/respond")
-        ? (pendingApproval ?? null)
-        : null,
-    );
-    setQuestion(
-      supportsMethod(capabilities, "user_question/respond") &&
-        supportsFeature(capabilities, "user_question.v1")
-        ? (pendingQuestion ?? null)
-        : null,
-    );
-    setDecisionBusy(false);
-    setDecisionError(null);
   }
 
   function reconcileQueueFromHydrate(hydrated: SessionHydrateResult) {
@@ -597,7 +551,7 @@ export function useOctosSession(): OctosSessionRuntime {
     durableProjectionRef.current.reset("");
     syncRecovery();
     resetQueue();
-    resetBlockingInteraction();
+    interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
     launchOpeningRef.current = false;
@@ -685,60 +639,6 @@ export function useOctosSession(): OctosSessionRuntime {
       setConnectionError(
         reason instanceof Error ? reason.message : String(reason),
       );
-    }
-  };
-
-  const respondApproval = async (
-    decision: ApprovalDecision,
-    scope: ApprovalScope,
-  ) => {
-    const client = clientRef.current;
-    const current = approval;
-    if (!client || !current || decisionBusy) return;
-    setDecisionBusy(true);
-    setDecisionError(null);
-    try {
-      const result = await client.respondApproval({
-        session_id: current.sessionId,
-        approval_id: current.approvalId,
-        decision,
-        approval_scope: scope,
-      });
-      if (!result.accepted) throw new Error("The server rejected the decision");
-      setApproval((pending) =>
-        pending?.approvalId === current.approvalId ? null : pending,
-      );
-    } catch (reason) {
-      setDecisionError(
-        reason instanceof Error ? reason.message : String(reason),
-      );
-    } finally {
-      setDecisionBusy(false);
-    }
-  };
-
-  const respondQuestion = async (answers: UserQuestionAnswer[]) => {
-    const client = clientRef.current;
-    const current = question;
-    if (!client || !current || decisionBusy) return;
-    setDecisionBusy(true);
-    setDecisionError(null);
-    try {
-      const result = await client.respondUserQuestion({
-        session_id: current.sessionId,
-        question_id: current.questionId,
-        answers,
-      });
-      if (!result.accepted) throw new Error("The server rejected the answer");
-      setQuestion((pending) =>
-        pending?.questionId === current.questionId ? null : pending,
-      );
-    } catch (reason) {
-      setDecisionError(
-        reason instanceof Error ? reason.message : String(reason),
-      );
-    } finally {
-      setDecisionBusy(false);
     }
   };
 
@@ -881,69 +781,11 @@ export function useOctosSession(): OctosSessionRuntime {
       setTimeline((current) => foldNotification(current, notification));
     }
 
-    if (notification.method === "approval/requested") {
-      const requested = parseApprovalRequested(notification);
-      if (
-        requested &&
-        matchesSessionScope(
-          sessionIdRef.current,
-          requested.sessionId,
-          requested.topic,
-        ) &&
-        supportsMethod(capabilitiesRef.current, "approval/respond")
-      ) {
-        setDecisionError(null);
-        setApproval(requested);
-      } else {
-        setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `invalid-approval:${crypto.randomUUID()}`,
-            "Approval cannot be rendered",
-            "The request was malformed, belonged to another session, or approval/respond was not negotiated.",
-            "error",
-          ),
-        );
-      }
-    }
-    const resolvedApprovalId = approvalResolutionId(notification);
-    if (resolvedApprovalId) {
-      setApproval((pending) =>
-        pending?.approvalId === resolvedApprovalId ? null : pending,
-      );
-    }
-
-    if (notification.method === "user_question/requested") {
-      const requested = parseUserQuestionRequested(notification);
-      if (
-        requested &&
-        matchesSessionScope(
-          sessionIdRef.current,
-          requested.sessionId,
-          requested.topic,
-        ) &&
-        supportsMethod(capabilitiesRef.current, "user_question/respond") &&
-        supportsFeature(capabilitiesRef.current, "user_question.v1")
-      ) {
-        setDecisionError(null);
-        setQuestion(requested);
-      } else {
-        setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `invalid-question:${crypto.randomUUID()}`,
-            "Question cannot be rendered",
-            "The request was malformed, belonged to another session, or user_question.v1 was not negotiated.",
-            "error",
-          ),
-        );
-      }
-    }
+    interactionController.observeNotification(notification);
 
     const terminal = foldIntoTimeline ? terminalTurnId(notification) : null;
     if (terminal) {
-      setApproval((pending) => (pending?.turnId === terminal ? null : pending));
-      setQuestion((pending) => (pending?.turnId === terminal ? null : pending));
+      interactionController.settleTurn(terminal);
       settleTurn(terminal);
     }
   }
@@ -984,8 +826,8 @@ export function useOctosSession(): OctosSessionRuntime {
     disconnect,
     enqueuePrompt,
     interrupt,
-    respondApproval,
-    respondQuestion,
+    respondApproval: interactionController.respondApproval,
+    respondQuestion: interactionController.respondQuestion,
     refreshPermission: codingSafetyController.refreshPermission,
     updatePermission: codingSafetyController.updatePermission,
     openDiffReview: codingSafetyController.openDiffReview,
@@ -1013,37 +855,6 @@ function launchProfileConfig(
     profileId,
     sessionId: codingSessionIdForProfile(profileId),
   };
-}
-
-function matchesSessionScope(
-  expected: string,
-  received: string,
-  topic?: string,
-): boolean {
-  if (received === expected) {
-    const expectedTopic = expected.split("#", 2)[1];
-    return (
-      expectedTopic === undefined ||
-      topic === undefined ||
-      topic === expectedTopic
-    );
-  }
-  return Boolean(topic && `${received}#${topic}` === expected);
-}
-
-function notificationMatchesSessionScope(
-  notification: RpcNotification,
-  expected: string,
-): boolean {
-  if (!isRecord(notification.params)) return true;
-  const received = notification.params.session_id;
-  if (received === undefined) return true;
-  if (typeof received !== "string") return false;
-  const topic =
-    typeof notification.params.topic === "string"
-      ? notification.params.topic
-      : undefined;
-  return matchesSessionScope(expected, received, topic);
 }
 
 function isFatalSessionContractError(message: string): boolean {

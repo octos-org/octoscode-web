@@ -82,6 +82,8 @@ const capabilities = {
 sockets.on("connection", (socket) => {
   let permission = { mode: "workspace_write", network: "deny" };
   let taskState = "running";
+  let pendingInteraction = null;
+  let projectionCursor = 10;
   socket.on("message", (bytes) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
@@ -188,7 +190,37 @@ sockets.on("connection", (socket) => {
     }
     if (request.method === "turn/start") {
       reply(socket, request.id, { accepted: true });
-      streamTurn(socket, sessionId, request.params);
+      pendingInteraction = streamTurn(
+        socket,
+        sessionId,
+        request.params,
+        () => ++projectionCursor,
+      );
+      return;
+    }
+    if (request.method === "approval/respond") {
+      reply(socket, request.id, {
+        approval_id: request.params.approval_id,
+        accepted: true,
+        status: request.params.decision === "approve" ? "approved" : "denied",
+        runtime_resumed: true,
+      });
+      if (pendingInteraction?.kind === "approval") {
+        finishInteraction(socket, pendingInteraction);
+        pendingInteraction = null;
+      }
+      return;
+    }
+    if (request.method === "user_question/respond") {
+      reply(socket, request.id, {
+        question_id: request.params.question_id,
+        accepted: true,
+        runtime_resumed: true,
+      });
+      if (pendingInteraction?.kind === "question") {
+        finishInteraction(socket, pendingInteraction);
+        pendingInteraction = null;
+      }
       return;
     }
     if (request.method === "turn/interrupt") {
@@ -377,11 +409,11 @@ sockets.on("connection", (socket) => {
   });
 });
 
-function streamTurn(socket, sessionId, params) {
+function streamTurn(socket, sessionId, params, nextCursor) {
   const turnId = params.turn_id;
   const threadId = `thread-${turnId}`;
   const text = params.input?.[0]?.text ?? "Fixture prompt";
-  notify(socket, sessionId, threadId, turnId, 1, 11, "user_message", {
+  notify(socket, sessionId, threadId, turnId, 1, nextCursor(), "user_message", {
     text,
     files: [],
   });
@@ -412,10 +444,69 @@ function streamTurn(socket, sessionId, params) {
       },
     }),
   );
-  notify(socket, sessionId, threadId, turnId, 2, 12, "assistant_delta", {
-    text: "Working on **Markdown**…",
-    assistant_segment_id: "segment-1",
-  });
+  if (text === "Request approval fixture") {
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "approval/requested",
+        params: {
+          session_id: sessionId,
+          approval_id: `approval-${turnId}`,
+          turn_id: turnId,
+          tool_name: "shell",
+          title: "Run product checks?",
+          body: "The agent wants to run the repository checks.",
+          approval_kind: "command",
+          risk: "medium",
+          typed_details: {
+            command: { command_line: "pnpm check" },
+          },
+        },
+      }),
+    );
+    return { kind: "approval", sessionId, threadId, turnId, nextCursor };
+  }
+  if (text === "Request question fixture") {
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "user_question/requested",
+        params: {
+          session_id: sessionId,
+          question_id: `question-${turnId}`,
+          turn_id: turnId,
+          title: "Choose verification depth",
+          body: "Octos needs one product decision.",
+          questions: [
+            {
+              header: "Checks",
+              question: "Which checks should run?",
+              options: [
+                { label: "Fast", description: "Unit tests only" },
+                { label: "Full", description: "All product gates" },
+              ],
+              multi_select: false,
+              allow_free_text: false,
+            },
+          ],
+        },
+      }),
+    );
+    return { kind: "question", sessionId, threadId, turnId, nextCursor };
+  }
+  notify(
+    socket,
+    sessionId,
+    threadId,
+    turnId,
+    2,
+    nextCursor(),
+    "assistant_delta",
+    {
+      text: "Working on **Markdown**…",
+      assistant_segment_id: "segment-1",
+    },
+  );
   socket.send(
     JSON.stringify({
       jsonrpc: "2.0",
@@ -458,19 +549,54 @@ function streamTurn(socket, sessionId, params) {
         },
       }),
     );
-    notify(socket, sessionId, threadId, turnId, 3, 13, "assistant_persisted", {
-      text: "Completed with `pnpm check` and **all tests passing**.",
-      assistant_segment_id: "segment-1",
-      meta: {
-        message_id: `message-${turnId}`,
-        persisted_at: new Date().toISOString(),
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      3,
+      nextCursor(),
+      "assistant_persisted",
+      {
+        text: "Completed with `pnpm check` and **all tests passing**.",
+        assistant_segment_id: "segment-1",
+        meta: {
+          message_id: `message-${turnId}`,
+          persisted_at: new Date().toISOString(),
+        },
       },
-    });
-    notify(socket, sessionId, threadId, turnId, 4, 14, "turn_terminal", {
-      outcome: "completed",
-      token_usage: { input_tokens: 12, output_tokens: 9 },
-    });
+    );
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      {
+        outcome: "completed",
+        token_usage: { input_tokens: 12, output_tokens: 9 },
+      },
+    );
   }, 350);
+  return null;
+}
+
+function finishInteraction(socket, interaction) {
+  notify(
+    socket,
+    interaction.sessionId,
+    interaction.threadId,
+    interaction.turnId,
+    2,
+    interaction.nextCursor(),
+    "turn_terminal",
+    {
+      outcome: "completed",
+      token_usage: { input_tokens: 4, output_tokens: 2 },
+    },
+  );
 }
 
 function mockTask(state) {
