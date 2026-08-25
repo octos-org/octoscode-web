@@ -1,23 +1,30 @@
 import type { ObservedEvent } from "../inspector/EventInspector.tsx";
 import { EventInspector } from "../inspector/EventInspector.tsx";
 import { taskIsCancellable, type SupervisionRuntimeState } from "./model.ts";
+import type { TokenCostUpdate } from "@octos-org/octoscode-client";
 
 interface WorkInspectorProps {
+  open: boolean;
   state: SupervisionRuntimeState;
   features: readonly string[];
   events: readonly ObservedEvent[];
   onRefresh: () => void;
   onOpenTask: (taskId: string) => void;
   onCancelTask: (taskId: string) => void;
+  tokenCost: TokenCostUpdate | null;
+  onClose: () => void;
 }
 
 export function WorkInspector({
+  open,
   state,
   features,
   events,
   onRefresh,
   onOpenTask,
   onCancelTask,
+  tokenCost,
+  onClose,
 }: WorkInspectorProps) {
   const policy = state.runtimeStatus?.runtime_policy_stamp;
   const runtimeRows = [
@@ -34,9 +41,32 @@ export function WorkInspector({
         stringAt(policy, "approval_policy"),
     ],
   ].filter((row): row is [string, string] => Boolean(row[1]));
+  const statusUsage = state.runtimeStatus?.usage;
+  const inputTokens = tokenCost?.inputTokens ?? statusUsage?.input_tokens;
+  const outputTokens = tokenCost?.outputTokens ?? statusUsage?.output_tokens;
+  const cost =
+    tokenCost?.sessionCost ??
+    (statusUsage?.estimated_cost_micros_usd === undefined
+      ? undefined
+      : statusUsage.estimated_cost_micros_usd / 1_000_000);
+  const contextPercent =
+    inputTokens !== undefined && tokenCost?.contextWindow
+      ? Math.min(100, Math.round((inputTokens / tokenCost.contextWindow) * 100))
+      : null;
 
   return (
-    <aside className="inspector work-inspector">
+    <aside
+      id="work-inspector"
+      className={`inspector work-inspector${open ? " is-open" : ""}`}
+    >
+      <button
+        className="inspector-close"
+        type="button"
+        aria-label="Close work inspector"
+        onClick={onClose}
+      >
+        ×
+      </button>
       <section>
         <div className="section-heading compact-heading">
           <div>
@@ -67,6 +97,36 @@ export function WorkInspector({
               : "session/status/read is not advertised."}
           </p>
         )}
+        {inputTokens !== undefined ||
+        outputTokens !== undefined ||
+        cost !== undefined ? (
+          <div className="usage-summary" aria-label="Session usage">
+            <div>
+              <span>Tokens</span>
+              <strong>
+                {formatTokens(inputTokens)} in · {formatTokens(outputTokens)}{" "}
+                out
+              </strong>
+            </div>
+            <div>
+              <span>Cost</span>
+              <strong>
+                {cost === undefined ? "—" : `$${cost.toFixed(4)}`}
+              </strong>
+            </div>
+            {contextPercent !== null ? (
+              <div className="context-meter">
+                <span>
+                  Context · {contextPercent}% of{" "}
+                  {formatTokens(tokenCost?.contextWindow)}
+                </span>
+                <i>
+                  <b style={{ width: `${contextPercent}%` }} />
+                </i>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="work-section">
@@ -147,6 +207,14 @@ export function WorkInspector({
       </details>
     </aside>
   );
+}
+
+function formatTokens(value: number | undefined) {
+  if (value === undefined) return "—";
+  return new Intl.NumberFormat("en", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function stringAt(value: Record<string, unknown> | undefined, key: string) {

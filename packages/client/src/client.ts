@@ -14,6 +14,12 @@ import type {
   SessionHydrateResult,
   SessionOpenParams,
   SessionOpenResult,
+  SessionDeleteParams,
+  SessionDeleteResult,
+  SessionFilesListParams,
+  SessionFilesListResult,
+  SessionListParams,
+  SessionListResult,
   SessionStatusReadResult,
   TaskArtifactListParams,
   TaskArtifactListResult,
@@ -44,6 +50,11 @@ import {
   parseTaskListResult,
   parseTaskOutputReadResult,
 } from "./supervision.ts";
+import {
+  parseSessionDeleteResult,
+  parseSessionFilesListResult,
+  parseSessionListResult,
+} from "./workspace.ts";
 
 export const DEFAULT_UI_FEATURES = [
   "approval.typed.v1",
@@ -351,6 +362,36 @@ export class OctosUiClient {
       "session/status/read",
       { session_id: sessionId },
       parseSessionStatusReadResult,
+    );
+  }
+
+  async listSessions(
+    params: SessionListParams = {},
+  ): Promise<SessionListResult> {
+    return this.validatedRequest(
+      "session/list",
+      params,
+      parseSessionListResult,
+    );
+  }
+
+  async deleteSession(
+    params: SessionDeleteParams,
+  ): Promise<SessionDeleteResult> {
+    return this.validatedRequest(
+      "session/delete",
+      params,
+      parseSessionDeleteResult,
+    );
+  }
+
+  async listSessionFiles(
+    params: SessionFilesListParams,
+  ): Promise<SessionFilesListResult> {
+    return this.validatedRequest(
+      "session/files.list",
+      params,
+      parseSessionFilesListResult,
     );
   }
 

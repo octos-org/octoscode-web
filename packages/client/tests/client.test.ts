@@ -161,7 +161,7 @@ describe("OctosUiClient", () => {
     });
   });
 
-  it("emits and validates authoritative permission and diff requests", async () => {
+  it("emits and validates authoritative product requests", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
       endpoint: "http://127.0.0.1:50080",
@@ -178,6 +178,9 @@ describe("OctosUiClient", () => {
         fixture.permission_profile_set.request as PermissionProfileSetParams,
       ),
       client.getDiffPreview(fixture.diff_preview_get.request),
+      client.listSessions(fixture.session_list.request),
+      client.listSessionFiles(fixture.session_files_list.request),
+      client.deleteSession(fixture.session_delete.request),
     ];
     const frames = socket.send.mock.calls.map(([frame]) =>
       JSON.parse(String(frame)),
@@ -195,12 +198,27 @@ describe("OctosUiClient", () => {
         method: "diff/preview/get",
         params: fixture.diff_preview_get.request,
       },
+      {
+        method: "session/list",
+        params: fixture.session_list.request,
+      },
+      {
+        method: "session/files.list",
+        params: fixture.session_files_list.request,
+      },
+      {
+        method: "session/delete",
+        params: fixture.session_delete.request,
+      },
     ]);
 
     const results = [
       fixture.permission_profile_list.result,
       fixture.permission_profile_set.result,
       fixture.diff_preview_get.result,
+      fixture.session_list.result,
+      fixture.session_files_list.result,
+      fixture.session_delete.result,
     ];
     for (const [index, frame] of frames.entries()) {
       socket.onmessage?.({
@@ -211,7 +229,7 @@ describe("OctosUiClient", () => {
         }),
       } as MessageEvent);
     }
-    await expect(Promise.all(pending)).resolves.toHaveLength(3);
+    await expect(Promise.all(pending)).resolves.toHaveLength(6);
   });
 });
 

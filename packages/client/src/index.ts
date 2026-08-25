@@ -32,6 +32,12 @@ export {
   parseTaskUpdated,
 } from "./supervision.ts";
 export {
+  parseSessionDeleteResult,
+  parseSessionFilesListResult,
+  parseSessionListResult,
+  parseTokenCostUpdate,
+} from "./workspace.ts";
+export {
   approvalDiffPreviewId,
   approvalResolutionId,
   notificationDiffPreviewId,
@@ -68,6 +74,18 @@ export type {
   PlanItemStatus,
   PlanUpdated,
   SessionStatusReadResult,
+  RuntimeHealthStatus,
+  SessionCursorStatus,
+  SessionDeleteParams,
+  SessionDeleteResult,
+  SessionFileInfo,
+  SessionFilesListParams,
+  SessionFilesListResult,
+  SessionListEntry,
+  SessionListParams,
+  SessionListResult,
+  SessionUsageStatus,
+  TokenCostUpdate,
   TaskArtifactListParams,
   TaskArtifactListResult,
   TaskArtifactReadParams,

@@ -7,6 +7,7 @@ describe("WorkInspector", () => {
   it("renders runtime truth, plan, and supervised tasks", () => {
     const html = renderToStaticMarkup(
       <WorkInspector
+        open={false}
         state={{
           ...EMPTY_SUPERVISION,
           available: true,
@@ -42,11 +43,22 @@ describe("WorkInspector", () => {
         onRefresh={vi.fn()}
         onOpenTask={vi.fn()}
         onCancelTask={vi.fn()}
+        onClose={vi.fn()}
+        tokenCost={{
+          sessionId: "s1",
+          inputTokens: 128_000,
+          outputTokens: 340,
+          sessionCost: 0.12,
+          contextWindow: 1_000_000,
+        }}
       />,
     );
     expect(html).toContain("deepseek-v4");
     expect(html).toContain("Run checks");
     expect(html).toContain("Validate checks");
+    expect(html).toContain("Context · 13%");
     expect(html).toContain('aria-label="Cancel Validate checks"');
+    expect(html).toContain('id="work-inspector"');
+    expect(html).toContain('aria-label="Close work inspector"');
   });
 });

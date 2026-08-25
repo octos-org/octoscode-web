@@ -118,6 +118,51 @@ a:focus-visible,
   padding: 12px 4px;
 }
 
+.connection-card-compact {
+  padding-bottom: 10px;
+}
+
+.connection-card-compact .section-heading {
+  margin-bottom: 10px;
+}
+
+.connection-card-compact .button {
+  height: 32px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.connection-summary {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px;
+}
+
+.connection-summary > div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.connection-summary dt,
+.connection-summary dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 9px;
+}
+
+.connection-summary dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.connection-summary dd {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -264,6 +309,241 @@ label > span {
 .connection-error {
   margin: -2px 0 12px;
   color: var(--dsw-alias-state-error-primary);
+}
+
+.session-navigator {
+  margin: 4px;
+  padding: 14px 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.navigator-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.navigator-actions button,
+.new-session-form button,
+.session-delete-confirm button {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.navigator-actions button:hover,
+.new-session-form button:hover:not(:disabled),
+.session-delete-confirm button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.new-session-form {
+  margin-bottom: 9px;
+  padding: 9px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 9px;
+  background: var(--dsw-specific-tip);
+}
+
+.new-session-form label {
+  margin-bottom: 7px;
+}
+
+.new-session-form input,
+.session-search {
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  padding: 0 8px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: 400 9px/1 var(--ds-font-family-code);
+}
+
+.new-session-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.new-session-form button:last-child {
+  background: var(--dsw-alias-button-info-fill);
+  color: #fff;
+}
+
+.session-search {
+  margin-bottom: 7px;
+}
+
+.session-list {
+  display: grid;
+  gap: 4px;
+}
+
+.session-list article {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.session-list article.active {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.session-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: start;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 27px 8px 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-row:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.session-row:disabled {
+  cursor: default;
+}
+
+.session-presence {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.active .session-presence {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.session-row > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.session-row strong,
+.session-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row strong {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.session-row small {
+  color: var(--dsw-alias-label-tertiary);
+  font: 400 8px/1.4 var(--ds-font-family-code);
+}
+
+.session-row em {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 7px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.session-delete {
+  position: absolute;
+  top: 7px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.session-delete:hover {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.session-delete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 4px 6px 7px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 8px;
+}
+
+.session-delete-confirm span {
+  margin-right: auto;
+}
+
+.session-delete-confirm button:last-child {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.session-files {
+  margin-top: 9px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 9px;
+}
+
+.session-files summary {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.session-files > div {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 5px;
+  padding: 6px 2px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.session-files > div > span:last-child {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.session-files strong,
+.session-files small,
+.session-files p {
+  font-size: 8px;
+  font-weight: 400;
+}
+
+.session-files strong {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-files p {
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .boundary-note {
@@ -461,6 +741,23 @@ label > span {
 .header-actions {
   flex: none;
   gap: 14px;
+}
+
+.inspector-toggle,
+.inspector-close,
+.inspector-backdrop {
+  display: none;
+}
+
+.inspector-toggle {
+  height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 11px;
 }
 
 .recovery-pill {
@@ -1200,6 +1497,54 @@ kbd {
   white-space: nowrap;
 }
 
+.usage-summary {
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+  padding: 10px;
+  border-radius: 9px;
+  background: var(--dsw-specific-tip);
+}
+
+.usage-summary > div:not(.context-meter) {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-summary span,
+.usage-summary strong {
+  font-size: 9px;
+}
+
+.usage-summary span {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.usage-summary strong {
+  color: var(--dsw-alias-label-secondary);
+  font: 500 9px/1 var(--ds-font-family-code);
+}
+
+.context-meter {
+  display: grid;
+  gap: 5px;
+}
+
+.context-meter i {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.context-meter b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dsw-alias-state-business-primary);
+}
+
 .plan-list {
   display: grid;
   gap: 8px;
@@ -1869,7 +2214,64 @@ kbd {
   }
 
   .inspector {
-    display: none;
+    position: fixed;
+    z-index: 45;
+    inset: 0 0 0 auto;
+    display: block;
+    width: min(360px, calc(100vw - 32px));
+    max-height: 100dvh;
+    visibility: hidden;
+    box-shadow: -18px 0 48px rgb(0 0 0 / 22%);
+    transform: translateX(100%);
+    transition:
+      transform 180ms ease,
+      visibility 180ms ease;
+  }
+
+  .inspector.is-open {
+    visibility: visible;
+    transform: translateX(0);
+  }
+
+  .inspector-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .inspector-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 9px;
+    padding: 0;
+    place-items: center;
+    background: var(--dsw-alias-bg-layer-1);
+    color: var(--dsw-alias-label-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .work-inspector > section:first-of-type .section-heading {
+    padding-right: 32px;
+  }
+
+  .inspector-backdrop {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    padding: 0;
+    background: rgb(0 0 0 / 38%);
+    cursor: default;
   }
 }
 

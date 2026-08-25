@@ -152,6 +152,37 @@
       ]
     }
   },
+  "session_list": {
+    "request": { "cwd": "/srv/work/octoscode-web" },
+    "result": {
+      "sessions": [
+        {
+          "id": "coding:local:main",
+          "message_count": 12,
+          "title": "Ship the Web client",
+          "updated_at": "2026-08-26T00:00:00Z",
+          "last_prompt": "Finish session navigation"
+        }
+      ]
+    }
+  },
+  "session_files_list": {
+    "request": { "session_id": "coding:local:main" },
+    "result": {
+      "files": [
+        {
+          "filename": "check.txt",
+          "path": "pf/coding/reports/check.txt",
+          "size_bytes": 42,
+          "modified_at": "2026-08-26T00:00:00Z"
+        }
+      ]
+    }
+  },
+  "session_delete": {
+    "request": { "session_id": "coding:local:review" },
+    "result": {}
+  },
   "session_status_read": {
     "result": {
       "session_id": "coding:local:main",
@@ -162,9 +193,35 @@
       "network": "blocked",
       "approval_policy": "on-request",
       "mcp_servers": [],
+      "usage": {
+        "input_tokens": 1200,
+        "output_tokens": 340,
+        "estimated_cost_micros_usd": 2500
+      },
+      "health": { "status": "ok" },
+      "cursor": { "healthy": true, "replay_supported": true },
       "runtime_policy_stamp": {
         "model": "deepseek-v4",
         "sandbox": "workspace_write"
+      }
+    }
+  },
+  "token_cost_update": {
+    "jsonrpc": "2.0",
+    "method": "progress/updated",
+    "params": {
+      "session_id": "coding:local:main",
+      "turn_id": "turn-1",
+      "metadata": {
+        "kind": "token_cost_update",
+        "token_cost": {
+          "input_tokens": 128000,
+          "output_tokens": 300,
+          "session_cost": 0.12,
+          "currency": "USD",
+          "model": "deepseek-v4",
+          "context_window": 1000000
+        }
       }
     }
   }

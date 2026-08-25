@@ -30,11 +30,11 @@
 
 ## Milestone 3 — workspace product
 
-- [ ] Session list/create/switch/archive
+- [x] Session list/create/switch/delete (Core has no archive RPC)
 - [ ] Workspace/repository launcher using server-owned paths
-- [ ] File/artifact browser
-- [ ] Context/cost/model status
-- [ ] Responsive and accessible layouts
+- [x] Server-owned session file metadata and paged task artifacts
+- [x] Context/cost/model status
+- [x] Responsive supervision drawer and keyboard dismissal
 
 ## Explicit non-goals for the MVP
 

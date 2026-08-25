@@ -16,6 +16,7 @@ import {
   parsePlanUpdated,
   parseTaskOutputDelta,
   parseTaskUpdated,
+  parseTokenCostUpdate,
   parseUserQuestionRequested,
   supportsFeature,
   supportsMethod,
@@ -62,6 +63,13 @@ import {
   tasksFromList,
   type SupervisionRuntimeState,
 } from "../supervision/model.ts";
+import {
+  EMPTY_WORKSPACE_PRODUCT,
+  includeActiveSession,
+  mergeTokenCost,
+  sortSessions,
+  type WorkspaceProductState,
+} from "../workspace/model.ts";
 
 const REQUIRED_DURABLE_FEATURES = [
   "state.session_hydrate.v1",
@@ -103,6 +111,7 @@ export interface OctosSessionRuntime {
   permission: PermissionRuntimeState;
   diffReview: DiffReviewRuntimeState;
   supervision: SupervisionRuntimeState;
+  workspace: WorkspaceProductState;
   connected: boolean;
   connect: (input: SessionConnectionInput) => void;
   disconnect: () => void;
@@ -124,6 +133,9 @@ export interface OctosSessionRuntime {
   cancelTask: (taskId: string) => Promise<void>;
   readTaskArtifact: (artifact: TaskArtifactRecord) => Promise<void>;
   loadMoreTaskArtifact: () => Promise<void>;
+  refreshWorkspace: () => Promise<void>;
+  switchSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => Promise<void>;
 }
 
 export interface PermissionRuntimeState {
@@ -177,6 +189,8 @@ export function useOctosSession(): OctosSessionRuntime {
   const diffRequestRef = useRef(0);
   const permissionBusyRef = useRef(false);
   const supervisionRequestRef = useRef(0);
+  const workspaceRequestRef = useRef(0);
+  const deletingSessionRef = useRef<string | null>(null);
   const manualDisconnectRef = useRef(false);
   const connectionConfigRef = useRef<SessionConnectionInput | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -203,6 +217,9 @@ export function useOctosSession(): OctosSessionRuntime {
     useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
   const [supervision, setSupervision] =
     useState<SupervisionRuntimeState>(EMPTY_SUPERVISION);
+  const [workspace, setWorkspace] = useState<WorkspaceProductState>(
+    EMPTY_WORKSPACE_PRODUCT,
+  );
 
   useEffect(
     () => () => {
@@ -263,6 +280,9 @@ export function useOctosSession(): OctosSessionRuntime {
     setDiffReview(EMPTY_DIFF_REVIEW);
     supervisionRequestRef.current += 1;
     setSupervision(EMPTY_SUPERVISION);
+    workspaceRequestRef.current += 1;
+    deletingSessionRef.current = null;
+    setWorkspace(EMPTY_WORKSPACE_PRODUCT);
     capabilitiesRef.current = undefined;
     sessionIdRef.current = config.sessionId;
     durableProjectionRef.current.reset(config.sessionId);
@@ -322,6 +342,7 @@ export function useOctosSession(): OctosSessionRuntime {
         void loadPermissionProfiles(client);
       }
       void refreshSupervisionWith(client);
+      void refreshWorkspaceWith(client);
       reconnectAttemptRef.current = 0;
       setConnectionError(null);
     } catch (reason) {
@@ -367,6 +388,12 @@ export function useOctosSession(): OctosSessionRuntime {
         supportsMethod(capabilities, "task/artifact/list") &&
         supportsMethod(capabilities, "task/artifact/read"),
       statusAvailable: supportsMethod(capabilities, "session/status/read"),
+    }));
+    setWorkspace((current) => ({
+      ...current,
+      sessionsAvailable: supportsMethod(capabilities, "session/list"),
+      deleteAvailable: supportsMethod(capabilities, "session/delete"),
+      filesAvailable: supportsMethod(capabilities, "session/files.list"),
     }));
   }
 
@@ -586,6 +613,9 @@ export function useOctosSession(): OctosSessionRuntime {
     setDiffReview(EMPTY_DIFF_REVIEW);
     supervisionRequestRef.current += 1;
     setSupervision(EMPTY_SUPERVISION);
+    workspaceRequestRef.current += 1;
+    deletingSessionRef.current = null;
+    setWorkspace(EMPTY_WORKSPACE_PRODUCT);
   };
 
   const enqueuePrompt = (text: string) => {
@@ -1261,6 +1291,136 @@ export function useOctosSession(): OctosSessionRuntime {
     }
   };
 
+  async function refreshWorkspaceWith(client = clientRef.current) {
+    const sessionId = sessionIdRef.current;
+    const config = connectionConfigRef.current;
+    const capabilities = capabilitiesRef.current;
+    if (!client || !sessionId || !config) return;
+    const canList = supportsMethod(capabilities, "session/list");
+    const canListFiles = supportsMethod(capabilities, "session/files.list");
+    if (!canList && !canListFiles) return;
+    const request = workspaceRequestRef.current + 1;
+    workspaceRequestRef.current = request;
+    setWorkspace((current) => ({
+      ...current,
+      loading: canList,
+      filesLoading: canListFiles,
+      error: null,
+    }));
+    const [sessions, files] = await Promise.allSettled([
+      canList
+        ? client.listSessions(
+            config.cwd &&
+              supportsFeature(capabilities, "session.workspace_cwd.v1")
+              ? { cwd: config.cwd }
+              : {},
+          )
+        : Promise.resolve(null),
+      canListFiles
+        ? client.listSessionFiles({ session_id: sessionId })
+        : Promise.resolve(null),
+    ]);
+    if (
+      clientRef.current !== client ||
+      sessionIdRef.current !== sessionId ||
+      workspaceRequestRef.current !== request
+    ) {
+      return;
+    }
+    const errors: string[] = [];
+    if (sessions.status === "rejected") {
+      errors.push(
+        sessions.reason instanceof Error
+          ? sessions.reason.message
+          : String(sessions.reason),
+      );
+    }
+    if (files.status === "rejected") {
+      errors.push(
+        files.reason instanceof Error
+          ? files.reason.message
+          : String(files.reason),
+      );
+    }
+    setWorkspace((current) => ({
+      ...current,
+      loading: false,
+      filesLoading: false,
+      sessions:
+        sessions.status === "fulfilled" && sessions.value
+          ? includeActiveSession(
+              sortSessions(sessions.value.sessions),
+              sessionId,
+            )
+          : current.sessions,
+      files:
+        files.status === "fulfilled" && files.value
+          ? files.value.files
+          : current.files,
+      error: errors.length ? errors.join(" · ") : null,
+    }));
+  }
+
+  const refreshWorkspace = async () => {
+    await refreshWorkspaceWith();
+  };
+
+  const switchSession = (sessionId: string) => {
+    const target = sessionId.trim();
+    const config = connectionConfigRef.current;
+    const queueState = queueRef.current.snapshot();
+    if (!target || target === sessionIdRef.current || !config) return;
+    if (queueState.active || queueState.pending.length) {
+      setWorkspace((current) => ({
+        ...current,
+        error:
+          "The foreground queue must settle before this Web client can switch sessions.",
+      }));
+      return;
+    }
+    connect({ ...config, sessionId: target });
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    const client = clientRef.current;
+    if (
+      !client ||
+      sessionId === sessionIdRef.current ||
+      !supportsMethod(capabilitiesRef.current, "session/delete") ||
+      deletingSessionRef.current
+    ) {
+      return;
+    }
+    deletingSessionRef.current = sessionId;
+    setWorkspace((current) => ({
+      ...current,
+      deletingSessionId: sessionId,
+      error: null,
+    }));
+    try {
+      await client.deleteSession({ session_id: sessionId });
+      if (clientRef.current !== client) return;
+      setWorkspace((current) => ({
+        ...current,
+        deletingSessionId: null,
+        sessions: current.sessions.filter(
+          (session) => session.id !== sessionId,
+        ),
+      }));
+    } catch (reason) {
+      if (clientRef.current !== client) return;
+      setWorkspace((current) => ({
+        ...current,
+        deletingSessionId: null,
+        error: reason instanceof Error ? reason.message : String(reason),
+      }));
+    } finally {
+      if (deletingSessionRef.current === sessionId) {
+        deletingSessionRef.current = null;
+      }
+    }
+  };
+
   function handleNotification(notification: RpcNotification) {
     setEvents((current) =>
       [
@@ -1356,6 +1516,13 @@ export function useOctosSession(): OctosSessionRuntime {
       setSupervision((current) => ({
         ...current,
         detail: appendTaskOutputDelta(current.detail, outputDelta),
+      }));
+    }
+    const tokenCost = parseTokenCostUpdate(notification);
+    if (tokenCost && tokenCost.sessionId === sessionIdRef.current) {
+      setWorkspace((current) => ({
+        ...current,
+        tokenCost: mergeTokenCost(current.tokenCost, tokenCost),
       }));
     }
 
@@ -1465,6 +1632,7 @@ export function useOctosSession(): OctosSessionRuntime {
     permission,
     diffReview,
     supervision,
+    workspace,
     connected:
       status === "connected" && opened !== null && recovery.phase === "healthy",
     connect,
@@ -1484,6 +1652,9 @@ export function useOctosSession(): OctosSessionRuntime {
     cancelTask,
     readTaskArtifact,
     loadMoreTaskArtifact,
+    refreshWorkspace,
+    switchSession,
+    deleteSession,
   };
 }
 

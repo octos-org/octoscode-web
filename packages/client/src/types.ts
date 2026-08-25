@@ -358,7 +358,82 @@ export interface SessionStatusReadResult {
   tool_policy_id?: string;
   mcp_servers: string[];
   memory_scope?: string;
-  usage?: unknown;
+  health?: RuntimeHealthStatus;
+  usage?: SessionUsageStatus;
+  cursor?: SessionCursorStatus;
+}
+
+export interface RuntimeHealthStatus {
+  status: string;
+  message?: string;
+}
+
+export interface SessionUsageStatus {
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_input_tokens?: number;
+  cached_output_tokens?: number;
+  estimated_cost_micros_usd?: number;
+}
+
+export interface SessionCursorStatus {
+  cursor?: UiCursor;
+  healthy: boolean;
+  replay_supported: boolean;
+  detail?: string;
+}
+
+export interface TokenCostUpdate {
+  sessionId: string;
+  turnId?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  totalTokens?: number;
+  responseCost?: number;
+  sessionCost?: number;
+  currency?: string;
+  model?: string;
+  contextWindow?: number;
+}
+
+export interface SessionListParams {
+  cwd?: string;
+}
+
+export interface SessionListEntry {
+  id: string;
+  message_count: number;
+  title?: string;
+  updated_at?: string;
+  last_prompt?: string;
+}
+
+export interface SessionListResult {
+  sessions: SessionListEntry[];
+}
+
+export interface SessionDeleteParams {
+  session_id: string;
+}
+
+export type SessionDeleteResult = Record<string, never>;
+
+export interface SessionFileInfo {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+export interface SessionFilesListParams {
+  session_id: string;
+}
+
+export interface SessionFilesListResult {
+  files: SessionFileInfo[];
 }
 
 export interface SessionOpenParams {

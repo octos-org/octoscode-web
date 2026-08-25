@@ -4,6 +4,7 @@ import type {
   PlanItem,
   PlanUpdated,
   SessionStatusReadResult,
+  SessionUsageStatus,
   TaskArtifactListResult,
   TaskArtifactReadResult,
   TaskArtifactRecord,
@@ -288,6 +289,10 @@ export function parseSessionStatusReadResult(
   if (!model.valid) return null;
   const mcpServers = value.mcp_servers ?? [];
   if (!Array.isArray(mcpServers) || !mcpServers.every(isString)) return null;
+  const usage = parseUsage(value.usage);
+  const health = parseHealth(value.health);
+  const cursor = parseSessionCursor(value.cursor);
+  if (!usage.valid || !health.valid || !cursor.valid) return null;
   return {
     session_id: value.session_id,
     ...copyOptionalStrings(value, stringFields),
@@ -296,7 +301,89 @@ export function parseSessionStatusReadResult(
       : {}),
     ...(model.value ? { model: model.value } : {}),
     mcp_servers: mcpServers,
-    ...(value.usage === undefined ? {} : { usage: value.usage }),
+    ...(usage.value ? { usage: usage.value } : {}),
+    ...(health.value ? { health: health.value } : {}),
+    ...(cursor.value ? { cursor: cursor.value } : {}),
+  };
+}
+
+function parseUsage(value: unknown): {
+  valid: boolean;
+  value?: SessionUsageStatus;
+} {
+  if (value === undefined || value === null) return { valid: true };
+  if (!isRecord(value)) return { valid: false };
+  const keys = [
+    "input_tokens",
+    "output_tokens",
+    "cached_input_tokens",
+    "cached_output_tokens",
+    "estimated_cost_micros_usd",
+  ] as const;
+  if (keys.some((key) => value[key] !== undefined && !isU64(value[key]))) {
+    return { valid: false };
+  }
+  return {
+    valid: true,
+    value: Object.fromEntries(
+      keys.flatMap((key) => (isU64(value[key]) ? [[key, value[key]]] : [])),
+    ) as SessionUsageStatus,
+  };
+}
+
+function parseHealth(value: unknown): {
+  valid: boolean;
+  value?: { status: string; message?: string };
+} {
+  if (value === undefined || value === null) return { valid: true };
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.status) ||
+    (value.message !== undefined && typeof value.message !== "string")
+  ) {
+    return { valid: false };
+  }
+  return {
+    valid: true,
+    value: {
+      status: value.status,
+      ...(typeof value.message === "string" ? { message: value.message } : {}),
+    },
+  };
+}
+
+function parseSessionCursor(value: unknown): {
+  valid: boolean;
+  value?: SessionStatusReadResult["cursor"];
+} {
+  if (value === undefined || value === null) return { valid: true };
+  if (
+    !isRecord(value) ||
+    typeof value.healthy !== "boolean" ||
+    typeof value.replay_supported !== "boolean" ||
+    (value.detail !== undefined && typeof value.detail !== "string")
+  ) {
+    return { valid: false };
+  }
+  let parsedCursor;
+  if (value.cursor !== undefined && value.cursor !== null) {
+    if (
+      !isRecord(value.cursor) ||
+      typeof value.cursor.stream !== "string" ||
+      !isU64(value.cursor.seq)
+    ) {
+      return { valid: false };
+    }
+    parsedCursor = { stream: value.cursor.stream, seq: value.cursor.seq };
+  }
+  return {
+    valid: true,
+    value: {
+      ...(parsedCursor ? { cursor: parsedCursor } : {}),
+      healthy: value.healthy,
+      replay_supported: value.replay_supported,
+      ...(typeof value.detail === "string" ? { detail: value.detail } : {}),
+    },
   };
 }
 

@@ -68,6 +68,20 @@ deduplicated against the last read cursor, gaps fail closed, and large output
 or artifact bodies are read in bounded pages. The raw protocol inspector stays
 available as folded diagnostics, not as the primary product surface.
 
+Workspace navigation is also server-authoritative. `session/list` may be
+scoped by `cwd` only after `session.workspace_cwd.v1` is negotiated. Creating a
+session means opening a new explicit id; switching closes the current protocol
+connection and reopens the selected durable session against the same server.
+The browser preserves only unsent per-session drafts. It never copies runtime
+state across sessions. `session/files.list` is rendered as safe server-owned
+output metadata, not treated as a general repository filesystem API.
+
+Core exposes permanent `session/delete`, but no archive RPC. The product names
+that action truthfully, requires an inline second confirmation, and never
+offers it for the active session. Live context and cost come from typed
+`token_cost_update` progress metadata and are merged with the latest
+`session/status/read` usage snapshot.
+
 ## Browser constraints
 
 - A browser cannot spawn `octos serve`; standalone use requires an existing

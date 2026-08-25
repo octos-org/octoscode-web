@@ -9,6 +9,22 @@ const sockets = new WebSocketServer({
   server: http,
   path: "/api/ui-protocol/ws",
 });
+let mockSessions = [
+  {
+    id: "coding:local:main",
+    message_count: 12,
+    title: "Ship octoscode-web",
+    updated_at: "2026-08-26T00:00:00Z",
+    last_prompt: "Add the coding product surfaces",
+  },
+  {
+    id: "coding:local:review",
+    message_count: 4,
+    title: "Review protocol drift",
+    updated_at: "2026-08-25T18:00:00Z",
+    last_prompt: "Compare the Core fixture",
+  },
+];
 
 const capabilities = {
   version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
@@ -29,8 +45,16 @@ const capabilities = {
     "task/artifact/list",
     "task/artifact/read",
     "session/status/read",
+    "session/list",
+    "session/delete",
+    "session/files.list",
   ],
-  supported_notifications: ["projection/envelope", "protocol/replay_lossy"],
+  supported_notifications: [
+    "projection/envelope",
+    "protocol/replay_lossy",
+    "progress/updated",
+    "plan/updated",
+  ],
   supported_features: [
     "state.session_hydrate.v1",
     "projection.envelope.v2",
@@ -39,6 +63,7 @@ const capabilities = {
     "harness.task_control.v1",
     "harness.task_artifacts.v1",
     "plan.todos.v1",
+    "session.workspace_cwd.v1",
   ],
 };
 
@@ -49,6 +74,17 @@ sockets.on("connection", (socket) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
     if (request.method === "session/open") {
+      if (!mockSessions.some((session) => session.id === sessionId)) {
+        mockSessions = [
+          {
+            id: sessionId,
+            message_count: 0,
+            title: "New coding session",
+            updated_at: new Date().toISOString(),
+          },
+          ...mockSessions,
+        ];
+      }
       reply(socket, request.id, {
         opened: {
           session_id: sessionId,
@@ -174,6 +210,48 @@ sockets.on("connection", (socket) => {
           network: permission.network === "allow" ? "allowed" : "blocked",
           approval_policy: "on-request",
         },
+        usage: {
+          input_tokens: 128000,
+          output_tokens: 340,
+          cached_input_tokens: 64000,
+          estimated_cost_micros_usd: 120000,
+        },
+        health: { status: "ok" },
+        cursor: {
+          cursor: { stream: sessionId, seq: 10 },
+          healthy: true,
+          replay_supported: true,
+        },
+      });
+      return;
+    }
+    if (request.method === "session/list") {
+      reply(socket, request.id, { sessions: mockSessions });
+      return;
+    }
+    if (request.method === "session/delete") {
+      mockSessions = mockSessions.filter(
+        (session) => session.id !== request.params.session_id,
+      );
+      reply(socket, request.id, {});
+      return;
+    }
+    if (request.method === "session/files.list") {
+      reply(socket, request.id, {
+        files: [
+          {
+            filename: "check.txt",
+            path: "pf/coding/reports/check.txt",
+            size_bytes: 12400,
+            modified_at: "2026-08-26T00:00:00Z",
+          },
+          {
+            filename: "diff.patch",
+            path: "pf/coding/reports/diff.patch",
+            size_bytes: 8100,
+            modified_at: "2026-08-25T23:58:00Z",
+          },
+        ],
       });
       return;
     }
@@ -305,6 +383,28 @@ function streamTurn(socket, sessionId, params) {
     text: "Working on **Markdown**…",
     assistant_segment_id: "segment-1",
   });
+  socket.send(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "progress/updated",
+      params: {
+        session_id: sessionId,
+        turn_id: turnId,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          kind: "token_cost_update",
+          token_cost: {
+            input_tokens: 128000,
+            output_tokens: 340,
+            session_cost: 0.12,
+            currency: "USD",
+            model: "deepseek-v4",
+            context_window: 1000000,
+          },
+        },
+      },
+    }),
+  );
   setTimeout(() => {
     socket.send(
       JSON.stringify({

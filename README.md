@@ -19,8 +19,12 @@ shows settled GFM with lazy syntax highlighting. It also exposes server-confirme
 per-session permission profiles and authoritative diff previews discovered from
 typed coding events. The supervised-work surface renders the server's live plan,
 runtime policy stamp, task lifecycle, cursor-safe output, cancellation, and
-paged task artifacts. Session switching and workspace product surfaces follow
-in the MVP plan.
+paged task artifacts. The workspace sidebar lists, creates, switches, and
+permanently deletes server-owned sessions while preserving a draft per session;
+it also exposes safe session-file metadata. Runtime usage combines the typed
+status snapshot with live model cost and context-window updates. On narrower
+screens, the supervision surface remains available as a keyboard-dismissible
+drawer.
 
 ## Run locally
 
@@ -68,6 +72,8 @@ Permission and diff review follow the
 [coding safety surfaces decision](docs/adr/0007-coding-safety-surfaces.md).
 Plans, tasks, output, and artifacts follow the
 [supervised work decision](docs/adr/0008-supervised-work-surfaces.md).
+Session navigation, safe file metadata, and usage follow the
+[workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 

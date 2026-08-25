@@ -32,6 +32,43 @@ export function ConnectionPanel({
     onChange({ ...value, [key]: next });
   };
 
+  if (connected) {
+    return (
+      <section
+        className="connection-card connection-card-compact"
+        aria-labelledby="connection-title"
+      >
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Runtime</span>
+            <h2 id="connection-title">Octos server</h2>
+          </div>
+          <span className={`status-dot status-${status}`} title={status} />
+        </div>
+        <dl className="connection-summary">
+          <div>
+            <dt>Origin</dt>
+            <dd>{value.endpoint}</dd>
+          </div>
+          {value.cwd ? (
+            <div>
+              <dt>Workspace</dt>
+              <dd>{value.cwd}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {error ? <p className="connection-error">{error}</p> : null}
+        <button
+          className="button button-secondary"
+          onClick={onDisconnect}
+          type="button"
+        >
+          Disconnect
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section className="connection-card" aria-labelledby="connection-title">
       <div className="section-heading">

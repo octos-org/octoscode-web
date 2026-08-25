@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addSystemMessage } from "../features/timeline/model.ts";
 import {
   ConnectionPanel,
@@ -18,6 +18,7 @@ import { PermissionPanel } from "../features/permissions/PermissionPanel.tsx";
 import { DiffReviewDialog } from "../features/review/DiffReviewDialog.tsx";
 import { WorkInspector } from "../features/supervision/WorkInspector.tsx";
 import { TaskDetailDialog } from "../features/supervision/TaskDetailDialog.tsx";
+import { SessionNavigator } from "../features/workspace/SessionNavigator.tsx";
 
 const initialConnection: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -30,9 +31,20 @@ const initialConnection: ConnectionDraft = {
 export function App() {
   const session = useOctosSession();
   const draftRef = useRef("");
+  const sessionDraftsRef = useRef(new Map<string, string>());
   const [connection, setConnection] = useState(initialConnection);
   const [draft, setDraft] = useState("");
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+
+  useEffect(() => {
+    if (!inspectorOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInspectorOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [inspectorOpen]);
 
   const submit = (override?: string) => {
     const text = (override ?? draftRef.current).trim();
@@ -182,6 +194,20 @@ export function App() {
     session.opened?.capabilities,
   );
   const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
+  const switchBlocked = Boolean(
+    session.queue.active || session.queue.pending.length,
+  );
+  const moveToSession = (sessionId: string) => {
+    if (switchBlocked || sessionId === session.opened?.session_id) return;
+    if (session.opened?.session_id) {
+      sessionDraftsRef.current.set(session.opened.session_id, draftRef.current);
+    }
+    const restored = sessionDraftsRef.current.get(sessionId) ?? "";
+    draftRef.current = restored;
+    setDraft(restored);
+    setConnection((current) => ({ ...current, sessionId }));
+    session.switchSession(sessionId);
+  };
 
   return (
     <div className="app-shell">
@@ -207,6 +233,17 @@ export function App() {
             onConnect={() => session.connect(connection)}
             onDisconnect={session.disconnect}
           />
+          {session.opened ? (
+            <SessionNavigator
+              state={session.workspace}
+              activeSessionId={session.opened.session_id}
+              switchBlocked={switchBlocked}
+              onRefresh={() => void session.refreshWorkspace()}
+              onSwitch={moveToSession}
+              onCreate={moveToSession}
+              onDelete={(sessionId) => void session.deleteSession(sessionId)}
+            />
+          ) : null}
           <PermissionPanel
             state={session.permission}
             connected={Boolean(session.opened)}
@@ -234,6 +271,15 @@ export function App() {
               </small>
             </div>
             <div className="header-actions">
+              <button
+                className="inspector-toggle"
+                type="button"
+                aria-controls="work-inspector"
+                aria-expanded={inspectorOpen}
+                onClick={() => setInspectorOpen(true)}
+              >
+                Work
+              </button>
               {session.diffReview.available &&
               session.diffReview.latestPreviewId ? (
                 <button
@@ -426,13 +472,24 @@ export function App() {
         </section>
 
         <WorkInspector
+          open={inspectorOpen}
           state={session.supervision}
           events={session.events}
           features={features}
           onRefresh={() => void session.refreshSupervision()}
           onOpenTask={(taskId) => void session.openTaskDetail(taskId)}
           onCancelTask={(taskId) => void session.cancelTask(taskId)}
+          tokenCost={session.workspace.tokenCost}
+          onClose={() => setInspectorOpen(false)}
         />
+        {inspectorOpen ? (
+          <button
+            className="inspector-backdrop"
+            type="button"
+            aria-label="Close work inspector"
+            onClick={() => setInspectorOpen(false)}
+          />
+        ) : null}
       </main>
       <DiffReviewDialog
         state={session.diffReview}
