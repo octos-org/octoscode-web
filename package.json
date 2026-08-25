@@ -11,6 +11,8 @@
     "dev": "pnpm --filter @octos-org/octoscode-web dev",
     "mock:server": "pnpm --filter @octos-org/octoscode-web mock:server",
     "build": "pnpm --filter @octos-org/octoscode-web build",
+    "contract:verify": "node scripts/sync-core-contract.mjs --check",
+    "contract:update": "node scripts/sync-core-contract.mjs --write",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "oxlint --deny-warnings apps packages e2e playwright.config.ts",

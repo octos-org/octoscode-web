@@ -33,6 +33,9 @@ jobs:
             echo "Expected a SemVer-like tag such as v0.1.0 or v0.1.0-rc.1" >&2
             exit 1
           fi
+      - run: node scripts/sync-core-contract.mjs --check
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm exec playwright install --with-deps chromium

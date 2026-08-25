@@ -84,6 +84,8 @@ Pre-session repository launch follows the
 [workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
 Background session indicators follow the
 [background activity decision](docs/adr/0012-background-session-activity.md).
+The generated protocol vocabulary and Core blob gate follow the
+[contract index decision](docs/adr/0013-generated-core-contract-index.md).
 Versioned artifacts follow the
 [static release decision](docs/adr/0011-versioned-static-releases.md) and the
 [deployment contract](docs/deployment.md).
@@ -94,6 +96,7 @@ Copied or adapted third-party portions are listed in
 
 ```sh
 pnpm check
+pnpm contract:verify
 pnpm exec playwright install chromium
 pnpm test:e2e
 ```
@@ -102,6 +105,11 @@ The Playwright product suite starts the checked mock AppUI server and Web app,
 then exercises launch resolution, durable session switching, a live turn,
 responsive supervision, and WCAG 2/2.1 A/AA axe checks. CI runs it in a separate
 Chromium job and retains traces and screenshots when it fails.
+
+`contract:verify` downloads the immutable Core revision, recomputes its Git blob
+SHA, and compares the generated method/feature/protocol index. To update an
+intentional Core pin, edit `packages/client/contract-source.json` and run
+`pnpm contract:update`; reviewers should inspect the generated diff.
 
 A top-level render boundary replaces white screens with a safe reload path and
 a copyable diagnostic capped at 4 KB. Query-token and bearer-shaped values are

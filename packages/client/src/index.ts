@@ -3,7 +3,18 @@ export {
   OctosUiClient,
   OctosUiProtocolError,
 } from "./client.ts";
-export { SUPPORTED_OCTOS_CONTRACT } from "./contract.ts";
+export {
+  coreProtocolCompatibilityError,
+  SUPPORTED_OCTOS_CONTRACT,
+} from "./contract.ts";
+export {
+  CORE_UI_FEATURES,
+  CORE_UI_KNOWN_FEATURES,
+  CORE_UI_METHODS,
+  CORE_UI_NOTIFICATION_METHODS,
+  CORE_UI_PROTOCOL,
+  CORE_UI_SERVER_METHODS,
+} from "./generated/core-contract.ts";
 export { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 export type {
   IncomingFrame,

@@ -13,8 +13,12 @@ const capabilities = (
   methods: string[],
   features: string[] = [],
 ): UiProtocolCapabilities => ({
-  version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 1,
+  version: {
+    protocol: "octos-ui/v1alpha1",
+    schema_version: 1,
+    jsonrpc: "2.0",
+  },
+  capabilities_schema_version: 2,
   supported_methods: methods,
   supported_notifications: [],
   supported_features: features,

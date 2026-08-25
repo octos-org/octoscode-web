@@ -100,8 +100,12 @@ describe("blocking interaction protocol", () => {
 
   it("treats explicitly unsupported advertised methods as unavailable", () => {
     const capabilities: UiProtocolCapabilities = {
-      version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
-      capabilities_schema_version: 1,
+      version: {
+        protocol: "octos-ui/v1alpha1",
+        schema_version: 1,
+        jsonrpc: "2.0",
+      },
+      capabilities_schema_version: 2,
       supported_methods: ["approval/respond"],
       supported_notifications: [],
       unsupported: [

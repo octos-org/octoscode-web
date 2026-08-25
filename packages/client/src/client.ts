@@ -1,4 +1,8 @@
 import { createRequest, parseIncomingFrame } from "./rpc.ts";
+import {
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
+} from "./generated/core-contract.ts";
 import type { RpcNotification } from "./rpc.ts";
 import type {
   ApprovalRespondParams,
@@ -62,15 +66,15 @@ import {
 } from "./workspace.ts";
 
 export const DEFAULT_UI_FEATURES = [
-  "approval.typed.v1",
-  "pane.snapshots.v1",
-  "session.workspace_cwd.v1",
-  "state.session_hydrate.v1",
-  "user_question.v1",
-  "plan.todos.v1",
-  "projection.envelope.v2",
-  "harness.task_control.v1",
-  "harness.task_artifacts.v1",
+  CORE_UI_FEATURES.APPROVAL_TYPED_V1,
+  CORE_UI_FEATURES.PANE_SNAPSHOTS_V1,
+  CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+  CORE_UI_FEATURES.SESSION_HYDRATE_V1,
+  CORE_UI_FEATURES.USER_QUESTION_V1,
+  CORE_UI_FEATURES.PLAN_TODOS_V1,
+  CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
+  CORE_UI_FEATURES.HARNESS_TASK_CONTROL_V1,
+  CORE_UI_FEATURES.HARNESS_TASK_ARTIFACTS_V1,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -250,26 +254,31 @@ export class OctosUiClient {
   }
 
   openSession(params: SessionOpenParams): Promise<SessionOpenResult> {
-    return this.request("session/open", params);
+    return this.request(CORE_UI_METHODS.SESSION_OPEN, params);
   }
 
   async hydrateSession(
     params: SessionHydrateParams,
   ): Promise<SessionHydrateResult> {
-    const result = await this.request<unknown>("session/hydrate", params);
+    const result = await this.request<unknown>(
+      CORE_UI_METHODS.SESSION_HYDRATE,
+      params,
+    );
     const parsed = parseSessionHydrateResult(result);
     if (!parsed) {
-      throw new Error("session/hydrate returned an invalid result");
+      throw new Error(
+        `${CORE_UI_METHODS.SESSION_HYDRATE} returned an invalid result`,
+      );
     }
     return parsed;
   }
 
   startTurn(params: TurnStartParams): Promise<unknown> {
-    return this.request("turn/start", params);
+    return this.request(CORE_UI_METHODS.TURN_START, params);
   }
 
   interruptTurn(sessionId: string, turnId: string): Promise<unknown> {
-    return this.request("turn/interrupt", {
+    return this.request(CORE_UI_METHODS.TURN_INTERRUPT, {
       session_id: sessionId,
       turn_id: turnId,
     });
@@ -278,25 +287,27 @@ export class OctosUiClient {
   respondApproval(
     params: ApprovalRespondParams,
   ): Promise<ApprovalRespondResult> {
-    return this.request("approval/respond", params);
+    return this.request(CORE_UI_METHODS.APPROVAL_RESPOND, params);
   }
 
   respondUserQuestion(
     params: UserQuestionRespondParams,
   ): Promise<UserQuestionRespondResult> {
-    return this.request("user_question/respond", params);
+    return this.request(CORE_UI_METHODS.USER_QUESTION_RESPOND, params);
   }
 
   async listPermissionProfiles(
     params: PermissionProfileListParams,
   ): Promise<PermissionProfileListResult> {
     const result = await this.request<unknown>(
-      "permission/profile/list",
+      CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
       params,
     );
     const parsed = parsePermissionProfileListResult(result);
     if (!parsed) {
-      throw new Error("permission/profile/list returned an invalid result");
+      throw new Error(
+        `${CORE_UI_METHODS.PERMISSION_PROFILE_LIST} returned an invalid result`,
+      );
     }
     return parsed;
   }
@@ -305,12 +316,14 @@ export class OctosUiClient {
     params: PermissionProfileSetParams,
   ): Promise<PermissionProfileSetResult> {
     const result = await this.request<unknown>(
-      "permission/profile/set",
+      CORE_UI_METHODS.PERMISSION_PROFILE_SET,
       params,
     );
     const parsed = parsePermissionProfileSetResult(result);
     if (!parsed) {
-      throw new Error("permission/profile/set returned an invalid result");
+      throw new Error(
+        `${CORE_UI_METHODS.PERMISSION_PROFILE_SET} returned an invalid result`,
+      );
     }
     return parsed;
   }
@@ -318,25 +331,40 @@ export class OctosUiClient {
   async getDiffPreview(
     params: DiffPreviewGetParams,
   ): Promise<DiffPreviewGetResult> {
-    const result = await this.request<unknown>("diff/preview/get", params);
+    const result = await this.request<unknown>(
+      CORE_UI_METHODS.DIFF_PREVIEW_GET,
+      params,
+    );
     const parsed = parseDiffPreviewGetResult(result);
-    if (!parsed) throw new Error("diff/preview/get returned an invalid result");
+    if (!parsed) {
+      throw new Error(
+        `${CORE_UI_METHODS.DIFF_PREVIEW_GET} returned an invalid result`,
+      );
+    }
     return parsed;
   }
 
   async listTasks(params: TaskListParams): Promise<TaskListResult> {
-    return this.validatedRequest("task/list", params, parseTaskListResult);
+    return this.validatedRequest(
+      CORE_UI_METHODS.TASK_LIST,
+      params,
+      parseTaskListResult,
+    );
   }
 
   async cancelTask(params: TaskCancelParams): Promise<TaskCancelResult> {
-    return this.validatedRequest("task/cancel", params, parseTaskCancelResult);
+    return this.validatedRequest(
+      CORE_UI_METHODS.TASK_CANCEL,
+      params,
+      parseTaskCancelResult,
+    );
   }
 
   async readTaskOutput(
     params: TaskOutputReadParams,
   ): Promise<TaskOutputReadResult> {
     return this.validatedRequest(
-      "task/output/read",
+      CORE_UI_METHODS.TASK_OUTPUT_READ,
       params,
       parseTaskOutputReadResult,
     );
@@ -346,7 +374,7 @@ export class OctosUiClient {
     params: TaskArtifactListParams,
   ): Promise<TaskArtifactListResult> {
     return this.validatedRequest(
-      "task/artifact/list",
+      CORE_UI_METHODS.TASK_ARTIFACT_LIST,
       params,
       parseTaskArtifactListResult,
     );
@@ -356,7 +384,7 @@ export class OctosUiClient {
     params: TaskArtifactReadParams,
   ): Promise<TaskArtifactReadResult> {
     return this.validatedRequest(
-      "task/artifact/read",
+      CORE_UI_METHODS.TASK_ARTIFACT_READ,
       params,
       parseTaskArtifactReadResult,
     );
@@ -364,7 +392,7 @@ export class OctosUiClient {
 
   async readSessionStatus(sessionId: string): Promise<SessionStatusReadResult> {
     return this.validatedRequest(
-      "session/status/read",
+      CORE_UI_METHODS.SESSION_STATUS_READ,
       { session_id: sessionId },
       parseSessionStatusReadResult,
     );
@@ -374,7 +402,7 @@ export class OctosUiClient {
     params: SessionListParams = {},
   ): Promise<SessionListResult> {
     return this.validatedRequest(
-      "session/list",
+      CORE_UI_METHODS.SESSION_LIST,
       params,
       parseSessionListResult,
     );
@@ -382,7 +410,7 @@ export class OctosUiClient {
 
   async listConfigCapabilities(): Promise<ConfigCapabilitiesListResult> {
     return this.validatedRequest(
-      "config/capabilities/list",
+      CORE_UI_METHODS.CONFIG_CAPABILITIES_LIST,
       {},
       parseConfigCapabilitiesListResult,
     );
@@ -392,7 +420,7 @@ export class OctosUiClient {
     params: LaunchResolveParams,
   ): Promise<LaunchResolveResult> {
     return this.validatedRequest(
-      "launch/resolve",
+      CORE_UI_METHODS.LAUNCH_RESOLVE,
       params,
       parseLaunchResolveResult,
     );
@@ -402,7 +430,7 @@ export class OctosUiClient {
     params: SessionDeleteParams,
   ): Promise<SessionDeleteResult> {
     return this.validatedRequest(
-      "session/delete",
+      CORE_UI_METHODS.SESSION_DELETE,
       params,
       parseSessionDeleteResult,
     );
@@ -412,7 +440,7 @@ export class OctosUiClient {
     params: SessionFilesListParams,
   ): Promise<SessionFilesListResult> {
     return this.validatedRequest(
-      "session/files.list",
+      CORE_UI_METHODS.SESSION_FILES_LIST,
       params,
       parseSessionFilesListResult,
     );

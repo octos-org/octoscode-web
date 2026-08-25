@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/ui-protocol-v1.json";
 import {
   approvalDiffPreviewId,
+  coreProtocolCompatibilityError,
+  CORE_UI_PROTOCOL,
   isPreviewId,
   notificationDiffPreviewId,
   parseDiffPreviewGetResult,
@@ -15,6 +17,37 @@ describe("authoritative coding contract fixtures", () => {
   it("pins each fixture to an exact octos core contract blob", () => {
     const { protocol: _protocol, ...contractSource } = SUPPORTED_OCTOS_CONTRACT;
     expect(fixture.source).toEqual(contractSource);
+    expect(
+      fixture.config_capabilities_list.result.capabilities.version,
+    ).toEqual({
+      protocol: CORE_UI_PROTOCOL.protocol,
+      schema_version: CORE_UI_PROTOCOL.schema_version,
+      jsonrpc: CORE_UI_PROTOCOL.jsonrpc,
+    });
+    expect(
+      fixture.config_capabilities_list.result.capabilities
+        .capabilities_schema_version,
+    ).toBe(CORE_UI_PROTOCOL.capabilities_schema_version);
+    expect(
+      coreProtocolCompatibilityError(
+        fixture.config_capabilities_list.result.capabilities,
+      ),
+    ).toBeNull();
+    expect(
+      coreProtocolCompatibilityError({
+        ...fixture.config_capabilities_list.result.capabilities,
+        version: {
+          ...fixture.config_capabilities_list.result.capabilities.version,
+          protocol: "future-ui/v9",
+        },
+      }),
+    ).toContain("future-ui/v9");
+    expect(
+      coreProtocolCompatibilityError({
+        ...fixture.config_capabilities_list.result.capabilities,
+        capabilities_schema_version: 3,
+      }),
+    ).toContain("outside 1..2");
   });
 
   it("decodes permission list and mutation results", () => {

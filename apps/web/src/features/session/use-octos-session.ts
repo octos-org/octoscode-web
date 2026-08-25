@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   approvalResolutionId,
+  coreProtocolCompatibilityError,
   DEFAULT_UI_FEATURES,
   isPreviewId,
   isRecord,
@@ -364,6 +365,7 @@ export function useOctosSession(): OctosSessionRuntime {
     let capabilities;
     try {
       capabilities = (await client.listConfigCapabilities()).capabilities;
+      assertCompatibleProtocol(capabilities);
     } catch (reason) {
       if (reason instanceof OctosUiProtocolError && reason.code === -32601) {
         setLaunch(EMPTY_LAUNCH_RUNTIME);
@@ -414,6 +416,7 @@ export function useOctosSession(): OctosSessionRuntime {
       ...(resumeCursor ? { after: resumeCursor } : {}),
     });
     if (clientRef.current !== client) return;
+    assertCompatibleProtocol(result.opened.capabilities);
     if (result.opened.session_id !== sessionIdRef.current) {
       durableProjectionRef.current.reset(result.opened.session_id);
     }
@@ -1714,7 +1717,17 @@ function notificationMatchesSessionScope(
 
 function isFatalSessionContractError(message: string): boolean {
   return (
+    message.startsWith("Server protocol contract is incompatible") ||
     message.startsWith("Server lacks the durable Web contract") ||
     message === "session/hydrate returned an invalid result"
   );
+}
+
+function assertCompatibleProtocol(
+  capabilities: UiProtocolCapabilities | undefined,
+): void {
+  const error = coreProtocolCompatibilityError(capabilities);
+  if (error) {
+    throw new Error(`Server protocol contract is incompatible: ${error}`);
+  }
 }

@@ -33,8 +33,12 @@ let mockSessions = [
 ];
 
 const capabilities = {
-  version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 1,
+  version: {
+    protocol: "octos-ui/v1alpha1",
+    schema_version: 1,
+    jsonrpc: "2.0",
+  },
+  capabilities_schema_version: 2,
   supported_methods: [
     "config/capabilities/list",
     "launch/resolve",

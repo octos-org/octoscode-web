@@ -39,13 +39,15 @@ The authoritative contract lives in `octos-core`:
 - `crates/octos-core/src/app_ui.rs`
 - `crates/octos-core/src/ui_protocol.rs`
 
-The Rust TUI consumes those types directly. A browser cannot. The target is a
-generated, versioned TypeScript contract emitted by the Octos repository. Until
-that exists, the client defines only the narrow request/result slice it uses
-and checks it against an exact Core revision and contract-blob fixture in
-`packages/client/tests/fixtures`. Safety-bearing permission enums fail closed;
-display-only diff status, source, file-status, and line-kind labels remain
-forward compatible after their surrounding structure is validated.
+The Rust TUI consumes those types directly. A browser cannot. The checked-in
+TypeScript contract index is generated from an exact Core revision and verified
+against the Git blob SHA in CI and releases. It owns protocol identity, methods,
+features, server methods, and notifications. The remaining request/result/event
+payload decoders are deliberately narrow and checked against golden fixtures
+until Core emits a full machine-readable schema. Safety-bearing permission
+enums fail closed; display-only diff status, source, file-status, and line-kind
+labels remain forward compatible after their surrounding structure is
+validated.
 
 The client must fail closed on malformed JSON-RPC frames, advertise requested
 features during the WebSocket handshake, and render controls from the server's
