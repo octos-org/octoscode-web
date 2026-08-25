@@ -25,8 +25,8 @@
 - [x] Structured single-select, multi-select, and free-text user questions
 - [x] Per-session permission profile
 - [x] Diff preview and review surface
-- [ ] Task list, output, cancel, and artifacts
-- [ ] Plan/progress and runtime policy visibility
+- [x] Task list, output, cancel, and paged artifacts
+- [x] Plan/progress and runtime policy visibility
 
 ## Milestone 3 — workspace product
 

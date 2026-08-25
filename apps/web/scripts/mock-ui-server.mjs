@@ -23,6 +23,12 @@ const capabilities = {
     "permission/profile/list",
     "permission/profile/set",
     "diff/preview/get",
+    "task/list",
+    "task/cancel",
+    "task/output/read",
+    "task/artifact/list",
+    "task/artifact/read",
+    "session/status/read",
   ],
   supported_notifications: ["projection/envelope", "protocol/replay_lossy"],
   supported_features: [
@@ -30,11 +36,15 @@ const capabilities = {
     "projection.envelope.v2",
     "approval.typed.v1",
     "user_question.v1",
+    "harness.task_control.v1",
+    "harness.task_artifacts.v1",
+    "plan.todos.v1",
   ],
 };
 
 sockets.on("connection", (socket) => {
   let permission = { mode: "workspace_write", network: "deny" };
+  let taskState = "running";
   socket.on("message", (bytes) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
@@ -146,6 +156,112 @@ sockets.on("connection", (socket) => {
       );
       return;
     }
+    if (request.method === "session/status/read") {
+      reply(socket, request.id, {
+        session_id: sessionId,
+        runtime_mode: "solo",
+        profile_id: "coding",
+        workspace_root: "/workspace/octoscode-web",
+        model: { model: "deepseek-v4", provider: "deepseek", selected: true },
+        sandbox: permission.mode,
+        network: permission.network === "allow" ? "allowed" : "blocked",
+        approval_policy: "on-request",
+        mcp_servers: [],
+        runtime_policy_stamp: {
+          model: "deepseek-v4",
+          profile_id: "coding",
+          sandbox: permission.mode,
+          network: permission.network === "allow" ? "allowed" : "blocked",
+          approval_policy: "on-request",
+        },
+      });
+      return;
+    }
+    if (request.method === "task/list") {
+      reply(socket, request.id, {
+        session_id: sessionId,
+        tasks: [mockTask(taskState)],
+      });
+      return;
+    }
+    if (request.method === "task/cancel") {
+      taskState = "cancelled";
+      reply(socket, request.id, {
+        task_id: request.params.task_id,
+        status: taskState,
+      });
+      return;
+    }
+    if (request.method === "task/output/read") {
+      const fullText = [
+        "Inspecting changed files…\n",
+        "Running pnpm check\n",
+        "68 tests passed\n",
+      ].join("");
+      const offset = request.params.cursor?.offset ?? 0;
+      const text = Buffer.from(fullText).subarray(offset).toString("utf8");
+      const bytesRead = Buffer.byteLength(text);
+      reply(socket, request.id, {
+        session_id: sessionId,
+        task_id: request.params.task_id,
+        source: "runtime_projection",
+        cursor: request.params.cursor ?? { offset: 0 },
+        next_cursor: { offset: offset + bytesRead },
+        text,
+        bytes_read: bytesRead,
+        total_bytes: Buffer.byteLength(fullText),
+        truncated: false,
+        complete: true,
+        live_tail_supported: true,
+        is_snapshot_projection: false,
+        task_status: taskState,
+        runtime_state: taskState,
+        lifecycle_state: taskState,
+        output_files: ["reports/check.txt"],
+        limitations: [],
+      });
+      return;
+    }
+    if (request.method === "task/artifact/list") {
+      reply(socket, request.id, {
+        session_id: sessionId,
+        task_id: request.params.task_id,
+        artifacts: [
+          {
+            id: "check-report",
+            title: "Check report",
+            kind: "text",
+            status: "ready",
+            path: "reports/check.txt",
+          },
+        ],
+      });
+      return;
+    }
+    if (request.method === "task/artifact/read") {
+      const pages = ["pnpm check\n68 tests passed\n", "build completed"];
+      const page = request.params.cursor?.offset ? 1 : 0;
+      const cursor = pages
+        .slice(0, page)
+        .reduce((offset, content) => offset + Buffer.byteLength(content), 0);
+      const nextCursor = cursor + Buffer.byteLength(pages[page]);
+      reply(socket, request.id, {
+        session_id: sessionId,
+        task_id: request.params.task_id,
+        artifact: {
+          id: request.params.artifact_id,
+          title: "Check report",
+          kind: "text",
+          status: "ready",
+          path: "reports/check.txt",
+        },
+        content: pages[page],
+        cursor: { offset: cursor },
+        next_cursor: { offset: nextCursor },
+        has_more: page < pages.length - 1,
+      });
+      return;
+    }
     reply(socket, request.id, { accepted: true });
   });
 });
@@ -158,6 +274,33 @@ function streamTurn(socket, sessionId, params) {
     text,
     files: [],
   });
+  socket.send(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "plan/updated",
+      params: {
+        session_id: sessionId,
+        turn_id: turnId,
+        plan: {
+          title: "Shipping the coding surface",
+          updated_at_ms: Date.now(),
+          items: [
+            {
+              id: "inspect",
+              title: "Inspect the workspace",
+              status: "completed",
+            },
+            {
+              id: "change",
+              title: "Implement the change",
+              status: "in_progress",
+            },
+            { id: "verify", title: "Run product checks", status: "pending" },
+          ],
+        },
+      },
+    }),
+  );
   notify(socket, sessionId, threadId, turnId, 2, 12, "assistant_delta", {
     text: "Working on **Markdown**…",
     assistant_segment_id: "segment-1",
@@ -195,6 +338,25 @@ function streamTurn(socket, sessionId, params) {
       token_usage: { input_tokens: 12, output_tokens: 9 },
     });
   }, 350);
+}
+
+function mockTask(state) {
+  return {
+    id: "00000000-0000-4000-8000-000000000099",
+    tool_name: "spawn_agent",
+    tool_call_id: "tool-fixture",
+    state,
+    status: state === "running" ? "checking workspace" : state,
+    lifecycle_state: state,
+    runtime_state: state,
+    source: "model",
+    role: "test_worker",
+    summary: "Validate product checks",
+    artifact_count: 1,
+    started_at: "2026-08-26T00:00:00Z",
+    updated_at: new Date().toISOString(),
+    output_files: ["reports/check.txt"],
+  };
 }
 
 function diffPreview(sessionId, previewId) {

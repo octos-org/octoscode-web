@@ -4,7 +4,6 @@ import {
   ConnectionPanel,
   type ConnectionDraft,
 } from "../features/connection/ConnectionPanel.tsx";
-import { EventInspector } from "../features/inspector/EventInspector.tsx";
 import { Timeline } from "../features/timeline/Timeline.tsx";
 import { resolveComposerIntent } from "../features/composer/intent.ts";
 import { CommandPalette } from "../features/commands/CommandPalette.tsx";
@@ -17,6 +16,8 @@ import { UserQuestionPanel } from "../features/questions/UserQuestionPanel.tsx";
 import { useOctosSession } from "../features/session/use-octos-session.ts";
 import { PermissionPanel } from "../features/permissions/PermissionPanel.tsx";
 import { DiffReviewDialog } from "../features/review/DiffReviewDialog.tsx";
+import { WorkInspector } from "../features/supervision/WorkInspector.tsx";
+import { TaskDetailDialog } from "../features/supervision/TaskDetailDialog.tsx";
 
 const initialConnection: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -424,12 +425,26 @@ export function App() {
           </div>
         </section>
 
-        <EventInspector events={session.events} features={features} />
+        <WorkInspector
+          state={session.supervision}
+          events={session.events}
+          features={features}
+          onRefresh={() => void session.refreshSupervision()}
+          onOpenTask={(taskId) => void session.openTaskDetail(taskId)}
+          onCancelTask={(taskId) => void session.cancelTask(taskId)}
+        />
       </main>
       <DiffReviewDialog
         state={session.diffReview}
         onClose={session.closeDiffReview}
         onRefresh={() => void session.openDiffReview()}
+      />
+      <TaskDetailDialog
+        state={session.supervision}
+        onClose={session.closeTaskDetail}
+        onLoadMore={() => void session.loadMoreTaskOutput()}
+        onReadArtifact={(artifact) => void session.readTaskArtifact(artifact)}
+        onLoadMoreArtifact={() => void session.loadMoreTaskArtifact()}
       />
     </div>
   );

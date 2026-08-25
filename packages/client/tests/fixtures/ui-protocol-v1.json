@@ -91,5 +91,81 @@
         ]
       }
     }
+  },
+  "task_list": {
+    "request": { "session_id": "coding:local:main" },
+    "result": {
+      "session_id": "coding:local:main",
+      "tasks": [
+        {
+          "id": "00000000-0000-4000-8000-000000000099",
+          "tool_name": "spawn_agent",
+          "tool_call_id": "tool-1",
+          "state": "running",
+          "status": "checking",
+          "lifecycle_state": "running",
+          "runtime_state": "running",
+          "source": "model",
+          "role": "test_worker",
+          "summary": "Validate checks",
+          "artifact_count": 1,
+          "started_at": "2026-08-26T00:00:00Z",
+          "updated_at": "2026-08-26T00:00:01Z",
+          "output_files": ["reports/check.txt"]
+        }
+      ]
+    }
+  },
+  "task_output_read": {
+    "result": {
+      "session_id": "coding:local:main",
+      "task_id": "00000000-0000-4000-8000-000000000099",
+      "source": "runtime_projection",
+      "cursor": { "offset": 0 },
+      "next_cursor": { "offset": 18 },
+      "text": "68 tests passed\n",
+      "bytes_read": 18,
+      "total_bytes": 18,
+      "truncated": false,
+      "complete": true,
+      "live_tail_supported": true,
+      "is_snapshot_projection": false,
+      "task_status": "completed",
+      "runtime_state": "completed",
+      "lifecycle_state": "completed",
+      "output_files": ["reports/check.txt"],
+      "limitations": []
+    }
+  },
+  "task_artifact_list": {
+    "result": {
+      "session_id": "coding:local:main",
+      "task_id": "00000000-0000-4000-8000-000000000099",
+      "artifacts": [
+        {
+          "id": "check-report",
+          "title": "Check report",
+          "kind": "text",
+          "status": "ready",
+          "path": "reports/check.txt"
+        }
+      ]
+    }
+  },
+  "session_status_read": {
+    "result": {
+      "session_id": "coding:local:main",
+      "runtime_mode": "solo",
+      "profile_id": "coding",
+      "model": { "model": "deepseek-v4", "provider": "deepseek" },
+      "sandbox": "workspace_write",
+      "network": "blocked",
+      "approval_policy": "on-request",
+      "mcp_servers": [],
+      "runtime_policy_stamp": {
+        "model": "deepseek-v4",
+        "sandbox": "workspace_write"
+      }
+    }
   }
 }

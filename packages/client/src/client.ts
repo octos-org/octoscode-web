@@ -14,6 +14,17 @@ import type {
   SessionHydrateResult,
   SessionOpenParams,
   SessionOpenResult,
+  SessionStatusReadResult,
+  TaskArtifactListParams,
+  TaskArtifactListResult,
+  TaskArtifactReadParams,
+  TaskArtifactReadResult,
+  TaskCancelParams,
+  TaskCancelResult,
+  TaskListParams,
+  TaskListResult,
+  TaskOutputReadParams,
+  TaskOutputReadResult,
   TurnStartParams,
   UserQuestionRespondParams,
   UserQuestionRespondResult,
@@ -25,6 +36,14 @@ import {
   parsePermissionProfileListResult,
   parsePermissionProfileSetResult,
 } from "./coding.ts";
+import {
+  parseSessionStatusReadResult,
+  parseTaskArtifactListResult,
+  parseTaskArtifactReadResult,
+  parseTaskCancelResult,
+  parseTaskListResult,
+  parseTaskOutputReadResult,
+} from "./supervision.ts";
 
 export const DEFAULT_UI_FEATURES = [
   "approval.typed.v1",
@@ -34,6 +53,8 @@ export const DEFAULT_UI_FEATURES = [
   "user_question.v1",
   "plan.todos.v1",
   "projection.envelope.v2",
+  "harness.task_control.v1",
+  "harness.task_artifacts.v1",
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -284,6 +305,63 @@ export class OctosUiClient {
     const result = await this.request<unknown>("diff/preview/get", params);
     const parsed = parseDiffPreviewGetResult(result);
     if (!parsed) throw new Error("diff/preview/get returned an invalid result");
+    return parsed;
+  }
+
+  async listTasks(params: TaskListParams): Promise<TaskListResult> {
+    return this.validatedRequest("task/list", params, parseTaskListResult);
+  }
+
+  async cancelTask(params: TaskCancelParams): Promise<TaskCancelResult> {
+    return this.validatedRequest("task/cancel", params, parseTaskCancelResult);
+  }
+
+  async readTaskOutput(
+    params: TaskOutputReadParams,
+  ): Promise<TaskOutputReadResult> {
+    return this.validatedRequest(
+      "task/output/read",
+      params,
+      parseTaskOutputReadResult,
+    );
+  }
+
+  async listTaskArtifacts(
+    params: TaskArtifactListParams,
+  ): Promise<TaskArtifactListResult> {
+    return this.validatedRequest(
+      "task/artifact/list",
+      params,
+      parseTaskArtifactListResult,
+    );
+  }
+
+  async readTaskArtifact(
+    params: TaskArtifactReadParams,
+  ): Promise<TaskArtifactReadResult> {
+    return this.validatedRequest(
+      "task/artifact/read",
+      params,
+      parseTaskArtifactReadResult,
+    );
+  }
+
+  async readSessionStatus(sessionId: string): Promise<SessionStatusReadResult> {
+    return this.validatedRequest(
+      "session/status/read",
+      { session_id: sessionId },
+      parseSessionStatusReadResult,
+    );
+  }
+
+  private async validatedRequest<Result>(
+    method: string,
+    params: unknown,
+    parse: (value: unknown) => Result | null,
+  ): Promise<Result> {
+    const result = await this.request<unknown>(method, params);
+    const parsed = parse(result);
+    if (!parsed) throw new Error(`${method} returned an invalid result`);
     return parsed;
   }
 

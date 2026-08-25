@@ -9,11 +9,16 @@ export interface ObservedEvent {
 interface EventInspectorProps {
   events: readonly ObservedEvent[];
   features: readonly string[];
+  embedded?: boolean;
 }
 
-export function EventInspector({ events, features }: EventInspectorProps) {
-  return (
-    <aside className="inspector">
+export function EventInspector({
+  events,
+  features,
+  embedded = false,
+}: EventInspectorProps) {
+  const content = (
+    <>
       <section>
         <div className="section-heading compact-heading">
           <div>
@@ -57,7 +62,12 @@ export function EventInspector({ events, features }: EventInspectorProps) {
           )}
         </div>
       </section>
-    </aside>
+    </>
+  );
+  return embedded ? (
+    <div className="embedded-inspector">{content}</div>
+  ) : (
+    <aside className="inspector">{content}</aside>
   );
 }
 

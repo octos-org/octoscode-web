@@ -59,6 +59,15 @@ mutation fields, then reads the proposal-time snapshot with `diff/preview/get`.
 It never computes a replacement git diff in the browser or scrapes ids from
 tool prose.
 
+Plans, runtime policy, task lifecycle, output, and artifacts are projections of
+server-owned work. The Web client uses the advertised `session/status/read`,
+`task/list`, `task/output/read`, `task/cancel`, `task/artifact/list`, and
+`task/artifact/read` methods plus `plan/updated`, `task/updated`, and
+`task/output/delta`. Output cursors are byte offsets: durable replay is
+deduplicated against the last read cursor, gaps fail closed, and large output
+or artifact bodies are read in bounded pages. The raw protocol inspector stays
+available as folded diagnostics, not as the primary product surface.
+
 ## Browser constraints
 
 - A browser cannot spawn `octos serve`; standalone use requires an existing

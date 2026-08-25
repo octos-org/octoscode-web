@@ -17,8 +17,10 @@ projection gaps and lossy replay, reconnects with backoff, preserves the FIFO
 prompt contract, renders typed approvals and structured user questions, and
 shows settled GFM with lazy syntax highlighting. It also exposes server-confirmed
 per-session permission profiles and authoritative diff previews discovered from
-typed coding events. Task, artifact, and session-switching surfaces follow in
-the MVP plan.
+typed coding events. The supervised-work surface renders the server's live plan,
+runtime policy stamp, task lifecycle, cursor-safe output, cancellation, and
+paged task artifacts. Session switching and workspace product surfaces follow
+in the MVP plan.
 
 ## Run locally
 
@@ -64,6 +66,8 @@ Reconnect and hydrate follow the
 [durable session decision](docs/adr/0005-durable-session-recovery.md).
 Permission and diff review follow the
 [coding safety surfaces decision](docs/adr/0007-coding-safety-surfaces.md).
+Plans, tasks, output, and artifacts follow the
+[supervised work decision](docs/adr/0008-supervised-work-surfaces.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 

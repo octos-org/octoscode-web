@@ -165,6 +165,202 @@ export interface DiffPreviewGetResult {
   preview: DiffPreview;
 }
 
+export type TaskRuntimeState =
+  "pending" | "running" | "completed" | "failed" | "cancelled" | string;
+
+export interface OutputCursor {
+  offset: number;
+}
+
+export interface TaskListParams {
+  session_id: string;
+  topic?: string;
+}
+
+export interface TaskListEntry {
+  id: string;
+  tool_name: string;
+  tool_call_id: string;
+  state: TaskRuntimeState;
+  status: string;
+  lifecycle_state: string;
+  runtime_state: string;
+  source?: string;
+  role?: string;
+  summary?: string;
+  artifact_count?: number;
+  runtime_policy_stamp?: unknown;
+  parent_session_key?: string;
+  child_session_key?: string;
+  child_terminal_state?: string;
+  child_join_state?: string;
+  child_joined_at?: string;
+  child_failure_action?: string;
+  runtime_detail?: unknown;
+  workflow_kind?: string;
+  current_phase?: string;
+  started_at: string;
+  updated_at: string;
+  completed_at?: string;
+  output_files: string[];
+  error?: string;
+  session_key?: string;
+}
+
+export interface TaskListResult {
+  session_id: string;
+  topic?: string;
+  tasks: TaskListEntry[];
+}
+
+export interface TaskCancelParams {
+  task_id: string;
+  session_id?: string;
+  profile_id?: string;
+}
+
+export interface TaskCancelResult {
+  task_id: string;
+  status: TaskRuntimeState;
+}
+
+export interface TaskOutputReadParams {
+  session_id: string;
+  task_id: string;
+  cursor?: OutputCursor;
+  limit_bytes?: number;
+}
+
+export interface TaskOutputReadLimitation {
+  code: string;
+  message: string;
+}
+
+export interface TaskOutputReadResult {
+  session_id: string;
+  task_id: string;
+  source: string;
+  cursor: OutputCursor;
+  next_cursor: OutputCursor;
+  text: string;
+  bytes_read: number;
+  total_bytes: number;
+  truncated: boolean;
+  complete: boolean;
+  live_tail_supported: boolean;
+  is_snapshot_projection: boolean;
+  task_status: string;
+  runtime_state: string;
+  lifecycle_state: string;
+  runtime_detail?: unknown;
+  output_files: string[];
+  limitations: TaskOutputReadLimitation[];
+}
+
+export interface TaskArtifactRecord {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  path?: string;
+  content?: string;
+}
+
+export interface TaskArtifactListParams {
+  session_id: string;
+  task_id: string;
+  profile_id?: string;
+  agent_id?: string;
+}
+
+export interface TaskArtifactListResult {
+  session_id: string;
+  task_id: string;
+  agent_id?: string;
+  artifacts: TaskArtifactRecord[];
+}
+
+export interface TaskArtifactReadParams extends TaskArtifactListParams {
+  artifact_id?: string;
+  path?: string;
+  cursor?: OutputCursor;
+  limit_bytes?: number;
+}
+
+export interface TaskArtifactReadResult {
+  session_id: string;
+  task_id: string;
+  agent_id?: string;
+  artifact: TaskArtifactRecord;
+  content?: string;
+  cursor?: OutputCursor;
+  next_cursor?: OutputCursor;
+  has_more: boolean;
+}
+
+export interface TaskUpdated {
+  sessionId: string;
+  topic?: string;
+  taskId: string;
+  toolCallId?: string;
+  turnId?: string;
+  title: string;
+  state: TaskRuntimeState;
+  runtimeDetail?: string;
+  source?: string;
+  role?: string;
+  summary?: string;
+  artifactCount?: number;
+  runtimePolicyStamp?: unknown;
+}
+
+export interface TaskOutputDelta {
+  sessionId: string;
+  topic?: string;
+  taskId: string;
+  cursor: OutputCursor;
+  text: string;
+}
+
+export type PlanItemStatus = "pending" | "in_progress" | "completed";
+
+export interface PlanItem {
+  id: string;
+  title: string;
+  status: PlanItemStatus;
+  priority?: string;
+}
+
+export interface PlanUpdated {
+  sessionId: string;
+  topic?: string;
+  turnId?: string;
+  title?: string;
+  updatedAtMs: number;
+  items: PlanItem[];
+}
+
+export interface SessionStatusReadResult {
+  session_id: string;
+  runtime_mode?: string;
+  profile_id?: string;
+  cwd?: string;
+  workspace_root?: string;
+  active_turn_id?: string;
+  runtime_policy_stamp?: Record<string, unknown>;
+  model?: { model: string; provider: string; title?: string };
+  permission_profile?: string;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  sandbox?: string;
+  filesystem_scope?: string;
+  network?: string;
+  tool_policy_id?: string;
+  mcp_servers: string[];
+  memory_scope?: string;
+  usage?: unknown;
+}
+
 export interface SessionOpenParams {
   session_id: string;
   topic?: string;
