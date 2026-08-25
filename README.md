@@ -30,7 +30,9 @@ confirmed, cross-profile folders offer the same explicit choice, and a server
 with no profile points to canonical onboarding.
 The session navigator also performs a bounded, read-only `task/list` scan so
 running or failed work in another recent session remains visible without
-changing the foreground subscription.
+changing the foreground subscription. `/activity` opens the same task truth as
+a searchable, status-filtered cross-session navigator and switches sessions
+only after an explicit user action.
 
 ## Run locally
 

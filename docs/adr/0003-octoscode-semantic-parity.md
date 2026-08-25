@@ -30,6 +30,8 @@ The parity contract includes:
   conditions.
 - Slash and bang commands are resolved before prompt dispatch. Unsupported
   commands fail visibly and are never sent to the model as text.
+- `/activity` opens a searchable, status-filtered cross-session task navigator;
+  its scan is read-only and opening a result is an explicit session switch.
 - `/stop`, `/interrupt`, `/esc`, the Stop button, and the equivalent shortcut
   represent one interrupt intent. With no active foreground turn, the client
   sends no backend command.

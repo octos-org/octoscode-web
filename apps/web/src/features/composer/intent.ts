@@ -3,6 +3,7 @@ export type ComposerIntent =
   | { kind: "interrupt" }
   | { kind: "help" }
   | { kind: "process-status" }
+  | { kind: "activity" }
   | { kind: "copy" }
   | { kind: "status" }
   | { kind: "empty-command" }

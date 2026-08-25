@@ -119,6 +119,17 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .app-shell,
 .workspace-grid {
   height: 100%;
@@ -1986,6 +1997,253 @@ kbd {
   backdrop-filter: blur(2px);
 }
 
+.activity-backdrop {
+  position: fixed;
+  z-index: 55;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: var(--dsw-alias-bg-mask-1);
+  backdrop-filter: blur(2px);
+}
+
+.activity-dialog {
+  display: grid;
+  width: min(900px, 100%);
+  height: min(720px, 100%);
+  min-height: 360px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.activity-dialog.has-warning {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+}
+
+.activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 20px 15px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.activity-header h2 {
+  margin: 4px 0 2px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.activity-header p {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+}
+
+.activity-header > button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.activity-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.activity-toolbar label,
+.activity-toolbar input {
+  width: 100%;
+}
+
+.activity-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-filters button {
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 9px;
+  text-transform: capitalize;
+}
+
+.activity-filters button:hover,
+.activity-filters button[aria-pressed="true"] {
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+}
+
+.activity-filters button span {
+  margin-left: 3px;
+  font-family: var(--ds-font-family-code);
+}
+
+.activity-warning {
+  margin: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-warn-primary) 8%,
+    transparent
+  );
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+}
+
+.activity-results {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.activity-results article {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 64px;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.activity-results article > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.activity-results strong,
+.activity-results article span,
+.activity-results small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-results strong {
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.activity-results article span {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+}
+
+.activity-results small {
+  color: var(--dsw-alias-label-tertiary);
+  font: 400 9px/1.4 var(--ds-font-family-code);
+}
+
+.activity-state {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.activity-state.state-running {
+  background: var(--dsw-alias-button-info-fill);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.activity-state.state-failed,
+.activity-state.state-unknown {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.activity-state.state-done {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.activity-results article > button {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.activity-results article > button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.activity-results article > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.activity-empty {
+  display: grid;
+  min-height: 220px;
+  place-content: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+.activity-empty strong {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.activity-empty span {
+  font-size: 10px;
+}
+
+.activity-footer {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font: 400 9px/1 var(--ds-font-family-code);
+}
+
+.activity-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-toggle > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dsw-alias-button-info-fill);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
 .review-dialog {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -2523,6 +2781,35 @@ kbd {
   .conversation-scroll {
     padding-right: 16px;
     padding-left: 16px;
+  }
+
+  .activity-backdrop {
+    padding: 0;
+  }
+
+  .activity-dialog {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .activity-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-filters {
+    overflow-x: auto;
+  }
+
+  .activity-results article {
+    grid-template-columns: 9px minmax(0, 1fr);
+  }
+
+  .activity-results article > button {
+    grid-column: 2;
+    width: fit-content;
   }
 
   .composer-wrap {

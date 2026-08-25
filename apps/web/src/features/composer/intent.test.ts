@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { resolveComposerIntent } from "./intent.ts";
 
+const activityCapabilities = {
+  version: {
+    protocol: "octos-ui/v1alpha1",
+    schema_version: 1,
+    jsonrpc: "2.0",
+  },
+  capabilities_schema_version: 2,
+  supported_methods: ["task/list"],
+  supported_notifications: [],
+};
+
 describe("resolveComposerIntent", () => {
   it("keeps ordinary input as a prompt", () => {
     expect(resolveComposerIntent("  explain this diff  ")).toEqual({
@@ -35,6 +46,9 @@ describe("resolveComposerIntent", () => {
     });
     expect(resolveComposerIntent("/copy")).toEqual({ kind: "copy" });
     expect(resolveComposerIntent("/status")).toEqual({ kind: "status" });
+    expect(resolveComposerIntent("/activity", activityCapabilities)).toEqual({
+      kind: "activity",
+    });
   });
 
   it("fails closed for commands that this build cannot execute", () => {

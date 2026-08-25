@@ -60,6 +60,32 @@ test("preserves unsent drafts across explicit session switches", async ({
   await expect(composer).toHaveValue("draft for coding");
 });
 
+test("searches cross-session task activity and opens its session", async ({
+  page,
+}) => {
+  await launchWorkspace(page, "/srv/work/project");
+  const composer = page.getByPlaceholder(
+    "Ask Octos to change, explain, or review code…",
+  );
+  await composer.fill("/activity");
+  await composer.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Activity" })).toBeVisible();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".activity-dialog")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  const search = page.getByRole("searchbox", { name: "Search activity" });
+  await expect(search).toBeFocused();
+  await search.fill("review protocol");
+  await page
+    .getByRole("button", { name: "Open Review protocol drift" })
+    .click();
+  await expect(
+    page.getByText("coding:local:review", { exact: true }),
+  ).toBeVisible();
+});
+
 test("matches activate and cross-profile launch choices", async ({ page }) => {
   await launchWorkspace(page, "/srv/work/new");
   const activate = page.getByRole("button", { name: /Activate _main/ });

@@ -3,6 +3,7 @@ import {
   supportsFeature,
   supportsMethod,
   type OctosUiClient,
+  type TaskListEntry,
   type TokenCostUpdate,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
@@ -10,6 +11,7 @@ import {
   EMPTY_WORKSPACE_PRODUCT,
   includeActiveSession,
   mergeTokenCost,
+  recentSessionTasks,
   sortSessions,
   summarizeSessionTasks,
   type SessionActivitySummary,
@@ -182,7 +184,11 @@ export function useWorkspaceProduct(
           if (result.session_id !== session.id) {
             throw new Error("task/list returned another session");
           }
-          return [session.id, summarizeSessionTasks(result.tasks)] as const;
+          return [
+            session.id,
+            summarizeSessionTasks(result.tasks),
+            recentSessionTasks(result.tasks),
+          ] as const;
         } catch (reason) {
           const summary: SessionActivitySummary = {
             status: "unknown",
@@ -192,7 +198,8 @@ export function useWorkspaceProduct(
             completedCount: 0,
             error: errorMessage(reason),
           };
-          return [session.id, summary] as const;
+          const noTasks: TaskListEntry[] = [];
+          return [session.id, summary, noTasks] as const;
         }
       },
     );
@@ -206,7 +213,12 @@ export function useWorkspaceProduct(
     setState((current) => ({
       ...current,
       activityLoading: false,
-      activityBySession: Object.fromEntries(entries),
+      activityBySession: Object.fromEntries(
+        entries.map(([sessionId, summary]) => [sessionId, summary]),
+      ),
+      activityTasksBySession: Object.fromEntries(
+        entries.map(([sessionId, , tasks]) => [sessionId, tasks]),
+      ),
       activityUpdatedAt: Date.now(),
     }));
   }

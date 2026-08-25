@@ -20,6 +20,7 @@ import { WorkInspector } from "../features/supervision/WorkInspector.tsx";
 import { TaskDetailDialog } from "../features/supervision/TaskDetailDialog.tsx";
 import { SessionNavigator } from "../features/workspace/SessionNavigator.tsx";
 import { LaunchDecisionPanel } from "../features/workspace/LaunchDecisionPanel.tsx";
+import { ActivityNavigator } from "../features/activity/ActivityNavigator.tsx";
 
 const initialConnection: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -37,6 +38,7 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   useEffect(() => {
     if (!inspectorOpen) return;
@@ -90,6 +92,10 @@ export function App() {
             : "No foreground turn is active and the prompt queue is empty.",
         ),
       );
+      return;
+    }
+    if (intent.kind === "activity") {
+      setActivityOpen(true);
       return;
     }
     if (intent.kind === "status") {
@@ -277,6 +283,20 @@ export function App() {
               </small>
             </div>
             <div className="header-actions">
+              {session.opened && session.workspace.activityAvailable ? (
+                <button
+                  className="activity-toggle"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={activityOpen}
+                  onClick={() => setActivityOpen(true)}
+                >
+                  Activity
+                  {session.workspace.activityLoading ? (
+                    <span aria-label="refreshing" />
+                  ) : null}
+                </button>
+              ) : null}
               <button
                 className="inspector-toggle"
                 type="button"
@@ -520,6 +540,15 @@ export function App() {
         onLoadMore={() => void session.loadMoreTaskOutput()}
         onReadArtifact={(artifact) => void session.readTaskArtifact(artifact)}
         onLoadMoreArtifact={() => void session.loadMoreTaskArtifact()}
+      />
+      <ActivityNavigator
+        open={activityOpen}
+        state={session.workspace}
+        activeSessionId={session.opened?.session_id ?? null}
+        switchBlocked={switchBlocked}
+        onClose={() => setActivityOpen(false)}
+        onOpenSession={moveToSession}
+        onInspectCurrentTask={(taskId) => void session.openTaskDetail(taskId)}
       />
     </div>
   );

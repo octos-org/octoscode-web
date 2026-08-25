@@ -8,7 +8,13 @@ export const OCTOSCODE_INTERACTION_SOURCE_REVISION =
 
 export type CommandCategory = "Runtime" | "Session" | "Settings" | "Help";
 export type CommandIntent =
-  "process-status" | "interrupt" | "help" | "copy" | "status" | "resume";
+  | "process-status"
+  | "activity"
+  | "interrupt"
+  | "help"
+  | "copy"
+  | "status"
+  | "resume";
 
 export interface CommandRequirement {
   methodsAll?: readonly string[];
@@ -47,6 +53,15 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
     category: "Runtime",
     intent: "process-status",
     implemented: true,
+  },
+  {
+    name: "activity",
+    aliases: [],
+    description: "Search tasks across recent sessions",
+    category: "Runtime",
+    intent: "activity",
+    implemented: true,
+    requirement: { methodsAll: ["task/list"] },
   },
   {
     name: "stop",

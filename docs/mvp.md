@@ -44,6 +44,7 @@
 - [x] Application error boundary and recoverable, redacted crash screen
 - [x] Versioned release artifact and deployment contract
 - [x] Bounded background-session task status in the workspace navigator
+- [x] Searchable, status-filtered `/activity` task navigator
 - [x] Generated protocol vocabulary and exact Core blob drift gate
 - [ ] Generated request/result/event payload types from Octos Core
 - [ ] Background multi-session supervision parity with Octoscode

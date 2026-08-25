@@ -31,6 +31,7 @@ export interface WorkspaceProductState {
   activityAvailable: boolean;
   activityLoading: boolean;
   activityBySession: Record<string, SessionActivitySummary>;
+  activityTasksBySession: Record<string, TaskListEntry[]>;
   activityUpdatedAt: number | null;
   error: string | null;
 }
@@ -48,6 +49,7 @@ export const EMPTY_WORKSPACE_PRODUCT: WorkspaceProductState = {
   activityAvailable: false,
   activityLoading: false,
   activityBySession: {},
+  activityTasksBySession: {},
   activityUpdatedAt: null,
   error: null,
 };
@@ -155,4 +157,115 @@ export function activityLabel(summary: SessionActivitySummary): string {
   if (summary.status === "unknown") return "Needs review";
   if (summary.taskCount) return "Done";
   return "Idle";
+}
+
+export type ActivityFilter = "all" | "running" | "failed" | "done";
+
+export interface WorkspaceActivityRow {
+  sessionId: string;
+  sessionTitle: string;
+  taskId: string;
+  title: string;
+  detail: string;
+  state: SessionActivityStatus;
+  updatedAt?: string;
+  searchText: string;
+}
+
+export interface WorkspaceActivityModel {
+  rows: WorkspaceActivityRow[];
+  counts: Record<ActivityFilter, number>;
+}
+
+export function buildWorkspaceActivityModel(
+  state: WorkspaceProductState,
+  query: string,
+  filter: ActivityFilter,
+): WorkspaceActivityModel {
+  const sessionById = new Map(
+    state.sessions.map((session) => [session.id, session]),
+  );
+  const allRows = Object.entries(state.activityTasksBySession).flatMap(
+    ([sessionId, tasks]) => {
+      const session = sessionById.get(sessionId);
+      const sessionTitle = session ? sessionLabel(session) : sessionId;
+      return tasks.map((task): WorkspaceActivityRow => {
+        const state = taskActivityStatus(task);
+        const title =
+          task.summary?.trim() || task.role?.trim() || task.tool_name;
+        const detail = [task.role, task.current_phase, task.status, task.error]
+          .filter((value): value is string => Boolean(value?.trim()))
+          .join(" · ");
+        return {
+          sessionId,
+          sessionTitle,
+          taskId: task.id,
+          title,
+          detail,
+          state,
+          ...(task.updated_at ? { updatedAt: task.updated_at } : {}),
+          searchText: [
+            sessionId,
+            sessionTitle,
+            task.id,
+            title,
+            detail,
+            task.tool_name,
+            task.state,
+          ]
+            .join(" ")
+            .toLocaleLowerCase(),
+        };
+      });
+    },
+  );
+  allRows.sort((left, right) => {
+    const priority = { running: 0, failed: 1, unknown: 2, done: 3, idle: 4 };
+    const stateOrder = priority[left.state] - priority[right.state];
+    if (stateOrder) return stateOrder;
+    const leftTime = Date.parse(left.updatedAt ?? "");
+    const rightTime = Date.parse(right.updatedAt ?? "");
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+      return rightTime - leftTime;
+    }
+    return left.title.localeCompare(right.title);
+  });
+  const counts = {
+    all: allRows.length,
+    running: allRows.filter((row) => row.state === "running").length,
+    failed: allRows.filter((row) => row.state === "failed").length,
+    done: allRows.filter((row) => row.state === "done").length,
+  };
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return {
+    counts,
+    rows: allRows.filter(
+      (row) =>
+        (filter === "all" || row.state === filter) &&
+        (!normalizedQuery || row.searchText.includes(normalizedQuery)),
+    ),
+  };
+}
+
+export function recentSessionTasks(
+  tasks: readonly TaskListEntry[],
+  limit = 50,
+): TaskListEntry[] {
+  return [...tasks]
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.updated_at);
+      const rightTime = Date.parse(right.updated_at);
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+        return rightTime - leftTime;
+      }
+      return left.id.localeCompare(right.id);
+    })
+    .slice(0, limit);
+}
+
+function taskActivityStatus(task: TaskListEntry): SessionActivityStatus {
+  if (task.state === "pending" || task.state === "running") return "running";
+  if (task.state === "failed" || task.state === "cancelled") return "failed";
+  if (task.state === "completed") return "done";
+  return "unknown";
 }

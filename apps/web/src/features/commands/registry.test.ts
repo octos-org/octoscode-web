@@ -45,6 +45,11 @@ describe("octoscode command registry slice", () => {
       commandSuggestions("/", capabilities([])).map(({ name }) => name),
     ).toEqual(["ps", "stop", "help", "copy", "status"]);
     expect(
+      commandSuggestions("/", capabilities(["task/list"])).map(
+        ({ name }) => name,
+      ),
+    ).toContain("activity");
+    expect(
       commandSuggestions("/st", capabilities([])).map(({ name }) => name),
     ).toEqual(["stop", "status"]);
   });

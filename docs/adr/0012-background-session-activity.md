@@ -18,6 +18,9 @@ listed sessions, with four concurrent requests and a ten-second foreground-tab
 poll. Each sidebar row shows running, failed, completed, unknown, or unavailable
 state from the server result. The scan is read-only: it never opens a session,
 changes the foreground subscription, or infers task state from transcript text.
+The `/activity` command and header control open a searchable task navigator with
+the TUI's `all`, `running`, `failed`, and `done` filters. A row inspects a task
+in the current session or explicitly switches to its owning session.
 
 Unknown task states fail visibly as `Needs review`; a per-session RPC failure is
 shown as `Unavailable` and does not erase the session list. Switching sessions
@@ -25,9 +28,10 @@ continues to use the explicit Octoscode-compatible open/hydrate path.
 
 ## Consequences
 
-- Users can see that another coding session is still running before switching.
+- Users can see, search, and filter work in another coding session before
+  switching.
 - Polling supplies cross-session truth without inventing a global notification
   contract that Core does not provide.
-- This is not yet full `/activity` parity: searchable cross-session messages,
-  plans, approvals, recent changes, and detailed task navigation need a bounded
-  server snapshot or explicit multi-session subscription contract.
+- This is not yet full `/activity` parity: cross-session messages, plans,
+  approvals, and recent changes need a bounded server snapshot or explicit
+  multi-session subscription contract.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   activityLabel,
+  buildWorkspaceActivityModel,
+  EMPTY_WORKSPACE_PRODUCT,
   formatFileSize,
   includeActiveSession,
   mergeTokenCost,
@@ -83,5 +85,54 @@ describe("workspace product model", () => {
     ]);
     expect(unknown.status).toBe("unknown");
     expect(activityLabel(unknown)).toBe("Needs review");
+  });
+
+  it("builds searchable cross-session activity with stable status filters", () => {
+    const task = {
+      tool_name: "spawn_agent",
+      tool_call_id: "call-1",
+      status: "working",
+      lifecycle_state: "active",
+      runtime_state: "running",
+      source: "model",
+      role: "reviewer",
+      started_at: "2026-08-26T00:00:00Z",
+      updated_at: "2026-08-26T00:01:00Z",
+      output_files: [],
+    };
+    const state = {
+      ...EMPTY_WORKSPACE_PRODUCT,
+      sessions: [
+        { id: "coding:main", message_count: 2, title: "Implementation" },
+        { id: "coding:review", message_count: 1, title: "Protocol review" },
+      ],
+      activityTasksBySession: {
+        "coding:main": [
+          { ...task, id: "build", state: "completed", summary: "Build Web" },
+        ],
+        "coding:review": [
+          {
+            ...task,
+            id: "review",
+            state: "running",
+            summary: "Check protocol drift",
+          },
+        ],
+      },
+    };
+    const all = buildWorkspaceActivityModel(state, "", "all");
+    expect(all.counts).toEqual({ all: 2, running: 1, failed: 0, done: 1 });
+    expect(all.rows.map((row) => row.taskId)).toEqual(["review", "build"]);
+
+    const searched = buildWorkspaceActivityModel(
+      state,
+      "protocol review",
+      "running",
+    );
+    expect(searched.rows).toHaveLength(1);
+    expect(searched.rows[0]).toMatchObject({
+      sessionId: "coding:review",
+      title: "Check protocol drift",
+    });
   });
 });
