@@ -11,7 +11,10 @@ Every build emits `/octoscode-web-build.json` with:
 - the Web release and exact source revision;
 - the UI Protocol version;
 - the exact Octos Core revision and protocol blob used by the generated
-  vocabulary and checked payload fixtures.
+  vocabulary and checked payload fixtures;
+- the exact released Core tag/revision exercised by the checksummed runtime
+  smoke, including required base/onboarding capabilities and known optional
+  forward methods.
 
 Release tags must look like `v0.1.0` or `v0.1.0-rc.1`. The release workflow
 repeats all checks, Chromium product tests, and the checksummed pinned-Core

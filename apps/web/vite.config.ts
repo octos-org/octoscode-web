@@ -1,6 +1,19 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { SUPPORTED_OCTOS_CONTRACT } from "../../packages/client/src/contract.ts";
+import coreRuntime from "../../packages/client/core-runtime.json";
+
+const VERIFIED_CORE_RUNTIME = {
+  repository: coreRuntime.repository,
+  tag: coreRuntime.tag,
+  version: coreRuntime.version,
+  revision: coreRuntime.revision,
+  required_web_methods: coreRuntime.required_web_methods,
+  required_web_features: coreRuntime.required_web_features,
+  required_solo_onboarding_methods:
+    coreRuntime.required_solo_onboarding_methods,
+  forward_compatible_methods: coreRuntime.forward_compatible_methods,
+};
 
 function releaseValue(name: string, fallback: string): string {
   const value = process.env[name]?.trim();
@@ -29,13 +42,14 @@ export default defineConfig({
           fileName: "octoscode-web-build.json",
           source: `${JSON.stringify(
             {
-              schema_version: 1,
+              schema_version: 2,
               release: releaseValue("OCTOSCODE_WEB_RELEASE", "dev"),
               source_revision: releaseValue(
                 "OCTOSCODE_WEB_REVISION",
                 "unknown",
               ),
               supported_octos_contract: SUPPORTED_OCTOS_CONTRACT,
+              verified_core_runtime: VERIFIED_CORE_RUNTIME,
             },
             null,
             2,

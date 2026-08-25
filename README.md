@@ -141,7 +141,8 @@ A SemVer-like `v*` tag runs the full check and Chromium E2E gates before GitHub
 publishes a versioned static archive and SHA-256 file. The release gate also
 passes the pinned real-Core smoke. Each build contains
 `octoscode-web-build.json`, which records its Web revision and the exact Octos
-Core protocol contract covered by the fixtures. See the
+Core protocol contract covered by the fixtures plus the released Core runtime
+baseline exercised by CI. See the
 [deployment contract](docs/deployment.md) before hosting or embedding it.
 
 ## License

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.0-rc.2 — 2026-08-26
+
+- Record both the generated protocol source pin and checksummed released Core
+  runtime baseline in the deployed build manifest.
+- Mark release-candidate tags as GitHub prereleases and ship security/changelog
+  metadata with the static archive.
+- Make settled Markdown links, syntax tokens, and task-list controls pass the
+  deterministic light-theme WCAG 2/2.1 A/AA gate.
+
 ## v0.1.0-rc.1 — 2026-08-26
 
 First release candidate of the standalone Octoscode browser client.

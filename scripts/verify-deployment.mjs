@@ -8,6 +8,9 @@ const html = await readFile(resolve(dist, "index.html"), "utf8");
 const manifest = JSON.parse(
   await readFile(resolve(dist, "octoscode-web-build.json"), "utf8"),
 );
+const runtime = JSON.parse(
+  await readFile(resolve(root, "packages/client/core-runtime.json"), "utf8"),
+);
 
 for (const required of [
   "Content-Security-Policy",
@@ -43,11 +46,29 @@ for (const forbidden of [
   );
 }
 
-assert(manifest.schema_version === 1, "build manifest schema is invalid");
+assert(manifest.schema_version === 2, "build manifest schema is invalid");
 assert(
   manifest.supported_octos_contract?.protocol === "octos-ui/v1alpha1",
   "build manifest protocol is invalid",
 );
+for (const key of ["repository", "tag", "version", "revision"]) {
+  assert(
+    manifest.verified_core_runtime?.[key] === runtime[key],
+    `build manifest runtime ${key} is invalid`,
+  );
+}
+for (const key of [
+  "required_web_methods",
+  "required_web_features",
+  "required_solo_onboarding_methods",
+  "forward_compatible_methods",
+]) {
+  assert(
+    JSON.stringify(manifest.verified_core_runtime?.[key]) ===
+      JSON.stringify(runtime[key]),
+    `build manifest runtime ${key} is invalid`,
+  );
+}
 
 const initialAssets = [
   ...html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g),

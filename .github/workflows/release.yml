@@ -80,7 +80,7 @@ jobs:
           test ! -e "$stage"
           mkdir "$stage"
           cp -R apps/web/dist/. "$stage/"
-          cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
+          cp LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md SECURITY.md "$stage/"
           cp docs/deployment.md "$stage/DEPLOYMENT.md"
           cp -R deploy "$stage/deploy"
           tar -C "$stage" -czf "$artifact" .
@@ -98,4 +98,7 @@ jobs:
               --verify-tag \
               --generate-notes \
               --title "octoscode-web $RELEASE_TAG"
+          fi
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            gh release edit "$RELEASE_TAG" --prerelease
           fi
