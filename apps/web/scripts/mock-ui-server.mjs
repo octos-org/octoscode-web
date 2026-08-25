@@ -20,6 +20,9 @@ const capabilities = {
     "turn/interrupt",
     "approval/respond",
     "user_question/respond",
+    "permission/profile/list",
+    "permission/profile/set",
+    "diff/preview/get",
   ],
   supported_notifications: ["projection/envelope", "protocol/replay_lossy"],
   supported_features: [
@@ -31,6 +34,7 @@ const capabilities = {
 };
 
 sockets.on("connection", (socket) => {
+  let permission = { mode: "workspace_write", network: "deny" };
   socket.on("message", (bytes) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
@@ -112,6 +116,36 @@ sockets.on("connection", (socket) => {
       reply(socket, request.id, { accepted: true });
       return;
     }
+    if (request.method === "permission/profile/list") {
+      reply(socket, request.id, {
+        session_id: sessionId,
+        current: permission,
+        profiles: [
+          { mode: "read_only", network: "deny" },
+          { mode: "workspace_write", network: "deny" },
+          { mode: "workspace_write", network: "allow" },
+          { mode: "danger_full_access", network: "allow" },
+        ],
+      });
+      return;
+    }
+    if (request.method === "permission/profile/set") {
+      permission = { ...permission, ...request.params?.update };
+      reply(socket, request.id, {
+        session_id: sessionId,
+        current: permission,
+        applied: true,
+      });
+      return;
+    }
+    if (request.method === "diff/preview/get") {
+      reply(
+        socket,
+        request.id,
+        diffPreview(sessionId, request.params.preview_id),
+      );
+      return;
+    }
     reply(socket, request.id, { accepted: true });
   });
 });
@@ -129,6 +163,25 @@ function streamTurn(socket, sessionId, params) {
     assistant_segment_id: "segment-1",
   });
   setTimeout(() => {
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "progress/updated",
+        params: {
+          session_id: sessionId,
+          turn_id: turnId,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            kind: "file_mutation",
+            file_mutation: {
+              path: "apps/web/src/app/App.tsx",
+              operation: "write",
+              preview_id: "00000000-0000-4000-8000-000000000042",
+            },
+          },
+        },
+      }),
+    );
     notify(socket, sessionId, threadId, turnId, 3, 13, "assistant_persisted", {
       text: "Completed with `pnpm check` and **all tests passing**.",
       assistant_segment_id: "segment-1",
@@ -142,6 +195,57 @@ function streamTurn(socket, sessionId, params) {
       token_usage: { input_tokens: 12, output_tokens: 9 },
     });
   }, 350);
+}
+
+function diffPreview(sessionId, previewId) {
+  return {
+    status: "ready",
+    source: "pending_store",
+    preview: {
+      session_id: sessionId,
+      preview_id: previewId,
+      title: "Mock coding change",
+      files: [
+        {
+          path: "apps/web/src/app/App.tsx",
+          status: "modified",
+          hunks: [
+            {
+              header: "@@ -41,3 +41,4 @@ export function App()",
+              lines: [
+                {
+                  kind: "context",
+                  content: "  const session = useOctosSession();",
+                  old_line: 41,
+                  new_line: 41,
+                },
+                {
+                  kind: "removed",
+                  content: "  const ready = false;",
+                  old_line: 42,
+                },
+                {
+                  kind: "added",
+                  content: "  const ready = session.connected;",
+                  new_line: 42,
+                },
+                {
+                  kind: "added",
+                  content: "  const review = session.diffReview;",
+                  new_line: 43,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          path: "packages/client/src/coding.ts",
+          status: "added",
+          hunks: [],
+        },
+      ],
+    },
+  };
 }
 
 function reply(socket, id, result) {

@@ -15,6 +15,8 @@ import {
 import { ApprovalPanel } from "../features/approval/ApprovalPanel.tsx";
 import { UserQuestionPanel } from "../features/questions/UserQuestionPanel.tsx";
 import { useOctosSession } from "../features/session/use-octos-session.ts";
+import { PermissionPanel } from "../features/permissions/PermissionPanel.tsx";
+import { DiffReviewDialog } from "../features/review/DiffReviewDialog.tsx";
 
 const initialConnection: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -204,6 +206,12 @@ export function App() {
             onConnect={() => session.connect(connection)}
             onDisconnect={session.disconnect}
           />
+          <PermissionPanel
+            state={session.permission}
+            connected={Boolean(session.opened)}
+            onRefresh={() => void session.refreshPermission()}
+            onUpdate={(update) => void session.updatePermission(update)}
+          />
           <section className="boundary-note">
             <span className="eyebrow">Boundary</span>
             <h3>One runtime, two clients</h3>
@@ -225,6 +233,16 @@ export function App() {
               </small>
             </div>
             <div className="header-actions">
+              {session.diffReview.available &&
+              session.diffReview.latestPreviewId ? (
+                <button
+                  className="review-chip"
+                  type="button"
+                  onClick={() => void session.openDiffReview()}
+                >
+                  Review changes
+                </button>
+              ) : null}
               {session.opened ? (
                 <span
                   className={`recovery-pill recovery-${session.recovery.phase}`}
@@ -282,6 +300,9 @@ export function App() {
                   void session.respondApproval(decision, scope)
                 }
                 onInterrupt={() => void session.interrupt()}
+                onReviewDiff={(previewId) =>
+                  void session.openDiffReview(previewId)
+                }
               />
             ) : session.question ? (
               <UserQuestionPanel
@@ -405,6 +426,11 @@ export function App() {
 
         <EventInspector events={session.events} features={features} />
       </main>
+      <DiffReviewDialog
+        state={session.diffReview}
+        onClose={session.closeDiffReview}
+        onRefresh={() => void session.openDiffReview()}
+      />
     </div>
   );
 }

@@ -14,7 +14,15 @@ export type {
 export { parseProjectionEnvelope } from "./projection.ts";
 export { parseReplayLossyEvent, parseSessionHydrateResult } from "./hydrate.ts";
 export {
+  isPreviewId,
+  parseDiffPreviewGetResult,
+  parsePermissionProfileListResult,
+  parsePermissionProfileSetResult,
+} from "./coding.ts";
+export {
+  approvalDiffPreviewId,
   approvalResolutionId,
+  notificationDiffPreviewId,
   parseApprovalRequested,
   parseUserQuestionRequested,
   supportsFeature,
@@ -27,8 +35,22 @@ export type {
   ApprovalRespondResult,
   ApprovalScope,
   ConnectionStatus,
+  DiffPreview,
+  DiffPreviewFile,
+  DiffPreviewGetParams,
+  DiffPreviewGetResult,
+  DiffPreviewHunk,
+  DiffPreviewLine,
   ProjectionEnvelopeV2,
   ProjectionPayload,
+  PermissionNetworkPolicy,
+  PermissionProfileListParams,
+  PermissionProfileListResult,
+  PermissionProfileMode,
+  PermissionProfileSelection,
+  PermissionProfileSetParams,
+  PermissionProfileSetResult,
+  PermissionProfileUpdate,
   ReplayLossyEvent,
   HydratedMessage,
   HydratedTurn,

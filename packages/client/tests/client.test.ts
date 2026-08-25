@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_UI_FEATURES, OctosUiClient } from "../src/client.ts";
+import type { PermissionProfileSetParams } from "../src/types.ts";
+import fixture from "./fixtures/ui-protocol-v1.json";
 
 describe("OctosUiClient", () => {
   it("negotiates the core's authoritative session hydrate feature", () => {
@@ -157,6 +159,59 @@ describe("OctosUiClient", () => {
     await expect(hydrate).resolves.toMatchObject({
       cursor: { stream: "session", seq: 3 },
     });
+  });
+
+  it("emits and validates authoritative permission and diff requests", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const pending = [
+      client.listPermissionProfiles(fixture.permission_profile_list.request),
+      client.setPermissionProfile(
+        fixture.permission_profile_set.request as PermissionProfileSetParams,
+      ),
+      client.getDiffPreview(fixture.diff_preview_get.request),
+    ];
+    const frames = socket.send.mock.calls.map(([frame]) =>
+      JSON.parse(String(frame)),
+    ) as Array<{ id: string; method: string; params: unknown }>;
+    expect(frames).toMatchObject([
+      {
+        method: "permission/profile/list",
+        params: fixture.permission_profile_list.request,
+      },
+      {
+        method: "permission/profile/set",
+        params: fixture.permission_profile_set.request,
+      },
+      {
+        method: "diff/preview/get",
+        params: fixture.diff_preview_get.request,
+      },
+    ]);
+
+    const results = [
+      fixture.permission_profile_list.result,
+      fixture.permission_profile_set.result,
+      fixture.diff_preview_get.result,
+    ];
+    for (const [index, frame] of frames.entries()) {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          id: frame.id,
+          result: results[index],
+        }),
+      } as MessageEvent);
+    }
+    await expect(Promise.all(pending)).resolves.toHaveLength(3);
   });
 });
 

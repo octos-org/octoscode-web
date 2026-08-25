@@ -4,6 +4,12 @@ import type {
   ApprovalRespondParams,
   ApprovalRespondResult,
   ConnectionStatus,
+  DiffPreviewGetParams,
+  DiffPreviewGetResult,
+  PermissionProfileListParams,
+  PermissionProfileListResult,
+  PermissionProfileSetParams,
+  PermissionProfileSetResult,
   SessionHydrateParams,
   SessionHydrateResult,
   SessionOpenParams,
@@ -14,6 +20,11 @@ import type {
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
 import { parseSessionHydrateResult } from "./hydrate.ts";
+import {
+  parseDiffPreviewGetResult,
+  parsePermissionProfileListResult,
+  parsePermissionProfileSetResult,
+} from "./coding.ts";
 
 export const DEFAULT_UI_FEATURES = [
   "approval.typed.v1",
@@ -237,6 +248,43 @@ export class OctosUiClient {
     params: UserQuestionRespondParams,
   ): Promise<UserQuestionRespondResult> {
     return this.request("user_question/respond", params);
+  }
+
+  async listPermissionProfiles(
+    params: PermissionProfileListParams,
+  ): Promise<PermissionProfileListResult> {
+    const result = await this.request<unknown>(
+      "permission/profile/list",
+      params,
+    );
+    const parsed = parsePermissionProfileListResult(result);
+    if (!parsed) {
+      throw new Error("permission/profile/list returned an invalid result");
+    }
+    return parsed;
+  }
+
+  async setPermissionProfile(
+    params: PermissionProfileSetParams,
+  ): Promise<PermissionProfileSetResult> {
+    const result = await this.request<unknown>(
+      "permission/profile/set",
+      params,
+    );
+    const parsed = parsePermissionProfileSetResult(result);
+    if (!parsed) {
+      throw new Error("permission/profile/set returned an invalid result");
+    }
+    return parsed;
+  }
+
+  async getDiffPreview(
+    params: DiffPreviewGetParams,
+  ): Promise<DiffPreviewGetResult> {
+    const result = await this.request<unknown>("diff/preview/get", params);
+    const parsed = parseDiffPreviewGetResult(result);
+    if (!parsed) throw new Error("diff/preview/get returned an invalid result");
+    return parsed;
   }
 
   private handleMessage(data: unknown): void {

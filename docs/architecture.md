@@ -40,14 +40,24 @@ The authoritative contract lives in `octos-core`:
 - `crates/octos-core/src/ui_protocol.rs`
 
 The Rust TUI consumes those types directly. A browser cannot. The target is a
-generated, versioned TypeScript contract emitted by the Octos repository and
-verified against golden wire fixtures. Until that exists, this repository only
-defines the narrow request fields it sends and treats all unrecognized payload
-fields as `unknown`.
+generated, versioned TypeScript contract emitted by the Octos repository. Until
+that exists, the client defines only the narrow request/result slice it uses
+and checks it against an exact Core revision and contract-blob fixture in
+`packages/client/tests/fixtures`. Safety-bearing permission enums fail closed;
+display-only diff status, source, file-status, and line-kind labels remain
+forward compatible after their surrounding structure is validated.
 
 The client must fail closed on malformed JSON-RPC frames, advertise requested
 features during the WebSocket handshake, and render controls from the server's
 accepted capabilities rather than from build-time assumptions.
+
+Permission profiles and diff previews remain server-owned state. The Web app
+uses `permission/profile/list` before enabling any mutation, submits only a
+selection advertised for the active session, and treats the set response as
+authoritative. It discovers preview ids only from typed approval or file
+mutation fields, then reads the proposal-time snapshot with `diff/preview/get`.
+It never computes a replacement git diff in the browser or scrapes ids from
+tool prose.
 
 ## Browser constraints
 

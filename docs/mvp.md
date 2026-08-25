@@ -13,7 +13,7 @@
 
 ## Milestone 1 — durable chat
 
-- [ ] Generated TypeScript contract or checked golden protocol fixtures
+- [x] Generated TypeScript contract or checked golden protocol fixtures
 - [x] `projection.envelope.v2` reducer with cursor, dedupe, and session scope
 - [x] `session/hydrate` plus reconnect replay and gap repair
 - [x] User, assistant, reasoning, tool, warning, and terminal rows
@@ -23,8 +23,8 @@
 
 - [x] Typed approvals with Octoscode request/session/deny decisions
 - [x] Structured single-select, multi-select, and free-text user questions
-- [ ] Per-session permission profile
-- [ ] Diff preview and review surface
+- [x] Per-session permission profile
+- [x] Diff preview and review surface
 - [ ] Task list, output, cancel, and artifacts
 - [ ] Plan/progress and runtime policy visibility
 

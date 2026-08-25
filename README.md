@@ -15,8 +15,10 @@ The first product slice is usable against a current Octos server. It negotiates
 capabilities, hydrates durable transcript state, resumes with a cursor, detects
 projection gaps and lossy replay, reconnects with backoff, preserves the FIFO
 prompt contract, renders typed approvals and structured user questions, and
-shows settled GFM with lazy syntax highlighting. Diff, task, artifact, and
-session-switching surfaces follow in the MVP plan.
+shows settled GFM with lazy syntax highlighting. It also exposes server-confirmed
+per-session permission profiles and authoritative diff previews discovered from
+typed coding events. Task, artifact, and session-switching surfaces follow in
+the MVP plan.
 
 ## Run locally
 
@@ -60,6 +62,8 @@ while product structure and visual language follow the
 [DSH reference decision](docs/adr/0004-dsh-product-and-visual-reference.md).
 Reconnect and hydrate follow the
 [durable session decision](docs/adr/0005-durable-session-recovery.md).
+Permission and diff review follow the
+[coding safety surfaces decision](docs/adr/0007-coding-safety-surfaces.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 

@@ -8,7 +8,9 @@ import {
 import {
   approvalResolutionId,
   DEFAULT_UI_FEATURES,
+  isPreviewId,
   isRecord,
+  notificationDiffPreviewId,
   OctosUiClient,
   parseApprovalRequested,
   parseUserQuestionRequested,
@@ -18,6 +20,9 @@ import {
   type ApprovalRequested,
   type ApprovalScope,
   type ConnectionStatus,
+  type DiffPreviewGetResult,
+  type PermissionProfileListResult,
+  type PermissionProfileUpdate,
   type RpcNotification,
   type SessionHydrateResult,
   type SessionOpened,
@@ -81,6 +86,8 @@ export interface OctosSessionRuntime {
   decisionBusy: boolean;
   decisionError: string | null;
   recovery: SessionRecoverySnapshot;
+  permission: PermissionRuntimeState;
+  diffReview: DiffReviewRuntimeState;
   connected: boolean;
   connect: (input: SessionConnectionInput) => void;
   disconnect: () => void;
@@ -91,7 +98,47 @@ export interface OctosSessionRuntime {
     scope: ApprovalScope,
   ) => Promise<void>;
   respondQuestion: (answers: UserQuestionAnswer[]) => Promise<void>;
+  refreshPermission: () => Promise<void>;
+  updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
+  openDiffReview: (previewId?: string) => Promise<void>;
+  closeDiffReview: () => void;
 }
+
+export interface PermissionRuntimeState {
+  available: boolean;
+  editable: boolean;
+  loading: boolean;
+  busy: boolean;
+  result: PermissionProfileListResult | null;
+  error: string | null;
+}
+
+export interface DiffReviewRuntimeState {
+  available: boolean;
+  latestPreviewId: string | null;
+  active: boolean;
+  loading: boolean;
+  result: DiffPreviewGetResult | null;
+  error: string | null;
+}
+
+const EMPTY_PERMISSION: PermissionRuntimeState = {
+  available: false,
+  editable: false,
+  loading: false,
+  busy: false,
+  result: null,
+  error: null,
+};
+
+const EMPTY_DIFF_REVIEW: DiffReviewRuntimeState = {
+  available: false,
+  latestPreviewId: null,
+  active: false,
+  loading: false,
+  result: null,
+  error: null,
+};
 
 export function useOctosSession(): OctosSessionRuntime {
   const clientRef = useRef<OctosUiClient | null>(null);
@@ -105,6 +152,8 @@ export function useOctosSession(): OctosSessionRuntime {
   const recoveryBufferRef = useRef<RpcNotification[]>([]);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const diffRequestRef = useRef(0);
+  const permissionBusyRef = useRef(false);
   const manualDisconnectRef = useRef(false);
   const connectionConfigRef = useRef<SessionConnectionInput | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -125,6 +174,10 @@ export function useOctosSession(): OctosSessionRuntime {
   const [recovery, setRecovery] = useState<SessionRecoverySnapshot>(() =>
     durableProjectionRef.current.snapshot(),
   );
+  const [permission, setPermission] =
+    useState<PermissionRuntimeState>(EMPTY_PERMISSION);
+  const [diffReview, setDiffReview] =
+    useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
 
   useEffect(
     () => () => {
@@ -179,6 +232,10 @@ export function useOctosSession(): OctosSessionRuntime {
     setTimeline([]);
     resetQueue();
     resetBlockingInteraction();
+    setPermission(EMPTY_PERMISSION);
+    permissionBusyRef.current = false;
+    diffRequestRef.current += 1;
+    setDiffReview(EMPTY_DIFF_REVIEW);
     capabilitiesRef.current = undefined;
     sessionIdRef.current = config.sessionId;
     durableProjectionRef.current.reset(config.sessionId);
@@ -231,6 +288,12 @@ export function useOctosSession(): OctosSessionRuntime {
       capabilitiesRef.current = result.opened.capabilities;
       setOpened(result.opened);
       await hydrateSessionState(client, result.opened.capabilities);
+      configureCodingSurfaces(result.opened.capabilities);
+      if (
+        supportsMethod(result.opened.capabilities, "permission/profile/list")
+      ) {
+        void loadPermissionProfiles(client);
+      }
       reconnectAttemptRef.current = 0;
       setConnectionError(null);
     } catch (reason) {
@@ -244,6 +307,65 @@ export function useOctosSession(): OctosSessionRuntime {
       setConnectionError(message);
       client.disconnect();
       if (reconnecting && !fatalContractError) scheduleReconnect();
+    }
+  }
+
+  function configureCodingSurfaces(
+    capabilities: UiProtocolCapabilities | undefined,
+  ) {
+    const permissionAvailable = supportsMethod(
+      capabilities,
+      "permission/profile/list",
+    );
+    setPermission((current) => ({
+      ...current,
+      available: permissionAvailable,
+      editable:
+        permissionAvailable &&
+        supportsMethod(capabilities, "permission/profile/set"),
+    }));
+    setDiffReview((current) => ({
+      ...current,
+      available: supportsMethod(capabilities, "diff/preview/get"),
+    }));
+  }
+
+  async function loadPermissionProfiles(client = clientRef.current) {
+    const sessionId = sessionIdRef.current;
+    if (
+      !client ||
+      !sessionId ||
+      !supportsMethod(capabilitiesRef.current, "permission/profile/list")
+    ) {
+      return;
+    }
+    setPermission((current) => ({
+      ...current,
+      loading: true,
+      error: null,
+    }));
+    try {
+      const result = await client.listPermissionProfiles({
+        session_id: sessionId,
+      });
+      if (clientRef.current !== client || sessionIdRef.current !== sessionId) {
+        return;
+      }
+      if (result.session_id !== sessionId) {
+        throw new Error("permission/profile/list returned another session");
+      }
+      setPermission((current) => ({
+        ...current,
+        loading: false,
+        result,
+      }));
+    } catch (reason) {
+      if (clientRef.current !== client) return;
+      setPermission((current) => ({
+        ...current,
+        loading: false,
+        error: reason instanceof Error ? reason.message : String(reason),
+      }));
     }
   }
 
@@ -418,6 +540,10 @@ export function useOctosSession(): OctosSessionRuntime {
     syncRecovery();
     resetQueue();
     resetBlockingInteraction();
+    setPermission(EMPTY_PERMISSION);
+    permissionBusyRef.current = false;
+    diffRequestRef.current += 1;
+    setDiffReview(EMPTY_DIFF_REVIEW);
   };
 
   const enqueuePrompt = (text: string) => {
@@ -555,6 +681,152 @@ export function useOctosSession(): OctosSessionRuntime {
     }
   };
 
+  const refreshPermission = async () => {
+    await loadPermissionProfiles();
+  };
+
+  const updatePermission = async (update: PermissionProfileUpdate) => {
+    const client = clientRef.current;
+    const sessionId = sessionIdRef.current;
+    if (
+      !client ||
+      !sessionId ||
+      !permission.available ||
+      !permission.editable ||
+      permissionBusyRef.current
+    ) {
+      return;
+    }
+    const current = permission.result?.current;
+    const next = current
+      ? {
+          mode: update.mode ?? current.mode,
+          network: update.network ?? current.network,
+        }
+      : null;
+    if (
+      !next ||
+      !permission.result?.profiles.some(
+        (profile) =>
+          profile.mode === next.mode && profile.network === next.network,
+      )
+    ) {
+      setPermission((state) => ({
+        ...state,
+        error:
+          "The requested permission profile was not advertised for this session",
+      }));
+      return;
+    }
+    permissionBusyRef.current = true;
+    setPermission((current) => ({ ...current, busy: true, error: null }));
+    try {
+      const result = await client.setPermissionProfile({
+        session_id: sessionId,
+        update,
+      });
+      if (clientRef.current !== client || sessionIdRef.current !== sessionId) {
+        return;
+      }
+      if (result.session_id !== sessionId) {
+        throw new Error("permission/profile/set returned another session");
+      }
+      if (!result.applied) {
+        throw new Error("The server did not apply the permission change");
+      }
+      setPermission((current) => ({
+        ...current,
+        busy: false,
+        result: current.result
+          ? { ...current.result, current: result.current }
+          : {
+              session_id: result.session_id,
+              current: result.current,
+              profiles: [],
+            },
+      }));
+      permissionBusyRef.current = false;
+      await loadPermissionProfiles(client);
+    } catch (reason) {
+      if (clientRef.current !== client) return;
+      permissionBusyRef.current = false;
+      setPermission((current) => ({
+        ...current,
+        busy: false,
+        error: reason instanceof Error ? reason.message : String(reason),
+      }));
+    }
+  };
+
+  const openDiffReview = async (requestedPreviewId?: string) => {
+    const client = clientRef.current;
+    const sessionId = sessionIdRef.current;
+    const previewId = requestedPreviewId ?? diffReview.latestPreviewId;
+    if (
+      !client ||
+      !sessionId ||
+      !previewId ||
+      !isPreviewId(previewId) ||
+      !supportsMethod(capabilitiesRef.current, "diff/preview/get")
+    ) {
+      return;
+    }
+    const request = diffRequestRef.current + 1;
+    diffRequestRef.current = request;
+    setDiffReview((current) => ({
+      ...current,
+      latestPreviewId: previewId,
+      active: true,
+      loading: true,
+      result: null,
+      error: null,
+    }));
+    try {
+      const result = await client.getDiffPreview({
+        session_id: sessionId,
+        preview_id: previewId,
+      });
+      if (
+        clientRef.current !== client ||
+        diffRequestRef.current !== request ||
+        sessionIdRef.current !== sessionId
+      ) {
+        return;
+      }
+      if (
+        result.preview.session_id !== sessionId ||
+        result.preview.preview_id !== previewId
+      ) {
+        throw new Error("diff/preview/get returned a mismatched preview");
+      }
+      setDiffReview((current) => ({
+        ...current,
+        loading: false,
+        result,
+      }));
+    } catch (reason) {
+      if (clientRef.current !== client || diffRequestRef.current !== request) {
+        return;
+      }
+      setDiffReview((current) => ({
+        ...current,
+        loading: false,
+        error: reason instanceof Error ? reason.message : String(reason),
+      }));
+    }
+  };
+
+  const closeDiffReview = () => {
+    diffRequestRef.current += 1;
+    setDiffReview((current) => ({
+      ...current,
+      active: false,
+      loading: false,
+      result: null,
+      error: null,
+    }));
+  };
+
   function handleNotification(notification: RpcNotification) {
     setEvents((current) =>
       [
@@ -625,6 +897,14 @@ export function useOctosSession(): OctosSessionRuntime {
       !notificationMatchesSessionScope(notification, sessionIdRef.current)
     ) {
       return;
+    }
+
+    const previewId = notificationDiffPreviewId(notification);
+    if (previewId) {
+      setDiffReview((current) => ({
+        ...current,
+        latestPreviewId: previewId,
+      }));
     }
 
     const canonicalProjection = supportsFeature(
@@ -730,6 +1010,8 @@ export function useOctosSession(): OctosSessionRuntime {
     decisionBusy,
     decisionError,
     recovery,
+    permission,
+    diffReview,
     connected:
       status === "connected" && opened !== null && recovery.phase === "healthy",
     connect,
@@ -738,6 +1020,10 @@ export function useOctosSession(): OctosSessionRuntime {
     interrupt,
     respondApproval,
     respondQuestion,
+    refreshPermission,
+    updatePermission,
+    openDiffReview,
+    closeDiffReview,
   };
 }
 

@@ -91,6 +91,80 @@ export interface UserQuestionRespondResult {
   runtime_resumed: boolean;
 }
 
+export type PermissionProfileMode =
+  "read_only" | "workspace_write" | "danger_full_access";
+export type PermissionNetworkPolicy = "allow" | "deny";
+
+export interface PermissionProfileSelection {
+  mode: PermissionProfileMode;
+  network: PermissionNetworkPolicy;
+}
+
+export interface PermissionProfileUpdate {
+  mode?: PermissionProfileMode;
+  network?: PermissionNetworkPolicy;
+  approval_policy?: "on-request" | "never";
+}
+
+export interface PermissionProfileListParams {
+  session_id: string;
+}
+
+export interface PermissionProfileSetParams {
+  session_id: string;
+  update: PermissionProfileUpdate;
+  runtime_mode?: string;
+}
+
+export interface PermissionProfileListResult {
+  session_id: string;
+  current: PermissionProfileSelection;
+  profiles: PermissionProfileSelection[];
+}
+
+export interface PermissionProfileSetResult {
+  session_id: string;
+  current: PermissionProfileSelection;
+  applied: boolean;
+}
+
+export interface DiffPreviewGetParams {
+  session_id: string;
+  preview_id: string;
+}
+
+export interface DiffPreviewLine {
+  kind: string;
+  content: string;
+  old_line?: number;
+  new_line?: number;
+}
+
+export interface DiffPreviewHunk {
+  header: string;
+  lines: DiffPreviewLine[];
+}
+
+export interface DiffPreviewFile {
+  path: string;
+  old_path?: string;
+  status: string;
+  hunks: DiffPreviewHunk[];
+}
+
+export interface DiffPreview {
+  session_id: string;
+  preview_id: string;
+  title?: string;
+  files: DiffPreviewFile[];
+}
+
+export interface DiffPreviewGetResult {
+  status: string;
+  source: string;
+  preview: DiffPreview;
+}
+
 export interface SessionOpenParams {
   session_id: string;
   topic?: string;

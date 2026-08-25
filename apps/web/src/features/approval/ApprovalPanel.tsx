@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import {
+  approvalDiffPreviewId,
   isRecord,
   type ApprovalDecision,
   type ApprovalRequested,
@@ -12,6 +13,7 @@ interface ApprovalPanelProps {
   error: string | null;
   onDecide: (decision: ApprovalDecision, scope: ApprovalScope) => void;
   onInterrupt: () => void;
+  onReviewDiff?: (previewId: string) => void;
 }
 
 export function ApprovalPanel({
@@ -20,11 +22,13 @@ export function ApprovalPanel({
   error,
   onDecide,
   onInterrupt,
+  onReviewDiff,
 }: ApprovalPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => rootRef.current?.focus(), [approval.approvalId]);
 
   const command = approvalCommand(approval.typedDetails);
+  const previewId = approvalDiffPreviewId(approval);
 
   return (
     <div className="takeover-wrap">
@@ -37,7 +41,10 @@ export function ApprovalPanel({
         tabIndex={-1}
         onKeyDown={(event) => {
           if (busy) return;
-          if (event.key.toLowerCase() === "y") {
+          if (event.key.toLowerCase() === "d" && previewId && onReviewDiff) {
+            event.preventDefault();
+            onReviewDiff(previewId);
+          } else if (event.key.toLowerCase() === "y") {
             event.preventDefault();
             onDecide("approve", "request");
           } else if (event.key.toLowerCase() === "s") {
@@ -68,6 +75,16 @@ export function ApprovalPanel({
           {error ? <span className="takeover-error">{error}</span> : null}
         </div>
         <div className="approval-actions">
+          {previewId && onReviewDiff ? (
+            <button
+              className="takeover-button"
+              type="button"
+              disabled={busy}
+              onClick={() => onReviewDiff(previewId)}
+            >
+              Review diff <kbd>D</kbd>
+            </button>
+          ) : null}
           <button
             className="takeover-button reject"
             type="button"

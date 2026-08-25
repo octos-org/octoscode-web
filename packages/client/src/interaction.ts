@@ -1,4 +1,5 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
+import { isPreviewId } from "./coding.ts";
 import type {
   ApprovalRequested,
   UiProtocolCapabilities,
@@ -74,6 +75,45 @@ export function approvalResolutionId(
   return isRecord(notification.params) &&
     typeof notification.params.approval_id === "string"
     ? notification.params.approval_id
+    : null;
+}
+
+export function approvalDiffPreviewId(
+  approval: Pick<ApprovalRequested, "typedDetails">,
+): string | null {
+  if (!isRecord(approval.typedDetails)) return null;
+  const diff = approval.typedDetails.diff;
+  return isRecord(diff) && isPreviewId(diff.preview_id)
+    ? diff.preview_id
+    : null;
+}
+
+/** Finds only contract-defined preview locations; it never recursively scrapes prose. */
+export function notificationDiffPreviewId(
+  notification: RpcNotification,
+): string | null {
+  if (notification.method === "approval/requested") {
+    const approval = parseApprovalRequested(notification);
+    return approval ? approvalDiffPreviewId(approval) : null;
+  }
+  if (notification.method === "progress/updated") {
+    return progressPreviewId(notification.params);
+  }
+  if (notification.method !== "projection/envelope") return null;
+  const envelope = notification.params;
+  if (!isRecord(envelope) || !isRecord(envelope.payload)) return null;
+  const data = envelope.payload.data;
+  return progressPreviewId(data);
+}
+
+function progressPreviewId(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const metadata = isRecord(value.metadata) ? value.metadata : value;
+  const mutation = isRecord(metadata.file_mutation)
+    ? metadata.file_mutation
+    : null;
+  return mutation && isPreviewId(mutation.preview_id)
+    ? mutation.preview_id
     : null;
 }
 

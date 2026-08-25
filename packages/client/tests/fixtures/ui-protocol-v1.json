@@ -1,0 +1,95 @@
+{
+  "source": {
+    "repository": "https://github.com/octos-org/octos",
+    "revision": "04cb5596ec0935926d2e8afdd0826bfa18e0c4bb",
+    "contract_blob": "853140d45c3e59e1c4ab2e4445c0282dbb09a8bc",
+    "path": "crates/octos-core/src/ui_protocol.rs"
+  },
+  "permission_profile_list": {
+    "request": {
+      "session_id": "coding:local:main"
+    },
+    "result": {
+      "session_id": "coding:local:main",
+      "current": {
+        "mode": "workspace_write",
+        "network": "deny"
+      },
+      "profiles": [
+        {
+          "mode": "read_only",
+          "network": "deny"
+        },
+        {
+          "mode": "workspace_write",
+          "network": "deny"
+        },
+        {
+          "mode": "danger_full_access",
+          "network": "allow"
+        }
+      ]
+    }
+  },
+  "permission_profile_set": {
+    "request": {
+      "session_id": "coding:local:main",
+      "update": {
+        "mode": "danger_full_access",
+        "network": "allow"
+      }
+    },
+    "result": {
+      "session_id": "coding:local:main",
+      "current": {
+        "mode": "danger_full_access",
+        "network": "allow"
+      },
+      "applied": true
+    }
+  },
+  "diff_preview_get": {
+    "request": {
+      "session_id": "coding:local:main",
+      "preview_id": "00000000-0000-4000-8000-000000000042"
+    },
+    "result": {
+      "status": "ready",
+      "source": "pending_store",
+      "preview": {
+        "session_id": "coding:local:main",
+        "preview_id": "00000000-0000-4000-8000-000000000042",
+        "title": "Coding change",
+        "files": [
+          {
+            "path": "src/lib.rs",
+            "status": "modified",
+            "hunks": [
+              {
+                "header": "@@ -1,2 +1,3 @@",
+                "lines": [
+                  {
+                    "kind": "context",
+                    "content": "export const answer = 41;",
+                    "old_line": 1,
+                    "new_line": 1
+                  },
+                  {
+                    "kind": "removed",
+                    "content": "export const ready = false;",
+                    "old_line": 2
+                  },
+                  {
+                    "kind": "added",
+                    "content": "export const ready = true;",
+                    "new_line": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
