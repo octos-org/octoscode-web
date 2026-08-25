@@ -9,6 +9,15 @@ describe("resolveComposerIntent", () => {
     });
   });
 
+  it("keeps absolute paths as prompts like octoscode", () => {
+    expect(
+      resolveComposerIntent("/Users/me/project/src/main.rs is broken"),
+    ).toEqual({
+      kind: "prompt",
+      text: "/Users/me/project/src/main.rs is broken",
+    });
+  });
+
   it.each(["/stop", "/interrupt", "/esc"])(
     "maps %s to the same interrupt intent",
     (input) => {
@@ -18,6 +27,14 @@ describe("resolveComposerIntent", () => {
 
   it("dispatches help locally", () => {
     expect(resolveComposerIntent("/commands")).toEqual({ kind: "help" });
+  });
+
+  it("resolves the implemented local status commands", () => {
+    expect(resolveComposerIntent("/tasks")).toEqual({
+      kind: "process-status",
+    });
+    expect(resolveComposerIntent("/copy")).toEqual({ kind: "copy" });
+    expect(resolveComposerIntent("/status")).toEqual({ kind: "status" });
   });
 
   it("fails closed for commands that this build cannot execute", () => {

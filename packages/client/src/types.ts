@@ -15,6 +15,80 @@ export interface UiProtocolCapabilities {
   supported_methods: string[];
   supported_notifications: string[];
   supported_features?: string[];
+  unsupported?: Array<{ method: string; reason: string }>;
+}
+
+export type ApprovalDecision = "approve" | "deny";
+export type ApprovalScope = "request" | "turn" | "session" | "tool";
+
+export interface ApprovalRequested {
+  sessionId: string;
+  topic?: string;
+  approvalId: string;
+  turnId: string;
+  toolName: string;
+  title: string;
+  body: string;
+  approvalKind?: string;
+  risk?: string;
+  typedDetails?: unknown;
+  renderHints?: unknown;
+}
+
+export interface ApprovalRespondParams {
+  session_id: string;
+  approval_id: string;
+  decision: ApprovalDecision;
+  approval_scope?: ApprovalScope;
+  client_note?: string;
+}
+
+export interface ApprovalRespondResult {
+  approval_id: string;
+  accepted: boolean;
+  status: string;
+  runtime_resumed: boolean;
+}
+
+export interface UserQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface UserQuestion {
+  header: string;
+  question: string;
+  options: UserQuestionOption[];
+  multiSelect: boolean;
+  allowFreeText: boolean;
+}
+
+export interface UserQuestionRequested {
+  sessionId: string;
+  topic?: string;
+  questionId: string;
+  turnId: string;
+  title: string;
+  body: string;
+  questions: UserQuestion[];
+}
+
+export interface UserQuestionAnswer {
+  selected_labels?: string[];
+  free_text?: string;
+}
+
+export interface UserQuestionRespondParams {
+  session_id: string;
+  question_id: string;
+  answers: UserQuestionAnswer[];
+  client_note?: string;
+}
+
+export interface UserQuestionRespondResult {
+  question_id: string;
+  accepted: boolean;
+  runtime_resumed: boolean;
 }
 
 export interface SessionOpenParams {

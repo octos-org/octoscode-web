@@ -17,7 +17,8 @@ Do not fork DSH or adopt its complete plugin/service graph as the base of
 octoscode-web. That would introduce a second harness, session model, plugin
 loader, and host API that would then need to be adapted to Octos.
 
-Use DSH as design research. Ideas worth revisiting after the coding MVP are:
+Use DSH as the product and visual reference without adopting its runtime graph;
+ADR 0004 records the expanded decision. Architectural ideas include:
 
 - reversible UI contributions with explicit disposal;
 - declared dependencies between optional contributions;

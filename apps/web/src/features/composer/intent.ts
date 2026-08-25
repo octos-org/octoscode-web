@@ -2,20 +2,34 @@ export type ComposerIntent =
   | { kind: "prompt"; text: string }
   | { kind: "interrupt" }
   | { kind: "help" }
+  | { kind: "process-status" }
+  | { kind: "copy" }
+  | { kind: "status" }
+  | { kind: "empty-command" }
   | { kind: "unsupported-command"; command: string }
   | { kind: "local-shell-unavailable" };
 
-const INTERRUPT_ALIASES = new Set(["stop", "interrupt", "esc"]);
-const HELP_ALIASES = new Set(["help", "?", "commands"]);
+import {
+  commandAvailability,
+  findCommand,
+  parseCommandInvocation,
+} from "../commands/registry.ts";
+import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
 
 /** Commands are resolved before queueing so command text never reaches a model. */
-export function resolveComposerIntent(input: string): ComposerIntent {
+export function resolveComposerIntent(
+  input: string,
+  capabilities?: UiProtocolCapabilities,
+): ComposerIntent {
   const text = input.trim();
   if (text.startsWith("!")) return { kind: "local-shell-unavailable" };
-  if (!text.startsWith("/")) return { kind: "prompt", text };
+  const invocation = parseCommandInvocation(text);
+  if (!invocation) return { kind: "prompt", text };
+  if (!invocation.name) return { kind: "empty-command" };
 
-  const command = text.slice(1).split(/\s+/, 1)[0]?.toLowerCase() ?? "";
-  if (INTERRUPT_ALIASES.has(command)) return { kind: "interrupt" };
-  if (HELP_ALIASES.has(command)) return { kind: "help" };
-  return { kind: "unsupported-command", command: command || "/" };
+  const command = findCommand(invocation.name.toLowerCase());
+  if (!command || !commandAvailability(command, capabilities).available) {
+    return { kind: "unsupported-command", command: invocation.name };
+  }
+  return { kind: command.intent } as ComposerIntent;
 }

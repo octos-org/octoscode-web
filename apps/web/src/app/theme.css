@@ -1,0 +1,96 @@
+/*
+ * Visual token subset adapted from DeepSeek Harness UI Theme.
+ * Source revision: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
+ * Copyright (c) 2026 DeepSeek. Licensed under the MIT License.
+ * See THIRD_PARTY_NOTICES.md.
+ */
+
+:root {
+  color-scheme: light dark;
+  --dsw-font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --ds-font-family-code:
+    "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono",
+    Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+  --ds-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ds-transition-duration: 0.2s;
+  --ds-transition-duration-slow: 0.3s;
+  --dsw-shadow-lv1: 0 2px 4px rgb(0 0 0 / 5%);
+  --dsw-shadow-lv2: 0 4px 12px rgb(0 0 0 / 2%), 0 2px 8px rgb(0 0 0 / 4%);
+  --dsw-shadow-lv3: 0 0 1px rgb(0 0 0 / 20%), 0 12px 32px rgb(0 0 0 / 8%);
+
+  --dsw-alias-bg-base: #fff;
+  --dsw-alias-bg-layer-1: #fff;
+  --dsw-alias-bg-layer-2: #fff;
+  --dsw-alias-bg-layer-3: #fff;
+  --dsw-alias-bg-mask-1: rgb(0 0 0 / 24%);
+  --dsw-alias-border-l1: rgb(0 0 0 / 4%);
+  --dsw-alias-border-l2: rgb(0 0 0 / 10%);
+  --dsw-alias-border-l2-darkmode-thin: rgb(0 0 0 / 10%);
+  --dsw-alias-border-l3: rgb(0 0 0 / 12%);
+  --dsw-alias-button-elevated-fill: #fff;
+  --dsw-alias-button-floating-fill: #fff;
+  --dsw-alias-button-floating-hover: #f1f3f5;
+  --dsw-alias-button-info-fill: #4176e6;
+  --dsw-alias-button-info-hover: #679efe;
+  --dsw-alias-interactive-bg-hover: rgb(38 49 72 / 6%);
+  --dsw-alias-interactive-bg-hover-solid: #f1f3f5;
+  --dsw-alias-interactive-bg-hover-danger: rgb(236 19 19 / 5%);
+  --dsw-alias-label-caption: #adb2b8;
+  --dsw-alias-label-primary: #0f1115;
+  --dsw-alias-label-primary-dimmed: #151517;
+  --dsw-alias-label-secondary: #61666b;
+  --dsw-alias-label-tertiary: #81858c;
+  --dsw-alias-state-business-primary: #4176e6;
+  --dsw-alias-state-error-primary: #ec1313;
+  --dsw-alias-state-error-secondary: #f25a5a;
+  --dsw-alias-state-success-primary: #22c55e;
+  --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-alias-state-warn-secondary: #f7ad31;
+  --dsw-alias-state-warn-tertiary: #fef5e7;
+  --dsw-specific-bubble: #edf3fe;
+  --dsw-specific-input-major: #fff;
+  --dsw-specific-menu: #fff;
+  --dsw-specific-selector: #f5f6f7;
+  --dsw-specific-sidebar-fill: #f9fafb;
+  --dsw-specific-tip: #f5f6f7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dsw-alias-bg-base: #151517;
+    --dsw-alias-bg-layer-1: #232324;
+    --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-bg-layer-3: #353638;
+    --dsw-alias-bg-mask-1: rgb(0 0 0 / 50%);
+    --dsw-alias-border-l1: rgb(255 255 255 / 6%);
+    --dsw-alias-border-l2: rgb(255 255 255 / 12%);
+    --dsw-alias-border-l2-darkmode-thin: rgb(255 255 255 / 6%);
+    --dsw-alias-border-l3: rgb(255 255 255 / 16%);
+    --dsw-alias-button-elevated-fill: #43454a;
+    --dsw-alias-button-floating-fill: #2c2c2e;
+    --dsw-alias-button-floating-hover: #353638;
+    --dsw-alias-button-info-fill: #679efe;
+    --dsw-alias-button-info-hover: #4176e6;
+    --dsw-alias-interactive-bg-hover: rgb(255 255 255 / 8%);
+    --dsw-alias-interactive-bg-hover-solid: #353638;
+    --dsw-alias-interactive-bg-hover-danger: rgb(242 90 90 / 15%);
+    --dsw-alias-label-caption: #81858c;
+    --dsw-alias-label-primary: #f9fafb;
+    --dsw-alias-label-primary-dimmed: #ebeef2;
+    --dsw-alias-label-secondary: #cfd3d6;
+    --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-state-business-primary: #679efe;
+    --dsw-alias-state-error-primary: #f25a5a;
+    --dsw-alias-state-error-secondary: #f25a5a;
+    --dsw-alias-state-warn-tertiary: #27241f;
+    --dsw-specific-bubble: #2c2c2e;
+    --dsw-specific-input-major: #2c2c2e;
+    --dsw-specific-menu: #353638;
+    --dsw-specific-selector: #353638;
+    --dsw-specific-sidebar-fill: #1b1b1c;
+    --dsw-specific-tip: #353638;
+  }
+}

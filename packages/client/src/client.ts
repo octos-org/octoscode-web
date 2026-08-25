@@ -1,10 +1,14 @@
 import { createRequest, parseIncomingFrame } from "./rpc.ts";
 import type { RpcNotification } from "./rpc.ts";
 import type {
+  ApprovalRespondParams,
+  ApprovalRespondResult,
   ConnectionStatus,
   SessionOpenParams,
   SessionOpenResult,
   TurnStartParams,
+  UserQuestionRespondParams,
+  UserQuestionRespondResult,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
 
@@ -207,6 +211,18 @@ export class OctosUiClient {
       session_id: sessionId,
       turn_id: turnId,
     });
+  }
+
+  respondApproval(
+    params: ApprovalRespondParams,
+  ): Promise<ApprovalRespondResult> {
+    return this.request("approval/respond", params);
+  }
+
+  respondUserQuestion(
+    params: UserQuestionRespondParams,
+  ): Promise<UserQuestionRespondResult> {
+    return this.request("user_question/respond", params);
   }
 
   private handleMessage(data: unknown): void {

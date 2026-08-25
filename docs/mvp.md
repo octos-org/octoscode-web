@@ -9,6 +9,7 @@
 - [x] Raw fail-closed event inspector
 - [x] Octoscode-compatible FIFO prompt queue and interrupt aliases
 - [x] Fail-closed slash/bang command dispatch before prompts
+- [x] Capability-aware slash palette for the implemented command slice
 
 ## Milestone 1 — durable chat
 
@@ -20,8 +21,8 @@
 
 ## Milestone 2 — safe coding loop
 
-- [ ] Typed approvals and scopes
-- [ ] Structured user questions
+- [x] Typed approvals with Octoscode request/session/deny decisions
+- [x] Structured single-select, multi-select, and free-text user questions
 - [ ] Per-session permission profile
 - [ ] Diff preview and review surface
 - [ ] Task list, output, cancel, and artifacts

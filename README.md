@@ -45,7 +45,11 @@ with DSH's full plugin graph or octos-web's product surface.
 Read [the architecture](docs/architecture.md), [the MVP](docs/mvp.md), and the
 [DSH evaluation](docs/adr/0002-dsh-evaluation.md) before expanding the package
 graph. Web interaction behavior follows the
-[Octoscode semantic parity contract](docs/adr/0003-octoscode-semantic-parity.md).
+[Octoscode semantic parity contract](docs/adr/0003-octoscode-semantic-parity.md),
+while product structure and visual language follow the
+[DSH reference decision](docs/adr/0004-dsh-product-and-visual-reference.md).
+Copied or adapted third-party portions are listed in
+[the notices](THIRD_PARTY_NOTICES.md).
 
 ## Checks
 

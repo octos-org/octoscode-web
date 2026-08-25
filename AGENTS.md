@@ -21,6 +21,12 @@ or plugin execution. Those remain in `octos serve`.
   presentation, but they must not change command or state-transition semantics.
 - Resolve slash and bang commands before prompt dispatch. Unknown or unavailable
   commands fail closed and must never reach the model as ordinary text.
+- Use DSH as the browser product and visual reference without importing its
+  Cordis or harness runtime. Shared visual values belong to `app/theme.css`;
+  feature presentation should move toward colocated CSS Modules and consume
+  semantic `--dsw-*` aliases rather than literal palette values.
+- Preserve the DeepSeek MIT notice and audited source revision when copying or
+  substantially adapting DSH UI code. See `THIRD_PARTY_NOTICES.md`.
 - Browser-only state is limited to drafts, focus, selection, expansion, and
   connection preferences. Durable task/session state belongs to the server.
 - Never persist an auth token to `localStorage`. The current server accepts a
