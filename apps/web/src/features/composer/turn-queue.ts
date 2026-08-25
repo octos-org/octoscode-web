@@ -31,6 +31,12 @@ export class PromptTurnQueue {
     return { startNow: false };
   }
 
+  restoreActive(turn: PromptTurn): boolean {
+    if (this.#active !== null) return this.#active.turnId === turn.turnId;
+    this.#active = turn;
+    return true;
+  }
+
   settle(turnId: string): QueueTransition {
     if (this.#active?.turnId !== turnId) {
       return { settled: false, next: null };

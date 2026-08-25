@@ -113,6 +113,61 @@ export interface SessionOpenResult {
   opened: SessionOpened;
 }
 
+export interface SessionHydrateParams {
+  session_id: string;
+  after?: UiCursor;
+  include?: Array<"messages" | "threads" | "turns" | "pending_approvals">;
+}
+
+export interface HydratedMessage {
+  seq: number;
+  role: string;
+  content: string;
+  turn_id?: string;
+  thread_id?: string;
+  client_message_id?: string;
+  persisted_at: string;
+  reasoning_content?: string;
+  message_id?: string;
+  source?: string;
+  media: string[];
+}
+
+export interface HydratedTurn {
+  turn_id: string;
+  state:
+    | "active"
+    | "interrupting"
+    | "completed"
+    | "errored"
+    | "interrupted"
+    | "unknown"
+    | string;
+  started_at?: string;
+  completed_at?: string;
+  thread_id?: string;
+}
+
+export interface SessionHydrateResult {
+  session_id: string;
+  cursor: UiCursor;
+  context?: unknown;
+  context_state?: unknown;
+  messages?: HydratedMessage[];
+  threads?: unknown[];
+  turns?: HydratedTurn[];
+  pending_approvals?: unknown[];
+  pending_questions?: unknown[];
+  replayed_envelopes?: ProjectionEnvelopeV2[];
+  replayed_tool_envelopes?: ProjectionEnvelopeV2[];
+}
+
+export interface ReplayLossyEvent {
+  session_id: string;
+  dropped_count: number;
+  last_durable_cursor?: UiCursor;
+}
+
 export interface TurnStartParams {
   session_id: string;
   turn_id: string;

@@ -11,10 +11,12 @@ approvals, sessions, tasks, and replay.
 
 ## Status
 
-The first vertical slice is in progress. The current app can connect to a real
-`/api/ui-protocol/ws` endpoint, negotiate capabilities, open a coding session,
-send `turn/start`, and inspect the incoming event stream. Durable projection,
-approval, question, diff, task, and artifact surfaces follow in the MVP plan.
+The first product slice is usable against a current Octos server. It negotiates
+capabilities, hydrates durable transcript state, resumes with a cursor, detects
+projection gaps and lossy replay, reconnects with backoff, preserves the FIFO
+prompt contract, and renders typed approvals and structured user questions.
+Diff, task, artifact, session-switching, and rich Markdown surfaces follow in
+the MVP plan.
 
 ## Run locally
 
@@ -48,6 +50,8 @@ graph. Web interaction behavior follows the
 [Octoscode semantic parity contract](docs/adr/0003-octoscode-semantic-parity.md),
 while product structure and visual language follow the
 [DSH reference decision](docs/adr/0004-dsh-product-and-visual-reference.md).
+Reconnect and hydrate follow the
+[durable session decision](docs/adr/0005-durable-session-recovery.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
 

@@ -38,6 +38,14 @@ describe("PromptTurnQueue", () => {
     expect(queue.snapshot().active).toEqual(turn("two"));
   });
 
+  it("restores a server-active turn without starting a second one", () => {
+    const queue = new PromptTurnQueue();
+
+    expect(queue.restoreActive(turn("server-turn"))).toBe(true);
+    expect(queue.restoreActive(turn("other-turn"))).toBe(false);
+    expect(queue.snapshot().active).toEqual(turn("server-turn"));
+  });
+
   it("clears browser-local queue state when the session disconnects", () => {
     const queue = new PromptTurnQueue();
     queue.enqueue(turn("one"));

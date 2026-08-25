@@ -333,6 +333,44 @@ input:disabled {
   color: var(--dsw-alias-label-primary);
 }
 
+.header-actions,
+.recovery-pill {
+  display: flex;
+  align-items: center;
+}
+
+.header-actions {
+  flex: none;
+  gap: 14px;
+}
+
+.recovery-pill {
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-tertiary);
+  font: 500 10px/1 var(--ds-font-family-code);
+  text-transform: capitalize;
+}
+
+.recovery-pill > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.recovery-pill.recovery-healthy > span {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.recovery-pill.recovery-error > span,
+.recovery-pill.recovery-gap > span,
+.recovery-pill.recovery-lossy > span {
+  background: var(--dsw-alias-state-error-primary);
+}
+
 .conversation-scroll {
   min-height: 0;
   overflow-y: auto;
@@ -463,6 +501,69 @@ input:disabled {
   z-index: 7;
   padding: 8px max(24px, calc((100% - 768px) / 2));
   background: linear-gradient(transparent, var(--dsw-alias-bg-base) 34%);
+}
+
+.recovery-banner {
+  display: flex;
+  width: 100%;
+  max-width: 768px;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.recovery-banner-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  flex: none;
+  border-radius: 10px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-primary);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.recovery-banner > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recovery-banner strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.recovery-banner small {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recovery-banner.recovery-error,
+.recovery-banner.recovery-gap,
+.recovery-banner.recovery-lossy {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-error-primary) 35%,
+    transparent
+  );
+}
+
+.recovery-banner.recovery-error .recovery-banner-mark,
+.recovery-banner.recovery-gap .recovery-banner-mark,
+.recovery-banner.recovery-lossy .recovery-banner-mark {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .composer {

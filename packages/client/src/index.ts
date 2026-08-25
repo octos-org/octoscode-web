@@ -12,6 +12,7 @@ export type {
   RpcSuccess,
 } from "./rpc.ts";
 export { parseProjectionEnvelope } from "./projection.ts";
+export { parseReplayLossyEvent, parseSessionHydrateResult } from "./hydrate.ts";
 export {
   approvalResolutionId,
   parseApprovalRequested,
@@ -28,6 +29,11 @@ export type {
   ConnectionStatus,
   ProjectionEnvelopeV2,
   ProjectionPayload,
+  ReplayLossyEvent,
+  HydratedMessage,
+  HydratedTurn,
+  SessionHydrateParams,
+  SessionHydrateResult,
   SessionOpened,
   SessionOpenParams,
   SessionOpenResult,

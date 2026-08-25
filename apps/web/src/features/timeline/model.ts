@@ -2,6 +2,7 @@ import {
   isRecord,
   parseProjectionEnvelope,
   type RpcNotification,
+  type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
 
 export type TimelineKind =
@@ -15,6 +16,70 @@ export interface TimelineEntry {
   body: string;
   status: TimelineStatus;
   turnId?: string;
+  messageId?: string;
+}
+
+export function timelineFromHydrate(
+  result: SessionHydrateResult,
+): TimelineEntry[] {
+  let entries: TimelineEntry[] = [];
+  for (const message of [...(result.messages ?? [])].sort(
+    (left, right) => left.seq - right.seq,
+  )) {
+    const turnId = message.turn_id;
+    const stableId =
+      message.message_id ??
+      message.client_message_id ??
+      `${message.thread_id ?? "session"}:${message.seq}`;
+    if (message.reasoning_content) {
+      entries = upsert(entries, {
+        id: `reasoning:${stableId}`,
+        kind: "reasoning",
+        title: "Reasoning",
+        body: message.reasoning_content,
+        status: "complete",
+        ...(turnId ? { turnId } : {}),
+      });
+    }
+    const role = message.role.toLowerCase();
+    entries = upsert(entries, {
+      id: role === "user" && turnId ? `user:${turnId}` : `hydrated:${stableId}`,
+      kind:
+        role === "user"
+          ? "user"
+          : role === "assistant"
+            ? "assistant"
+            : "system",
+      title:
+        role === "user"
+          ? "You"
+          : role === "assistant"
+            ? message.source === "background"
+              ? "Background agent"
+              : "Octos"
+            : message.role,
+      body: appendMedia(message.content, message.media),
+      status: "complete",
+      ...(turnId ? { turnId } : {}),
+      ...(message.message_id ? { messageId: message.message_id } : {}),
+    });
+  }
+
+  const replayed = [
+    ...(result.replayed_tool_envelopes ?? []),
+    ...(result.replayed_envelopes ?? []),
+  ].sort(
+    (left, right) =>
+      (left.cursor?.seq ?? left.seq) - (right.cursor?.seq ?? right.seq),
+  );
+  for (const envelope of replayed) {
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: envelope,
+    });
+  }
+  return entries;
 }
 
 export function addOptimisticUser(
@@ -187,15 +252,27 @@ function foldProjection(
         data.text,
         turnId,
       );
-    case "assistant_persisted":
+    case "assistant_persisted": {
+      const meta = isRecord(data.meta) ? data.meta : undefined;
+      const messageId =
+        meta && typeof meta.message_id === "string"
+          ? meta.message_id
+          : undefined;
+      const hydrated = messageId
+        ? entries.find((entry) => entry.messageId === messageId)
+        : undefined;
       return upsert(entries, {
-        id: `assistant:${turnId}:${String(data.assistant_segment_id ?? "default")}`,
+        id:
+          hydrated?.id ??
+          `assistant:${turnId}:${String(data.assistant_segment_id ?? "default")}`,
         kind: "assistant",
         title: "Octos",
         body: textOf(data),
         status: "complete",
         turnId,
+        ...(messageId ? { messageId } : {}),
       });
+    }
     case "reasoning_delta":
       return appendText(
         entries,
@@ -219,7 +296,7 @@ function foldProjection(
         entries,
         `tool:${String(data.tool_call_id ?? turnId)}`,
         {
-          body: textOf(data),
+          body: typeof data.message === "string" ? data.message : "",
         },
       );
     case "tool_end":
@@ -228,7 +305,12 @@ function foldProjection(
         `tool:${String(data.tool_call_id ?? turnId)}`,
         {
           body: String(data.output_preview ?? data.error ?? data.reason ?? ""),
-          status: data.status === "success" ? "complete" : "error",
+          status:
+            data.status === "complete"
+              ? "complete"
+              : data.status === "skipped"
+                ? "info"
+                : "error",
         },
       );
     case "turn_terminal":
@@ -251,6 +333,12 @@ function foldProjection(
     default:
       return entries.slice();
   }
+}
+
+function appendMedia(content: string, media: readonly string[]): string {
+  if (!media.length) return content;
+  const attachments = media.map((path) => `Attachment: ${path}`).join("\n");
+  return content ? `${content}\n\n${attachments}` : attachments;
 }
 
 function appendText(

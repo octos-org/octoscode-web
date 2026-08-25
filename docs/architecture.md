@@ -26,9 +26,11 @@ correlation, frame validation, and typed command helpers for the slice already
 implemented.
 
 The application owns projection and UI state. A protocol notification is
-converted into a feature-specific action before it reaches React. We will not
-repeat octos-web's bridge → global event bus → compatibility store → projection
-store chain.
+converted into a feature-specific action before it reaches React. Durable
+session orchestration lives in one feature boundary (`useOctosSession` plus a
+React-free integrity reducer), not in the visual shell. We will not repeat
+octos-web's bridge → global event bus → compatibility store → projection store
+chain.
 
 ## Protocol source of truth
 

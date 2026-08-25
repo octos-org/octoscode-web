@@ -96,13 +96,13 @@ export function ConnectionPanel({
 
       {error ? <p className="connection-error">{error}</p> : null}
 
-      {connected ? (
+      {connected || connecting ? (
         <button
           className="button button-secondary"
           onClick={onDisconnect}
           type="button"
         >
-          Disconnect
+          {connecting ? "Cancel connection" : "Disconnect"}
         </button>
       ) : (
         <button

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { OctosUiClient } from "../src/client.ts";
+import { DEFAULT_UI_FEATURES, OctosUiClient } from "../src/client.ts";
 
 describe("OctosUiClient", () => {
+  it("negotiates the core's authoritative session hydrate feature", () => {
+    expect(DEFAULT_UI_FEATURES).toContain("state.session_hydrate.v1");
+    expect(DEFAULT_UI_FEATURES).not.toContain("session.hydrate.v1");
+  });
+
   it("rejects connect when the socket closes before opening", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
@@ -115,6 +120,43 @@ describe("OctosUiClient", () => {
       }),
     } as MessageEvent);
     await expect(Promise.all([approval, question])).resolves.toHaveLength(2);
+  });
+
+  it("validates session/hydrate before returning it", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const hydrate = client.hydrateSession({
+      session_id: "coding:local:main",
+      include: ["messages", "turns"],
+    });
+    const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as {
+      id: string;
+      method: string;
+    };
+    expect(frame.method).toBe("session/hydrate");
+    socket.onmessage?.({
+      data: JSON.stringify({
+        jsonrpc: "2.0",
+        id: frame.id,
+        result: {
+          session_id: "coding:local:main",
+          cursor: { stream: "session", seq: 3 },
+          messages: [],
+        },
+      }),
+    } as MessageEvent);
+
+    await expect(hydrate).resolves.toMatchObject({
+      cursor: { stream: "session", seq: 3 },
+    });
   });
 });
 

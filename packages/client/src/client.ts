@@ -4,6 +4,8 @@ import type {
   ApprovalRespondParams,
   ApprovalRespondResult,
   ConnectionStatus,
+  SessionHydrateParams,
+  SessionHydrateResult,
   SessionOpenParams,
   SessionOpenResult,
   TurnStartParams,
@@ -11,12 +13,13 @@ import type {
   UserQuestionRespondResult,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
+import { parseSessionHydrateResult } from "./hydrate.ts";
 
 export const DEFAULT_UI_FEATURES = [
   "approval.typed.v1",
   "pane.snapshots.v1",
   "session.workspace_cwd.v1",
-  "session.hydrate.v1",
+  "state.session_hydrate.v1",
   "user_question.v1",
   "plan.todos.v1",
   "projection.envelope.v2",
@@ -200,6 +203,17 @@ export class OctosUiClient {
 
   openSession(params: SessionOpenParams): Promise<SessionOpenResult> {
     return this.request("session/open", params);
+  }
+
+  async hydrateSession(
+    params: SessionHydrateParams,
+  ): Promise<SessionHydrateResult> {
+    const result = await this.request<unknown>("session/hydrate", params);
+    const parsed = parseSessionHydrateResult(result);
+    if (!parsed) {
+      throw new Error("session/hydrate returned an invalid result");
+    }
+    return parsed;
   }
 
   startTurn(params: TurnStartParams): Promise<unknown> {

@@ -14,9 +14,9 @@
 ## Milestone 1 — durable chat
 
 - [ ] Generated TypeScript contract or checked golden protocol fixtures
-- [ ] `projection.envelope.v2` reducer with cursor, dedupe, and session scope
-- [ ] `session/hydrate` plus reconnect replay and gap repair
-- [ ] User, assistant, reasoning, tool, warning, and terminal rows
+- [x] `projection.envelope.v2` reducer with cursor, dedupe, and session scope
+- [x] `session/hydrate` plus reconnect replay and gap repair
+- [x] User, assistant, reasoning, tool, warning, and terminal rows
 - [ ] Markdown and code rendering
 
 ## Milestone 2 — safe coding loop
