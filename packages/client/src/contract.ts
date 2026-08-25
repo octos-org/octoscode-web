@@ -17,10 +17,10 @@ export function coreProtocolCompatibilityError(
   const { version, capabilities_schema_version: capabilitiesSchemaVersion } =
     capabilities;
   if (version.protocol !== CORE_UI_PROTOCOL.protocol) {
-    return `protocol ${version.protocol} is not ${CORE_UI_PROTOCOL.protocol}`;
+    return `protocol ${describeWireValue(version.protocol)} is not ${describeWireValue(CORE_UI_PROTOCOL.protocol)}`;
   }
   if (version.jsonrpc !== CORE_UI_PROTOCOL.jsonrpc) {
-    return `JSON-RPC ${version.jsonrpc} is not ${CORE_UI_PROTOCOL.jsonrpc}`;
+    return `JSON-RPC ${describeWireValue(version.jsonrpc)} is not ${describeWireValue(CORE_UI_PROTOCOL.jsonrpc)}`;
   }
   if (
     version.schema_version < 1 ||
@@ -35,4 +35,9 @@ export function coreProtocolCompatibilityError(
     return `capabilities schema ${capabilitiesSchemaVersion} is outside 1..${CORE_UI_PROTOCOL.capabilities_schema_version}`;
   }
   return null;
+}
+
+function describeWireValue(value: string): string {
+  const encoded = JSON.stringify(value);
+  return encoded.length <= 96 ? encoded : `${encoded.slice(0, 95)}…`;
 }

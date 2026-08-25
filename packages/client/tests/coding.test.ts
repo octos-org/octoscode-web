@@ -48,6 +48,17 @@ describe("authoritative coding contract fixtures", () => {
         capabilities_schema_version: 3,
       }),
     ).toContain("outside 1..2");
+
+    const hostile = coreProtocolCompatibilityError({
+      ...fixture.config_capabilities_list.result.capabilities,
+      version: {
+        ...fixture.config_capabilities_list.result.capabilities.version,
+        protocol: `future\n${"x".repeat(500)}do-not-render-this-tail`,
+      },
+    });
+    expect(hostile).toContain("future\\n");
+    expect(hostile).not.toContain("do-not-render-this-tail");
+    expect(hostile?.length).toBeLessThan(180);
   });
 
   it("decodes permission list and mutation results", () => {

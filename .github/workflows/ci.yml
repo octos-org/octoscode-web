@@ -57,3 +57,39 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  core-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Resolve pinned Core release
+        id: core
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const contract = require("./packages/client/core-runtime.json");
+          const asset = contract.assets["linux-x64"];
+          console.log(`tag=${contract.tag}`);
+          console.log(`name=${asset.name}`);
+          console.log(`sha256=${asset.sha256}`);
+          console.log(`url=${contract.repository}/releases/download/${contract.tag}/${asset.name}`);
+          NODE
+      - name: Download and verify pinned Core
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/octos-core"
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            "${{ steps.core.outputs.url }}"
+          echo "${{ steps.core.outputs.sha256 }}  $RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            -C "$RUNNER_TEMP/octos-core"
+      - name: Exercise real octos serve
+        run: node scripts/verify-core-integration.mjs
+        env:
+          OCTOS_BINARY: ${{ runner.temp }}/octos-core/octos

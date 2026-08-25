@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/octos-org/octos",
+  "tag": "v2.0.3-rc.9",
+  "revision": "5ea987813de4fd2afdd1d78f2106ad2868f0d923",
+  "version": "2.0.3-rc.9",
+  "required_web_methods": [
+    "config/capabilities/list",
+    "launch/resolve",
+    "session/open",
+    "session/hydrate",
+    "session/status/read",
+    "permission/profile/list",
+    "permission/profile/set",
+    "diff/preview/get",
+    "task/list",
+    "task/cancel",
+    "task/output/read",
+    "task/artifact/list",
+    "task/artifact/read"
+  ],
+  "required_web_features": [
+    "approval.typed.v1",
+    "pane.snapshots.v1",
+    "session.workspace_cwd.v1",
+    "state.session_hydrate.v1",
+    "user_question.v1",
+    "plan.todos.v1",
+    "projection.envelope.v2",
+    "harness.task_control.v1",
+    "harness.task_artifacts.v1"
+  ],
+  "forward_compatible_methods": [
+    "session/list",
+    "session/delete",
+    "session/files.list"
+  ],
+  "assets": {
+    "linux-x64": {
+      "name": "octos-bundle-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "c40c9804e34076182f3c7d537d521c131bcee3a8603671543d06cfa83b14e22e"
+    },
+    "darwin-arm64": {
+      "name": "octos-bundle-aarch64-apple-darwin.tar.gz",
+      "sha256": "8d19e1d2c614df6472e7e69bc9154848382a5e0272462c9dbd64d2d70dee028b"
+    }
+  }
+}

@@ -14,9 +14,10 @@ Every build emits `/octoscode-web-build.json` with:
   vocabulary and checked payload fixtures.
 
 Release tags must look like `v0.1.0` or `v0.1.0-rc.1`. The release workflow
-repeats all checks and Chromium product tests, builds with the tag and commit,
-then publishes `octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the
-release identity; moving release tags is unsupported.
+repeats all checks, Chromium product tests, and the checksummed pinned-Core
+runtime smoke, builds with the tag and commit, then publishes
+`octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the release identity;
+moving release tags is unsupported.
 
 To build for an absolute subpath, set a slash-terminated base path:
 
@@ -39,6 +40,15 @@ Set at least `X-Content-Type-Options: nosniff`, a restrictive
 `Referrer-Policy`, and a deployment-specific Content Security Policy. The CSP
 must allow WebSocket connections to the intended Octos origins through
 `connect-src`; do not use a blanket `connect-src *` in production.
+
+`deploy/nginx.conf` is the checked root-path, same-origin reference. It ships
+with the release archive and includes SPA fallback, immutable hashed-asset
+caching, security headers, WebSocket proxying, and a privacy access-log format
+that omits query strings. Replace its public host/origin assumptions and set
+`OCTOS_APPUI_ALLOWED_ORIGINS` on Octos before production use. Its CSP assumes
+the browser connects through the same `/api/` proxy; direct cross-origin WSS
+requires an explicit deployment-specific `connect-src` origin. Enable its HSTS
+line only after the public host is HTTPS-only.
 
 ## Octos runtime boundary
 

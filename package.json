@@ -13,6 +13,8 @@
     "build": "pnpm --filter @octos-org/octoscode-web build",
     "contract:verify": "node scripts/sync-core-contract.mjs --check",
     "contract:update": "node scripts/sync-core-contract.mjs --write",
+    "deploy:verify": "node scripts/verify-deployment.mjs",
+    "integration:core": "node scripts/verify-core-integration.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "oxlint --deny-warnings apps packages e2e playwright.config.ts",
@@ -20,7 +22,7 @@
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm deploy:verify"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

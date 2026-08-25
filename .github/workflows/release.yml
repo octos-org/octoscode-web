@@ -40,6 +40,32 @@ jobs:
       - run: pnpm check
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - name: Resolve pinned Core release
+        id: core
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const contract = require("./packages/client/core-runtime.json");
+          const asset = contract.assets["linux-x64"];
+          console.log(`name=${asset.name}`);
+          console.log(`sha256=${asset.sha256}`);
+          console.log(`url=${contract.repository}/releases/download/${contract.tag}/${asset.name}`);
+          NODE
+      - name: Download and verify pinned Core
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/octos-core"
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            "${{ steps.core.outputs.url }}"
+          echo "${{ steps.core.outputs.sha256 }}  $RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/octos-core/${{ steps.core.outputs.name }}" \
+            -C "$RUNNER_TEMP/octos-core"
+      - name: Exercise real octos serve
+        run: node scripts/verify-core-integration.mjs
+        env:
+          OCTOS_BINARY: ${{ runner.temp }}/octos-core/octos
       - name: Build versioned distribution
         env:
           OCTOSCODE_WEB_RELEASE: ${{ github.ref_name }}
@@ -56,6 +82,7 @@ jobs:
           cp -R apps/web/dist/. "$stage/"
           cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
           cp docs/deployment.md "$stage/DEPLOYMENT.md"
+          cp -R deploy "$stage/deploy"
           tar -C "$stage" -czf "$artifact" .
           sha256sum "$artifact" > "$artifact.sha256"
       - name: Publish GitHub release

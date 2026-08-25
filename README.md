@@ -99,6 +99,7 @@ Copied or adapted third-party portions are listed in
 ```sh
 pnpm check
 pnpm contract:verify
+OCTOS_BINARY=/path/to/pinned/octos pnpm integration:core
 pnpm exec playwright install chromium
 pnpm test:e2e
 ```
@@ -113,6 +114,13 @@ SHA, and compares the generated method/feature/protocol index. To update an
 intentional Core pin, edit `packages/client/contract-source.json` and run
 `pnpm contract:update`; reviewers should inspect the generated diff.
 
+`integration:core` rejects a binary that does not match the release and commit
+in `packages/client/core-runtime.json`, then launches a real isolated
+`octos serve` and exercises the shipped AppUI transport without making a model
+call. CI downloads that release asset and verifies its SHA-256 first. The
+checked mock remains the deterministic browser-flow fixture, not compatibility
+proof.
+
 A top-level render boundary replaces white screens with a safe reload path and
 a copyable diagnostic capped at 4 KB. Query-token and bearer-shaped values are
 redacted before display; no auth token is persisted for crash reporting.
@@ -120,7 +128,8 @@ redacted before display; no auth token is persisted for crash reporting.
 ## Releases
 
 A SemVer-like `v*` tag runs the full check and Chromium E2E gates before GitHub
-publishes a versioned static archive and SHA-256 file. Each build contains
+publishes a versioned static archive and SHA-256 file. The release gate also
+passes the pinned real-Core smoke. Each build contains
 `octoscode-web-build.json`, which records its Web revision and the exact Octos
 Core protocol contract covered by the fixtures. See the
 [deployment contract](docs/deployment.md) before hosting or embedding it.

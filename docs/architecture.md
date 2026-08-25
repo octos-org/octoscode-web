@@ -49,6 +49,14 @@ enums fail closed; display-only diff status, source, file-status, and line-kind
 labels remain forward compatible after their surrounding structure is
 validated.
 
+Generated vocabulary and executable compatibility are distinct gates.
+`contract-source.json` pins an immutable Core source/blob pair.
+`core-runtime.json` pins a downloadable release commit and checksummed assets.
+The first proves that checked method and feature names did not drift; the
+second proves that a shipped `octos serve` can complete the browser-critical
+flow. A source pin is never presented as proof that an unreleased binary was
+tested.
+
 The client must fail closed on malformed JSON-RPC frames, advertise requested
 features during the WebSocket handshake, and render controls from the server's
 accepted capabilities rather than from build-time assumptions.
@@ -122,7 +130,11 @@ exercise the user-visible launch decisions, an actual turn, explicit session
 switching with draft restoration, and the responsive supervision drawer. An
 axe pass gates WCAG 2/2.1 A/AA rules on the blocking no-profile launch surface.
 CI runs browser checks separately from the fast compile/test/build job and
-uploads traces, error context, and screenshots only on failure.
+uploads traces, error context, and screenshots only on failure. A third gate
+downloads a pinned, checksummed Octos release and drives its real HTTP/WebSocket
+AppUI transport through negotiation, bootstrap, the exact TUI coding session,
+hydrate, permissions, task supervision, and status. See
+`docs/adr/0014-pinned-core-runtime-smoke.md`.
 
 An unexpected React render or lifecycle exception is contained by the root
 error boundary. Its recovery screen states the durable-state boundary, offers
