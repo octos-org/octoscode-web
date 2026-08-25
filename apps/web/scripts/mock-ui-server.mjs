@@ -135,6 +135,10 @@ sockets.on("connection", (socket) => {
               },
             ],
           },
+          ollama: {
+            env: "",
+            models: [{ id: "qwen3", endpoints: [] }],
+          },
         },
       });
       return;
@@ -154,14 +158,24 @@ sockets.on("connection", (socket) => {
     }
     if (request.method === "profile/llm/test") {
       const rejected = request.params.api_key === "sk-rejected-secret";
+      const invalidKeylessProbe =
+        request.params.selection?.family_id === "ollama" &&
+        request.params.api_key !== "octoscode-web-keyless-probe";
+      const applied = !rejected && !invalidKeylessProbe;
       reply(socket, request.id, {
         profile_id: request.params.profile_id,
-        applied: !rejected,
-        message: rejected
-          ? `Provider rejected ${request.params.api_key}`
-          : "Provider test succeeded",
-        ...(rejected
-          ? { error: `Provider rejected ${request.params.api_key}` }
+        applied,
+        message: applied
+          ? "Provider test succeeded"
+          : rejected
+            ? `Provider rejected ${request.params.api_key}`
+            : "Keyless compatibility probe missing",
+        ...(!applied
+          ? {
+              error: rejected
+                ? `Provider rejected ${request.params.api_key}`
+                : "Keyless compatibility probe missing",
+            }
           : {}),
       });
       return;

@@ -99,6 +99,8 @@ Versioned artifacts follow the
 [deployment contract](docs/deployment.md).
 Copied or adapted third-party portions are listed in
 [the notices](THIRD_PARTY_NOTICES.md).
+Contributors should also read [the contribution guide](CONTRIBUTING.md), and
+security-sensitive findings should follow [the security policy](SECURITY.md).
 
 ## Checks
 

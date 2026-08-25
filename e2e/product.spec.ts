@@ -170,6 +170,23 @@ test("onboards an empty solo server and opens the canonical coding session", asy
   expect(results.violations).toEqual([]);
 });
 
+test("preserves Octoscode keyless-provider onboarding semantics", async ({
+  page,
+}) => {
+  await launchWorkspace(page, "/srv/work/no-profile");
+  const onboarding = page.getByRole("dialog", {
+    name: "Create your local coding profile",
+  });
+  await onboarding.getByLabel("Provider").selectOption("ollama");
+  await expect(onboarding.getByLabel("Model")).toHaveValue("qwen3");
+  await expect(onboarding.getByText("No API key required")).toBeVisible();
+  await expect(onboarding.getByLabel("API key")).toHaveCount(0);
+  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  await expect(
+    page.getByText("coding:local:tui#coding", { exact: true }),
+  ).toBeVisible();
+});
+
 test("keeps the work inspector available on a narrow viewport", async ({
   page,
 }) => {

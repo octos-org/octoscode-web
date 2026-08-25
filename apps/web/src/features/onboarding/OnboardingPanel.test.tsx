@@ -49,4 +49,33 @@ describe("OnboardingPanel", () => {
     );
     expect(html).toContain("octoscode onboard");
   });
+
+  it("does not ask for a credential when Core marks a family keyless", () => {
+    const html = renderToStaticMarkup(
+      <OnboardingPanel
+        state={{
+          phase: "ready",
+          supported: true,
+          catalog: {
+            families: [
+              {
+                id: "ollama",
+                env: "",
+                models: [{ id: "qwen3", endpoints: [] }],
+              },
+            ],
+          },
+          createdProfileId: null,
+          error: null,
+        }}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(html).toContain("No API key required");
+    expect(html).not.toContain('type="password"');
+    expect(html).toContain("Test, save &amp; open");
+    expect(html).not.toContain('type="submit" disabled');
+  });
 });

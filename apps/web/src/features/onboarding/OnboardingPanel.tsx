@@ -4,6 +4,7 @@ import {
   type OnboardingRuntimeState,
   type OnboardingSubmission,
 } from "./use-onboarding.ts";
+import styles from "./OnboardingPanel.module.css";
 
 interface OnboardingPanelProps {
   state: OnboardingRuntimeState;
@@ -90,7 +91,7 @@ export function OnboardingPanel({
 
   return (
     <section
-      className="launch-decision onboarding-panel"
+      className={`launch-decision ${styles.panel}`}
       role="dialog"
       aria-labelledby="launch-decision-title"
     >
@@ -105,16 +106,16 @@ export function OnboardingPanel({
       {!state.supported ? (
         <OnboardingFallback onCancel={onCancel} />
       ) : state.phase === "loading_catalog" ? (
-        <div className="onboarding-progress" role="status">
+        <div className={styles.progress} role="status">
           <span /> Loading providers from Octos…
         </div>
       ) : !state.catalog ? (
-        <div className="onboarding-failure" role="alert">
+        <div className={styles.failure} role="alert">
           <strong>Provider catalog unavailable</strong>
           <span>
             {state.error ?? "The server returned an invalid catalog."}
           </span>
-          <div className="launch-actions">
+          <div className={`launch-actions ${styles.actions}`}>
             <button type="button" onClick={onRetry}>
               Retry
             </button>
@@ -124,8 +125,8 @@ export function OnboardingPanel({
           </div>
         </div>
       ) : (
-        <form className="onboarding-form" onSubmit={submit}>
-          <div className="onboarding-fields onboarding-fields-profile">
+        <form className={styles.form} onSubmit={submit}>
+          <div className={`${styles.fields} ${styles.profileFields}`}>
             <label>
               <span>Profile ID</span>
               <input
@@ -147,7 +148,7 @@ export function OnboardingPanel({
               />
             </label>
           </div>
-          <label className="onboarding-checkbox">
+          <label className={styles.checkbox}>
             <input
               type="checkbox"
               checked={makeDefault}
@@ -156,7 +157,7 @@ export function OnboardingPanel({
             />
             <span>Use as the default local profile</span>
           </label>
-          <div className="onboarding-fields">
+          <div className={styles.fields}>
             <label>
               <span>Provider</span>
               <select
@@ -215,7 +216,7 @@ export function OnboardingPanel({
             </label>
           </div>
           {requiresApiKey ? (
-            <label className="onboarding-secret">
+            <label className={styles.secret}>
               <span>API key</span>
               <input
                 name="api-key"
@@ -232,30 +233,30 @@ export function OnboardingPanel({
               </small>
             </label>
           ) : (
-            <div className="onboarding-keyless" role="status">
+            <div className={styles.keyless} role="status">
               <strong>No API key required</strong>
               <span>{familyId} is marked keyless by the Core catalog.</span>
             </div>
           )}
           {state.createdProfileId ? (
-            <div className="onboarding-recovery" role="status">
+            <div className={styles.recovery} role="status">
               Profile <code>{state.createdProfileId}</code> exists. A retry only
               repeats provider test and save.
             </div>
           ) : null}
           {state.error ? (
-            <div className="onboarding-error" role="alert">
+            <div className={styles.error} role="alert">
               {state.error}
             </div>
           ) : null}
-          <div className="launch-actions">
+          <div className={`launch-actions ${styles.actions}`}>
             <span>{onboardingStatus(state.phase)}</span>
             <div>
               <button type="button" disabled={busy} onClick={onCancel}>
                 Disconnect
               </button>
               <button
-                className="onboarding-submit"
+                className={styles.submit}
                 type="submit"
                 disabled={
                   busy ||
@@ -276,13 +277,13 @@ export function OnboardingPanel({
 
 function OnboardingFallback({ onCancel }: { onCancel: () => void }) {
   return (
-    <div className="onboarding-failure" role="alert">
+    <div className={styles.failure} role="alert">
       <strong>This server cannot onboard from the Web</strong>
       <span>
         Run the canonical setup on the server, then reconnect this workspace.
       </span>
       <code>octoscode onboard</code>
-      <div className="launch-actions">
+      <div className={`launch-actions ${styles.actions}`}>
         <button type="button" autoFocus onClick={onCancel}>
           Disconnect
         </button>
