@@ -512,6 +512,21 @@ label > span {
   background: var(--dsw-alias-state-success-primary);
 }
 
+.activity-running .session-presence {
+  background: var(--dsw-alias-button-info-fill);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--dsw-alias-button-info-fill) 18%, transparent);
+}
+
+.activity-failed .session-presence,
+.activity-unknown .session-presence {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.activity-done:not(.active) .session-presence {
+  background: var(--dsw-alias-state-success-primary);
+}
+
 .session-row > span:nth-child(2) {
   display: grid;
   min-width: 0;
@@ -543,6 +558,11 @@ label > span {
   font-size: 7px;
   font-style: normal;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.session-activity-note {
+  margin-top: 7px;
 }
 
 .session-delete {

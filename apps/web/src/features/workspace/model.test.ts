@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  activityLabel,
   formatFileSize,
   includeActiveSession,
   mergeTokenCost,
   sessionLabel,
   sortSessions,
+  summarizeSessionTasks,
 } from "./model.ts";
 
 describe("workspace product model", () => {
@@ -51,5 +53,35 @@ describe("workspace product model", () => {
       contextWindow: 1_000,
       sessionCost: 0.01,
     });
+  });
+
+  it("summarizes server task truth without treating unknown states as done", () => {
+    const base = {
+      tool_name: "spawn_agent",
+      tool_call_id: "call-1",
+      status: "running",
+      lifecycle_state: "active",
+      runtime_state: "running",
+      started_at: "2026-08-26T00:00:00Z",
+      updated_at: "2026-08-26T00:01:00Z",
+      output_files: [],
+    };
+    const running = summarizeSessionTasks([
+      { ...base, id: "t1", state: "running" },
+      { ...base, id: "t2", state: "failed" },
+    ]);
+    expect(running).toMatchObject({
+      status: "running",
+      taskCount: 2,
+      runningCount: 1,
+      failedCount: 1,
+    });
+    expect(activityLabel(running)).toBe("1 running · 1 failed");
+
+    const unknown = summarizeSessionTasks([
+      { ...base, id: "future", state: "paused" },
+    ]);
+    expect(unknown.status).toBe("unknown");
+    expect(activityLabel(unknown)).toBe("Needs review");
   });
 });

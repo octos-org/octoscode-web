@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { WorkspaceProductState } from "./model.ts";
-import { formatFileSize, sessionLabel } from "./model.ts";
+import { activityLabel, formatFileSize, sessionLabel } from "./model.ts";
 
 interface SessionNavigatorProps {
   state: WorkspaceProductState;
@@ -114,8 +114,17 @@ export function SessionNavigator({
         {sessions.map((session) => {
           const active = session.id === activeSessionId;
           const deleting = state.deletingSessionId === session.id;
+          const activity = state.activityBySession[session.id];
           return (
-            <article className={active ? "active" : ""} key={session.id}>
+            <article
+              className={[
+                active ? "active" : "",
+                activity ? `activity-${activity.status}` : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={session.id}
+            >
               <button
                 className="session-row"
                 type="button"
@@ -123,14 +132,30 @@ export function SessionNavigator({
                 aria-current={active ? "page" : undefined}
                 onClick={() => onSwitch(session.id)}
               >
-                <span className="session-presence" />
+                <span
+                  className="session-presence"
+                  title={
+                    activity
+                      ? `Background tasks: ${activityLabel(activity)}`
+                      : "Background task state not loaded"
+                  }
+                />
                 <span>
                   <strong>{sessionLabel(session)}</strong>
                   <small>
                     {shortSessionId(session.id)} · {session.message_count} msgs
                   </small>
                 </span>
-                {active ? <em>Current</em> : null}
+                {active || activity ? (
+                  <em>
+                    {[
+                      active ? "Current" : "",
+                      activity ? activityLabel(activity) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </em>
+                ) : null}
               </button>
               {state.deleteAvailable && !active ? (
                 confirmDelete === session.id ? (
@@ -172,6 +197,15 @@ export function SessionNavigator({
         <p className="field-note">session/list is not advertised.</p>
       ) : !state.loading && sessions.length === 0 ? (
         <p className="field-note">No sessions match this workspace.</p>
+      ) : null}
+      {state.activityAvailable ? (
+        <p className="field-note session-activity-note">
+          {state.activityLoading
+            ? "Refreshing background work…"
+            : state.activityUpdatedAt
+              ? "Recent background work is read-only and refreshes every 10 seconds."
+              : "Background work has not been loaded yet."}
+        </p>
       ) : null}
 
       <details className="session-files">

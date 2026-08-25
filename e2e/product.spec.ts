@@ -16,6 +16,12 @@ test("resumes the server-resolved Octoscode session and supervises work", async 
     page.getByText("_main:local:tui#coding", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("region", { name: "Sessions" })).toBeVisible();
+  await expect(
+    page
+      .locator(".session-row")
+      .filter({ hasText: "Review protocol drift" })
+      .getByText("1 running"),
+  ).toBeVisible();
   await expect(page.getByText("Validate product checks")).toBeVisible();
 
   const composer = page.getByPlaceholder(

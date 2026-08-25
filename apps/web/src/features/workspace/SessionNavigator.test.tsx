@@ -12,6 +12,17 @@ describe("SessionNavigator", () => {
           sessionsAvailable: true,
           deleteAvailable: true,
           filesAvailable: true,
+          activityAvailable: true,
+          activityUpdatedAt: Date.parse("2026-08-26T00:01:00Z"),
+          activityBySession: {
+            "coding:local:review": {
+              status: "running",
+              taskCount: 2,
+              runningCount: 1,
+              failedCount: 0,
+              completedCount: 1,
+            },
+          },
           sessions: [
             {
               id: "coding:local:main",
@@ -45,6 +56,8 @@ describe("SessionNavigator", () => {
     expect(html).toContain("Review the diff");
     expect(html).toContain("Current");
     expect(html).toContain("12.4 KB");
+    expect(html).toContain("1 running");
+    expect(html).toContain("Recent background work is read-only");
     expect(html).not.toContain("Delete Ship the Web client");
     expect(html).toContain("Delete Review the diff");
   });

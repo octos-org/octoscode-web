@@ -43,6 +43,7 @@
 - [x] CI failure traces and screenshots
 - [x] Application error boundary and recoverable, redacted crash screen
 - [x] Versioned release artifact and deployment contract
+- [x] Bounded background-session task status in the workspace navigator
 - [ ] Generated protocol contract from Octos Core
 - [ ] Background multi-session supervision parity with Octoscode
 

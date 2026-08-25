@@ -28,6 +28,9 @@ drawer. When a server-side workspace path is supplied, startup follows
 Octoscode's `launch/resolve` contract: resume is automatic, activation is
 confirmed, cross-profile folders offer the same explicit choice, and a server
 with no profile points to canonical onboarding.
+The session navigator also performs a bounded, read-only `task/list` scan so
+running or failed work in another recent session remains visible without
+changing the foreground subscription.
 
 ## Run locally
 
@@ -79,6 +82,8 @@ Session navigation, safe file metadata, and usage follow the
 [workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
 Pre-session repository launch follows the
 [workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
+Background session indicators follow the
+[background activity decision](docs/adr/0012-background-session-activity.md).
 Versioned artifacts follow the
 [static release decision](docs/adr/0011-versioned-static-releases.md) and the
 [deployment contract](docs/deployment.md).

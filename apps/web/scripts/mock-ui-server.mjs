@@ -286,7 +286,7 @@ sockets.on("connection", (socket) => {
     }
     if (request.method === "task/list") {
       reply(socket, request.id, {
-        session_id: sessionId,
+        session_id: request.params.session_id,
         tasks: [mockTask(taskState)],
       });
       return;
