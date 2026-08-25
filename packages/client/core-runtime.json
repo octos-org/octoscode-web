@@ -30,6 +30,12 @@
     "harness.task_control.v1",
     "harness.task_artifacts.v1"
   ],
+  "required_solo_onboarding_methods": [
+    "profile/local/create",
+    "profile/llm/catalog",
+    "profile/llm/test",
+    "profile/llm/upsert"
+  ],
   "forward_compatible_methods": [
     "session/list",
     "session/delete",

@@ -60,6 +60,11 @@ import {
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
 } from "../workspace/launch-model.ts";
+import {
+  useOnboarding,
+  type OnboardingRuntimeState,
+  type OnboardingSubmission,
+} from "../onboarding/use-onboarding.ts";
 
 export type {
   DiffReviewRuntimeState,
@@ -108,6 +113,7 @@ export interface OctosSessionRuntime {
   supervision: SupervisionRuntimeState;
   workspace: WorkspaceProductState;
   launch: LaunchRuntimeState;
+  onboarding: OnboardingRuntimeState;
   connected: boolean;
   connect: (input: SessionConnectionInput) => void;
   disconnect: () => void;
@@ -133,6 +139,8 @@ export interface OctosSessionRuntime {
   switchSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => Promise<void>;
   chooseLaunchProfile: (profileId: string) => Promise<void>;
+  retryOnboarding: () => Promise<void>;
+  submitOnboarding: (submission: OnboardingSubmission) => Promise<void>;
 }
 
 export function useOctosSession(): OctosSessionRuntime {
@@ -211,6 +219,30 @@ export function useOctosSession(): OctosSessionRuntime {
   const workspace = workspaceController.state;
   const [launch, setLaunch] =
     useState<LaunchRuntimeState>(EMPTY_LAUNCH_RUNTIME);
+  const onboardingController = useOnboarding({
+    client: () => clientRef.current,
+    capabilities: () => capabilitiesRef.current,
+    onConfigured: async (profileId, client) => {
+      const config = connectionConfigRef.current;
+      if (!config || clientRef.current !== client) {
+        throw new Error("The server connection changed during onboarding.");
+      }
+      launchOpeningRef.current = true;
+      setLaunch((current) => ({ ...current, phase: "opening" }));
+      try {
+        await openConnectedSession(
+          client,
+          launchProfileConfig(config, profileId),
+        );
+        onboardingController.reset();
+      } catch (reason) {
+        setLaunch((current) => ({ ...current, phase: "awaiting_choice" }));
+        throw reason;
+      } finally {
+        launchOpeningRef.current = false;
+      }
+    },
+  });
 
   useEffect(
     () => () => {
@@ -267,6 +299,7 @@ export function useOctosSession(): OctosSessionRuntime {
     interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
+    onboardingController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
     launchResolutionRequiredRef.current =
@@ -335,6 +368,7 @@ export function useOctosSession(): OctosSessionRuntime {
     try {
       capabilities = (await client.listConfigCapabilities()).capabilities;
       assertCompatibleProtocol(capabilities);
+      capabilitiesRef.current = capabilities;
     } catch (reason) {
       if (reason instanceof OctosUiProtocolError && reason.code === -32601) {
         setLaunch(EMPTY_LAUNCH_RUNTIME);
@@ -356,6 +390,9 @@ export function useOctosSession(): OctosSessionRuntime {
     if (decision.decision === "resume" && decision.resolved_profile) {
       setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
       return launchProfileConfig(config, decision.resolved_profile);
+    }
+    if (decision.decision === "no_profile") {
+      void onboardingController.prepare();
     }
     setLaunch({
       phase: "awaiting_choice",
@@ -554,6 +591,7 @@ export function useOctosSession(): OctosSessionRuntime {
     interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
+    onboardingController.reset();
     launchOpeningRef.current = false;
     sessionEstablishedRef.current = false;
     launchResolutionRequiredRef.current = false;
@@ -820,6 +858,7 @@ export function useOctosSession(): OctosSessionRuntime {
     supervision,
     workspace,
     launch,
+    onboarding: onboardingController.state,
     connected:
       status === "connected" && opened !== null && recovery.phase === "healthy",
     connect,
@@ -843,6 +882,8 @@ export function useOctosSession(): OctosSessionRuntime {
     switchSession,
     deleteSession: workspaceController.deleteSession,
     chooseLaunchProfile,
+    retryOnboarding: onboardingController.prepare,
+    submitOnboarding: onboardingController.submit,
   };
 }
 

@@ -136,13 +136,33 @@ test("matches activate and cross-profile launch choices", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("routes no-profile to onboarding and has no critical accessibility violations", async ({
+test("onboards an empty solo server and opens the canonical coding session", async ({
   page,
 }) => {
   await launchWorkspace(page, "/srv/work/no-profile");
-  await expect(page.getByRole("alertdialog")).toContainText(
-    "octoscode onboard",
+  const onboarding = page.getByRole("dialog", {
+    name: "Create your local coding profile",
+  });
+  await expect(onboarding).toBeVisible();
+  await expect(onboarding.getByLabel("Provider")).toHaveValue("deepseek");
+  await expect(onboarding.getByLabel("Model")).toHaveValue("deepseek-chat");
+
+  const apiKey = onboarding.getByLabel("API key");
+  await apiKey.fill("sk-rejected-secret");
+  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  const providerError = onboarding.getByRole("alert");
+  await expect(providerError).toContainText("[redacted]");
+  await expect(providerError).not.toContainText("sk-rejected-secret");
+  await expect(onboarding).toContainText(
+    "A retry only repeats provider test and save",
   );
+
+  await apiKey.fill("sk-e2e-valid");
+  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  await expect(
+    page.getByText("coding:local:tui#coding", { exact: true }),
+  ).toBeVisible();
+  await expect(onboarding).toBeHidden();
 
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

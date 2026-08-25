@@ -27,7 +27,11 @@ screens, the supervision surface remains available as a keyboard-dismissible
 drawer. When a server-side workspace path is supplied, startup follows
 Octoscode's `launch/resolve` contract: resume is automatic, activation is
 confirmed, cross-profile folders offer the same explicit choice, and a server
-with no profile points to canonical onboarding.
+with no profile can complete canonical solo profile/provider onboarding in the
+browser when Core advertises that surface. Provider families, models, and
+routes come from Core; the Web tests the credential before saving it, never
+persists the API key, and opens the exact TUI coding session. Older servers keep
+the truthful `octoscode onboard` fallback.
 The session navigator also performs a bounded, read-only `task/list` scan so
 running or failed work in another recent session remains visible without
 changing the foreground subscription. `/activity` opens the same task truth as
@@ -84,6 +88,8 @@ Session navigation, safe file metadata, and usage follow the
 [workspace session decision](docs/adr/0009-workspace-session-surfaces.md).
 Pre-session repository launch follows the
 [workspace launch decision](docs/adr/0010-server-resolved-workspace-launch.md).
+Empty solo-server setup follows the
+[Web onboarding decision](docs/adr/0015-solo-web-onboarding.md).
 Background session indicators follow the
 [background activity decision](docs/adr/0012-background-session-activity.md).
 The generated protocol vocabulary and Core blob gate follow the
@@ -117,7 +123,9 @@ intentional Core pin, edit `packages/client/contract-source.json` and run
 `integration:core` rejects a binary that does not match the release and commit
 in `packages/client/core-runtime.json`, then launches a real isolated
 `octos serve` and exercises the shipped AppUI transport without making a model
-call. CI downloads that release asset and verifies its SHA-256 first. The
+turn. A local OpenAI-compatible fixture verifies the provider test request and
+response without contacting an external service. CI downloads that release
+asset and verifies its SHA-256 first. The
 checked mock remains the deterministic browser-flow fixture, not compatibility
 proof.
 

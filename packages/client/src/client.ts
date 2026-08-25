@@ -64,6 +64,19 @@ import {
   parseSessionFilesListResult,
   parseSessionListResult,
 } from "./workspace.ts";
+import {
+  APPUI_ONBOARDING_METHODS,
+  parseLlmCatalogResult,
+  parseLlmTestResult,
+  parseLlmUpsertResult,
+  parseLocalProfileCreateResult,
+  type LlmCatalogResult,
+  type LlmProvisionParams,
+  type LlmTestResult,
+  type LlmUpsertResult,
+  type LocalProfileCreateParams,
+  type LocalProfileCreateResult,
+} from "./onboarding.ts";
 
 export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
@@ -413,6 +426,40 @@ export class OctosUiClient {
       CORE_UI_METHODS.CONFIG_CAPABILITIES_LIST,
       {},
       parseConfigCapabilitiesListResult,
+    );
+  }
+
+  async createLocalProfile(
+    params: LocalProfileCreateParams,
+  ): Promise<LocalProfileCreateResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LOCAL_CREATE,
+      params,
+      parseLocalProfileCreateResult,
+    );
+  }
+
+  async getLlmCatalog(): Promise<LlmCatalogResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_CATALOG,
+      {},
+      parseLlmCatalogResult,
+    );
+  }
+
+  async testLlmProfile(params: LlmProvisionParams): Promise<LlmTestResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_TEST,
+      params,
+      parseLlmTestResult,
+    );
+  }
+
+  async upsertLlmProfile(params: LlmProvisionParams): Promise<LlmUpsertResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_UPSERT,
+      params,
+      parseLlmUpsertResult,
     );
   }
 

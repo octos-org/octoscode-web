@@ -337,10 +337,20 @@ export function App() {
               </a>
             </div>
           </header>
-          <div className="conversation-scroll">
+          <div
+            className="conversation-scroll"
+            role="region"
+            aria-label="Conversation"
+            tabIndex={0}
+          >
             {session.launch.decision ? (
               <LaunchDecisionPanel
                 state={session.launch}
+                onboarding={session.onboarding}
+                onSubmitOnboarding={(submission) =>
+                  void session.submitOnboarding(submission)
+                }
+                onRetryOnboarding={() => void session.retryOnboarding()}
                 onChooseProfile={(profileId) =>
                   void session.chooseLaunchProfile(profileId)
                 }

@@ -52,6 +52,13 @@ export {
   parseTokenCostUpdate,
 } from "./workspace.ts";
 export {
+  APPUI_ONBOARDING_METHODS,
+  parseLlmCatalogResult,
+  parseLlmTestResult,
+  parseLlmUpsertResult,
+  parseLocalProfileCreateResult,
+} from "./onboarding.ts";
+export {
   approvalDiffPreviewId,
   approvalResolutionId,
   notificationDiffPreviewId,
@@ -139,4 +146,17 @@ export type {
   UserQuestionRespondParams,
   UserQuestionRespondResult,
 } from "./types.ts";
+export type {
+  LlmCatalogEndpoint,
+  LlmCatalogFamily,
+  LlmCatalogModel,
+  LlmCatalogResult,
+  LlmProvisionParams,
+  LlmRouteSelection,
+  LlmSelection,
+  LlmTestResult,
+  LlmUpsertResult,
+  LocalProfileCreateParams,
+  LocalProfileCreateResult,
+} from "./onboarding.ts";
 export { buildUiProtocolUrl, UI_PROTOCOL_PATH } from "./url.ts";

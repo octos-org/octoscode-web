@@ -42,6 +42,10 @@ const capabilities = {
   supported_methods: [
     "config/capabilities/list",
     "launch/resolve",
+    "profile/local/create",
+    "profile/llm/catalog",
+    "profile/llm/test",
+    "profile/llm/upsert",
     "session/open",
     "session/hydrate",
     "turn/start",
@@ -84,6 +88,7 @@ sockets.on("connection", (socket) => {
   let taskState = "running";
   let pendingInteraction = null;
   let projectionCursor = 10;
+  let createdProfileId = null;
   socket.on("message", (bytes) => {
     const request = JSON.parse(bytes.toString());
     const sessionId = request.params?.session_id ?? "coding:local:main";
@@ -95,7 +100,9 @@ sockets.on("connection", (socket) => {
       const cwd = request.params?.cwd ?? "";
       const profile = request.params?.profile_id || "_main";
       const result = cwd.endsWith("/no-profile")
-        ? { decision: "no_profile" }
+        ? createdProfileId
+          ? { decision: "activate", resolved_profile: createdProfileId }
+          : { decision: "no_profile" }
         : cwd.endsWith("/cross")
           ? {
               decision: "cross_profile",
@@ -106,6 +113,64 @@ sockets.on("connection", (socket) => {
             ? { decision: "activate", resolved_profile: profile }
             : { decision: "resume", resolved_profile: profile };
       reply(socket, request.id, result);
+      return;
+    }
+    if (request.method === "profile/llm/catalog") {
+      reply(socket, request.id, {
+        families: {
+          deepseek: {
+            env: "DEEPSEEK_API_KEY",
+            models: [
+              {
+                id: "deepseek-chat",
+                endpoints: [
+                  {
+                    id: "openrouter",
+                    label: "OpenRouter",
+                    base_url: "https://openrouter.ai/api/v1",
+                    api_key_env: "OPENROUTER_API_KEY",
+                    api_type: "openai",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      return;
+    }
+    if (request.method === "profile/local/create") {
+      createdProfileId = request.params.requested_id;
+      reply(socket, request.id, {
+        profile_id: createdProfileId,
+        user_id: `user-${createdProfileId}`,
+        name: request.params.name,
+        username: request.params.username,
+        email: request.params.email,
+        created: true,
+        runtime_mode: "solo",
+      });
+      return;
+    }
+    if (request.method === "profile/llm/test") {
+      const rejected = request.params.api_key === "sk-rejected-secret";
+      reply(socket, request.id, {
+        profile_id: request.params.profile_id,
+        applied: !rejected,
+        message: rejected
+          ? `Provider rejected ${request.params.api_key}`
+          : "Provider test succeeded",
+        ...(rejected
+          ? { error: `Provider rejected ${request.params.api_key}` }
+          : {}),
+      });
+      return;
+    }
+    if (request.method === "profile/llm/upsert") {
+      reply(socket, request.id, {
+        profile_id: request.params.profile_id,
+        applied: true,
+      });
       return;
     }
     if (request.method === "session/open") {
@@ -123,7 +188,7 @@ sockets.on("connection", (socket) => {
       reply(socket, request.id, {
         opened: {
           session_id: sessionId,
-          active_profile_id: "coding",
+          active_profile_id: request.params?.profile_id || "coding",
           workspace_root: "/workspace/octoscode-web",
           cursor: { stream: sessionId, seq: 10 },
           capabilities,

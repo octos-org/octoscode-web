@@ -32,6 +32,7 @@
 
 - [x] Session list/create/switch/delete (Core has no archive RPC)
 - [x] Workspace/repository launcher using server-owned `launch/resolve`
+- [x] Empty-server solo profile and provider onboarding with a TUI fallback
 - [x] Server-owned session file metadata and paged task artifacts
 - [x] Context/cost/model status
 - [x] Responsive supervision drawer and keyboard dismissal
@@ -46,6 +47,7 @@
 - [x] Bounded background-session task status in the workspace navigator
 - [x] Searchable, status-filtered `/activity` task navigator
 - [x] Generated protocol vocabulary and exact Core blob drift gate
+- [x] Checksummed real-Core onboarding/session compatibility gate
 - [ ] Generated request/result/event payload types from Octos Core
 - [ ] Background multi-session supervision parity with Octoscode
 

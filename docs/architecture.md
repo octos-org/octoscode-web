@@ -97,10 +97,24 @@ For a path-based first launch, the Web client requests
 only when the method and `session.workspace_cwd.v1` are both advertised. A
 `resume` decision opens the exact Octoscode coding identity
 `<profile>:local:tui#coding`; `activate` and `cross_profile` require the same
-user choices as the TUI launch menu; `no_profile` points to `octoscode onboard`.
-An older server without the capability falls back to the explicitly entered
-session id. A reconnect before the user chooses repeats resolution instead of
-silently opening that fallback session.
+user choices as the TUI launch menu. For `no_profile`, the client offers the
+same local-solo profile and model setup when all four onboarding methods are
+advertised. It reads families/models/routes from `profile/llm/catalog`, creates
+one named local profile, requires `profile/llm/test` to pass, then applies the
+same selection through `profile/llm/upsert`. The API key exists only in the
+live form/request closure. A partial failure retains the created profile id so
+retry never duplicates the profile. Servers missing any part of this optional
+surface show the truthful `octoscode onboard` fallback.
+
+The onboarding method names currently belong to the `octos-cli` AppUI
+transport rather than exported Core constants, so the client keeps one isolated
+capability-gated vocabulary in `packages/client/src/onboarding.ts`. Payloads
+still use strict bounded decoders. These literals should be replaced by the
+generated contract as soon as Core exports them.
+
+An older server without workspace launch capability falls back to the
+explicitly entered session id. A reconnect before the user chooses repeats
+resolution instead of silently opening that fallback session.
 
 ## Browser constraints
 
@@ -128,13 +142,16 @@ Unit tests validate parsers, reducers, queues, and static feature rendering.
 Playwright then starts the mock AppUI server and the real Vite application to
 exercise the user-visible launch decisions, an actual turn, explicit session
 switching with draft restoration, and the responsive supervision drawer. An
-axe pass gates WCAG 2/2.1 A/AA rules on the blocking no-profile launch surface.
+axe passes gate WCAG 2/2.1 A/AA rules on blocking product surfaces and the
+post-onboarding coding workspace.
 CI runs browser checks separately from the fast compile/test/build job and
 uploads traces, error context, and screenshots only on failure. A third gate
 downloads a pinned, checksummed Octos release and drives its real HTTP/WebSocket
-AppUI transport through negotiation, bootstrap, the exact TUI coding session,
-hydrate, permissions, task supervision, and status. See
-`docs/adr/0014-pinned-core-runtime-smoke.md`.
+AppUI transport through negotiation, bootstrap, provider catalog and a local
+OpenAI-compatible provider test, the exact TUI coding session, hydrate,
+permissions, task supervision, and status. See
+`docs/adr/0014-pinned-core-runtime-smoke.md` and
+`docs/adr/0015-solo-web-onboarding.md`.
 
 An unexpected React render or lifecycle exception is contained by the root
 error boundary. Its recovery screen states the durable-state boundary, offers

@@ -8,7 +8,8 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,7 @@ async function main() {
     '{"name":"octoscode-web-core-smoke","private":true}\n',
   );
   const port = await reservePort();
+  const provider = await startProviderFixture();
   const token = `octoscode-web-${randomBytes(18).toString("hex")}`;
   const profileId = "octoscode-web-ci";
   const sessionId = `${profileId}:local:tui#coding`;
@@ -110,8 +112,15 @@ async function main() {
     );
     assertIncludesAll(
       beforeCapabilities.supported_methods,
-      ["profile/local/create", "profile/llm/upsert"],
+      runtimeContract.required_solo_onboarding_methods,
       "solo bootstrap method",
+    );
+
+    const catalog = await socket.request("profile/llm/catalog", {});
+    assert(
+      Object.keys(asRecord(catalog.families, "LLM catalog families")).length >
+        0,
+      "LLM catalog has no provider families",
     );
 
     const emptyLaunch = await socket.request("launch/resolve", {
@@ -128,21 +137,34 @@ async function main() {
     });
     assertEqual(created.profile_id, profileId, "created profile id");
 
-    await socket.request("profile/llm/upsert", {
+    const llmProvision = {
       profile_id: profileId,
-      set_primary: true,
       selection: {
         family_id: "custom",
         model_id: "octoscode-web-ci-smoke",
         route: {
           route_id: "custom",
-          base_url: "http://127.0.0.1:1/v1",
+          base_url: provider.baseUrl,
           api_key_env: "OCTOSCODE_WEB_CI_API_KEY",
           api_type: "openai",
         },
       },
       api_key: "sk-integration-placeholder-not-a-secret",
+    };
+    const tested = await socket.request("profile/llm/test", llmProvision);
+    assertEqual(tested.profile_id, profileId, "tested profile id");
+    assertEqual(tested.applied, true, "provider test result");
+    assert(
+      provider.requests > 0,
+      "profile/llm/test did not reach the provider fixture",
+    );
+
+    const saved = await socket.request("profile/llm/upsert", {
+      ...llmProvision,
+      set_primary: true,
     });
+    assertEqual(saved.profile_id, profileId, "saved profile id");
+    assertEqual(saved.applied, true, "provider save result");
 
     const launch = await socket.request("launch/resolve", {
       cwd: workspaceDir,
@@ -219,7 +241,7 @@ async function main() {
     );
     process.stdout.write(
       `Verified ${runtimeContract.tag} (${expectedRevision}) through real octos serve: ` +
-        `health, negotiation, no-profile launch, profile bootstrap, exact TUI session open, ` +
+        `health, negotiation, no-profile launch, profile/catalog/test/save, exact TUI session open, ` +
         `hydrate, permissions, supervision and status. Forward methods: ` +
         `${forwardAvailable.length ? forwardAvailable.join(", ") : "not advertised by this release"}.\n`,
     );
@@ -234,6 +256,7 @@ async function main() {
   } finally {
     socket?.close();
     await stopChild(child);
+    await provider.close();
     if (succeeded) await safeRemoveRunRoot(runRoot);
     else process.stderr.write(`Integration state retained at ${runRoot}\n`);
   }
@@ -364,7 +387,7 @@ async function waitForHealth(port, child) {
 }
 
 async function reservePort() {
-  const server = createServer();
+  const server = createNetServer();
   await new Promise((resolvePromise, rejectPromise) => {
     server.once("error", rejectPromise);
     server.listen(0, "127.0.0.1", resolvePromise);
@@ -381,6 +404,70 @@ async function reservePort() {
     ),
   );
   return port;
+}
+
+async function startProviderFixture() {
+  let requests = 0;
+  const server = createHttpServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      requests += 1;
+      const valid =
+        request.method === "POST" &&
+        request.url === "/v1/chat/completions" &&
+        request.headers.authorization ===
+          "Bearer sk-integration-placeholder-not-a-secret" &&
+        body.includes("octoscode-web-ci-smoke");
+      if (!valid) {
+        response
+          .writeHead(400, { "content-type": "application/json" })
+          .end('{"error":{"message":"invalid integration request"}}');
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          id: "chatcmpl-octoscode-web",
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1_000),
+          model: "octoscode-web-ci-smoke",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "OK" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 2,
+            completion_tokens: 1,
+            total_tokens: 3,
+          },
+        }),
+      );
+    });
+  });
+  await new Promise((resolvePromise, rejectPromise) => {
+    server.once("error", rejectPromise);
+    server.listen(0, "127.0.0.1", resolvePromise);
+  });
+  const address = server.address();
+  assert(address && typeof address !== "string", "provider fixture address");
+  return {
+    get requests() {
+      return requests;
+    },
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    close: () =>
+      new Promise((resolvePromise, rejectPromise) =>
+        server.close((error) =>
+          error ? rejectPromise(error) : resolvePromise(),
+        ),
+      ),
+  };
 }
 
 function capture(stream, output, key) {
@@ -478,6 +565,10 @@ function validateRuntimeContract(value) {
   assert(
     Array.isArray(value.required_web_features),
     "required_web_features is invalid",
+  );
+  assert(
+    Array.isArray(value.required_solo_onboarding_methods),
+    "required_solo_onboarding_methods is invalid",
   );
 }
 

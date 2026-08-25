@@ -15,6 +15,15 @@ describe("LaunchDecisionPanel", () => {
             existing_profiles: ["glm"],
           },
         }}
+        onboarding={{
+          phase: "idle",
+          supported: false,
+          catalog: null,
+          createdProfileId: null,
+          error: null,
+        }}
+        onSubmitOnboarding={vi.fn()}
+        onRetryOnboarding={vi.fn()}
         onChooseProfile={vi.fn()}
         onCancel={vi.fn()}
       />,
@@ -32,6 +41,15 @@ describe("LaunchDecisionPanel", () => {
           cwd: "/srv/work/project",
           decision: { decision: "no_profile", existing_profiles: [] },
         }}
+        onboarding={{
+          phase: "idle",
+          supported: false,
+          catalog: null,
+          createdProfileId: null,
+          error: null,
+        }}
+        onSubmitOnboarding={vi.fn()}
+        onRetryOnboarding={vi.fn()}
         onChooseProfile={vi.fn()}
         onCancel={vi.fn()}
       />,

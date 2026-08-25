@@ -1,13 +1,24 @@
 import type { LaunchRuntimeState } from "./launch-model.ts";
+import { OnboardingPanel } from "../onboarding/OnboardingPanel.tsx";
+import type {
+  OnboardingRuntimeState,
+  OnboardingSubmission,
+} from "../onboarding/use-onboarding.ts";
 
 interface LaunchDecisionPanelProps {
   state: LaunchRuntimeState;
+  onboarding: OnboardingRuntimeState;
+  onSubmitOnboarding: (submission: OnboardingSubmission) => void;
+  onRetryOnboarding: () => void;
   onChooseProfile: (profileId: string) => void;
   onCancel: () => void;
 }
 
 export function LaunchDecisionPanel({
   state,
+  onboarding,
+  onSubmitOnboarding,
+  onRetryOnboarding,
   onChooseProfile,
   onCancel,
 }: LaunchDecisionPanelProps) {
@@ -17,24 +28,12 @@ export function LaunchDecisionPanel({
 
   if (decision.decision === "no_profile") {
     return (
-      <section
-        className="launch-decision"
-        role="alertdialog"
-        aria-labelledby="launch-decision-title"
-      >
-        <span className="eyebrow">Octoscode setup</span>
-        <h2 id="launch-decision-title">Create a profile first</h2>
-        <p>
-          This Octos server has no launchable profile. Run the canonical setup
-          flow on the server, then reconnect this workspace.
-        </p>
-        <code>octoscode onboard</code>
-        <div className="launch-actions">
-          <button type="button" autoFocus onClick={onCancel}>
-            Disconnect
-          </button>
-        </div>
-      </section>
+      <OnboardingPanel
+        state={onboarding}
+        onSubmit={onSubmitOnboarding}
+        onRetry={onRetryOnboarding}
+        onCancel={onCancel}
+      />
     );
   }
 

@@ -10,16 +10,18 @@ the browser-facing AppUI transport.
 
 `packages/client/core-runtime.json` is the machine-readable runtime baseline.
 It records the release tag, commit, platform assets, required Web methods and
-features, and newer workspace methods that the client can adopt when a server
-advertises them. It is separate from `contract-source.json`: the latter may pin
-a newer immutable source revision for generated vocabulary while the runtime
-gate must pin an actually downloadable, checksummed binary.
+features, the complete optional solo-onboarding method set, and newer workspace
+methods that the client can adopt when a server advertises them. It is separate
+from `contract-source.json`: the latter may pin a newer immutable source
+revision for generated vocabulary while the runtime gate must pin an actually
+downloadable, checksummed binary.
 
 The smoke covers public health, protocol negotiation, no-profile launch,
-local-solo profile bootstrap, a non-routable placeholder model configuration,
-the exact Octoscode TUI coding session id, hydrate, permissions, task
-supervision, and session status. It never starts a model turn or contacts the
-placeholder model endpoint.
+local-solo profile bootstrap, the provider catalog, provider test and save, the
+exact Octoscode TUI coding session id, hydrate, permissions, task supervision,
+and session status. A loopback OpenAI-compatible fixture proves that
+`profile/llm/test` sends the expected authenticated request and accepts a valid
+response. It never starts an agent turn or contacts an external model service.
 
 ## Consequences
 
