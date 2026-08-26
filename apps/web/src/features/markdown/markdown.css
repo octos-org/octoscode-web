@@ -58,12 +58,14 @@
 
 .markdown-body a {
   color: var(--dsw-alias-state-business-primary);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .markdown-body a:hover,
 .markdown-body a:focus-visible {
-  text-decoration: underline;
+  text-decoration-thickness: 2px;
 }
 
 .markdown-body :where(ul, ol) {

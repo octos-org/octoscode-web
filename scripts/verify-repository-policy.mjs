@@ -80,6 +80,20 @@ if (globalStyleLines > globalStyleBudget) {
   );
 }
 
+const markdownStyle = await readFile(
+  resolve(sourceRoot, "features/markdown/markdown.css"),
+  "utf8",
+);
+if (
+  !/\.markdown-body a\s*\{[^}]*text-decoration:\s*underline;/s.test(
+    markdownStyle,
+  )
+) {
+  violations.push(
+    "markdown transcript links must remain distinguishable without color",
+  );
+}
+
 const adrDirectory = resolve(root, "docs/adr");
 for (const name of (await readdir(adrDirectory)).filter((name) =>
   /^\d{4}-.*\.md$/.test(name),

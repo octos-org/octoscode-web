@@ -31,12 +31,18 @@ for (const required of [
   "server_tokens off",
   "client_max_body_size 1m",
   "gzip on",
+  "types {",
 ]) {
   assert(
     effectiveNginx.includes(required),
     `nginx deployment contract is missing ${required}`,
   );
 }
+
+assert(
+  !effectiveNginx.includes("include mime.types"),
+  "nginx reference configuration must not depend on a relative mime.types file",
+);
 
 assert(
   !effectiveNginx.includes("'unsafe-inline'"),
