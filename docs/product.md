@@ -7,8 +7,8 @@ semantics. Octos Core remains the runtime and source of durable truth.
 ## Product principles
 
 1. **Same action, same meaning.** Launch, commands, prompt queueing,
-   interruption, approvals, questions, and session transitions follow
-   Octoscode rather than inventing a second browser dialect.
+   interruption, approvals, questions, and session transitions follow Octoscode
+   rather than inventing a second browser dialect.
 2. **The server owns work.** Sessions, permissions, diffs, plans, tasks,
    artifacts, cost, and replay are projections of `octos serve` state.
 3. **Capabilities are runtime truth.** Optional controls appear only when the
@@ -35,24 +35,31 @@ semantics. Octos Core remains the runtime and source of durable truth.
 | Usage         | Model, context-window, token, and cost projections from typed server state.                                                |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                     |
 
+Transcript rows are a bounded browser rendering projection, not the durable
+history store. When older rows fall outside that window the first visible row
+states how many were omitted and points back to server hydrate. Model-authored
+remote images render as alt text rather than making an automatic cross-origin
+request; explicit links remain user-initiated.
+
 ## Deliberate non-goals
 
 - Running an agent, model, tool, sandbox, plugin, or durable store in the
   browser.
 - Importing the DSH/Cordis host runtime or the old `octos-web` application.
 - Voice, camera, smart home, Learn, Studio, slides, sites, or administration.
-- PTY terminal emulation, a full code editor, or a general repository
-  filesystem API.
+- PTY terminal emulation, a full code editor, or a general repository filesystem
+  API.
 - Loading arbitrary third-party JavaScript into the client.
 - Guessing unsupported capabilities or reconstructing server truth from prose.
 
 ## Forward work
 
-The current product slice is release-gated and usable. Broader parity depends
-on explicit Core contracts rather than more client-side inference:
+The current product slice is release-gated and usable. Broader parity depends on
+explicit Core contracts rather than more client-side inference:
 
-- Generate request, result, and event payload types from a machine-readable
-  Core schema ([tracking issue #1](https://github.com/octos-org/octoscode-web/issues/1)).
+- Generate request, result, and event payload types from a machine-readable Core
+  schema
+  ([tracking issue #1](https://github.com/octos-org/octoscode-web/issues/1)).
 - Expose a bounded Core activity snapshot for complete multi-session parity
   ([tracking issue #3](https://github.com/octos-org/octoscode-web/issues/3)).
 

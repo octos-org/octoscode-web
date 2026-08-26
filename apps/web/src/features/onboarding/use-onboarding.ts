@@ -7,6 +7,7 @@ import {
   type OctosUiClient,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
+import { RequestGate } from "../async/request-gate.ts";
 
 const OFFICIAL_ROUTE = "__official__";
 const KEYLESS_CORE_PROBE = "octoscode-web-keyless-probe";
@@ -54,21 +55,22 @@ const EMPTY_ONBOARDING: OnboardingRuntimeState = {
 };
 
 export function useOnboarding(options: UseOnboardingOptions) {
-  const generationRef = useRef(0);
+  const requestsRef = useRef(new RequestGate());
   const createdProfileRef = useRef<string | null>(null);
+  const submissionActiveRef = useRef(false);
   const [state, setState] = useState<OnboardingRuntimeState>(EMPTY_ONBOARDING);
 
   const reset = () => {
-    generationRef.current += 1;
+    requestsRef.current.invalidate();
     createdProfileRef.current = null;
+    submissionActiveRef.current = false;
     setState(EMPTY_ONBOARDING);
   };
 
   const prepare = async () => {
     const client = options.client();
     const capabilities = options.capabilities();
-    const generation = generationRef.current + 1;
-    generationRef.current = generation;
+    const generation = requestsRef.current.begin();
     createdProfileRef.current = null;
 
     if (
@@ -88,7 +90,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
     });
     try {
       const catalog = await client.getLlmCatalog();
-      if (generationRef.current !== generation || options.client() !== client) {
+      if (
+        !requestsRef.current.isCurrent(generation) ||
+        options.client() !== client
+      ) {
         return;
       }
       setState({
@@ -99,7 +104,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
         error: null,
       });
     } catch (reason) {
-      if (generationRef.current !== generation || options.client() !== client) {
+      if (
+        !requestsRef.current.isCurrent(generation) ||
+        options.client() !== client
+      ) {
         return;
       }
       setState({
@@ -115,10 +123,17 @@ export function useOnboarding(options: UseOnboardingOptions) {
   const submit = async (submission: OnboardingSubmission) => {
     const client = options.client();
     const catalog = state.catalog;
-    const generation = generationRef.current;
-    if (!client || !state.supported || !catalog || state.phase !== "ready") {
+    if (
+      !client ||
+      !state.supported ||
+      !catalog ||
+      state.phase !== "ready" ||
+      submissionActiveRef.current
+    ) {
       return;
     }
+    const generation = requestsRef.current.begin();
+    submissionActiveRef.current = true;
 
     const profileId = submission.profileId.trim();
     const profileName = submission.profileName.trim();
@@ -152,7 +167,7 @@ export function useOnboarding(options: UseOnboardingOptions) {
           make_default: submission.makeDefault,
         });
         if (
-          generationRef.current !== generation ||
+          !requestsRef.current.isCurrent(generation) ||
           options.client() !== client
         ) {
           return;
@@ -182,7 +197,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
         selection,
         api_key: wireApiKey,
       });
-      if (generationRef.current !== generation || options.client() !== client) {
+      if (
+        !requestsRef.current.isCurrent(generation) ||
+        options.client() !== client
+      ) {
         return;
       }
       if (
@@ -206,7 +224,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
         api_key: wireApiKey,
         set_primary: true,
       });
-      if (generationRef.current !== generation || options.client() !== client) {
+      if (
+        !requestsRef.current.isCurrent(generation) ||
+        options.client() !== client
+      ) {
         return;
       }
       if (saved.profile_id !== createdProfileId || !saved.applied) {
@@ -220,7 +241,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
       }));
       await options.onConfigured(createdProfileId, client);
     } catch (reason) {
-      if (generationRef.current !== generation || options.client() !== client) {
+      if (
+        !requestsRef.current.isCurrent(generation) ||
+        options.client() !== client
+      ) {
         return;
       }
       setState((current) => ({
@@ -229,6 +253,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
         createdProfileId: createdProfileRef.current,
         error: redactSecret(errorMessage(reason), apiKey),
       }));
+    } finally {
+      if (requestsRef.current.isCurrent(generation)) {
+        submissionActiveRef.current = false;
+      }
     }
   };
 

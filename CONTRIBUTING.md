@@ -18,8 +18,8 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-`pnpm mock:server` runs the deterministic browser fixture. Protocol changes
-must also pass `pnpm contract:verify`. Compatibility changes should run the
+`pnpm mock:server` runs the deterministic browser fixture. Protocol changes must
+also pass `pnpm contract:verify`. Compatibility changes should run the
 checksummed pinned runtime gate described in
 [`docs/protocol.md`](docs/protocol.md#compatibility-gates).
 

@@ -64,6 +64,14 @@ notifications into feature-specific actions. Durable state is always
 reconstructible from server hydrate/replay; browser state must not be mistaken
 for runtime truth.
 
+The React hook is a composition root, not a catch-all state API. Consumers see
+grouped connection, conversation, interaction, safety, work, workspace-product,
+and diagnostic domains. Connection/recovery and foreground-turn transitions live
+in React-free controllers; overlapping refreshes use request generations so an
+older response cannot overwrite newer session state. Ephemeral per-session
+drafts use a 50-entry LRU, and the timeline exposes when its 200-row rendering
+window omits older durable history.
+
 ## Interaction authority
 
 Octoscode defines what commands and user actions mean. The browser may change
@@ -97,9 +105,15 @@ Detailed wire and compatibility rules live in
 ## Extension boundary
 
 Octos runtime plugins and skills stay server-side. A future browser extension
-surface may contribute presentation such as tool renderers, panels, commands,
-or artifact viewers. It must not load arbitrary remote code by default or
-create another agent/service container in the browser.
+surface may contribute presentation such as tool renderers, panels, commands, or
+artifact viewers. It must not load arbitrary remote code by default or create
+another agent/service container in the browser.
+
+New feature presentation uses colocated CSS Modules and shared theme tokens. The
+legacy application stylesheet has a checked, non-growing line budget and is a
+migration surface, not a place to append another feature. Repository policy also
+rejects raw feature colors, inline JSX styles, retired token prefixes, and
+sub-11px text.
 
 ## Verification layers
 

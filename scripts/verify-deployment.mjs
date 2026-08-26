@@ -4,6 +4,9 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const dist = resolve(root, "apps/web/dist");
 const nginx = await readFile(resolve(root, "deploy/nginx.conf"), "utf8");
+// Comments are operational notes, not active configuration. Contract checks
+// must never pass because a required directive only appears in a comment.
+const effectiveNginx = nginx.replaceAll(/#[^\n]*/g, "");
 const html = await readFile(resolve(dist, "index.html"), "utf8");
 const manifest = JSON.parse(
   await readFile(resolve(dist, "octoscode-web-build.json"), "utf8"),
@@ -25,14 +28,28 @@ for (const required of [
   'Cache-Control "no-cache"',
   "proxy_set_header Upgrade $http_upgrade",
   "try_files $uri $uri/ /index.html",
+  "server_tokens off",
+  "client_max_body_size 1m",
+  "gzip on",
 ]) {
   assert(
-    nginx.includes(required),
+    effectiveNginx.includes(required),
     `nginx deployment contract is missing ${required}`,
   );
 }
 
-const logFormat = nginx.match(/log_format octoscode_privacy ([\s\S]*?);/)?.[0];
+assert(
+  !effectiveNginx.includes("'unsafe-inline'"),
+  "nginx CSP must not permit inline styles or scripts",
+);
+assert(
+  effectiveNginx.includes("img-src 'self' data: blob:"),
+  "nginx CSP must block automatic cross-origin transcript images",
+);
+
+const logFormat = effectiveNginx.match(
+  /log_format octoscode_privacy ([\s\S]*?);/,
+)?.[0];
 assert(logFormat, "nginx privacy log format is missing");
 for (const forbidden of [
   "$request_uri",

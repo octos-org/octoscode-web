@@ -2,17 +2,22 @@
 
 ## Supported versions
 
-Security fixes target the latest published release and `main`. Pre-release
-builds may change protocol compatibility, but credential handling and
-server-owned safety boundaries are never considered experimental.
+| Version                  | Security fixes |
+| ------------------------ | -------------- |
+| Latest published release | Yes            |
+| `main`                   | Yes            |
+| Older releases           | No             |
+
+Pre-release builds may change protocol compatibility, but credential handling
+and server-owned safety boundaries are never considered experimental.
 
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting for
 [`octos-org/octoscode-web`](https://github.com/octos-org/octoscode-web/security/advisories/new).
 Do not open a public issue for an unpatched vulnerability and do not include
-auth tokens, API keys, server URLs containing query credentials, transcripts,
-or private repository content in a report.
+auth tokens, API keys, server URLs containing query credentials, transcripts, or
+private repository content in a report.
 
 Include the affected Web revision or release, Octos Core version, browser, a
 minimal reproduction, and the security impact. If private reporting is not

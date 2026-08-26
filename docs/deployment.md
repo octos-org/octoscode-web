@@ -18,9 +18,11 @@ Every build emits `/octoscode-web-build.json` with:
 
 Release tags must look like `v0.1.0` or `v0.1.0-rc.1`. The release workflow
 repeats all checks, Chromium product tests, and the checksummed pinned-Core
-runtime smoke, builds with the tag and commit, then publishes
-`octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the release identity;
-moving release tags is unsupported.
+runtime smoke, builds with the tag and commit, then passes the exact archive to
+a separate publish job. The publish job produces GitHub build-provenance
+attestations and refuses to replace an existing release. It publishes
+`octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the release
+identity; moving release tags is unsupported.
 
 To build for an absolute subpath, set a slash-terminated base path:
 
@@ -32,17 +34,17 @@ Root deployments use the default `/`. A malformed base path fails the build.
 
 ## Hosting requirements
 
-Serve the extracted directory over HTTPS and route unknown application paths
-to `index.html`. Use these cache policies:
+Serve the extracted directory over HTTPS and route unknown application paths to
+`index.html`. Use these cache policies:
 
 - `index.html` and `octoscode-web-build.json`: `no-cache`;
 - hashed files under `assets/`: `public, max-age=31536000, immutable`;
 - `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `DEPLOYMENT.md`: `no-cache`.
 
-Set at least `X-Content-Type-Options: nosniff`, a restrictive
-`Referrer-Policy`, and a deployment-specific Content Security Policy. The CSP
-must allow WebSocket connections to the intended Octos origins through
-`connect-src`; do not use a blanket `connect-src *` in production.
+Set at least `X-Content-Type-Options: nosniff`, a restrictive `Referrer-Policy`,
+and a deployment-specific Content Security Policy. The CSP must allow WebSocket
+connections to the intended Octos origins through `connect-src`; do not use a
+blanket `connect-src *` in production.
 
 `deploy/nginx.conf` is the checked root-path, same-origin reference. It ships
 with the release archive and includes SPA fallback, immutable hashed-asset
@@ -52,6 +54,13 @@ that omits query strings. Replace its public host/origin assumptions and set
 the browser connects through the same `/api/` proxy; direct cross-origin WSS
 requires an explicit deployment-specific `connect-src` origin. Enable its HSTS
 line only after the public host is HTTPS-only.
+
+The reference enables compression, hides the nginx version, bounds request
+bodies, and uses a CSP with no inline script/style allowance. Settled code
+highlighting is converted from Shiki's closed inline-style vocabulary to static
+classes. Remote transcript images are blocked, so `img-src` does not grant
+arbitrary HTTPS origins. CI runs both the semantic deployment verifier (against
+comment-stripped configuration) and `nginx -t`.
 
 ## Octos runtime boundary
 
@@ -63,19 +72,19 @@ Octos endpoint or reverse proxy to accept the Web application's `Origin`.
 
 The browser client never writes the auth token to local storage. The current UI
 Protocol transports it in the WebSocket URL query, so HTTPS/WSS is mandatory
-outside loopback and reverse proxies must redact query strings from access
-logs. Treat captured URLs as credentials.
+outside loopback and reverse proxies must redact query strings from access logs.
+Treat captured URLs as credentials.
 
 Compatibility is capability-gated at runtime. The build manifest records the
 contract verified during release, but it is not a promise that every future or
-older server is compatible. Unsupported required methods or features fail
-closed in the connection surface.
+older server is compatible. Unsupported required methods or features fail closed
+in the connection surface.
 
 ## Rollback and health
 
-Keep the preceding immutable archive available. Rollback consists of serving
-the preceding extracted bundle; server-owned sessions and task state are not
-stored in the static deployment and are therefore unaffected. A deployment is
-healthy when `index.html`, one hashed asset, and
-`octoscode-web-build.json` return successfully and a browser can complete
-capability negotiation with its target Octos server.
+Keep the preceding immutable archive available. Rollback consists of serving the
+preceding extracted bundle; server-owned sessions and task state are not stored
+in the static deployment and are therefore unaffected. A deployment is healthy
+when `index.html`, one hashed asset, and `octoscode-web-build.json` return
+successfully and a browser can complete capability negotiation with its target
+Octos server.

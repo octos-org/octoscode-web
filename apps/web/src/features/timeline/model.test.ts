@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { foldNotification, timelineFromHydrate } from "./model.ts";
+import {
+  addSystemMessage,
+  foldNotification,
+  timelineFromHydrate,
+  type TimelineEntry,
+} from "./model.ts";
 
 describe("timeline projection", () => {
   it("folds canonical assistant deltas by segment", () => {
@@ -172,5 +177,24 @@ describe("timeline projection", () => {
 
     expect(progress[0]?.body).toBe("running tests");
     expect(end[0]).toMatchObject({ body: "3 passed", status: "complete" });
+  });
+
+  it("makes the bounded rendering window visible instead of silently dropping history", () => {
+    let entries: TimelineEntry[] = [];
+    for (let index = 0; index < 205; index += 1) {
+      entries = addSystemMessage(
+        entries,
+        `event:${index}`,
+        "Event",
+        String(index),
+      );
+    }
+
+    expect(entries).toHaveLength(200);
+    expect(entries[0]).toMatchObject({
+      id: "timeline:truncated",
+      omittedCount: 6,
+    });
+    expect(entries.at(-1)?.body).toBe("204");
   });
 });

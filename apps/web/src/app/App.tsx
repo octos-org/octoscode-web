@@ -21,22 +21,34 @@ import { TaskDetailDialog } from "../features/supervision/TaskDetailDialog.tsx";
 import { SessionNavigator } from "../features/workspace/SessionNavigator.tsx";
 import { LaunchDecisionPanel } from "../features/workspace/LaunchDecisionPanel.tsx";
 import { ActivityNavigator } from "../features/activity/ActivityNavigator.tsx";
+import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 
 const initialConnection: ConnectionDraft = {
-  endpoint: "http://127.0.0.1:50080",
+  endpoint:
+    import.meta.env.VITE_OCTOS_DEFAULT_ENDPOINT ?? "http://127.0.0.1:50080",
   token: "",
   sessionId: "coding:local:main",
   profileId: "",
   cwd: "",
 };
+const COMMAND_PALETTE_ID = "composer-command-palette";
 
 export function App() {
-  const session = useOctosSession();
+  const {
+    connection: session,
+    conversation,
+    interactions,
+    safety,
+    work,
+    workspaceProduct,
+    diagnostics,
+  } = useOctosSession();
   const draftRef = useRef("");
-  const sessionDraftsRef = useRef(new Map<string, string>());
+  const sessionDraftsRef = useRef(new SessionDraftCache());
   const [connection, setConnection] = useState(initialConnection);
   const [draft, setDraft] = useState("");
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
 
@@ -51,137 +63,139 @@ export function App() {
 
   const submit = (override?: string) => {
     const text = (override ?? draftRef.current).trim();
-    if (!session.connected || !session.opened || !text) return;
+    const opened = session.opened;
+    if (!session.connected || !opened || !text) return;
 
-    const intent = resolveComposerIntent(text, session.opened.capabilities);
+    const intent = resolveComposerIntent(text, opened.capabilities);
     if (intent.kind === "empty-command") return;
 
     draftRef.current = "";
     setDraft("");
     setSelectedCommandIndex(0);
+    setCommandPaletteDismissed(false);
 
-    if (intent.kind === "interrupt") {
-      void session.interrupt();
-      return;
-    }
-    if (intent.kind === "help") {
-      const available = commandSuggestions("/", session.opened.capabilities)
-        .map(
-          (command) =>
-            `/${command.name}${command.aliases.length ? ` (${command.aliases.map((alias) => `/${alias}`).join(", ")})` : ""}`,
-        )
-        .join(" · ");
-      session.setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `help:${crypto.randomUUID()}`,
-          "Commands",
-          `${available}. Unsupported slash commands are never sent to the model.`,
-        ),
-      );
-      return;
-    }
-    if (intent.kind === "process-status") {
-      session.setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `process-status:${crypto.randomUUID()}`,
-          "Process status",
-          session.queue.active
-            ? `Foreground turn ${session.queue.active.turnId.slice(0, 8)} is active. ${session.queue.pending.length} prompt${session.queue.pending.length === 1 ? "" : "s"} queued.`
-            : "No foreground turn is active and the prompt queue is empty.",
-        ),
-      );
-      return;
-    }
-    if (intent.kind === "activity") {
-      setActivityOpen(true);
-      return;
-    }
-    if (intent.kind === "status") {
-      const capabilities = session.opened.capabilities;
-      session.setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `status:${crypto.randomUUID()}`,
-          "Session status",
-          [
-            `Session: ${session.opened?.session_id}`,
-            `Workspace: ${session.opened?.workspace_root ?? "server default"}`,
-            `Methods: ${capabilities?.supported_methods.length ?? 0}`,
-            `Features: ${capabilities?.supported_features?.length ?? 0}`,
-          ].join("\n"),
-        ),
-      );
-      return;
-    }
-    if (intent.kind === "copy") {
-      const lastReply = session.timeline.findLast(
-        (entry) => entry.kind === "assistant" && entry.body,
-      );
-      if (!lastReply) {
-        session.setTimeline((current) =>
+    switch (intent.kind) {
+      case "prompt":
+        conversation.enqueuePrompt(intent.text);
+        return;
+      case "interrupt":
+        void conversation.interrupt();
+        return;
+      case "help": {
+        const available = commandSuggestions("/", opened.capabilities)
+          .map(
+            (command) =>
+              `/${command.name}${command.aliases.length ? ` (${command.aliases.map((alias) => `/${alias}`).join(", ")})` : ""}`,
+          )
+          .join(" · ");
+        conversation.setTimeline((current) =>
           addSystemMessage(
             current,
-            `copy-empty:${crypto.randomUUID()}`,
-            "Nothing to copy",
-            "There is no assistant reply in this session yet.",
+            `help:${crypto.randomUUID()}`,
+            "Commands",
+            `${available}. Unsupported slash commands are never sent to the model.`,
           ),
         );
         return;
       }
-      void navigator.clipboard
-        .writeText(lastReply.body)
-        .then(() =>
-          session.setTimeline((current) =>
-            addSystemMessage(
-              current,
-              `copy-ok:${crypto.randomUUID()}`,
-              "Copied",
-              "The last assistant reply is on the clipboard.",
-              "complete",
-            ),
-          ),
-        )
-        .catch((reason: unknown) =>
-          session.setTimeline((current) =>
-            addSystemMessage(
-              current,
-              `copy-error:${crypto.randomUUID()}`,
-              "Copy failed",
-              reason instanceof Error ? reason.message : String(reason),
-              "error",
-            ),
+      case "process-status":
+        conversation.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `process-status:${crypto.randomUUID()}`,
+            "Process status",
+            conversation.queue.active
+              ? `Foreground turn ${conversation.queue.active.turnId.slice(0, 8)} is active. ${conversation.queue.pending.length} prompt${conversation.queue.pending.length === 1 ? "" : "s"} queued.`
+              : "No foreground turn is active and the prompt queue is empty.",
           ),
         );
-      return;
+        return;
+      case "activity":
+        setActivityOpen(true);
+        return;
+      case "status": {
+        const capabilities = opened.capabilities;
+        conversation.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `status:${crypto.randomUUID()}`,
+            "Session status",
+            [
+              `Session: ${opened.session_id}`,
+              `Workspace: ${opened.workspace_root ?? "server default"}`,
+              `Methods: ${capabilities?.supported_methods.length ?? 0}`,
+              `Features: ${capabilities?.supported_features?.length ?? 0}`,
+            ].join("\n"),
+          ),
+        );
+        return;
+      }
+      case "copy": {
+        const lastReply = conversation.timeline.findLast(
+          (entry) => entry.kind === "assistant" && entry.body,
+        );
+        if (!lastReply) {
+          conversation.setTimeline((current) =>
+            addSystemMessage(
+              current,
+              `copy-empty:${crypto.randomUUID()}`,
+              "Nothing to copy",
+              "There is no assistant reply in this session yet.",
+            ),
+          );
+          return;
+        }
+        void navigator.clipboard
+          .writeText(lastReply.body)
+          .then(() =>
+            conversation.setTimeline((current) =>
+              addSystemMessage(
+                current,
+                `copy-ok:${crypto.randomUUID()}`,
+                "Copied",
+                "The last assistant reply is on the clipboard.",
+                "complete",
+              ),
+            ),
+          )
+          .catch((reason: unknown) =>
+            conversation.setTimeline((current) =>
+              addSystemMessage(
+                current,
+                `copy-error:${crypto.randomUUID()}`,
+                "Copy failed",
+                reason instanceof Error ? reason.message : String(reason),
+                "error",
+              ),
+            ),
+          );
+        return;
+      }
+      case "local-shell-unavailable":
+        conversation.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `shell-unavailable:${crypto.randomUUID()}`,
+            "Local shell unavailable",
+            "Octoscode's ! command runs on the TUI host. A browser cannot execute a local process, so nothing was sent.",
+            "error",
+          ),
+        );
+        return;
+      case "unsupported-command":
+        conversation.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `unsupported-command:${crypto.randomUUID()}`,
+            `/${intent.command} is unavailable`,
+            "This Web build cannot execute that Octoscode command. Nothing was sent to the model.",
+            "error",
+          ),
+        );
+        return;
+      default:
+        return assertNever(intent);
     }
-    if (intent.kind === "local-shell-unavailable") {
-      session.setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `shell-unavailable:${crypto.randomUUID()}`,
-          "Local shell unavailable",
-          "Octoscode's ! command runs on the TUI host. A browser cannot execute a local process, so nothing was sent.",
-          "error",
-        ),
-      );
-      return;
-    }
-    if (intent.kind === "unsupported-command") {
-      session.setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `unsupported-command:${crypto.randomUUID()}`,
-          `/${intent.command} is unavailable`,
-          "This Web build cannot execute that Octoscode command. Nothing was sent to the model.",
-          "error",
-        ),
-      );
-      return;
-    }
-
-    session.enqueuePrompt(intent.text);
   };
 
   function insertComposerNewline(target: HTMLTextAreaElement) {
@@ -195,14 +209,13 @@ export function App() {
   }
 
   const features = session.opened?.capabilities?.supported_features ?? [];
-  const activeTurnId = session.queue.active?.turnId ?? null;
-  const suggestedCommands = commandSuggestions(
-    draft,
-    session.opened?.capabilities,
-  );
+  const activeTurnId = conversation.queue.active?.turnId ?? null;
+  const suggestedCommands = commandPaletteDismissed
+    ? []
+    : commandSuggestions(draft, session.opened?.capabilities);
   const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
   const switchBlocked = Boolean(
-    session.queue.active || session.queue.pending.length,
+    conversation.queue.active || conversation.queue.pending.length,
   );
   const moveToSession = (sessionId: string) => {
     if (switchBlocked || sessionId === session.opened?.session_id) return;
@@ -213,7 +226,7 @@ export function App() {
     draftRef.current = restored;
     setDraft(restored);
     setConnection((current) => ({ ...current, sessionId }));
-    session.switchSession(sessionId);
+    workspaceProduct.switchSession(sessionId);
   };
 
   return (
@@ -235,27 +248,29 @@ export function App() {
           <ConnectionPanel
             value={connection}
             status={session.status}
-            error={session.connectionError}
+            error={session.error}
             onChange={setConnection}
             onConnect={() => session.connect(connection)}
             onDisconnect={session.disconnect}
           />
           {session.opened ? (
             <SessionNavigator
-              state={session.workspace}
+              state={workspaceProduct.state}
               activeSessionId={session.opened.session_id}
               switchBlocked={switchBlocked}
-              onRefresh={() => void session.refreshWorkspace()}
+              onRefresh={() => void workspaceProduct.refresh()}
               onSwitch={moveToSession}
               onCreate={moveToSession}
-              onDelete={(sessionId) => void session.deleteSession(sessionId)}
+              onDelete={(sessionId) =>
+                void workspaceProduct.deleteSession(sessionId)
+              }
             />
           ) : null}
           <PermissionPanel
-            state={session.permission}
+            state={safety.permission}
             connected={Boolean(session.opened)}
-            onRefresh={() => void session.refreshPermission()}
-            onUpdate={(update) => void session.updatePermission(update)}
+            onRefresh={() => void safety.refreshPermission()}
+            onUpdate={(update) => void safety.updatePermission(update)}
           />
           <section className="boundary-note">
             <span className="eyebrow">Boundary</span>
@@ -272,18 +287,18 @@ export function App() {
             <div className="workspace-title">
               <span>
                 {session.opened?.workspace_root ??
-                  session.launch.cwd ??
+                  workspaceProduct.launch.cwd ??
                   "No workspace connected"}
               </span>
               <small>
                 {session.opened?.session_id ??
-                  (session.launch.phase === "resolving"
+                  (workspaceProduct.launch.phase === "resolving"
                     ? "Resolving workspace launch"
                     : "Octos AppUI client")}
               </small>
             </div>
             <div className="header-actions">
-              {session.opened && session.workspace.activityAvailable ? (
+              {session.opened && workspaceProduct.state.activityAvailable ? (
                 <button
                   className="activity-toggle"
                   type="button"
@@ -292,7 +307,7 @@ export function App() {
                   onClick={() => setActivityOpen(true)}
                 >
                   Activity
-                  {session.workspace.activityLoading ? (
+                  {workspaceProduct.state.activityLoading ? (
                     <span aria-label="refreshing" />
                   ) : null}
                 </button>
@@ -306,12 +321,12 @@ export function App() {
               >
                 Work
               </button>
-              {session.diffReview.available &&
-              session.diffReview.latestPreviewId ? (
+              {safety.diffReview.available &&
+              safety.diffReview.latestPreviewId ? (
                 <button
                   className="review-chip"
                   type="button"
-                  onClick={() => void session.openDiffReview()}
+                  onClick={() => void safety.openDiffReview()}
                 >
                   Review changes
                 </button>
@@ -343,28 +358,30 @@ export function App() {
             aria-label="Conversation"
             tabIndex={0}
           >
-            {session.launch.decision ? (
+            {workspaceProduct.launch.decision ? (
               <LaunchDecisionPanel
-                state={session.launch}
-                onboarding={session.onboarding}
+                state={workspaceProduct.launch}
+                onboarding={workspaceProduct.onboarding}
                 onSubmitOnboarding={(submission) =>
-                  void session.submitOnboarding(submission)
+                  void workspaceProduct.submitOnboarding(submission)
                 }
-                onRetryOnboarding={() => void session.retryOnboarding()}
+                onRetryOnboarding={() =>
+                  void workspaceProduct.retryOnboarding()
+                }
                 onChooseProfile={(profileId) =>
-                  void session.chooseLaunchProfile(profileId)
+                  void workspaceProduct.chooseLaunchProfile(profileId)
                 }
                 onCancel={session.disconnect}
               />
             ) : (
               <Timeline
-                entries={session.timeline}
+                entries={conversation.timeline}
                 connected={session.connected}
               />
             )}
           </div>
           <div
-            className={`composer-wrap${session.launch.decision ? " is-hidden" : ""}`}
+            className={`composer-wrap${workspaceProduct.launch.decision ? " is-hidden" : ""}`}
           >
             {session.opened && session.recovery.phase !== "healthy" ? (
               <div
@@ -386,31 +403,34 @@ export function App() {
                   </small>
                 </span>
               </div>
-            ) : session.approval ? (
+            ) : interactions.approval ? (
               <ApprovalPanel
-                approval={session.approval}
-                busy={session.decisionBusy}
-                error={session.decisionError}
+                approval={interactions.approval}
+                busy={interactions.busy}
+                error={interactions.error}
                 onDecide={(decision, scope) =>
-                  void session.respondApproval(decision, scope)
+                  void interactions.respondApproval(decision, scope)
                 }
-                onInterrupt={() => void session.interrupt()}
+                onInterrupt={() => void conversation.interrupt()}
                 onReviewDiff={(previewId) =>
-                  void session.openDiffReview(previewId)
+                  void safety.openDiffReview(previewId)
                 }
               />
-            ) : session.question ? (
+            ) : interactions.question ? (
               <UserQuestionPanel
-                key={session.question.questionId}
-                request={session.question}
-                busy={session.decisionBusy}
-                error={session.decisionError}
-                onSubmit={(answers) => void session.respondQuestion(answers)}
-                onInterrupt={() => void session.interrupt()}
+                key={interactions.question.questionId}
+                request={interactions.question}
+                busy={interactions.busy}
+                error={interactions.error}
+                onSubmit={(answers) =>
+                  void interactions.respondQuestion(answers)
+                }
+                onInterrupt={() => void conversation.interrupt()}
               />
             ) : (
               <div className="composer">
                 <CommandPalette
+                  id={COMMAND_PALETTE_ID}
                   commands={suggestedCommands}
                   selectedIndex={Math.min(
                     selectedCommandIndex,
@@ -418,10 +438,10 @@ export function App() {
                   )}
                   onSelect={chooseCommand}
                 />
-                {session.queue.pending.length > 0 ? (
+                {conversation.queue.pending.length > 0 ? (
                   <div className="prompt-queue" aria-live="polite">
-                    <strong>{session.queue.pending.length} queued</strong>
-                    <span>{session.queue.pending[0]?.text}</span>
+                    <strong>{conversation.queue.pending.length} queued</strong>
+                    <span>{conversation.queue.pending[0]?.text}</span>
                   </div>
                 ) : null}
                 <textarea
@@ -430,6 +450,7 @@ export function App() {
                     draftRef.current = event.target.value;
                     setDraft(event.target.value);
                     setSelectedCommandIndex(0);
+                    setCommandPaletteDismissed(false);
                   }}
                   onKeyDown={(event) => {
                     if (suggestedCommands.length && event.key === "ArrowDown") {
@@ -452,8 +473,7 @@ export function App() {
                       event.key === "Escape"
                     ) {
                       event.preventDefault();
-                      draftRef.current = "";
-                      setDraft("");
+                      setCommandPaletteDismissed(true);
                       setSelectedCommandIndex(0);
                     } else if (
                       (event.key === "Enter" && event.altKey) ||
@@ -479,13 +499,23 @@ export function App() {
                       : "Connect a workspace to begin"
                   }
                   disabled={!session.connected}
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-haspopup="listbox"
+                  aria-expanded={suggestedCommands.length > 0}
+                  aria-controls={COMMAND_PALETTE_ID}
+                  aria-activedescendant={
+                    suggestedCommands[selectedCommandIndex]
+                      ? `${COMMAND_PALETTE_ID}-${suggestedCommands[selectedCommandIndex].name}`
+                      : undefined
+                  }
                   rows={3}
                 />
                 <div className="composer-footer">
                   <span>
                     {session.connected
                       ? activeTurnId
-                        ? `Working · Enter queues next${session.queue.pending.length ? ` · ${session.queue.pending.length} queued` : ""}`
+                        ? `Working · Enter queues next${conversation.queue.pending.length ? ` · ${conversation.queue.pending.length} queued` : ""}`
                         : "Enter to send · Shift+Enter for newline"
                       : "Waiting for server"}
                   </span>
@@ -494,10 +524,12 @@ export function App() {
                       <button
                         className="stop-button"
                         type="button"
-                        onClick={() => void session.interrupt()}
-                        disabled={session.interruptingTurnId === activeTurnId}
+                        onClick={() => void conversation.interrupt()}
+                        disabled={
+                          conversation.interruptingTurnId === activeTurnId
+                        }
                       >
-                        {session.interruptingTurnId === activeTurnId
+                        {conversation.interruptingTurnId === activeTurnId
                           ? "Stopping…"
                           : "Stop"}
                       </button>
@@ -521,13 +553,14 @@ export function App() {
 
         <WorkInspector
           open={inspectorOpen}
-          state={session.supervision}
-          events={session.events}
+          state={work.supervision}
+          events={diagnostics.events}
+          omittedEvents={diagnostics.omittedEvents}
           features={features}
-          onRefresh={() => void session.refreshSupervision()}
-          onOpenTask={(taskId) => void session.openTaskDetail(taskId)}
-          onCancelTask={(taskId) => void session.cancelTask(taskId)}
-          tokenCost={session.workspace.tokenCost}
+          onRefresh={() => void work.refresh()}
+          onOpenTask={(taskId) => void work.openTask(taskId)}
+          onCancelTask={(taskId) => void work.cancelTask(taskId)}
+          tokenCost={workspaceProduct.state.tokenCost}
           onClose={() => setInspectorOpen(false)}
         />
         {inspectorOpen ? (
@@ -540,26 +573,30 @@ export function App() {
         ) : null}
       </main>
       <DiffReviewDialog
-        state={session.diffReview}
-        onClose={session.closeDiffReview}
-        onRefresh={() => void session.openDiffReview()}
+        state={safety.diffReview}
+        onClose={safety.closeDiffReview}
+        onRefresh={() => void safety.openDiffReview()}
       />
       <TaskDetailDialog
-        state={session.supervision}
-        onClose={session.closeTaskDetail}
-        onLoadMore={() => void session.loadMoreTaskOutput()}
-        onReadArtifact={(artifact) => void session.readTaskArtifact(artifact)}
-        onLoadMoreArtifact={() => void session.loadMoreTaskArtifact()}
+        state={work.supervision}
+        onClose={work.closeTask}
+        onLoadMore={() => void work.loadMoreOutput()}
+        onReadArtifact={(artifact) => void work.readArtifact(artifact)}
+        onLoadMoreArtifact={() => void work.loadMoreArtifact()}
       />
       <ActivityNavigator
         open={activityOpen}
-        state={session.workspace}
+        state={workspaceProduct.state}
         activeSessionId={session.opened?.session_id ?? null}
         switchBlocked={switchBlocked}
         onClose={() => setActivityOpen(false)}
         onOpenSession={moveToSession}
-        onInspectCurrentTask={(taskId) => void session.openTaskDetail(taskId)}
+        onInspectCurrentTask={(taskId) => void work.openTask(taskId)}
       />
     </div>
   );
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled composer intent: ${JSON.stringify(value)}`);
 }

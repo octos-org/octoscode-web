@@ -1,6 +1,7 @@
 # ADR 0001: Build a focused sibling client
 
-Status: accepted, 2026-08-26.
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Decision
 

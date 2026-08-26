@@ -6,7 +6,13 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  SessionConnectionLifecycle,
+  type SessionConnectionInput,
+} from "./connection-lifecycle.ts";
+import {
   coreProtocolCompatibilityError,
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
   DEFAULT_UI_FEATURES,
   OctosUiClient,
   OctosUiProtocolError,
@@ -19,7 +25,6 @@ import {
   type ConnectionStatus,
   type PermissionProfileUpdate,
   type RpcNotification,
-  type SessionHydrateResult,
   type SessionOpened,
   type UiProtocolCapabilities,
   type UserQuestionAnswer,
@@ -33,13 +38,9 @@ import {
   type DiffReviewRuntimeState,
   type PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
+import { useTurnController } from "../composer/use-turn-controller.ts";
+import type { PromptTurnQueueSnapshot } from "../composer/turn-queue.ts";
 import {
-  PromptTurnQueue,
-  type PromptTurn,
-  type PromptTurnQueueSnapshot,
-} from "../composer/turn-queue.ts";
-import {
-  addOptimisticUser,
   addSystemMessage,
   foldNotification,
   terminalTurnId,
@@ -72,75 +73,81 @@ export type {
 } from "../review/use-coding-safety.ts";
 
 const REQUIRED_DURABLE_FEATURES = [
-  "state.session_hydrate.v1",
-  "projection.envelope.v2",
+  CORE_UI_FEATURES.SESSION_HYDRATE_V1,
+  CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
 ] as const;
 
-const LEGACY_PROJECTION_METHODS = new Set([
-  "message/delta",
-  "message/reasoning_delta",
-  "tool/started",
-  "tool/progress",
-  "tool/completed",
-  "turn/completed",
-  "turn/error",
+const LEGACY_PROJECTION_METHODS = new Set<string>([
+  CORE_UI_METHODS.MESSAGE_DELTA,
+  CORE_UI_METHODS.MESSAGE_REASONING_DELTA,
+  CORE_UI_METHODS.TOOL_STARTED,
+  CORE_UI_METHODS.TOOL_PROGRESS,
+  CORE_UI_METHODS.TOOL_COMPLETED,
+  CORE_UI_METHODS.TURN_COMPLETED,
+  CORE_UI_METHODS.TURN_ERROR,
 ]);
 
-export interface SessionConnectionInput {
-  endpoint: string;
-  token: string;
-  sessionId: string;
-  profileId: string;
-  cwd: string;
-}
+export type { SessionConnectionInput } from "./connection-lifecycle.ts";
 
 export interface OctosSessionRuntime {
-  status: ConnectionStatus;
-  connectionError: string | null;
-  opened: SessionOpened | null;
-  events: ObservedEvent[];
-  timeline: TimelineEntry[];
-  setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
-  queue: PromptTurnQueueSnapshot;
-  interruptingTurnId: string | null;
-  approval: ApprovalRequested | null;
-  question: UserQuestionRequested | null;
-  decisionBusy: boolean;
-  decisionError: string | null;
-  recovery: SessionRecoverySnapshot;
-  permission: PermissionRuntimeState;
-  diffReview: DiffReviewRuntimeState;
-  supervision: SupervisionRuntimeState;
-  workspace: WorkspaceProductState;
-  launch: LaunchRuntimeState;
-  onboarding: OnboardingRuntimeState;
-  connected: boolean;
-  connect: (input: SessionConnectionInput) => void;
-  disconnect: () => void;
-  enqueuePrompt: (text: string) => void;
-  interrupt: () => Promise<void>;
-  respondApproval: (
-    decision: ApprovalDecision,
-    scope: ApprovalScope,
-  ) => Promise<void>;
-  respondQuestion: (answers: UserQuestionAnswer[]) => Promise<void>;
-  refreshPermission: () => Promise<void>;
-  updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
-  openDiffReview: (previewId?: string) => Promise<void>;
-  closeDiffReview: () => void;
-  refreshSupervision: () => Promise<void>;
-  openTaskDetail: (taskId: string) => Promise<void>;
-  closeTaskDetail: () => void;
-  loadMoreTaskOutput: () => Promise<void>;
-  cancelTask: (taskId: string) => Promise<void>;
-  readTaskArtifact: (artifact: TaskArtifactRecord) => Promise<void>;
-  loadMoreTaskArtifact: () => Promise<void>;
-  refreshWorkspace: () => Promise<void>;
-  switchSession: (sessionId: string) => void;
-  deleteSession: (sessionId: string) => Promise<void>;
-  chooseLaunchProfile: (profileId: string) => Promise<void>;
-  retryOnboarding: () => Promise<void>;
-  submitOnboarding: (submission: OnboardingSubmission) => Promise<void>;
+  connection: {
+    status: ConnectionStatus;
+    error: string | null;
+    opened: SessionOpened | null;
+    recovery: SessionRecoverySnapshot;
+    connected: boolean;
+    connect: (input: SessionConnectionInput) => void;
+    disconnect: () => void;
+  };
+  conversation: {
+    timeline: TimelineEntry[];
+    setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
+    queue: PromptTurnQueueSnapshot;
+    interruptingTurnId: string | null;
+    enqueuePrompt: (text: string) => void;
+    interrupt: () => Promise<void>;
+  };
+  interactions: {
+    approval: ApprovalRequested | null;
+    question: UserQuestionRequested | null;
+    busy: boolean;
+    error: string | null;
+    respondApproval: (
+      decision: ApprovalDecision,
+      scope: ApprovalScope,
+    ) => Promise<void>;
+    respondQuestion: (answers: UserQuestionAnswer[]) => Promise<void>;
+  };
+  safety: {
+    permission: PermissionRuntimeState;
+    diffReview: DiffReviewRuntimeState;
+    refreshPermission: () => Promise<void>;
+    updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
+    openDiffReview: (previewId?: string) => Promise<void>;
+    closeDiffReview: () => void;
+  };
+  work: {
+    supervision: SupervisionRuntimeState;
+    refresh: () => Promise<void>;
+    openTask: (taskId: string) => Promise<void>;
+    closeTask: () => void;
+    loadMoreOutput: () => Promise<void>;
+    cancelTask: (taskId: string) => Promise<void>;
+    readArtifact: (artifact: TaskArtifactRecord) => Promise<void>;
+    loadMoreArtifact: () => Promise<void>;
+  };
+  workspaceProduct: {
+    state: WorkspaceProductState;
+    launch: LaunchRuntimeState;
+    onboarding: OnboardingRuntimeState;
+    refresh: () => Promise<void>;
+    switchSession: (sessionId: string) => void;
+    deleteSession: (sessionId: string) => Promise<void>;
+    chooseLaunchProfile: (profileId: string) => Promise<void>;
+    retryOnboarding: () => Promise<void>;
+    submitOnboarding: (submission: OnboardingSubmission) => Promise<void>;
+  };
+  diagnostics: { events: ObservedEvent[]; omittedEvents: number };
 }
 
 export function useOctosSession(): OctosSessionRuntime {
@@ -148,29 +155,20 @@ export function useOctosSession(): OctosSessionRuntime {
   const eventId = useRef(0);
   const sessionIdRef = useRef("");
   const capabilitiesRef = useRef<UiProtocolCapabilities | undefined>(undefined);
-  const queueRef = useRef(new PromptTurnQueue());
-  const interruptingTurnIdRef = useRef<string | null>(null);
   const durableProjectionRef = useRef(new DurableSessionProjection());
   const recoveringRef = useRef(false);
   const recoveryBufferRef = useRef<RpcNotification[]>([]);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptRef = useRef(0);
+  const connectionLifecycleRef = useRef(new SessionConnectionLifecycle());
   const launchOpeningRef = useRef(false);
-  const sessionEstablishedRef = useRef(false);
-  const launchResolutionRequiredRef = useRef(false);
-  const manualDisconnectRef = useRef(false);
-  const connectionConfigRef = useRef<SessionConnectionInput | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [opened, setOpened] = useState<SessionOpened | null>(null);
-  const [events, setEvents] = useState<ObservedEvent[]>([]);
+  const [eventLog, setEventLog] = useState<{
+    events: ObservedEvent[];
+    omitted: number;
+  }>({ events: [], omitted: 0 });
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
-  const [queue, setQueue] = useState<PromptTurnQueueSnapshot>(() =>
-    queueRef.current.snapshot(),
-  );
-  const [interruptingTurnId, setInterruptingTurnId] = useState<string | null>(
-    null,
-  );
   const interactionController = useBlockingInteractions({
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
@@ -194,6 +192,17 @@ export function useOctosSession(): OctosSessionRuntime {
   const [recovery, setRecovery] = useState<SessionRecoverySnapshot>(() =>
     durableProjectionRef.current.snapshot(),
   );
+  const turnController = useTurnController({
+    client: () => clientRef.current,
+    sessionId: () => sessionIdRef.current,
+    canEnqueue: () =>
+      status === "connected" &&
+      opened !== null &&
+      durableProjectionRef.current.snapshot().phase === "healthy",
+    canStart: () => durableProjectionRef.current.snapshot().phase === "healthy",
+    setTimeline,
+    setConnectionError,
+  });
   const supervisionController = useSupervision({
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
@@ -214,7 +223,7 @@ export function useOctosSession(): OctosSessionRuntime {
     client: () => clientRef.current,
     sessionId: () => sessionIdRef.current,
     capabilities: () => capabilitiesRef.current,
-    connectionConfig: () => connectionConfigRef.current,
+    connectionConfig: () => connectionLifecycleRef.current.config,
   });
   const workspace = workspaceController.state;
   const [launch, setLaunch] =
@@ -223,7 +232,7 @@ export function useOctosSession(): OctosSessionRuntime {
     client: () => clientRef.current,
     capabilities: () => capabilitiesRef.current,
     onConfigured: async (profileId, client) => {
-      const config = connectionConfigRef.current;
+      const config = connectionLifecycleRef.current.config;
       if (!config || clientRef.current !== client) {
         throw new Error("The server connection changed during onboarding.");
       }
@@ -246,23 +255,15 @@ export function useOctosSession(): OctosSessionRuntime {
 
   useEffect(
     () => () => {
-      manualDisconnectRef.current = true;
+      connectionLifecycleRef.current.stopRetrying();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       clientRef.current?.disconnect();
     },
     [],
   );
 
-  const syncQueue = () => setQueue(queueRef.current.snapshot());
   const syncRecovery = () =>
     setRecovery(durableProjectionRef.current.snapshot());
-
-  const resetQueue = () => {
-    queueRef.current.clear();
-    interruptingTurnIdRef.current = null;
-    setInterruptingTurnId(null);
-    syncQueue();
-  };
 
   const connect = (input: SessionConnectionInput) => {
     beginConnection(input, true);
@@ -272,7 +273,7 @@ export function useOctosSession(): OctosSessionRuntime {
     input: SessionConnectionInput,
     resolveWorkspaceLaunch: boolean,
   ) => {
-    manualDisconnectRef.current = true;
+    connectionLifecycleRef.current.suspend();
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -281,32 +282,23 @@ export function useOctosSession(): OctosSessionRuntime {
     clientRef.current = null;
     previous?.disconnect();
 
-    const config = {
-      endpoint: input.endpoint.trim(),
-      token: input.token,
-      sessionId: input.sessionId.trim(),
-      profileId: input.profileId.trim(),
-      cwd: input.cwd.trim(),
-    };
-    connectionConfigRef.current = config;
-    reconnectAttemptRef.current = 0;
-    manualDisconnectRef.current = false;
+    const config = connectionLifecycleRef.current.begin(
+      input,
+      resolveWorkspaceLaunch,
+    );
     setConnectionError(null);
     setOpened(null);
-    setEvents([]);
+    setEventLog({ events: [], omitted: 0 });
     setTimeline([]);
-    resetQueue();
+    turnController.reset();
     interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
     onboardingController.reset();
     launchOpeningRef.current = false;
-    sessionEstablishedRef.current = false;
-    launchResolutionRequiredRef.current =
-      resolveWorkspaceLaunch && Boolean(config.cwd);
     workspaceController.reset();
     setLaunch(
-      launchResolutionRequiredRef.current
+      connectionLifecycleRef.current.shouldResolveLaunch(false)
         ? { phase: "resolving", cwd: config.cwd, decision: null }
         : EMPTY_LAUNCH_RUNTIME,
     );
@@ -335,7 +327,7 @@ export function useOctosSession(): OctosSessionRuntime {
     client.subscribeStatus((next) => {
       if (clientRef.current !== client) return;
       setStatus(next);
-      if (next === "disconnected" && !manualDisconnectRef.current) {
+      if (next === "disconnected") {
         scheduleReconnect();
       }
     });
@@ -347,11 +339,11 @@ export function useOctosSession(): OctosSessionRuntime {
     try {
       await client.connect();
       if (clientRef.current !== client) return;
-      const openConfig =
-        launchResolutionRequiredRef.current &&
-        !(reconnecting && sessionEstablishedRef.current)
-          ? await resolveInitialLaunch(client, config)
-          : config;
+      const openConfig = connectionLifecycleRef.current.shouldResolveLaunch(
+        reconnecting,
+      )
+        ? await resolveInitialLaunch(client, config)
+        : config;
       if (!openConfig || clientRef.current !== client) return;
       await openConnectedSession(client, openConfig, resumeCursor);
     } catch (reason) {
@@ -377,8 +369,11 @@ export function useOctosSession(): OctosSessionRuntime {
       throw reason;
     }
     if (
-      !supportsFeature(capabilities, "session.workspace_cwd.v1") ||
-      !supportsMethod(capabilities, "launch/resolve")
+      !supportsFeature(
+        capabilities,
+        CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+      ) ||
+      !supportsMethod(capabilities, CORE_UI_METHODS.LAUNCH_RESOLVE)
     ) {
       setLaunch(EMPTY_LAUNCH_RUNTIME);
       return config;
@@ -407,9 +402,9 @@ export function useOctosSession(): OctosSessionRuntime {
     config: SessionConnectionInput,
     resumeCursor?: SessionRecoverySnapshot["cursor"],
   ) {
-    connectionConfigRef.current = config;
+    connectionLifecycleRef.current.updateConfig(config);
     sessionIdRef.current = config.sessionId;
-    launchResolutionRequiredRef.current = false;
+    connectionLifecycleRef.current.markLaunchResolved();
     if (!resumeCursor) {
       durableProjectionRef.current.reset(config.sessionId);
       syncRecovery();
@@ -427,12 +422,11 @@ export function useOctosSession(): OctosSessionRuntime {
       durableProjectionRef.current.reset(result.opened.session_id);
     }
     sessionIdRef.current = result.opened.session_id;
-    sessionEstablishedRef.current = true;
-    connectionConfigRef.current = {
+    connectionLifecycleRef.current.markSessionEstablished({
       ...config,
       sessionId: result.opened.session_id,
       profileId: result.opened.active_profile_id ?? config.profileId,
-    };
+    });
     capabilitiesRef.current = result.opened.capabilities;
     setOpened(result.opened);
     await hydrateSessionState(client, result.opened.capabilities);
@@ -440,7 +434,6 @@ export function useOctosSession(): OctosSessionRuntime {
     void codingSafetyController.refreshPermission(client);
     void supervisionController.refresh(client);
     void workspaceController.refresh(client);
-    reconnectAttemptRef.current = 0;
     setConnectionError(null);
     setLaunch(EMPTY_LAUNCH_RUNTIME);
   }
@@ -453,7 +446,7 @@ export function useOctosSession(): OctosSessionRuntime {
     if (clientRef.current !== client) return;
     const message = reason instanceof Error ? reason.message : String(reason);
     const fatalContractError = isFatalSessionContractError(message);
-    if (fatalContractError) manualDisconnectRef.current = true;
+    if (fatalContractError) connectionLifecycleRef.current.stopRetrying();
     durableProjectionRef.current.fail(message);
     syncRecovery();
     recoveringRef.current = false;
@@ -480,14 +473,14 @@ export function useOctosSession(): OctosSessionRuntime {
     );
     if (
       missingFeatures.length ||
-      !supportsMethod(capabilities, "session/hydrate")
+      !supportsMethod(capabilities, CORE_UI_METHODS.SESSION_HYDRATE)
     ) {
       throw new Error(
         `Server lacks the durable Web contract: ${[
           ...missingFeatures,
-          ...(supportsMethod(capabilities, "session/hydrate")
+          ...(supportsMethod(capabilities, CORE_UI_METHODS.SESSION_HYDRATE)
             ? []
-            : ["session/hydrate"]),
+            : [CORE_UI_METHODS.SESSION_HYDRATE]),
         ].join(", ")}`,
       );
     }
@@ -504,7 +497,7 @@ export function useOctosSession(): OctosSessionRuntime {
     durableProjectionRef.current.commitHydrate(hydrated);
     setTimeline(timelineFromHydrate(hydrated));
     interactionController.restore(hydrated, capabilities);
-    const nextTurn = reconcileQueueFromHydrate(hydrated);
+    const nextTurn = turnController.reconcileFromHydrate(hydrated);
     recoveringRef.current = false;
     syncRecovery();
 
@@ -514,63 +507,29 @@ export function useOctosSession(): OctosSessionRuntime {
       processNotification(notification);
       if (recoveringRef.current) break;
     }
-    if (nextTurn && !recoveringRef.current) void startTurn(nextTurn);
-  }
-
-  function reconcileQueueFromHydrate(hydrated: SessionHydrateResult) {
-    const snapshot = queueRef.current.snapshot();
-    const serverActive = hydrated.turns?.find(
-      (turn) => turn.state === "active" || turn.state === "interrupting",
-    );
-    if (!snapshot.active && serverActive) {
-      queueRef.current.restoreActive({
-        turnId: serverActive.turn_id,
-        text: "",
-      });
-      syncQueue();
-      return null;
-    }
-    if (!snapshot.active) return null;
-    const serverTurn = hydrated.turns?.find(
-      (turn) => turn.turn_id === snapshot.active?.turnId,
-    );
-    if (
-      serverTurn &&
-      serverTurn.state !== "active" &&
-      serverTurn.state !== "interrupting" &&
-      serverTurn.state !== "unknown"
-    ) {
-      const transition = queueRef.current.settle(snapshot.active.turnId);
-      syncQueue();
-      return transition.next;
-    }
-    return null;
+    if (nextTurn && !recoveringRef.current)
+      void turnController.startTurn(nextTurn);
   }
 
   function scheduleReconnect() {
-    if (
-      manualDisconnectRef.current ||
-      reconnectTimerRef.current ||
-      !connectionConfigRef.current
-    ) {
+    if (reconnectTimerRef.current || !connectionLifecycleRef.current.config) {
       return;
     }
-    const attempt = reconnectAttemptRef.current + 1;
-    reconnectAttemptRef.current = attempt;
-    durableProjectionRef.current.beginReconnect(attempt);
+    const plan = connectionLifecycleRef.current.nextReconnect();
+    if (!plan) return;
+    durableProjectionRef.current.beginReconnect(plan.attempt);
     syncRecovery();
-    const delay = Math.min(500 * 2 ** Math.min(attempt - 1, 4), 5_000);
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
-      const config = connectionConfigRef.current;
-      if (config && !manualDisconnectRef.current) {
+      const config = connectionLifecycleRef.current.config;
+      if (config) {
         void establishSession(config, true);
       }
-    }, delay);
+    }, plan.delayMs);
   }
 
   const disconnect = () => {
-    manualDisconnectRef.current = true;
+    connectionLifecycleRef.current.stopRetrying();
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -579,7 +538,7 @@ export function useOctosSession(): OctosSessionRuntime {
     clientRef.current = null;
     client?.disconnect();
     setStatus("disconnected");
-    connectionConfigRef.current = null;
+    connectionLifecycleRef.current.disconnect();
     recoveringRef.current = false;
     recoveryBufferRef.current = [];
     setOpened(null);
@@ -587,97 +546,14 @@ export function useOctosSession(): OctosSessionRuntime {
     capabilitiesRef.current = undefined;
     durableProjectionRef.current.reset("");
     syncRecovery();
-    resetQueue();
+    turnController.reset();
     interactionController.reset();
     codingSafetyController.reset();
     supervisionController.reset();
     onboardingController.reset();
     launchOpeningRef.current = false;
-    sessionEstablishedRef.current = false;
-    launchResolutionRequiredRef.current = false;
     workspaceController.reset();
     setLaunch(EMPTY_LAUNCH_RUNTIME);
-  };
-
-  const enqueuePrompt = (text: string) => {
-    if (
-      !clientRef.current ||
-      status !== "connected" ||
-      recovery.phase !== "healthy" ||
-      !opened ||
-      !text.trim()
-    ) {
-      return;
-    }
-    const turn: PromptTurn = { turnId: crypto.randomUUID(), text: text.trim() };
-    const { startNow } = queueRef.current.enqueue(turn);
-    syncQueue();
-    if (startNow) void startTurn(turn);
-  };
-
-  async function startTurn(turn: PromptTurn) {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    if (
-      !client ||
-      !sessionId ||
-      durableProjectionRef.current.snapshot().phase !== "healthy"
-    ) {
-      return;
-    }
-
-    setTimeline((current) =>
-      addOptimisticUser(current, turn.turnId, turn.text),
-    );
-    try {
-      await client.startTurn({
-        session_id: sessionId,
-        turn_id: turn.turnId,
-        input: [{ kind: "text", text: turn.text }],
-      });
-    } catch (reason) {
-      if (clientRef.current !== client) return;
-      const message = reason instanceof Error ? reason.message : String(reason);
-      setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `send-error:${turn.turnId}`,
-          "Turn rejected",
-          message,
-          "error",
-        ),
-      );
-      settleTurn(turn.turnId);
-    }
-  }
-
-  const interrupt = async () => {
-    const client = clientRef.current;
-    const activeTurn = queueRef.current.snapshot().active;
-    if (!client || !activeTurn) {
-      setTimeline((current) =>
-        addSystemMessage(
-          current,
-          `nothing-to-stop:${crypto.randomUUID()}`,
-          "Nothing to stop",
-          "There is no active foreground turn, so no server command was sent.",
-        ),
-      );
-      return;
-    }
-    if (interruptingTurnIdRef.current === activeTurn.turnId) return;
-
-    interruptingTurnIdRef.current = activeTurn.turnId;
-    setInterruptingTurnId(activeTurn.turnId);
-    try {
-      await client.interruptTurn(sessionIdRef.current, activeTurn.turnId);
-    } catch (reason) {
-      interruptingTurnIdRef.current = null;
-      setInterruptingTurnId(null);
-      setConnectionError(
-        reason instanceof Error ? reason.message : String(reason),
-      );
-    }
   };
 
   const refreshWorkspace = async () => {
@@ -686,8 +562,8 @@ export function useOctosSession(): OctosSessionRuntime {
 
   const switchSession = (sessionId: string) => {
     const target = sessionId.trim();
-    const config = connectionConfigRef.current;
-    const queueState = queueRef.current.snapshot();
+    const config = connectionLifecycleRef.current.config;
+    const queueState = turnController.snapshot();
     if (!target || target === sessionIdRef.current || !config) return;
     if (queueState.active || queueState.pending.length) {
       workspaceController.setError(
@@ -702,7 +578,7 @@ export function useOctosSession(): OctosSessionRuntime {
     const target = profileId.trim();
     const decision = launch.decision;
     const client = clientRef.current;
-    const config = connectionConfigRef.current;
+    const config = connectionLifecycleRef.current.config;
     const allowed = decision
       ? [decision.resolved_profile, ...decision.existing_profiles].filter(
           (candidate): candidate is string => Boolean(candidate),
@@ -730,9 +606,9 @@ export function useOctosSession(): OctosSessionRuntime {
   };
 
   function handleNotification(notification: RpcNotification) {
-    setEvents((current) =>
-      [
-        ...current,
+    setEventLog((current) => {
+      const appended = [
+        ...current.events,
         {
           id: eventId.current++,
           at: new Date().toLocaleTimeString([], {
@@ -742,8 +618,13 @@ export function useOctosSession(): OctosSessionRuntime {
           }),
           notification,
         },
-      ].slice(-100),
-    );
+      ];
+      const overflow = Math.max(0, appended.length - 100);
+      return {
+        events: appended.slice(-100),
+        omitted: current.omitted + overflow,
+      };
+    });
     if (recoveringRef.current) {
       if (recoveryBufferRef.current.length >= 4_096) {
         const message =
@@ -767,7 +648,9 @@ export function useOctosSession(): OctosSessionRuntime {
     if (projectionDecision.kind === "recover") {
       recoveringRef.current = true;
       recoveryBufferRef.current =
-        notification.method === "protocol/replay_lossy" ? [] : [notification];
+        notification.method === CORE_UI_METHODS.REPLAY_LOSSY
+          ? []
+          : [notification];
       const client = clientRef.current;
       if (client) {
         void hydrateSessionState(client, capabilitiesRef.current).catch(
@@ -776,7 +659,7 @@ export function useOctosSession(): OctosSessionRuntime {
             const message =
               reason instanceof Error ? reason.message : String(reason);
             if (isFatalSessionContractError(message)) {
-              manualDisconnectRef.current = true;
+              connectionLifecycleRef.current.stopRetrying();
             }
             recoveringRef.current = false;
             durableProjectionRef.current.fail(message);
@@ -789,13 +672,13 @@ export function useOctosSession(): OctosSessionRuntime {
       return;
     }
     if (
-      notification.method === "projection/envelope" &&
+      notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE &&
       projectionDecision.kind !== "apply"
     ) {
       return;
     }
     if (
-      notification.method !== "projection/envelope" &&
+      notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE &&
       !notificationMatchesSessionScope(notification, sessionIdRef.current)
     ) {
       return;
@@ -810,7 +693,7 @@ export function useOctosSession(): OctosSessionRuntime {
 
     const canonicalProjection = supportsFeature(
       capabilitiesRef.current,
-      "projection.envelope.v2",
+      CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
     );
     const foldIntoTimeline = !(
       canonicalProjection && LEGACY_PROJECTION_METHODS.has(notification.method)
@@ -824,66 +707,72 @@ export function useOctosSession(): OctosSessionRuntime {
     const terminal = foldIntoTimeline ? terminalTurnId(notification) : null;
     if (terminal) {
       interactionController.settleTurn(terminal);
-      settleTurn(terminal);
+      turnController.settleTurn(terminal);
     }
-  }
-
-  function settleTurn(turnId: string) {
-    const transition = queueRef.current.settle(turnId);
-    if (!transition.settled) return;
-    if (interruptingTurnIdRef.current === turnId) {
-      interruptingTurnIdRef.current = null;
-      setInterruptingTurnId(null);
-    }
-    syncQueue();
-    if (transition.next) void startTurn(transition.next);
   }
 
   return {
-    status,
-    connectionError,
-    opened,
-    events,
-    timeline,
-    setTimeline,
-    queue,
-    interruptingTurnId,
-    approval,
-    question,
-    decisionBusy,
-    decisionError,
-    recovery,
-    permission,
-    diffReview,
-    supervision,
-    workspace,
-    launch,
-    onboarding: onboardingController.state,
-    connected:
-      status === "connected" && opened !== null && recovery.phase === "healthy",
-    connect,
-    disconnect,
-    enqueuePrompt,
-    interrupt,
-    respondApproval: interactionController.respondApproval,
-    respondQuestion: interactionController.respondQuestion,
-    refreshPermission: codingSafetyController.refreshPermission,
-    updatePermission: codingSafetyController.updatePermission,
-    openDiffReview: codingSafetyController.openDiffReview,
-    closeDiffReview: codingSafetyController.closeDiffReview,
-    refreshSupervision: supervisionController.refresh,
-    openTaskDetail: supervisionController.openTaskDetail,
-    closeTaskDetail: supervisionController.closeTaskDetail,
-    loadMoreTaskOutput: supervisionController.loadMoreTaskOutput,
-    cancelTask: supervisionController.cancelTask,
-    readTaskArtifact: supervisionController.readTaskArtifact,
-    loadMoreTaskArtifact: supervisionController.loadMoreTaskArtifact,
-    refreshWorkspace,
-    switchSession,
-    deleteSession: workspaceController.deleteSession,
-    chooseLaunchProfile,
-    retryOnboarding: onboardingController.prepare,
-    submitOnboarding: onboardingController.submit,
+    connection: {
+      status,
+      error: connectionError,
+      opened,
+      recovery,
+      connected:
+        status === "connected" &&
+        opened !== null &&
+        recovery.phase === "healthy",
+      connect,
+      disconnect,
+    },
+    conversation: {
+      timeline,
+      setTimeline,
+      queue: turnController.queue,
+      interruptingTurnId: turnController.interruptingTurnId,
+      enqueuePrompt: turnController.enqueuePrompt,
+      interrupt: turnController.interrupt,
+    },
+    interactions: {
+      approval,
+      question,
+      busy: decisionBusy,
+      error: decisionError,
+      respondApproval: interactionController.respondApproval,
+      respondQuestion: interactionController.respondQuestion,
+    },
+    safety: {
+      permission,
+      diffReview,
+      refreshPermission: codingSafetyController.refreshPermission,
+      updatePermission: codingSafetyController.updatePermission,
+      openDiffReview: codingSafetyController.openDiffReview,
+      closeDiffReview: codingSafetyController.closeDiffReview,
+    },
+    work: {
+      supervision,
+      refresh: supervisionController.refresh,
+      openTask: supervisionController.openTaskDetail,
+      closeTask: supervisionController.closeTaskDetail,
+      loadMoreOutput: supervisionController.loadMoreTaskOutput,
+      cancelTask: supervisionController.cancelTask,
+      readArtifact: supervisionController.readTaskArtifact,
+      loadMoreArtifact: supervisionController.loadMoreTaskArtifact,
+    },
+    workspaceProduct: {
+      state: workspace,
+      launch,
+      onboarding: onboardingController.state,
+      refresh: refreshWorkspace,
+      switchSession,
+      deleteSession: workspaceController.deleteSession,
+      chooseLaunchProfile,
+      retryOnboarding: onboardingController.prepare,
+      submitOnboarding: onboardingController.submit,
+    },
+    diagnostics: {
+      events: eventLog.events,
+      omittedEvents: eventLog.omitted,
+    },
   };
 }
 

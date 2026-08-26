@@ -129,11 +129,14 @@ function generateContractIndex(source, sourceMetadata) {
     "UI_PROTOCOL_CAPABILITIES_SCHEMA_VERSION",
   );
   const jsonrpc = requiredStringConstant(source, "JSON_RPC_VERSION");
-  const featureEntries = [
-    ...source.matchAll(
-      /pub const UI_PROTOCOL_FEATURE_([A-Z0-9_]+): &str\s*=\s*"([^"]+)";/gs,
-    ),
-  ].map((match) => [match[1], match[2]]);
+  const featureEntries = uniqueEntries(
+    [
+      ...source.matchAll(
+        /pub const UI_PROTOCOL_FEATURE_([A-Z0-9_]+): &str\s*=\s*"([^"]+)";/gs,
+      ),
+    ].map((match) => [match[1], match[2]]),
+    "feature",
+  );
   const methodsStart = source.indexOf("pub mod methods {");
   const methodsEnd = source.indexOf(
     "\n}\n\n/// Reason codes for `approval/cancelled`",
@@ -143,11 +146,14 @@ function generateContractIndex(source, sourceMetadata) {
     throw new Error("Could not locate the Core methods module");
   }
   const methodsSource = source.slice(methodsStart, methodsEnd);
-  const methodEntries = [
-    ...methodsSource.matchAll(
-      /pub const ([A-Z0-9_]+): &str\s*=\s*"([^"]+)";/gs,
-    ),
-  ].map((match) => [match[1], match[2]]);
+  const methodEntries = uniqueEntries(
+    [
+      ...methodsSource.matchAll(
+        /pub const ([A-Z0-9_]+): &str\s*=\s*"([^"]+)";/gs,
+      ),
+    ].map((match) => [match[1], match[2]]),
+    "method",
+  );
   if (featureEntries.length < 10 || methodEntries.length < 50) {
     throw new Error(
       `Core contract parse was suspiciously small (${featureEntries.length} features, ${methodEntries.length} methods)`,
@@ -238,4 +244,18 @@ function requiredEntry(entries, name, kind) {
   const value = entries[name];
   if (!value) throw new Error(`Unknown ${kind} reference ${name}`);
   return value;
+}
+
+function uniqueEntries(entries, kind) {
+  const unique = new Map();
+  for (const [name, value] of entries) {
+    const previous = unique.get(name);
+    if (previous !== undefined && previous !== value) {
+      throw new Error(
+        `Core contract has conflicting ${kind} ${name}: ${previous} and ${value}`,
+      );
+    }
+    unique.set(name, value);
+  }
+  return [...unique.entries()];
 }

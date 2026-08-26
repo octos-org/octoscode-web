@@ -124,8 +124,54 @@ export function highlightToHtml(
 ): string | undefined {
   const resolved = language ? aliases.get(language.toLowerCase()) : undefined;
   if (!resolved || !ensureLanguage(resolved)) return undefined;
-  return highlighter().codeToHtml(code, {
-    lang: resolved,
-    theme: "css-variables",
-  });
+  return removeInlineTokenStyles(
+    highlighter().codeToHtml(code, {
+      lang: resolved,
+      theme: "css-variables",
+    }),
+  );
+}
+
+const shikiStyleClasses = new Map([
+  ["background-color:var(--shiki-background)", "shiki-bg"],
+  ["color:var(--shiki-foreground)", "shiki-color-foreground"],
+  ["color:var(--shiki-token-constant)", "shiki-color-constant"],
+  ["color:var(--shiki-token-string)", "shiki-color-string"],
+  ["color:var(--shiki-token-comment)", "shiki-color-comment"],
+  ["color:var(--shiki-token-keyword)", "shiki-color-keyword"],
+  ["color:var(--shiki-token-parameter)", "shiki-color-parameter"],
+  ["color:var(--shiki-token-function)", "shiki-color-function"],
+  [
+    "color:var(--shiki-token-string-expression)",
+    "shiki-color-string-expression",
+  ],
+  ["color:var(--shiki-token-punctuation)", "shiki-color-punctuation"],
+  ["color:var(--shiki-token-link)", "shiki-color-link"],
+  ["font-style:italic", "shiki-italic"],
+  ["font-weight:bold", "shiki-bold"],
+  ["text-decoration:underline", "shiki-underline"],
+]);
+
+/** Converts Shiki's closed CSS-variable style vocabulary into static classes. */
+function removeInlineTokenStyles(html: string): string | undefined {
+  let valid = true;
+  const transformed = html.replace(
+    /(<(?:pre|span)\b[^>]*?) style="([^"]*)"/g,
+    (_match, prefix: string, style: string) => {
+      const classes = style
+        .split(";")
+        .filter(Boolean)
+        .map((declaration) => shikiStyleClasses.get(declaration));
+      if (classes.some((name) => name === undefined)) {
+        valid = false;
+        return prefix;
+      }
+      const names = classes.join(" ");
+      if (!names) return prefix;
+      return prefix.includes('class="')
+        ? prefix.replace('class="', `class="${names} `)
+        : `${prefix} class="${names}"`;
+    },
+  );
+  return valid && !transformed.includes(' style="') ? transformed : undefined;
 }

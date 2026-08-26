@@ -3,7 +3,7 @@ import type {
   PermissionProfileMode,
   PermissionProfileUpdate,
 } from "@octos-org/octoscode-client";
-import type { PermissionRuntimeState } from "../session/use-octos-session.ts";
+import type { PermissionRuntimeState } from "../review/use-coding-safety.ts";
 
 interface PermissionPanelProps {
   state: PermissionRuntimeState;

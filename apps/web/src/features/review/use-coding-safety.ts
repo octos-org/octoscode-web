@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import {
+  CORE_UI_METHODS,
   isPreviewId,
   notificationDiffPreviewId,
   supportsMethod,
@@ -10,6 +11,7 @@ import {
   type RpcNotification,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
+import { RequestGate } from "../async/request-gate.ts";
 
 export interface PermissionRuntimeState {
   available: boolean;
@@ -55,7 +57,8 @@ interface CodingSafetyDependencies {
 }
 
 export function useCodingSafety(dependencies: CodingSafetyDependencies) {
-  const requestRef = useRef(0);
+  const diffRequestsRef = useRef(new RequestGate());
+  const permissionRequestsRef = useRef(new RequestGate());
   const permissionBusyRef = useRef(false);
   const [permission, setPermission] =
     useState<PermissionRuntimeState>(EMPTY_PERMISSION);
@@ -64,7 +67,8 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
 
   const reset = () => {
     permissionBusyRef.current = false;
-    requestRef.current += 1;
+    diffRequestsRef.current.invalidate();
+    permissionRequestsRef.current.invalidate();
     setPermission(EMPTY_PERMISSION);
     setDiffReview(EMPTY_DIFF_REVIEW);
   };
@@ -74,18 +78,18 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   ) => {
     const permissionAvailable = supportsMethod(
       capabilities,
-      "permission/profile/list",
+      CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
     );
     setPermission((current) => ({
       ...current,
       available: permissionAvailable,
       editable:
         permissionAvailable &&
-        supportsMethod(capabilities, "permission/profile/set"),
+        supportsMethod(capabilities, CORE_UI_METHODS.PERMISSION_PROFILE_SET),
     }));
     setDiffReview((current) => ({
       ...current,
-      available: supportsMethod(capabilities, "diff/preview/get"),
+      available: supportsMethod(capabilities, CORE_UI_METHODS.DIFF_PREVIEW_GET),
     }));
   };
 
@@ -96,10 +100,14 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     if (
       !client ||
       !sessionId ||
-      !supportsMethod(dependencies.capabilities(), "permission/profile/list")
+      !supportsMethod(
+        dependencies.capabilities(),
+        CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
+      )
     ) {
       return;
     }
+    const request = permissionRequestsRef.current.begin();
     setPermission((current) => ({ ...current, loading: true, error: null }));
     try {
       const result = await client.listPermissionProfiles({
@@ -107,7 +115,8 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       });
       if (
         dependencies.client() !== client ||
-        dependencies.sessionId() !== sessionId
+        dependencies.sessionId() !== sessionId ||
+        !permissionRequestsRef.current.isCurrent(request)
       ) {
         return;
       }
@@ -116,7 +125,11 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       }
       setPermission((current) => ({ ...current, loading: false, result }));
     } catch (reason) {
-      if (dependencies.client() !== client) return;
+      if (
+        dependencies.client() !== client ||
+        !permissionRequestsRef.current.isCurrent(request)
+      )
+        return;
       setPermission((current) => ({
         ...current,
         loading: false,
@@ -214,13 +227,15 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       !sessionId ||
       !previewId ||
       !isPreviewId(previewId) ||
-      !supportsMethod(dependencies.capabilities(), "diff/preview/get")
+      !supportsMethod(
+        dependencies.capabilities(),
+        CORE_UI_METHODS.DIFF_PREVIEW_GET,
+      )
     ) {
       return;
     }
 
-    const request = requestRef.current + 1;
-    requestRef.current = request;
+    const request = diffRequestsRef.current.begin();
     setDiffReview((current) => ({
       ...current,
       latestPreviewId: previewId,
@@ -236,7 +251,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       });
       if (
         dependencies.client() !== client ||
-        requestRef.current !== request ||
+        !diffRequestsRef.current.isCurrent(request) ||
         dependencies.sessionId() !== sessionId
       ) {
         return;
@@ -253,7 +268,10 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
         result,
       }));
     } catch (reason) {
-      if (dependencies.client() !== client || requestRef.current !== request) {
+      if (
+        dependencies.client() !== client ||
+        !diffRequestsRef.current.isCurrent(request)
+      ) {
         return;
       }
       setDiffReview((current) => ({
@@ -265,7 +283,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   };
 
   const closeDiffReview = () => {
-    requestRef.current += 1;
+    diffRequestsRef.current.invalidate();
     setDiffReview((current) => ({
       ...current,
       active: false,

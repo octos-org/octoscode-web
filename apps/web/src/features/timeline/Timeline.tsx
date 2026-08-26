@@ -33,7 +33,7 @@ export function Timeline({ entries, connected }: TimelineProps) {
   }
 
   return (
-    <div className="timeline" aria-live="polite">
+    <div className="timeline" role="region" aria-label="Conversation timeline">
       {entries.map((entry) => (
         <article
           className={`timeline-entry entry-${entry.kind}`}

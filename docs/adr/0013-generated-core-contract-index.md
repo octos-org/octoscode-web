@@ -1,8 +1,9 @@
 # ADR 0013: Generated Core contract index
 
-## Status
+- Status: Accepted
+- Date: 2026-08-26
 
-Accepted as an intermediate boundary; generated request/result types remain
+This is an intermediate boundary; generated request/result types remain
 required.
 
 ## Context
@@ -14,8 +15,8 @@ the pinned Core source declares `octos-ui/v1alpha1` and capability schema 2.
 
 ## Decision
 
-Generate the protocol identity, method registry, feature registry, server
-method list, and notification list directly from an exact
+Generate the protocol identity, method registry, feature registry, server method
+list, and notification list directly from an exact
 `crates/octos-core/src/ui_protocol.rs` Git blob. The sync script:
 
 - reads the full upstream commit, blob, and path from
@@ -27,8 +28,8 @@ method list, and notification list directly from an exact
 - fails CI and releases when the checked-in result differs.
 
 Production request methods, requested features, build metadata, and golden
-fixtures consume this index. Handwritten payload decoders remain narrow and
-fail closed.
+fixtures consume this index. Handwritten payload decoders remain narrow and fail
+closed.
 
 ## Consequences
 

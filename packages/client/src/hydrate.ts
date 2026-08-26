@@ -6,15 +6,15 @@ import type {
   ProjectionEnvelopeV2,
   ReplayLossyEvent,
   SessionHydrateResult,
-  UiCursor,
 } from "./types.ts";
+import { parseUiCursor } from "./wire-decoders.ts";
 
 export function parseSessionHydrateResult(
   value: unknown,
 ): SessionHydrateResult | null {
   if (!isRecord(value) || typeof value.session_id !== "string") return null;
   const sessionId = value.session_id;
-  const cursor = parseCursor(value.cursor);
+  const cursor = parseUiCursor(value.cursor);
   if (!cursor) return null;
 
   const messages = parseOptionalArray(value.messages, parseHydratedMessage);
@@ -77,7 +77,7 @@ export function parseReplayLossyEvent(value: unknown): ReplayLossyEvent | null {
   const cursor =
     value.last_durable_cursor === undefined
       ? undefined
-      : parseCursor(value.last_durable_cursor);
+      : parseUiCursor(value.last_durable_cursor);
   if (cursor === null) return null;
   return {
     session_id: value.session_id,
@@ -155,19 +155,6 @@ function parseHydratedEnvelope(
 ): ProjectionEnvelopeV2 | null {
   if (!isRecord(value)) return null;
   return parseProjectionEnvelope({ ...value, session_id: sessionId });
-}
-
-function parseCursor(value: unknown): UiCursor | null {
-  if (
-    !isRecord(value) ||
-    typeof value.stream !== "string" ||
-    typeof value.seq !== "number" ||
-    !Number.isSafeInteger(value.seq) ||
-    value.seq < 0
-  ) {
-    return null;
-  }
-  return { stream: value.stream, seq: value.seq };
 }
 
 function parseOptionalArray<T>(

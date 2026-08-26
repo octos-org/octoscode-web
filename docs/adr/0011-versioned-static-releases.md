@@ -1,19 +1,18 @@
 # ADR 0011: Versioned static releases
 
-## Status
-
-Accepted.
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Decision
 
 Release `octoscode-web` as an immutable static archive from a SemVer-like Git
 tag. A tag build repeats the complete check and Chromium E2E gates, embeds its
-release/source/Core-contract identity in a machine-readable build manifest,
-and publishes both the archive and a SHA-256 file.
+release/source/Core-contract identity in a machine-readable build manifest, and
+publishes both the archive and a SHA-256 file.
 
-The Web release remains independent from Octos Core. Compatibility is decided
-by protocol capabilities at connection time; the embedded Core revision states
-what was tested, not a required server version. A future generated contract and
+The Web release remains independent from Octos Core. Compatibility is decided by
+protocol capabilities at connection time; the embedded Core revision states what
+was tested, not a required server version. A future generated contract and
 paired compatibility matrix can strengthen that statement without changing the
 artifact format.
 

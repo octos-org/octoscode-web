@@ -15,6 +15,7 @@ import {
   findCommand,
   parseCommandInvocation,
 } from "../commands/registry.ts";
+import type { CommandIntent } from "../commands/registry.ts";
 import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
 
 /** Commands are resolved before queueing so command text never reaches a model. */
@@ -32,5 +33,30 @@ export function resolveComposerIntent(
   if (!command || !commandAvailability(command, capabilities).available) {
     return { kind: "unsupported-command", command: invocation.name };
   }
-  return { kind: command.intent } as ComposerIntent;
+  return (
+    implementedIntent(command.intent) ?? {
+      kind: "unsupported-command",
+      command: invocation.name,
+    }
+  );
+}
+
+function implementedIntent(intent: CommandIntent): ComposerIntent | null {
+  switch (intent) {
+    case "process-status":
+    case "activity":
+    case "interrupt":
+    case "help":
+    case "copy":
+    case "status":
+      return { kind: intent };
+    case "resume":
+      return null;
+    default:
+      return assertNever(intent);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled composer intent ${String(value)}`);
 }

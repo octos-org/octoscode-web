@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+
 async function launchWorkspace(page: Page, cwd: string) {
   await page.goto("/");
   await page.getByRole("textbox", { name: "Server workspace" }).fill(cwd);
@@ -60,6 +62,29 @@ test("preserves unsent drafts across explicit session switches", async ({
   await expect(composer).toHaveValue("draft for coding");
 });
 
+test("recovers the durable session after disconnect and lossy replay", async ({
+  page,
+  request,
+}) => {
+  await launchWorkspace(page, "/srv/work/project");
+  const transcript = page.getByText("Durable coding transcript");
+  await expect(transcript).toBeVisible();
+
+  await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
+  await expect(page.locator(".recovery-banner")).toBeVisible();
+  await expect(page.locator(".recovery-pill")).toContainText("Synced", {
+    timeout: 10_000,
+  });
+  await expect(transcript).toHaveCount(1);
+
+  await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
+  await expect(page.locator(".recovery-banner")).toBeVisible();
+  await expect(page.locator(".recovery-pill")).toContainText("Synced", {
+    timeout: 10_000,
+  });
+  await expect(transcript).toHaveCount(1);
+});
+
 test("resolves approval and structured-question takeovers", async ({
   page,
 }) => {
@@ -72,7 +97,17 @@ test("resolves approval and structured-question takeovers", async ({
   await page.getByRole("button", { name: "Send prompt" }).click();
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
   await expect(approval).toBeVisible();
+  await expect(approval).toBeFocused();
   await expect(approval).toContainText("pnpm check");
+  await page.keyboard.press("Shift+Tab");
+  await expect(approval.getByRole("button", { name: /Yes/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(approval.getByRole("button", { name: /No/ })).toBeFocused();
+  const approvalAccessibility = await new AxeBuilder({ page })
+    .include(".approval-card")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(approvalAccessibility.violations).toEqual([]);
   await approval.getByRole("button", { name: /Yes/ }).click();
   await expect(approval).toBeHidden();
 
@@ -200,4 +235,13 @@ test("keeps the work inspector available on a narrow viewport", async ({
   await expect(page.locator("#work-inspector")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("#work-inspector")).toBeHidden();
+});
+
+test("keeps the dark coding workspace WCAG A/AA clean", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await launchWorkspace(page, "/srv/work/project");
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
 });

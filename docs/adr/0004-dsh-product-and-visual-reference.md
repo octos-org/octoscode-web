@@ -1,8 +1,7 @@
 # ADR 0004: DSH product and visual reference
 
-## Status
-
-Accepted.
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 

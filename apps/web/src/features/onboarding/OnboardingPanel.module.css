@@ -38,7 +38,7 @@
   padding: 0 10px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-primary);
-  font: 500 11px/1 var(--ds-font-family-code);
+  font: 500 11px/1 var(--dsw-font-family-code);
 }
 
 .form input:focus,
@@ -68,7 +68,7 @@
 
 .secret small {
   color: var(--dsw-alias-label-caption);
-  font-size: 10px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -117,7 +117,7 @@
   border-radius: 6px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code);
+  font-family: var(--dsw-font-family-code);
 }
 
 .error,
@@ -156,7 +156,7 @@
 
 .recovery code {
   color: var(--dsw-alias-label-primary);
-  font-family: var(--ds-font-family-code);
+  font-family: var(--dsw-font-family-code);
 }
 
 .actions > div {
@@ -168,12 +168,12 @@
   padding-right: 12px;
   padding-left: 12px;
   background: var(--dsw-alias-button-info-fill);
-  color: #fff;
+  color: var(--dsw-alias-label-on-accent);
 }
 
 .actions .submit:hover:not(:disabled) {
   background: var(--dsw-alias-button-info-hover);
-  color: #fff;
+  color: var(--dsw-alias-label-on-accent);
 }
 
 .actions button:disabled {

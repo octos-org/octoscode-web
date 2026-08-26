@@ -10,7 +10,8 @@ A focused Web client for the Octos coding UI Protocol.
 [![Release](https://img.shields.io/github/v/release/octos-org/octoscode-web?include_prereleases&sort=semver)](https://github.com/octos-org/octoscode-web/releases)
 [![License](https://img.shields.io/github/license/octos-org/octoscode-web)](LICENSE)
 
-[Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [Releases](https://github.com/octos-org/octoscode-web/releases)
+[Get started](docs/getting-started.md) · [Documentation](docs/README.md) ·
+[Releases](https://github.com/octos-org/octoscode-web/releases)
 
 </div>
 
@@ -25,20 +26,20 @@ is intentionally separate from the general-purpose
 octoscode-web ───┘                        agents · tools · sessions · tasks
 ```
 
-The two clients share server-owned runtime truth. The Web app does not contain
-a second agent loop, plugin host, sandbox, or session store.
+The two clients share server-owned runtime truth. The Web app does not contain a
+second agent loop, plugin host, sandbox, or session store.
 
 ## What is included
 
 - Octoscode-compatible launch, prompt queue, interrupt, approval, question,
   command, and session behavior.
 - Durable hydrate, cursor replay, deduplication, gap recovery, and reconnect.
-- Safe Markdown and code rendering, permission profiles, and authoritative
-  diff review.
+- Safe Markdown and code rendering, permission profiles, and authoritative diff
+  review.
 - Plans, tasks, output, artifacts, context, cost, model status, and bounded
   cross-session activity.
-- Browser onboarding for an empty solo server, with transient credentials and
-  a truthful TUI fallback on older Core versions.
+- Browser onboarding for an empty solo server, with transient credentials and a
+  truthful TUI fallback on older Core versions.
 - A responsive coding workspace informed by
   [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), with its
   MIT attribution preserved.
@@ -77,6 +78,9 @@ The [getting-started guide](docs/getting-started.md) explains both paths.
 | [Architecture](docs/architecture.md)       | understand ownership and package boundaries          |
 | [Protocol integration](docs/protocol.md)   | change transport, projections, or Core compatibility |
 | [Deployment](docs/deployment.md)           | host or roll back a release safely                   |
+| [Testing](docs/testing.md)                 | choose verification gates and diagnose flakes        |
+| [Troubleshooting](docs/troubleshooting.md) | resolve connection, recovery, and command issues     |
+| [Releasing](docs/releasing.md)             | publish and verify immutable releases                |
 | [ADR index](docs/adr/README.md)            | find the reasoning behind durable decisions          |
 
 The [documentation index](docs/README.md) is the complete map. Contributors
@@ -88,6 +92,10 @@ should also read [CONTRIBUTING.md](CONTRIBUTING.md) and
 ```text
 apps/web          React application and feature UI
 packages/client   React-free JSON-RPC/WebSocket client
+e2e               Playwright product, recovery, responsive, and WCAG flows
+scripts           Contract, policy, deployment, and real-Core verification
+deploy            Checked same-origin nginx production reference
+.github/workflows CI and immutable provenance-attested release automation
 docs              product, architecture, protocol, and deployment guides
 docs/adr          accepted architectural decisions
 ```

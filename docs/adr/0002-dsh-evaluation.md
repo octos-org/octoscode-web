@@ -1,6 +1,7 @@
 # ADR 0002: Do not fork DeepSeek Harness for the Web client
 
-Status: accepted, 2026-08-26.
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 
@@ -8,8 +9,8 @@ Status: accepted, 2026-08-26.
 licensed, developer-preview agent harness. Its Web app is impressively modular,
 but the two-line Vite entry boots a dynamic Cordis plugin graph. Its client
 runtime directly depends on DSH session, agent, tool, projection, API remote,
-module-loader, and host contracts. The repository currently contains hundreds
-of workspace packages, not a transport-neutral React starter.
+module-loader, and host contracts. The repository currently contains hundreds of
+workspace packages, not a transport-neutral React starter.
 
 ## Decision
 

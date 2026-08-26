@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import {
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
   parsePlanUpdated,
   parseTaskOutputDelta,
   parseTaskUpdated,
@@ -20,6 +22,7 @@ import {
   tasksFromList,
   type SupervisionRuntimeState,
 } from "./model.ts";
+import { RequestGate } from "../async/request-gate.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
@@ -47,14 +50,16 @@ export interface SupervisionController {
 export function useSupervision(
   dependencies: SupervisionDependencies,
 ): SupervisionController {
-  const requestRef = useRef(0);
+  const detailRequestsRef = useRef(new RequestGate());
+  const refreshRequestsRef = useRef(new RequestGate());
   const dependenciesRef = useRef(dependencies);
   dependenciesRef.current = dependencies;
   const [state, setState] =
     useState<SupervisionRuntimeState>(EMPTY_SUPERVISION);
 
   const reset = () => {
-    requestRef.current += 1;
+    detailRequestsRef.current.invalidate();
+    refreshRequestsRef.current.invalidate();
     setState(EMPTY_SUPERVISION);
   };
 
@@ -64,14 +69,23 @@ export function useSupervision(
     setState((current) => ({
       ...current,
       available:
-        supportsMethod(capabilities, "task/list") &&
-        supportsMethod(capabilities, "task/output/read"),
-      cancelAvailable: supportsMethod(capabilities, "task/cancel"),
+        supportsMethod(capabilities, CORE_UI_METHODS.TASK_LIST) &&
+        supportsMethod(capabilities, CORE_UI_METHODS.TASK_OUTPUT_READ),
+      cancelAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.TASK_CANCEL,
+      ),
       artifactsAvailable:
-        supportsFeature(capabilities, "harness.task_artifacts.v1") &&
-        supportsMethod(capabilities, "task/artifact/list") &&
-        supportsMethod(capabilities, "task/artifact/read"),
-      statusAvailable: supportsMethod(capabilities, "session/status/read"),
+        supportsFeature(
+          capabilities,
+          CORE_UI_FEATURES.HARNESS_TASK_ARTIFACTS_V1,
+        ) &&
+        supportsMethod(capabilities, CORE_UI_METHODS.TASK_ARTIFACT_LIST) &&
+        supportsMethod(capabilities, CORE_UI_METHODS.TASK_ARTIFACT_READ),
+      statusAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_STATUS_READ,
+      ),
     }));
   };
 
@@ -83,13 +97,14 @@ export function useSupervision(
     if (!requestedClient || !sessionId) return;
     const canList = supportsMethod(
       currentDependencies.capabilities(),
-      "task/list",
+      CORE_UI_METHODS.TASK_LIST,
     );
     const canReadStatus = supportsMethod(
       currentDependencies.capabilities(),
-      "session/status/read",
+      CORE_UI_METHODS.SESSION_STATUS_READ,
     );
     if (!canList && !canReadStatus) return;
+    const request = refreshRequestsRef.current.begin();
     setState((current) => ({ ...current, loading: true, error: null }));
     const [tasks, runtimeStatus] = await Promise.allSettled([
       canList
@@ -101,6 +116,7 @@ export function useSupervision(
     ]);
     if (
       dependenciesRef.current.client() !== requestedClient ||
+      !refreshRequestsRef.current.isCurrent(request) ||
       dependenciesRef.current.sessionId() !== sessionId
     ) {
       return;
@@ -143,8 +159,7 @@ export function useSupervision(
     ) {
       return;
     }
-    const request = requestRef.current + 1;
-    requestRef.current = request;
+    const request = detailRequestsRef.current.begin();
     setState((current) => ({
       ...current,
       detail: { ...EMPTY_TASK_DETAIL, active: true, taskId, loading: true },
@@ -161,7 +176,7 @@ export function useSupervision(
     ]);
     if (
       dependenciesRef.current.client() !== client ||
-      requestRef.current !== request ||
+      !detailRequestsRef.current.isCurrent(request) ||
       dependenciesRef.current.sessionId() !== sessionId
     ) {
       return;
@@ -213,7 +228,7 @@ export function useSupervision(
   };
 
   const closeTaskDetail = () => {
-    requestRef.current += 1;
+    detailRequestsRef.current.invalidate();
     setState((current) => ({ ...current, detail: EMPTY_TASK_DETAIL }));
   };
 

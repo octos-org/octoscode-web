@@ -1,13 +1,14 @@
 # ADR 0005: Treat reconnect and hydrate as one invariant
 
-Status: accepted
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 
-A reconnecting WebSocket is not a recovered coding session. The browser can
-miss durable events, replay the same envelope twice, receive another session's
-topic, or resume after the server has evicted part of its replay window. A UI
-that silently keeps rendering in any of those states is unsafe for coding work.
+A reconnecting WebSocket is not a recovered coding session. The browser can miss
+durable events, replay the same envelope twice, receive another session's topic,
+or resume after the server has evicted part of its replay window. A UI that
+silently keeps rendering in any of those states is unsafe for coding work.
 
 The authoritative Octos contract provides the pieces as a set:
 

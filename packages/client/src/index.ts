@@ -15,7 +15,7 @@ export {
   CORE_UI_PROTOCOL,
   CORE_UI_SERVER_METHODS,
 } from "./generated/core-contract.ts";
-export { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
+export { isRecord } from "./rpc.ts";
 export type {
   IncomingFrame,
   RpcFailure,
@@ -24,6 +24,7 @@ export type {
   RpcSuccess,
 } from "./rpc.ts";
 export { parseProjectionEnvelope } from "./projection.ts";
+export { parseSessionOpenResult } from "./session.ts";
 export { parseReplayLossyEvent, parseSessionHydrateResult } from "./hydrate.ts";
 export {
   isPreviewId,
@@ -50,6 +51,7 @@ export {
   parseSessionFilesListResult,
   parseSessionListResult,
   parseTokenCostUpdate,
+  parseUiProtocolCapabilities,
 } from "./workspace.ts";
 export {
   APPUI_ONBOARDING_METHODS,
@@ -63,7 +65,9 @@ export {
   approvalResolutionId,
   notificationDiffPreviewId,
   parseApprovalRequested,
+  parseApprovalRespondResult,
   parseUserQuestionRequested,
+  parseUserQuestionRespondResult,
   supportsFeature,
   supportsMethod,
 } from "./interaction.ts";

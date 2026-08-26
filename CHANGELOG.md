@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Replace scattered connection/recovery refs and turn handling with directly
+  tested lifecycle controllers and grouped session domains.
+- Validate every structured request result, quarantine late RPC responses, and
+  centralize shared wire decoders and generated Core method vocabulary.
+- Add focus-trapped modal semantics, dark/light WCAG gates, accessible diff and
+  command widgets, token-only feature styling, and explicit bounded-history
+  disclosure.
+- Harden deployment and publication with a strict CSP, checked nginx syntax,
+  exact toolchain/action pins, separate publish authority, immutable assets, and
+  build provenance attestations.
+
 ## v0.1.0-rc.2 — 2026-08-26
 
 - Record both the generated protocol source pin and checksummed released Core

@@ -1,13 +1,12 @@
 # ADR 0003: Octoscode semantic parity
 
-## Status
-
-Accepted.
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 
-Octoscode-web is another client for Octoscode, not a separate coding product.
-A visual imitation of the TUI is insufficient if identical user actions create
+Octoscode-web is another client for Octoscode, not a separate coding product. A
+visual imitation of the TUI is insufficient if identical user actions create
 different commands, queue behavior, approval decisions, or session outcomes.
 
 The interaction audit for this decision used octoscode revision
@@ -68,5 +67,5 @@ octoscode source revision in the change that introduces them.
 ## Consequences
 
 The Web client may ship fewer controls than the TUI, but every shipped control
-must mean the same thing. Capability-gated incremental delivery is preferable
-to a broad UI whose operations drift from Octoscode.
+must mean the same thing. Capability-gated incremental delivery is preferable to
+a broad UI whose operations drift from Octoscode.

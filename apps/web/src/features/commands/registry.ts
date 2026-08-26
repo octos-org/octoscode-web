@@ -1,4 +1,5 @@
 import {
+  CORE_UI_METHODS,
   supportsMethod,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
@@ -61,7 +62,7 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
     category: "Runtime",
     intent: "activity",
     implemented: true,
-    requirement: { methodsAll: ["task/list"] },
+    requirement: { methodsAll: [CORE_UI_METHODS.TASK_LIST] },
   },
   {
     name: "stop",
@@ -103,7 +104,12 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
     intent: "resume",
     implemented: false,
     menuHidden: true,
-    requirement: { methodsAll: ["session/list", "session/hydrate"] },
+    requirement: {
+      methodsAll: [
+        CORE_UI_METHODS.SESSION_LIST,
+        CORE_UI_METHODS.SESSION_HYDRATE,
+      ],
+    },
   },
 ] as const;
 

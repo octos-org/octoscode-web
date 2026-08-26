@@ -1,8 +1,8 @@
 # Architectural decisions
 
 ADRs explain durable boundaries and the alternatives that were deliberately
-rejected. Accepted records are historical: supersede them with a new ADR
-instead of rewriting the original decision.
+rejected. Accepted records are historical: supersede them with a new ADR instead
+of rewriting the original decision.
 
 ## Product foundation
 
@@ -28,11 +28,12 @@ instead of rewriting the original decision.
 
 ## Contracts and delivery
 
-| ADR                                           | Decision                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------- |
-| [0011](0011-versioned-static-releases.md)     | Publish immutable, checksummed static releases.                           |
-| [0013](0013-generated-core-contract-index.md) | Generate and verify Core protocol vocabulary as an intermediate contract. |
-| [0014](0014-pinned-core-runtime-smoke.md)     | Test a checksummed released Core in CI and release gates.                 |
+| ADR                                           | Decision                                                                     |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| [0011](0011-versioned-static-releases.md)     | Publish immutable, checksummed static releases.                              |
+| [0013](0013-generated-core-contract-index.md) | Generate and verify Core protocol vocabulary as an intermediate contract.    |
+| [0014](0014-pinned-core-runtime-smoke.md)     | Test a checksummed released Core in CI and release gates.                    |
+| [0016](0016-architectural-ratchets.md)        | Replace recurring defect chains with shared boundaries and checked ratchets. |
 
 ## Adding an ADR
 

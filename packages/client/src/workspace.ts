@@ -1,4 +1,10 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
+import { CORE_UI_METHODS } from "./generated/core-contract.ts";
+import {
+  isNonEmptyString,
+  isNonNegativeInteger,
+  isStringArray,
+} from "./wire-decoders.ts";
 import type {
   ConfigCapabilitiesListResult,
   LaunchResolveResult,
@@ -21,7 +27,7 @@ export function parseConfigCapabilitiesListResult(
   value: unknown,
 ): ConfigCapabilitiesListResult | null {
   if (!isRecord(value)) return null;
-  const capabilities = parseCapabilities(value.capabilities);
+  const capabilities = parseUiProtocolCapabilities(value.capabilities);
   return capabilities ? { capabilities } : null;
 }
 
@@ -86,7 +92,7 @@ export function parseTokenCostUpdate(
   notification: RpcNotification,
 ): TokenCostUpdate | null {
   if (
-    notification.method !== "progress/updated" ||
+    notification.method !== CORE_UI_METHODS.PROGRESS_UPDATED ||
     !isRecord(notification.params) ||
     typeof notification.params.session_id !== "string" ||
     !isRecord(notification.params.metadata) ||
@@ -157,7 +163,7 @@ function parseSessionEntry(value: unknown): SessionListEntry | null {
   };
 }
 
-function parseCapabilities(value: unknown) {
+export function parseUiProtocolCapabilities(value: unknown) {
   if (
     !isRecord(value) ||
     !isRecord(value.version) ||
@@ -233,18 +239,4 @@ function optionalNumber<Key extends string>(value: unknown, key: Key) {
   return typeof value === "number"
     ? ({ [key]: value } as Record<Key, number>)
     : {};
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isNonNegativeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((entry) => typeof entry === "string")
-  );
 }

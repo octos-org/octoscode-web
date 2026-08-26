@@ -327,7 +327,13 @@ class RpcSocket {
   async receive(data) {
     const text =
       typeof data === "string" ? data : await new Blob([data]).text();
-    const message = JSON.parse(text);
+    let message;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      throw new Error("Octos Core smoke received invalid JSON");
+    }
+    if (!message || typeof message !== "object") return;
     if (typeof message.id !== "string") return;
     const pending = this.pending.get(message.id);
     if (!pending) return;

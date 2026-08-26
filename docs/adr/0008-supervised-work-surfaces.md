@@ -1,13 +1,14 @@
 # ADR 0008: Project supervised work from Octos
 
-Status: accepted
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 
 Octoscode treats plans, child tasks, runtime policy, output, and artifacts as
 part of the coding interaction—not as a separate dashboard. A Web sibling must
-preserve those meanings while avoiding the duplicate stores and hand-built
-event bus found in the general `octos-web` product.
+preserve those meanings while avoiding the duplicate stores and hand-built event
+bus found in the general `octos-web` product.
 
 The implemented wire shapes were checked against Octos Core revision
 `04cb5596ec0935926d2e8afdd0826bfa18e0c4bb` and its
@@ -26,10 +27,10 @@ The React-free client owns strict decoders and bounded request helpers for:
 - `task/artifact/list` and `task/artifact/read` evidence;
 - `plan/updated` model-authored progress.
 
-The application folds those values into one supervision projection. It does
-not introduce a generic event bus or mirror task state into a compatibility
-store. The inspector renders runtime truth, the current plan, and supervised
-tasks; raw frames remain available in a collapsed diagnostics section.
+The application folds those values into one supervision projection. It does not
+introduce a generic event bus or mirror task state into a compatibility store.
+The inspector renders runtime truth, the current plan, and supervised tasks; raw
+frames remain available in a collapsed diagnostics section.
 
 Task output and artifact bodies are bounded and cursor-paged. Output cursor
 values are UTF-8 byte offsets. A live delta that overlaps a hydrated snapshot
@@ -45,6 +46,6 @@ request restores the previous task state.
 
 An older server exposes explicit unavailable states instead of decorative
 controls. Reconnect cannot duplicate output already present in the task
-snapshot, and large evidence files do not need unbounded responses. New task
-or plan fields can be added to the narrow parser and projection without
-changing the product shell or reviving octos-web's store hierarchy.
+snapshot, and large evidence files do not need unbounded responses. New task or
+plan fields can be added to the narrow parser and projection without changing
+the product shell or reviving octos-web's store hierarchy.

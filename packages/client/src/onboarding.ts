@@ -1,8 +1,9 @@
 import { isRecord } from "./rpc.ts";
+import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 
 /** AppUI transport extensions owned by octos-cli until Core exports them. */
 export const APPUI_ONBOARDING_METHODS = {
-  PROFILE_LOCAL_CREATE: "profile/local/create",
+  PROFILE_LOCAL_CREATE: CORE_UI_METHODS.PROFILE_LOCAL_CREATE,
   PROFILE_LLM_CATALOG: "profile/llm/catalog",
   PROFILE_LLM_TEST: "profile/llm/test",
   PROFILE_LLM_UPSERT: "profile/llm/upsert",

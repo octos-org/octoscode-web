@@ -19,7 +19,10 @@ const safeUrlTransform: UrlTransform = (url, key) => {
   try {
     const protocol = new URL(url).protocol;
     if (key === "src") {
-      return protocol === "http:" || protocol === "https:" ? url : "";
+      // Model-authored remote images would make a credential-bearing browser
+      // leak its IP and request timing without a user gesture. Keep alt text;
+      // links remain explicit, user-initiated navigation.
+      return "";
     }
     return protocol === "http:" ||
       protocol === "https:" ||

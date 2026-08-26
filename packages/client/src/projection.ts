@@ -4,6 +4,7 @@ import type {
   ProjectionPayload,
   UiCursor,
 } from "./types.ts";
+import { parseUiCursor } from "./wire-decoders.ts";
 
 export function parseProjectionEnvelope(
   value: unknown,
@@ -24,7 +25,7 @@ export function parseProjectionEnvelope(
 
   let cursor: UiCursor | undefined;
   if (value.cursor !== undefined) {
-    const parsedCursor = parseCursor(value.cursor);
+    const parsedCursor = parseUiCursor(value.cursor);
     if (parsedCursor === null) return null;
     cursor = parsedCursor;
   }
@@ -46,17 +47,4 @@ export function parseProjectionEnvelope(
       : {}),
     ...(cursor === undefined ? {} : { cursor }),
   };
-}
-
-function parseCursor(value: unknown): UiCursor | null {
-  if (
-    !isRecord(value) ||
-    typeof value.stream !== "string" ||
-    typeof value.seq !== "number" ||
-    !Number.isSafeInteger(value.seq) ||
-    value.seq < 0
-  ) {
-    return null;
-  }
-  return { stream: value.stream, seq: value.seq };
 }

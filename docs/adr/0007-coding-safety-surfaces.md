@@ -1,6 +1,7 @@
 # ADR 0007: Keep coding safety surfaces server-authoritative
 
-Status: accepted
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 
@@ -32,14 +33,14 @@ files, hunks, line numbers, and content are still validated.
 
 The Web permission panel is session scoped and capability gated. A choice is
 enabled only when the active server advertises both the method and a compatible
-profile selection. Mode changes carry the advertised network pair so the
-client cannot synthesize an unsupported combination. The server response, not
-the optimistic click, becomes current state.
+profile selection. Mode changes carry the advertised network pair so the client
+cannot synthesize an unsupported combination. The server response, not the
+optimistic click, becomes current state.
 
 The review surface uses the server's proposal-time diff snapshot. It does not
-run git in the browser, recursively scrape ids from text, or merge preview
-state across sessions. Request and response session/preview ids must match.
-Opening a newer preview invalidates any older in-flight response.
+run git in the browser, recursively scrape ids from text, or merge preview state
+across sessions. Request and response session/preview ids must match. Opening a
+newer preview invalidates any older in-flight response.
 
 Approval remains a separate blocking interaction. The diff dialog is read-only
 evidence; approve and deny actions stay on the authoritative approval request.

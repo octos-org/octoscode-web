@@ -44,6 +44,11 @@ import type {
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
 import { parseSessionHydrateResult } from "./hydrate.ts";
+import { parseSessionOpenResult } from "./session.ts";
+import {
+  parseApprovalRespondResult,
+  parseUserQuestionRespondResult,
+} from "./interaction.ts";
 import {
   parseDiffPreviewGetResult,
   parsePermissionProfileListResult,
@@ -132,6 +137,8 @@ export class OctosUiClient {
   >();
   private readonly errorListeners = new Set<(error: Error) => void>();
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly settledRequestIds = new Set<string>();
+  private readonly settledRequestOrder: string[] = [];
   private socket: WebSocket | null = null;
   private nextRequestId = 1;
   private currentStatus: ConnectionStatus = "idle";
@@ -230,7 +237,7 @@ export class OctosUiClient {
     this.setStatus("disconnected");
   }
 
-  request<Result>(method: string, params: unknown): Promise<Result> {
+  private request(method: string, params: unknown): Promise<unknown> {
     const socket = this.socket;
     if (
       this.currentStatus !== "connected" ||
@@ -243,15 +250,16 @@ export class OctosUiClient {
     }
 
     const id = String(this.nextRequestId++);
-    return new Promise<Result>((resolve, reject) => {
+    return new Promise<unknown>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
+        this.markRequestSettled(id);
         reject(new Error(`${method} timed out`));
       }, this.options.requestTimeoutMs);
 
       this.pending.set(id, {
         method,
-        resolve: (result) => resolve(result as Result),
+        resolve,
         reject,
         timeout,
       });
@@ -267,23 +275,21 @@ export class OctosUiClient {
   }
 
   openSession(params: SessionOpenParams): Promise<SessionOpenResult> {
-    return this.request(CORE_UI_METHODS.SESSION_OPEN, params);
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_OPEN,
+      params,
+      parseSessionOpenResult,
+    );
   }
 
   async hydrateSession(
     params: SessionHydrateParams,
   ): Promise<SessionHydrateResult> {
-    const result = await this.request<unknown>(
+    return this.validatedRequest(
       CORE_UI_METHODS.SESSION_HYDRATE,
       params,
+      parseSessionHydrateResult,
     );
-    const parsed = parseSessionHydrateResult(result);
-    if (!parsed) {
-      throw new Error(
-        `${CORE_UI_METHODS.SESSION_HYDRATE} returned an invalid result`,
-      );
-    }
-    return parsed;
   }
 
   startTurn(params: TurnStartParams): Promise<unknown> {
@@ -300,61 +306,51 @@ export class OctosUiClient {
   respondApproval(
     params: ApprovalRespondParams,
   ): Promise<ApprovalRespondResult> {
-    return this.request(CORE_UI_METHODS.APPROVAL_RESPOND, params);
+    return this.validatedRequest(
+      CORE_UI_METHODS.APPROVAL_RESPOND,
+      params,
+      parseApprovalRespondResult,
+    );
   }
 
   respondUserQuestion(
     params: UserQuestionRespondParams,
   ): Promise<UserQuestionRespondResult> {
-    return this.request(CORE_UI_METHODS.USER_QUESTION_RESPOND, params);
+    return this.validatedRequest(
+      CORE_UI_METHODS.USER_QUESTION_RESPOND,
+      params,
+      parseUserQuestionRespondResult,
+    );
   }
 
   async listPermissionProfiles(
     params: PermissionProfileListParams,
   ): Promise<PermissionProfileListResult> {
-    const result = await this.request<unknown>(
+    return this.validatedRequest(
       CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
       params,
+      parsePermissionProfileListResult,
     );
-    const parsed = parsePermissionProfileListResult(result);
-    if (!parsed) {
-      throw new Error(
-        `${CORE_UI_METHODS.PERMISSION_PROFILE_LIST} returned an invalid result`,
-      );
-    }
-    return parsed;
   }
 
   async setPermissionProfile(
     params: PermissionProfileSetParams,
   ): Promise<PermissionProfileSetResult> {
-    const result = await this.request<unknown>(
+    return this.validatedRequest(
       CORE_UI_METHODS.PERMISSION_PROFILE_SET,
       params,
+      parsePermissionProfileSetResult,
     );
-    const parsed = parsePermissionProfileSetResult(result);
-    if (!parsed) {
-      throw new Error(
-        `${CORE_UI_METHODS.PERMISSION_PROFILE_SET} returned an invalid result`,
-      );
-    }
-    return parsed;
   }
 
   async getDiffPreview(
     params: DiffPreviewGetParams,
   ): Promise<DiffPreviewGetResult> {
-    const result = await this.request<unknown>(
+    return this.validatedRequest(
       CORE_UI_METHODS.DIFF_PREVIEW_GET,
       params,
+      parseDiffPreviewGetResult,
     );
-    const parsed = parseDiffPreviewGetResult(result);
-    if (!parsed) {
-      throw new Error(
-        `${CORE_UI_METHODS.DIFF_PREVIEW_GET} returned an invalid result`,
-      );
-    }
-    return parsed;
   }
 
   async listTasks(params: TaskListParams): Promise<TaskListResult> {
@@ -498,7 +494,7 @@ export class OctosUiClient {
     params: unknown,
     parse: (value: unknown) => Result | null,
   ): Promise<Result> {
-    const result = await this.request<unknown>(method, params);
+    const result = await this.request(method, params);
     const parsed = parse(result);
     if (!parsed) throw new Error(`${method} returned an invalid result`);
     return parsed;
@@ -531,6 +527,7 @@ export class OctosUiClient {
     }
     const pending = this.pending.get(id);
     if (!pending) {
+      if (this.settledRequestIds.delete(id)) return;
       this.emitError(new Error(`Received response for unknown request ${id}`));
       return;
     }
@@ -550,11 +547,21 @@ export class OctosUiClient {
   }
 
   private rejectPending(error: Error): void {
-    for (const pending of this.pending.values()) {
+    for (const [id, pending] of this.pending) {
       clearTimeout(pending.timeout);
+      this.markRequestSettled(id);
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private markRequestSettled(id: string): void {
+    this.settledRequestIds.add(id);
+    this.settledRequestOrder.push(id);
+    while (this.settledRequestOrder.length > 128) {
+      const expired = this.settledRequestOrder.shift();
+      if (expired) this.settledRequestIds.delete(expired);
+    }
   }
 
   private setStatus(status: ConnectionStatus): void {

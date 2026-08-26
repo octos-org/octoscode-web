@@ -1,4 +1,5 @@
 import {
+  CORE_UI_METHODS,
   parseProjectionEnvelope,
   parseReplayLossyEvent,
   type ProjectionEnvelopeV2,
@@ -84,7 +85,7 @@ export class DurableSessionProjection {
   }
 
   observe(notification: RpcNotification): ProjectionDecision {
-    if (notification.method === "protocol/replay_lossy") {
+    if (notification.method === CORE_UI_METHODS.REPLAY_LOSSY) {
       const event = parseReplayLossyEvent(notification.params);
       if (!event || !this.#matchesScope(event.session_id)) {
         return { kind: "ignore", reason: "wrong_session" };
@@ -94,7 +95,7 @@ export class DurableSessionProjection {
       return { kind: "recover", reason: this.#detail };
     }
 
-    if (notification.method !== "projection/envelope") {
+    if (notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE) {
       return { kind: "ignore", reason: "not_projection" };
     }
     const envelope = parseProjectionEnvelope(notification.params);

@@ -1,6 +1,7 @@
 # ADR 0006: Parse Markdown only after persistence
 
-Status: accepted
+- Status: Accepted
+- Date: 2026-08-26
 
 ## Context
 

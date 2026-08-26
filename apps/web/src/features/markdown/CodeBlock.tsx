@@ -5,7 +5,13 @@
  * See THIRD_PARTY_NOTICES.md.
  */
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   grammarLoadCount,
   highlightToHtml,
@@ -29,12 +35,28 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
     [trimmed, language, loaded],
   );
   const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const copy = () => {
     if (copied) return;
     void navigator.clipboard.writeText(trimmed).then(() => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1_000);
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = window.setTimeout(() => {
+        resetTimerRef.current = null;
+        setCopied(false);
+      }, 1_000);
     });
   };
 

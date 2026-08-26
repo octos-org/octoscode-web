@@ -110,7 +110,7 @@
   border-radius: 6px;
   padding: 2px 5px;
   background: var(--dsw-specific-selector);
-  font-family: var(--ds-font-family-code);
+  font-family: var(--dsw-font-family-code);
   font-size: 0.875em;
 }
 
@@ -167,7 +167,7 @@
   padding: 8px 13px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-secondary);
-  font: 500 11px/18px var(--ds-font-family-code);
+  font: 500 11px/18px var(--dsw-font-family-code);
 }
 
 .md-code-banner button {
@@ -189,11 +189,64 @@
   padding: 14px 16px;
   background: var(--dsw-specific-tip) !important;
   white-space: pre;
-  font: 400 12px/20px var(--ds-font-family-code);
+  font: 400 12px/20px var(--dsw-font-family-code);
 }
 
 .md-code-block pre code {
   font: inherit;
+}
+
+.shiki-bg {
+  background-color: var(--shiki-background);
+}
+
+.shiki-color-foreground {
+  color: var(--shiki-foreground);
+}
+
+.shiki-color-constant {
+  color: var(--shiki-token-constant);
+}
+
+.shiki-color-string,
+.shiki-color-string-expression {
+  color: var(--shiki-token-string);
+}
+
+.shiki-color-comment {
+  color: var(--shiki-token-comment);
+}
+
+.shiki-color-keyword {
+  color: var(--shiki-token-keyword);
+}
+
+.shiki-color-parameter {
+  color: var(--shiki-token-parameter);
+}
+
+.shiki-color-function {
+  color: var(--shiki-token-function);
+}
+
+.shiki-color-punctuation {
+  color: var(--shiki-token-punctuation);
+}
+
+.shiki-color-link {
+  color: var(--shiki-token-link);
+}
+
+.shiki-italic {
+  font-style: italic;
+}
+
+.shiki-bold {
+  font-weight: 700;
+}
+
+.shiki-underline {
+  text-decoration: underline;
 }
 
 .md-streaming {

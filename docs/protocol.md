@@ -12,9 +12,17 @@ The browser client must not become a second protocol authority.
 
 The React-free client connects to `/api/ui-protocol/ws`, validates JSON-RPC
 frames, correlates responses, and requests Web features during the handshake.
-The application enables a method only after the server accepts or advertises
-it. Missing optional capabilities reduce the interface; they do not trigger a
+The application enables a method only after the server accepts or advertises it.
+Missing optional capabilities reduce the interface; they do not trigger a
 best-effort wire guess.
+
+The generic request primitive is private. Every public method with a structured
+result applies a fail-closed decoder before returning, and shared cursor/string
+primitives come from one decoder module. Request timeouts and disconnects move
+their ids into a bounded quarantine so a valid late server response is ignored
+instead of reported as an unrelated protocol error. Method and feature names
+exported by Core come from the generated contract index; only the isolated CLI
+onboarding extension remains handwritten until Core exports it.
 
 Browser WebSockets cannot attach an `Authorization` header. The current Core
 endpoint accepts `?token=` and repeated `ui_feature` parameters. Tokens remain
@@ -23,8 +31,8 @@ from diagnostics and access logs.
 
 ## Durable projection invariant
 
-A reconnecting socket is not a recovered session. Recovery is complete only
-when the client treats these behaviors as one invariant:
+A reconnecting socket is not a recovered session. Recovery is complete only when
+the client treats these behaviors as one invariant:
 
 1. Open or hydrate the intended session scope.
 2. Resume from the last durable cursor.
@@ -91,10 +99,10 @@ Two machine-readable pins answer different questions:
 | `packages/client/contract-source.json` | Generated method, feature, notification, and protocol vocabulary matches an immutable Core source revision and Git blob. |
 | `packages/client/core-runtime.json`    | A checksummed released `octos` binary completes the browser-critical runtime flow.                                       |
 
-Payload decoders remain deliberately narrow and fixture-checked until Core
-emits a complete machine-readable schema. Permission enums and other
-safety-bearing values fail closed. Display-only labels may remain forward
-compatible after their surrounding structure is validated.
+Payload decoders remain deliberately narrow and fixture-checked until Core emits
+a complete machine-readable schema. Permission enums and other safety-bearing
+values fail closed. Display-only labels may remain forward compatible after
+their surrounding structure is validated.
 
 ## Compatibility gates
 
@@ -110,8 +118,8 @@ After intentionally changing the immutable source pin:
 pnpm contract:update
 ```
 
-Review the generated diff. Do not treat a source pin as proof that an
-unreleased binary was executed.
+Review the generated diff. Do not treat a source pin as proof that an unreleased
+binary was executed.
 
 Exercise the released runtime baseline:
 

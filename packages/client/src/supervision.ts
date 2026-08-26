@@ -1,4 +1,5 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
+import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 import type {
   OutputCursor,
   PlanItem,
@@ -157,7 +158,7 @@ export function parseTaskUpdated(
   notification: RpcNotification,
 ): TaskUpdated | null {
   if (
-    notification.method !== "task/updated" ||
+    notification.method !== CORE_UI_METHODS.TASK_UPDATED ||
     !isRecord(notification.params)
   ) {
     return null;
@@ -196,7 +197,7 @@ export function parseTaskOutputDelta(
   notification: RpcNotification,
 ): TaskOutputDelta | null {
   if (
-    notification.method !== "task/output/delta" ||
+    notification.method !== CORE_UI_METHODS.TASK_OUTPUT_DELTA ||
     !isRecord(notification.params)
   ) {
     return null;
@@ -225,7 +226,7 @@ export function parsePlanUpdated(
   notification: RpcNotification,
 ): PlanUpdated | null {
   if (
-    notification.method !== "plan/updated" ||
+    notification.method !== CORE_UI_METHODS.PLAN_UPDATED ||
     !isRecord(notification.params)
   ) {
     return null;
@@ -483,7 +484,8 @@ function parsePlanItem(value: unknown): PlanItem | null {
     !isRecord(value) ||
     typeof value.id !== "string" ||
     typeof value.title !== "string" ||
-    !["pending", "in_progress", "completed"].includes(String(value.status)) ||
+    typeof value.status !== "string" ||
+    !["pending", "in_progress", "completed"].includes(value.status) ||
     (value.priority !== undefined && typeof value.priority !== "string")
   ) {
     return null;

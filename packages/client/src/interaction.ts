@@ -1,10 +1,13 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
 import { isPreviewId } from "./coding.ts";
+import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 import type {
   ApprovalRequested,
+  ApprovalRespondResult,
   UiProtocolCapabilities,
   UserQuestion,
   UserQuestionRequested,
+  UserQuestionRespondResult,
 } from "./types.ts";
 
 export function supportsMethod(
@@ -27,7 +30,7 @@ export function supportsFeature(
 export function parseApprovalRequested(
   notification: RpcNotification,
 ): ApprovalRequested | null {
-  if (notification.method !== "approval/requested") return null;
+  if (notification.method !== CORE_UI_METHODS.APPROVAL_REQUESTED) return null;
   const value = notification.params;
   if (
     !isRecord(value) ||
@@ -62,13 +65,51 @@ export function parseApprovalRequested(
   };
 }
 
+export function parseApprovalRespondResult(
+  value: unknown,
+): ApprovalRespondResult | null {
+  if (
+    !isRecord(value) ||
+    typeof value.approval_id !== "string" ||
+    typeof value.accepted !== "boolean" ||
+    typeof value.status !== "string" ||
+    typeof value.runtime_resumed !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    approval_id: value.approval_id,
+    accepted: value.accepted,
+    status: value.status,
+    runtime_resumed: value.runtime_resumed,
+  };
+}
+
+export function parseUserQuestionRespondResult(
+  value: unknown,
+): UserQuestionRespondResult | null {
+  if (
+    !isRecord(value) ||
+    typeof value.question_id !== "string" ||
+    typeof value.accepted !== "boolean" ||
+    typeof value.runtime_resumed !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    question_id: value.question_id,
+    accepted: value.accepted,
+    runtime_resumed: value.runtime_resumed,
+  };
+}
+
 export function approvalResolutionId(
   notification: RpcNotification,
 ): string | null {
   if (
-    notification.method !== "approval/decided" &&
-    notification.method !== "approval/auto_resolved" &&
-    notification.method !== "approval/cancelled"
+    notification.method !== CORE_UI_METHODS.APPROVAL_DECIDED &&
+    notification.method !== CORE_UI_METHODS.APPROVAL_AUTO_RESOLVED &&
+    notification.method !== CORE_UI_METHODS.APPROVAL_CANCELLED
   ) {
     return null;
   }
@@ -92,14 +133,14 @@ export function approvalDiffPreviewId(
 export function notificationDiffPreviewId(
   notification: RpcNotification,
 ): string | null {
-  if (notification.method === "approval/requested") {
+  if (notification.method === CORE_UI_METHODS.APPROVAL_REQUESTED) {
     const approval = parseApprovalRequested(notification);
     return approval ? approvalDiffPreviewId(approval) : null;
   }
-  if (notification.method === "progress/updated") {
+  if (notification.method === CORE_UI_METHODS.PROGRESS_UPDATED) {
     return progressPreviewId(notification.params);
   }
-  if (notification.method !== "projection/envelope") return null;
+  if (notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE) return null;
   const envelope = notification.params;
   if (!isRecord(envelope) || !isRecord(envelope.payload)) return null;
   const data = envelope.payload.data;
@@ -120,7 +161,8 @@ function progressPreviewId(value: unknown): string | null {
 export function parseUserQuestionRequested(
   notification: RpcNotification,
 ): UserQuestionRequested | null {
-  if (notification.method !== "user_question/requested") return null;
+  if (notification.method !== CORE_UI_METHODS.USER_QUESTION_REQUESTED)
+    return null;
   const value = notification.params;
   if (
     !isRecord(value) ||

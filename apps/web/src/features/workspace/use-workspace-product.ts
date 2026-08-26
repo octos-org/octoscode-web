@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
   type OctosUiClient,
@@ -17,6 +19,7 @@ import {
   type SessionActivitySummary,
   type WorkspaceProductState,
 } from "./model.ts";
+import { RequestGate } from "../async/request-gate.ts";
 
 interface WorkspaceConnectionConfig {
   cwd: string;
@@ -49,8 +52,8 @@ export interface WorkspaceProductController {
 export function useWorkspaceProduct(
   dependencies: WorkspaceProductDependencies,
 ): WorkspaceProductController {
-  const requestRef = useRef(0);
-  const activityRequestRef = useRef(0);
+  const requestsRef = useRef(new RequestGate());
+  const activityRequestsRef = useRef(new RequestGate());
   const deletingSessionRef = useRef<string | null>(null);
   const [state, setState] = useState<WorkspaceProductState>(
     EMPTY_WORKSPACE_PRODUCT,
@@ -73,8 +76,8 @@ export function useWorkspaceProduct(
   }, []);
 
   const reset = () => {
-    requestRef.current += 1;
-    activityRequestRef.current += 1;
+    requestsRef.current.invalidate();
+    activityRequestsRef.current.invalidate();
     deletingSessionRef.current = null;
     setState(EMPTY_WORKSPACE_PRODUCT);
   };
@@ -84,10 +87,22 @@ export function useWorkspaceProduct(
   ) => {
     setState((current) => ({
       ...current,
-      sessionsAvailable: supportsMethod(capabilities, "session/list"),
-      deleteAvailable: supportsMethod(capabilities, "session/delete"),
-      filesAvailable: supportsMethod(capabilities, "session/files.list"),
-      activityAvailable: supportsMethod(capabilities, "task/list"),
+      sessionsAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_LIST,
+      ),
+      deleteAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_DELETE,
+      ),
+      filesAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_LIST,
+      ),
+      activityAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.TASK_LIST,
+      ),
     }));
   };
 
@@ -96,11 +111,13 @@ export function useWorkspaceProduct(
     const config = dependencies.connectionConfig();
     const capabilities = dependencies.capabilities();
     if (!requestedClient || !sessionId || !config) return;
-    const canList = supportsMethod(capabilities, "session/list");
-    const canListFiles = supportsMethod(capabilities, "session/files.list");
+    const canList = supportsMethod(capabilities, CORE_UI_METHODS.SESSION_LIST);
+    const canListFiles = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_LIST,
+    );
     if (!canList && !canListFiles) return;
-    const request = requestRef.current + 1;
-    requestRef.current = request;
+    const request = requestsRef.current.begin();
     setState((current) => ({
       ...current,
       loading: canList,
@@ -111,7 +128,10 @@ export function useWorkspaceProduct(
       canList
         ? requestedClient.listSessions(
             config.cwd &&
-              supportsFeature(capabilities, "session.workspace_cwd.v1")
+              supportsFeature(
+                capabilities,
+                CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+              )
               ? { cwd: config.cwd }
               : {},
           )
@@ -123,7 +143,7 @@ export function useWorkspaceProduct(
     if (
       dependencies.client() !== requestedClient ||
       dependencies.sessionId() !== sessionId ||
-      requestRef.current !== request
+      !requestsRef.current.isCurrent(request)
     ) {
       return;
     }
@@ -164,13 +184,15 @@ export function useWorkspaceProduct(
     if (
       !requestedClient ||
       !activeSessionId ||
-      !supportsMethod(currentDependencies.capabilities(), "task/list") ||
+      !supportsMethod(
+        currentDependencies.capabilities(),
+        CORE_UI_METHODS.TASK_LIST,
+      ) ||
       requestedSessions.length === 0
     ) {
       return;
     }
-    const request = activityRequestRef.current + 1;
-    activityRequestRef.current = request;
+    const request = activityRequestsRef.current.begin();
     const targets = requestedSessions.slice(0, BACKGROUND_ACTIVITY_LIMIT);
     setState((current) => ({ ...current, activityLoading: true }));
     const entries = await mapWithConcurrency(
@@ -206,7 +228,7 @@ export function useWorkspaceProduct(
     if (
       dependenciesRef.current.client() !== requestedClient ||
       dependenciesRef.current.sessionId() !== activeSessionId ||
-      activityRequestRef.current !== request
+      !activityRequestsRef.current.isCurrent(request)
     ) {
       return;
     }
@@ -228,7 +250,10 @@ export function useWorkspaceProduct(
     if (
       !client ||
       sessionId === dependencies.sessionId() ||
-      !supportsMethod(dependencies.capabilities(), "session/delete") ||
+      !supportsMethod(
+        dependencies.capabilities(),
+        CORE_UI_METHODS.SESSION_DELETE,
+      ) ||
       deletingSessionRef.current
     ) {
       return;

@@ -1,12 +1,14 @@
 import type { WebCommandSpec } from "./registry.ts";
 
 interface CommandPaletteProps {
+  id: string;
   commands: readonly WebCommandSpec[];
   selectedIndex: number;
   onSelect: (command: WebCommandSpec) => void;
 }
 
 export function CommandPalette({
+  id,
   commands,
   selectedIndex,
   onSelect,
@@ -14,13 +16,20 @@ export function CommandPalette({
   if (commands.length === 0) return null;
 
   return (
-    <div className="command-palette" role="listbox" aria-label="Commands">
+    <div
+      className="command-palette"
+      id={id}
+      role="listbox"
+      aria-label="Commands"
+    >
       {commands.map((command, index) => (
         <button
           className={index === selectedIndex ? "is-selected" : undefined}
           key={command.name}
+          id={`${id}-${command.name}`}
           type="button"
           role="option"
+          tabIndex={-1}
           aria-selected={index === selectedIndex}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(command)}

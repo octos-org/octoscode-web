@@ -8,6 +8,7 @@ interface WorkInspectorProps {
   state: SupervisionRuntimeState;
   features: readonly string[];
   events: readonly ObservedEvent[];
+  omittedEvents?: number;
   onRefresh: () => void;
   onOpenTask: (taskId: string) => void;
   onCancelTask: (taskId: string) => void;
@@ -20,6 +21,7 @@ export function WorkInspector({
   state,
   features,
   events,
+  omittedEvents = 0,
   onRefresh,
   onOpenTask,
   onCancelTask,
@@ -120,9 +122,11 @@ export function WorkInspector({
                   Context · {contextPercent}% of{" "}
                   {formatTokens(tokenCost?.contextWindow)}
                 </span>
-                <i>
-                  <b style={{ width: `${contextPercent}%` }} />
-                </i>
+                <progress
+                  aria-label="Context window used"
+                  max={100}
+                  value={contextPercent}
+                />
               </div>
             ) : null}
           </div>
@@ -202,8 +206,16 @@ export function WorkInspector({
       </section>
 
       <details className="wire-disclosure">
-        <summary>Protocol diagnostics · {events.length}</summary>
-        <EventInspector embedded events={events} features={features} />
+        <summary>
+          Protocol diagnostics · {events.length}
+          {omittedEvents ? ` (+${omittedEvents} omitted)` : ""}
+        </summary>
+        <EventInspector
+          embedded
+          events={events}
+          omittedEvents={omittedEvents}
+          features={features}
+        />
       </details>
     </aside>
   );

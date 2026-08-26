@@ -39,6 +39,7 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain('href="/secret"');
     expect(html).not.toContain("javascript:");
     expect(html).not.toContain('src="mailto:');
+    expect(html).not.toContain("<img");
   });
 
   it("renders fenced code with DSH-style chrome and Shiki tokens", () => {
@@ -48,9 +49,10 @@ describe("MarkdownBody", () => {
 
     expect(html).toContain('class="md-code-block"');
     expect(html).toContain("Copy code block");
-    expect(html).toContain('class="shiki css-variables"');
+    expect(html).toContain("shiki css-variables");
     expect(html).toContain(">const</span>");
-    expect(html).toContain("> answer</span>");
+    expect(html).toContain("answer");
+    expect(html).not.toContain('style="');
   });
 
   it("keeps a growing stream plain until the canonical persisted row", () => {

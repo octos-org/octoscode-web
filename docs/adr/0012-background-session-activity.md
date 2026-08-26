@@ -1,8 +1,9 @@
 # ADR 0012: Background session activity
 
-## Status
+- Status: Accepted
+- Date: 2026-08-26
 
-Accepted, with broader activity-navigator parity still planned.
+Broader activity-navigator parity remains planned.
 
 ## Context
 

@@ -2,6 +2,12 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
+if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+  throw new Error("OCTOSCODE_MOCK_PORT must be a valid TCP port");
+}
+let sockets;
+const openedSessionBySocket = new WeakMap();
+const delayedHydrateSockets = new WeakSet();
 const http = createServer((request, response) => {
   if (request.url === "/health") {
     response
@@ -9,9 +15,33 @@ const http = createServer((request, response) => {
       .end('{"ok":true}');
     return;
   }
+  if (request.method === "POST" && request.url === "/__test__/disconnect") {
+    for (const client of sockets.clients) {
+      client.close(1012, "fixture restart");
+    }
+    response.writeHead(204).end();
+    return;
+  }
+  if (request.method === "POST" && request.url === "/__test__/replay-lossy") {
+    for (const client of sockets.clients) {
+      const sessionId =
+        openedSessionBySocket.get(client) ?? "coding:local:main";
+      delayedHydrateSockets.add(client);
+      notifyRpc(client, "protocol/replay_lossy", {
+        session_id: sessionId,
+        dropped_count: 1,
+        last_durable_cursor: {
+          stream: sessionId,
+          seq: 10,
+        },
+      });
+    }
+    response.writeHead(204).end();
+    return;
+  }
   response.writeHead(404).end("Octoscode AppUI fixture only");
 });
-const sockets = new WebSocketServer({
+sockets = new WebSocketServer({
   server: http,
   path: "/api/ui-protocol/ws",
 });
@@ -90,7 +120,23 @@ sockets.on("connection", (socket) => {
   let projectionCursor = 10;
   let createdProfileId = null;
   socket.on("message", (bytes) => {
-    const request = JSON.parse(bytes.toString());
+    let request;
+    try {
+      request = JSON.parse(bytes.toString());
+    } catch {
+      socket.close(1003, "invalid JSON-RPC frame");
+      return;
+    }
+    if (
+      !request ||
+      typeof request !== "object" ||
+      request.jsonrpc !== "2.0" ||
+      typeof request.id !== "string" ||
+      typeof request.method !== "string"
+    ) {
+      socket.close(1003, "invalid JSON-RPC request");
+      return;
+    }
     const sessionId = request.params?.session_id ?? "coding:local:main";
     if (request.method === "config/capabilities/list") {
       reply(socket, request.id, { capabilities });
@@ -188,6 +234,7 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/open") {
+      openedSessionBySocket.set(socket, sessionId);
       if (!mockSessions.some((session) => session.id === sessionId)) {
         mockSessions = [
           {
@@ -211,7 +258,7 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/hydrate") {
-      reply(socket, request.id, {
+      const result = {
         session_id: sessionId,
         cursor: { stream: sessionId, seq: 10 },
         messages: [
@@ -264,7 +311,12 @@ sockets.on("connection", (socket) => {
         ],
         pending_approvals: [],
         pending_questions: [],
-      });
+      };
+      if (delayedHydrateSockets.delete(socket)) {
+        setTimeout(() => reply(socket, request.id, result), 150);
+      } else {
+        reply(socket, request.id, result);
+      }
       return;
     }
     if (request.method === "turn/start") {
@@ -767,6 +819,10 @@ function notify(socket, sessionId, threadId, turnId, seq, cursor, type, data) {
       },
     }),
   );
+}
+
+function notifyRpc(socket, method, params) {
+  socket.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
 }
 
 http.listen(port, "127.0.0.1", () => {

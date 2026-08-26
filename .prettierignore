@@ -3,3 +3,5 @@ pnpm-lock.yaml
 dist
 coverage
 deploy/nginx.conf
+AGENTS.md
+SELF_REVIEW.md

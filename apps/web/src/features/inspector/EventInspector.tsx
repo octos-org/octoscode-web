@@ -9,12 +9,14 @@ export interface ObservedEvent {
 interface EventInspectorProps {
   events: readonly ObservedEvent[];
   features: readonly string[];
+  omittedEvents?: number;
   embedded?: boolean;
 }
 
 export function EventInspector({
   events,
   features,
+  omittedEvents = 0,
   embedded = false,
 }: EventInspectorProps) {
   const content = (
@@ -47,6 +49,13 @@ export function EventInspector({
           <span className="count-badge">{events.length}</span>
         </div>
         <div className="event-list">
+          {omittedEvents ? (
+            <p className="muted" role="status">
+              {omittedEvents} older protocol event
+              {omittedEvents === 1 ? " is" : "s are"} outside this diagnostic
+              window.
+            </p>
+          ) : null}
           {events.length === 0 ? (
             <p className="muted">No protocol events received.</p>
           ) : (

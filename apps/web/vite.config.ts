@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { SUPPORTED_OCTOS_CONTRACT } from "../../packages/client/src/contract.ts";
-import coreRuntime from "../../packages/client/core-runtime.json";
+import coreRuntime from "../../packages/client/core-runtime.json" with { type: "json" };
 
 const VERIFIED_CORE_RUNTIME = {
   repository: coreRuntime.repository,

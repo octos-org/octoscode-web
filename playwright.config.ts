@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const fixturePort = testPort("OCTOSCODE_E2E_FIXTURE_PORT", 50_080);
+const webPort = testPort("OCTOSCODE_E2E_WEB_PORT", 4_173);
+const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
+const webOrigin = `http://127.0.0.1:${webPort}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -8,7 +13,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: webOrigin,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -24,16 +29,25 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm mock:server",
-      url: "http://127.0.0.1:50080/health",
-      reuseExistingServer: !process.env.CI,
+      url: `${fixtureOrigin}/health`,
+      env: { OCTOSCODE_MOCK_PORT: String(fixturePort) },
+      reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command:
-        "pnpm --filter @octos-org/octoscode-web exec vite --host 127.0.0.1 --port 4173",
-      url: "http://127.0.0.1:4173",
-      reuseExistingServer: !process.env.CI,
+      command: `pnpm --filter @octos-org/octoscode-web exec vite --host 127.0.0.1 --port ${webPort}`,
+      url: webOrigin,
+      env: { VITE_OCTOS_DEFAULT_ENDPOINT: fixtureOrigin },
+      reuseExistingServer: false,
       timeout: 30_000,
     },
   ],
 });
+
+function testPort(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] ?? String(fallback), 10);
+  if (!Number.isSafeInteger(value) || value < 1 || value > 65_535) {
+    throw new Error(`${name} must be a valid TCP port`);
+  }
+  return value;
+}

@@ -6,3 +6,5 @@ coverage/
 *.log
 playwright-report/
 test-results/
+*.tsbuildinfo
+skill-output/

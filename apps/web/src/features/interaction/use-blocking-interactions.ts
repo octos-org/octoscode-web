@@ -1,5 +1,7 @@
 import { useState } from "react";
 import {
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
   approvalResolutionId,
   parseApprovalRequested,
   parseUserQuestionRequested,
@@ -48,7 +50,7 @@ export function useBlockingInteractions(
       .map((params) =>
         parseApprovalRequested({
           jsonrpc: "2.0",
-          method: "approval/requested",
+          method: CORE_UI_METHODS.APPROVAL_REQUESTED,
           params,
         }),
       )
@@ -61,7 +63,7 @@ export function useBlockingInteractions(
       .map((params) =>
         parseUserQuestionRequested({
           jsonrpc: "2.0",
-          method: "user_question/requested",
+          method: CORE_UI_METHODS.USER_QUESTION_REQUESTED,
           params,
         }),
       )
@@ -71,13 +73,13 @@ export function useBlockingInteractions(
           matchesSessionScope(sessionId, request.sessionId, request.topic),
       );
     setApproval(
-      supportsMethod(capabilities, "approval/respond")
+      supportsMethod(capabilities, CORE_UI_METHODS.APPROVAL_RESPOND)
         ? (pendingApproval ?? null)
         : null,
     );
     setQuestion(
-      supportsMethod(capabilities, "user_question/respond") &&
-        supportsFeature(capabilities, "user_question.v1")
+      supportsMethod(capabilities, CORE_UI_METHODS.USER_QUESTION_RESPOND) &&
+        supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
         ? (pendingQuestion ?? null)
         : null,
     );
@@ -140,12 +142,12 @@ export function useBlockingInteractions(
   const observeNotification = (notification: RpcNotification) => {
     const sessionId = dependencies.sessionId();
     const capabilities = dependencies.capabilities();
-    if (notification.method === "approval/requested") {
+    if (notification.method === CORE_UI_METHODS.APPROVAL_REQUESTED) {
       const requested = parseApprovalRequested(notification);
       if (
         requested &&
         matchesSessionScope(sessionId, requested.sessionId, requested.topic) &&
-        supportsMethod(capabilities, "approval/respond")
+        supportsMethod(capabilities, CORE_UI_METHODS.APPROVAL_RESPOND)
       ) {
         setError(null);
         setApproval(requested);
@@ -164,20 +166,20 @@ export function useBlockingInteractions(
       );
     }
 
-    if (notification.method === "user_question/requested") {
+    if (notification.method === CORE_UI_METHODS.USER_QUESTION_REQUESTED) {
       const requested = parseUserQuestionRequested(notification);
       if (
         requested &&
         matchesSessionScope(sessionId, requested.sessionId, requested.topic) &&
-        supportsMethod(capabilities, "user_question/respond") &&
-        supportsFeature(capabilities, "user_question.v1")
+        supportsMethod(capabilities, CORE_UI_METHODS.USER_QUESTION_RESPOND) &&
+        supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
       ) {
         setError(null);
         setQuestion(requested);
       } else {
         dependencies.onInvalid(
           "Question cannot be rendered",
-          "The request was malformed, belonged to another session, or user_question.v1 was not negotiated.",
+          `The request was malformed, belonged to another session, or ${CORE_UI_FEATURES.USER_QUESTION_V1} was not negotiated.`,
         );
       }
     }
