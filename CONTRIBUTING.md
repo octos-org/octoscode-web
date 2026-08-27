@@ -30,8 +30,10 @@ checksummed pinned runtime gate described in
   colocated CSS Modules over expanding the global stylesheet.
 - Gate optional controls on negotiated methods/features and fail closed on
   malformed safety-bearing payloads.
-- Do not persist auth tokens or API keys, and do not add credentials to test
-  fixtures, logs, screenshots, issues, or crash diagnostics.
+- Never persist auth tokens to `localStorage`; only the tab-scoped connection
+  preference boundary may retain them in `sessionStorage`. Provider API keys
+  remain memory-only. Do not add credentials to test fixtures, logs,
+  screenshots, issues, or crash diagnostics.
 - Preserve server-owned session, permission, diff, task, and replay truth.
 - Add unit coverage for decoders/reducers and a browser flow for material user
   behavior. Keep accessibility assertions on blocking surfaces.

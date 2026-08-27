@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
 import { SUPPORTED_OCTOS_CONTRACT } from "../../packages/client/src/contract.ts";
 import coreRuntime from "../../packages/client/core-runtime.json" with { type: "json" };
 
@@ -60,5 +60,27 @@ export default defineConfig({
   ],
   server: {
     port: 4173,
+    ...developmentProxy(),
   },
 });
+
+function developmentProxy(): { proxy: Record<string, ProxyOptions> } | object {
+  const target = process.env.OCTOSCODE_DEV_PROXY_TARGET?.trim();
+  if (!target) return {};
+  const trustedOrigin = process.env.OCTOSCODE_DEV_PROXY_ORIGIN?.trim();
+  return {
+    proxy: {
+      "/api": {
+        target,
+        changeOrigin: true,
+        ws: true,
+        configure(proxy) {
+          if (!trustedOrigin) return;
+          proxy.on("proxyReqWs", (request) => {
+            request.setHeader("Origin", trustedOrigin);
+          });
+        },
+      },
+    },
+  };
+}

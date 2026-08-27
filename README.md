@@ -56,9 +56,10 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run `octos serve` separately, then enter its origin, optional auth token,
-server-side workspace path, and session id in the connection panel. The browser
-cannot start or provision the Octos binary.
+Run `octos serve` separately, then enter its origin, optional auth token, and
+server-side workspace path. Core resolves the normal Octoscode profile/session;
+the session id is an advanced fallback. A successful connection is restored on
+refresh in the same tab. The browser cannot start or provision the Octos binary.
 
 For UI work without a local Octos installation, start the deterministic AppUI
 fixture in another terminal:

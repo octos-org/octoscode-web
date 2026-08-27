@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Restore a successful runtime/workspace/session connection across refresh with
+  tab-scoped credential retention, explicit forgetting, and canonical
+  server-returned identity.
+- Replace arbitrary client-entered session creation with a profile-routable
+  `<profile>:api:web-<uuid>` identity inside the active workspace.
+- Add an artifact-free, opt-in live provider gate for real Core/model/tool and
+  refresh-recovery verification.
 - Replace scattered connection/recovery refs and turn handling with directly
   tested lifecycle controllers and grouped session domains.
 - Validate every structured request result, quarantine late RPC responses, and

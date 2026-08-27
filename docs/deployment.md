@@ -70,10 +70,13 @@ connection surface. Same-origin reverse proxying is recommended because it
 simplifies TLS, origin policy, and CSP. A cross-origin deployment requires the
 Octos endpoint or reverse proxy to accept the Web application's `Origin`.
 
-The browser client never writes the auth token to local storage. The current UI
-Protocol transports it in the WebSocket URL query, so HTTPS/WSS is mandatory
-outside loopback and reverse proxies must redact query strings from access logs.
-Treat captured URLs as credentials.
+The browser client never writes the auth token to `localStorage`. It retains the
+token only in the current tab's `sessionStorage` so refresh can restore a live
+workspace; closing the tab clears it. Provider API keys are never persisted in
+browser storage. The current UI Protocol transports the auth token in the
+WebSocket URL query, so HTTPS/WSS is mandatory outside loopback and reverse
+proxies must redact query strings from access logs. Treat captured URLs as
+credentials.
 
 Compatibility is capability-gated at runtime. The build manifest records the
 contract verified during release, but it is not a promise that every future or

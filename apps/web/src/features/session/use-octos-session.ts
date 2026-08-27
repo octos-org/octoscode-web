@@ -97,6 +97,7 @@ export interface OctosSessionRuntime {
     recovery: SessionRecoverySnapshot;
     connected: boolean;
     connect: (input: SessionConnectionInput) => void;
+    restore: (input: SessionConnectionInput) => void;
     disconnect: () => void;
   };
   conversation: {
@@ -269,6 +270,10 @@ export function useOctosSession(): OctosSessionRuntime {
     beginConnection(input, true);
   };
 
+  const restore = (input: SessionConnectionInput) => {
+    beginConnection(input, false);
+  };
+
   const beginConnection = (
     input: SessionConnectionInput,
     resolveWorkspaceLaunch: boolean,
@@ -426,6 +431,7 @@ export function useOctosSession(): OctosSessionRuntime {
       ...config,
       sessionId: result.opened.session_id,
       profileId: result.opened.active_profile_id ?? config.profileId,
+      cwd: result.opened.workspace_root ?? config.cwd,
     });
     capabilitiesRef.current = result.opened.capabilities;
     setOpened(result.opened);
@@ -722,6 +728,7 @@ export function useOctosSession(): OctosSessionRuntime {
         opened !== null &&
         recovery.phase === "healthy",
       connect,
+      restore,
       disconnect,
     },
     conversation: {

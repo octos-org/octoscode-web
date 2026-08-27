@@ -31,6 +31,7 @@ export function WorkInspector({
   const policy = state.runtimeStatus?.runtime_policy_stamp;
   const runtimeRows = [
     ["Model", state.runtimeStatus?.model?.model ?? stringAt(policy, "model")],
+    ["Provider", state.runtimeStatus?.model?.provider],
     [
       "Profile",
       state.runtimeStatus?.profile_id ?? stringAt(policy, "profile_id"),

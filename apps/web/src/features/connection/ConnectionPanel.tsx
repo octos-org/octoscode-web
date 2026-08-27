@@ -1,4 +1,5 @@
 import type { ConnectionStatus } from "@octos-org/octoscode-client";
+import styles from "./ConnectionPanel.module.css";
 
 export interface ConnectionDraft {
   endpoint: string;
@@ -15,6 +16,7 @@ interface ConnectionPanelProps {
   onChange: (next: ConnectionDraft) => void;
   onConnect: () => void;
   onDisconnect: () => void;
+  onForget: () => void;
 }
 
 export function ConnectionPanel({
@@ -24,6 +26,7 @@ export function ConnectionPanel({
   onChange,
   onConnect,
   onDisconnect,
+  onForget,
 }: ConnectionPanelProps) {
   const connected = status === "connected";
   const connecting = status === "connecting";
@@ -54,6 +57,12 @@ export function ConnectionPanel({
             <div>
               <dt>Workspace</dt>
               <dd>{value.cwd}</dd>
+            </div>
+          ) : null}
+          {value.profileId ? (
+            <div>
+              <dt>Profile</dt>
+              <dd>{value.profileId}</dd>
             </div>
           ) : null}
         </dl>
@@ -94,35 +103,15 @@ export function ConnectionPanel({
         <input
           value={value.token}
           onChange={(event) => field("token", event.target.value)}
-          placeholder="Kept in memory only"
+          placeholder="Remembered for this tab"
           type="password"
           autoComplete="off"
           disabled={connected || connecting}
         />
       </label>
 
-      <div className="field-pair">
-        <label>
-          <span>Session id</span>
-          <input
-            value={value.sessionId}
-            onChange={(event) => field("sessionId", event.target.value)}
-            disabled={connected || connecting}
-          />
-        </label>
-        <label>
-          <span>Profile id</span>
-          <input
-            value={value.profileId}
-            onChange={(event) => field("profileId", event.target.value)}
-            placeholder="Optional"
-            disabled={connected || connecting}
-          />
-        </label>
-      </div>
-
       <label>
-        <span>Server workspace</span>
+        <span>Workspace path on server</span>
         <input
           value={value.cwd}
           onChange={(event) => field("cwd", event.target.value)}
@@ -131,7 +120,41 @@ export function ConnectionPanel({
         />
       </label>
 
+      <details className={styles.advanced}>
+        <summary>Advanced launch identity</summary>
+        <p>
+          Core normally resolves the profile and canonical coding session from
+          the workspace. These values are fallback hints for older servers.
+        </p>
+        <div className="field-pair">
+          <label>
+            <span>Session id</span>
+            <input
+              value={value.sessionId}
+              onChange={(event) => field("sessionId", event.target.value)}
+              disabled={connected || connecting}
+            />
+          </label>
+          <label>
+            <span>Profile id</span>
+            <input
+              value={value.profileId}
+              onChange={(event) => field("profileId", event.target.value)}
+              placeholder="Optional"
+              disabled={connected || connecting}
+            />
+          </label>
+        </div>
+      </details>
+
       {error ? <p className="connection-error">{error}</p> : null}
+      {isHandshakeError(error) ? (
+        <p className={styles.help}>
+          The WebSocket failed before <code>session/open</code>. Check server
+          reachability, the token, allowed Web origins, and reverse-proxy
+          WebSocket Upgrade forwarding.
+        </p>
+      ) : null}
 
       {connected || connecting ? (
         <button
@@ -155,10 +178,16 @@ export function ConnectionPanel({
       )}
 
       <p className="field-note">
-        The browser is only a client. Agent execution and filesystem access stay
-        in
-        <code> octos serve</code>.
+        Origin and workspace are remembered on this browser. The auth token is
+        kept only for this tab and is cleared when the tab closes.
       </p>
+      <button className={styles.forget} onClick={onForget} type="button">
+        Forget connection
+      </button>
     </section>
   );
+}
+
+function isHandshakeError(error: string | null): boolean {
+  return error === "Could not open the Octos UI Protocol connection";
 }

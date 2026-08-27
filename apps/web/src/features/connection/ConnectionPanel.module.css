@@ -1,0 +1,37 @@
+.advanced {
+  margin: -2px 0 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 9px;
+}
+
+.advanced summary,
+.forget {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: var(--dsw-font-size-micro);
+}
+
+.advanced > p,
+.help {
+  margin: 7px 0 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 1.5;
+}
+
+.help {
+  margin-top: -5px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.forget {
+  display: block;
+  margin: 7px auto 0;
+  border: 0;
+  padding: 3px 7px;
+  background: transparent;
+}
+
+.forget:hover {
+  color: var(--dsw-alias-label-primary);
+}

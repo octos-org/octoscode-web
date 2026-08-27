@@ -6,8 +6,15 @@
   network location.
 - Use `https://` for a remote endpoint; the client derives `wss://`.
 - Configure the Web origin in `OCTOS_APPUI_ALLOWED_ORIGINS`.
-- Re-enter the token. Tokens are intentionally memory-only and disappear on
-  reload.
+- Confirm the reverse proxy forwards `Upgrade` and `Connection` for
+  `/api/ui-protocol/ws`; serving the static page successfully does not prove the
+  WebSocket route works.
+- Re-enter the token if the tab was closed. It survives a refresh in the same
+  tab but is intentionally absent from `localStorage`.
+
+“Could not open the Octos UI Protocol connection” means the WebSocket handshake
+failed before `session/open`. Workspace, profile, and session errors occur only
+after the socket opens and retain the server's specific error text.
 
 ## A workspace path does not open
 
@@ -15,6 +22,16 @@ The path is resolved on the `octos serve` host, not on the browser computer. The
 server's workspace-root policy remains authoritative. A `/path` containing
 another slash is treated as prompt text, while a recognized `/command` is
 resolved locally and never sent to the model.
+
+## A new session does not open
+
+**New** creates a server-owned `<profile>:api:web-<uuid>` session in the active
+workspace; there is no browser-owned session registry or user-entered identity.
+Keeping the active profile in the id lets hydrate, task, and permission methods
+route correctly even when the connection uses a global serve token rather than
+profile-bound authentication. If it is rejected, verify that the current profile
+still exists and that the server-confirmed workspace root remains accessible.
+Existing rows come from `session/list`, not browser storage.
 
 ## Recovery is stuck
 

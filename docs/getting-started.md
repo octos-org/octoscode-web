@@ -30,9 +30,9 @@ pnpm install --frozen-lockfile
    | Field          | Meaning                                                                     |
    | -------------- | --------------------------------------------------------------------------- |
    | Server origin  | HTTP(S) origin that exposes the Octos AppUI endpoint.                       |
-   | Auth token     | Optional server credential; retained in memory only.                        |
+   | Auth token     | Optional server credential; retained only for the current browser tab.      |
    | Workspace path | Path on the **server host**, not on the browser device.                     |
-   | Session id     | Explicit fallback identity for servers without workspace launch resolution. |
+   | Session id     | Advanced fallback identity for servers without workspace launch resolution. |
 
 When Core supports `launch/resolve`, the server decides whether to resume,
 activate, or select a profile for the workspace. An empty solo server can also
@@ -40,6 +40,18 @@ offer profile and provider onboarding in the browser. Provider data comes from
 Core, the credential is tested before saving, and the API key is never written
 to browser storage. Older servers display the canonical `octoscode onboard`
 fallback instead.
+
+After a successful connection, refreshing the same tab reopens the exact
+established session. The browser remembers non-secret connection fields across
+browser restarts. The auth token and auto-connect marker use tab-scoped
+`sessionStorage`, so closing the tab forgets the credential. **Forget
+connection** clears both scopes explicitly.
+
+The product hierarchy is runtime connection → workspace → session. “Workspace”
+is the Octoscode/Web name for the object that groups coding sessions by a path.
+The path is on the `octos serve` host; a remote browser cannot open a local
+directory picker for it. The server canonicalizes the path and returns the
+authoritative workspace root.
 
 ## Run the product fixture
 
@@ -96,8 +108,9 @@ profile save without contacting a model service.
 - Browser WebSockets cannot attach an `Authorization` header. The current
   endpoint accepts a query token, so use HTTPS/WSS outside loopback and keep
   query strings out of proxy logs.
-- Auth tokens and provider API keys stay in memory; they are not persisted to
-  `localStorage`.
+- Auth tokens are never written to `localStorage`; they may survive refresh in
+  the current tab's `sessionStorage`. Provider API keys remain memory-only and
+  are never written to browser storage.
 - Unsupported methods and malformed safety-bearing payloads fail closed.
 
 For production hosting, continue with the [deployment contract](deployment.md).

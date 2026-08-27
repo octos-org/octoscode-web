@@ -32,8 +32,10 @@ replay. Reports about those server-side controls belong in the
 [`octos`](https://github.com/octos-org/octos) repository unless the Web client
 misrepresents or bypasses them.
 
-The browser keeps connection and model credentials in memory only. The current
-UI Protocol may carry an auth token in the WebSocket query, so non-loopback
+The browser keeps provider credentials in memory only. A connection auth token
+may be retained in the current tab's `sessionStorage` to survive refresh, but is
+never written to `localStorage` and is cleared when the tab closes. The current
+UI Protocol may carry that token in the WebSocket query, so non-loopback
 deployments must use HTTPS/WSS and access logs must omit query strings. See
 [`deployment contract`](docs/deployment.md) for production requirements and
 [`protocol integration`](docs/protocol.md) for client-side trust boundaries.

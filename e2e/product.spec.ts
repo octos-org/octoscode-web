@@ -5,7 +5,9 @@ const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_POR
 
 async function launchWorkspace(page: Page, cwd: string) {
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Server workspace" }).fill(cwd);
+  await page
+    .getByRole("textbox", { name: "Workspace path on server" })
+    .fill(cwd);
   await page.getByRole("button", { name: "Connect workspace" }).click();
 }
 
@@ -60,6 +62,48 @@ test("preserves unsent drafts across explicit session switches", async ({
     page.getByText("_main:local:tui#coding", { exact: true }),
   ).toBeVisible();
   await expect(composer).toHaveValue("draft for coding");
+});
+
+test("restores the active workspace and credential across a refresh", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
+  await page
+    .getByRole("textbox", { name: "Workspace path on server" })
+    .fill("/srv/work/project");
+  await page.getByRole("button", { name: "Connect workspace" }).click();
+  await expect(
+    page.getByText("_main:local:tui#coding", { exact: true }),
+  ).toBeVisible();
+
+  await page.reload();
+
+  await expect(
+    page.getByText("_main:local:tui#coding", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByLabel("Auth token")).toHaveValue(
+    "tab-scoped-e2e-token",
+  );
+  await expect(
+    page.getByRole("textbox", { name: "Workspace path on server" }),
+  ).toHaveValue("/workspace/octoscode-web");
+});
+
+test("creates a server-owned Web session inside the active workspace", async ({
+  page,
+}) => {
+  await launchWorkspace(page, "/srv/work/project");
+
+  await page.getByRole("button", { name: "New", exact: true }).click();
+
+  await expect(page.locator(".workspace-title small")).toHaveText(
+    /^_main:api:web-[0-9a-f-]{36}$/,
+  );
+  await expect(
+    page.getByText("/workspace/octoscode-web", { exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("recovers the durable session after disconnect and lossy replay", async ({
@@ -159,7 +203,7 @@ test("matches activate and cross-profile launch choices", async ({ page }) => {
 
   await page.getByRole("button", { name: "Disconnect" }).click();
   await page
-    .getByRole("textbox", { name: "Server workspace" })
+    .getByRole("textbox", { name: "Workspace path on server" })
     .fill("/srv/work/cross");
   await page.getByRole("button", { name: "Connect workspace" }).click();
   await expect(

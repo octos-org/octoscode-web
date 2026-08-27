@@ -414,7 +414,6 @@ label > span {
 }
 
 .navigator-actions button,
-.new-session-form button,
 .session-delete-confirm button {
   border: 0;
   border-radius: 6px;
@@ -426,25 +425,11 @@ label > span {
 }
 
 .navigator-actions button:hover,
-.new-session-form button:hover:not(:disabled),
 .session-delete-confirm button:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
-.new-session-form {
-  margin-bottom: 9px;
-  padding: 9px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 9px;
-  background: var(--dsw-specific-tip);
-}
-
-.new-session-form label {
-  margin-bottom: 7px;
-}
-
-.new-session-form input,
 .session-search {
   width: 100%;
   height: 30px;
@@ -455,17 +440,6 @@ label > span {
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: 400 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
-}
-
-.new-session-form > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.new-session-form button:last-child {
-  background: var(--dsw-alias-button-info-fill);
-  color: var(--dsw-alias-label-on-accent);
 }
 
 .session-search {

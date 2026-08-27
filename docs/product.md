@@ -22,24 +22,30 @@ semantics. Octos Core remains the runtime and source of durable truth.
 
 ## Supported surface
 
-| Area          | Current behavior                                                                                                           |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Launch        | Server-resolved workspace resume, activation, cross-profile choice, and explicit fallback session.                         |
-| Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback. |
-| Conversation  | Durable transcript, FIFO prompts, interrupt, slash/bang command resolution, safe GFM, and highlighted code.                |
-| Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                 |
-| Coding safety | Server-confirmed permission profiles and proposal-time diff previews.                                                      |
-| Supervision   | Live plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                              |
-| Workspace     | Session list/create/switch/delete, per-session drafts, safe file metadata, and responsive work inspector.                  |
-| Activity      | Bounded recent-session task scan and searchable, filterable `/activity` navigator.                                         |
-| Usage         | Model, context-window, token, and cost projections from typed server state.                                                |
-| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                     |
+| Area          | Current behavior                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Launch        | Remembered runtime connection, server-resolved workspace launch, exact-session refresh restore, and advanced fallback identity. |
+| Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback.      |
+| Conversation  | Durable transcript, FIFO prompts, interrupt, slash/bang command resolution, safe GFM, and highlighted code.                     |
+| Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                      |
+| Coding safety | Server-confirmed permission profiles and proposal-time diff previews.                                                           |
+| Supervision   | Live plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                                   |
+| Workspace     | Server path → canonical workspace root, one-click Web session create, list/switch/delete, drafts, and safe file metadata.       |
+| Activity      | Bounded recent-session task scan and searchable, filterable `/activity` navigator.                                              |
+| Usage         | Model, context-window, token, and cost projections from typed server state.                                                     |
+| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                          |
 
 Transcript rows are a bounded browser rendering projection, not the durable
 history store. When older rows fall outside that window the first visible row
 states how many were omitted and points back to server hydrate. Model-authored
 remote images render as alt text rather than making an automatic cross-origin
 request; explicit links remain user-initiated.
+
+The user-facing hierarchy is **runtime connection → workspace → session**.
+DeepSeek Harness calls a similar durable grouping a Workspace; this client does
+not introduce a generic “Object” or duplicate DSH's local registry. Octos Core
+owns path validation and session state. The browser remembers connection intent
+and presents the server projection.
 
 ## Deliberate non-goals
 

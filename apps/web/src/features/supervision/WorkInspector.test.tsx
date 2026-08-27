@@ -54,6 +54,7 @@ describe("WorkInspector", () => {
       />,
     );
     expect(html).toContain("deepseek-v4");
+    expect(html).toContain("deepseek");
     expect(html).toContain("Run checks");
     expect(html).toContain("Validate checks");
     expect(html).toContain("Context · 13%");

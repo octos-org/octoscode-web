@@ -22,6 +22,14 @@ import { SessionNavigator } from "../features/workspace/SessionNavigator.tsx";
 import { LaunchDecisionPanel } from "../features/workspace/LaunchDecisionPanel.tsx";
 import { ActivityNavigator } from "../features/activity/ActivityNavigator.tsx";
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
+import {
+  clearConnectionPreferences,
+  loadAutoConnect,
+  loadConnectionPreferences,
+  saveConnectionPreferences,
+  setAutoConnect,
+} from "../features/connection/preferences.ts";
+import { freshWebSessionId } from "../features/workspace/session-identity.ts";
 
 const initialConnection: ConnectionDraft = {
   endpoint:
@@ -45,12 +53,59 @@ export function App() {
   } = useOctosSession();
   const draftRef = useRef("");
   const sessionDraftsRef = useRef(new SessionDraftCache());
-  const [connection, setConnection] = useState(initialConnection);
+  const restoreConnectionRef = useRef(loadAutoConnect(window.sessionStorage));
+  const restoreAttemptedRef = useRef(false);
+  const [connection, setConnection] = useState(() =>
+    loadConnectionPreferences(
+      initialConnection,
+      window.localStorage,
+      window.sessionStorage,
+    ),
+  );
   const [draft, setDraft] = useState("");
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+
+  useEffect(() => {
+    saveConnectionPreferences(
+      connection,
+      window.localStorage,
+      window.sessionStorage,
+    );
+  }, [connection]);
+
+  useEffect(() => {
+    if (restoreAttemptedRef.current || !restoreConnectionRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (restoreAttemptedRef.current) return;
+      restoreAttemptedRef.current = true;
+      if (connection.endpoint.trim() && connection.sessionId.trim()) {
+        session.restore(connection);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [connection, session]);
+
+  useEffect(() => {
+    const opened = session.opened;
+    if (!session.connected || !opened) return;
+    setAutoConnect(window.sessionStorage, true);
+    setConnection((current) => {
+      const next = {
+        ...current,
+        sessionId: opened.session_id,
+        profileId: opened.active_profile_id ?? current.profileId,
+        cwd: opened.workspace_root ?? current.cwd,
+      };
+      return next.sessionId === current.sessionId &&
+        next.profileId === current.profileId &&
+        next.cwd === current.cwd
+        ? current
+        : next;
+    });
+  }, [session.connected, session.opened]);
 
   useEffect(() => {
     if (!inspectorOpen) return;
@@ -228,6 +283,27 @@ export function App() {
     setConnection((current) => ({ ...current, sessionId }));
     workspaceProduct.switchSession(sessionId);
   };
+  const createSession = () =>
+    moveToSession(
+      freshWebSessionId(
+        session.opened?.active_profile_id ?? connection.profileId,
+      ),
+    );
+  const changeConnection = (next: ConnectionDraft) => {
+    restoreConnectionRef.current = false;
+    setAutoConnect(window.sessionStorage, false);
+    setConnection(next);
+  };
+  const disconnect = () => {
+    restoreConnectionRef.current = false;
+    setAutoConnect(window.sessionStorage, false);
+    session.disconnect();
+  };
+  const forgetConnection = () => {
+    disconnect();
+    clearConnectionPreferences(window.localStorage, window.sessionStorage);
+    setConnection(initialConnection);
+  };
 
   return (
     <div className="app-shell">
@@ -249,9 +325,10 @@ export function App() {
             value={connection}
             status={session.status}
             error={session.error}
-            onChange={setConnection}
+            onChange={changeConnection}
             onConnect={() => session.connect(connection)}
-            onDisconnect={session.disconnect}
+            onDisconnect={disconnect}
+            onForget={forgetConnection}
           />
           {session.opened ? (
             <SessionNavigator
@@ -260,7 +337,7 @@ export function App() {
               switchBlocked={switchBlocked}
               onRefresh={() => void workspaceProduct.refresh()}
               onSwitch={moveToSession}
-              onCreate={moveToSession}
+              onCreate={createSession}
               onDelete={(sessionId) =>
                 void workspaceProduct.deleteSession(sessionId)
               }
@@ -371,7 +448,7 @@ export function App() {
                 onChooseProfile={(profileId) =>
                   void workspaceProduct.chooseLaunchProfile(profileId)
                 }
-                onCancel={session.disconnect}
+                onCancel={disconnect}
               />
             ) : (
               <Timeline

@@ -8,7 +8,7 @@ interface SessionNavigatorProps {
   switchBlocked: boolean;
   onRefresh: () => void;
   onSwitch: (sessionId: string) => void;
-  onCreate: (sessionId: string) => void;
+  onCreate: () => void;
   onDelete: (sessionId: string) => void;
 }
 
@@ -22,8 +22,6 @@ export function SessionNavigator({
   onDelete,
 }: SessionNavigatorProps) {
   const [query, setQuery] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [newSessionId, setNewSessionId] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const sessions = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -36,14 +34,6 @@ export function SessionNavigator({
       : state.sessions;
   }, [query, state.sessions]);
 
-  const create = () => {
-    const id =
-      newSessionId.trim() || `coding:web:${crypto.randomUUID().slice(0, 8)}`;
-    setCreating(false);
-    setNewSessionId("");
-    onCreate(id);
-  };
-
   return (
     <section className="session-navigator" aria-labelledby="sessions-title">
       <div className="section-heading compact-heading">
@@ -52,7 +42,7 @@ export function SessionNavigator({
           <h2 id="sessions-title">Sessions</h2>
         </div>
         <div className="navigator-actions">
-          <button type="button" onClick={() => setCreating((value) => !value)}>
+          <button type="button" disabled={switchBlocked} onClick={onCreate}>
             New
           </button>
           <button type="button" onClick={onRefresh}>
@@ -60,34 +50,6 @@ export function SessionNavigator({
           </button>
         </div>
       </div>
-
-      {creating ? (
-        <form
-          className="new-session-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            create();
-          }}
-        >
-          <label>
-            <span>Session id</span>
-            <input
-              autoFocus
-              value={newSessionId}
-              onChange={(event) => setNewSessionId(event.target.value)}
-              placeholder="Auto-generate when empty"
-            />
-          </label>
-          <div>
-            <button type="button" onClick={() => setCreating(false)}>
-              Cancel
-            </button>
-            <button type="submit" disabled={switchBlocked}>
-              Create
-            </button>
-          </div>
-        </form>
-      ) : null}
 
       {state.sessions.length > 3 ? (
         <input

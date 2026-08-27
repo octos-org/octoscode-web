@@ -52,12 +52,13 @@ bridge, or raw protocol event bus.
 
 ## State ownership
 
-| State                                                           | Owner                                         |
-| --------------------------------------------------------------- | --------------------------------------------- |
-| Sessions, transcript, tasks, plans, permissions, diffs, usage   | `octos serve`                                 |
-| Cursor, hydrate integrity, and current server projections       | Protocol/session feature boundaries           |
-| Drafts, focus, selection, expansion, and connection preferences | Browser UI                                    |
-| Auth token and provider credential                              | Memory only; never persistent browser storage |
+| State                                                           | Owner                                                |
+| --------------------------------------------------------------- | ---------------------------------------------------- |
+| Sessions, transcript, tasks, plans, permissions, diffs, usage   | `octos serve`                                        |
+| Cursor, hydrate integrity, and current server projections       | Protocol/session feature boundaries                  |
+| Drafts, focus, selection, expansion, and connection preferences | Browser UI                                           |
+| Auth token                                                      | Current tab (`sessionStorage`); never `localStorage` |
+| Provider credential                                             | Memory only; never browser storage                   |
 
 The foreground session orchestration boundary converts validated protocol
 notifications into feature-specific actions. Durable state is always
@@ -96,8 +97,17 @@ See [ADR 0002](adr/0002-dsh-evaluation.md) and
   transport requires HTTPS/WSS and query-redacting logs outside loopback.
 - Workspace paths refer to the server host and remain subject to server root
   policy.
+- Product hierarchy is runtime connection → workspace → session. The remembered
+  path is a browser convenience; the server-confirmed canonical root remains
+  workspace truth.
 - Reconnect without hydrate, replay, dedupe, session scope, and gap handling is
   not recovery.
+
+Connection origin, canonical workspace path, profile hint, and last established
+session are remembered locally. A successful connection also leaves a tab-scoped
+auto-connect marker and token so a refresh can restore the same session. Closing
+the tab clears the credential. See
+[ADR 0017](adr/0017-workspace-session-and-connection-memory.md).
 
 Detailed wire and compatibility rules live in
 [Protocol integration](protocol.md).
