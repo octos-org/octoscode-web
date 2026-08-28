@@ -1,0 +1,237 @@
+.root {
+  display: grid;
+  width: min(100%, 760px);
+  gap: 24px;
+  margin: 0 auto;
+  padding: 8px 0 120px;
+}
+
+.header,
+.sectionTitle,
+.tasks article,
+.taskBody {
+  display: flex;
+  align-items: center;
+}
+
+.header {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header h2,
+.header p,
+.sectionTitle h3,
+.empty {
+  margin: 0;
+}
+
+.statusList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.statusList > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.statusList dt,
+.statusList dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.statusList dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.statusList dd {
+  color: var(--dsw-alias-label-secondary);
+  text-align: right;
+}
+
+.header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.header p,
+.empty {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.header button,
+.cancel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.header button {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+.header button:hover:not(:disabled),
+.cancel:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.header button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+}
+
+.sectionTitle {
+  justify-content: space-between;
+}
+
+.sectionTitle h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sectionTitle span {
+  min-width: 24px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+  font-size: 11px;
+}
+
+.plan,
+.tasks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan li,
+.tasks article {
+  min-height: 46px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.plan li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.plan li[data-status="in_progress"] > span {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.plan li[data-status="completed"] > span {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.plan strong,
+.taskBody strong {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan small,
+.taskBody small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.tasks article {
+  gap: 8px;
+  padding: 4px;
+}
+
+.taskBody {
+  flex: 1;
+  min-width: 0;
+  gap: 9px;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.taskBody:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.taskBody > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.taskState {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.taskState[data-state="running"],
+.taskState[data-state="pending"] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.taskState[data-state="failed"],
+.taskState[data-state="cancelled"] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.taskState[data-state="completed"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.cancel {
+  flex: none;
+  height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.empty {
+  padding: 16px 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 12px;
+}
+
+.error {
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}

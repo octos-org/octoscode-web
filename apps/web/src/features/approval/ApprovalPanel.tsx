@@ -13,7 +13,7 @@ interface ApprovalPanelProps {
   busy: boolean;
   error: string | null;
   onDecide: (decision: ApprovalDecision, scope: ApprovalScope) => void;
-  onInterrupt: () => void;
+  onInterrupt?: (() => void) | undefined;
   onReviewDiff?: (previewId: string) => void;
 }
 
@@ -50,7 +50,7 @@ export function ApprovalPanel({
       backdropClassName="takeover-wrap"
       dialogClassName="approval-card"
       labelledBy="approval-title"
-      {...(busy ? {} : { onEscape: onInterrupt })}
+      {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
       onKeyDown={handleKeyDown}
     >
       <div className="approval-strip">

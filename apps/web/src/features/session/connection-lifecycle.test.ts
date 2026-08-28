@@ -31,6 +31,29 @@ describe("SessionConnectionLifecycle", () => {
     expect(lifecycle.sessionEstablished).toBe(true);
   });
 
+  it("can authenticate without requesting a hidden default session", () => {
+    const lifecycle = new SessionConnectionLifecycle(() => 0.5);
+    lifecycle.begin(input, false, false);
+    expect(lifecycle.shouldOpenSession).toBe(false);
+    expect(lifecycle.shouldResolveLaunch(false)).toBe(false);
+    expect(lifecycle.sessionEstablished).toBe(false);
+  });
+
+  it("drops a rejected Session hint without dropping authenticated identity", () => {
+    const lifecycle = new SessionConnectionLifecycle(() => 0.5);
+    lifecycle.begin(input, false, false);
+
+    expect(lifecycle.clearSessionSelection()).toEqual({
+      endpoint: "http://127.0.0.1:50080",
+      token: " secret ",
+      sessionId: "",
+      profileId: "",
+      cwd: "",
+    });
+    expect(lifecycle.shouldOpenSession).toBe(false);
+    expect(lifecycle.sessionEstablished).toBe(false);
+  });
+
   it("uses bounded jittered backoff without giving up a durable session", () => {
     const lifecycle = new SessionConnectionLifecycle(() => 1);
     lifecycle.begin(input, false);

@@ -199,7 +199,7 @@ export function WorkInspector({
           </div>
         ) : (
           <p className="muted">
-            {state.available
+            {state.taskListAvailable
               ? "No background tasks in this session."
               : "Task supervision is not advertised."}
           </p>

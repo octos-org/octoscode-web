@@ -56,6 +56,8 @@ export {
 export {
   APPUI_ONBOARDING_METHODS,
   parseLlmCatalogResult,
+  parseProfileLlmListResult,
+  parseProfileLlmSelectResult,
   parseLlmTestResult,
   parseLlmUpsertResult,
   parseLocalProfileCreateResult,
@@ -160,6 +162,11 @@ export type {
   LlmSelection,
   LlmTestResult,
   LlmUpsertResult,
+  ProfileLlmListParams,
+  ProfileLlmListResult,
+  ProfileLlmModel,
+  ProfileLlmSelectParams,
+  ProfileLlmSelectResult,
   LocalProfileCreateParams,
   LocalProfileCreateResult,
 } from "./onboarding.ts";

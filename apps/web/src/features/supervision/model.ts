@@ -39,7 +39,9 @@ export interface TaskDetailState {
 }
 
 export interface SupervisionRuntimeState {
-  available: boolean;
+  planAvailable: boolean;
+  taskListAvailable: boolean;
+  taskOutputAvailable: boolean;
   artifactsAvailable: boolean;
   cancelAvailable: boolean;
   statusAvailable: boolean;
@@ -65,7 +67,9 @@ export const EMPTY_TASK_DETAIL: TaskDetailState = {
 };
 
 export const EMPTY_SUPERVISION: SupervisionRuntimeState = {
-  available: false,
+  planAvailable: false,
+  taskListAvailable: false,
+  taskOutputAvailable: false,
   artifactsAvailable: false,
   cancelAvailable: false,
   statusAvailable: false,

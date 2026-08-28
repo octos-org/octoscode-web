@@ -11,7 +11,7 @@ import {
   type RpcNotification,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
-import { RequestGate } from "../async/request-gate.ts";
+import { RequestAuthorityGate } from "../async/request-authority.ts";
 
 export interface PermissionRuntimeState {
   available: boolean;
@@ -57,9 +57,16 @@ interface CodingSafetyDependencies {
 }
 
 export function useCodingSafety(dependencies: CodingSafetyDependencies) {
-  const diffRequestsRef = useRef(new RequestGate());
-  const permissionRequestsRef = useRef(new RequestGate());
+  const diffRequestsRef = useRef(new RequestAuthorityGate<OctosUiClient>());
+  const permissionRequestsRef = useRef(
+    new RequestAuthorityGate<OctosUiClient>(),
+  );
+  const permissionMutationRef = useRef(
+    new RequestAuthorityGate<OctosUiClient>(),
+  );
   const permissionBusyRef = useRef(false);
+  const dependenciesRef = useRef(dependencies);
+  dependenciesRef.current = dependencies;
   const [permission, setPermission] =
     useState<PermissionRuntimeState>(EMPTY_PERMISSION);
   const [diffReview, setDiffReview] =
@@ -69,6 +76,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     permissionBusyRef.current = false;
     diffRequestsRef.current.invalidate();
     permissionRequestsRef.current.invalidate();
+    permissionMutationRef.current.invalidate();
     setPermission(EMPTY_PERMISSION);
     setDiffReview(EMPTY_DIFF_REVIEW);
   };
@@ -76,12 +84,21 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   const configureCapabilities = (
     capabilities: UiProtocolCapabilities | undefined,
   ) => {
+    // Runtime hydrate/reconnect installs a new RPC authority. Old socket
+    // requests may never settle, so invalidate them synchronously instead of
+    // waiting for a stale finally block to unlock the new Session controls.
+    diffRequestsRef.current.invalidate();
+    permissionRequestsRef.current.invalidate();
+    permissionMutationRef.current.invalidate();
+    permissionBusyRef.current = false;
     const permissionAvailable = supportsMethod(
       capabilities,
       CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
     );
     setPermission((current) => ({
       ...current,
+      loading: false,
+      busy: false,
       available: permissionAvailable,
       editable:
         permissionAvailable &&
@@ -89,60 +106,69 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     }));
     setDiffReview((current) => ({
       ...current,
+      loading: false,
       available: supportsMethod(capabilities, CORE_UI_METHODS.DIFF_PREVIEW_GET),
     }));
   };
 
   const refreshPermission = async (
-    client = dependencies.client(),
+    client = dependenciesRef.current.client(),
   ): Promise<void> => {
-    const sessionId = dependencies.sessionId();
+    const currentDependencies = dependenciesRef.current;
+    const sessionId = currentDependencies.sessionId();
     if (
       !client ||
       !sessionId ||
+      permissionBusyRef.current ||
       !supportsMethod(
-        dependencies.capabilities(),
+        currentDependencies.capabilities(),
         CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
       )
     ) {
       return;
     }
-    const request = permissionRequestsRef.current.begin();
+    const request = permissionRequestsRef.current.begin(client, sessionId);
     setPermission((current) => ({ ...current, loading: true, error: null }));
     try {
       const result = await client.listPermissionProfiles({
         session_id: sessionId,
       });
-      if (
-        dependencies.client() !== client ||
-        dependencies.sessionId() !== sessionId ||
-        !permissionRequestsRef.current.isCurrent(request)
-      ) {
-        return;
-      }
+      if (!requestIsCurrent()) return;
       if (result.session_id !== sessionId) {
         throw new Error("permission/profile/list returned another session");
       }
       setPermission((current) => ({ ...current, loading: false, result }));
     } catch (reason) {
-      if (
-        dependencies.client() !== client ||
-        !permissionRequestsRef.current.isCurrent(request)
-      )
-        return;
+      if (!requestIsCurrent()) return;
       setPermission((current) => ({
         ...current,
         loading: false,
         error: errorMessage(reason),
       }));
+    } finally {
+      if (permissionRequestsRef.current.finish(request)) {
+        setPermission((current) =>
+          current.loading ? { ...current, loading: false } : current,
+        );
+      }
+    }
+
+    function requestIsCurrent(): boolean {
+      const latest = dependenciesRef.current;
+      return permissionRequestsRef.current.isCurrent(
+        request,
+        latest.client(),
+        latest.sessionId(),
+      );
     }
   };
 
   const updatePermission = async (
     update: PermissionProfileUpdate,
   ): Promise<void> => {
-    const client = dependencies.client();
-    const sessionId = dependencies.sessionId();
+    const currentDependencies = dependenciesRef.current;
+    const client = currentDependencies.client();
+    const sessionId = currentDependencies.sessionId();
     if (
       !client ||
       !sessionId ||
@@ -174,19 +200,24 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       return;
     }
 
+    // A mutation supersedes any older permission read. Otherwise a slow list
+    // response can overwrite the just-selected profile before the post-write
+    // refresh begins.
+    permissionRequestsRef.current.invalidate();
+    const request = permissionMutationRef.current.begin(client, sessionId);
     permissionBusyRef.current = true;
-    setPermission((state) => ({ ...state, busy: true, error: null }));
+    setPermission((state) => ({
+      ...state,
+      loading: false,
+      busy: true,
+      error: null,
+    }));
     try {
       const result = await client.setPermissionProfile({
         session_id: sessionId,
         update,
       });
-      if (
-        dependencies.client() !== client ||
-        dependencies.sessionId() !== sessionId
-      ) {
-        return;
-      }
+      if (!requestIsCurrent()) return;
       if (result.session_id !== sessionId) {
         throw new Error("permission/profile/set returned another session");
       }
@@ -206,21 +237,37 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       }));
       permissionBusyRef.current = false;
       await refreshPermission(client);
-      dependencies.onPermissionApplied(client);
+      if (!requestIsCurrent()) return;
+      dependenciesRef.current.onPermissionApplied(client);
     } catch (reason) {
-      if (dependencies.client() !== client) return;
-      permissionBusyRef.current = false;
+      if (!requestIsCurrent()) return;
       setPermission((state) => ({
         ...state,
-        busy: false,
         error: errorMessage(reason),
       }));
+    } finally {
+      if (permissionMutationRef.current.finish(request)) {
+        permissionBusyRef.current = false;
+        setPermission((current) =>
+          current.busy ? { ...current, busy: false } : current,
+        );
+      }
+    }
+
+    function requestIsCurrent(): boolean {
+      const latest = dependenciesRef.current;
+      return permissionMutationRef.current.isCurrent(
+        request,
+        latest.client(),
+        latest.sessionId(),
+      );
     }
   };
 
   const openDiffReview = async (requestedPreviewId?: string): Promise<void> => {
-    const client = dependencies.client();
-    const sessionId = dependencies.sessionId();
+    const currentDependencies = dependenciesRef.current;
+    const client = currentDependencies.client();
+    const sessionId = currentDependencies.sessionId();
     const previewId = requestedPreviewId ?? diffReview.latestPreviewId;
     if (
       !client ||
@@ -228,14 +275,14 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       !previewId ||
       !isPreviewId(previewId) ||
       !supportsMethod(
-        dependencies.capabilities(),
+        currentDependencies.capabilities(),
         CORE_UI_METHODS.DIFF_PREVIEW_GET,
       )
     ) {
       return;
     }
 
-    const request = diffRequestsRef.current.begin();
+    const request = diffRequestsRef.current.begin(client, sessionId);
     setDiffReview((current) => ({
       ...current,
       latestPreviewId: previewId,
@@ -249,13 +296,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
         session_id: sessionId,
         preview_id: previewId,
       });
-      if (
-        dependencies.client() !== client ||
-        !diffRequestsRef.current.isCurrent(request) ||
-        dependencies.sessionId() !== sessionId
-      ) {
-        return;
-      }
+      if (!requestIsCurrent()) return;
       if (
         result.preview.session_id !== sessionId ||
         result.preview.preview_id !== previewId
@@ -268,17 +309,27 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
         result,
       }));
     } catch (reason) {
-      if (
-        dependencies.client() !== client ||
-        !diffRequestsRef.current.isCurrent(request)
-      ) {
-        return;
-      }
+      if (!requestIsCurrent()) return;
       setDiffReview((current) => ({
         ...current,
         loading: false,
         error: errorMessage(reason),
       }));
+    } finally {
+      if (diffRequestsRef.current.finish(request)) {
+        setDiffReview((current) =>
+          current.loading ? { ...current, loading: false } : current,
+        );
+      }
+    }
+
+    function requestIsCurrent(): boolean {
+      const latest = dependenciesRef.current;
+      return diffRequestsRef.current.isCurrent(
+        request,
+        latest.client(),
+        latest.sessionId(),
+      );
     }
   };
 

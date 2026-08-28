@@ -72,11 +72,17 @@ import {
 import {
   APPUI_ONBOARDING_METHODS,
   parseLlmCatalogResult,
+  parseProfileLlmListResult,
+  parseProfileLlmSelectResult,
   parseLlmTestResult,
   parseLlmUpsertResult,
   parseLocalProfileCreateResult,
   type LlmCatalogResult,
   type LlmProvisionParams,
+  type ProfileLlmListParams,
+  type ProfileLlmListResult,
+  type ProfileLlmSelectParams,
+  type ProfileLlmSelectResult,
   type LlmTestResult,
   type LlmUpsertResult,
   type LocalProfileCreateParams,
@@ -87,6 +93,7 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
   CORE_UI_FEATURES.PANE_SNAPSHOTS_V1,
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+  CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
   CORE_UI_FEATURES.USER_QUESTION_V1,
   CORE_UI_FEATURES.PLAN_TODOS_V1,
@@ -440,6 +447,26 @@ export class OctosUiClient {
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_CATALOG,
       {},
       parseLlmCatalogResult,
+    );
+  }
+
+  async listProfileModels(
+    params: ProfileLlmListParams,
+  ): Promise<ProfileLlmListResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_LIST,
+      params,
+      parseProfileLlmListResult,
+    );
+  }
+
+  async selectProfileModel(
+    params: ProfileLlmSelectParams,
+  ): Promise<ProfileLlmSelectResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_SELECT,
+      params,
+      parseProfileLlmSelectResult,
     );
   }
 

@@ -1,5 +1,8 @@
 # Third-party notices
 
+This file records copied or adapted source. Licenses for the production npm
+dependency closure are generated separately in `THIRD_PARTY_LICENSES.md`.
+
 ## DeepSeek Harness UI and Markdown primitives
 
 Parts of the visual token values, layout treatment, Markdown styling, code-block

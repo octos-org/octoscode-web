@@ -60,7 +60,7 @@ jobs:
           test ! -e "$stage"
           mkdir "$stage"
           cp -R apps/web/dist/. "$stage/"
-          cp LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md SECURITY.md "$stage/"
+          cp LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.md CHANGELOG.md SECURITY.md "$stage/"
           cp docs/deployment.md "$stage/DEPLOYMENT.md"
           cp -R deploy "$stage/deploy"
           tar -C "$stage" -czf "$artifact" .

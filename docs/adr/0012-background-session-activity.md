@@ -1,9 +1,12 @@
 # ADR 0012: Background session activity
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-26
+- Superseded by: [ADR 0018](0018-dsh-aligned-product-shell.md)
 
-Broader activity-navigator parity remains planned.
+ADR 0018 removes the global Activity navigator and cross-session polling. Work
+supervision is presented as Trajectory for the selected Session until Core
+offers an authoritative server-wide product contract.
 
 ## Context
 

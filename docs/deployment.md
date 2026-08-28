@@ -1,14 +1,16 @@
 # Deployment contract
 
 `octoscode-web` is a static browser client. The release archive contains the
-contents of `apps/web/dist`, the Apache-2.0 license, third-party notices, and
-this deployment contract. It does not contain or start an Octos runtime.
+contents of `apps/web/dist`, the Apache-2.0 license, adapted-source notices,
+generated production dependency licenses, and this deployment contract. It does
+not contain or start an Octos runtime.
 
 ## Build and release identity
 
 Every build emits `/octoscode-web-build.json` with:
 
-- the Web release and exact source revision;
+- the Web release and source-revision fields (local builds intentionally use
+  `dev` / `unknown`; the release workflow injects the exact tag and commit);
 - the UI Protocol version;
 - the exact Octos Core revision and protocol blob used by the generated
   vocabulary and checked payload fixtures;
@@ -39,7 +41,8 @@ Serve the extracted directory over HTTPS and route unknown application paths to
 
 - `index.html` and `octoscode-web-build.json`: `no-cache`;
 - hashed files under `assets/`: `public, max-age=31536000, immutable`;
-- `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `DEPLOYMENT.md`: `no-cache`.
+- `LICENSE`, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES.md`, and
+  `DEPLOYMENT.md`: `no-cache`.
 
 Set at least `X-Content-Type-Options: nosniff`, a restrictive `Referrer-Policy`,
 and a deployment-specific Content Security Policy. The CSP must allow WebSocket
@@ -64,19 +67,30 @@ comment-stripped configuration) and `nginx -t`.
 
 ## Octos runtime boundary
 
-Run a compatible `octos serve` separately. The operator supplies its origin,
-server-side workspace path, session id, and (when configured) auth token in the
-connection surface. Same-origin reverse proxying is recommended because it
-simplifies TLS, origin policy, and CSP. A cross-origin deployment requires the
-Octos endpoint or reverse proxy to accept the Web application's `Origin`.
+Run a compatible `octos serve` separately. The connection gate asks for its
+origin and, when configured, an auth token. Workspace selection happens after
+authentication: New Session chooses a known Workspace, while Add workspace
+accepts a path on the server host and creates a fresh Web Session. Session
+identity is never an operator-facing login field. Same-origin reverse proxying
+is recommended because it simplifies TLS, origin policy, and CSP. A cross-origin
+deployment requires the Octos endpoint or reverse proxy to accept the Web
+application's `Origin`.
 
-The browser client never writes the auth token to `localStorage`. It retains the
-token only in the current tab's `sessionStorage` so refresh can restore a live
-workspace; closing the tab clears it. Provider API keys are never persisted in
-browser storage. The current UI Protocol transports the auth token in the
-WebSocket URL query, so HTTPS/WSS is mandatory outside loopback and reverse
-proxies must redact query strings from access logs. Treat captured URLs as
-credentials.
+Current Core responses do not report whether a `session/list({cwd})` request was
+honored or silently served from the legacy profile-global store. Core rc.9 can
+also lose the target Profile on an unscoped/admin known-path list and scan
+`_main` instead. octoscode-web therefore does not use those rows as a Workspace
+catalog, regardless of `appui.sessions_in_cwd`; the authoritative replacement is
+tracked in [octos#2146](https://github.com/octos-org/octos/issues/2146).
+
+The browser writes only the server endpoint to `localStorage`. It binds the auth
+token, auto-connect marker, active Session/Workspace/Profile restore hints, and
+recent Workspace paths to that endpoint in the current tab's `sessionStorage`.
+Refresh can restore the active Session; closing the tab leaves only the
+endpoint. Provider API keys are never persisted in browser storage. The current
+UI Protocol transports the auth token in the WebSocket URL query, so HTTPS/WSS
+is mandatory outside loopback and reverse proxies must redact query strings from
+access logs. Treat captured URLs as credentials.
 
 Compatibility is capability-gated at runtime. The build manifest records the
 contract verified during release, but it is not a promise that every future or

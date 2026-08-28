@@ -9,13 +9,7 @@ export const OCTOSCODE_INTERACTION_SOURCE_REVISION =
 
 export type CommandCategory = "Runtime" | "Session" | "Settings" | "Help";
 export type CommandIntent =
-  | "process-status"
-  | "activity"
-  | "interrupt"
-  | "help"
-  | "copy"
-  | "status"
-  | "resume";
+  "process-status" | "interrupt" | "help" | "copy" | "status" | "resume";
 
 export interface CommandRequirement {
   methodsAll?: readonly string[];
@@ -56,21 +50,13 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
     implemented: true,
   },
   {
-    name: "activity",
-    aliases: [],
-    description: "Search tasks across recent sessions",
-    category: "Runtime",
-    intent: "activity",
-    implemented: true,
-    requirement: { methodsAll: [CORE_UI_METHODS.TASK_LIST] },
-  },
-  {
     name: "stop",
     aliases: ["interrupt", "esc"],
     description: "Stop the active foreground turn",
     category: "Runtime",
     intent: "interrupt",
     implemented: true,
+    requirement: { methodsAll: [CORE_UI_METHODS.TURN_INTERRUPT] },
   },
   {
     name: "help",

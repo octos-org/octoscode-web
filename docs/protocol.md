@@ -22,12 +22,14 @@ primitives come from one decoder module. Request timeouts and disconnects move
 their ids into a bounded quarantine so a valid late server response is ignored
 instead of reported as an unrelated protocol error. Method and feature names
 exported by Core come from the generated contract index; only the isolated CLI
-onboarding extension remains handwritten until Core exports it.
+AppUI extensions used for onboarding and Profile model management remain
+handwritten until Core exports them.
 
 Browser WebSockets cannot attach an `Authorization` header. The current Core
 endpoint accepts `?token=` and repeated `ui_feature` parameters. Tokens remain
-in memory, must travel over HTTPS/WSS outside loopback, and must be excluded
-from diagnostics and access logs.
+in tab-scoped `sessionStorage` so a refresh can reconnect without placing the
+credential in durable cross-tab storage. They must travel over HTTPS/WSS outside
+loopback and must be excluded from diagnostics and access logs.
 
 ## Durable projection invariant
 
@@ -58,19 +60,38 @@ Markdown tree.
   a browser-computed git diff.
 - Plans, policy, tasks, output, cancellation, and artifacts use the advertised
   status and task methods. Output cursors are byte offsets; reads are bounded.
-- Session navigation uses server-owned lists and identities. Switching sessions
-  closes the foreground subscription and opens the selected durable session.
-  Only unsent drafts are browser state.
-- Context, cost, and model usage merge typed progress metadata with the latest
-  server status snapshot.
+- The successfully opened/restored Session is the only current navigation
+  authority. rc.9 `session/list` rows are not projected because the response
+  proves neither Workspace nor Profile scope. A future server-owned catalog must
+  provide Workspace/SessionRef before multi-Session switching is enabled. Only
+  unsent drafts are browser state.
+- Context, cost, and effective runtime-model usage merge typed progress metadata
+  with the latest server status snapshot.
+
+The model served by a Session runtime and the active Profile default are
+different projections. The composer reports only the former. Capability-gated
+`profile/llm/list` and `profile/llm/select` populate Settings and manage the
+Profile default, which affects every Session on that Profile and may require an
+Octos restart. They are not treated as a Session override; that missing Core
+contract is tracked in
+[octos#2148](https://github.com/octos-org/octos/issues/2148).
 
 ## Workspace launch and onboarding
 
 For a path-based launch, the client requests capabilities before opening a
 session. It calls `launch/resolve` only when both the method and
-`session.workspace_cwd.v1` are available. Resume opens the exact Octoscode
-identity `<profile>:local:tui#coding`; activation and cross-profile cases retain
-the TUI's explicit choices.
+`session.workspace_cwd.v1` are available. The result chooses a Profile; it does
+not identify an existing Session. New Session and Add workspace keep a neutral
+`web-<uuid>` launch intent until that Profile is resolved, then open a fresh
+`<profile>:api:web-<uuid>` Session. Existing sidebar rows bypass launch
+resolution and open their exact server identity. The Web client never aliases or
+overwrites Octoscode TUI's `<profile>:local:tui#coding` conversation.
+
+This profile-bearing Web id is a compatibility requirement, not proof that Core
+has one unified Session resolver. Current Core can accept a raw id with an
+explicit Profile during `session/open` and then route hydrate/status elsewhere;
+the server-side identity split is tracked in
+[octos#2162](https://github.com/octos-org/octos/issues/2162).
 
 On `no_profile`, the browser offers solo onboarding only when Core advertises
 the complete method set:
@@ -82,8 +103,10 @@ the complete method set:
 
 Families, models, and routes come from Core. A credential must pass the provider
 test before the selection is saved, and the API key exists only in the live
-form/request closure. Partial failure retains the created profile id so a retry
-does not duplicate it. Older servers show `octoscode onboard` instead.
+form/request closure. `requested_id` is only a request: Core's returned
+`profile_id` is authoritative and may be normalized or collision-suffixed.
+Partial failure retains both that returned id and its original request so a
+retry does not duplicate it. Older servers show `octoscode onboard` instead.
 
 These onboarding names currently come from the CLI AppUI transport rather than
 exported Core constants. They are isolated in

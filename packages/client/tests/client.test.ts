@@ -9,6 +9,10 @@ describe("OctosUiClient", () => {
     expect(DEFAULT_UI_FEATURES).not.toContain("session.hydrate.v1");
   });
 
+  it("negotiates the auxiliary REST-to-WebSocket bridge", () => {
+    expect(DEFAULT_UI_FEATURES).toContain("auxiliary.rest_to_ws.v1");
+  });
+
   it("rejects connect when the socket closes before opening", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({

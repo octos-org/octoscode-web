@@ -12,26 +12,88 @@
 - Re-enter the token if the tab was closed. It survives a refresh in the same
   tab but is intentionally absent from `localStorage`.
 
-“Could not open the Octos UI Protocol connection” means the WebSocket handshake
-failed before `session/open`. Workspace, profile, and session errors occur only
-after the socket opens and retain the server's specific error text.
+The connection gate asks only for server origin and token. If it reports “Could
+not connect,” fix authentication or network reachability there; Workspace and
+Session choices appear only after the product opens.
 
 ## A workspace path does not open
 
-The path is resolved on the `octos serve` host, not on the browser computer. The
-server's workspace-root policy remains authoritative. A `/path` containing
-another slash is treated as prompt text, while a recognized `/command` is
-resolved locally and never sent to the model.
+Open **Add workspace** from the left sidebar and enter a path on the
+`octos serve` host, not on the browser computer. Core's Workspace-root and
+filesystem policy remains authoritative. A recent Workspace may also have moved
+or been deleted since the browser remembered it. There is currently no
+individual edit/remove action for a recent path. Enter the corrected path with
+**Add workspace**; **Forget server** clears the whole tab-scoped recent list
+when you need a full reset.
+
+Typing a path in Chat does not select a Workspace. Absolute paths containing a
+directory separator remain ordinary prompt text. A slash-shaped command that is
+not in the Web command registry fails closed and is never sent to the model;
+recognized `/commands` are resolved locally.
+
+## Workspaces or Sessions are missing from the sidebar
+
+Current Core builds cannot yet provide an authoritative Workspace/Session
+catalog. During the current tab, the sidebar remembers recent paths, but it
+shows only the Session that this client successfully opened or restored. Core
+rc.9 can route an unscoped/admin `session/list({cwd})` through `_main` instead
+of the Workspace's coding Profile, or silently ignore cwd, without reporting the
+effective scope. The Web rejects those rows instead of placing them under the
+wrong Workspace. A new tab therefore begins with no Workspace recents even
+though the durable server has other work; only the endpoint survives.
+
+Use **Add workspace** with the server path. This creates a fresh Session and
+makes the path available as a recent navigation hint; it does not import a
+client-side Workspace object or guarantee discovery of older Sessions. Do not
+copy browser storage between deployments. A complete server-owned catalog is
+tracked in [octos#2146](https://github.com/octos-org/octos/issues/2146).
+
+Changing `appui.sessions_in_cwd` cannot make the current response authoritative:
+the setting is not returned to the client and the list has no effective scope.
+This wire-contract gap is tracked in octos#2146.
 
 ## A new session does not open
 
-**New** creates a server-owned `<profile>:api:web-<uuid>` session in the active
-workspace; there is no browser-owned session registry or user-entered identity.
-Keeping the active profile in the id lets hydrate, task, and permission methods
-route correctly even when the connection uses a global serve token rather than
-profile-bound authentication. If it is rejected, verify that the current profile
-still exists and that the server-confirmed workspace root remains accessible.
-Existing rows come from `session/list`, not browser storage.
+**New Session** first asks for a recent Workspace path. Choosing it creates a
+fresh Web Session; **Add workspace** does the same after accepting a new server
+path. There is no user-entered Session identity and neither action means “resume
+the canonical TUI coding Session.” The adapter waits for Core's Profile decision
+before forming the profile-routable Web identity. If creation is rejected,
+verify that the server path remains accessible and has a usable Octos coding
+profile. An empty server may open onboarding or direct you to
+`octoscode onboard`.
+
+Older clients that opened a bare `web-*` identity through an unscoped admin
+credential may have created a Session that Core can open but cannot hydrate. The
+browser cannot safely guess a Profile and migrate that history; the Core
+resolver defect is tracked in
+[octos#2162](https://github.com/octos-org/octos/issues/2162).
+
+Session switching and creation are disabled while the selected Session has an
+active turn or queued prompts. Stop or finish that work before switching.
+
+## Full access cannot be selected
+
+The composer shows only complete permission and network combinations advertised
+for the selected Session. Full access is absent or disabled when the server does
+not allow it; the browser cannot promote its own authority. When available,
+selecting it requires explicit risk acknowledgement. Durable policy and
+authenticated administration are tracked in
+[octos#2147](https://github.com/octos-org/octos/issues/2147).
+
+## A model is missing or Profile default differs from Session runtime
+
+The composer reports the effective model from the selected Session's runtime; it
+is not a Session-level selector. **Settings → Models** separately shows and,
+when allowed, changes the active Profile default. That default affects every
+Session using the Profile. Refresh the Models page after server configuration
+changes.
+
+If Settings says a restart is required, the saved Profile default and the model
+served by the current Octos process are intentionally shown as different values.
+Restart Octos before expecting new turns to use the default. A true
+Session-scoped override is tracked in
+[octos#2148](https://github.com/octos-org/octos/issues/2148).
 
 ## Recovery is stuck
 

@@ -25,33 +25,58 @@ pnpm install --frozen-lockfile
    pnpm dev
    ```
 
-3. Open the displayed local URL and complete the connection panel:
+3. Open the displayed local URL. The connection gate has two fields:
 
-   | Field          | Meaning                                                                     |
-   | -------------- | --------------------------------------------------------------------------- |
-   | Server origin  | HTTP(S) origin that exposes the Octos AppUI endpoint.                       |
-   | Auth token     | Optional server credential; retained only for the current browser tab.      |
-   | Workspace path | Path on the **server host**, not on the browser device.                     |
-   | Session id     | Advanced fallback identity for servers without workspace launch resolution. |
+   | Field         | Meaning                                                             |
+   | ------------- | ------------------------------------------------------------------- |
+   | Server origin | HTTP(S) origin for the Octos server.                                |
+   | Auth token    | Credential when the server requires one; retained only in this tab. |
 
-When Core supports `launch/resolve`, the server decides whether to resume,
-activate, or select a profile for the workspace. An empty solo server can also
-offer profile and provider onboarding in the browser. Provider data comes from
-Core, the credential is tested before saving, and the API key is never written
-to browser storage. Older servers display the canonical `octoscode onboard`
-fallback instead.
+4. Select **Connect**. Authentication happens before work selection; there are
+   no Workspace path, profile, or Session identity fields on this screen.
+5. In the product sidebar, select **New Session** and choose a known Workspace.
+   To use another repository, select **Add workspace** and enter its path on the
+   **Octos server host**, not the browser device. Add workspace validates that
+   path and creates a fresh Session; it is not Workspace-registry CRUD.
+6. When Core returns an existing Session row with a usable identity, select it
+   to resume it. Chat and Trajectory both follow the selected Session. Do not
+   assume the list is complete on Core rc.9; unscoped/admin connections can
+   misroute a known-path list to the wrong Profile (octos#2146).
 
-After a successful connection, refreshing the same tab reopens the exact
-established session. The browser remembers non-secret connection fields across
-browser restarts. The auth token and auto-connect marker use tab-scoped
-`sessionStorage`, so closing the tab forgets the credential. **Forget
-connection** clears both scopes explicitly.
+Workspace is the coding object that groups Sessions for one server path. Core
+validates and canonicalizes that path and owns every durable Session. For New
+Session, the browser generates a fresh opaque Web identity behind the product
+flow and Core creates the durable ledger; users never enter an id.
 
-The product hierarchy is runtime connection → workspace → session. “Workspace”
-is the Octoscode/Web name for the object that groups coding sessions by a path.
-The path is on the `octos serve` host; a remote browser cannot open a local
-directory picker for it. The server canonicalizes the path and returns the
-authoritative workspace root.
+Current Core builds do not provide a complete server-wide Workspace catalog. In
+the current tab, the sidebar remembers only a bounded list of recent server
+paths. No Session ids, titles, prompts, or projections live in that cache. Core
+rc.9 can lose the requested Profile or silently ignore cwd on an unscoped/admin
+list call, and its response does not report the effective scope. The Web does
+not project those rows: only the active/restored Session is shown, while a
+recent path starts a new Session. Recents have no individual edit/remove action
+and never become a second database. The missing Core object contract is tracked
+in [octos#2146](https://github.com/octos-org/octos/issues/2146).
+
+The active Session's permission control and effective runtime model are in the
+composer footer. Full access appears only when advertised and requires a risk
+acknowledgement. The runtime-model label is status, not a Session-level model
+selector. Open **Settings** at the bottom of the sidebar for General connection
+details, **Disconnect**, **Forget server**, or Models. The Models section
+manages the active Profile default, which affects all Sessions using that
+Profile and may require an Octos restart.
+
+An empty solo server can offer profile and provider onboarding after a Workspace
+is selected. Provider data comes from Core, the credential is tested before
+saving, and the API key is never written to browser storage. Older servers
+display the canonical `octoscode onboard` fallback instead.
+
+After a successful connection, refreshing the same tab reopens the established
+Session. Only the server origin is durable. The token, auto-connect marker,
+active Session/Workspace/Profile restore hints, and recent Workspace paths are
+bound to that endpoint in tab-scoped `sessionStorage`; closing the tab forgets
+all of them. **Disconnect** keeps the endpoint and current tab data but stops
+automatic reconnection; **Forget server** clears both storage scopes.
 
 ## Run the product fixture
 

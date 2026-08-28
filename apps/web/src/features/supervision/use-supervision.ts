@@ -68,9 +68,18 @@ export function useSupervision(
   ) => {
     setState((current) => ({
       ...current,
-      available:
-        supportsMethod(capabilities, CORE_UI_METHODS.TASK_LIST) &&
-        supportsMethod(capabilities, CORE_UI_METHODS.TASK_OUTPUT_READ),
+      planAvailable: supportsFeature(
+        capabilities,
+        CORE_UI_FEATURES.PLAN_TODOS_V1,
+      ),
+      taskListAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.TASK_LIST,
+      ),
+      taskOutputAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.TASK_OUTPUT_READ,
+      ),
       cancelAvailable: supportsMethod(
         capabilities,
         CORE_UI_METHODS.TASK_CANCEL,
@@ -154,7 +163,8 @@ export function useSupervision(
     if (
       !client ||
       !sessionId ||
-      !state.available ||
+      !state.taskListAvailable ||
+      (!state.taskOutputAvailable && !state.artifactsAvailable) ||
       !state.tasks.some((task) => task.id === taskId)
     ) {
       return;
@@ -165,11 +175,13 @@ export function useSupervision(
       detail: { ...EMPTY_TASK_DETAIL, active: true, taskId, loading: true },
     }));
     const [output, artifacts] = await Promise.allSettled([
-      client.readTaskOutput({
-        session_id: sessionId,
-        task_id: taskId,
-        limit_bytes: 131_072,
-      }),
+      state.taskOutputAvailable
+        ? client.readTaskOutput({
+            session_id: sessionId,
+            task_id: taskId,
+            limit_bytes: 131_072,
+          })
+        : Promise.resolve(null),
       state.artifactsAvailable
         ? client.listTaskArtifacts({ session_id: sessionId, task_id: taskId })
         : Promise.resolve(null),

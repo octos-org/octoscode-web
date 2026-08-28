@@ -15,17 +15,18 @@ of rewriting the original decision.
 
 ## Sessions, coding, and supervision
 
-| ADR                                                     | Decision                                                              |
-| ------------------------------------------------------- | --------------------------------------------------------------------- |
-| [0005](0005-durable-session-recovery.md)                | Treat hydrate, cursor replay, dedupe, and reconnect as one invariant. |
-| [0006](0006-safe-markdown-transcript.md)                | Parse Markdown only after assistant output settles.                   |
-| [0007](0007-coding-safety-surfaces.md)                  | Keep permission and diff safety surfaces server-authoritative.        |
-| [0008](0008-supervised-work-surfaces.md)                | Project plans, tasks, output, and artifacts from Octos.               |
-| [0009](0009-workspace-session-surfaces.md)              | Keep workspace sessions and usage server-owned.                       |
-| [0010](0010-server-resolved-workspace-launch.md)        | Let the server resolve path-based workspace launch.                   |
-| [0012](0012-background-session-activity.md)             | Show bounded background activity without inventing global live state. |
-| [0015](0015-solo-web-onboarding.md)                     | Onboard an empty solo server through capability-gated Core methods.   |
-| [0017](0017-workspace-session-and-connection-memory.md) | Model runtime → workspace → session and restore it safely on refresh. |
+| ADR                                                     | Decision                                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [0005](0005-durable-session-recovery.md)                | Treat hydrate, cursor replay, dedupe, and reconnect as one invariant.  |
+| [0006](0006-safe-markdown-transcript.md)                | Parse Markdown only after assistant output settles.                    |
+| [0007](0007-coding-safety-surfaces.md)                  | Keep permission and diff safety surfaces server-authoritative.         |
+| [0008](0008-supervised-work-surfaces.md)                | Project plans, tasks, output, and artifacts from Octos.                |
+| [0009](0009-workspace-session-surfaces.md)              | Keep workspace sessions and usage server-owned.                        |
+| [0010](0010-server-resolved-workspace-launch.md)        | Let the server resolve path-based workspace launch.                    |
+| [0012](0012-background-session-activity.md)             | Retired the incomplete cross-session Activity navigator.               |
+| [0015](0015-solo-web-onboarding.md)                     | Onboard an empty solo server through capability-gated Core methods.    |
+| [0017](0017-workspace-session-and-connection-memory.md) | Historical connection/restore design, superseded by ADR 0018.          |
+| [0018](0018-dsh-aligned-product-shell.md)               | Separate authentication from DSH-aligned Workspace/Session navigation. |
 
 ## Contracts and delivery
 

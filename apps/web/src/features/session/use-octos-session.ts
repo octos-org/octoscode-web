@@ -5,17 +5,29 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { type SessionConnectionInput } from "./connection-lifecycle.ts";
 import {
-  SessionConnectionLifecycle,
-  type SessionConnectionInput,
-} from "./connection-lifecycle.ts";
+  prepareCandidateSession,
+  type CandidateSessionSnapshot,
+  type PreparedCandidateSession,
+} from "./candidate-session.ts";
+import { missingCodingSessionRequirements } from "./coding-capabilities.ts";
+import {
+  LaunchTransitionCoordinator,
+  type LaunchTransitionLease,
+} from "./launch-transition.ts";
+import { bindWebSessionIdToProfile } from "./session-identity.ts";
+import type {
+  ActiveSessionAuthority,
+  ActiveSessionRuntimeEvent,
+} from "./active-session-runtime.ts";
+import { useServerConnection } from "./use-server-connection.ts";
 import {
   coreProtocolCompatibilityError,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
   DEFAULT_UI_FEATURES,
   OctosUiClient,
-  OctosUiProtocolError,
   parseTokenCostUpdate,
   supportsFeature,
   supportsMethod,
@@ -23,9 +35,12 @@ import {
   type ApprovalRequested,
   type ApprovalScope,
   type ConnectionStatus,
+  type LaunchResolveResult,
   type PermissionProfileUpdate,
+  type ProfileLlmModel,
   type RpcNotification,
   type SessionOpened,
+  type SessionListEntry,
   type UiProtocolCapabilities,
   type UserQuestionAnswer,
   type UserQuestionRequested,
@@ -39,7 +54,10 @@ import {
   type PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
 import { useTurnController } from "../composer/use-turn-controller.ts";
-import type { PromptTurnQueueSnapshot } from "../composer/turn-queue.ts";
+import type {
+  PromptTurn,
+  PromptTurnQueueSnapshot,
+} from "../composer/turn-queue.ts";
 import {
   addSystemMessage,
   foldNotification,
@@ -47,17 +65,12 @@ import {
   timelineFromHydrate,
   type TimelineEntry,
 } from "../timeline/model.ts";
-import {
-  DurableSessionProjection,
-  type SessionRecoverySnapshot,
-} from "./durable-session.ts";
-import { notificationMatchesSessionScope } from "./scope.ts";
+import type { SessionRecoverySnapshot } from "./durable-session.ts";
 import { type SupervisionRuntimeState } from "../supervision/model.ts";
 import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
 import { useWorkspaceProduct } from "../workspace/use-workspace-product.ts";
 import {
-  codingSessionIdForProfile,
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
 } from "../workspace/launch-model.ts";
@@ -66,16 +79,15 @@ import {
   type OnboardingRuntimeState,
   type OnboardingSubmission,
 } from "../onboarding/use-onboarding.ts";
+import {
+  useModelSelection,
+  type ModelSelectionRuntimeState,
+} from "../models/use-model-selection.ts";
 
 export type {
   DiffReviewRuntimeState,
   PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
-
-const REQUIRED_DURABLE_FEATURES = [
-  CORE_UI_FEATURES.SESSION_HYDRATE_V1,
-  CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
-] as const;
 
 const LEGACY_PROJECTION_METHODS = new Set<string>([
   CORE_UI_METHODS.MESSAGE_DELTA,
@@ -95,6 +107,9 @@ export interface OctosSessionRuntime {
     error: string | null;
     opened: SessionOpened | null;
     recovery: SessionRecoverySnapshot;
+    capabilities: UiProtocolCapabilities | undefined;
+    authenticated: boolean;
+    restoreRejected: boolean;
     connected: boolean;
     connect: (input: SessionConnectionInput) => void;
     restore: (input: SessionConnectionInput) => void;
@@ -127,6 +142,11 @@ export interface OctosSessionRuntime {
     openDiffReview: (previewId?: string) => Promise<void>;
     closeDiffReview: () => void;
   };
+  models: {
+    state: ModelSelectionRuntimeState;
+    refresh: () => Promise<void>;
+    select: (model: ProfileLlmModel) => Promise<void>;
+  };
   work: {
     supervision: SupervisionRuntimeState;
     refresh: () => Promise<void>;
@@ -140,40 +160,75 @@ export interface OctosSessionRuntime {
   workspaceProduct: {
     state: WorkspaceProductState;
     launch: LaunchRuntimeState;
+    transitioning: boolean;
     onboarding: OnboardingRuntimeState;
     refresh: () => Promise<void>;
-    switchSession: (sessionId: string) => void;
+    listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
+    switchSession: (sessionId: string) => Promise<WorkspaceOpenOutcome>;
+    openSession: (input: {
+      sessionId: string;
+      cwd: string;
+      profileId?: string | null;
+    }) => Promise<WorkspaceOpenOutcome>;
     deleteSession: (sessionId: string) => Promise<void>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
+    cancelLaunch: () => void;
     retryOnboarding: () => Promise<void>;
     submitOnboarding: (submission: OnboardingSubmission) => Promise<void>;
   };
   diagnostics: { events: ObservedEvent[]; omittedEvents: number };
 }
 
+export type WorkspaceOpenOutcome = "opened" | "awaiting_choice" | "failed";
+
 export function useOctosSession(): OctosSessionRuntime {
-  const clientRef = useRef<OctosUiClient | null>(null);
+  const runtimeEventSinkRef = useRef<
+    (event: ActiveSessionRuntimeEvent<OctosUiClient>) => void
+  >(() => undefined);
+  const serverConnection = useServerConnection({
+    createClient: (config) =>
+      new OctosUiClient({
+        endpoint: config.endpoint,
+        token: config.token,
+        features: DEFAULT_UI_FEATURES,
+      }),
+    validateServerCapabilities: assertCompatibleProtocol,
+    validateSessionCapabilities: (capabilities) => {
+      assertCompatibleProtocol(capabilities);
+      assertCodingSessionContract(capabilities);
+    },
+    isFatalSessionError: (reason) =>
+      isFatalSessionContractError(errorMessage(reason)),
+    onEvent: (event) => runtimeEventSinkRef.current(event),
+  });
+  const activeRuntime = serverConnection.runtime;
+  const connectionSnapshot = serverConnection.snapshot;
   const eventId = useRef(0);
-  const sessionIdRef = useRef("");
-  const capabilitiesRef = useRef<UiProtocolCapabilities | undefined>(undefined);
-  const durableProjectionRef = useRef(new DurableSessionProjection());
-  const recoveringRef = useRef(false);
-  const recoveryBufferRef = useRef<RpcNotification[]>([]);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connectionLifecycleRef = useRef(new SessionConnectionLifecycle());
-  const launchOpeningRef = useRef(false);
-  const [status, setStatus] = useState<ConnectionStatus>("idle");
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [opened, setOpened] = useState<SessionOpened | null>(null);
+  const candidateAbortRef = useRef<AbortController | null>(null);
+  const launchTransitionRef = useRef(
+    new LaunchTransitionCoordinator<
+      SessionConnectionInput,
+      LaunchResolveResult
+    >(),
+  );
+  const transitioningRef = useRef(false);
+  const pendingRestoreConfigRef = useRef<SessionConnectionInput | null>(null);
+  const pendingTurnAfterHydrateRef = useRef<PromptTurn | null>(null);
+  const [restoreRejected, setRestoreRejected] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
   const [eventLog, setEventLog] = useState<{
     events: ObservedEvent[];
     omitted: number;
   }>({ events: [], omitted: 0 });
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+  const currentAuthority = () => activeRuntime.currentAuthority();
+  const currentClient = () => currentAuthority()?.client ?? null;
+  const currentSessionId = () => currentAuthority()?.sessionId ?? "";
+  const currentCapabilities = () => currentAuthority()?.capabilities;
   const interactionController = useBlockingInteractions({
-    client: () => clientRef.current,
-    sessionId: () => sessionIdRef.current,
-    capabilities: () => capabilitiesRef.current,
+    client: currentClient,
+    sessionId: currentSessionId,
+    capabilities: currentCapabilities,
     onInvalid: (title, body) => {
       setTimeline((current) =>
         addSystemMessage(
@@ -190,30 +245,42 @@ export function useOctosSession(): OctosSessionRuntime {
   const question = interactionController.question;
   const decisionBusy = interactionController.busy;
   const decisionError = interactionController.error;
-  const [recovery, setRecovery] = useState<SessionRecoverySnapshot>(() =>
-    durableProjectionRef.current.snapshot(),
-  );
   const turnController = useTurnController({
-    client: () => clientRef.current,
-    sessionId: () => sessionIdRef.current,
-    canEnqueue: () =>
-      status === "connected" &&
-      opened !== null &&
-      durableProjectionRef.current.snapshot().phase === "healthy",
-    canStart: () => durableProjectionRef.current.snapshot().phase === "healthy",
+    client: currentClient,
+    sessionId: currentSessionId,
+    canEnqueue: () => {
+      const snapshot = activeRuntime.getSnapshot();
+      return (
+        snapshot.status === "connected" &&
+        snapshot.session !== null &&
+        !transitioningRef.current &&
+        supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_START) &&
+        snapshot.recovery.phase === "healthy"
+      );
+    },
+    canStart: () => {
+      const snapshot = activeRuntime.getSnapshot();
+      return (
+        !transitioningRef.current &&
+        supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_START) &&
+        snapshot.recovery.phase === "healthy"
+      );
+    },
+    canInterrupt: () =>
+      supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_INTERRUPT),
     setTimeline,
-    setConnectionError,
+    setConnectionError: (message) => activeRuntime.reportError(message),
   });
   const supervisionController = useSupervision({
-    client: () => clientRef.current,
-    sessionId: () => sessionIdRef.current,
-    capabilities: () => capabilitiesRef.current,
+    client: currentClient,
+    sessionId: currentSessionId,
+    capabilities: currentCapabilities,
   });
   const supervision = supervisionController.state;
   const codingSafetyController = useCodingSafety({
-    client: () => clientRef.current,
-    sessionId: () => sessionIdRef.current,
-    capabilities: () => capabilitiesRef.current,
+    client: currentClient,
+    sessionId: currentSessionId,
+    capabilities: currentCapabilities,
     onPermissionApplied: (client) => {
       void supervisionController.refresh(client);
     },
@@ -221,78 +288,69 @@ export function useOctosSession(): OctosSessionRuntime {
   const permission = codingSafetyController.permission;
   const diffReview = codingSafetyController.diffReview;
   const workspaceController = useWorkspaceProduct({
-    client: () => clientRef.current,
-    sessionId: () => sessionIdRef.current,
-    capabilities: () => capabilitiesRef.current,
-    connectionConfig: () => connectionLifecycleRef.current.config,
+    client: currentClient,
+    sessionId: currentSessionId,
+    capabilities: currentCapabilities,
+    connectionConfig: () => currentAuthority()?.config ?? null,
   });
   const workspace = workspaceController.state;
+  const modelController = useModelSelection({
+    client: currentClient,
+    sessionId: currentSessionId,
+    profileId: () =>
+      currentAuthority()?.profileId ??
+      connectionSnapshot.session?.opened.active_profile_id ??
+      "",
+    capabilities: currentCapabilities,
+  });
   const [launch, setLaunch] =
     useState<LaunchRuntimeState>(EMPTY_LAUNCH_RUNTIME);
   const onboardingController = useOnboarding({
-    client: () => clientRef.current,
-    capabilities: () => capabilitiesRef.current,
+    client: currentClient,
+    capabilities: currentCapabilities,
     onConfigured: async (profileId, client) => {
-      const config = connectionLifecycleRef.current.config;
-      if (!config || clientRef.current !== client) {
+      const transition = launchTransitionRef.current.current();
+      const authority = currentAuthority();
+      if (!transition || !authority || authority.client !== client) {
         throw new Error("The server connection changed during onboarding.");
       }
-      launchOpeningRef.current = true;
+      const { config, lease } = transition;
       setLaunch((current) => ({ ...current, phase: "opening" }));
+      const opening = openCandidateSession(
+        launchProfileConfig(config, profileId),
+        lease,
+      );
       try {
-        await openConnectedSession(
-          client,
-          launchProfileConfig(config, profileId),
-        );
+        const outcome = await opening;
+        if (!launchTransitionRef.current.isCurrent(lease)) return;
+        if (outcome !== "opened") {
+          throw new Error("The new coding session could not be opened.");
+        }
         onboardingController.reset();
       } catch (reason) {
-        setLaunch((current) => ({ ...current, phase: "awaiting_choice" }));
+        failLaunchTransition(lease, reason);
         throw reason;
-      } finally {
-        launchOpeningRef.current = false;
       }
     },
   });
 
+  runtimeEventSinkRef.current = handleRuntimeEvent;
+
   useEffect(
     () => () => {
-      connectionLifecycleRef.current.stopRetrying();
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      clientRef.current?.disconnect();
+      candidateAbortRef.current?.abort();
+      launchTransitionRef.current.cancel();
     },
     [],
   );
 
-  const syncRecovery = () =>
-    setRecovery(durableProjectionRef.current.snapshot());
-
-  const connect = (input: SessionConnectionInput) => {
-    beginConnection(input, true);
+  const markTransitioning = (next: boolean) => {
+    transitioningRef.current = next;
+    setTransitioning(next);
   };
 
-  const restore = (input: SessionConnectionInput) => {
-    beginConnection(input, false);
-  };
-
-  const beginConnection = (
-    input: SessionConnectionInput,
-    resolveWorkspaceLaunch: boolean,
-  ) => {
-    connectionLifecycleRef.current.suspend();
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    const previous = clientRef.current;
-    clientRef.current = null;
-    previous?.disconnect();
-
-    const config = connectionLifecycleRef.current.begin(
-      input,
-      resolveWorkspaceLaunch,
-    );
-    setConnectionError(null);
-    setOpened(null);
+  function resetProductSessionState(): void {
+    pendingTurnAfterHydrateRef.current = null;
     setEventLog({ events: [], omitted: 0 });
     setTimeline([]);
     turnController.reset();
@@ -300,318 +358,73 @@ export function useOctosSession(): OctosSessionRuntime {
     codingSafetyController.reset();
     supervisionController.reset();
     onboardingController.reset();
-    launchOpeningRef.current = false;
     workspaceController.reset();
-    setLaunch(
-      connectionLifecycleRef.current.shouldResolveLaunch(false)
-        ? { phase: "resolving", cwd: config.cwd, decision: null }
-        : EMPTY_LAUNCH_RUNTIME,
-    );
-    capabilitiesRef.current = undefined;
-    sessionIdRef.current = config.sessionId;
-    durableProjectionRef.current.reset(config.sessionId);
-    syncRecovery();
-    recoveringRef.current = true;
-    recoveryBufferRef.current = [];
-    void establishSession(config, false);
-  };
-
-  async function establishSession(
-    config: SessionConnectionInput,
-    reconnecting: boolean,
-  ) {
-    const resumeCursor = reconnecting
-      ? durableProjectionRef.current.snapshot().cursor
-      : undefined;
-    const client = new OctosUiClient({
-      endpoint: config.endpoint,
-      token: config.token,
-      features: DEFAULT_UI_FEATURES,
-    });
-    clientRef.current = client;
-    client.subscribeStatus((next) => {
-      if (clientRef.current !== client) return;
-      setStatus(next);
-      if (next === "disconnected") {
-        scheduleReconnect();
-      }
-    });
-    client.subscribeErrors((error) => {
-      if (clientRef.current === client) setConnectionError(error.message);
-    });
-    client.subscribeNotifications(handleNotification);
-
-    try {
-      await client.connect();
-      if (clientRef.current !== client) return;
-      const openConfig = connectionLifecycleRef.current.shouldResolveLaunch(
-        reconnecting,
-      )
-        ? await resolveInitialLaunch(client, config)
-        : config;
-      if (!openConfig || clientRef.current !== client) return;
-      await openConnectedSession(client, openConfig, resumeCursor);
-    } catch (reason) {
-      failSessionConnection(client, reason, reconnecting);
-    }
+    modelController.reset();
   }
 
-  async function resolveInitialLaunch(
-    client: OctosUiClient,
-    config: SessionConnectionInput,
-  ): Promise<SessionConnectionInput | null> {
-    if (!config.cwd) return config;
-    let capabilities;
-    try {
-      capabilities = (await client.listConfigCapabilities()).capabilities;
-      assertCompatibleProtocol(capabilities);
-      capabilitiesRef.current = capabilities;
-    } catch (reason) {
-      if (reason instanceof OctosUiProtocolError && reason.code === -32601) {
-        setLaunch(EMPTY_LAUNCH_RUNTIME);
-        return config;
-      }
-      throw reason;
-    }
-    if (
-      !supportsFeature(
-        capabilities,
-        CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
-      ) ||
-      !supportsMethod(capabilities, CORE_UI_METHODS.LAUNCH_RESOLVE)
-    ) {
+  function handleRuntimeEvent(
+    event: ActiveSessionRuntimeEvent<OctosUiClient>,
+  ): void {
+    if (event.type === "session-cleared") {
+      resetProductSessionState();
       setLaunch(EMPTY_LAUNCH_RUNTIME);
-      return config;
-    }
-    const decision = await client.resolveLaunch({
-      cwd: config.cwd,
-      ...(config.profileId ? { profile_id: config.profileId } : {}),
-    });
-    if (decision.decision === "resume" && decision.resolved_profile) {
-      setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
-      return launchProfileConfig(config, decision.resolved_profile);
-    }
-    if (decision.decision === "no_profile") {
-      void onboardingController.prepare();
-    }
-    setLaunch({
-      phase: "awaiting_choice",
-      cwd: config.cwd,
-      decision,
-    });
-    return null;
-  }
-
-  async function openConnectedSession(
-    client: OctosUiClient,
-    config: SessionConnectionInput,
-    resumeCursor?: SessionRecoverySnapshot["cursor"],
-  ) {
-    connectionLifecycleRef.current.updateConfig(config);
-    sessionIdRef.current = config.sessionId;
-    connectionLifecycleRef.current.markLaunchResolved();
-    if (!resumeCursor) {
-      durableProjectionRef.current.reset(config.sessionId);
-      syncRecovery();
-    }
-    recoveringRef.current = true;
-    const result = await client.openSession({
-      session_id: config.sessionId,
-      ...(config.profileId ? { profile_id: config.profileId } : {}),
-      ...(config.cwd ? { cwd: config.cwd } : {}),
-      ...(resumeCursor ? { after: resumeCursor } : {}),
-    });
-    if (clientRef.current !== client) return;
-    assertCompatibleProtocol(result.opened.capabilities);
-    if (result.opened.session_id !== sessionIdRef.current) {
-      durableProjectionRef.current.reset(result.opened.session_id);
-    }
-    sessionIdRef.current = result.opened.session_id;
-    connectionLifecycleRef.current.markSessionEstablished({
-      ...config,
-      sessionId: result.opened.session_id,
-      profileId: result.opened.active_profile_id ?? config.profileId,
-      cwd: result.opened.workspace_root ?? config.cwd,
-    });
-    capabilitiesRef.current = result.opened.capabilities;
-    setOpened(result.opened);
-    await hydrateSessionState(client, result.opened.capabilities);
-    configureCodingSurfaces(result.opened.capabilities);
-    void codingSafetyController.refreshPermission(client);
-    void supervisionController.refresh(client);
-    void workspaceController.refresh(client);
-    setConnectionError(null);
-    setLaunch(EMPTY_LAUNCH_RUNTIME);
-  }
-
-  function failSessionConnection(
-    client: OctosUiClient,
-    reason: unknown,
-    reconnecting: boolean,
-  ) {
-    if (clientRef.current !== client) return;
-    const message = reason instanceof Error ? reason.message : String(reason);
-    const fatalContractError = isFatalSessionContractError(message);
-    if (fatalContractError) connectionLifecycleRef.current.stopRetrying();
-    durableProjectionRef.current.fail(message);
-    syncRecovery();
-    recoveringRef.current = false;
-    setConnectionError(message);
-    setLaunch(EMPTY_LAUNCH_RUNTIME);
-    client.disconnect();
-    if (reconnecting && !fatalContractError) scheduleReconnect();
-  }
-
-  function configureCodingSurfaces(
-    capabilities: UiProtocolCapabilities | undefined,
-  ) {
-    codingSafetyController.configureCapabilities(capabilities);
-    supervisionController.configureCapabilities(capabilities);
-    workspaceController.configureCapabilities(capabilities);
-  }
-
-  async function hydrateSessionState(
-    client: OctosUiClient,
-    capabilities: UiProtocolCapabilities | undefined,
-  ) {
-    const missingFeatures = REQUIRED_DURABLE_FEATURES.filter(
-      (feature) => !supportsFeature(capabilities, feature),
-    );
-    if (
-      missingFeatures.length ||
-      !supportsMethod(capabilities, CORE_UI_METHODS.SESSION_HYDRATE)
-    ) {
-      throw new Error(
-        `Server lacks the durable Web contract: ${[
-          ...missingFeatures,
-          ...(supportsMethod(capabilities, CORE_UI_METHODS.SESSION_HYDRATE)
-            ? []
-            : [CORE_UI_METHODS.SESSION_HYDRATE]),
-        ].join(", ")}`,
-      );
-    }
-
-    recoveringRef.current = true;
-    durableProjectionRef.current.beginHydrate(sessionIdRef.current);
-    syncRecovery();
-    const hydrated = await client.hydrateSession({
-      session_id: sessionIdRef.current,
-      include: ["messages", "threads", "turns", "pending_approvals"],
-    });
-    if (clientRef.current !== client) return;
-
-    durableProjectionRef.current.commitHydrate(hydrated);
-    setTimeline(timelineFromHydrate(hydrated));
-    interactionController.restore(hydrated, capabilities);
-    const nextTurn = turnController.reconcileFromHydrate(hydrated);
-    recoveringRef.current = false;
-    syncRecovery();
-
-    const buffered = recoveryBufferRef.current;
-    recoveryBufferRef.current = [];
-    for (const notification of buffered) {
-      processNotification(notification);
-      if (recoveringRef.current) break;
-    }
-    if (nextTurn && !recoveringRef.current)
-      void turnController.startTurn(nextTurn);
-  }
-
-  function scheduleReconnect() {
-    if (reconnectTimerRef.current || !connectionLifecycleRef.current.config) {
       return;
     }
-    const plan = connectionLifecycleRef.current.nextReconnect();
-    if (!plan) return;
-    durableProjectionRef.current.beginReconnect(plan.attempt);
-    syncRecovery();
-    reconnectTimerRef.current = setTimeout(() => {
-      reconnectTimerRef.current = null;
-      const config = connectionLifecycleRef.current.config;
-      if (config) {
-        void establishSession(config, true);
+    if (event.type === "authenticated") {
+      configureCodingSurfaces(event.authority.capabilities);
+      setLaunch(EMPTY_LAUNCH_RUNTIME);
+      markTransitioning(false);
+      return;
+    }
+    if (event.type === "raw-notification") {
+      appendObservedEvent(event.notification);
+      return;
+    }
+    if (event.type === "session-hydrate") {
+      if (!activeRuntime.isCurrent(event.authority)) return;
+      if (event.reason === "candidate") {
+        // Candidate adoption emits session-cleared before its raw diagnostics,
+        // so resetting here would erase the new Session's staged event log.
+        pendingRestoreConfigRef.current = null;
+        setRestoreRejected(false);
       }
-    }, plan.delayMs);
+      setTimeline(timelineFromHydrate(event.hydrated));
+      interactionController.restore(
+        event.hydrated,
+        event.authority.capabilities,
+      );
+      pendingTurnAfterHydrateRef.current = turnController.reconcileFromHydrate(
+        event.hydrated,
+      );
+      // A same-transport durable recovery does not replace the capability/RPC
+      // authority. Candidate and reconnect hydrates do, so only those retire
+      // controller requests that may belong to an obsolete socket.
+      if (event.reason !== "recovery") {
+        configureCodingSurfaces(event.authority.capabilities);
+      }
+      if (event.reason === "candidate") {
+        setLaunch(EMPTY_LAUNCH_RUNTIME);
+        markTransitioning(false);
+      }
+      return;
+    }
+    if (event.type === "notification") {
+      applyProductNotification(event.notification, event.authority);
+      return;
+    }
+    if (!activeRuntime.isCurrent(event.authority)) return;
+    if (event.reason !== "recovery") {
+      void codingSafetyController.refreshPermission(event.authority.client);
+      void supervisionController.refresh(event.authority.client);
+      void workspaceController.refresh(event.authority.client);
+      void modelController.refresh(event.authority.client);
+    }
+    const nextTurn = pendingTurnAfterHydrateRef.current;
+    pendingTurnAfterHydrateRef.current = null;
+    if (nextTurn) void turnController.startTurn(nextTurn);
   }
 
-  const disconnect = () => {
-    connectionLifecycleRef.current.stopRetrying();
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    const client = clientRef.current;
-    clientRef.current = null;
-    client?.disconnect();
-    setStatus("disconnected");
-    connectionLifecycleRef.current.disconnect();
-    recoveringRef.current = false;
-    recoveryBufferRef.current = [];
-    setOpened(null);
-    sessionIdRef.current = "";
-    capabilitiesRef.current = undefined;
-    durableProjectionRef.current.reset("");
-    syncRecovery();
-    turnController.reset();
-    interactionController.reset();
-    codingSafetyController.reset();
-    supervisionController.reset();
-    onboardingController.reset();
-    launchOpeningRef.current = false;
-    workspaceController.reset();
-    setLaunch(EMPTY_LAUNCH_RUNTIME);
-  };
-
-  const refreshWorkspace = async () => {
-    await workspaceController.refresh();
-  };
-
-  const switchSession = (sessionId: string) => {
-    const target = sessionId.trim();
-    const config = connectionLifecycleRef.current.config;
-    const queueState = turnController.snapshot();
-    if (!target || target === sessionIdRef.current || !config) return;
-    if (queueState.active || queueState.pending.length) {
-      workspaceController.setError(
-        "The foreground queue must settle before this Web client can switch sessions.",
-      );
-      return;
-    }
-    beginConnection({ ...config, sessionId: target }, false);
-  };
-
-  const chooseLaunchProfile = async (profileId: string) => {
-    const target = profileId.trim();
-    const decision = launch.decision;
-    const client = clientRef.current;
-    const config = connectionLifecycleRef.current.config;
-    const allowed = decision
-      ? [decision.resolved_profile, ...decision.existing_profiles].filter(
-          (candidate): candidate is string => Boolean(candidate),
-        )
-      : [];
-    if (
-      !target ||
-      !client ||
-      !config ||
-      !decision ||
-      !allowed.includes(target) ||
-      launchOpeningRef.current
-    ) {
-      return;
-    }
-    launchOpeningRef.current = true;
-    setLaunch((current) => ({ ...current, phase: "opening" }));
-    try {
-      await openConnectedSession(client, launchProfileConfig(config, target));
-    } catch (reason) {
-      failSessionConnection(client, reason, false);
-    } finally {
-      launchOpeningRef.current = false;
-    }
-  };
-
-  function handleNotification(notification: RpcNotification) {
+  function appendObservedEvent(notification: RpcNotification): void {
     setEventLog((current) => {
       const appended = [
         ...current.events,
@@ -631,74 +444,379 @@ export function useOctosSession(): OctosSessionRuntime {
         omitted: current.omitted + overflow,
       };
     });
-    if (recoveringRef.current) {
-      if (recoveryBufferRef.current.length >= 4_096) {
-        const message =
-          "Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor";
-        durableProjectionRef.current.fail(message);
-        syncRecovery();
-        setConnectionError(message);
-        clientRef.current?.disconnect();
-        return;
-      }
-      recoveryBufferRef.current.push(notification);
-      return;
-    }
-    processNotification(notification);
   }
 
-  function processNotification(notification: RpcNotification) {
-    const projectionDecision =
-      durableProjectionRef.current.observe(notification);
-    syncRecovery();
-    if (projectionDecision.kind === "recover") {
-      recoveringRef.current = true;
-      recoveryBufferRef.current =
-        notification.method === CORE_UI_METHODS.REPLAY_LOSSY
-          ? []
-          : [notification];
-      const client = clientRef.current;
-      if (client) {
-        void hydrateSessionState(client, capabilitiesRef.current).catch(
-          (reason: unknown) => {
-            if (clientRef.current !== client) return;
-            const message =
-              reason instanceof Error ? reason.message : String(reason);
-            if (isFatalSessionContractError(message)) {
-              connectionLifecycleRef.current.stopRetrying();
-            }
-            recoveringRef.current = false;
-            durableProjectionRef.current.fail(message);
-            syncRecovery();
-            setConnectionError(message);
-            client.disconnect();
-          },
-        );
-      }
-      return;
+  function restoreLaunchChoice(lease: LaunchTransitionLease): boolean {
+    const choice = launchTransitionRef.current.restoreChoice(lease);
+    if (!choice) return false;
+    setLaunch({
+      phase: "awaiting_choice",
+      cwd: choice.config.cwd,
+      decision: choice.decision,
+    });
+    return true;
+  }
+
+  function failLaunchTransition(
+    lease: LaunchTransitionLease,
+    reason: unknown,
+  ): void {
+    if (!launchTransitionRef.current.isCurrent(lease)) return;
+    workspaceController.setError(errorMessage(reason));
+    if (!restoreLaunchChoice(lease)) {
+      launchTransitionRef.current.discard(lease);
+      setLaunch(EMPTY_LAUNCH_RUNTIME);
     }
+    markTransitioning(false);
+  }
+
+  const connect = (input: SessionConnectionInput) => {
+    // Authentication and selecting a coding Session are separate product
+    // actions. The auth gate must not create a hidden default session.
+    beginConnection(input, false);
+  };
+
+  const restore = (input: SessionConnectionInput) => {
+    // Refresh restoration is a best-effort Session transition after the
+    // authenticated server shell is committed. A stale Session must never
+    // turn valid credentials into a connection failure.
+    beginConnection(input, true);
+  };
+
+  const beginConnection = (
+    input: SessionConnectionInput,
+    restoreAfterAuthentication = false,
+  ) => {
+    launchTransitionRef.current.cancel();
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    const config = normalizeConnectionInput(input);
+    pendingRestoreConfigRef.current =
+      restoreAfterAuthentication && config.sessionId && config.cwd
+        ? config
+        : null;
+    setRestoreRejected(false);
+    markTransitioning(false);
+    setLaunch(EMPTY_LAUNCH_RUNTIME);
+    void activeRuntime
+      .authenticate(config)
+      .then((authority) => {
+        if (!authority || !activeRuntime.isCurrent(authority)) return;
+        const restoreTarget = pendingRestoreConfigRef.current;
+        pendingRestoreConfigRef.current = null;
+        if (!restoreTarget) return;
+        void openCandidateSession(restoreTarget).then((outcome) => {
+          if (outcome === "opened") return;
+          if (
+            activeRuntime.isCurrent(authority) &&
+            authority.client.status === "connected"
+          ) {
+            setRestoreRejected(true);
+          }
+        });
+      })
+      .catch(() => {
+        pendingRestoreConfigRef.current = null;
+        setLaunch(EMPTY_LAUNCH_RUNTIME);
+        markTransitioning(false);
+      });
+  };
+
+  async function resolveInitialLaunch(
+    authority: ActiveSessionAuthority<OctosUiClient>,
+    config: SessionConnectionInput,
+    lease: LaunchTransitionLease,
+  ): Promise<SessionConnectionInput | null> {
+    const stillOwnsTransition = () =>
+      launchTransitionRef.current.isCurrent(lease) &&
+      activeRuntime.isCurrent(authority);
+    if (!config.cwd) return stillOwnsTransition() ? config : null;
+    const capabilities = authority.capabilities;
     if (
-      notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE &&
-      projectionDecision.kind !== "apply"
+      !supportsFeature(
+        capabilities,
+        CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+      ) ||
+      !supportsMethod(capabilities, CORE_UI_METHODS.LAUNCH_RESOLVE)
     ) {
-      return;
+      setLaunch(EMPTY_LAUNCH_RUNTIME);
+      return config;
     }
-    if (
-      notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE &&
-      !notificationMatchesSessionScope(notification, sessionIdRef.current)
-    ) {
-      return;
+    const decision = await authority.client.resolveLaunch({
+      cwd: config.cwd,
+      ...(config.profileId ? { profile_id: config.profileId } : {}),
+    });
+    if (!stillOwnsTransition()) return null;
+    if (decision.decision === "resume" && decision.resolved_profile) {
+      setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
+      return launchProfileConfig(config, decision.resolved_profile);
+    }
+    if (!launchTransitionRef.current.rememberDecision(lease, decision)) {
+      return null;
+    }
+    setLaunch({
+      phase: "awaiting_choice",
+      cwd: config.cwd,
+      decision,
+    });
+    if (decision.decision === "no_profile") {
+      void onboardingController.prepare();
+    }
+    return null;
+  }
+
+  async function openCandidateSession(
+    config: SessionConnectionInput,
+    existingLease?: LaunchTransitionLease,
+  ): Promise<WorkspaceOpenOutcome> {
+    const lease = existingLease ?? launchTransitionRef.current.begin(config);
+    if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
+    const previous = currentAuthority();
+    if (!previous || previous.client.status !== "connected") {
+      failLaunchTransition(lease, "The Octos server connection is not ready.");
+      return "failed";
+    }
+    if (missingCodingSessionRequirements(previous.capabilities).length) {
+      failLaunchTransition(
+        lease,
+        "This Octos server cannot open a coding session in the Web app.",
+      );
+      return "failed";
     }
 
+    candidateAbortRef.current?.abort();
+    const abortController = new AbortController();
+    candidateAbortRef.current = abortController;
+
+    markTransitioning(true);
+    const choice = launchTransitionRef.current.restoreChoice(lease);
+    setLaunch({
+      phase: "opening",
+      cwd: config.cwd,
+      decision: choice?.decision ?? null,
+    });
+    workspaceController.setError(null);
+    let committed = false;
+    let prepared: PreparedCandidateSession<OctosUiClient> | null = null;
+    let released: CandidateSessionSnapshot<OctosUiClient> | null = null;
+    try {
+      prepared = await prepareCandidateSession({
+        config,
+        signal: abortController.signal,
+        createClient: (candidateConfig) =>
+          new OctosUiClient({
+            endpoint: candidateConfig.endpoint,
+            token: candidateConfig.token,
+            features: DEFAULT_UI_FEATURES,
+          }),
+        validateOpened: (nextOpened) => {
+          assertCompatibleProtocol(nextOpened.capabilities);
+          assertCodingSessionContract(nextOpened.capabilities);
+        },
+      });
+      if (
+        candidateAbortRef.current !== abortController ||
+        !launchTransitionRef.current.isCurrent(lease) ||
+        !activeRuntime.isCurrent(previous)
+      ) {
+        return "failed";
+      }
+
+      const queueState = turnController.snapshot();
+      if (queueState.active || queueState.pending.length) {
+        throw new Error(
+          "The previous session started work while the new session was opening.",
+        );
+      }
+      released = prepared.release();
+      activeRuntime.adoptCandidate({
+        expected: previous,
+        config,
+        candidate: released,
+      });
+      committed = true;
+      if (!launchTransitionRef.current.commit(lease)) {
+        throw new Error("The launch transition was superseded before commit.");
+      }
+      return "opened";
+    } catch (reason) {
+      if (
+        candidateAbortRef.current === abortController &&
+        launchTransitionRef.current.isCurrent(lease)
+      ) {
+        failLaunchTransition(lease, reason);
+      }
+      return "failed";
+    } finally {
+      if (!committed) {
+        if (released) released.client.disconnect();
+        else prepared?.dispose();
+      }
+      if (candidateAbortRef.current === abortController) {
+        candidateAbortRef.current = null;
+        if (!committed) markTransitioning(false);
+      }
+    }
+  }
+
+  function configureCodingSurfaces(
+    capabilities: UiProtocolCapabilities | undefined,
+  ) {
+    codingSafetyController.configureCapabilities(capabilities);
+    supervisionController.configureCapabilities(capabilities);
+    workspaceController.configureCapabilities(capabilities);
+    modelController.configureCapabilities(capabilities);
+  }
+
+  const disconnect = () => {
+    launchTransitionRef.current.cancel();
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    pendingRestoreConfigRef.current = null;
+    setRestoreRejected(false);
+    markTransitioning(false);
+    activeRuntime.disconnect();
+  };
+
+  const refreshWorkspace = async () => {
+    await workspaceController.refresh();
+  };
+
+  const switchSession = async (
+    sessionId: string,
+  ): Promise<WorkspaceOpenOutcome> => {
+    const target = sessionId.trim();
+    const authority = currentAuthority();
+    const config = authority?.config;
+    const queueState = turnController.snapshot();
+    if (!target || target === authority?.sessionId || !config) return "failed";
+    if (queueState.active || queueState.pending.length) {
+      workspaceController.setError(
+        "The foreground queue must settle before this Web client can switch sessions.",
+      );
+      return "failed";
+    }
+    return openCandidateSession({ ...config, sessionId: target });
+  };
+
+  const openWorkspaceSession = async (input: {
+    sessionId: string;
+    cwd: string;
+    profileId?: string | null;
+  }): Promise<WorkspaceOpenOutcome> => {
+    const target = input.sessionId.trim();
+    const cwd = input.cwd.trim();
+    const authority = currentAuthority();
+    const config = authority?.config;
+    const queueState = turnController.snapshot();
+    if (!target || !cwd || !config || !authority) return "failed";
+    if (queueState.active || queueState.pending.length) {
+      workspaceController.setError(
+        "The foreground queue must settle before this Web client can open another workspace.",
+      );
+      return "failed";
+    }
+    const candidateConfig = {
+      ...config,
+      sessionId: target,
+      cwd,
+      profileId:
+        input.profileId === null
+          ? ""
+          : input.profileId?.trim() || config.profileId,
+    };
+    const lease = launchTransitionRef.current.begin(candidateConfig);
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    onboardingController.reset();
+    workspaceController.setError(null);
+    markTransitioning(true);
+    if (input.profileId === null) {
+      // A catalog row already names an authoritative Session. Folder launch
+      // resolution is for creating a Session and may resolve an unrelated
+      // current/default profile; reopen the exact id without a stale hint.
+      setLaunch({ phase: "opening", cwd, decision: null });
+      return openCandidateSession(candidateConfig, lease);
+    }
+    setLaunch({ phase: "resolving", cwd, decision: null });
+    try {
+      const resolved = await resolveInitialLaunch(
+        authority,
+        candidateConfig,
+        lease,
+      );
+      if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
+      if (!resolved) return "awaiting_choice";
+      return openCandidateSession(resolved, lease);
+    } catch (reason) {
+      if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
+      failLaunchTransition(lease, reason);
+      return "failed";
+    }
+  };
+
+  const chooseLaunchProfile = async (profileId: string) => {
+    const target = profileId.trim();
+    const transition = launchTransitionRef.current.current();
+    const decision = transition?.decision;
+    const authority = currentAuthority();
+    const config = transition?.config;
+    const lease = transition?.lease;
+    const allowed = decision
+      ? [decision.resolved_profile, ...decision.existing_profiles].filter(
+          (candidate): candidate is string => Boolean(candidate),
+        )
+      : [];
+    if (
+      !target ||
+      !authority ||
+      !config ||
+      !lease ||
+      !decision ||
+      !allowed.includes(target) ||
+      candidateAbortRef.current !== null
+    ) {
+      return;
+    }
+    setLaunch((current) => ({ ...current, phase: "opening" }));
+    const opening = openCandidateSession(
+      launchProfileConfig(config, target),
+      lease,
+    );
+    try {
+      const outcome = await opening;
+      if (!launchTransitionRef.current.isCurrent(lease)) return;
+      if (outcome !== "opened") restoreLaunchChoice(lease);
+    } catch (reason) {
+      if (!launchTransitionRef.current.isCurrent(lease)) return;
+      failLaunchTransition(lease, reason);
+    }
+  };
+
+  const cancelLaunch = () => {
+    launchTransitionRef.current.cancel();
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    onboardingController.reset();
+    workspaceController.setError(null);
+    setLaunch(EMPTY_LAUNCH_RUNTIME);
+    markTransitioning(false);
+  };
+
+  function applyProductNotification(
+    notification: RpcNotification,
+    authority: ActiveSessionAuthority<OctosUiClient>,
+  ): void {
+    if (!activeRuntime.isCurrent(authority)) return;
     codingSafetyController.observeNotification(notification);
     supervisionController.observeNotification(notification);
     const tokenCost = parseTokenCostUpdate(notification);
-    if (tokenCost && tokenCost.sessionId === sessionIdRef.current) {
+    if (tokenCost && tokenCost.sessionId === authority.sessionId) {
       workspaceController.observeTokenCost(tokenCost);
     }
 
     const canonicalProjection = supportsFeature(
-      capabilitiesRef.current,
+      authority.capabilities,
       CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
     );
     const foldIntoTimeline = !(
@@ -719,14 +837,19 @@ export function useOctosSession(): OctosSessionRuntime {
 
   return {
     connection: {
-      status,
-      error: connectionError,
-      opened,
-      recovery,
+      status: connectionSnapshot.status,
+      error: connectionSnapshot.error,
+      opened: connectionSnapshot.session?.opened ?? null,
+      recovery: connectionSnapshot.recovery,
+      capabilities:
+        connectionSnapshot.session?.capabilities ??
+        connectionSnapshot.serverCapabilities,
       connected:
-        status === "connected" &&
-        opened !== null &&
-        recovery.phase === "healthy",
+        connectionSnapshot.status === "connected" &&
+        connectionSnapshot.session !== null &&
+        connectionSnapshot.recovery.phase === "healthy",
+      authenticated: connectionSnapshot.authenticated,
+      restoreRejected,
       connect,
       restore,
       disconnect,
@@ -755,6 +878,11 @@ export function useOctosSession(): OctosSessionRuntime {
       openDiffReview: codingSafetyController.openDiffReview,
       closeDiffReview: codingSafetyController.closeDiffReview,
     },
+    models: {
+      state: modelController.state,
+      refresh: modelController.refresh,
+      select: modelController.select,
+    },
     work: {
       supervision,
       refresh: supervisionController.refresh,
@@ -768,11 +896,15 @@ export function useOctosSession(): OctosSessionRuntime {
     workspaceProduct: {
       state: workspace,
       launch,
+      transitioning,
       onboarding: onboardingController.state,
       refresh: refreshWorkspace,
+      listWorkspaceSessions: workspaceController.listWorkspaceSessions,
       switchSession,
+      openSession: openWorkspaceSession,
       deleteSession: workspaceController.deleteSession,
       chooseLaunchProfile,
+      cancelLaunch,
       retryOnboarding: onboardingController.prepare,
       submitOnboarding: onboardingController.submit,
     },
@@ -789,15 +921,27 @@ function launchProfileConfig(
 ): SessionConnectionInput {
   return {
     ...config,
+    sessionId: bindWebSessionIdToProfile(config.sessionId, profileId),
     profileId,
-    sessionId: codingSessionIdForProfile(profileId),
+  };
+}
+
+function normalizeConnectionInput(
+  input: SessionConnectionInput,
+): SessionConnectionInput {
+  return {
+    endpoint: input.endpoint.trim(),
+    token: input.token,
+    sessionId: input.sessionId.trim(),
+    profileId: input.profileId.trim(),
+    cwd: input.cwd.trim(),
   };
 }
 
 function isFatalSessionContractError(message: string): boolean {
   return (
     message.startsWith("Server protocol contract is incompatible") ||
-    message.startsWith("Server lacks the durable Web contract") ||
+    message.startsWith("Server lacks the coding Session contract") ||
     message === "session/hydrate returned an invalid result"
   );
 }
@@ -809,4 +953,19 @@ function assertCompatibleProtocol(
   if (error) {
     throw new Error(`Server protocol contract is incompatible: ${error}`);
   }
+}
+
+function assertCodingSessionContract(
+  capabilities: UiProtocolCapabilities | undefined,
+): void {
+  const missing = missingCodingSessionRequirements(capabilities);
+  if (missing.length) {
+    throw new Error(
+      `Server lacks the coding Session contract: ${missing.join(", ")}`,
+    );
+  }
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
 }

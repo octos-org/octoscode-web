@@ -9,7 +9,7 @@ complete gate before review.
 | Types and lint        | `pnpm typecheck && pnpm lint`                   | package boundaries and exhaustive cases                 |
 | Repository policy     | `pnpm policy:verify`                            | UI tokens, style ownership, and ADR metadata            |
 | Product browser       | `pnpm test:e2e`                                 | launch, recovery, interactions, responsive layout, WCAG |
-| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, provider, tools, durable turn, and refresh   |
+| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, runtime model, tools, turn, and tab restore  |
 | Generated contract    | `pnpm contract:verify`                          | Core vocabulary matches the immutable source pin        |
 | Released Core runtime | `OCTOS_BINARY=/abs/octos pnpm integration:core` | a matching released Core completes the critical flow    |
 | Deployment            | `pnpm build && pnpm deploy:verify`              | artifact, CSP, nginx contract, and size budgets         |
@@ -25,24 +25,33 @@ occupied; the configured fixture origin is injected into the app.
 
 The live gate is intentionally separate from CI because it consumes a real
 provider and mutates a real server workspace. It runs the production Web client
-against a developer-supplied Core proxy, verifies the server-selected model,
-performs one bounded file edit/read turn, and reloads the page to prove durable
-recovery. It disables Playwright traces, screenshots, and video so the
-tab-scoped auth token cannot enter test artifacts.
+against a developer-supplied Core proxy, creates a fresh opaque Web Session,
+verifies the model reported by that Session runtime, performs one bounded file
+edit/read turn, and reloads the page to prove same-tab restore plus durable
+server hydrate. It does not change or infer the active Profile default. It
+disables Playwright traces, screenshots, and video so the tab-scoped auth token
+cannot enter test artifacts. The live config also disables Playwright's
+automatic failure-page accessibility snapshot because it can serialize password
+field values.
 
-Supply all five values explicitly:
+Supply all four values explicitly:
 
 ```sh
 OCTOSCODE_LIVE_PROXY_TARGET=http://127.0.0.1:18031 \
 OCTOSCODE_LIVE_PROXY_ORIGIN=https://octoscode-web.example \
 OCTOSCODE_LIVE_TOKEN='<ephemeral server token>' \
 OCTOSCODE_LIVE_WORKSPACE=/absolute/path/on/server \
-OCTOSCODE_LIVE_SESSION_ID=coding:api:web-live-e2e-001 \
 pnpm test:e2e:live
 ```
 
-`OCTOSCODE_DEV_PROXY_TARGET` and `OCTOSCODE_DEV_PROXY_ORIGIN` are wired only
-into Vite's development server. They are absent from production builds. The
+There is no Session-id input: the product creates one through the same Add
+workspace flow used by a person. The environment supplies a server path, not a
+browser-owned Workspace record.
+
+The live gate builds `apps/web/dist` first and serves that production artifact
+through Vite preview. `OCTOSCODE_DEV_PROXY_TARGET` and
+`OCTOSCODE_DEV_PROXY_ORIGIN` configure only the local Vite dev/preview proxy;
+they are absent from the built JavaScript and from a deployed static host. The
 origin override is necessary when a local SSH tunnel reaches a Core that trusts
 the deployed Web origin. Do not put tokens in either proxy variable, shell
 history, committed files, or Playwright configuration.

@@ -5,10 +5,19 @@
 - Restore a successful runtime/workspace/session connection across refresh with
   tab-scoped credential retention, explicit forgetting, and canonical
   server-returned identity.
-- Replace arbitrary client-entered session creation with a profile-routable
-  `<profile>:api:web-<uuid>` identity inside the active workspace.
-- Add an artifact-free, opt-in live provider gate for real Core/model/tool and
-  refresh-recovery verification.
+- Replace client-entered protocol ids with a profile-neutral `web-<uuid>` launch
+  intent, then bind it to `<resolved-profile>:api:web-<uuid>` before
+  `session/open`; restored Sessions reopen by their committed server identity
+  without inheriting a stale active Profile.
+- Fail closed on Core rc.9's unscoped `session/list` rows: show only the
+  successfully opened or restored Session until Core returns an authoritative
+  Workspace/Profile-scoped SessionRef catalog.
+- Add an opt-in GLM 5.2 live gate that authenticates, creates and verifies a
+  bounded workspace file through real Core tools using the production static
+  build, then proves refresh recovery.
+- Replace the diagnostic shell with DSH-aligned Workspace/Session navigation,
+  composer permission/runtime controls, and General/Models settings; defer
+  non-primary surfaces so the initial production bundle stays inside budget.
 - Replace scattered connection/recovery refs and turn handling with directly
   tested lifecycle controllers and grouped session domains.
 - Validate every structured request result, quarantine late RPC responses, and
@@ -18,7 +27,8 @@
   disclosure.
 - Harden deployment and publication with a strict CSP, checked nginx syntax,
   exact toolchain/action pins, separate publish authority, immutable assets, and
-  build provenance attestations.
+  build provenance attestations; generate and verify the production dependency
+  license closure in every release.
 
 ## v0.1.0-rc.2 — 2026-08-26
 

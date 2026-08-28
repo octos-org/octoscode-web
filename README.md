@@ -34,10 +34,12 @@ second agent loop, plugin host, sandbox, or session store.
 - Octoscode-compatible launch, prompt queue, interrupt, approval, question,
   command, and session behavior.
 - Durable hydrate, cursor replay, deduplication, gap recovery, and reconnect.
-- Safe Markdown and code rendering, permission profiles, and authoritative diff
-  review.
-- Plans, tasks, output, artifacts, context, cost, model status, and bounded
-  cross-session activity.
+- A DSH-aligned Workspace/Session sidebar with search, New Session, Add
+  workspace, and Settings.
+- Session-local Chat and Trajectory views, safe Markdown/code rendering,
+  approvals, questions, plans, tasks, output, artifacts, and diff review.
+- Server-advertised permission control and effective runtime-model status in the
+  composer, plus provider-grouped Profile defaults in Settings.
 - Browser onboarding for an empty solo server, with transient credentials and a
   truthful TUI fallback on older Core versions.
 - A responsive coding workspace informed by
@@ -56,10 +58,17 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run `octos serve` separately, then enter its origin, optional auth token, and
-server-side workspace path. Core resolves the normal Octoscode profile/session;
-the session id is an advanced fallback. A successful connection is restored on
-refresh in the same tab. The browser cannot start or provision the Octos binary.
+Run `octos serve` separately, then enter its origin and optional auth token.
+After connecting, use **New Session** to choose a known Workspace, or **Add
+workspace** to enter a path on the Octos server and create a fresh Session. The
+active Session appears under its Workspace and is restored on refresh in the
+same tab; only the server origin survives after that tab closes. Browsing older
+Sessions remains a compatibility preview: Core rc.9 can misroute
+`session/list({cwd})` for unscoped/admin connections, so the Web client cannot
+promise a complete or correctly grouped catalog until the server-owned
+SessionRef contract in
+[octos#2146](https://github.com/octos-org/octos/issues/2146) lands. The browser
+cannot start or provision the Octos binary.
 
 For UI work without a local Octos installation, start the deterministic AppUI
 fixture in another terminal:
@@ -116,4 +125,6 @@ see [Protocol integration](docs/protocol.md#compatibility-gates).
 ## License
 
 Apache-2.0. Copied or substantially adapted third-party work is recorded in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the generated production
+dependency closure is recorded in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

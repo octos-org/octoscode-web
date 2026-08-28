@@ -1,65 +1,90 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const endpoint = `http://127.0.0.1:${process.env.OCTOSCODE_LIVE_WEB_PORT ?? "4174"}`;
 const token = required("OCTOSCODE_LIVE_TOKEN");
 const cwd = required("OCTOSCODE_LIVE_WORKSPACE");
-const sessionId = required("OCTOSCODE_LIVE_SESSION_ID");
+const MARKER = "GLM_E2E_OK";
+const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
+
+function productNavigation(page: Page): Locator {
+  return page.getByRole("complementary", { name: "Product navigation" });
+}
 
 test("runs a GLM-5.2 coding turn and restores it after refresh", async ({
   page,
 }) => {
-  await page.addInitScript(
-    ({ endpoint, token, cwd, sessionId }) => {
-      localStorage.setItem(
-        "octoscode-web.connection.v1",
-        JSON.stringify({
-          version: 1,
-          endpoint,
-          sessionId,
-          profileId: "coding",
-          cwd,
-        }),
-      );
-      sessionStorage.setItem("octoscode-web.connection-token.v1", token);
-      sessionStorage.setItem("octoscode-web.auto-connect.v1", "1");
-    },
-    { endpoint, token, cwd, sessionId },
-  );
-
   await page.goto("/");
-  await expect(page.locator(".workspace-title small")).toHaveText(sessionId, {
+  await page.getByLabel("Server origin").fill(endpoint);
+  await page.getByLabel("Auth token").fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  const navigation = productNavigation(page);
+  await expect(navigation).toBeVisible({ timeout: 30_000 });
+  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  await expect(chooser).toBeVisible();
+  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
+  await addWorkspace.getByLabel("Server workspace path").fill(cwd);
+  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+
+  const permission = page.getByRole("button", { name: /^Permission:/ });
+  const activateCoding = page.getByRole("button", {
+    name: /^Activate coding/,
+  });
+  const onboarding = page.getByRole("dialog", {
+    name: "Create your local coding profile",
+  });
+  await expect(
+    permission.or(activateCoding).or(onboarding).first(),
+  ).toBeVisible({ timeout: 30_000 });
+  if (await onboarding.isVisible()) {
+    throw new Error(
+      "The live server requires Profile onboarding; configure it before the GLM gate.",
+    );
+  }
+  if (await activateCoding.isVisible()) await activateCoding.click();
+
+  await expect(page.locator(".workspace-title small")).toHaveText(cwd, {
     timeout: 30_000,
   });
 
-  const workspaceWrite = page.getByRole("button", {
-    name: "Workspace write",
+  const launchError = page.getByRole("alert").first();
+  await expect(permission.or(launchError).first()).toBeVisible({
+    timeout: 30_000,
   });
+  if (await launchError.isVisible()) {
+    throw new Error(
+      `The live Session could not open: ${await launchError.innerText()}`,
+    );
+  }
+  await permission.click();
+  const permissionMenu = page.getByRole("menu", { name: "Permission" });
+  const workspaceWrite = permissionMenu
+    .getByRole("menuitemradio", { name: /^Write ·/ })
+    .first();
   await expect(workspaceWrite).toBeVisible();
-  if ((await workspaceWrite.getAttribute("aria-pressed")) !== "true") {
+  if ((await workspaceWrite.getAttribute("aria-checked")) !== "true") {
     await workspaceWrite.click();
-    await expect(workspaceWrite).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("button", { name: /^Permission: Write ·/ }),
+    ).toBeVisible();
+  } else {
+    await page.keyboard.press("Escape");
   }
 
-  const inspector = page.locator("#work-inspector");
-  if (!(await inspector.isVisible())) {
-    await page.locator(".inspector-toggle").click({ timeout: 10_000 });
-  }
-  await expect(inspector).toBeVisible();
-  await expect(inspector).toContainText("glm-5.2");
-  await expect(inspector).toContainText("zai");
+  const runtimeModel = page.getByRole("button", {
+    name: /^Runtime model: .*glm[- .]?5\.2/i,
+  });
+  await expect(runtimeModel).toBeVisible({ timeout: 30_000 });
 
-  const composer = page.getByPlaceholder(
-    "Ask Octos to change, explain, or review code…",
-  );
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
   await composer.fill(
-    "Create GLM_E2E.md in this workspace with exactly one line: GLM-5.2 web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker GLM_E2E_OK.",
+    `Create GLM_E2E.md in this workspace with exactly one line: GLM-5.2 web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker ${MARKER}.`,
   );
   await page.getByRole("button", { name: "Send prompt" }).click();
 
-  const result = page.locator(".entry-assistant").filter({
-    hasText: "GLM_E2E_OK",
-  });
+  const result = page.locator(".entry-assistant").filter({ hasText: MARKER });
   for (let attempt = 0; attempt < 180; attempt += 1) {
     if ((await result.count()) > 0 && (await result.last().isVisible())) break;
 
@@ -85,16 +110,34 @@ test("runs a GLM-5.2 coding turn and restores it after refresh", async ({
 
   await page.reload();
 
-  await expect(page.locator(".workspace-title small")).toHaveText(sessionId, {
+  await expect(page.locator(".workspace-title small")).toHaveText(cwd, {
     timeout: 30_000,
   });
   await expect(
-    page.locator(".entry-assistant").filter({ hasText: "GLM_E2E_OK" }).last(),
+    page.locator(".entry-assistant").filter({ hasText: MARKER }).last(),
   ).toBeVisible();
-
-  await page.getByRole("button", { name: "Disconnect" }).click();
   await expect(
-    page.getByRole("button", { name: "Connect workspace" }),
+    page.getByRole("button", {
+      name: /^Runtime model: .*glm[- .]?5\.2/i,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+
+  const settingsButton = productNavigation(page).getByRole("button", {
+    name: "Settings",
+  });
+  await settingsButton.click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "General" }).click();
+  await settings.getByRole("button", { name: "Disconnect" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Server origin")).toHaveValue(endpoint);
+  expect(
+    (await page.getByLabel("Auth token").inputValue()).length,
+  ).toBeGreaterThan(0);
+  await expect(
+    page.getByRole("button", { name: "Connect", exact: true }),
   ).toBeVisible();
 });
 

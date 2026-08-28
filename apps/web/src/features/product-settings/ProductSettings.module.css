@@ -1,0 +1,342 @@
+/*
+ * Settings cells and provider cards adapt DeepSeek Harness UI measurements at
+ * revision b150a551b8d465e31e418e1b2eaf5e79bbb7d28e.
+ * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
+ */
+
+.section,
+.modelsSection {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+}
+
+.settingCopy,
+.headingCopy,
+.modelCopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settingCopy {
+  gap: 4px;
+  padding-right: 24px;
+}
+
+.settingTitle,
+.modelName {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.settingDescription,
+.connectionStatus,
+.modelDescription,
+.sectionIntro {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.connectionStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.statusDot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.statusConnected {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.statusConnecting {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.statusError {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.readonlyValue {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  max-width: min(280px, 45%);
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 7px 14px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pathValue {
+  font-family: var(--dsw-font-family-code);
+  font-size: 12px;
+}
+
+.connectionActionsRow {
+  align-items: flex-start;
+}
+
+.actionGroup {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: none;
+  border-radius: 18px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.secondaryButton {
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dangerButton {
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+.secondaryButton:focus-visible,
+.dangerButton:focus-visible,
+.modelRow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.secondaryButton:disabled,
+.dangerButton:disabled,
+.modelRow:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 8px 0 20px;
+}
+
+.headingCopy {
+  gap: 4px;
+}
+
+.sectionTitle,
+.providerName,
+.sectionIntro {
+  margin: 0;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.restartNotice,
+.emptyState,
+.errorState {
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.restartNotice {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-text);
+}
+
+.modelTruth {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.modelTruth > span {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.modelTruth strong {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.emptyState {
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.errorState {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.providerList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.providerCard {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+}
+
+.providerName {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
+  padding: 9px 14px;
+  border: none;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modelRow:last-child {
+  border-bottom: none;
+}
+
+button.modelRow:hover:not(:disabled),
+.modelSelected {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.modelReadOnly {
+  cursor: default;
+}
+
+.modelCopy {
+  gap: 1px;
+}
+
+.modelName {
+  font-weight: 500;
+}
+
+.modelCheck {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+@media (max-width: 640px) {
+  .settingRow,
+  .connectionActionsRow,
+  .sectionHeading,
+  .errorState {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settingCopy {
+    padding-right: 0;
+  }
+
+  .readonlyValue {
+    max-width: 100%;
+  }
+
+  .actionGroup {
+    justify-content: flex-start;
+  }
+
+  .sectionHeading .secondaryButton {
+    align-self: flex-start;
+  }
+}

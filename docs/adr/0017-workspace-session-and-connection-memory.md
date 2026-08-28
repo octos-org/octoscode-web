@@ -1,7 +1,13 @@
 # ADR 0017: Model runtime → workspace → session and restore it safely
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-26
+- Superseded by: [ADR 0018](0018-dsh-aligned-product-shell.md)
+
+This is the historical design record. ADR 0018 replaces its login, browser
+storage, restore, recent-Workspace, and New Session decisions. Do not treat the
+storage or generated-identity details below as current product behavior; only
+the server-ownership motivation remains.
 
 ## Context
 

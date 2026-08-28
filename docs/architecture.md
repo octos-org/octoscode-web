@@ -52,13 +52,15 @@ bridge, or raw protocol event bus.
 
 ## State ownership
 
-| State                                                           | Owner                                                |
-| --------------------------------------------------------------- | ---------------------------------------------------- |
-| Sessions, transcript, tasks, plans, permissions, diffs, usage   | `octos serve`                                        |
-| Cursor, hydrate integrity, and current server projections       | Protocol/session feature boundaries                  |
-| Drafts, focus, selection, expansion, and connection preferences | Browser UI                                           |
-| Auth token                                                      | Current tab (`sessionStorage`); never `localStorage` |
-| Provider credential                                             | Memory only; never browser storage                   |
+| State                                                         | Owner                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------ |
+| Sessions, transcript, tasks, plans, permissions, diffs, usage | `octos serve`                                          |
+| Cursor, hydrate integrity, and current server projections     | Protocol/session feature boundaries                    |
+| Drafts, focus, selection, and expansion                       | Browser memory                                         |
+| Remembered server endpoint                                    | `localStorage`; the only durable browser preference    |
+| Token, auto-connect, and active Session restore hints         | Endpoint-bound current tab (`sessionStorage`)          |
+| Recent Workspace paths                                        | Current tab (`sessionStorage`); never Session metadata |
+| Provider credential                                           | Memory only; never browser storage                     |
 
 The foreground session orchestration boundary converts validated protocol
 notifications into feature-specific actions. Durable state is always
@@ -82,7 +84,10 @@ their presentation but not their state transition:
 - unknown or unavailable commands fail closed;
 - prompt queueing and interrupt retain TUI semantics;
 - approval decisions preserve request, session, and deny scope;
-- workspace resolution opens the canonical coding session identity.
+- workspace resolution validates the server path/profile decision, while New
+  Session uses a fresh opaque Web identity;
+- the composer reports the effective Session runtime model, while Settings may
+  manage only the active Profile default.
 
 DeepSeek Harness supplies the audited browser-product and visual reference. Its
 Cordis host, agent runtime, and full plugin graph are not part of this system.
@@ -97,17 +102,24 @@ See [ADR 0002](adr/0002-dsh-evaluation.md) and
   transport requires HTTPS/WSS and query-redacting logs outside loopback.
 - Workspace paths refer to the server host and remain subject to server root
   policy.
-- Product hierarchy is runtime connection → workspace → session. The remembered
-  path is a browser convenience; the server-confirmed canonical root remains
-  workspace truth.
+- Authentication is separate from work selection. Inside the shell the product
+  hierarchy is Workspace → Session, with Chat and Trajectory scoped to the
+  selected Session.
+- Per-server Workspace recents are a bounded, tab-scoped path cache, not a
+  durable catalog. The server-confirmed canonical root and successfully opened
+  Session projection remain truth. Current `session/list` results carry no
+  effective Workspace/Profile scope, so they are not used as a product catalog;
+  recent paths only start a new Session until Core exposes Workspace/SessionRef.
 - Reconnect without hydrate, replay, dedupe, session scope, and gap handling is
   not recovery.
 
-Connection origin, canonical workspace path, profile hint, and last established
-session are remembered locally. A successful connection also leaves a tab-scoped
-auto-connect marker and token so a refresh can restore the same session. Closing
-the tab clears the credential. See
-[ADR 0017](adr/0017-workspace-session-and-connection-memory.md).
+Only the connection origin is remembered durably. A successful connection binds
+the token, auto-connect marker, active Workspace/Profile/Session restore hints,
+and recent Workspace paths to that endpoint in the current tab. Closing the tab
+leaves the origin but clears that working context. See
+[ADR 0018](adr/0018-dsh-aligned-product-shell.md) for the current boundary.
+[ADR 0017](adr/0017-workspace-session-and-connection-memory.md) is the
+superseded historical restore design.
 
 Detailed wire and compatibility rules live in
 [Protocol integration](protocol.md).

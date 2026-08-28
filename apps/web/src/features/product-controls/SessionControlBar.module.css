@@ -1,0 +1,430 @@
+/*
+ * Composer control geometry and menu treatment adapted from DeepSeek Harness
+ * InputBar, PermissionSelect, and ModelSelect at revision
+ * b150a551b8d465e31e418e1b2eaf5e79bbb7d28e.
+ * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
+ */
+
+.bar {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 2px 8px 6px;
+  container-type: inline-size;
+}
+
+.leftSeat,
+.rightSeat {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rightSeat {
+  flex: none;
+  margin-left: auto;
+}
+
+.control {
+  position: relative;
+  min-width: 0;
+}
+
+.trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: min(360px, 45cqw);
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: 24px;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.trigger:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+.triggerIcon {
+  display: inline-flex;
+  flex: none;
+}
+
+.triggerIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron,
+.chevronOpen {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms var(--dsw-ease-in-out);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.errorDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.pendingDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.danger {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: min(260px, calc(100vw - 32px));
+  max-width: min(420px, calc(100vw - 32px));
+  max-height: min(380px, calc(100vh - 96px));
+  overflow: hidden;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+}
+
+.permissionMenu {
+  left: 0;
+}
+
+.modelMenu {
+  right: 0;
+}
+
+.status {
+  padding: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.retry {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.options,
+.modelGroups {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modelGroup + .modelGroup {
+  margin-top: 4px;
+}
+
+.groupTitle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px 3px;
+  background: var(--dsw-specific-menu);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.option {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover:not(:disabled),
+.option:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.option:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+.optionIcon,
+.optionCheck {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+}
+
+.optionCopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.optionName {
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionDescription {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCheck {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--dsw-alias-bg-mask-strong);
+}
+
+.dialog {
+  box-sizing: border-box;
+  width: min(460px, calc(100vw - 48px));
+  padding: 24px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-shadow-dialog);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dialogHeader h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.dialogWarning {
+  display: inline-flex;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dialogDescription {
+  margin: 12px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.riskSummary {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--dsw-specific-selector);
+}
+
+.riskSummary div {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 8px;
+}
+
+.riskSummary dt,
+.riskSummary dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.riskSummary dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.riskSummary dd {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.acknowledgement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.acknowledgement input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--dsw-alias-state-error-primary);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.secondaryAction,
+.dangerAction {
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.secondaryAction {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
+.secondaryAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dangerAction {
+  border: none;
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-on-accent);
+}
+
+.dangerAction:hover:not(:disabled) {
+  background: var(--dsw-alias-state-error-secondary);
+}
+
+.dangerAction:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@container (max-width: 460px) {
+  .trigger:has(.triggerIcon) .triggerLabel {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .menu {
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    left: 16px;
+    width: auto;
+    max-width: none;
+  }
+
+  .bar {
+    gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron,
+  .chevronOpen {
+    transition: none;
+  }
+}

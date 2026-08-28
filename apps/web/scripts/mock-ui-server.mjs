@@ -7,7 +7,89 @@ if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
 }
 let sockets;
 const openedSessionBySocket = new WeakMap();
+const openedWorkspaceBySocket = new WeakMap();
+const openedProfileBySocket = new WeakMap();
+const authenticatedProfileBySocket = new WeakMap();
+const rejectedSessionIds = new Set();
 const delayedHydrateSockets = new WeakSet();
+const mockAuthMode = process.env.OCTOSCODE_MOCK_AUTH_MODE ?? "optional";
+if (!new Set(["optional", "required"]).has(mockAuthMode)) {
+  throw new Error("OCTOSCODE_MOCK_AUTH_MODE must be optional or required");
+}
+const mockAuthTokens = new Set(
+  (process.env.OCTOSCODE_MOCK_AUTH_TOKENS ?? "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean),
+);
+const mockProfileAuthToken = (
+  process.env.OCTOSCODE_MOCK_PROFILE_AUTH_TOKEN ?? ""
+).trim();
+const mockProfileAuthId = (
+  process.env.OCTOSCODE_MOCK_PROFILE_AUTH_ID ?? ""
+).trim();
+if (Boolean(mockProfileAuthToken) !== Boolean(mockProfileAuthId)) {
+  throw new Error(
+    "OCTOSCODE_MOCK_PROFILE_AUTH_TOKEN and OCTOSCODE_MOCK_PROFILE_AUTH_ID must be configured together",
+  );
+}
+if (mockProfileAuthToken) mockAuthTokens.add(mockProfileAuthToken);
+if (mockAuthMode === "required" && mockAuthTokens.size === 0) {
+  throw new Error(
+    "OCTOSCODE_MOCK_AUTH_TOKENS must contain a fixture token when auth is required",
+  );
+}
+const defaultProfileId = "coding";
+const sessionChannels = new Set([
+  "api",
+  "cli",
+  "dingtalk",
+  "discord",
+  "email",
+  "feishu",
+  "line",
+  "local",
+  "matrix",
+  "qq-bot",
+  "slack",
+  "system",
+  "telegram",
+  "test",
+  "twilio",
+  "wechat",
+  "wecom",
+  "wecom-bot",
+  "whatsapp",
+]);
+const profileModels = [
+  {
+    model: "glm-5.2",
+    provider: "zai",
+    title: "GLM 5.2",
+    family: "zai",
+    route: "official",
+    available: true,
+  },
+  {
+    model: "deepseek-v4-pro",
+    provider: "deepseek",
+    title: "DeepSeek V4 Pro",
+    family: "deepseek",
+    route: "official",
+    available: true,
+  },
+];
+const defaultRuntimeModel = {
+  model: "deepseek-v4",
+  provider: "deepseek",
+  title: "DeepSeek V4",
+};
+const profileDefaultModelByProfile = new Map([
+  [defaultProfileId, profileModels[0]],
+]);
+const effectiveRuntimeModelByProfile = new Map([
+  [defaultProfileId, defaultRuntimeModel],
+]);
 const http = createServer((request, response) => {
   if (request.url === "/health") {
     response
@@ -39,13 +121,25 @@ const http = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (request.method === "POST" && request.url === "/__test__/reject-opened") {
+    for (const client of sockets.clients) {
+      const sessionId = openedSessionBySocket.get(client);
+      if (sessionId) rejectedSessionIds.add(sessionId);
+    }
+    response.writeHead(204).end();
+    return;
+  }
   response.writeHead(404).end("Octoscode AppUI fixture only");
 });
 sockets = new WebSocketServer({
   server: http,
   path: "/api/ui-protocol/ws",
+  verifyClient: ({ req }) =>
+    mockAuthMode === "optional" ||
+    mockAuthTokens.has(authTokenFromUpgradeRequest(req)),
 });
-let mockSessions = [
+const defaultWorkspace = "/workspace/octoscode-web";
+const defaultSessions = [
   {
     id: "coding:local:main",
     message_count: 12,
@@ -61,6 +155,7 @@ let mockSessions = [
     last_prompt: "Compare the Core fixture",
   },
 ];
+const sessionsByWorkspace = new Map([[defaultWorkspace, defaultSessions]]);
 
 const capabilities = {
   version: {
@@ -74,6 +169,8 @@ const capabilities = {
     "launch/resolve",
     "profile/local/create",
     "profile/llm/catalog",
+    "profile/llm/list",
+    "profile/llm/select",
     "profile/llm/test",
     "profile/llm/upsert",
     "session/open",
@@ -113,7 +210,13 @@ const capabilities = {
   ],
 };
 
-sockets.on("connection", (socket) => {
+sockets.on("connection", (socket, request) => {
+  const connectionProfileId = authenticatedProfileForToken(
+    authTokenFromUpgradeRequest(request),
+  );
+  if (connectionProfileId) {
+    authenticatedProfileBySocket.set(socket, connectionProfileId);
+  }
   let permission = { mode: "workspace_write", network: "deny" };
   let taskState = "running";
   let pendingInteraction = null;
@@ -189,8 +292,63 @@ sockets.on("connection", (socket) => {
       });
       return;
     }
+    if (request.method === "profile/llm/list") {
+      const profileId = profileIdFor(socket, request.params);
+      const selected =
+        profileDefaultModelByProfile.get(profileId) ?? profileModels[0];
+      reply(socket, request.id, {
+        session_id: sessionId,
+        models: profileModels.map((model) => ({
+          ...model,
+          selected:
+            model.model === selected.model &&
+            model.provider === selected.provider,
+        })),
+      });
+      return;
+    }
+    if (request.method === "profile/llm/select") {
+      const modelId = request.params?.model_id;
+      const provider = request.params?.family_id;
+      const selected = profileModels.find(
+        (model) => model.model === modelId && model.family === provider,
+      );
+      if (!selected) {
+        replyError(socket, request.id, -32602, "Model is not configured");
+        return;
+      }
+      const profileId = profileIdFor(socket, request.params);
+      const profileDefault = {
+        ...selected,
+        route: request.params?.route_id ?? selected.route,
+      };
+      profileDefaultModelByProfile.set(profileId, profileDefault);
+      const runtimeModel =
+        effectiveRuntimeModelByProfile.get(profileId) ?? defaultRuntimeModel;
+      reply(socket, request.id, {
+        session_id: sessionId,
+        selected: {
+          ...profileDefault,
+          selected: true,
+        },
+        applied: true,
+        restart_required: true,
+        runtime_policy_stamp: runtimePolicyStamp(
+          profileId,
+          runtimeModel,
+          permission,
+        ),
+      });
+      return;
+    }
     if (request.method === "profile/local/create") {
-      createdProfileId = request.params.requested_id;
+      // Core owns the final id and may normalize or suffix a colliding request.
+      // Keeping this fixture non-equal prevents the Web onboarding flow from
+      // treating requested_id as authoritative.
+      createdProfileId =
+        request.params.requested_id === "coding"
+          ? "coding-2"
+          : request.params.requested_id;
       reply(socket, request.id, {
         profile_id: createdProfileId,
         user_id: `user-${createdProfileId}`,
@@ -234,23 +392,49 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/open") {
+      const scope = sessionScopeFor(
+        sessionId,
+        request.params,
+        connectionProfileId,
+      );
+      if (!scope.ok) {
+        rejectSessionScope(socket, request.id, scope);
+        return;
+      }
+      if (rejectedSessionIds.has(sessionId)) {
+        replyError(
+          socket,
+          request.id,
+          -32_040,
+          "The saved Session is no longer available",
+        );
+        return;
+      }
+      const profileId = scope.profileId;
+      const workspaceRoot =
+        request.params?.cwd ??
+        openedWorkspaceBySocket.get(socket) ??
+        defaultWorkspace;
       openedSessionBySocket.set(socket, sessionId);
-      if (!mockSessions.some((session) => session.id === sessionId)) {
-        mockSessions = [
+      openedWorkspaceBySocket.set(socket, workspaceRoot);
+      openedProfileBySocket.set(socket, profileId);
+      const workspaceSessions = sessionsByWorkspace.get(workspaceRoot) ?? [];
+      if (!workspaceSessions.some((session) => session.id === sessionId)) {
+        sessionsByWorkspace.set(workspaceRoot, [
           {
             id: sessionId,
             message_count: 0,
             title: "New coding session",
             updated_at: new Date().toISOString(),
           },
-          ...mockSessions,
-        ];
+          ...workspaceSessions,
+        ]);
       }
       reply(socket, request.id, {
         opened: {
           session_id: sessionId,
-          active_profile_id: request.params?.profile_id || "coding",
-          workspace_root: "/workspace/octoscode-web",
+          active_profile_id: profileId,
+          workspace_root: workspaceRoot,
           cursor: { stream: sessionId, seq: 10 },
           capabilities,
         },
@@ -258,6 +442,21 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/hydrate") {
+      const openedSessionId = openedSessionBySocket.get(socket);
+      const openedProfileId = openedProfileBySocket.get(socket);
+      const routedProfileId = profileIdFromSessionId(sessionId) ?? "_main";
+      if (
+        openedSessionId !== sessionId ||
+        (openedProfileId && routedProfileId !== openedProfileId)
+      ) {
+        replyError(
+          socket,
+          request.id,
+          -32_004,
+          `unknown session: ${sessionId}`,
+        );
+        return;
+      }
       const result = {
         session_id: sessionId,
         cursor: { stream: sessionId, seq: 10 },
@@ -389,23 +588,24 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/status/read") {
+      const profileId = profileIdFor(socket, request.params);
+      const runtimeModel =
+        effectiveRuntimeModelByProfile.get(profileId) ?? defaultRuntimeModel;
       reply(socket, request.id, {
         session_id: sessionId,
         runtime_mode: "solo",
-        profile_id: "coding",
-        workspace_root: "/workspace/octoscode-web",
-        model: { model: "deepseek-v4", provider: "deepseek", selected: true },
+        profile_id: profileId,
+        workspace_root: openedWorkspaceBySocket.get(socket) ?? defaultWorkspace,
+        model: { ...runtimeModel, selected: true },
         sandbox: permission.mode,
         network: permission.network === "allow" ? "allowed" : "blocked",
         approval_policy: "on-request",
         mcp_servers: [],
-        runtime_policy_stamp: {
-          model: "deepseek-v4",
-          profile_id: "coding",
-          sandbox: permission.mode,
-          network: permission.network === "allow" ? "allowed" : "blocked",
-          approval_policy: "on-request",
-        },
+        runtime_policy_stamp: runtimePolicyStamp(
+          profileId,
+          runtimeModel,
+          permission,
+        ),
         usage: {
           input_tokens: 128000,
           output_tokens: 340,
@@ -422,13 +622,24 @@ sockets.on("connection", (socket) => {
       return;
     }
     if (request.method === "session/list") {
-      reply(socket, request.id, { sessions: mockSessions });
+      const workspaceRoot =
+        request.params?.cwd ??
+        openedWorkspaceBySocket.get(socket) ??
+        defaultWorkspace;
+      reply(socket, request.id, {
+        sessions: sessionsByWorkspace.get(workspaceRoot) ?? [],
+      });
       return;
     }
     if (request.method === "session/delete") {
-      mockSessions = mockSessions.filter(
-        (session) => session.id !== request.params.session_id,
-      );
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.filter(
+            (session) => session.id !== request.params.session_id,
+          ),
+        );
+      }
       reply(socket, request.id, {});
       return;
     }
@@ -800,8 +1011,171 @@ function diffPreview(sessionId, previewId) {
   };
 }
 
+function authTokenFromRequestUrl(requestUrl) {
+  const query = requestUrl?.split("?", 2)[1]?.split("#", 1)[0];
+  if (!query) return "";
+  for (const pair of query.split("&")) {
+    const separator = pair.indexOf("=");
+    const key = separator < 0 ? pair : pair.slice(0, separator);
+    if (key !== "token" && key !== "_token") continue;
+    const encoded = separator < 0 ? "" : pair.slice(separator + 1);
+    try {
+      // Match Core's RFC 3986 query-token behavior: percent-decode without
+      // treating a literal plus as a space.
+      return decodeURIComponent(encoded);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function authTokenFromUpgradeRequest(request) {
+  const authorization = request.headers.authorization;
+  const header = Array.isArray(authorization)
+    ? authorization[0]
+    : authorization;
+  const bearer =
+    typeof header === "string" ? header.slice("Bearer ".length) : "";
+  return header?.startsWith("Bearer ") && bearer
+    ? bearer
+    : authTokenFromRequestUrl(request.url);
+}
+
+function authenticatedProfileForToken(token) {
+  return mockProfileAuthToken && token === mockProfileAuthToken
+    ? mockProfileAuthId
+    : undefined;
+}
+
+function sessionScopeFor(sessionId, params, connectionProfileId) {
+  if (typeof sessionId !== "string" || !sessionId) {
+    return {
+      ok: false,
+      message: "session_id must be a non-empty string",
+      data: undefined,
+      authViolation: false,
+    };
+  }
+  const requested = params?.profile_id;
+  if (
+    requested !== undefined &&
+    (typeof requested !== "string" || !requested)
+  ) {
+    return {
+      ok: false,
+      message: "profile_id cannot be empty",
+      data: undefined,
+      authViolation: false,
+    };
+  }
+  const sessionProfileId = profileIdFromSessionId(sessionId);
+  if (connectionProfileId) {
+    if (requested !== undefined && requested !== connectionProfileId) {
+      return scopeMismatch(
+        "profile_id is outside the authenticated profile",
+        connectionProfileId,
+        requested,
+        true,
+      );
+    }
+    if (sessionProfileId && sessionProfileId !== connectionProfileId) {
+      return scopeMismatch(
+        "session_id is outside the authenticated profile",
+        connectionProfileId,
+        sessionProfileId,
+        true,
+      );
+    }
+    return { ok: true, profileId: connectionProfileId };
+  }
+  if (requested && sessionProfileId && requested !== sessionProfileId) {
+    return scopeMismatch(
+      "profile_id does not match session_id profile",
+      sessionProfileId,
+      requested,
+      false,
+    );
+  }
+  return {
+    ok: true,
+    profileId: requested ?? sessionProfileId ?? defaultProfileId,
+  };
+}
+
+function profileIdFromSessionId(sessionId) {
+  const [base] = sessionId.split("#", 1);
+  const segments = base.split(":");
+  if (
+    segments.length >= 3 &&
+    !sessionChannels.has(segments[0]) &&
+    sessionChannels.has(segments[1])
+  ) {
+    return segments[0];
+  }
+  return undefined;
+}
+
+function scopeMismatch(
+  message,
+  expectedProfileId,
+  actualProfileId,
+  authViolation,
+) {
+  return {
+    ok: false,
+    message,
+    data: {
+      expected_profile_id: expectedProfileId,
+      actual_profile_id: actualProfileId,
+      ...(authViolation ? { auth_scope_violation: true } : {}),
+    },
+    authViolation,
+  };
+}
+
+function rejectSessionScope(socket, id, scope) {
+  if (scope.authViolation) {
+    socket.close(1008, "auth_expired");
+    return;
+  }
+  replyError(socket, id, -32602, scope.message, scope.data);
+}
+
+function profileIdFor(socket, params) {
+  const requested =
+    typeof params?.profile_id === "string" ? params.profile_id.trim() : "";
+  return (
+    requested ||
+    openedProfileBySocket.get(socket) ||
+    authenticatedProfileBySocket.get(socket) ||
+    defaultProfileId
+  );
+}
+
+function runtimePolicyStamp(profileId, runtimeModel, permission) {
+  return {
+    model: runtimeModel.model,
+    provider: runtimeModel.provider,
+    profile_id: profileId,
+    sandbox: permission.mode,
+    network: permission.network === "allow" ? "allowed" : "blocked",
+    approval_policy: "on-request",
+  };
+}
+
 function reply(socket, id, result) {
   socket.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
+}
+
+function replyError(socket, id, code, message, data) {
+  socket.send(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      error: { code, message, ...(data === undefined ? {} : { data }) },
+    }),
+  );
 }
 
 function notify(socket, sessionId, threadId, turnId, seq, cursor, type, data) {

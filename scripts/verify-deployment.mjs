@@ -26,6 +26,9 @@ for (const required of [
   '"$request_method $uri"',
   'Cache-Control "public, max-age=31536000, immutable"',
   'Cache-Control "no-cache"',
+  "THIRD_PARTY_NOTICES\\.md",
+  "THIRD_PARTY_LICENSES\\.md",
+  "DEPLOYMENT\\.md",
   "proxy_set_header Upgrade $http_upgrade",
   "try_files $uri $uri/ /index.html",
   "server_tokens off",
@@ -97,18 +100,25 @@ const initialAssets = [
   ...html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g),
 ].map((match) => match[1]);
 assert(initialAssets.length >= 2, "built index has no initial assets");
+const expectedBase = process.env.OCTOSCODE_WEB_BASE_PATH?.trim() || "/";
+assert(
+  expectedBase.startsWith("/") && expectedBase.endsWith("/"),
+  "OCTOSCODE_WEB_BASE_PATH must be an absolute slash-terminated path",
+);
+const assetPrefix = `${expectedBase}assets/`;
 let initialJavaScriptBytes = 0;
 let initialCssBytes = 0;
 for (const asset of initialAssets) {
   assert(
-    asset.startsWith("/assets/"),
+    asset.startsWith(assetPrefix),
     `unexpected initial asset path ${asset}`,
   );
   assert(
     /-[A-Za-z0-9_-]{8}\.(?:js|css)$/.test(asset),
     `asset is not content-hashed: ${asset}`,
   );
-  const size = (await stat(resolve(dist, asset.slice(1)))).size;
+  const size = (await stat(resolve(dist, asset.slice(expectedBase.length))))
+    .size;
   if (asset.endsWith(".js")) initialJavaScriptBytes += size;
   if (asset.endsWith(".css")) initialCssBytes += size;
 }

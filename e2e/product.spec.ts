@@ -1,108 +1,491 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+const DEFAULT_WORKSPACE = "/workspace/octoscode-web";
+const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 
-async function launchWorkspace(page: Page, cwd: string) {
-  await page.goto("/");
-  await page
-    .getByRole("textbox", { name: "Workspace path on server" })
-    .fill(cwd);
-  await page.getByRole("button", { name: "Connect workspace" }).click();
+function productNavigation(page: Page): Locator {
+  return page.getByRole("complementary", { name: "Product navigation" });
 }
 
-test("resumes the server-resolved Octoscode session and supervises work", async ({
-  page,
-}) => {
-  await launchWorkspace(page, "/srv/work/project");
-
-  await expect(
-    page.getByText("_main:local:tui#coding", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Sessions" })).toBeVisible();
-  await expect(
-    page
-      .locator(".session-row")
-      .filter({ hasText: "Review protocol drift" })
-      .getByText("1 running"),
-  ).toBeVisible();
-  await expect(page.getByText("Validate product checks")).toBeVisible();
-
-  const composer = page.getByPlaceholder(
-    "Ask Octos to change, explain, or review code…",
-  );
-  await composer.fill("Run the product checks");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByText(/Context · 13% of 1M/)).toBeVisible();
-});
-
-test("preserves unsent drafts across explicit session switches", async ({
-  page,
-}) => {
-  await launchWorkspace(page, "/srv/work/project");
-  const composer = page.getByPlaceholder(
-    "Ask Octos to change, explain, or review code…",
-  );
-  await expect(composer).toBeEnabled();
-  await composer.fill("draft for coding");
-
-  await page
-    .locator(".session-row")
-    .filter({ hasText: "Review protocol drift" })
-    .click();
-  await expect(
-    page.getByText("coding:local:review", { exact: true }),
-  ).toBeVisible();
-  await composer.fill("draft for review");
-  await page
-    .locator(".session-row")
-    .filter({ hasText: "New coding session" })
-    .click();
-  await expect(
-    page.getByText("_main:local:tui#coding", { exact: true }),
-  ).toBeVisible();
-  await expect(composer).toHaveValue("draft for coding");
-});
-
-test("restores the active workspace and credential across a refresh", async ({
-  page,
-}) => {
+async function connectServer(
+  page: Page,
+  token = "tab-scoped-e2e-token",
+): Promise<Locator> {
   await page.goto("/");
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page
-    .getByRole("textbox", { name: "Workspace path on server" })
-    .fill("/srv/work/project");
-  await page.getByRole("button", { name: "Connect workspace" }).click();
+
   await expect(
-    page.getByText("_main:local:tui#coding", { exact: true }),
+    page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
+  await expect(page.getByLabel("Session id")).toHaveCount(0);
+  await expect(page.getByLabel("Profile id")).toHaveCount(0);
+  await expect(page.getByLabel("Server workspace")).toHaveCount(0);
+
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page.getByLabel("Auth token").fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  const navigation = productNavigation(page);
+  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  await expect(navigation).toBeVisible();
+  await expect(chooser).toBeVisible();
+  await expect(
+    chooser.getByRole("heading", { name: "Choose a workspace" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Session views" }),
+  ).toHaveCount(0);
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeHidden();
+  await expect(navigation.getByRole("treeitem")).toHaveCount(0);
+  return chooser;
+}
+
+async function requestInitialWorkspace(page: Page, cwd: string): Promise<void> {
+  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
+  await expect(addWorkspace).toBeVisible();
+  await addWorkspace.getByLabel("Server workspace path").fill(cwd);
+  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await expect(addWorkspace).toBeHidden();
+}
+
+async function startWorkspace(
+  page: Page,
+  cwd = DEFAULT_WORKSPACE,
+): Promise<void> {
+  await requestInitialWorkspace(page, cwd);
+  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
+}
+
+async function connectAndStartWorkspace(
+  page: Page,
+  cwd = DEFAULT_WORKSPACE,
+  token = "tab-scoped-e2e-token",
+): Promise<void> {
+  await connectServer(page, token);
+  await startWorkspace(page, cwd);
+}
+
+async function openSettings(page: Page): Promise<Locator> {
+  await productNavigation(page)
+    .getByRole("button", { name: "Settings" })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  return settings;
+}
+
+test("uses the DSH-aligned product sidebar and grouped or flat session views", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const sidebar = productNavigation(page);
+
+  await expect(sidebar.getByText("Octoscode", { exact: true })).toBeVisible();
+  await expect(
+    sidebar.getByRole("button", { name: "New session", exact: true }).last(),
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("tree", { name: "Workspaces and sessions" }),
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("treeitem", { name: "octoscode-web", exact: true }),
+  ).toBeVisible();
+  await expect(
+    sidebar.locator('[role="treeitem"][aria-current="page"]'),
+  ).toContainText("New coding session");
+
+  await sidebar.getByRole("button", { name: "Session view options" }).click();
+  let menu = sidebar.getByRole("menu", { name: "Session view options" });
+  await expect(
+    menu.getByRole("menuitemradio", { name: "Workspace" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await menu.getByRole("menuitemradio", { name: "In one list" }).click();
+
+  await expect(sidebar.getByRole("tree", { name: "Sessions" })).toBeVisible();
+  await expect(sidebar.getByText("Sessions", { exact: true })).toBeVisible();
+  await expect(
+    sidebar.getByRole("treeitem", { name: "octoscode-web", exact: true }),
+  ).toHaveCount(0);
+
+  await sidebar.getByRole("button", { name: "Session view options" }).click();
+  menu = sidebar.getByRole("menu", { name: "Session view options" });
+  await menu.getByRole("menuitemradio", { name: "Workspace" }).click();
+  await expect(
+    sidebar.getByRole("tree", { name: "Workspaces and sessions" }),
+  ).toBeVisible();
+});
+
+test("authenticates before any session and owns workspace selection in the hero", async ({
+  page,
+}) => {
+  const openedMethods: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (frame.includes('"method":"session/open"')) {
+        openedMethods.push(frame);
+      }
+    });
+  });
+
+  const chooser = await connectServer(page);
+
+  expect(openedMethods).toEqual([]);
+  await expect(
+    page.getByText("Ship octoscode-web", { exact: true }),
+  ).toHaveCount(0);
+  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  await expect(
+    page.getByRole("region", { name: "Add workspace" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Server workspace path")).toBeVisible();
+  await expect(page.getByLabel("Session id")).toHaveCount(0);
+  await expect(page.getByLabel("Profile id")).toHaveCount(0);
+});
+
+test("keeps authentication when a remembered Session can no longer open", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page, "/srv/work/stale-restore");
+  await page.request.post(`${FIXTURE_ORIGIN}/__test__/reject-opened`);
+
+  let restoreOpenCount = 0;
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      if (String(payload).includes('"method":"session/open"')) {
+        restoreOpenCount += 1;
+      }
+    });
+  });
+
+  await page.reload();
+  await expect(productNavigation(page)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Choose a workspace" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Choose a workspace" }).getByRole("alert"),
+  ).toContainText("saved Session is no longer available");
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toHaveCount(0);
+  await expect.poll(() => restoreOpenCount).toBe(1);
+
+  await page.reload();
+  await expect(productNavigation(page)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Choose a workspace" }),
+  ).toBeVisible();
+  await page.waitForTimeout(250);
+  expect(restoreOpenCount).toBe(1);
+
+  await requestInitialWorkspace(page, "/srv/work/recovered-after-stale");
+  await expect(
+    page.getByText("/srv/work/recovered-after-stale", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
+});
+
+test("keeps only the authoritative open Session when starting another", async ({
+  page,
+}) => {
+  const cwd = "/srv/work/per-workspace-session";
+  await connectServer(page);
+  await startWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "per-workspace-session",
+    exact: true,
+  });
+  await expect(workspace).toBeVisible();
+  const openSessions = sidebar.getByRole("treeitem", {
+    name: /New coding session/,
+  });
+  await expect(openSessions).toHaveCount(1);
+
+  await workspace
+    .getByRole("button", { name: "per-workspace-session", exact: true })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in per-workspace-session",
+    })
+    .click();
+
+  await expect(openSessions).toHaveCount(1);
+  await expect(openSessions).toHaveAttribute("aria-current", "page");
+  await expect(
+    sidebar.getByText("Only the open session is shown.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
+});
+
+test("does not project ambiguous legacy Session rows into a Workspace", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const sidebar = productNavigation(page);
+  await expect(
+    sidebar.getByRole("treeitem", { name: /Ship octoscode-web/ }),
+  ).toHaveCount(0);
+  await expect(
+    sidebar.getByRole("treeitem", { name: /Review protocol drift/ }),
+  ).toHaveCount(0);
+  await expect(
+    sidebar.getByRole("treeitem", { name: /New coding session/ }),
+  ).toHaveCount(1);
+  await expect(
+    sidebar.getByText("Only the open session is shown.", { exact: true }),
+  ).toBeVisible();
+});
+
+test("moves drafts only after a profile-choice Session transition commits", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("keep this draft in the original Session");
+
+  const openCrossProfileWorkspace = async () => {
+    await productNavigation(page)
+      .getByRole("button", { name: "Add workspace" })
+      .click();
+    const addWorkspace = page.getByRole("dialog", { name: "Add workspace" });
+    await addWorkspace
+      .getByLabel("Server workspace path")
+      .fill("/srv/work/cross");
+    await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Choose this workspace’s profile" }),
+    ).toBeVisible();
+  };
+
+  await openCrossProfileWorkspace();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(composer).toHaveValue("keep this draft in the original Session");
+
+  await openCrossProfileWorkspace();
+  await page
+    .getByRole("button", { name: /Start new session with review/ })
+    .click();
+  await expect(composer).toBeVisible();
+  await expect(composer).toHaveValue("");
+});
+
+test("restores the origin, tab credential, session, and workspace after refresh", async ({
+  page,
+}) => {
+  const cwd = "/srv/work/remembered-product";
+  await connectServer(page, "remember-this-tab-token");
+  await startWorkspace(page, cwd);
 
   await page.reload();
 
+  const restoredNavigation = productNavigation(page);
+  await expect(restoredNavigation).toBeVisible();
+  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
   await expect(
-    page.getByText("_main:local:tui#coding", { exact: true }),
+    restoredNavigation.getByRole("treeitem", { name: /New coding session/ }),
+  ).toHaveAttribute("aria-current", "page");
+  const settings = await openSettings(page);
+  await settings.getByRole("button", { name: "Disconnect" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByLabel("Server origin")).toHaveValue(FIXTURE_ORIGIN);
   await expect(page.getByLabel("Auth token")).toHaveValue(
-    "tab-scoped-e2e-token",
+    "remember-this-tab-token",
   );
-  await expect(
-    page.getByRole("textbox", { name: "Workspace path on server" }),
-  ).toHaveValue("/workspace/octoscode-web");
 });
 
-test("creates a server-owned Web session inside the active workspace", async ({
+test("offers whole permission presets and confirms full access", async ({
   page,
 }) => {
-  await launchWorkspace(page, "/srv/work/project");
+  await connectAndStartWorkspace(page);
 
-  await page.getByRole("button", { name: "New", exact: true }).click();
-
-  await expect(page.locator(".workspace-title small")).toHaveText(
-    /^_main:api:web-[0-9a-f-]{36}$/,
-  );
+  const permission = page.getByRole("button", {
+    name: "Permission: Write · Network blocked",
+  });
+  await expect(permission).toBeVisible();
+  await permission.click();
+  const menu = page.getByRole("menu", { name: "Permission" });
   await expect(
-    page.getByText("/workspace/octoscode-web", { exact: true }).first(),
+    menu.getByRole("menuitemradio", { name: "Read · Network blocked" }),
+  ).toBeVisible();
+  await expect(
+    menu.getByRole("menuitemradio", { name: "Write · Network allowed" }),
+  ).toBeVisible();
+  await expect(
+    menu.getByRole("menuitemradio", {
+      name: "Full access · Network allowed",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("switch")).toHaveCount(0);
+
+  await menu
+    .getByRole("menuitemradio", {
+      name: "Full access · Network allowed",
+    })
+    .click();
+  const warning = page.getByRole("dialog", { name: "Enable full access?" });
+  await expect(warning).toBeVisible();
+  const enable = warning.getByRole("button", { name: "Enable full access" });
+  await expect(enable).toBeDisabled();
+  await warning
+    .getByLabel("I understand that this session can make unrestricted changes.")
+    .check();
+  await enable.click();
+
+  await expect(
+    page.getByRole("button", {
+      name: "Permission: Full access · Network allowed",
+    }),
+  ).toBeVisible();
+});
+
+test("separates the Session runtime from the Profile default model", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+
+  const runtimeModel = page.getByRole("button", {
+    name: /Runtime model: DeepSeek V4\./,
+  });
+  await expect(runtimeModel).toBeVisible();
+  await runtimeModel.click();
+
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(
+    settings.getByRole("heading", { name: "Profile model" }),
+  ).toBeVisible();
+  await expect(settings.getByText("Session runtime")).toBeVisible();
+  await expect(
+    settings.getByText("Session runtime").locator(".."),
+  ).toContainText("DeepSeek V4");
+  await expect(
+    settings.getByText("Profile default", { exact: true }),
+  ).toBeVisible();
+
+  const models = settings.getByRole("radiogroup", {
+    name: "Profile default model",
+  });
+  const glm = models.getByRole("radio", { name: /GLM 5.2/ });
+  await expect(glm).toHaveAttribute("aria-checked", "true");
+  const deepseek = models.getByRole("radio", { name: /DeepSeek V4 Pro/ });
+  await deepseek.click();
+  await expect(deepseek).toHaveAttribute("aria-checked", "true");
+  await expect(settings.getByRole("status")).toContainText(
+    "Profile default is DeepSeek V4 Pro",
+  );
+  await expect(settings.getByRole("status")).toContainText(
+    "still serving DeepSeek V4",
+  );
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(
+    page.getByRole("button", {
+      name: /Runtime model: DeepSeek V4.*Profile default DeepSeek V4 Pro is pending an Octos restart/,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("menu", { name: "Model" })).toHaveCount(0);
+});
+
+test("keeps server connection actions in General settings", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page, DEFAULT_WORKSPACE, "forget-me-token");
+  let settings = await openSettings(page);
+
+  await expect(
+    settings.getByText("Octos server", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByText(FIXTURE_ORIGIN, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByText("Current workspace", { exact: true }),
+  ).toBeVisible();
+  await expect(settings.getByText("Profile", { exact: true })).toBeVisible();
+  await expect(settings.getByText("_main", { exact: true })).toBeVisible();
+  await settings.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByLabel("Auth token")).toHaveValue("forget-me-token");
+
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(productNavigation(page)).toBeVisible();
+  settings = await openSettings(page);
+  await settings.getByRole("button", { name: "Forget server" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Auth token")).toHaveValue("");
+});
+
+test("owns plan and background work under the active session Trajectory", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const sessionViews = page.getByRole("navigation", { name: "Session views" });
+  await expect(
+    sessionViews.getByRole("button", { name: "Chat" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await sessionViews.getByRole("button", { name: "Trajectory" }).click();
+  await expect(
+    sessionViews.getByRole("button", { name: "Trajectory" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Trajectory" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Background tasks" }),
+  ).toBeVisible();
+  await expect(page.getByText("Validate product checks")).toBeVisible();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Activity" })).toHaveCount(0);
+
+  await sessionViews.getByRole("button", { name: "Chat" }).click();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
+  await expect(page.getByText("Durable coding transcript")).toBeVisible();
+});
+
+test("does not expose implementation and diagnostic concepts as product IA", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const sidebar = productNavigation(page);
+
+  for (const label of [
+    "Runtime",
+    "Boundary",
+    "One runtime, two clients",
+    "Session files",
+    "Activity",
+  ]) {
+    await expect(page.getByText(label, { exact: true })).toHaveCount(0);
+  }
+  await expect(sidebar).not.toContainText("Connection");
+  await expect(sidebar).not.toContainText("Permissions");
+});
+
+test("sends prompts from the session composer", async ({ page }) => {
+  await connectAndStartWorkspace(page);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+
+  await composer.fill("Run the product checks");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+
+  await expect(
+    page.getByText("Run the product checks", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Completed with pnpm check and all tests passing."),
+  ).toBeVisible();
+  await expect(
+    page.getByTitle("13% of the model context window used"),
   ).toBeVisible();
 });
 
@@ -110,32 +493,49 @@ test("recovers the durable session after disconnect and lossy replay", async ({
   page,
   request,
 }) => {
-  await launchWorkspace(page, "/srv/work/project");
+  const rpcMethods: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      for (const method of ["session/open", "session/hydrate"]) {
+        if (frame.includes(`"method":"${method}"`)) rpcMethods.push(method);
+      }
+    });
+  });
+  await connectAndStartWorkspace(page);
   const transcript = page.getByText("Durable coding transcript");
   await expect(transcript).toBeVisible();
 
+  const opensBeforeDisconnect = rpcMethods.filter(
+    (method) => method === "session/open",
+  ).length;
   await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
-  await expect(page.locator(".recovery-banner")).toBeVisible();
-  await expect(page.locator(".recovery-pill")).toContainText("Synced", {
-    timeout: 10_000,
-  });
+  await expect
+    .poll(
+      () => rpcMethods.filter((method) => method === "session/open").length,
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(opensBeforeDisconnect);
   await expect(transcript).toHaveCount(1);
 
+  const hydratesBeforeLossy = rpcMethods.filter(
+    (method) => method === "session/hydrate",
+  ).length;
   await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
-  await expect(page.locator(".recovery-banner")).toBeVisible();
-  await expect(page.locator(".recovery-pill")).toContainText("Synced", {
-    timeout: 10_000,
-  });
+  await expect
+    .poll(
+      () => rpcMethods.filter((method) => method === "session/hydrate").length,
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(hydratesBeforeLossy);
   await expect(transcript).toHaveCount(1);
 });
 
 test("resolves approval and structured-question takeovers", async ({
   page,
 }) => {
-  await launchWorkspace(page, "/srv/work/project");
-  const composer = page.getByPlaceholder(
-    "Ask Octos to change, explain, or review code…",
-  );
+  await connectAndStartWorkspace(page);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 
   await composer.fill("Request approval fixture");
   await page.getByRole("button", { name: "Send prompt" }).click();
@@ -166,60 +566,54 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(question).toBeHidden();
 });
 
-test("searches cross-session task activity and opens its session", async ({
+test("preserves workspace launch decisions without exposing profile ids in connect", async ({
   page,
 }) => {
-  await launchWorkspace(page, "/srv/work/project");
-  const composer = page.getByPlaceholder(
-    "Ask Octos to change, explain, or review code…",
-  );
-  await composer.fill("/activity");
-  await composer.press("Enter");
-  await expect(page.getByRole("dialog", { name: "Activity" })).toBeVisible();
-  const accessibility = await new AxeBuilder({ page })
-    .include(".activity-dialog")
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  expect(accessibility.violations).toEqual([]);
-  const search = page.getByRole("searchbox", { name: "Search activity" });
-  await expect(search).toBeFocused();
-  await search.fill("review protocol");
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/cross");
+
+  const decision = page.getByRole("heading", {
+    name: "Choose this workspace’s profile",
+  });
+  await expect(decision).toBeVisible();
   await page
-    .getByRole("button", { name: "Open Review protocol drift" })
+    .getByRole("button", { name: /Start new session with review/ })
     .click();
+  await expect(decision).toBeHidden();
+  await expect(page.locator(".workspace-title small")).toHaveText(
+    "/srv/work/cross",
+  );
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
+});
+
+test("keeps session controls gated until an activate decision commits", async ({
+  page,
+}) => {
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/new");
+
+  const decision = page.getByRole("heading", {
+    name: "Activate this coding workspace?",
+  });
+  await expect(decision).toBeVisible();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeHidden();
+  await expect(page.getByRole("button", { name: /^Permission:/ })).toBeHidden();
+
+  await page.getByRole("button", { name: "Activate _main" }).click();
+
+  await expect(decision).toBeHidden();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
   await expect(
-    page.getByText("coding:local:review", { exact: true }),
+    page.getByRole("button", { name: /^Permission:/ }),
   ).toBeVisible();
 });
 
-test("matches activate and cross-profile launch choices", async ({ page }) => {
-  await launchWorkspace(page, "/srv/work/new");
-  const activate = page.getByRole("button", { name: /Activate _main/ });
-  await expect(activate).toBeFocused();
-  await activate.click();
-  await expect(
-    page.getByText("_main:local:tui#coding", { exact: true }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Disconnect" }).click();
-  await page
-    .getByRole("textbox", { name: "Workspace path on server" })
-    .fill("/srv/work/cross");
-  await page.getByRole("button", { name: "Connect workspace" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Choose this workspace’s profile" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: /Continue with review/ }).click();
-  await expect(
-    page.getByText("review:local:tui#coding", { exact: true }),
-  ).toBeVisible();
-});
-
-test("onboards an empty solo server and opens the canonical coding session", async ({
+test("onboards an empty solo server from workspace creation", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await launchWorkspace(page, "/srv/work/no-profile");
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
   });
@@ -240,21 +634,17 @@ test("onboards an empty solo server and opens the canonical coding session", asy
   await apiKey.fill("sk-e2e-valid");
   await onboarding.getByRole("button", { name: "Test, save & open" }).click();
   await expect(
-    page.getByText("coding:local:tui#coding", { exact: true }),
+    page.getByText("/srv/work/no-profile", { exact: true }),
   ).toBeVisible();
   await expect(onboarding).toBeHidden();
   await expect(page.locator(".shiki")).toBeVisible();
-
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  expect(results.violations).toEqual([]);
 });
 
 test("preserves Octoscode keyless-provider onboarding semantics", async ({
   page,
 }) => {
-  await launchWorkspace(page, "/srv/work/no-profile");
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
   });
@@ -264,28 +654,27 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
   await expect(onboarding.getByLabel("API key")).toHaveCount(0);
   await onboarding.getByRole("button", { name: "Test, save & open" }).click();
   await expect(
-    page.getByText("coding:local:tui#coding", { exact: true }),
+    page.getByText("/srv/work/no-profile", { exact: true }),
   ).toBeVisible();
+  await expect(onboarding).toBeHidden();
 });
 
-test("keeps the work inspector available on a narrow viewport", async ({
+test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 740, height: 900 });
-  await launchWorkspace(page, "/srv/work/project");
-  const workButton = page.getByRole("button", { name: "Work", exact: true });
-  await expect(workButton).toBeVisible();
-  await workButton.click();
-  await expect(page.locator("#work-inspector")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#work-inspector")).toBeHidden();
-});
-
-test("keeps the dark coding workspace WCAG A/AA clean", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
-  await launchWorkspace(page, "/srv/work/project");
+  await connectAndStartWorkspace(page);
+
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(results.violations).toEqual([]);
+
+  const settings = await openSettings(page);
+  const settingsResults = await new AxeBuilder({ page })
+    .include('[role="dialog"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(settingsResults.violations).toEqual([]);
+  await settings.getByRole("button", { name: "Close settings" }).click();
 });

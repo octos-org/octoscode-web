@@ -5,6 +5,8 @@ import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 export const APPUI_ONBOARDING_METHODS = {
   PROFILE_LOCAL_CREATE: CORE_UI_METHODS.PROFILE_LOCAL_CREATE,
   PROFILE_LLM_CATALOG: "profile/llm/catalog",
+  PROFILE_LLM_LIST: "profile/llm/list",
+  PROFILE_LLM_SELECT: "profile/llm/select",
   PROFILE_LLM_TEST: "profile/llm/test",
   PROFILE_LLM_UPSERT: "profile/llm/upsert",
 } as const;
@@ -79,6 +81,40 @@ export interface LlmTestResult {
 export interface LlmUpsertResult {
   profile_id: string;
   applied: boolean;
+}
+
+export interface ProfileLlmListParams {
+  session_id: string;
+  profile_id?: string;
+}
+
+export interface ProfileLlmModel {
+  model: string;
+  provider: string;
+  title: string;
+  family?: string;
+  route?: string;
+  selected: boolean;
+  available: boolean;
+}
+
+export interface ProfileLlmListResult {
+  session_id: string;
+  models: ProfileLlmModel[];
+}
+
+export interface ProfileLlmSelectParams extends ProfileLlmListParams {
+  family_id: string;
+  model_id: string;
+  route_id?: string;
+}
+
+export interface ProfileLlmSelectResult {
+  session_id: string;
+  selected: ProfileLlmModel;
+  applied: boolean;
+  restart_required?: boolean;
+  runtime_policy_stamp?: unknown;
 }
 
 const MAX_FAMILIES = 100;
@@ -185,6 +221,77 @@ export function parseLlmUpsertResult(value: unknown): LlmUpsertResult | null {
   const profileId = text(value.profile_id);
   if (!profileId || typeof value.applied !== "boolean") return null;
   return { profile_id: profileId, applied: value.applied };
+}
+
+export function parseProfileLlmListResult(
+  value: unknown,
+): ProfileLlmListResult | null {
+  if (!isRecord(value) || !Array.isArray(value.models)) return null;
+  const sessionId = text(value.session_id);
+  if (!sessionId || value.models.length > MAX_MODELS) return null;
+  const models: ProfileLlmModel[] = [];
+  for (const source of value.models) {
+    const model = parseProfileLlmModel(source);
+    if (!model) return null;
+    models.push(model);
+  }
+  return { session_id: sessionId, models };
+}
+
+export function parseProfileLlmSelectResult(
+  value: unknown,
+): ProfileLlmSelectResult | null {
+  if (!isRecord(value) || typeof value.applied !== "boolean") return null;
+  const sessionId = text(value.session_id);
+  const selected = parseProfileLlmModel(value.selected);
+  const restartRequired = value.restart_required;
+  if (
+    !sessionId ||
+    !selected ||
+    (restartRequired !== undefined && typeof restartRequired !== "boolean")
+  ) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    selected,
+    applied: value.applied,
+    ...(restartRequired === undefined
+      ? {}
+      : { restart_required: restartRequired }),
+    ...(value.runtime_policy_stamp === undefined
+      ? {}
+      : { runtime_policy_stamp: value.runtime_policy_stamp }),
+  };
+}
+
+function parseProfileLlmModel(value: unknown): ProfileLlmModel | null {
+  if (!isRecord(value)) return null;
+  const model = text(value.model);
+  const provider = text(value.provider);
+  const title = text(value.title);
+  const family = optionalText(value.family);
+  const route = optionalText(value.route);
+  if (
+    !model ||
+    !provider ||
+    !title ||
+    family === null ||
+    route === null ||
+    typeof value.selected !== "boolean" ||
+    typeof value.available !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    model,
+    provider,
+    title,
+    ...(family ? { family } : {}),
+    ...(route ? { route } : {}),
+    selected: value.selected,
+    available: value.available,
+  };
 }
 
 function text(value: unknown): string | null {

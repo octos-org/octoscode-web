@@ -62,6 +62,7 @@ export default defineConfig({
     port: 4173,
     ...developmentProxy(),
   },
+  preview: developmentProxy(),
 });
 
 function developmentProxy(): { proxy: Record<string, ProxyOptions> } | object {

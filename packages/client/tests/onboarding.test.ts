@@ -4,6 +4,8 @@ import {
   parseLlmTestResult,
   parseLlmUpsertResult,
   parseLocalProfileCreateResult,
+  parseProfileLlmListResult,
+  parseProfileLlmSelectResult,
 } from "../src/index.ts";
 
 describe("solo onboarding transport contract", () => {
@@ -108,5 +110,51 @@ describe("solo onboarding transport contract", () => {
     expect(
       parseLlmUpsertResult({ profile_id: "coding", applied: true }),
     ).toEqual({ profile_id: "coding", applied: true });
+  });
+
+  it("decodes the configured model directory used by the composer", () => {
+    const models = [
+      {
+        model: "glm-5.2",
+        provider: "zai",
+        title: "zai / glm-5.2",
+        family: "zai",
+        route: "official",
+        selected: true,
+        available: true,
+      },
+      {
+        model: "deepseek-v4-pro",
+        provider: "deepseek",
+        title: "deepseek / deepseek-v4-pro",
+        selected: false,
+        available: true,
+      },
+    ];
+    expect(
+      parseProfileLlmListResult({ session_id: "coding:local:main", models }),
+    ).toEqual({ session_id: "coding:local:main", models });
+    expect(
+      parseProfileLlmSelectResult({
+        session_id: "coding:local:main",
+        selected: models[0],
+        applied: true,
+        restart_required: true,
+      }),
+    ).toEqual({
+      session_id: "coding:local:main",
+      selected: models[0],
+      applied: true,
+      restart_required: true,
+    });
+  });
+
+  it("rejects a malformed composer model instead of guessing", () => {
+    expect(
+      parseProfileLlmListResult({
+        session_id: "coding:local:main",
+        models: [{ model: "glm-5.2", selected: true, available: true }],
+      }),
+    ).toBeNull();
   });
 });

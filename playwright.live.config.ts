@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// A failed live handshake must never place the password-field value in
+// Playwright's automatic accessibility snapshot artifact.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
+
 const webPort = livePort("OCTOSCODE_LIVE_WEB_PORT", 4_174);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const proxyTarget = required("OCTOSCODE_LIVE_PROXY_TARGET");
@@ -21,7 +25,7 @@ export default defineConfig({
     video: "off",
   },
   webServer: {
-    command: `pnpm --filter @octos-org/octoscode-web exec vite --host 127.0.0.1 --port ${webPort}`,
+    command: `pnpm --filter @octos-org/octoscode-web build && pnpm --filter @octos-org/octoscode-web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`,
     url: webOrigin,
     env: {
       VITE_OCTOS_DEFAULT_ENDPOINT: webOrigin,
@@ -29,7 +33,7 @@ export default defineConfig({
       OCTOSCODE_DEV_PROXY_ORIGIN: proxyOrigin,
     },
     reuseExistingServer: false,
-    timeout: 30_000,
+    timeout: 60_000,
   },
 });
 

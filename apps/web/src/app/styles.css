@@ -138,7 +138,7 @@ a:focus-visible,
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 272px minmax(420px, 1fr) 320px;
+  grid-template-columns: auto minmax(420px, 1fr);
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
 }
@@ -954,6 +954,17 @@ label > span {
   white-space: nowrap;
 }
 
+.launch-error {
+  margin: 0;
+  border: 1px solid var(--dsw-alias-state-error-secondary);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .launch-profile-list {
   display: grid;
   gap: 7px;
@@ -1213,7 +1224,7 @@ label > span {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 8px 8px 16px;
+  padding: 2px 8px 7px;
 }
 
 .composer-footer > span {
@@ -2661,7 +2672,7 @@ kbd {
 
 @media (max-width: 1120px) {
   .workspace-grid {
-    grid-template-columns: 252px minmax(420px, 1fr);
+    grid-template-columns: auto minmax(420px, 1fr);
   }
 
   .inspector {

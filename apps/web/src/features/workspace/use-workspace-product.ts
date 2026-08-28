@@ -1,25 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  CORE_UI_FEATURES,
   CORE_UI_METHODS,
-  supportsFeature,
   supportsMethod,
   type OctosUiClient,
-  type TaskListEntry,
+  type SessionListEntry,
   type TokenCostUpdate,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
 import {
   EMPTY_WORKSPACE_PRODUCT,
-  includeActiveSession,
   mergeTokenCost,
-  recentSessionTasks,
-  sortSessions,
-  summarizeSessionTasks,
-  type SessionActivitySummary,
   type WorkspaceProductState,
 } from "./model.ts";
-import { RequestGate } from "../async/request-gate.ts";
 
 interface WorkspaceConnectionConfig {
   cwd: string;
@@ -32,10 +24,6 @@ interface WorkspaceProductDependencies {
   connectionConfig: () => WorkspaceConnectionConfig | null;
 }
 
-const BACKGROUND_ACTIVITY_LIMIT = 20;
-const BACKGROUND_ACTIVITY_POLL_MS = 10_000;
-const BACKGROUND_ACTIVITY_CONCURRENCY = 4;
-
 export interface WorkspaceProductController {
   state: WorkspaceProductState;
   reset: () => void;
@@ -43,8 +31,9 @@ export interface WorkspaceProductController {
     capabilities: UiProtocolCapabilities | undefined,
   ) => void;
   refresh: (client?: OctosUiClient | null) => Promise<void>;
+  listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
   deleteSession: (sessionId: string) => Promise<void>;
-  setError: (message: string) => void;
+  setError: (message: string | null) => void;
   observeTokenCost: (update: TokenCostUpdate) => void;
 }
 
@@ -52,32 +41,12 @@ export interface WorkspaceProductController {
 export function useWorkspaceProduct(
   dependencies: WorkspaceProductDependencies,
 ): WorkspaceProductController {
-  const requestsRef = useRef(new RequestGate());
-  const activityRequestsRef = useRef(new RequestGate());
   const deletingSessionRef = useRef<string | null>(null);
   const [state, setState] = useState<WorkspaceProductState>(
     EMPTY_WORKSPACE_PRODUCT,
   );
-  const dependenciesRef = useRef(dependencies);
-  const sessionsRef = useRef(state.sessions);
-  dependenciesRef.current = dependencies;
-  sessionsRef.current = state.sessions;
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (
-        typeof document === "undefined" ||
-        document.visibilityState === "visible"
-      ) {
-        void refreshActivity();
-      }
-    }, BACKGROUND_ACTIVITY_POLL_MS);
-    return () => clearInterval(timer);
-  }, []);
 
   const reset = () => {
-    requestsRef.current.invalidate();
-    activityRequestsRef.current.invalidate();
     deletingSessionRef.current = null;
     setState(EMPTY_WORKSPACE_PRODUCT);
   };
@@ -87,163 +56,41 @@ export function useWorkspaceProduct(
   ) => {
     setState((current) => ({
       ...current,
-      sessionsAvailable: supportsMethod(
-        capabilities,
-        CORE_UI_METHODS.SESSION_LIST,
-      ),
+      // Core rc.9 advertises session/list and cwd requests, but its response
+      // does not report the effective Workspace or Profile scope. An
+      // advertised method is therefore not an authoritative product catalog.
+      sessionsAvailable: false,
       deleteAvailable: supportsMethod(
         capabilities,
         CORE_UI_METHODS.SESSION_DELETE,
       ),
-      filesAvailable: supportsMethod(
-        capabilities,
-        CORE_UI_METHODS.SESSION_FILES_LIST,
-      ),
-      activityAvailable: supportsMethod(
-        capabilities,
-        CORE_UI_METHODS.TASK_LIST,
-      ),
+      // The workspace catalog is deliberately backed by one authoritative
+      // request. Files and task activity are session-scoped views, not catalog
+      // discovery, and must not add N+1 work or poison the session list.
+      filesAvailable: false,
+      filesLoading: false,
+      files: [],
+      activityAvailable: false,
+      activityLoading: false,
+      activityBySession: {},
+      activityTasksBySession: {},
+      activityUpdatedAt: null,
     }));
   };
 
-  const refresh = async (requestedClient = dependencies.client()) => {
-    const sessionId = dependencies.sessionId();
-    const config = dependencies.connectionConfig();
-    const capabilities = dependencies.capabilities();
-    if (!requestedClient || !sessionId || !config) return;
-    const canList = supportsMethod(capabilities, CORE_UI_METHODS.SESSION_LIST);
-    const canListFiles = supportsMethod(
-      capabilities,
-      CORE_UI_METHODS.SESSION_FILES_LIST,
-    );
-    if (!canList && !canListFiles) return;
-    const request = requestsRef.current.begin();
+  const refresh = async (_requestedClient = dependencies.client()) => {
+    // Keep the current Session projection separate from catalog discovery.
+    // App.tsx derives it from the successfully opened Session authority. Do
+    // not call the legacy list method: rc.9 can silently ignore cwd and route
+    // an admin connection through `_main`, while returning no scope proof.
     setState((current) => ({
       ...current,
-      loading: canList,
-      filesLoading: canListFiles,
+      sessionsAvailable: false,
+      loading: false,
+      sessions: [],
       error: null,
     }));
-    const [sessions, files] = await Promise.allSettled([
-      canList
-        ? requestedClient.listSessions(
-            config.cwd &&
-              supportsFeature(
-                capabilities,
-                CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
-              )
-              ? { cwd: config.cwd }
-              : {},
-          )
-        : Promise.resolve(null),
-      canListFiles
-        ? requestedClient.listSessionFiles({ session_id: sessionId })
-        : Promise.resolve(null),
-    ]);
-    if (
-      dependencies.client() !== requestedClient ||
-      dependencies.sessionId() !== sessionId ||
-      !requestsRef.current.isCurrent(request)
-    ) {
-      return;
-    }
-    const errors: string[] = [];
-    if (sessions.status === "rejected") {
-      errors.push(errorMessage(sessions.reason));
-    }
-    if (files.status === "rejected") {
-      errors.push(errorMessage(files.reason));
-    }
-    const nextSessions =
-      sessions.status === "fulfilled" && sessions.value
-        ? includeActiveSession(sortSessions(sessions.value.sessions), sessionId)
-        : null;
-    setState((current) => ({
-      ...current,
-      loading: false,
-      filesLoading: false,
-      sessions: nextSessions ?? current.sessions,
-      files:
-        files.status === "fulfilled" && files.value
-          ? files.value.files
-          : current.files,
-      error: errors.length ? errors.join(" · ") : null,
-    }));
-    if (nextSessions) {
-      sessionsRef.current = nextSessions;
-      await refreshActivity(requestedClient, nextSessions);
-    }
   };
-
-  async function refreshActivity(
-    requestedClient = dependenciesRef.current.client(),
-    requestedSessions = sessionsRef.current,
-  ) {
-    const currentDependencies = dependenciesRef.current;
-    const activeSessionId = currentDependencies.sessionId();
-    if (
-      !requestedClient ||
-      !activeSessionId ||
-      !supportsMethod(
-        currentDependencies.capabilities(),
-        CORE_UI_METHODS.TASK_LIST,
-      ) ||
-      requestedSessions.length === 0
-    ) {
-      return;
-    }
-    const request = activityRequestsRef.current.begin();
-    const targets = requestedSessions.slice(0, BACKGROUND_ACTIVITY_LIMIT);
-    setState((current) => ({ ...current, activityLoading: true }));
-    const entries = await mapWithConcurrency(
-      targets,
-      BACKGROUND_ACTIVITY_CONCURRENCY,
-      async (session) => {
-        try {
-          const result = await requestedClient.listTasks({
-            session_id: session.id,
-          });
-          if (result.session_id !== session.id) {
-            throw new Error("task/list returned another session");
-          }
-          return [
-            session.id,
-            summarizeSessionTasks(result.tasks),
-            recentSessionTasks(result.tasks),
-          ] as const;
-        } catch (reason) {
-          const summary: SessionActivitySummary = {
-            status: "unknown",
-            taskCount: 0,
-            runningCount: 0,
-            failedCount: 0,
-            completedCount: 0,
-            error: errorMessage(reason),
-          };
-          const noTasks: TaskListEntry[] = [];
-          return [session.id, summary, noTasks] as const;
-        }
-      },
-    );
-    if (
-      dependenciesRef.current.client() !== requestedClient ||
-      dependenciesRef.current.sessionId() !== activeSessionId ||
-      !activityRequestsRef.current.isCurrent(request)
-    ) {
-      return;
-    }
-    setState((current) => ({
-      ...current,
-      activityLoading: false,
-      activityBySession: Object.fromEntries(
-        entries.map(([sessionId, summary]) => [sessionId, summary]),
-      ),
-      activityTasksBySession: Object.fromEntries(
-        entries.map(([sessionId, , tasks]) => [sessionId, tasks]),
-      ),
-      activityUpdatedAt: Date.now(),
-    }));
-  }
 
   const deleteSession = async (sessionId: string) => {
     const client = dependencies.client();
@@ -288,11 +135,25 @@ export function useWorkspaceProduct(
     }
   };
 
+  const listWorkspaceSessions = async (
+    requestedCwd: string,
+  ): Promise<SessionListEntry[]> => {
+    const cwd = requestedCwd.trim();
+    if (!dependencies.client() || !cwd) {
+      throw new Error("The Octos server connection is not ready.");
+    }
+    // This remains as the adapter seam for a future server-owned
+    // Workspace/SessionRef catalog. The current list result contains only
+    // rows, so accepting it here would assign unproven Sessions to `cwd`.
+    throw new Error("Session history is not available for this workspace.");
+  };
+
   return {
     state,
     reset,
     configureCapabilities,
     refresh,
+    listWorkspaceSessions,
     deleteSession,
     setError: (message) =>
       setState((current) => ({ ...current, error: message })),
@@ -306,19 +167,4 @@ export function useWorkspaceProduct(
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
-}
-
-async function mapWithConcurrency<Input, Output>(
-  values: readonly Input[],
-  concurrency: number,
-  map: (value: Input) => Promise<Output>,
-): Promise<Output[]> {
-  const output: Output[] = [];
-  for (let offset = 0; offset < values.length; offset += concurrency) {
-    const batch = await Promise.all(
-      values.slice(offset, offset + concurrency).map(map),
-    );
-    output.push(...batch);
-  }
-  return output;
 }

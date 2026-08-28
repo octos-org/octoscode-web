@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
+import {
+  CORE_UI_METHODS,
+  type UiProtocolCapabilities,
+} from "@octos-org/octoscode-client";
 import {
   commandAvailability,
   commandSuggestions,
@@ -43,15 +46,29 @@ describe("octoscode command registry slice", () => {
   it("only suggests implemented commands", () => {
     expect(
       commandSuggestions("/", capabilities([])).map(({ name }) => name),
-    ).toEqual(["ps", "stop", "help", "copy", "status"]);
-    expect(
-      commandSuggestions("/", capabilities(["task/list"])).map(
-        ({ name }) => name,
-      ),
-    ).toContain("activity");
+    ).toEqual(["ps", "help", "copy", "status"]);
     expect(
       commandSuggestions("/st", capabilities([])).map(({ name }) => name),
+    ).toEqual(["status"]);
+    expect(
+      commandSuggestions(
+        "/st",
+        capabilities([CORE_UI_METHODS.TURN_INTERRUPT]),
+      ).map(({ name }) => name),
     ).toEqual(["stop", "status"]);
+  });
+
+  it("does not advertise stop without the server interrupt method", () => {
+    const stop = findCommand("stop");
+    expect(stop).toBeDefined();
+    expect(commandAvailability(stop!, capabilities([]))).toMatchObject({
+      available: false,
+      reason: `Server lacks ${CORE_UI_METHODS.TURN_INTERRUPT}`,
+    });
+    expect(
+      commandAvailability(stop!, capabilities([CORE_UI_METHODS.TURN_INTERRUPT]))
+        .available,
+    ).toBe(true);
   });
 
   it("requires all methods for resume, matching octoscode", () => {

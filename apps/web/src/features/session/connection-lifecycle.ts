@@ -27,6 +27,7 @@ export class SessionConnectionLifecycle {
   private manual = true;
   private retryAttempt = 0;
   private established = false;
+  private sessionRequested = false;
   private launchResolutionPending = false;
 
   constructor(private readonly random: RandomSource = Math.random) {}
@@ -39,6 +40,10 @@ export class SessionConnectionLifecycle {
     return this.established;
   }
 
+  get shouldOpenSession(): boolean {
+    return this.sessionRequested;
+  }
+
   /** Prevent a superseded client's close callback from scheduling a retry. */
   suspend(): void {
     this.manual = true;
@@ -47,19 +52,36 @@ export class SessionConnectionLifecycle {
   begin(
     input: SessionConnectionInput,
     resolveWorkspaceLaunch: boolean,
+    openSession = true,
   ): SessionConnectionInput {
     const config = normalizeConnectionInput(input);
     this.activeConfig = config;
     this.manual = false;
     this.retryAttempt = 0;
     this.established = false;
+    this.sessionRequested = openSession;
     this.launchResolutionPending =
-      resolveWorkspaceLaunch && Boolean(config.cwd);
+      openSession && resolveWorkspaceLaunch && Boolean(config.cwd);
     return config;
   }
 
   updateConfig(config: SessionConnectionInput): void {
     this.activeConfig = config;
+  }
+
+  /** Keep authenticated transport identity while dropping a stale Session hint. */
+  clearSessionSelection(): SessionConnectionInput | null {
+    if (!this.activeConfig) return null;
+    this.activeConfig = {
+      ...this.activeConfig,
+      sessionId: "",
+      profileId: "",
+      cwd: "",
+    };
+    this.established = false;
+    this.sessionRequested = false;
+    this.launchResolutionPending = false;
+    return this.activeConfig;
   }
 
   shouldResolveLaunch(reconnecting: boolean): boolean {
@@ -73,6 +95,7 @@ export class SessionConnectionLifecycle {
   markSessionEstablished(config: SessionConnectionInput): void {
     this.activeConfig = config;
     this.established = true;
+    this.sessionRequested = true;
     this.retryAttempt = 0;
   }
 
@@ -98,6 +121,7 @@ export class SessionConnectionLifecycle {
     this.activeConfig = null;
     this.retryAttempt = 0;
     this.established = false;
+    this.sessionRequested = false;
     this.launchResolutionPending = false;
   }
 }

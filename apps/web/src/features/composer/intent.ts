@@ -3,7 +3,6 @@ export type ComposerIntent =
   | { kind: "interrupt" }
   | { kind: "help" }
   | { kind: "process-status" }
-  | { kind: "activity" }
   | { kind: "copy" }
   | { kind: "status" }
   | { kind: "empty-command" }
@@ -44,7 +43,6 @@ export function resolveComposerIntent(
 function implementedIntent(intent: CommandIntent): ComposerIntent | null {
   switch (intent) {
     case "process-status":
-    case "activity":
     case "interrupt":
     case "help":
     case "copy":

@@ -35,156 +35,75 @@ export function ConnectionPanel({
     onChange({ ...value, [key]: next });
   };
 
-  if (connected) {
-    return (
-      <section
-        className="connection-card connection-card-compact"
-        aria-labelledby="connection-title"
-      >
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Runtime</span>
-            <h2 id="connection-title">Octos server</h2>
-          </div>
-          <span className={`status-dot status-${status}`} title={status} />
-        </div>
-        <dl className="connection-summary">
-          <div>
-            <dt>Origin</dt>
-            <dd>{value.endpoint}</dd>
-          </div>
-          {value.cwd ? (
-            <div>
-              <dt>Workspace</dt>
-              <dd>{value.cwd}</dd>
-            </div>
-          ) : null}
-          {value.profileId ? (
-            <div>
-              <dt>Profile</dt>
-              <dd>{value.profileId}</dd>
-            </div>
-          ) : null}
-        </dl>
-        {error ? <p className="connection-error">{error}</p> : null}
-        <button
-          className="button button-secondary"
-          onClick={onDisconnect}
-          type="button"
-        >
-          Disconnect
-        </button>
-      </section>
-    );
-  }
+  if (connected) return null;
 
   return (
-    <section className="connection-card" aria-labelledby="connection-title">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Runtime</span>
-          <h2 id="connection-title">Octos server</h2>
+    <main className={styles.gate}>
+      <section className={styles.card} aria-labelledby="connection-title">
+        <div className={styles.brand}>
+          <span className={styles.mark}>O</span>
+          <span>
+            <strong>octoscode</strong>
+            <small>web</small>
+          </span>
         </div>
-        <span className={`status-dot status-${status}`} title={status} />
-      </div>
-
-      <label>
-        <span>Server origin</span>
-        <input
-          value={value.endpoint}
-          onChange={(event) => field("endpoint", event.target.value)}
-          placeholder="http://127.0.0.1:50080"
-          disabled={connected || connecting}
-        />
-      </label>
-
-      <label>
-        <span>Auth token</span>
-        <input
-          value={value.token}
-          onChange={(event) => field("token", event.target.value)}
-          placeholder="Remembered for this tab"
-          type="password"
-          autoComplete="off"
-          disabled={connected || connecting}
-        />
-      </label>
-
-      <label>
-        <span>Workspace path on server</span>
-        <input
-          value={value.cwd}
-          onChange={(event) => field("cwd", event.target.value)}
-          placeholder="/path/on/server"
-          disabled={connected || connecting}
-        />
-      </label>
-
-      <details className={styles.advanced}>
-        <summary>Advanced launch identity</summary>
-        <p>
-          Core normally resolves the profile and canonical coding session from
-          the workspace. These values are fallback hints for older servers.
-        </p>
-        <div className="field-pair">
+        <div className={styles.heading}>
+          <h1 id="connection-title">Connect to Octos</h1>
+          <p>Connect first, then choose a workspace for your coding session.</p>
+        </div>
+        <div className={styles.fields}>
           <label>
-            <span>Session id</span>
+            <span>Server origin</span>
             <input
-              value={value.sessionId}
-              onChange={(event) => field("sessionId", event.target.value)}
-              disabled={connected || connecting}
+              value={value.endpoint}
+              onChange={(event) => field("endpoint", event.target.value)}
+              placeholder="https://octos.example.com"
+              disabled={connecting}
+              autoCapitalize="none"
+              autoCorrect="off"
             />
           </label>
           <label>
-            <span>Profile id</span>
+            <span>Auth token</span>
             <input
-              value={value.profileId}
-              onChange={(event) => field("profileId", event.target.value)}
-              placeholder="Optional"
-              disabled={connected || connecting}
+              value={value.token}
+              onChange={(event) => field("token", event.target.value)}
+              placeholder="Token for this browser tab"
+              type="password"
+              autoComplete="off"
+              disabled={connecting}
             />
           </label>
         </div>
-      </details>
-
-      {error ? <p className="connection-error">{error}</p> : null}
-      {isHandshakeError(error) ? (
-        <p className={styles.help}>
-          The WebSocket failed before <code>session/open</code>. Check server
-          reachability, the token, allowed Web origins, and reverse-proxy
-          WebSocket Upgrade forwarding.
+        {error ? (
+          <div className={styles.error} role="alert">
+            <strong>Could not connect</strong>
+            <span>{error}</span>
+            {isHandshakeError(error) ? (
+              <small>
+                Check the origin, token, allowed Web origins, and reverse-proxy
+                WebSocket forwarding.
+              </small>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          className={styles.connect}
+          onClick={connecting ? onDisconnect : onConnect}
+          disabled={!connecting && !value.endpoint.trim()}
+          type="button"
+        >
+          {connecting ? "Cancel" : "Connect"}
+        </button>
+        <p className={styles.note}>
+          The origin is remembered. The token stays in this tab so a refresh can
+          reconnect without putting the credential in durable storage.
         </p>
-      ) : null}
-
-      {connected || connecting ? (
-        <button
-          className="button button-secondary"
-          onClick={onDisconnect}
-          type="button"
-        >
-          {connecting ? "Cancel connection" : "Disconnect"}
+        <button className={styles.forget} onClick={onForget} type="button">
+          Forget saved connection
         </button>
-      ) : (
-        <button
-          className="button button-primary"
-          onClick={onConnect}
-          disabled={
-            connecting || !value.endpoint.trim() || !value.sessionId.trim()
-          }
-          type="button"
-        >
-          {connecting ? "Connecting…" : "Connect workspace"}
-        </button>
-      )}
-
-      <p className="field-note">
-        Origin and workspace are remembered on this browser. The auth token is
-        kept only for this tab and is cleared when the tab closes.
-      </p>
-      <button className={styles.forget} onClick={onForget} type="button">
-        Forget connection
-      </button>
-    </section>
+      </section>
+    </main>
   );
 }
 

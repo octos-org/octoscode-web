@@ -1,4 +1,5 @@
 LICENSE
+THIRD_PARTY_LICENSES.md
 pnpm-lock.yaml
 dist
 coverage

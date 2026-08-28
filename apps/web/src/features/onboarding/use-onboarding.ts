@@ -46,6 +46,11 @@ interface UseOnboardingOptions {
   onConfigured: (profileId: string, client: OctosUiClient) => Promise<void>;
 }
 
+interface CreatedProfileBinding {
+  requestedId: string;
+  profileId: string;
+}
+
 const EMPTY_ONBOARDING: OnboardingRuntimeState = {
   phase: "idle",
   supported: false,
@@ -56,7 +61,7 @@ const EMPTY_ONBOARDING: OnboardingRuntimeState = {
 
 export function useOnboarding(options: UseOnboardingOptions) {
   const requestsRef = useRef(new RequestGate());
-  const createdProfileRef = useRef<string | null>(null);
+  const createdProfileRef = useRef<CreatedProfileBinding | null>(null);
   const submissionActiveRef = useRef(false);
   const [state, setState] = useState<OnboardingRuntimeState>(EMPTY_ONBOARDING);
 
@@ -152,8 +157,8 @@ export function useOnboarding(options: UseOnboardingOptions) {
       // marks the family keyless (octos#2123). An empty key env means upsert
       // never persists this non-secret compatibility probe.
       const wireApiKey = apiKey || KEYLESS_CORE_PROBE;
-      let createdProfileId = createdProfileRef.current;
-      if (!createdProfileId) {
+      let createdProfile = createdProfileRef.current;
+      if (!createdProfile) {
         setState((current) => ({
           ...current,
           phase: "creating_profile",
@@ -172,20 +177,21 @@ export function useOnboarding(options: UseOnboardingOptions) {
         ) {
           return;
         }
-        if (created.profile_id !== profileId) {
-          throw new Error("The server created an unexpected profile identity.");
-        }
-        createdProfileId = created.profile_id;
-        createdProfileRef.current = createdProfileId;
+        createdProfile = {
+          requestedId: profileId,
+          profileId: created.profile_id,
+        };
+        createdProfileRef.current = createdProfile;
         setState((current) => ({
           ...current,
-          createdProfileId,
+          createdProfileId: created.profile_id,
         }));
-      } else if (createdProfileId !== profileId) {
+      } else if (createdProfile.requestedId !== profileId) {
         throw new Error(
-          `Profile ${createdProfileId} was already created. Reconnect to choose another identity.`,
+          `Profile ${createdProfile.profileId} was already created. Reconnect to choose another identity.`,
         );
       }
+      const createdProfileId = createdProfile.profileId;
 
       setState((current) => ({
         ...current,
@@ -250,7 +256,7 @@ export function useOnboarding(options: UseOnboardingOptions) {
       setState((current) => ({
         ...current,
         phase: "ready",
-        createdProfileId: createdProfileRef.current,
+        createdProfileId: createdProfileRef.current?.profileId ?? null,
         error: redactSecret(errorMessage(reason), apiKey),
       }));
     } finally {

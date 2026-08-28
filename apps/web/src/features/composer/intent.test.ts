@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CORE_UI_METHODS } from "@octos-org/octoscode-client";
 import { resolveComposerIntent } from "./intent.ts";
 
 const activityCapabilities = {
@@ -32,9 +33,21 @@ describe("resolveComposerIntent", () => {
   it.each(["/stop", "/interrupt", "/esc"])(
     "maps %s to the same interrupt intent",
     (input) => {
-      expect(resolveComposerIntent(input)).toEqual({ kind: "interrupt" });
+      expect(
+        resolveComposerIntent(input, {
+          ...activityCapabilities,
+          supported_methods: [CORE_UI_METHODS.TURN_INTERRUPT],
+        }),
+      ).toEqual({ kind: "interrupt" });
     },
   );
+
+  it("fails closed for stop when turn/interrupt is not advertised", () => {
+    expect(resolveComposerIntent("/stop", activityCapabilities)).toEqual({
+      kind: "unsupported-command",
+      command: "stop",
+    });
+  });
 
   it("dispatches help locally", () => {
     expect(resolveComposerIntent("/commands")).toEqual({ kind: "help" });
@@ -46,15 +59,16 @@ describe("resolveComposerIntent", () => {
     });
     expect(resolveComposerIntent("/copy")).toEqual({ kind: "copy" });
     expect(resolveComposerIntent("/status")).toEqual({ kind: "status" });
-    expect(resolveComposerIntent("/activity", activityCapabilities)).toEqual({
-      kind: "activity",
-    });
   });
 
   it("fails closed for commands that this build cannot execute", () => {
     expect(resolveComposerIntent("/resume old-session")).toEqual({
       kind: "unsupported-command",
       command: "resume",
+    });
+    expect(resolveComposerIntent("/activity", activityCapabilities)).toEqual({
+      kind: "unsupported-command",
+      command: "activity",
     });
     expect(resolveComposerIntent("!git status")).toEqual({
       kind: "local-shell-unavailable",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -18,6 +18,7 @@ import {
   type UserQuestionRequested,
 } from "@octos-org/octoscode-client";
 import { matchesSessionScope } from "../session/scope.ts";
+import { RequestAuthorityGate } from "../async/request-authority.ts";
 
 interface BlockingInteractionDependencies {
   client: () => OctosUiClient | null;
@@ -29,12 +30,16 @@ interface BlockingInteractionDependencies {
 export function useBlockingInteractions(
   dependencies: BlockingInteractionDependencies,
 ) {
+  const decisionRequestsRef = useRef(new RequestAuthorityGate<OctosUiClient>());
+  const dependenciesRef = useRef(dependencies);
+  dependenciesRef.current = dependencies;
   const [approval, setApproval] = useState<ApprovalRequested | null>(null);
   const [question, setQuestion] = useState<UserQuestionRequested | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
+    decisionRequestsRef.current.invalidate();
     setApproval(null);
     setQuestion(null);
     setBusy(false);
@@ -45,7 +50,8 @@ export function useBlockingInteractions(
     hydrated: SessionHydrateResult,
     capabilities: UiProtocolCapabilities | undefined,
   ) => {
-    const sessionId = dependencies.sessionId();
+    decisionRequestsRef.current.invalidate();
+    const sessionId = dependenciesRef.current.sessionId();
     const pendingApproval = (hydrated.pending_approvals ?? [])
       .map((params) =>
         parseApprovalRequested({
@@ -91,9 +97,12 @@ export function useBlockingInteractions(
     decision: ApprovalDecision,
     scope: ApprovalScope,
   ): Promise<void> => {
-    const client = dependencies.client();
+    const currentDependencies = dependenciesRef.current;
+    const client = currentDependencies.client();
+    const sessionId = currentDependencies.sessionId();
     const current = approval;
-    if (!client || !current || busy) return;
+    if (!client || !sessionId || !current || busy) return;
+    const request = decisionRequestsRef.current.begin(client, sessionId);
     setBusy(true);
     setError(null);
     try {
@@ -103,23 +112,37 @@ export function useBlockingInteractions(
         decision,
         approval_scope: scope,
       });
+      if (!requestIsCurrent()) return;
       if (!result.accepted) throw new Error("The server rejected the decision");
       setApproval((pending) =>
         pending?.approvalId === current.approvalId ? null : pending,
       );
     } catch (reason) {
+      if (!requestIsCurrent()) return;
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      if (decisionRequestsRef.current.finish(request)) setBusy(false);
+    }
+
+    function requestIsCurrent(): boolean {
+      const latest = dependenciesRef.current;
+      return decisionRequestsRef.current.isCurrent(
+        request,
+        latest.client(),
+        latest.sessionId(),
+      );
     }
   };
 
   const respondQuestion = async (
     answers: UserQuestionAnswer[],
   ): Promise<void> => {
-    const client = dependencies.client();
+    const currentDependencies = dependenciesRef.current;
+    const client = currentDependencies.client();
+    const sessionId = currentDependencies.sessionId();
     const current = question;
-    if (!client || !current || busy) return;
+    if (!client || !sessionId || !current || busy) return;
+    const request = decisionRequestsRef.current.begin(client, sessionId);
     setBusy(true);
     setError(null);
     try {
@@ -128,20 +151,32 @@ export function useBlockingInteractions(
         question_id: current.questionId,
         answers,
       });
+      if (!requestIsCurrent()) return;
       if (!result.accepted) throw new Error("The server rejected the answer");
       setQuestion((pending) =>
         pending?.questionId === current.questionId ? null : pending,
       );
     } catch (reason) {
+      if (!requestIsCurrent()) return;
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      if (decisionRequestsRef.current.finish(request)) setBusy(false);
+    }
+
+    function requestIsCurrent(): boolean {
+      const latest = dependenciesRef.current;
+      return decisionRequestsRef.current.isCurrent(
+        request,
+        latest.client(),
+        latest.sessionId(),
+      );
     }
   };
 
   const observeNotification = (notification: RpcNotification) => {
-    const sessionId = dependencies.sessionId();
-    const capabilities = dependencies.capabilities();
+    const currentDependencies = dependenciesRef.current;
+    const sessionId = currentDependencies.sessionId();
+    const capabilities = currentDependencies.capabilities();
     if (notification.method === CORE_UI_METHODS.APPROVAL_REQUESTED) {
       const requested = parseApprovalRequested(notification);
       if (
@@ -149,10 +184,12 @@ export function useBlockingInteractions(
         matchesSessionScope(sessionId, requested.sessionId, requested.topic) &&
         supportsMethod(capabilities, CORE_UI_METHODS.APPROVAL_RESPOND)
       ) {
+        decisionRequestsRef.current.invalidate();
+        setBusy(false);
         setError(null);
         setApproval(requested);
       } else {
-        dependencies.onInvalid(
+        currentDependencies.onInvalid(
           "Approval cannot be rendered",
           "The request was malformed, belonged to another session, or approval/respond was not negotiated.",
         );
@@ -161,6 +198,10 @@ export function useBlockingInteractions(
 
     const resolvedApprovalId = approvalResolutionId(notification);
     if (resolvedApprovalId) {
+      if (approval?.approvalId === resolvedApprovalId) {
+        decisionRequestsRef.current.invalidate();
+        setBusy(false);
+      }
       setApproval((pending) =>
         pending?.approvalId === resolvedApprovalId ? null : pending,
       );
@@ -174,10 +215,12 @@ export function useBlockingInteractions(
         supportsMethod(capabilities, CORE_UI_METHODS.USER_QUESTION_RESPOND) &&
         supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
       ) {
+        decisionRequestsRef.current.invalidate();
+        setBusy(false);
         setError(null);
         setQuestion(requested);
       } else {
-        dependencies.onInvalid(
+        currentDependencies.onInvalid(
           "Question cannot be rendered",
           `The request was malformed, belonged to another session, or ${CORE_UI_FEATURES.USER_QUESTION_V1} was not negotiated.`,
         );
@@ -186,6 +229,11 @@ export function useBlockingInteractions(
   };
 
   const settleTurn = (turnId: string) => {
+    if (approval?.turnId === turnId || question?.turnId === turnId) {
+      decisionRequestsRef.current.invalidate();
+      setBusy(false);
+      setError(null);
+    }
     setApproval((pending) => (pending?.turnId === turnId ? null : pending));
     setQuestion((pending) => (pending?.turnId === turnId ? null : pending));
   };

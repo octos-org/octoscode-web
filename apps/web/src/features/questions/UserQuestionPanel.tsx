@@ -17,7 +17,7 @@ interface UserQuestionPanelProps {
   busy: boolean;
   error: string | null;
   onSubmit: (answers: UserQuestionAnswer[]) => void;
-  onInterrupt: () => void;
+  onInterrupt?: (() => void) | undefined;
 }
 
 export function UserQuestionPanel({
@@ -46,7 +46,7 @@ export function UserQuestionPanel({
       backdropClassName="takeover-wrap"
       dialogClassName="question-card"
       labelledBy="question-title"
-      {...(busy ? {} : { onEscape: onInterrupt })}
+      {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
     >
       <div className="question-heading">
         <span>Octos needs input</span>
@@ -113,7 +113,7 @@ export function UserQuestionPanel({
       </div>
       {error ? <span className="takeover-error">{error}</span> : null}
       <div className="question-actions">
-        <span>Esc stops the active turn</span>
+        {onInterrupt ? <span>Esc stops the active turn</span> : null}
         <button
           className="takeover-button primary"
           type="button"

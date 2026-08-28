@@ -8,6 +8,7 @@ import type {
 interface LaunchDecisionPanelProps {
   state: LaunchRuntimeState;
   onboarding: OnboardingRuntimeState;
+  error?: string | null;
   onSubmitOnboarding: (submission: OnboardingSubmission) => void;
   onRetryOnboarding: () => void;
   onChooseProfile: (profileId: string) => void;
@@ -17,6 +18,7 @@ interface LaunchDecisionPanelProps {
 export function LaunchDecisionPanel({
   state,
   onboarding,
+  error = null,
   onSubmitOnboarding,
   onRetryOnboarding,
   onChooseProfile,
@@ -28,12 +30,19 @@ export function LaunchDecisionPanel({
 
   if (decision.decision === "no_profile") {
     return (
-      <OnboardingPanel
-        state={onboarding}
-        onSubmit={onSubmitOnboarding}
-        onRetry={onRetryOnboarding}
-        onCancel={onCancel}
-      />
+      <>
+        {error ? (
+          <p className="launch-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <OnboardingPanel
+          state={onboarding}
+          onSubmit={onSubmitOnboarding}
+          onRetry={onRetryOnboarding}
+          onCancel={onCancel}
+        />
+      </>
     );
   }
 
@@ -55,10 +64,15 @@ export function LaunchDecisionPanel({
       </h2>
       <p>
         {crossProfile
-          ? "This folder already has conversations under another profile. Choose the same meaning Octoscode offers in its launch menu."
-          : `Open ${resolvedProfile} in this folder and create its project conversation.`}
+          ? "This folder is known to more than one profile. Choose which profile should own the new Session."
+          : `Start a new ${resolvedProfile} Session in this folder.`}
       </p>
       {state.cwd ? <code>{state.cwd}</code> : null}
+      {error ? (
+        <p className="launch-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="launch-profile-list">
         <button
           type="button"
@@ -84,8 +98,8 @@ export function LaunchDecisionPanel({
             key={profile}
             onClick={() => onChooseProfile(profile)}
           >
-            <strong>Continue with {profile}</strong>
-            <small>Resume the profile already used in this folder</small>
+            <strong>Start new session with {profile}</strong>
+            <small>Use this existing profile for a new Session</small>
           </button>
         ))}
       </div>

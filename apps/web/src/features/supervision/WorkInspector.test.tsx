@@ -10,7 +10,8 @@ describe("WorkInspector", () => {
         open={false}
         state={{
           ...EMPTY_SUPERVISION,
-          available: true,
+          taskListAvailable: true,
+          taskOutputAvailable: true,
           cancelAvailable: true,
           runtimeStatus: {
             session_id: "s1",
