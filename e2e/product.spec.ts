@@ -702,6 +702,71 @@ test("parks a recovery-admitted approval as Waiting, not Working", async ({
   await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
 });
 
+for (const scenario of [
+  {
+    name: "request",
+    prompt: "Buffer approval during recovery fixture",
+    expectedStatus: "Waiting for input",
+    staleStatus: "Working in background",
+  },
+  {
+    name: "resolution",
+    prompt: "Resolve approval during recovery fixture",
+    expectedStatus: "Working in background",
+    staleStatus: "Waiting for input",
+  },
+] as const) {
+  test(`folds a buffered approval ${scenario.name} before parking the Session`, async ({
+    page,
+    request,
+  }) => {
+    const cwd = `/srv/work/recovery-buffered-approval-${scenario.name}`;
+    await connectAndStartWorkspace(page, cwd);
+
+    const sidebar = productNavigation(page);
+    const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+    await expect(sessions).toHaveCount(1);
+    const originalTitle = await sessions
+      .first()
+      .locator('[class*="sessionTitle"]')
+      .textContent();
+    if (!originalTitle) throw new Error("Expected the source Session title");
+
+    await holdNextTurnStart(request);
+    const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+    await composer.fill(scenario.prompt);
+    await page.getByRole("button", { name: "Send prompt" }).click();
+    await waitForHeldTurnStart(request);
+
+    const workspaceName = `recovery-buffered-approval-${scenario.name}`;
+    const workspace = sidebar.getByRole("treeitem", {
+      name: workspaceName,
+      exact: true,
+    });
+    await workspace
+      .getByRole("button", { name: workspaceName, exact: true })
+      .hover();
+    await sidebar
+      .getByRole("button", { name: `New session in ${workspaceName}` })
+      .click();
+    await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
+
+    await expect(sessions).toHaveCount(2);
+    await expect(sessionRowByTitle(sidebar, originalTitle)).not.toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(
+      sidebar.locator(`[title="${scenario.expectedStatus}"]`),
+    ).toBeVisible();
+    await expect(
+      sidebar.locator(`[title="${scenario.staleStatus}"]`),
+    ).toHaveCount(0);
+
+    await settleHeldTurnStart(request, "release");
+  });
+}
+
 test("cancels queued navigation without cancelling the held turn/start", async ({
   page,
   request,

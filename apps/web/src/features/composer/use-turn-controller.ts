@@ -61,7 +61,7 @@ export interface TurnController {
   ) => PromptTurn | null;
   clearTransportOwnership: () => void;
   /** Keep an accepted local owner's handoff state aligned with interactions. */
-  setAcceptedOwnerInteraction: (waiting: boolean) => boolean;
+  setAcceptedOwnerInteraction: (waiting: boolean, turnId?: string) => boolean;
   restoreTransportOwnership: (turn: {
     turnId: string;
     state: "running" | "waiting" | "completed" | "failed";
@@ -395,11 +395,12 @@ export function useTurnController(
       dispatchingTurnIdRef.current = null;
       setDispatchingTurnId(null);
     },
-    setAcceptedOwnerInteraction: (waiting) => {
+    setAcceptedOwnerInteraction: (waiting, turnId) => {
       const owner = acceptedOwnerRef.current;
       if (
         !owner ||
         !leaseMatchesCurrent(owner) ||
+        (turnId !== undefined && owner.turnId !== turnId) ||
         owner.state === "completed" ||
         owner.state === "failed"
       ) {

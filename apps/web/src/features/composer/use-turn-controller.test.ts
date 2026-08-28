@@ -284,12 +284,20 @@ describe("useTurnController async authority", () => {
     await vi.waitFor(() => {
       expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
     });
-    expect(harness.controller.setAcceptedOwnerInteraction(true)).toBe(true);
+    const turnId = harness.activeTurnId();
+    expect(
+      harness.controller.setAcceptedOwnerInteraction(true, "another-turn"),
+    ).toBe(false);
+    expect(harness.controller.backgroundHandoffTurn()?.state).toBe("running");
+    expect(harness.controller.setAcceptedOwnerInteraction(true, turnId)).toBe(
+      true,
+    );
     expect(harness.controller.backgroundHandoffTurn()?.state).toBe("waiting");
-    expect(harness.controller.setAcceptedOwnerInteraction(false)).toBe(true);
+    expect(harness.controller.setAcceptedOwnerInteraction(false, turnId)).toBe(
+      true,
+    );
     expect(harness.controller.backgroundHandoffTurn()?.state).toBe("running");
 
-    const turnId = harness.activeTurnId();
     harness.controller.settleTurn(turnId, "completed");
     expect(harness.controller.setAcceptedOwnerInteraction(false)).toBe(false);
     expect(harness.controller.backgroundHandoffTurn()?.state).toBe("completed");

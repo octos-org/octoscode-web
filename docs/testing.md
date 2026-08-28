@@ -41,8 +41,9 @@ The product browser gate currently covers these sequences:
    release. A replay-lossy recovery whose hydrate already proves that exact turn
    active must release the same intent after recovery becomes ready, without
    waiting forever for the superseded RPC reply. If the same hydrate restores a
-   pending approval or question, the parked Session must project **Waiting**,
-   not a stale **Working** state.
+   pending approval or question—either in the hydrate snapshot or buffered
+   before ready—the parked Session must project **Waiting**, not stale
+   **Working**. A buffered resolution must make the inverse transition.
 4. Click several existing targets while the acknowledgement is held and verify
    latest-wins with exactly one candidate open. Cancelling the pending banner or
    rejecting the start clears the intent and leaves the source Session active.

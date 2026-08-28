@@ -814,12 +814,40 @@ sockets.on("connection", (socket, request) => {
               },
             ],
         pending_approvals:
-          heldForSession?.text === "Request approval fixture"
+          heldForSession?.text === "Request approval fixture" ||
+          heldForSession?.text === "Resolve approval during recovery fixture"
             ? [approvalRequest(sessionId, heldForSession.turnId)]
             : [],
         pending_questions: [],
       };
       if (delayedHydrateSockets.delete(socket)) {
+        if (
+          heldForSession?.text === "Buffer approval during recovery fixture"
+        ) {
+          setTimeout(
+            () =>
+              notifyRpc(
+                socket,
+                "approval/requested",
+                approvalRequest(sessionId, heldForSession.turnId),
+              ),
+            50,
+          );
+        }
+        if (
+          heldForSession?.text === "Resolve approval during recovery fixture"
+        ) {
+          setTimeout(
+            () =>
+              notifyRpc(socket, "approval/decided", {
+                session_id: sessionId,
+                approval_id: `approval-${heldForSession.turnId}`,
+                turn_id: heldForSession.turnId,
+                decision: "allow",
+              }),
+            50,
+          );
+        }
         setTimeout(() => reply(socket, request.id, result), 150);
       } else {
         reply(socket, request.id, result);

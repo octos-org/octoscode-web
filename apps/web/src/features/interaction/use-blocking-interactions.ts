@@ -33,6 +33,8 @@ export function useBlockingInteractions(
   const decisionRequestsRef = useRef(new RequestAuthorityGate<OctosUiClient>());
   const dependenciesRef = useRef(dependencies);
   dependenciesRef.current = dependencies;
+  const approvalRef = useRef<ApprovalRequested | null>(null);
+  const questionRef = useRef<UserQuestionRequested | null>(null);
   const [approval, setApproval] = useState<ApprovalRequested | null>(null);
   const [question, setQuestion] = useState<UserQuestionRequested | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +42,8 @@ export function useBlockingInteractions(
 
   const reset = () => {
     decisionRequestsRef.current.invalidate();
+    approvalRef.current = null;
+    questionRef.current = null;
     setApproval(null);
     setQuestion(null);
     setBusy(false);
@@ -49,7 +53,7 @@ export function useBlockingInteractions(
   const restore = (
     hydrated: SessionHydrateResult,
     capabilities: UiProtocolCapabilities | undefined,
-  ): boolean => {
+  ): { turnId: string | null; waiting: boolean } => {
     decisionRequestsRef.current.invalidate();
     const sessionId = dependenciesRef.current.sessionId();
     const pendingApproval = (hydrated.pending_approvals ?? [])
@@ -89,11 +93,16 @@ export function useBlockingInteractions(
       supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
         ? (pendingQuestion ?? null)
         : null;
+    approvalRef.current = restoredApproval;
+    questionRef.current = restoredQuestion;
     setApproval(restoredApproval);
     setQuestion(restoredQuestion);
     setBusy(false);
     setError(null);
-    return Boolean(restoredApproval || restoredQuestion);
+    return {
+      turnId: restoredApproval?.turnId ?? restoredQuestion?.turnId ?? null,
+      waiting: Boolean(restoredApproval || restoredQuestion),
+    };
   };
 
   const respondApproval = async (
@@ -103,7 +112,7 @@ export function useBlockingInteractions(
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
-    const current = approval;
+    const current = approvalRef.current;
     if (!client || !sessionId || !current || busy) return;
     const request = decisionRequestsRef.current.begin(client, sessionId);
     setBusy(true);
@@ -117,6 +126,9 @@ export function useBlockingInteractions(
       });
       if (!requestIsCurrent()) return;
       if (!result.accepted) throw new Error("The server rejected the decision");
+      if (approvalRef.current?.approvalId === current.approvalId) {
+        approvalRef.current = null;
+      }
       setApproval((pending) =>
         pending?.approvalId === current.approvalId ? null : pending,
       );
@@ -143,7 +155,7 @@ export function useBlockingInteractions(
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
-    const current = question;
+    const current = questionRef.current;
     if (!client || !sessionId || !current || busy) return;
     const request = decisionRequestsRef.current.begin(client, sessionId);
     setBusy(true);
@@ -156,6 +168,9 @@ export function useBlockingInteractions(
       });
       if (!requestIsCurrent()) return;
       if (!result.accepted) throw new Error("The server rejected the answer");
+      if (questionRef.current?.questionId === current.questionId) {
+        questionRef.current = null;
+      }
       setQuestion((pending) =>
         pending?.questionId === current.questionId ? null : pending,
       );
@@ -176,10 +191,13 @@ export function useBlockingInteractions(
     }
   };
 
-  const observeNotification = (notification: RpcNotification) => {
+  const observeNotification = (
+    notification: RpcNotification,
+  ): { turnId: string; waiting: boolean } | null => {
     const currentDependencies = dependenciesRef.current;
     const sessionId = currentDependencies.sessionId();
     const capabilities = currentDependencies.capabilities();
+    let affectedTurnId: string | null = null;
     if (notification.method === CORE_UI_METHODS.APPROVAL_REQUESTED) {
       const requested = parseApprovalRequested(notification);
       if (
@@ -188,6 +206,8 @@ export function useBlockingInteractions(
         supportsMethod(capabilities, CORE_UI_METHODS.APPROVAL_RESPOND)
       ) {
         decisionRequestsRef.current.invalidate();
+        approvalRef.current = requested;
+        affectedTurnId = requested.turnId;
         setBusy(false);
         setError(null);
         setApproval(requested);
@@ -201,8 +221,11 @@ export function useBlockingInteractions(
 
     const resolvedApprovalId = approvalResolutionId(notification);
     if (resolvedApprovalId) {
-      if (approval?.approvalId === resolvedApprovalId) {
+      const pending = approvalRef.current;
+      if (pending?.approvalId === resolvedApprovalId) {
         decisionRequestsRef.current.invalidate();
+        approvalRef.current = null;
+        affectedTurnId = pending.turnId;
         setBusy(false);
       }
       setApproval((pending) =>
@@ -219,6 +242,8 @@ export function useBlockingInteractions(
         supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
       ) {
         decisionRequestsRef.current.invalidate();
+        questionRef.current = requested;
+        affectedTurnId = requested.turnId;
         setBusy(false);
         setError(null);
         setQuestion(requested);
@@ -229,14 +254,28 @@ export function useBlockingInteractions(
         );
       }
     }
+    return affectedTurnId
+      ? {
+          turnId: affectedTurnId,
+          waiting: Boolean(
+            approvalRef.current?.turnId === affectedTurnId ||
+            questionRef.current?.turnId === affectedTurnId,
+          ),
+        }
+      : null;
   };
 
   const settleTurn = (turnId: string) => {
-    if (approval?.turnId === turnId || question?.turnId === turnId) {
+    if (
+      approvalRef.current?.turnId === turnId ||
+      questionRef.current?.turnId === turnId
+    ) {
       decisionRequestsRef.current.invalidate();
       setBusy(false);
       setError(null);
     }
+    if (approvalRef.current?.turnId === turnId) approvalRef.current = null;
+    if (questionRef.current?.turnId === turnId) questionRef.current = null;
     setApproval((pending) => (pending?.turnId === turnId ? null : pending));
     setQuestion((pending) => (pending?.turnId === turnId ? null : pending));
   };

@@ -427,7 +427,10 @@ export function useOctosSession(): OctosSessionRuntime {
   );
 
   useEffect(() => {
-    turnController.setAcceptedOwnerInteraction(Boolean(approval || question));
+    turnController.setAcceptedOwnerInteraction(
+      Boolean(approval || question),
+      approval?.turnId ?? question?.turnId,
+    );
   }, [approval, question, turnController.dispatchingTurnId]);
 
   useEffect(() => {
@@ -721,7 +724,7 @@ export function useOctosSession(): OctosSessionRuntime {
         setRestoreRejected(false);
       }
       setTimeline(timelineFromHydrate(event.hydrated));
-      const restoredInteractionWaiting = interactionController.restore(
+      const restoredInteraction = interactionController.restore(
         event.hydrated,
         event.authority.capabilities,
       );
@@ -746,7 +749,10 @@ export function useOctosSession(): OctosSessionRuntime {
           state: reclaimedOwner.state,
         });
       }
-      turnController.setAcceptedOwnerInteraction(restoredInteractionWaiting);
+      turnController.setAcceptedOwnerInteraction(
+        restoredInteraction.waiting,
+        restoredInteraction.turnId ?? undefined,
+      );
       // A same-transport durable recovery does not replace the capability/RPC
       // authority. Candidate and reconnect hydrates do, so only those retire
       // controller requests that may belong to an obsolete socket.
@@ -1274,7 +1280,13 @@ export function useOctosSession(): OctosSessionRuntime {
       setTimeline((current) => foldNotification(current, notification));
     }
 
-    interactionController.observeNotification(notification);
+    const interaction = interactionController.observeNotification(notification);
+    if (interaction) {
+      turnController.setAcceptedOwnerInteraction(
+        interaction.waiting,
+        interaction.turnId,
+      );
+    }
 
     const terminal = foldIntoTimeline ? terminalTurnId(notification) : null;
     if (terminal) {
