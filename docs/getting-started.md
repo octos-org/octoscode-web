@@ -71,9 +71,12 @@ After Core acknowledges a turn started by this tab, you can select another
 Session or create one in the same or another Workspace. The original Session
 continues to show its running or waiting status in the sidebar, and selecting it
 again restores its authoritative hydrate/replay projection. Browser-local queued
-prompts cannot move with that owner socket, and a `turn/start` whose
-acknowledgement has not arrived has ambiguous ownership, so either state blocks
-navigation until it settles.
+prompts cannot move with that owner socket, so they block navigation. A
+`turn/start` whose acknowledgement has not arrived is shown as **Starting**; one
+create/switch intent is retained locally (latest click wins) and runs
+automatically after that exact request is accepted. Rejection or cancellation
+clears the intent without leaving the source Session. **Stop** becomes available
+only after acceptance; `/stop` also fails closed during Starting.
 
 This is same-live-tab continuation, not a detached server job. Refreshing or
 closing the tab, losing the WebSocket through a network or proxy failure, or

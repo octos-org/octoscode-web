@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
 if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
@@ -12,6 +12,9 @@ const openedProfileBySocket = new WeakMap();
 const authenticatedProfileBySocket = new WeakMap();
 const rejectedSessionIds = new Set();
 const delayedHydrateSockets = new WeakSet();
+let holdNextTurnStartAcknowledgement = false;
+let heldTurnStart = null;
+let rejectNextSessionOpen = false;
 const mockAuthMode = process.env.OCTOSCODE_MOCK_AUTH_MODE ?? "optional";
 if (!new Set(["optional", "required"]).has(mockAuthMode)) {
   throw new Error("OCTOSCODE_MOCK_AUTH_MODE must be optional or required");
@@ -199,6 +202,88 @@ const http = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/turn-start/hold-next"
+  ) {
+    if (holdNextTurnStartAcknowledgement || heldTurnStart) {
+      response
+        .writeHead(409)
+        .end("A turn/start acknowledgement is already controlled");
+      return;
+    }
+    holdNextTurnStartAcknowledgement = true;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/turn-start/reset"
+  ) {
+    holdNextTurnStartAcknowledgement = false;
+    takeHeldTurnStart()?.reject();
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/session-open/reject-next"
+  ) {
+    rejectNextSessionOpen = true;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/session-open/reset"
+  ) {
+    rejectNextSessionOpen = false;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    request.url === "/__test__/turn-start/state"
+  ) {
+    response.writeHead(200, { "content-type": "application/json" }).end(
+      JSON.stringify({
+        armed: holdNextTurnStartAcknowledgement,
+        held: heldTurnStart
+          ? {
+              session_id: heldTurnStart.sessionId,
+              turn_id: heldTurnStart.turnId,
+            }
+          : null,
+      }),
+    );
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/turn-start/release"
+  ) {
+    const controlled = takeHeldTurnStart();
+    if (!controlled || !controlled.accept()) {
+      response
+        .writeHead(409)
+        .end("There is no live held turn/start to release");
+      return;
+    }
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/turn-start/reject"
+  ) {
+    const controlled = takeHeldTurnStart();
+    if (!controlled || !controlled.reject()) {
+      response.writeHead(409).end("There is no live held turn/start to reject");
+      return;
+    }
+    response.writeHead(204).end();
+    return;
+  }
   response.writeHead(404).end("Octoscode AppUI fixture only");
 });
 sockets = new WebSocketServer({
@@ -294,6 +379,9 @@ sockets.on("connection", (socket, request) => {
   let pendingInteraction = null;
   let projectionCursor = 10;
   let createdProfileId = null;
+  socket.on("close", () => {
+    if (heldTurnStart?.socket === socket) heldTurnStart = null;
+  });
   socket.on("message", (bytes) => {
     let request;
     try {
@@ -595,6 +683,16 @@ sockets.on("connection", (socket, request) => {
         rejectSessionScope(socket, request.id, scope);
         return;
       }
+      if (rejectNextSessionOpen) {
+        rejectNextSessionOpen = false;
+        replyError(
+          socket,
+          request.id,
+          -32_041,
+          "Fixture rejected the candidate session/open",
+        );
+        return;
+      }
       if (rejectedSessionIds.has(sessionId)) {
         replyError(
           socket,
@@ -651,6 +749,11 @@ sockets.on("connection", (socket, request) => {
         );
         return;
       }
+      const heldForSession =
+        heldTurnStart?.socket === socket &&
+        heldTurnStart.sessionId === sessionId
+          ? heldTurnStart
+          : null;
       const result = {
         session_id: sessionId,
         cursor: { stream: sessionId, seq: 10 },
@@ -695,14 +798,25 @@ sockets.on("connection", (socket, request) => {
             media: [],
           },
         ],
-        turns: [
-          {
-            turn_id: "fixture-turn",
-            state: "completed",
-            thread_id: "fixture-thread",
-          },
-        ],
-        pending_approvals: [],
+        turns: heldForSession
+          ? [
+              {
+                turn_id: heldForSession.turnId,
+                state: "active",
+                thread_id: "fixture-thread",
+              },
+            ]
+          : [
+              {
+                turn_id: "fixture-turn",
+                state: "completed",
+                thread_id: "fixture-thread",
+              },
+            ],
+        pending_approvals:
+          heldForSession?.text === "Request approval fixture"
+            ? [approvalRequest(sessionId, heldForSession.turnId)]
+            : [],
         pending_questions: [],
       };
       if (delayedHydrateSockets.delete(socket)) {
@@ -713,13 +827,40 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "turn/start") {
-      reply(socket, request.id, { accepted: true });
-      pendingInteraction = streamTurn(
-        socket,
-        sessionId,
-        request.params,
-        () => ++projectionCursor,
-      );
+      const accept = () => {
+        if (socket.readyState !== WebSocket.OPEN) return false;
+        reply(socket, request.id, { accepted: true });
+        pendingInteraction = streamTurn(
+          socket,
+          sessionId,
+          request.params,
+          () => ++projectionCursor,
+        );
+        return true;
+      };
+      const reject = () => {
+        if (socket.readyState !== WebSocket.OPEN) return false;
+        replyError(
+          socket,
+          request.id,
+          -32_050,
+          "Fixture rejected turn/start before acceptance",
+        );
+        return true;
+      };
+      if (holdNextTurnStartAcknowledgement) {
+        holdNextTurnStartAcknowledgement = false;
+        heldTurnStart = {
+          socket,
+          sessionId,
+          turnId: request.params.turn_id,
+          text: request.params.input?.[0]?.text ?? "",
+          accept,
+          reject,
+        };
+        return;
+      }
+      accept();
       return;
     }
     if (request.method === "approval/respond") {
@@ -987,19 +1128,7 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       JSON.stringify({
         jsonrpc: "2.0",
         method: "approval/requested",
-        params: {
-          session_id: sessionId,
-          approval_id: `approval-${turnId}`,
-          turn_id: turnId,
-          tool_name: "shell",
-          title: "Run product checks?",
-          body: "The agent wants to run the repository checks.",
-          approval_kind: "command",
-          risk: "medium",
-          typed_details: {
-            command: { command_line: "pnpm check" },
-          },
-        },
+        params: approvalRequest(sessionId, turnId),
       }),
     );
     return { kind: "approval", sessionId, threadId, turnId, nextCursor };
@@ -1119,6 +1248,22 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     );
   }, completionDelayMs);
   return null;
+}
+
+function approvalRequest(sessionId, turnId) {
+  return {
+    session_id: sessionId,
+    approval_id: `approval-${turnId}`,
+    turn_id: turnId,
+    tool_name: "shell",
+    title: "Run product checks?",
+    body: "The agent wants to run the repository checks.",
+    approval_kind: "command",
+    risk: "medium",
+    typed_details: {
+      command: { command_line: "pnpm check" },
+    },
+  };
 }
 
 function finishInteraction(socket, interaction) {
@@ -1372,6 +1517,12 @@ function replyError(socket, id, code, message, data) {
       error: { code, message, ...(data === undefined ? {} : { data }) },
     }),
   );
+}
+
+function takeHeldTurnStart() {
+  const controlled = heldTurnStart;
+  heldTurnStart = null;
+  return controlled;
 }
 
 function notify(socket, sessionId, threadId, turnId, seq, cursor, type, data) {

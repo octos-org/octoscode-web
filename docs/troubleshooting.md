@@ -77,8 +77,10 @@ browser opens it automatically. `cross_profile` still asks which Profile to use;
 
 Session switching and creation are allowed while a locally started turn is
 running after Core has acknowledged it. They remain blocked while a prompt is
-queued only in this browser or `turn/start` is still awaiting acknowledgement.
-Let that queue/start settle before switching.
+queued only in this browser. While `turn/start` is awaiting acknowledgement, the
+composer shows **Starting** and a create/switch click becomes the next action;
+you do not need to click again. The latest target wins, **Cancel** removes the
+pending navigation, and a rejected start leaves the source Session selected.
 
 ## New Session says eight background connections are being preserved
 

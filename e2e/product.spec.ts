@@ -1,5 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const DEFAULT_WORKSPACE = "/workspace/octoscode-web";
@@ -80,6 +86,89 @@ async function openSettings(page: Page): Promise<Locator> {
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
   return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
 }
+
+interface ObservedSessionOpen {
+  sessionId: string;
+}
+
+interface TurnStartControlState {
+  armed: boolean;
+  held: { session_id: string; turn_id: string } | null;
+}
+
+function observeSessionOpens(page: Page): ObservedSessionOpen[] {
+  const opened: ObservedSessionOpen[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (!frame.includes('"method":"session/open"')) return;
+      const request = JSON.parse(frame) as {
+        params?: { session_id?: unknown };
+      };
+      if (typeof request.params?.session_id === "string") {
+        opened.push({ sessionId: request.params.session_id });
+      }
+    });
+  });
+  return opened;
+}
+
+async function holdNextTurnStart(request: APIRequestContext): Promise<void> {
+  const reset = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/turn-start/reset`,
+  );
+  expect(reset.status()).toBe(204);
+  const armed = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/turn-start/hold-next`,
+  );
+  expect(armed.status()).toBe(204);
+}
+
+async function waitForHeldTurnStart(
+  request: APIRequestContext,
+): Promise<TurnStartControlState> {
+  let state: TurnStartControlState | null = null;
+  await expect
+    .poll(async () => {
+      const response = await request.get(
+        `${FIXTURE_ORIGIN}/__test__/turn-start/state`,
+      );
+      expect(response.ok()).toBe(true);
+      state = (await response.json()) as TurnStartControlState;
+      return state.held?.turn_id ?? null;
+    })
+    .not.toBeNull();
+  if (!state) throw new Error("Expected a held turn/start acknowledgement");
+  return state;
+}
+
+async function settleHeldTurnStart(
+  request: APIRequestContext,
+  outcome: "release" | "reject",
+): Promise<void> {
+  const response = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/turn-start/${outcome}`,
+  );
+  expect(response.status()).toBe(204);
+}
+
+async function rejectNextSessionOpen(
+  request: APIRequestContext,
+): Promise<void> {
+  const reset = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/session-open/reset`,
+  );
+  expect(reset.status()).toBe(204);
+  const armed = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/session-open/reject-next`,
+  );
+  expect(armed.status()).toBe(204);
+}
+
+test.afterEach(async ({ request }) => {
+  await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/session-open/reset`);
+});
 
 test("uses the DSH-aligned product sidebar and grouped or flat session views", async ({
   page,
@@ -350,6 +439,508 @@ test("keeps a server-accepted turn running while another Session is focused", as
   const settings = await openSettings(page);
   await settings.getByRole("button", { name: "Disconnect" }).click();
   await expect.poll(() => ownerSocketClosed).toBe(true);
+});
+
+test("queues one New Session click until turn/start is accepted", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/delayed-turn-start-new-session";
+  const sessionOpens = observeSessionOpens(page);
+  let interruptRequests = 0;
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      if (String(payload).includes('"method":"turn/interrupt"')) {
+        interruptRequests += 1;
+      }
+    });
+  });
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  const originalTitle = await sessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected a confirmed Session title");
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Continue this turn while I open another Session");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  const held = await waitForHeldTurnStart(request);
+  expect(held.armed).toBe(false);
+
+  await composer.fill("/stop");
+  await page.getByRole("button", { name: "Queue prompt" }).click();
+  await expect(
+    page.getByText("Turn is still starting", { exact: true }),
+  ).toBeVisible();
+  expect(interruptRequests).toBe(0);
+
+  const opensBeforeNavigation = sessionOpens.length;
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "delayed-turn-start-new-session",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", {
+      name: "delayed-turn-start-new-session",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in delayed-turn-start-new-session",
+    })
+    .click();
+
+  await expect(sessions).toHaveCount(1);
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
+  await expect(
+    sidebar.getByRole("alert").filter({
+      hasText: "Wait for Octos to accept the current turn",
+    }),
+  ).toHaveCount(0);
+
+  await settleHeldTurnStart(request, "release");
+
+  await expect(sessions).toHaveCount(2);
+  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
+  const siblingSession = sessions.filter({ hasNotText: originalTitle });
+  await expect(siblingSession).toHaveAttribute("aria-current", "page");
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toBeVisible();
+});
+
+test("drops a queued Session creation when turn/start is rejected", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/rejected-turn-start-navigation";
+  const sessionOpens = observeSessionOpens(page);
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  const originalSession = sessions.first();
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Reject this fixture turn before it starts");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  await waitForHeldTurnStart(request);
+
+  const opensBeforeNavigation = sessionOpens.length;
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "rejected-turn-start-navigation",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", {
+      name: "rejected-turn-start-navigation",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in rejected-turn-start-navigation",
+    })
+    .click();
+
+  await settleHeldTurnStart(request, "reject");
+
+  await expect(page.getByText("Turn rejected", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Fixture rejected turn/start before acceptance", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(sessions).toHaveCount(1);
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
+  await expect(
+    sidebar.getByRole("alert").filter({
+      hasText: "Wait for Octos to accept the current turn",
+    }),
+  ).toHaveCount(0);
+});
+
+test("releases pending navigation when recovery proves the held start active", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/recovery-admits-held-turn";
+  const sessionOpens = observeSessionOpens(page);
+  const hydrateSessions: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (!frame.includes('"method":"session/hydrate"')) return;
+      const hydrate = JSON.parse(frame) as {
+        params?: { session_id?: unknown };
+      };
+      if (typeof hydrate.params?.session_id === "string") {
+        hydrateSessions.push(hydrate.params.session_id);
+      }
+    });
+  });
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill(
+    "Recover this accepted turn before the RPC reply arrives",
+  );
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  const held = await waitForHeldTurnStart(request);
+  if (!held.held) throw new Error("Expected the held Session identity");
+
+  const opensBeforeNavigation = sessionOpens.length;
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "recovery-admits-held-turn",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", { name: "recovery-admits-held-turn", exact: true })
+    .hover();
+  await sidebar
+    .getByRole("button", { name: "New session in recovery-admits-held-turn" })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "New Session opens next" }),
+  ).toBeVisible();
+
+  const hydratesBeforeRecovery = hydrateSessions.length;
+  await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
+
+  await expect(sessions).toHaveCount(2);
+  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
+  await expect
+    .poll(
+      () =>
+        hydrateSessions
+          .slice(hydratesBeforeRecovery)
+          .filter((sessionId) => sessionId === held.held?.session_id).length,
+    )
+    .toBe(1);
+  await expect(page.getByRole("button", { name: /^Starting/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("status").filter({ hasText: /opens next|recovery before/ }),
+  ).toHaveCount(0);
+
+  await settleHeldTurnStart(request, "release");
+  await expect(sessions).toHaveCount(2);
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toBeVisible();
+});
+
+test("parks a recovery-admitted approval as Waiting, not Working", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/recovery-admits-waiting-turn";
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  const originalTitle = await sessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected the source Session title");
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Request approval fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await waitForHeldTurnStart(request);
+
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "recovery-admits-waiting-turn",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", {
+      name: "recovery-admits-waiting-turn",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in recovery-admits-waiting-turn",
+    })
+    .click();
+
+  await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
+
+  await expect(sessions).toHaveCount(2);
+  await expect(sessionRowByTitle(sidebar, originalTitle)).not.toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
+  await expect(sidebar.locator('[title="Working in background"]')).toHaveCount(
+    0,
+  );
+
+  await settleHeldTurnStart(request, "release");
+  await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
+});
+
+test("cancels queued navigation without cancelling the held turn/start", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/cancel-delayed-turn-navigation";
+  const sessionOpens = observeSessionOpens(page);
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  const originalSession = sessions.first();
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Continue this turn while I open another Session");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  await waitForHeldTurnStart(request);
+
+  const opensBeforeNavigation = sessionOpens.length;
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "cancel-delayed-turn-navigation",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", {
+      name: "cancel-delayed-turn-navigation",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in cancel-delayed-turn-navigation",
+    })
+    .click();
+
+  const pending = page
+    .getByRole("status")
+    .filter({ hasText: "New Session opens next" });
+  await expect(pending).toBeVisible();
+  await pending
+    .getByRole("button", { name: "Cancel pending Session navigation" })
+    .click();
+  await expect(pending).toHaveCount(0);
+
+  await settleHeldTurnStart(request, "release");
+
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(sessions).toHaveCount(1);
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
+  await expect(
+    page.getByText("Completed with pnpm check and all tests passing."),
+  ).toBeVisible();
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toHaveCount(0);
+});
+
+test("opens only the latest Session target after delayed turn/start acceptance", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/delayed-turn-start-latest-target";
+  const sessionOpens = observeSessionOpens(page);
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "delayed-turn-start-latest-target",
+    exact: true,
+  });
+  const newSession = sidebar.getByRole("button", {
+    name: "New session in delayed-turn-start-latest-target",
+  });
+  const selectedSession = () =>
+    sidebar.locator('button[role="treeitem"][aria-current="page"]');
+  const selectedTitle = async () => {
+    const title = await selectedSession()
+      .locator('[class*="sessionTitle"]')
+      .textContent();
+    if (!title) throw new Error("Expected a selected Session title");
+    return title;
+  };
+  const clickNewSession = async () => {
+    await workspace
+      .getByRole("button", {
+        name: "delayed-turn-start-latest-target",
+        exact: true,
+      })
+      .hover();
+    await newSession.click();
+  };
+
+  await expect(sessions).toHaveCount(1);
+  const originalTitle = await selectedTitle();
+  await clickNewSession();
+  await expect(sessions).toHaveCount(2);
+  const middleTitle = await selectedTitle();
+  const middleSessionId = sessionOpens.at(-1)?.sessionId;
+  if (!middleSessionId) throw new Error("Expected the middle Session id");
+
+  await clickNewSession();
+  await expect(sessions).toHaveCount(3);
+  const latestTitle = await selectedTitle();
+  const latestSessionId = sessionOpens.at(-1)?.sessionId;
+  if (!latestSessionId) throw new Error("Expected the latest Session id");
+
+  const originalSession = sessionRowByTitle(sidebar, originalTitle);
+  const middleSession = sessionRowByTitle(sidebar, middleTitle);
+  const latestSession = sessionRowByTitle(sidebar, latestTitle);
+  await originalSession.click();
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Continue this turn while I open another Session");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  await waitForHeldTurnStart(request);
+
+  const opensBeforeNavigation = sessionOpens.length;
+  await middleSession.click();
+  await latestSession.click();
+  await latestSession.click();
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
+
+  await settleHeldTurnStart(request, "release");
+
+  await expect(latestSession).toHaveAttribute("aria-current", "page");
+  await expect(middleSession).not.toHaveAttribute("aria-current", "page");
+  await expect(sessions).toHaveCount(3);
+  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
+  expect(sessionOpens.slice(opensBeforeNavigation)).toEqual([
+    { sessionId: latestSessionId },
+  ]);
+  expect(sessionOpens.slice(opensBeforeNavigation)).not.toContainEqual({
+    sessionId: middleSessionId,
+  });
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toBeVisible();
+});
+
+test("rolls a delayed-navigation candidate failure back to the turn owner", async ({
+  page,
+  request,
+}) => {
+  const cwd = "/srv/work/delayed-navigation-candidate-rollback";
+  const sessionOpens = observeSessionOpens(page);
+  let ownerSocketClosed = false;
+  page.on("websocket", (socket) => {
+    let ownsTurn = false;
+    socket.on("framesent", ({ payload }) => {
+      if (String(payload).includes('"method":"turn/start"')) ownsTurn = true;
+    });
+    socket.on("close", () => {
+      if (ownsTurn) ownerSocketClosed = true;
+    });
+  });
+  await connectAndStartWorkspace(page, cwd);
+
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const originalTitle = await sessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected a confirmed Session title");
+  const originalSession = sessionRowByTitle(sidebar, originalTitle);
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Continue this turn while I open another Session");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  await waitForHeldTurnStart(request);
+
+  const opensBeforeNavigation = sessionOpens.length;
+  await rejectNextSessionOpen(request);
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "delayed-navigation-candidate-rollback",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", {
+      name: "delayed-navigation-candidate-rollback",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in delayed-navigation-candidate-rollback",
+    })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "New Session opens next" }),
+  ).toBeVisible();
+  await settleHeldTurnStart(request, "release");
+
+  const candidateError = sidebar.getByRole("alert");
+  await expect(candidateError).toContainText(
+    "Fixture rejected the candidate session/open",
+  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "New Session opens next" }),
+  ).toHaveCount(0);
+  await expect(sessions).toHaveCount(1);
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
+  expect(ownerSocketClosed).toBe(false);
+  await expect(
+    page.getByText("Completed with pnpm check and all tests passing."),
+  ).toBeVisible();
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toHaveCount(0);
+
+  const retry = candidateError.getByRole("button", { name: "Retry" });
+  await expect(retry).toBeEnabled();
+  await retry.click();
+  await expect(candidateError).toHaveCount(0);
+
+  await workspace
+    .getByRole("button", {
+      name: "delayed-navigation-candidate-rollback",
+      exact: true,
+    })
+    .hover();
+  await sidebar
+    .getByRole("button", {
+      name: "New session in delayed-navigation-candidate-rollback",
+    })
+    .click();
+  await expect(sessions).toHaveCount(2);
+  expect(ownerSocketClosed).toBe(false);
 });
 
 test("does not project ambiguous legacy Session rows into a Workspace", async ({

@@ -16,6 +16,10 @@ import {
   LaunchTransitionCoordinator,
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
+import {
+  PendingNavigationIntentController,
+  type NavigationDispatchLease,
+} from "./pending-navigation-intent.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
 import {
   BackgroundTurnManager,
@@ -62,7 +66,10 @@ import {
   type DiffReviewRuntimeState,
   type PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
-import { useTurnController } from "../composer/use-turn-controller.ts";
+import {
+  useTurnController,
+  type TurnDispatchStateEvent,
+} from "../composer/use-turn-controller.ts";
 import type {
   PromptTurn,
   PromptTurnQueueSnapshot,
@@ -112,6 +119,24 @@ const LEGACY_PROJECTION_METHODS = new Set<string>([
 
 export type { SessionConnectionInput } from "./connection-lifecycle.ts";
 
+export interface WorkspaceSessionOpenInput {
+  sessionId: string;
+  cwd: string;
+  profileId?: string;
+  resolveLaunch?: boolean;
+}
+
+export interface PendingWorkspaceNavigation {
+  kind: "new-session" | "session";
+  cwd: string;
+  phase: "starting" | "restoring";
+}
+
+interface PendingWorkspaceNavigationIntent {
+  input: WorkspaceSessionOpenInput;
+  resolve: (outcome: WorkspaceOpenOutcome) => void;
+}
+
 export interface OctosSessionRuntime {
   connection: {
     status: ConnectionStatus;
@@ -130,6 +155,8 @@ export interface OctosSessionRuntime {
     timeline: TimelineEntry[];
     setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
     queue: PromptTurnQueueSnapshot;
+    dispatchingTurnId: string | null;
+    interruptible: boolean;
     interruptingTurnId: string | null;
     enqueuePrompt: (text: string) => void;
     interrupt: () => Promise<void>;
@@ -179,17 +206,16 @@ export interface OctosSessionRuntime {
     state: WorkspaceProductState;
     launch: LaunchRuntimeState;
     transitioning: boolean;
+    pendingNavigation: PendingWorkspaceNavigation | null;
     backgroundTurns: readonly BackgroundTurnSnapshot[];
     onboarding: OnboardingRuntimeState;
     refresh: () => Promise<void>;
     listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
     switchSession: (sessionId: string) => Promise<WorkspaceOpenOutcome>;
-    openSession: (input: {
-      sessionId: string;
-      cwd: string;
-      profileId?: string;
-      resolveLaunch?: boolean;
-    }) => Promise<WorkspaceOpenOutcome>;
+    openSession: (
+      input: WorkspaceSessionOpenInput,
+    ) => Promise<WorkspaceOpenOutcome>;
+    cancelPendingNavigation: () => void;
     deleteSession: (sessionId: string) => Promise<void>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
     cancelLaunch: () => void;
@@ -246,11 +272,25 @@ export function useOctosSession(): OctosSessionRuntime {
       LaunchResolveResult
     >(),
   );
+  const pendingNavigationControllerRef = useRef(
+    new PendingNavigationIntentController<PendingWorkspaceNavigationIntent>(),
+  );
+  const pendingNavigationDispatchRef = useRef<{
+    client: OctosUiClient;
+    sessionId: string;
+    turnId: string;
+    lease: NavigationDispatchLease;
+  } | null>(null);
+  const turnDispatchEventSinkRef = useRef<
+    (event: TurnDispatchStateEvent) => void
+  >(() => undefined);
   const transitioningRef = useRef(false);
   const pendingRestoreConfigRef = useRef<SessionConnectionInput | null>(null);
   const pendingTurnAfterHydrateRef = useRef<PromptTurn | null>(null);
   const [restoreRejected, setRestoreRejected] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<PendingWorkspaceNavigation | null>(null);
   const [backgroundTurns, setBackgroundTurns] = useState<
     readonly BackgroundTurnSnapshot[]
   >([]);
@@ -292,6 +332,7 @@ export function useOctosSession(): OctosSessionRuntime {
         snapshot.status === "connected" &&
         snapshot.session !== null &&
         !transitioningRef.current &&
+        pendingNavigationControllerRef.current.snapshot().intent === null &&
         supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_START) &&
         snapshot.recovery.phase === "healthy"
       );
@@ -308,6 +349,7 @@ export function useOctosSession(): OctosSessionRuntime {
       supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_INTERRUPT),
     setTimeline,
     setConnectionError: (message) => activeRuntime.reportError(message),
+    onDispatchState: (event) => turnDispatchEventSinkRef.current(event),
   });
   const supervisionController = useSupervision({
     client: currentClient,
@@ -374,6 +416,7 @@ export function useOctosSession(): OctosSessionRuntime {
   });
 
   runtimeEventSinkRef.current = handleRuntimeEvent;
+  turnDispatchEventSinkRef.current = handleTurnDispatchState;
 
   useEffect(
     () =>
@@ -384,8 +427,17 @@ export function useOctosSession(): OctosSessionRuntime {
   );
 
   useEffect(() => {
+    turnController.setAcceptedOwnerInteraction(Boolean(approval || question));
+  }, [approval, question, turnController.dispatchingTurnId]);
+
+  useEffect(() => {
+    publishNavigationAuthority(currentAuthority());
+  }, [connectionSnapshot.phase, connectionSnapshot.status]);
+
+  useEffect(() => {
     const epoch = ++lifecycleEpochRef.current;
     return () => {
+      resetPendingNavigation(false);
       candidateAbortRef.current?.abort();
       launchTransitionRef.current.cancel();
       const pending = pendingBackgroundHandoffRef.current;
@@ -409,6 +461,109 @@ export function useOctosSession(): OctosSessionRuntime {
     transitioningRef.current = next;
     setTransitioning(next);
   };
+
+  function handleTurnDispatchState(event: TurnDispatchStateEvent): void {
+    const authority = currentAuthority();
+    if (
+      !authority ||
+      authority.client !== event.client ||
+      authority.sessionId !== event.sessionId
+    ) {
+      return;
+    }
+    const controller = pendingNavigationControllerRef.current;
+    if (event.state === "dispatching") {
+      const superseded = controller.snapshot().intent;
+      superseded?.resolve("failed");
+      const authorityKey = `${authority.generation}:${authority.sessionId}`;
+      const lease = controller.beginDispatch(authorityKey, event.turnId);
+      pendingNavigationDispatchRef.current = {
+        client: event.client,
+        sessionId: event.sessionId,
+        turnId: event.turnId,
+        lease,
+      };
+      return;
+    }
+    const dispatch = pendingNavigationDispatchRef.current;
+    if (
+      !dispatch ||
+      dispatch.client !== event.client ||
+      dispatch.sessionId !== event.sessionId ||
+      dispatch.turnId !== event.turnId
+    ) {
+      return;
+    }
+    pendingNavigationDispatchRef.current = null;
+    if (event.state === "accepted") {
+      const released = controller.acceptDispatch(dispatch.lease);
+      if (released) {
+        const snapshot = activeRuntime.getSnapshot();
+        if (snapshot.phase !== "ready") {
+          if (controller.holdUntilReady(released)) {
+            setPendingNavigation((current) =>
+              current ? { ...current, phase: "restoring" } : current,
+            );
+          } else {
+            setPendingNavigation(null);
+            released.intent.resolve("failed");
+          }
+        } else {
+          executePendingNavigation(released.intent);
+        }
+      } else {
+        setPendingNavigation(null);
+      }
+      return;
+    }
+    const cancelled = controller.snapshot().intent;
+    const retired =
+      event.state === "rejected"
+        ? controller.rejectDispatch(dispatch.lease)
+        : controller.cancelDispatch(dispatch.lease);
+    if (!retired) return;
+    setPendingNavigation(null);
+    cancelled?.resolve("failed");
+  }
+
+  function resetPendingNavigation(publish = true): void {
+    const pending = pendingNavigationControllerRef.current.snapshot().intent;
+    pendingNavigationControllerRef.current.reset();
+    pendingNavigationDispatchRef.current = null;
+    if (publish) setPendingNavigation(null);
+    pending?.resolve("failed");
+  }
+
+  function cancelPendingNavigation(): void {
+    const pending = pendingNavigationControllerRef.current.cancelIntent();
+    if (!pending) return;
+    setPendingNavigation(null);
+    pending.resolve("failed");
+  }
+
+  function publishNavigationAuthority(
+    authority: ActiveSessionAuthority<OctosUiClient> | null,
+  ): void {
+    const controller = pendingNavigationControllerRef.current;
+    const authorityKey = authority
+      ? `${authority.generation}:${authority.sessionId}`
+      : null;
+    const changed = controller.snapshot().authorityKey !== authorityKey;
+    const retired = controller.setAuthority(authorityKey);
+    if (changed) pendingNavigationDispatchRef.current = null;
+    if (!retired) return;
+    setPendingNavigation(null);
+    retired.resolve("failed");
+  }
+
+  function executePendingNavigation(
+    intent: PendingWorkspaceNavigationIntent,
+  ): void {
+    setPendingNavigation(null);
+    void performWorkspaceSessionOpen(intent.input)
+      .then(intent.resolve)
+      .catch(() => intent.resolve("failed"));
+  }
 
   function rollbackBackgroundHandoff(lease?: LaunchTransitionLease): void {
     const pending = pendingBackgroundHandoffRef.current;
@@ -524,6 +679,7 @@ export function useOctosSession(): OctosSessionRuntime {
   }
 
   function resetProductSessionState(): void {
+    resetPendingNavigation();
     pendingTurnAfterHydrateRef.current = null;
     setEventLog({ events: [], omitted: 0 });
     setTimeline([]);
@@ -545,6 +701,7 @@ export function useOctosSession(): OctosSessionRuntime {
       return;
     }
     if (event.type === "authenticated") {
+      resetPendingNavigation();
       configureCodingSurfaces(event.authority.capabilities);
       setLaunch(EMPTY_LAUNCH_RUNTIME);
       markTransitioning(false);
@@ -556,6 +713,7 @@ export function useOctosSession(): OctosSessionRuntime {
     }
     if (event.type === "session-hydrate") {
       if (!activeRuntime.isCurrent(event.authority)) return;
+      publishNavigationAuthority(event.authority);
       if (event.reason === "candidate") {
         // Candidate adoption emits session-cleared before its raw diagnostics,
         // so resetting here would erase the new Session's staged event log.
@@ -563,7 +721,7 @@ export function useOctosSession(): OctosSessionRuntime {
         setRestoreRejected(false);
       }
       setTimeline(timelineFromHydrate(event.hydrated));
-      interactionController.restore(
+      const restoredInteractionWaiting = interactionController.restore(
         event.hydrated,
         event.authority.capabilities,
       );
@@ -588,6 +746,7 @@ export function useOctosSession(): OctosSessionRuntime {
           state: reclaimedOwner.state,
         });
       }
+      turnController.setAcceptedOwnerInteraction(restoredInteractionWaiting);
       // A same-transport durable recovery does not replace the capability/RPC
       // authority. Candidate and reconnect hydrates do, so only those retire
       // controller requests that may belong to an obsolete socket.
@@ -614,6 +773,12 @@ export function useOctosSession(): OctosSessionRuntime {
     const nextTurn = pendingTurnAfterHydrateRef.current;
     pendingTurnAfterHydrateRef.current = null;
     if (nextTurn) void turnController.startTurn(nextTurn);
+    publishNavigationAuthority(event.authority);
+    const releasedNavigation =
+      pendingNavigationControllerRef.current.releaseReady(
+        `${event.authority.generation}:${event.authority.sessionId}`,
+      );
+    if (releasedNavigation) executePendingNavigation(releasedNavigation.intent);
   }
 
   function appendObservedEvent(notification: RpcNotification): void {
@@ -684,6 +849,7 @@ export function useOctosSession(): OctosSessionRuntime {
     input: SessionConnectionInput,
     restoreAfterAuthentication = false,
   ) => {
+    resetPendingNavigation();
     rollbackBackgroundOwnership();
     backgroundTurnManagerRef.current.clear();
     launchTransitionRef.current.cancel();
@@ -915,6 +1081,7 @@ export function useOctosSession(): OctosSessionRuntime {
   }
 
   const disconnect = () => {
+    resetPendingNavigation();
     rollbackBackgroundOwnership();
     backgroundTurnManagerRef.current.clear();
     launchTransitionRef.current.cancel();
@@ -945,12 +1112,42 @@ export function useOctosSession(): OctosSessionRuntime {
     });
   };
 
-  const openWorkspaceSession = async (input: {
-    sessionId: string;
-    cwd: string;
-    profileId?: string;
-    resolveLaunch?: boolean;
-  }): Promise<WorkspaceOpenOutcome> => {
+  const openWorkspaceSession = (
+    input: WorkspaceSessionOpenInput,
+  ): Promise<WorkspaceOpenOutcome> => {
+    const target = input.sessionId.trim();
+    const cwd = input.cwd.trim();
+    if (!target || !cwd || !currentAuthority() || transitioningRef.current) {
+      return Promise.resolve("failed");
+    }
+    if (turnController.snapshot().pending.length) {
+      workspaceController.setError(
+        "Queued prompts belong to this Session. Let them run or stop queuing before switching.",
+      );
+      return Promise.resolve("failed");
+    }
+    return new Promise<WorkspaceOpenOutcome>((resolve) => {
+      const intent: PendingWorkspaceNavigationIntent = { input, resolve };
+      const decision = pendingNavigationControllerRef.current.request(intent);
+      if (decision.kind === "run-now") {
+        void performWorkspaceSessionOpen(input)
+          .then(resolve)
+          .catch(() => resolve("failed"));
+        return;
+      }
+      decision.replacedIntent?.resolve("failed");
+      workspaceController.setError(null);
+      setPendingNavigation({
+        kind: input.resolveLaunch === false ? "session" : "new-session",
+        cwd,
+        phase: decision.stage === "ready" ? "restoring" : "starting",
+      });
+    });
+  };
+
+  async function performWorkspaceSessionOpen(
+    input: WorkspaceSessionOpenInput,
+  ): Promise<WorkspaceOpenOutcome> {
     const target = input.sessionId.trim();
     const cwd = input.cwd.trim();
     const authority = currentAuthority();
@@ -1003,7 +1200,7 @@ export function useOctosSession(): OctosSessionRuntime {
       failLaunchTransition(lease, reason);
       return "failed";
     }
-  };
+  }
 
   const chooseLaunchProfile = async (profileId: string) => {
     const target = profileId.trim();
@@ -1112,6 +1309,8 @@ export function useOctosSession(): OctosSessionRuntime {
       timeline,
       setTimeline,
       queue: turnController.queue,
+      dispatchingTurnId: turnController.dispatchingTurnId,
+      interruptible: turnController.interruptible,
       interruptingTurnId: turnController.interruptingTurnId,
       enqueuePrompt: turnController.enqueuePrompt,
       interrupt: turnController.interrupt,
@@ -1166,12 +1365,14 @@ export function useOctosSession(): OctosSessionRuntime {
       state: workspace,
       launch,
       transitioning,
+      pendingNavigation,
       backgroundTurns,
       onboarding: onboardingController.state,
       refresh: refreshWorkspace,
       listWorkspaceSessions: workspaceController.listWorkspaceSessions,
       switchSession,
       openSession: openWorkspaceSession,
+      cancelPendingNavigation,
       deleteSession: workspaceController.deleteSession,
       chooseLaunchProfile,
       cancelLaunch,

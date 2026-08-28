@@ -1266,26 +1266,6 @@ label > span {
   opacity: 0.4;
 }
 
-.stop-button {
-  height: 30px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 9px;
-  padding: 0 10px;
-  background: transparent;
-  color: var(--dsw-alias-state-error-primary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.stop-button:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover-danger);
-}
-
-.stop-button:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
 .prompt-queue {
   display: flex;
   align-items: center;

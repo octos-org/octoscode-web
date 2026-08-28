@@ -77,11 +77,14 @@ cannot start or provision the Octos binary.
 
 A turn that this tab started and Core acknowledged can keep running while you
 select or create another Session in the same live tab. Browser-local queued
-prompts and an unresolved `turn/start` acknowledgement still block navigation.
-Core rc.9 provides no safe post-turn release signal, so the Web app retains at
-most eight owner connections. Reopening one of those retained Sessions reuses
-its connection even at the limit; opening a ninth new target is refused until
-you explicitly Disconnect and reconnect. No completed owner is silently evicted.
+prompts still block navigation. If `turn/start` is awaiting acknowledgement, the
+Web app labels the turn **Starting**, remembers the latest create/switch click,
+and executes it exactly once after Core accepts the turn. Rejection or local
+cancellation drops that intent and keeps the source Session selected. Core rc.9
+provides no safe post-turn release signal, so the Web app retains at most eight
+owner connections. Reopening one of those retained Sessions reuses its
+connection even at the limit; opening a ninth new target is refused until you
+explicitly Disconnect and reconnect. No completed owner is silently evicted.
 This is not detached server execution: refreshing or closing the tab, losing the
 network connection, or selecting **Disconnect** closes the owner WebSocket and
 Core rc.9 terminates a still-running turn. Disconnect keeps the current tab's

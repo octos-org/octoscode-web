@@ -29,27 +29,40 @@ messages, turns, and pending interactions, and durable turn events must reach
 every socket that has the Session open. A fixed completed hydrate or an
 arbitrary short timeout cannot prove background execution.
 
-The product browser gate covers these sequences:
+The product browser gate currently covers these sequences:
 
-1. Start a held, server-acknowledged turn in A; create or select B; verify A's
-   owner socket remains open, A stays marked working, and A output does not
-   enter B's timeline.
-2. Complete independent work in B, return to A while it is still running, then
-   release A and verify its exact persisted result through hydrate/live replay.
-3. Queue a second prompt in A and prove New Session/selection sends no candidate
-   `session/open` until the browser-local FIFO settles.
-4. Hold the `turn/start` acknowledgement and prove navigation is rejected until
-   dispatch ownership is known.
-5. Create two Sessions in the same cwd, give them distinct transcripts, switch
-   by exact Session identity, reload the same tab, and verify both confirmed
-   rows and histories remain distinct. Tests must not use positional
-   `.first()`/`.last()` locators because opening a Session updates recency
-   order.
+1. Create two confirmed Sessions in one Workspace, reopen each exact identity,
+   refresh the tab, and verify neither creation deletes or replaces the other.
+2. Start a server-acknowledged turn in A, create B, and verify A's owner socket
+   remains open while its status and terminal result stay out of B's timeline.
+3. Hold the next `turn/start` acknowledgement and verify the composer says
+   Starting. `Stop` is absent and `/stop` sends no interrupt. One New Session
+   click is queued without sending `session/open`, then runs automatically after
+   release. A replay-lossy recovery whose hydrate already proves that exact turn
+   active must release the same intent after recovery becomes ready, without
+   waiting forever for the superseded RPC reply. If the same hydrate restores a
+   pending approval or question, the parked Session must project **Waiting**,
+   not a stale **Working** state.
+4. Click several existing targets while the acknowledgement is held and verify
+   latest-wins with exactly one candidate open. Cancelling the pending banner or
+   rejecting the start clears the intent and leaves the source Session active.
+5. Reject the candidate `session/open` after accepting the start and verify the
+   handoff rolls back: the source remains selected, its owner socket stays open,
+   its turn completes in the foreground, and a later retry succeeds.
 
-Also cover candidate failure and a terminal event arriving during the handoff
-window. Closing an owner socket in the fixture must produce the same durable
-`connection_closed` result as Core rc.9, so a missing transport-preservation
-regression cannot pass accidentally.
+The queue state machine, prepare-window terminal race, candidate transaction,
+and eight-owner capacity exchange remain deterministic unit-test concerns.
+Closing an owner socket in the fixture must produce the same durable
+`connection_closed` result as Core rc.9, so a transport-preservation regression
+cannot pass accidentally. The opt-in live gate supplies the real Core/model
+proof for persisted output and hydrate after refresh.
+
+The fixture exposes one-shot `/__test__/turn-start/hold-next`, `state`,
+`release`, `reject`, and `reset` controls for this sequence. Product tests poll
+the explicit held state and release or reject it themselves; they must not use a
+short artificial acknowledgement timeout, a second UI click, or `Stop` as proof
+that Core accepted the start. The one-shot `/__test__/session-open/reject-next`
+control exercises candidate rollback without changing any production protocol.
 
 ## Opt-in live model gate
 

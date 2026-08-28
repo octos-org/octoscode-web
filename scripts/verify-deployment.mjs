@@ -96,15 +96,29 @@ for (const key of [
   );
 }
 
-const initialAssets = [
+const linkedResources = [
   ...html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g),
 ].map((match) => match[1]);
-assert(initialAssets.length >= 2, "built index has no initial assets");
 const expectedBase = process.env.OCTOSCODE_WEB_BASE_PATH?.trim() || "/";
 assert(
   expectedBase.startsWith("/") && expectedBase.endsWith("/"),
   "OCTOSCODE_WEB_BASE_PATH must be an absolute slash-terminated path",
 );
+const faviconPath = `${expectedBase}favicon.svg`;
+assert(
+  linkedResources.includes(faviconPath),
+  `built index is missing ${faviconPath}`,
+);
+const favicon = await readFile(resolve(dist, "favicon.svg"), "utf8");
+assert(
+  favicon.includes("<svg") &&
+    !/<script|\son\w+=|(?:href|src)\s*=\s*["']https?:/i.test(favicon),
+  "favicon must be a self-contained inert SVG",
+);
+const initialAssets = linkedResources.filter(
+  (resource) => resource.endsWith(".js") || resource.endsWith(".css"),
+);
+assert(initialAssets.length >= 2, "built index has no initial JS/CSS assets");
 const assetPrefix = `${expectedBase}assets/`;
 let initialJavaScriptBytes = 0;
 let initialCssBytes = 0;

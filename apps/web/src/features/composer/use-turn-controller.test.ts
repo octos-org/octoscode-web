@@ -5,6 +5,7 @@ import type { OctosUiClient } from "@octos-org/octoscode-client";
 import type { TimelineEntry } from "../timeline/model.ts";
 import {
   useTurnController,
+  type TurnDispatchStateEvent,
   type TurnController,
 } from "./use-turn-controller.ts";
 
@@ -26,6 +27,142 @@ describe("useTurnController async authority", () => {
       );
       expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
     });
+  });
+
+  it("publishes dispatching and accepted only around the exact start ACK", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("ship it");
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+    ]);
+
+    start.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+        "dispatching",
+        "accepted",
+      ]);
+    });
+  });
+
+  it("rejects or locally cancels a dispatch without publishing acceptance", async () => {
+    const rejectedStart = deferred<void>();
+    const rejected = renderController(
+      fakeClient({ start: () => rejectedStart.promise }),
+    );
+    rejected.controller.enqueuePrompt("reject me");
+    rejectedStart.reject(new Error("not accepted"));
+    await vi.waitFor(() => {
+      expect(rejected.dispatchEvents.map((event) => event.state)).toEqual([
+        "dispatching",
+        "rejected",
+      ]);
+    });
+
+    const cancelledStart = deferred<void>();
+    const cancelled = renderController(
+      fakeClient({ start: () => cancelledStart.promise }),
+    );
+    cancelled.controller.enqueuePrompt("cancel me");
+    const turnId = cancelled.activeTurnId();
+    cancelled.controller.settleTurn(turnId, "failed");
+    cancelledStart.resolve(undefined);
+    await cancelledStart.promise;
+
+    expect(cancelled.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "cancelled",
+    ]);
+  });
+
+  it("uses recovery hydrate as the authoritative ACK without waiting forever for the RPC", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("recover this start");
+    const turnId = harness.activeTurnId();
+    harness.controller.reconcileFromHydrate(
+      {
+        session_id: "session-a",
+        cursor: { stream: "session-a", seq: 3 },
+        turns: [{ turn_id: turnId, state: "active" }],
+      },
+      true,
+    );
+
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "accepted",
+    ]);
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId,
+      state: "running",
+    });
+
+    start.resolve(undefined);
+    await start.promise;
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "accepted",
+    ]);
+  });
+
+  it("admits and settles an in-flight start when recovery already proves it terminal", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("already finished");
+    const turnId = harness.activeTurnId();
+    harness.controller.reconcileFromHydrate(
+      {
+        session_id: "session-a",
+        cursor: { stream: "session-a", seq: 4 },
+        turns: [{ turn_id: turnId, state: "completed" }],
+      },
+      true,
+    );
+
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "accepted",
+    ]);
+    expect(harness.controller.snapshot().active).toBeNull();
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId,
+      state: "completed",
+    });
+    start.resolve(undefined);
+    await start.promise;
+  });
+
+  it("does not send interrupt while turn/start is still dispatching", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("start slowly");
+    await harness.controller.interrupt();
+
+    expect(client.interruptTurn).not.toHaveBeenCalled();
+    expect(
+      harness.timeline.some(
+        (entry) =>
+          entry.kind === "system" && entry.title === "Turn is still starting",
+      ),
+    ).toBe(true);
+
+    start.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    await harness.controller.interrupt();
+    expect(client.interruptTurn).toHaveBeenCalledTimes(1);
   });
 
   it("treats a hydrated active turn as observed, never as owner of this socket", () => {
@@ -139,12 +276,34 @@ describe("useTurnController async authority", () => {
     expect(owner.startTurn).toHaveBeenCalledTimes(1);
   });
 
+  it("tracks waiting interactions on the accepted owner without reviving terminal work", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("ask me something");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    expect(harness.controller.setAcceptedOwnerInteraction(true)).toBe(true);
+    expect(harness.controller.backgroundHandoffTurn()?.state).toBe("waiting");
+    expect(harness.controller.setAcceptedOwnerInteraction(false)).toBe(true);
+    expect(harness.controller.backgroundHandoffTurn()?.state).toBe("running");
+
+    const turnId = harness.activeTurnId();
+    harness.controller.settleTurn(turnId, "completed");
+    expect(harness.controller.setAcceptedOwnerInteraction(false)).toBe(false);
+    expect(harness.controller.backgroundHandoffTurn()?.state).toBe("completed");
+  });
+
   it("keeps a server-confirmed interrupt de-duplicated after hydrate", async () => {
     const interrupt = deferred<void>();
     const client = fakeClient({ interrupt: () => interrupt.promise });
     const harness = renderController(client);
 
     harness.controller.enqueuePrompt("ship it");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
     const first = harness.controller.interrupt();
     expect(client.interruptTurn).toHaveBeenCalledTimes(1);
 
@@ -188,6 +347,9 @@ describe("useTurnController async authority", () => {
     const harness = renderController(older);
 
     harness.controller.enqueuePrompt("ship it");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
     const pending = harness.controller.interrupt();
     harness.setClient(newer);
     staleInterrupt.reject(new Error("old socket closed"));
@@ -203,6 +365,7 @@ function renderController(initialClient: FakeTurnClient): {
   controller: TurnController;
   timeline: TimelineEntry[];
   connectionErrors: string[];
+  dispatchEvents: TurnDispatchStateEvent[];
   setClient(client: FakeTurnClient): void;
   activeTurnId(): string;
 } {
@@ -210,6 +373,7 @@ function renderController(initialClient: FakeTurnClient): {
   let client: FakeTurnClient = initialClient;
   const timeline: TimelineEntry[] = [];
   const connectionErrors: string[] = [];
+  const dispatchEvents: TurnDispatchStateEvent[] = [];
   const setTimeline: Dispatch<SetStateAction<TimelineEntry[]>> = (action) => {
     const next = typeof action === "function" ? action([...timeline]) : action;
     timeline.splice(0, timeline.length, ...next);
@@ -224,6 +388,7 @@ function renderController(initialClient: FakeTurnClient): {
       canInterrupt: () => true,
       setTimeline,
       setConnectionError: (message) => connectionErrors.push(message),
+      onDispatchState: (event) => dispatchEvents.push(event),
     });
     return null;
   }
@@ -235,6 +400,7 @@ function renderController(initialClient: FakeTurnClient): {
     controller: renderedController,
     timeline,
     connectionErrors,
+    dispatchEvents,
     setClient(next) {
       client = next;
     },

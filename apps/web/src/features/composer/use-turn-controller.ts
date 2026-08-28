@@ -23,10 +23,22 @@ interface TurnControllerDependencies {
   canInterrupt: () => boolean;
   setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
   setConnectionError: (message: string) => void;
+  onDispatchState?: (event: TurnDispatchStateEvent) => void;
+}
+
+export interface TurnDispatchStateEvent {
+  state: "dispatching" | "accepted" | "rejected" | "cancelled";
+  client: OctosUiClient;
+  sessionId: string;
+  turnId: string;
 }
 
 export interface TurnController {
   queue: PromptTurnQueueSnapshot;
+  /** The optimistic start request that has not yet been accepted by Core. */
+  dispatchingTurnId: string | null;
+  /** True only when the active turn is server-owned and interrupt is advertised. */
+  interruptible: boolean;
   interruptingTurnId: string | null;
   snapshot: () => PromptTurnQueueSnapshot;
   /**
@@ -48,6 +60,8 @@ export interface TurnController {
     preserveTransportOwnership?: boolean,
   ) => PromptTurn | null;
   clearTransportOwnership: () => void;
+  /** Keep an accepted local owner's handoff state aligned with interactions. */
+  setAcceptedOwnerInteraction: (waiting: boolean) => boolean;
   restoreTransportOwnership: (turn: {
     turnId: string;
     state: "running" | "waiting" | "completed" | "failed";
@@ -78,8 +92,12 @@ export function useTurnController(
     state: "running" | "waiting" | "completed" | "failed";
   } | null>(null);
   const interruptingTurnIdRef = useRef<string | null>(null);
+  const dispatchingTurnIdRef = useRef<string | null>(null);
   const [queue, setQueue] = useState<PromptTurnQueueSnapshot>(() =>
     queueRef.current.snapshot(),
+  );
+  const [dispatchingTurnId, setDispatchingTurnId] = useState<string | null>(
+    null,
   );
   const [interruptingTurnId, setInterruptingTurnId] = useState<string | null>(
     null,
@@ -93,6 +111,8 @@ export function useTurnController(
     queueRef.current.clear();
     locallyStartedTurnRef.current = null;
     acceptedOwnerRef.current = null;
+    dispatchingTurnIdRef.current = null;
+    setDispatchingTurnId(null);
     interruptingTurnIdRef.current = null;
     setInterruptingTurnId(null);
     sync();
@@ -104,6 +124,14 @@ export function useTurnController(
     const sessionId = currentDependencies.sessionId();
     if (!client || !sessionId || !currentDependencies.canStart()) return;
     locallyStartedTurnRef.current = { client, sessionId, turnId: turn.turnId };
+    dispatchingTurnIdRef.current = turn.turnId;
+    setDispatchingTurnId(turn.turnId);
+    currentDependencies.onDispatchState?.({
+      state: "dispatching",
+      client,
+      sessionId,
+      turnId: turn.turnId,
+    });
     const request = startRequestsRef.current.begin(client, sessionId);
 
     currentDependencies.setTimeline((current) =>
@@ -116,16 +144,11 @@ export function useTurnController(
         input: [{ kind: "text", text: turn.text }],
       });
       if (requestIsCurrent()) {
-        acceptedOwnerRef.current = {
-          client,
-          sessionId,
-          turnId: turn.turnId,
-          state: "running",
-        };
-        locallyStartedTurnRef.current = null;
+        acceptLocalDispatch(turn.turnId, "running");
       }
     } catch (reason) {
       if (!requestIsCurrent()) return;
+      retireLocalDispatch(turn.turnId, "rejected");
       const message = reason instanceof Error ? reason.message : String(reason);
       dependenciesRef.current.setTimeline((current) =>
         addSystemMessage(
@@ -164,7 +187,7 @@ export function useTurnController(
       };
     }
     if (locallyStartedTurnRef.current?.turnId === turnId) {
-      locallyStartedTurnRef.current = null;
+      retireLocalDispatch(turnId, "cancelled");
     }
     const transition = queueRef.current.settle(turnId);
     if (!transition.settled) return;
@@ -204,6 +227,21 @@ export function useTurnController(
       return;
     }
     const activeTurnId = activeTurn.turnId;
+    if (
+      locallyStartedTurnRef.current?.client === client &&
+      locallyStartedTurnRef.current.sessionId === sessionId &&
+      locallyStartedTurnRef.current.turnId === activeTurnId
+    ) {
+      currentDependencies.setTimeline((current) =>
+        addSystemMessage(
+          current,
+          `still-starting:${activeTurnId}`,
+          "Turn is still starting",
+          "Octos has not accepted this turn yet, so no interrupt was sent.",
+        ),
+      );
+      return;
+    }
     if (interruptingTurnIdRef.current === activeTurnId) return;
 
     interruptingTurnIdRef.current = activeTurnId;
@@ -253,11 +291,13 @@ export function useTurnController(
     preserveTransportOwnership = false,
   ): PromptTurn | null => {
     if (!preserveTransportOwnership) {
-      locallyStartedTurnRef.current = null;
+      const localTurnId = locallyStartedTurnRef.current?.turnId;
+      if (localTurnId) retireLocalDispatch(localTurnId, "cancelled");
       acceptedOwnerRef.current = null;
     } else {
       if (!leaseMatchesCurrent(locallyStartedTurnRef.current)) {
-        locallyStartedTurnRef.current = null;
+        const localTurnId = locallyStartedTurnRef.current?.turnId;
+        if (localTurnId) retireLocalDispatch(localTurnId, "cancelled");
       }
       if (!leaseMatchesCurrent(acceptedOwnerRef.current)) {
         acceptedOwnerRef.current = null;
@@ -294,6 +334,17 @@ export function useTurnController(
     // supersedes that request completion.
     if (serverTurn && serverTurn.state !== "unknown") {
       startRequestsRef.current.invalidate();
+      if (locallyStartedTurnRef.current?.turnId === snapshot.active.turnId) {
+        acceptLocalDispatch(
+          snapshot.active.turnId,
+          serverTurn.state === "completed"
+            ? "completed"
+            : serverTurn.state === "active" ||
+                serverTurn.state === "interrupting"
+              ? "running"
+              : "failed",
+        );
+      }
     }
     if (
       serverTurn &&
@@ -302,9 +353,6 @@ export function useTurnController(
       serverTurn.state !== "unknown"
     ) {
       const transition = queueRef.current.settle(snapshot.active.turnId);
-      if (locallyStartedTurnRef.current?.turnId === snapshot.active.turnId) {
-        locallyStartedTurnRef.current = null;
-      }
       if (acceptedOwnerRef.current?.turnId === snapshot.active.turnId) {
         acceptedOwnerRef.current = {
           ...acceptedOwnerRef.current,
@@ -319,6 +367,12 @@ export function useTurnController(
 
   return {
     queue,
+    dispatchingTurnId,
+    interruptible: Boolean(
+      queue.active &&
+      dispatchingTurnId !== queue.active.turnId &&
+      dependencies.canInterrupt(),
+    ),
     interruptingTurnId,
     snapshot: () => queueRef.current.snapshot(),
     backgroundHandoffTurn: () => {
@@ -338,6 +392,24 @@ export function useTurnController(
     clearTransportOwnership: () => {
       locallyStartedTurnRef.current = null;
       acceptedOwnerRef.current = null;
+      dispatchingTurnIdRef.current = null;
+      setDispatchingTurnId(null);
+    },
+    setAcceptedOwnerInteraction: (waiting) => {
+      const owner = acceptedOwnerRef.current;
+      if (
+        !owner ||
+        !leaseMatchesCurrent(owner) ||
+        owner.state === "completed" ||
+        owner.state === "failed"
+      ) {
+        return false;
+      }
+      acceptedOwnerRef.current = {
+        ...owner,
+        state: waiting ? "waiting" : "running",
+      };
+      return true;
     },
     restoreTransportOwnership: (turn) => {
       const current = dependenciesRef.current;
@@ -345,6 +417,8 @@ export function useTurnController(
       const sessionId = current.sessionId();
       if (!client || !sessionId || !turn.turnId) return false;
       locallyStartedTurnRef.current = null;
+      dispatchingTurnIdRef.current = null;
+      setDispatchingTurnId(null);
       acceptedOwnerRef.current = { client, sessionId, ...turn };
       return true;
     },
@@ -365,5 +439,52 @@ export function useTurnController(
       lease.client === current.client() &&
       lease.sessionId === current.sessionId(),
     );
+  }
+
+  function clearDispatchingTurn(turnId: string): void {
+    if (dispatchingTurnIdRef.current !== turnId) return;
+    dispatchingTurnIdRef.current = null;
+    setDispatchingTurnId(null);
+  }
+
+  function acceptLocalDispatch(
+    turnId: string,
+    state: "running" | "completed" | "failed",
+  ): boolean {
+    const dispatch = locallyStartedTurnRef.current;
+    if (
+      !dispatch ||
+      dispatch.turnId !== turnId ||
+      !leaseMatchesCurrent(dispatch)
+    ) {
+      return false;
+    }
+    acceptedOwnerRef.current = { ...dispatch, state };
+    locallyStartedTurnRef.current = null;
+    clearDispatchingTurn(turnId);
+    dependenciesRef.current.onDispatchState?.({
+      state: "accepted",
+      client: dispatch.client,
+      sessionId: dispatch.sessionId,
+      turnId,
+    });
+    return true;
+  }
+
+  function retireLocalDispatch(
+    turnId: string,
+    state: "rejected" | "cancelled",
+  ): boolean {
+    const dispatch = locallyStartedTurnRef.current;
+    if (!dispatch || dispatch.turnId !== turnId) return false;
+    locallyStartedTurnRef.current = null;
+    clearDispatchingTurn(turnId);
+    dependenciesRef.current.onDispatchState?.({
+      state,
+      client: dispatch.client,
+      sessionId: dispatch.sessionId,
+      turnId,
+    });
+    return true;
   }
 }

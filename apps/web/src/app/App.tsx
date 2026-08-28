@@ -438,9 +438,14 @@ export function App() {
   }
 
   const activeTurnId = conversation.queue.active?.turnId ?? null;
-  const suggestedCommands = commandPaletteDismissed
-    ? []
-    : commandSuggestions(draft, session.opened?.capabilities);
+  const turnStarting = Boolean(
+    activeTurnId && conversation.dispatchingTurnId === activeTurnId,
+  );
+  const navigationPending = workspaceProduct.pendingNavigation;
+  const suggestedCommands =
+    commandPaletteDismissed || navigationPending
+      ? []
+      : commandSuggestions(draft, session.opened?.capabilities);
   const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
   // A server-accepted turn may keep running on its owner socket while this
   // tab focuses another Session. Browser-local queued prompts cannot: they
@@ -449,6 +454,7 @@ export function App() {
   const runtimeMutationBlocked = Boolean(
     conversation.queue.active ||
     conversation.queue.pending.length ||
+    navigationPending ||
     workspaceProduct.transitioning,
   );
   const activeWorkspacePath =
@@ -554,7 +560,10 @@ export function App() {
                   statusLabel: "Waiting for input",
                 }
               : active && activeTurnId
-                ? { status: "running" as const, statusLabel: "Working" }
+                ? {
+                    status: "running" as const,
+                    statusLabel: turnStarting ? "Starting" : "Working",
+                  }
                 : background
                   ? backgroundSessionStatus(background.state)
                   : {}),
@@ -572,8 +581,16 @@ export function App() {
     interactions.question,
     knownSessions,
     recentWorkspaces,
+    turnStarting,
     workspaceProduct.backgroundTurns,
   ]);
+
+  useEffect(() => {
+    if (!navigationPending) return;
+    setWorkspacePicker((current) =>
+      current.open ? { ...current, open: false } : current,
+    );
+  }, [navigationPending]);
 
   const moveToProductSession = async (productSessionId: string) => {
     const target = sidebarProjection.targets.get(productSessionId);
@@ -941,8 +958,38 @@ export function App() {
             )}
           </div>
           <div
-            className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || conversationTab === "trajectory" ? " is-hidden" : ""}`}
+            className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending) ? " is-hidden" : ""}`}
           >
+            {navigationPending ? (
+              <div
+                className={productStyles.pendingNavigation}
+                role="status"
+                aria-live="polite"
+              >
+                <span className={productStyles.pendingNavigationCopy}>
+                  <strong>
+                    {navigationPending.phase === "restoring"
+                      ? "Finishing recovery before navigation"
+                      : navigationPending.kind === "new-session"
+                        ? "New Session opens next"
+                        : "Session switch runs next"}
+                  </strong>
+                  <small title={navigationPending.cwd}>
+                    {navigationPending.phase === "restoring"
+                      ? "Octos accepted the turn. Durable state is syncing before this action continues in "
+                      : "Octos is accepting the current turn. This action will continue automatically in "}
+                    {workspaceName(navigationPending.cwd)}.
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  aria-label="Cancel pending Session navigation"
+                  onClick={workspaceProduct.cancelPendingNavigation}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : null}
             {session.opened && session.recovery.phase !== "healthy" ? (
               <div
                 className={`recovery-banner recovery-${session.recovery.phase}`}
@@ -974,7 +1021,7 @@ export function App() {
                   onDecide={(decision, scope) =>
                     void interactions.respondApproval(decision, scope)
                   }
-                  {...(codingCapabilities.turnInterruptAvailable
+                  {...(conversation.interruptible
                     ? { onInterrupt: () => void conversation.interrupt() }
                     : {})}
                   onReviewDiff={(previewId) =>
@@ -994,12 +1041,12 @@ export function App() {
                   onSubmit={(answers) =>
                     void interactions.respondQuestion(answers)
                   }
-                  {...(codingCapabilities.turnInterruptAvailable
+                  {...(conversation.interruptible
                     ? { onInterrupt: () => void conversation.interrupt() }
                     : {})}
                 />
               </Suspense>
-            ) : (
+            ) : conversationTab === "trajectory" ? null : (
               <div className="composer">
                 {suggestedCommands.length > 0 ? (
                   <Suspense fallback={null}>
@@ -1079,7 +1126,8 @@ export function App() {
                   disabled={
                     !session.connected ||
                     !codingCapabilities.turnStartAvailable ||
-                    workspaceProduct.transitioning
+                    workspaceProduct.transitioning ||
+                    Boolean(navigationPending)
                   }
                   role="combobox"
                   aria-autocomplete="list"
@@ -1139,8 +1187,9 @@ export function App() {
                     ) : null}
                     <TurnStopButton
                       activeTurnId={activeTurnId}
+                      starting={turnStarting}
                       interruptingTurnId={conversation.interruptingTurnId}
-                      available={codingCapabilities.turnInterruptAvailable}
+                      available={conversation.interruptible}
                       onInterrupt={() => void conversation.interrupt()}
                     />
                     <button
@@ -1151,6 +1200,7 @@ export function App() {
                         !session.connected ||
                         !codingCapabilities.turnStartAvailable ||
                         workspaceProduct.transitioning ||
+                        Boolean(navigationPending) ||
                         !draft.trim()
                       }
                       aria-label={activeTurnId ? "Queue prompt" : "Send prompt"}

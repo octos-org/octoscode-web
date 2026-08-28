@@ -94,7 +94,8 @@ their presentation but not their state transition:
 - an unambiguous fresh Web `activate` follows the server-resolved Profile
   automatically, while `cross_profile` and `no_profile` remain explicit;
 - a server-acknowledged local turn may retain its owner transport during Session
-  navigation, while pending local prompts and dispatching starts block;
+  navigation; pending local prompts block, while a dispatching start retains one
+  latest-wins navigation intent and releases it only after the exact ACK;
 - the composer reports the effective Session runtime model, while Settings may
   manage provider/model/route configuration and the active Profile default;
 - provider keys are write-only operation arguments in the client; Core owns

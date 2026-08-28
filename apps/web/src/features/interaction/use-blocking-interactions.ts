@@ -49,7 +49,7 @@ export function useBlockingInteractions(
   const restore = (
     hydrated: SessionHydrateResult,
     capabilities: UiProtocolCapabilities | undefined,
-  ) => {
+  ): boolean => {
     decisionRequestsRef.current.invalidate();
     const sessionId = dependenciesRef.current.sessionId();
     const pendingApproval = (hydrated.pending_approvals ?? [])
@@ -78,19 +78,22 @@ export function useBlockingInteractions(
           request &&
           matchesSessionScope(sessionId, request.sessionId, request.topic),
       );
-    setApproval(
-      supportsMethod(capabilities, CORE_UI_METHODS.APPROVAL_RESPOND)
-        ? (pendingApproval ?? null)
-        : null,
-    );
-    setQuestion(
+    const restoredApproval = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.APPROVAL_RESPOND,
+    )
+      ? (pendingApproval ?? null)
+      : null;
+    const restoredQuestion =
       supportsMethod(capabilities, CORE_UI_METHODS.USER_QUESTION_RESPOND) &&
-        supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
+      supportsFeature(capabilities, CORE_UI_FEATURES.USER_QUESTION_V1)
         ? (pendingQuestion ?? null)
-        : null,
-    );
+        : null;
+    setApproval(restoredApproval);
+    setQuestion(restoredQuestion);
     setBusy(false);
     setError(null);
+    return Boolean(restoredApproval || restoredQuestion);
   };
 
   const respondApproval = async (

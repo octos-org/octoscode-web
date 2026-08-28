@@ -92,9 +92,14 @@ Core rc.9 has no quiesced signal proving that post-terminal tail work and
 Session scope cleanup are finished.
 
 Navigation remains blocked while the selected Session has browser-local pending
-prompts or while `turn/start` is still awaiting acknowledgement. This is a
-safety boundary, not a claim that queued work should remain foreground-only
-forever; a future per-Session queue/runtime contract can remove it.
+prompts. While `turn/start` is still awaiting acknowledgement, no candidate may
+open, but the product retains one navigation intent. Repeated clicks are
+latest-wins. Acceptance of that exact start releases the intent once through the
+same reclaim/handoff/candidate transaction; rejection, cancellation, authority
+replacement, or disconnect clears it and preserves the source Session. This
+removes an ACK-latency retry from the product without pretending an optimistic
+local turn is server-owned. A future per-Session queue/runtime contract is still
+required to move browser-local pending prompts.
 
 A fresh opaque Web Session whose `launch/resolve` result is an unambiguous
 `activate` automatically binds the resolved Profile and opens. `resume` remains
@@ -122,9 +127,10 @@ tracked in [octos#2167](https://github.com/octos-org/octos/issues/2167).
   creates a stale second database and weakens hydrate/replay authority.
 - Disconnect the active owner socket immediately after candidate commit. On rc.9
   that aborts a still-running turn and can discard post-terminal tail work.
-- Allow navigation while a prompt is queued locally or a start acknowledgement
+- Open a candidate while a prompt is queued locally or a start acknowledgement
   is unresolved. The new view could neither prove which work was server-owned
-  nor continue the local FIFO safely.
+  nor continue the local FIFO safely. Retaining a click until an exact ACK is
+  safe because it performs no Session mutation before acceptance.
 - Keep the extra “Activate coding” confirmation for a fresh unambiguous Web
   Session. It asks the user to confirm a Profile decision the server has already
   resolved and adds no safety boundary.
@@ -137,8 +143,8 @@ directory, while remaining honest about incomplete discovery. A server-accepted
 turn can continue when the user creates or selects another Session in the same
 live tab.
 
-The compatibility cost is a bounded set of retained WebSockets and an explicit
-pending/dispatching navigation gate. It does not provide durable detached work,
-cross-tab Session discovery, or a server catalog. Those capabilities require a
-Core SessionRef catalog and server-owned turn lease rather than more browser
-inference.
+The compatibility cost is a bounded set of retained WebSockets, an explicit
+pending-prompt gate, and a local ACK-bound navigation intent. It does not
+provide durable detached work, cross-tab Session discovery, or a server catalog.
+Those capabilities require a Core SessionRef catalog and server-owned turn lease
+rather than more browser inference.

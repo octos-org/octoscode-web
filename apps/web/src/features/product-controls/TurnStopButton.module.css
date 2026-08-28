@@ -1,0 +1,29 @@
+.control {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+
+.stop {
+  color: var(--dsw-alias-state-error-primary);
+  cursor: pointer;
+}
+
+.stop:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+.stop:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.starting {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: progress;
+  opacity: 0.72;
+}

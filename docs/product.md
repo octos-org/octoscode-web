@@ -78,10 +78,15 @@ completed, or failed status; returning to it reconstructs conversation truth
 from server hydrate/replay rather than from a browser transcript copy.
 
 Browser-local pending prompts still belong to the selected Session's FIFO, and a
-start request without its acknowledgement has unresolved ownership. Either state
-blocks create/switch until it settles. A fresh unambiguous `activate` decision
-for a Web Session opens automatically; `cross_profile` and `no_profile` remain
-explicit product decisions.
+start request without its acknowledgement has unresolved ownership. Pending
+prompts block create/switch. During an unresolved start, the product shows
+**Starting**, retains only the latest navigation intent, and performs the normal
+two-phase candidate transaction exactly once after acceptance. A rejected or
+cancelled start clears the intent and preserves the source Session. **Stop** is
+not offered during Starting, and `/stop` sends no interrupt until Core has
+accepted the turn. A fresh unambiguous `activate` decision for a Web Session
+opens automatically; `cross_profile` and `no_profile` remain explicit product
+decisions.
 
 The rc.9 compatibility layer retains at most eight live owner connections.
 Reopening an already retained Session reclaims its exact connection and still
