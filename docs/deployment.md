@@ -86,11 +86,24 @@ tracked in [octos#2146](https://github.com/octos-org/octos/issues/2146).
 The browser writes only the server endpoint to `localStorage`. It binds the auth
 token, auto-connect marker, active Session/Workspace/Profile restore hints, and
 recent Workspace paths to that endpoint in the current tab's `sessionStorage`.
-Refresh can restore the active Session; closing the tab leaves only the
-endpoint. Provider API keys are never persisted in browser storage. The current
-UI Protocol transports the auth token in the WebSocket URL query, so HTTPS/WSS
-is mandatory outside loopback and reverse proxies must redact query strings from
-access logs. Treat captured URLs as credentials.
+The same endpoint-and-token-bound envelope also keeps the minimal
+Workspace/Profile/Session tuples that this tab has successfully opened. Those
+refs are incomplete navigation memory, not a catalog, and contain no titles,
+prompts, transcript, or model output. Refresh can restore the selected Session;
+closing the tab leaves only the endpoint. Disconnect preserves tab navigation
+refs but closes live transports; Forget or an endpoint/token change clears the
+refs. Provider API keys are never persisted in browser storage.
+
+A reverse proxy must also preserve long-lived WebSocket connections when the
+product switches Sessions. Core rc.9 binds a server-acknowledged turn to its
+owner socket; the browser retains that socket while another Session is focused.
+Refresh, tab close, proxy/network loss, and manual Disconnect close it and
+terminate a still-running turn. Hosting must not advertise this as detached or
+cross-refresh execution.
+
+The current UI Protocol transports the auth token in the WebSocket URL query, so
+HTTPS/WSS is mandatory outside loopback and reverse proxies must redact query
+strings from access logs. Treat captured URLs as credentials.
 
 Compatibility is capability-gated at runtime. The build manifest records the
 contract verified during release, but it is not a promise that every future or

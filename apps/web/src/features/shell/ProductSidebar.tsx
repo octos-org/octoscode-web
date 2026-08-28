@@ -43,7 +43,13 @@ export interface ProductSidebarWorkspace {
   path?: string | undefined;
   expanded?: boolean | undefined;
   sessionCatalogStatus?:
-    "unknown" | "loading" | "loaded" | "error" | "current-only" | undefined;
+    | "unknown"
+    | "loading"
+    | "loaded"
+    | "error"
+    | "current-only"
+    | "known-only"
+    | undefined;
   sessionCatalogError?: string | undefined;
   sessions: readonly ProductSidebarSession[];
 }
@@ -170,7 +176,10 @@ export function ProductSidebar({
         pending += 1;
       } else if (workspace.sessionCatalogStatus === "error") {
         failed += 1;
-      } else if (workspace.sessionCatalogStatus === "current-only") {
+      } else if (
+        workspace.sessionCatalogStatus === "current-only" ||
+        workspace.sessionCatalogStatus === "known-only"
+      ) {
         limited += 1;
       }
     }
@@ -612,7 +621,9 @@ export function ProductSidebar({
                                       ? (workspace.sessionCatalogError ??
                                         "Could not load sessions.")
                                       : workspace.sessionCatalogStatus ===
-                                          "current-only"
+                                            "current-only" ||
+                                          workspace.sessionCatalogStatus ===
+                                            "known-only"
                                         ? "Start a session to open this workspace."
                                         : workspace.sessionCatalogStatus ===
                                             "unknown"
@@ -734,7 +745,7 @@ function CatalogProgress({
       <span>
         {limited > 0
           ? hasResults
-            ? "Only open sessions are shown."
+            ? "Showing sessions confirmed in this tab."
             : "Start a session to open a workspace."
           : hasResults
             ? "Results are incomplete."

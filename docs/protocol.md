@@ -60,13 +60,40 @@ Markdown tree.
   a browser-computed git diff.
 - Plans, policy, tasks, output, cancellation, and artifacts use the advertised
   status and task methods. Output cursors are byte offsets; reads are bounded.
-- The successfully opened/restored Session is the only current navigation
-  authority. rc.9 `session/list` rows are not projected because the response
-  proves neither Workspace nor Profile scope. A future server-owned catalog must
-  provide Workspace/SessionRef before multi-Session switching is enabled. Only
-  unsent drafts are browser state.
+- A successfully committed `session/open` may add its exact
+  `(workspace_root, active_profile_id, session_id)` tuple to bounded,
+  identity-bound tab navigation. rc.9 `session/list` rows are not projected
+  because the response proves neither Workspace nor Profile scope. Confirmed
+  refs are not a server catalog and contain no transcript or projection data.
 - Context, cost, and effective runtime-model usage merge typed progress metadata
   with the latest server status snapshot.
+
+## Turn ownership during Session navigation
+
+Core rc.9 couples an interactive turn to the WebSocket that accepted its
+`turn/start`. Physically closing that connection aborts the turn and appends a
+durable `connection_closed` terminal. The Web may therefore switch or create a
+Session during a running turn only after all of these conditions hold:
+
+1. the turn was started by this tab rather than merely observed through hydrate;
+2. Core has acknowledged `turn/start`;
+3. the browser-local FIFO has no pending prompts;
+4. the exact old Workspace/Profile/Session/turn owner transport can be retained.
+
+The destination uses the normal isolated candidate transaction. Observation of
+the old exact owner begins before candidate open, closing the terminal-event
+race. Candidate failure rolls observation back and leaves the foreground owner
+untouched. Candidate success preserves that transport and projects only its
+background status; conversation state in the new foreground Session still comes
+from its own hydrate/replay lane.
+
+A terminal turn event is not a transport-release signal on rc.9. Core can still
+perform persistence, task, goal, and accounting tail work, so the compatibility
+owner remains retained until explicit cleanup or transport loss. Refresh, tab
+close, network/proxy loss, and manual Disconnect close it and terminate a
+still-live turn. This behavior cannot provide durable detached execution across
+tabs or transport loss; that requires an explicit Core turn lease or quiesced
+signal.
 
 The model served by a Session runtime and the active Profile default are
 different projections. The composer reports only the former. Settings uses
@@ -121,8 +148,10 @@ session. It calls `launch/resolve` only when both the method and
 `session.workspace_cwd.v1` are available. The result chooses a Profile; it does
 not identify an existing Session. New Session and Add workspace keep a neutral
 `web-<uuid>` launch intent until that Profile is resolved, then open a fresh
-`<profile>:api:web-<uuid>` Session. Existing sidebar rows bypass launch
-resolution and open their exact server identity. The Web client never aliases or
+`<profile>:api:web-<uuid>` Session. An unambiguous fresh `activate` follows that
+resolved Profile automatically; `cross_profile` and `no_profile` remain
+explicit. Existing confirmed sidebar rows bypass launch resolution and open
+their exact server identity and Profile. The Web client never aliases or
 overwrites Octoscode TUI's `<profile>:local:tui#coding` conversation.
 
 This profile-bearing Web id is a compatibility requirement, not proof that Core
@@ -206,3 +235,4 @@ provides browser product coverage. Neither replaces the pinned real-Core gate.
 - [ADR 0013: Generated Core contract index](adr/0013-generated-core-contract-index.md)
 - [ADR 0014: Pinned Core runtime smoke](adr/0014-pinned-core-runtime-smoke.md)
 - [ADR 0015: Solo Web onboarding](adr/0015-solo-web-onboarding.md)
+- [ADR 0019: Tab Session navigation and background turn ownership](adr/0019-tab-session-navigation-and-background-turn-ownership.md)

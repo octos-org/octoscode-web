@@ -35,6 +35,10 @@ export class SessionDraftCache {
     }
   }
 
+  clear(): void {
+    this.#drafts.clear();
+  }
+
   get size(): number {
     return this.#drafts.size;
   }

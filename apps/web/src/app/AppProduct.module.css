@@ -5,6 +5,19 @@
   gap: 2px;
 }
 
+.sidebarFallback {
+  display: grid;
+  flex: none;
+  width: 280px;
+  height: 100%;
+  box-sizing: border-box;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  place-items: center;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+}
+
 .conversationTabs button {
   position: relative;
   align-self: stretch;
@@ -36,6 +49,12 @@
   flex: none;
   color: var(--dsw-alias-label-tertiary);
   font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+}
+
+.sessionControlsFallback {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
 }
 
 .newSessionHero {
@@ -76,6 +95,15 @@
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .sidebarFallback {
+    width: 100%;
+    min-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--dsw-alias-border-l2);
+  }
 }
 .deferredSurface {
   display: grid;

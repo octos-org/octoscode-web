@@ -38,10 +38,11 @@ pnpm install --frozen-lockfile
    To use another repository, select **Add workspace** and enter its path on the
    **Octos server host**, not the browser device. Add workspace validates that
    path and creates a fresh Session; it is not Workspace-registry CRUD.
-6. When Core returns an existing Session row with a usable identity, select it
-   to resume it. Chat and Trajectory both follow the selected Session. Do not
-   assume the list is complete on Core rc.9; unscoped/admin connections can
-   misroute a known-path list to the wrong Profile (octos#2146).
+6. Select any Session this tab has already confirmed to reopen it. Chat and
+   Trajectory both follow the selected Session. Multiple Sessions can share the
+   same Workspace path without replacing one another. Do not assume the list is
+   complete on Core rc.9; unscoped/admin connections can misroute a known-path
+   list to the wrong Profile (octos#2146).
 
 Workspace is the coding object that groups Sessions for one server path. Core
 validates and canonicalizes that path and owns every durable Session. For New
@@ -49,14 +50,41 @@ Session, the browser generates a fresh opaque Web identity behind the product
 flow and Core creates the durable ledger; users never enter an id.
 
 Current Core builds do not provide a complete server-wide Workspace catalog. In
-the current tab, the sidebar remembers only a bounded list of recent server
-paths. No Session ids, titles, prompts, or projections live in that cache. Core
-rc.9 can lose the requested Profile or silently ignore cwd on an unscoped/admin
-list call, and its response does not report the effective scope. The Web does
-not project those rows: only the active/restored Session is shown, while a
-recent path starts a new Session. Recents have no individual edit/remove action
-and never become a second database. The missing Core object contract is tracked
-in [octos#2146](https://github.com/octos-org/octos/issues/2146).
+the current tab, the sidebar remembers a bounded list of recent server paths and
+the minimal Workspace/Profile/Session routing tuples returned by successful
+opens. A local recency timestamp orders those confirmed rows. Session titles,
+prompts, transcripts, model output, and other durable projections never enter
+that cache.
+
+Core rc.9 can lose the requested Profile or silently ignore cwd on an
+unscoped/admin list call, and its response does not report the effective scope.
+The Web therefore does not project those rows as a catalog. It shows only
+Sessions this tab has successfully opened, while a recent path remains an entry
+point for a new Session. Recents and confirmed refs have no individual
+edit/remove action and never become a second database. The missing Core object
+contract is tracked in
+[octos#2146](https://github.com/octos-org/octos/issues/2146).
+
+## Switch Sessions while a turn is running
+
+After Core acknowledges a turn started by this tab, you can select another
+Session or create one in the same or another Workspace. The original Session
+continues to show its running or waiting status in the sidebar, and selecting it
+again restores its authoritative hydrate/replay projection. Browser-local queued
+prompts cannot move with that owner socket, and a `turn/start` whose
+acknowledgement has not arrived has ambiguous ownership, so either state blocks
+navigation until it settles.
+
+This is same-live-tab continuation, not a detached server job. Refreshing or
+closing the tab, losing the WebSocket through a network or proxy failure, or
+selecting **Disconnect** closes the rc.9 owner socket and terminates a
+still-running turn. Disconnect keeps the current tab's confirmed Session refs
+for reconnect. **Forget server** and endpoint/token identity changes clear those
+refs, recent Workspace paths, and in-memory drafts.
+
+For a fresh Web Session, an unambiguous `activate` result opens automatically
+with Core's resolved Profile. A `cross_profile` result still asks which Profile
+to use, and `no_profile` still opens onboarding or the truthful TUI fallback.
 
 The active Session's permission control and effective runtime model are in the
 composer footer. Full access appears only when advertised and requires a risk
@@ -119,10 +147,11 @@ display the canonical `octoscode onboard` fallback instead.
 
 After a successful connection, refreshing the same tab reopens the established
 Session. Only the server origin is durable. The token, auto-connect marker,
-active Session/Workspace/Profile restore hints, and recent Workspace paths are
-bound to that endpoint in tab-scoped `sessionStorage`; closing the tab forgets
-all of them. **Disconnect** keeps the endpoint and current tab data but stops
-automatic reconnection; **Forget server** clears both storage scopes.
+selected Session/Workspace/Profile restore hints, recent Workspace paths, and
+confirmed Session refs are bound to that endpoint and token in tab-scoped
+`sessionStorage`; closing the tab forgets all of them. **Disconnect** keeps the
+endpoint and current tab navigation data but stops automatic reconnection and
+terminates live owner transports; **Forget server** clears both storage scopes.
 
 ## Run the product fixture
 

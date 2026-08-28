@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSystemMessage,
   foldNotification,
+  terminalTurnOutcome,
   timelineFromHydrate,
   type TimelineEntry,
 } from "./model.ts";
@@ -196,5 +197,31 @@ describe("timeline projection", () => {
       omittedCount: 6,
     });
     expect(entries.at(-1)?.body).toBe("204");
+  });
+
+  it("decodes canonical terminal outcomes for transport ownership", () => {
+    expect(
+      terminalTurnOutcome({
+        jsonrpc: "2.0",
+        method: "projection/envelope",
+        params: {
+          session_id: "coding:local:main",
+          thread_id: "thread-1",
+          seq: 3,
+          turn_id: "turn-1",
+          payload: {
+            type: "turn_terminal",
+            data: { outcome: "completed" },
+          },
+        },
+      }),
+    ).toBe("completed");
+    expect(
+      terminalTurnOutcome({
+        jsonrpc: "2.0",
+        method: "turn/error",
+        params: { session_id: "coding:local:main", turn_id: "turn-1" },
+      }),
+    ).toBe("failed");
   });
 });

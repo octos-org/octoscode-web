@@ -949,6 +949,8 @@ function streamTurn(socket, sessionId, params, nextCursor) {
   const turnId = params.turn_id;
   const threadId = `thread-${turnId}`;
   const text = params.input?.[0]?.text ?? "Fixture prompt";
+  const completionDelayMs =
+    text === "Continue this turn while I open another Session" ? 1_500 : 350;
   notify(socket, sessionId, threadId, turnId, 1, nextCursor(), "user_message", {
     text,
     files: [],
@@ -1115,7 +1117,7 @@ function streamTurn(socket, sessionId, params, nextCursor) {
         token_usage: { input_tokens: 12, output_tokens: 9 },
       },
     );
-  }, 350);
+  }, completionDelayMs);
   return null;
 }
 

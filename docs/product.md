@@ -26,15 +26,15 @@ semantics. Octos Core remains the runtime and source of durable truth.
 
 | Area          | Current behavior                                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Connection    | Origin/token authentication gate, durable origin only, same-tab active-Session restore, and Settings disconnect/forget.     |
-| Navigation    | Collapsible Workspace/Session sidebar with search, grouped or flat views, New Session, Add workspace, and Settings.         |
+| Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.   |
+| Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.     |
 | Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback.  |
 | Conversation  | Session-local Chat with durable transcript, FIFO prompts, interrupt, commands, safe GFM, and highlighted code.              |
 | Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                      |
 | Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
-| Workspace     | Server-confirmed path, per-Workspace Session list/switch/create, per-Session drafts, and tab-scoped recent-path navigation. |
+| Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                      |
 
@@ -53,15 +53,50 @@ The composer also reports the model served by that Session's runtime; it does
 not present a Session-only model override.
 
 Current Core builds do not expose a complete server-wide Workspace/Session
-catalog. The browser remembers a bounded list of recent server paths—never
-Session ids, titles, prompts, or projections—as navigation hints. Core rc.9 can
-silently ignore the requested cwd and loses the target Profile for some
-unscoped/admin `session/list({cwd})` calls; its response does not echo either
-effective scope. The Web therefore does not project those rows at all. It shows
-only the Session that this client successfully opened or restored, and a recent
-Workspace remains an entry point for starting a Session rather than a history
-catalog. The authoritative object model and scoped SessionRef are tracked in
-[octos#2146](https://github.com/octos-org/octos/issues/2146).
+catalog. The browser remembers a bounded list of recent server paths and the
+minimal `(workspace_root, active_profile_id, session_id)` references that this
+tab has successfully opened. A local last-opened timestamp orders those rows. It
+does not cache Session titles, prompts, transcripts, model output, or other
+durable projections. Multiple confirmed Sessions may share one Workspace path
+without replacing each other.
+
+Those rows remain incomplete navigation memory. Core rc.9 can silently ignore
+the requested cwd and loses the target Profile for some unscoped/admin
+`session/list({cwd})` calls; its response does not echo either effective scope.
+The Web therefore does not project that list as a catalog. A new tab cannot
+discover older server Sessions until the authoritative object model and scoped
+SessionRef tracked in
+[octos#2146](https://github.com/octos-org/octos/issues/2146) land.
+
+## Session navigation and running turns
+
+A locally started turn becomes safe to move behind another Session only after
+Core acknowledges `turn/start`. The Web stages and hydrates the destination,
+then retains the exact old owner WebSocket while the new Session becomes the
+foreground view. The old Session row continues to show running, waiting,
+completed, or failed status; returning to it reconstructs conversation truth
+from server hydrate/replay rather than from a browser transcript copy.
+
+Browser-local pending prompts still belong to the selected Session's FIFO, and a
+start request without its acknowledgement has unresolved ownership. Either state
+blocks create/switch until it settles. A fresh unambiguous `activate` decision
+for a Web Session opens automatically; `cross_profile` and `no_profile` remain
+explicit product decisions.
+
+The rc.9 compatibility layer retains at most eight live owner connections.
+Reopening an already retained Session reclaims its exact connection and still
+works at the limit. A new target is refused at the limit with an explicit
+Disconnect/reconnect recovery path; the product never silently evicts a terminal
+owner because Core has not proved its tail work quiesced.
+
+This rc.9 compatibility behavior lasts only inside the same live tab. Refresh,
+tab close, network or proxy loss, and manual **Disconnect** close the owner
+WebSocket and terminate a still-running turn; even a terminal owner may still be
+finishing Core tail cleanup. Disconnect keeps the current tab's confirmed
+Session references for a later reconnect. **Forget server** or changing
+endpoint/token identity clears those references, recent Workspace paths, and
+in-memory drafts. Durable execution across transport loss requires a future
+server-owned turn lease.
 
 Settings opens from the bottom of the sidebar. General shows the active server
 and Workspace and provides Disconnect and Forget server. Models distinguishes
@@ -113,7 +148,8 @@ explicit Core contracts rather than more client-side inference:
   ([octos#2147](https://github.com/octos-org/octos/issues/2147),
   [octos#2148](https://github.com/octos-org/octos/issues/2148)).
 
-These are upstream contract boundaries, not invitations to add compatibility
-stores or a second event dialect. See
-[ADR 0018](adr/0018-dsh-aligned-product-shell.md) and the
+These are upstream contract boundaries, not invitations to add a transcript
+store or a second event dialect. See
+[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md),
+[ADR 0018](adr/0018-dsh-aligned-product-shell.md), and the
 [ADR index](adr/README.md) for the decisions behind the current product.

@@ -1,9 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// A failed live handshake must never place the password-field value in
-// Playwright's automatic accessibility snapshot artifact.
-process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
-
 const webPort = livePort("OCTOSCODE_LIVE_WEB_PORT", 4_174);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const proxyTarget = required("OCTOSCODE_LIVE_PROXY_TARGET");

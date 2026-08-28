@@ -35,12 +35,14 @@ recognized `/commands` are resolved locally.
 
 Current Core builds cannot yet provide an authoritative Workspace/Session
 catalog. During the current tab, the sidebar remembers recent paths, but it
-shows only the Session that this client successfully opened or restored. Core
-rc.9 can route an unscoped/admin `session/list({cwd})` through `_main` instead
-of the Workspace's coding Profile, or silently ignore cwd, without reporting the
+shows only the Sessions that this tab successfully opened and confirmed. Two
+Sessions with the same Workspace path remain separate rows. Core rc.9 can route
+an unscoped/admin `session/list({cwd})` through `_main` instead of the
+Workspace's coding Profile, or silently ignore cwd, without reporting the
 effective scope. The Web rejects those rows instead of placing them under the
-wrong Workspace. A new tab therefore begins with no Workspace recents even
-though the durable server has other work; only the endpoint survives.
+wrong Workspace. A new tab therefore begins with no Workspace recents or
+confirmed Session refs even though the durable server has other work; only the
+endpoint survives.
 
 Use **Add workspace** with the server path. This creates a fresh Session and
 makes the path available as a recent navigation hint; it does not import a
@@ -69,8 +71,42 @@ browser cannot safely guess a Profile and migrate that history; the Core
 resolver defect is tracked in
 [octos#2162](https://github.com/octos-org/octos/issues/2162).
 
-Session switching and creation are disabled while the selected Session has an
-active turn or queued prompts. Stop or finish that work before switching.
+If Core returned an unambiguous `activate` decision for a fresh Web Session, the
+browser opens it automatically. `cross_profile` still asks which Profile to use;
+`no_profile` still requires onboarding or the TUI fallback.
+
+Session switching and creation are allowed while a locally started turn is
+running after Core has acknowledged it. They remain blocked while a prompt is
+queued only in this browser or `turn/start` is still awaiting acknowledgement.
+Let that queue/start settle before switching.
+
+## New Session says eight background connections are being preserved
+
+Core rc.9 does not advertise when a terminal turn's owner connection is safe to
+release. The Web app therefore keeps a safety budget of eight live owner
+connections instead of closing an older one and potentially interrupting Core
+tail work or evicting a live Session scope.
+
+You can still select any Session whose owner is already retained: the app
+reclaims that exact connection without consuming another slot. To open a new
+target after the budget is full, explicitly **Disconnect**, reconnect, and then
+open it. Disconnect releases every retained transport and can terminate a turn
+or post-terminal cleanup still owned by those connections; confirmed Session
+references remain available in the same tab.
+
+## A background turn stopped after navigation or refresh
+
+Selecting or creating another Session does not close the owner WebSocket of a
+turn that this tab started and Core acknowledged. If the old Session later shows
+failed, check whether the WebSocket, reverse proxy, or Octos process restarted.
+
+Core rc.9 background continuation is transport-bound. Refreshing or closing the
+tab, losing the network/proxy connection, and selecting **Disconnect** all close
+the owner socket and terminate a still-running turn with `connection_closed`.
+Confirmed Session refs survive a same-tab refresh and Disconnect, but execution
+ownership does not. **Forget server** or changing endpoint/token identity clears
+the refs as well. Durable continuation across transport loss requires a future
+server-owned turn lease; it cannot be repaired with browser storage.
 
 ## Full access cannot be selected
 

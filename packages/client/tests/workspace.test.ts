@@ -40,6 +40,15 @@ describe("workspace product contract", () => {
 
   it("rejects contradictory launch decisions", () => {
     expect(parseLaunchResolveResult({ decision: "resume" })).toBeNull();
+    for (const decision of ["resume", "activate"] as const) {
+      expect(
+        parseLaunchResolveResult({
+          decision,
+          resolved_profile: "deepseek",
+          existing_profiles: ["glm"],
+        }),
+      ).toBeNull();
+    }
     expect(
       parseLaunchResolveResult({
         decision: "cross_profile",
@@ -50,6 +59,55 @@ describe("workspace product contract", () => {
       parseLaunchResolveResult({
         decision: "no_profile",
         resolved_profile: "deepseek",
+      }),
+    ).toBeNull();
+    expect(
+      parseLaunchResolveResult({
+        decision: "no_profile",
+        existing_profiles: ["deepseek"],
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects ambiguous or unbounded launch profile identities", () => {
+    expect(
+      parseLaunchResolveResult({
+        decision: "cross_profile",
+        resolved_profile: "deepseek",
+        existing_profiles: ["glm", "glm"],
+      }),
+    ).toBeNull();
+    expect(
+      parseLaunchResolveResult({
+        decision: "cross_profile",
+        resolved_profile: "deepseek",
+        existing_profiles: ["glm", "deepseek"],
+      }),
+    ).toBeNull();
+
+    const oversizedProfileId = "p".repeat(65);
+    expect(
+      parseLaunchResolveResult({
+        decision: "activate",
+        resolved_profile: oversizedProfileId,
+      }),
+    ).toBeNull();
+    expect(
+      parseLaunchResolveResult({
+        decision: "cross_profile",
+        resolved_profile: "deepseek",
+        existing_profiles: [oversizedProfileId],
+      }),
+    ).toBeNull();
+
+    expect(
+      parseLaunchResolveResult({
+        decision: "cross_profile",
+        resolved_profile: "deepseek",
+        existing_profiles: Array.from(
+          { length: 257 },
+          (_, index) => `profile-${index}`,
+        ),
       }),
     ).toBeNull();
   });

@@ -28,21 +28,20 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
   await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
 
   const permission = page.getByRole("button", { name: /^Permission:/ });
-  const activateCoding = page.getByRole("button", {
-    name: /^Activate coding/,
-  });
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
   });
-  await expect(
-    permission.or(activateCoding).or(onboarding).first(),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(permission.or(onboarding).first()).toBeVisible({
+    timeout: 30_000,
+  });
   if (await onboarding.isVisible()) {
     throw new Error(
       "The live server requires Profile onboarding; configure it before the GLM gate.",
     );
   }
-  if (await activateCoding.isVisible()) await activateCoding.click();
+  await expect(
+    page.getByRole("heading", { name: "Activate this coding workspace?" }),
+  ).toHaveCount(0);
 
   await expect(page.locator(".workspace-title small")).toHaveText(cwd, {
     timeout: 30_000,
@@ -140,6 +139,120 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
     page.getByRole("button", { name: "Connect", exact: true }),
   ).toBeVisible();
 });
+
+test("keeps a GLM turn alive while a sibling Session is focused", async ({
+  page,
+}) => {
+  const { navigation, composer } = await openLiveWorkspace(page);
+  const sessions = navigation.getByRole("treeitem", { name: /Session / });
+  await expect(sessions).toHaveCount(1);
+  const originalTitle = await sessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected a confirmed Session title");
+
+  const marker = "GLM_BACKGROUND_E2E_OK";
+  await composer.fill(
+    `Use the shell tool to execute exactly: sleep 12; printf 'background-e2e\\n' > .octoscode-background-e2e.tmp; cat .octoscode-background-e2e.tmp; rm .octoscode-background-e2e.tmp. Do not modify anything else. After the command succeeds, reply with the exact marker ${marker}.`,
+  );
+  await page.getByRole("button", { name: "Send prompt" }).click();
+
+  const stop = page.getByRole("button", { name: "Stop", exact: true });
+  const approval = page.getByRole("dialog").filter({
+    hasText: "Approval required",
+  });
+  await expect(stop.or(approval).first()).toBeVisible({ timeout: 60_000 });
+  if (await approval.isVisible()) {
+    await approval.getByRole("button", { name: /This session/ }).click();
+    await expect(stop).toBeVisible({ timeout: 30_000 });
+  }
+
+  const workspaceLabel = cwd.split("/").filter(Boolean).at(-1) ?? cwd;
+  const workspace = navigation.getByRole("treeitem", {
+    name: workspaceLabel,
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", { name: workspaceLabel, exact: true })
+    .hover();
+  await navigation
+    .getByRole("button", { name: `New session in ${workspaceLabel}` })
+    .click();
+
+  await expect(sessions).toHaveCount(2, { timeout: 30_000 });
+  await expect(
+    navigation.locator('[title="Completed in background"]'),
+  ).toBeVisible({ timeout: 6 * 60_000 });
+
+  const originalSession = navigation
+    .locator('button[role="treeitem"]')
+    .filter({ hasText: originalTitle });
+  await originalSession.click();
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.locator(".entry-assistant").filter({ hasText: marker }).last(),
+  ).toBeVisible({ timeout: 60_000 });
+  await expect(
+    page.getByText("connection_closed", { exact: false }),
+  ).toHaveCount(0);
+
+  const settingsButton = navigation.getByRole("button", { name: "Settings" });
+  await settingsButton.click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "General" }).click();
+  await settings.getByRole("button", { name: "Disconnect" }).click();
+});
+
+async function openLiveWorkspace(page: Page): Promise<{
+  navigation: Locator;
+  composer: Locator;
+}> {
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(endpoint);
+  await page.getByLabel("Auth token").fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  const navigation = productNavigation(page);
+  await expect(navigation).toBeVisible({ timeout: 30_000 });
+  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
+  await addWorkspace.getByLabel("Server workspace path").fill(cwd);
+  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+
+  const permission = page.getByRole("button", { name: /^Permission:/ });
+  const onboarding = page.getByRole("dialog", {
+    name: "Create your local coding profile",
+  });
+  await expect(permission.or(onboarding).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  if (await onboarding.isVisible()) {
+    throw new Error(
+      "The live server requires Profile onboarding; configure it before the GLM gate.",
+    );
+  }
+  await permission.click();
+  const permissionMenu = page.getByRole("menu", { name: "Permission" });
+  const workspaceWrite = permissionMenu
+    .getByRole("menuitemradio", { name: /^Write ·/ })
+    .first();
+  if ((await workspaceWrite.getAttribute("aria-checked")) !== "true") {
+    await workspaceWrite.click();
+  } else {
+    await page.keyboard.press("Escape");
+  }
+
+  await expect(
+    page.getByRole("button", {
+      name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await expect(composer).toBeEnabled({ timeout: 30_000 });
+  return { navigation, composer };
+}
 
 function required(name: string): string {
   const value = process.env[name]?.trim();

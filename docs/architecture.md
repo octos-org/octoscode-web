@@ -52,21 +52,25 @@ bridge, or raw protocol event bus.
 
 ## State ownership
 
-| State                                                         | Owner                                                  |
-| ------------------------------------------------------------- | ------------------------------------------------------ |
-| Sessions, transcript, tasks, plans, permissions, diffs, usage | `octos serve`                                          |
-| Cursor, hydrate integrity, and current server projections     | Protocol/session feature boundaries                    |
-| Drafts, focus, selection, and expansion                       | Browser memory                                         |
-| Remembered server endpoint                                    | `localStorage`; the only durable browser preference    |
-| Token, auto-connect, and active Session restore hints         | Endpoint-bound current tab (`sessionStorage`)          |
-| Recent Workspace paths                                        | Current tab (`sessionStorage`); never Session metadata |
-| Provider credential draft                                     | Operation-local browser memory; sent only to Core      |
-| Saved provider credential                                     | `octos serve`; browser receives only `has_api_key`     |
+| State                                                         | Owner                                                                |
+| ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Sessions, transcript, tasks, plans, permissions, diffs, usage | `octos serve`                                                        |
+| Cursor, hydrate integrity, and current server projections     | Protocol/session feature boundaries                                  |
+| Drafts, focus, selection, and expansion                       | Browser memory                                                       |
+| Remembered server endpoint                                    | `localStorage`; the only durable browser preference                  |
+| Token, auto-connect, and selected Session restore hints       | Endpoint-bound current tab (`sessionStorage`)                        |
+| Recent Workspace paths                                        | Endpoint-bound current tab (`sessionStorage`)                        |
+| Confirmed Session routing tuples and local recency            | Endpoint-and-token-bound current tab; navigation only, not a catalog |
+| Retained acknowledged-turn owner transports                   | Current live tab; closed on refresh, loss, or Disconnect             |
+| Provider credential draft                                     | Operation-local browser memory; sent only to Core                    |
+| Saved provider credential                                     | `octos serve`; browser receives only `has_api_key`                   |
 
-The foreground session orchestration boundary converts validated protocol
-notifications into feature-specific actions. Durable state is always
-reconstructible from server hydrate/replay; browser state must not be mistaken
-for runtime truth.
+The selected-session orchestration boundary converts validated protocol
+notifications into feature-specific actions. A committed `session/open` may add
+its exact Workspace/Profile/Session routing tuple to tab navigation, but durable
+state remains reconstructible from server hydrate/replay. Retained background
+owner sockets preserve execution lifetime; they do not preserve a second copy of
+transcript or Session state.
 
 The React hook is a composition root, not a catch-all state API. Consumers see
 grouped connection, conversation, interaction, safety, work, workspace-product,
@@ -87,6 +91,10 @@ their presentation but not their state transition:
 - approval decisions preserve request, session, and deny scope;
 - workspace resolution validates the server path/profile decision, while New
   Session uses a fresh opaque Web identity;
+- an unambiguous fresh Web `activate` follows the server-resolved Profile
+  automatically, while `cross_profile` and `no_profile` remain explicit;
+- a server-acknowledged local turn may retain its owner transport during Session
+  navigation, while pending local prompts and dispatching starts block;
 - the composer reports the effective Session runtime model, while Settings may
   manage provider/model/route configuration and the active Profile default;
 - provider keys are write-only operation arguments in the client; Core owns
@@ -108,21 +116,31 @@ See [ADR 0002](adr/0002-dsh-evaluation.md) and
 - Authentication is separate from work selection. Inside the shell the product
   hierarchy is Workspace → Session, with Chat and Trajectory scoped to the
   selected Session.
-- Per-server Workspace recents are a bounded, tab-scoped path cache, not a
-  durable catalog. The server-confirmed canonical root and successfully opened
-  Session projection remain truth. Current `session/list` results carry no
+- Per-server Workspace recents and server-confirmed Session routing tuples are
+  bounded, tab-scoped navigation memory, not a durable catalog. Multiple tuples
+  can share one Workspace path. Current `session/list` results carry no
   effective Workspace/Profile scope, so they are not used as a product catalog;
-  recent paths only start a new Session until Core exposes Workspace/SessionRef.
+  only a successful exact open can add a Session row until Core exposes
+  Workspace/SessionRef.
+- Background continuation is transport-bound on Core rc.9. A server-acknowledged
+  local turn may keep its owner socket while another Session is selected in the
+  same live tab. Refresh, tab close, network loss, and Disconnect close that
+  socket and terminate a still-running turn.
 - Reconnect without hydrate, replay, dedupe, session scope, and gap handling is
   not recovery.
 
 Only the connection origin is remembered durably. A successful connection binds
 the token, auto-connect marker, active Workspace/Profile/Session restore hints,
-and recent Workspace paths to that endpoint in the current tab. Closing the tab
-leaves the origin but clears that working context. See
+recent Workspace paths, and confirmed Session routing tuples to that endpoint
+and token in the current tab. Disconnect retains that navigation memory but
+stops automatic reconnection; Forget or an identity change clears it. Closing
+the tab leaves the origin but clears that working context. See
+[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md) and
 [ADR 0018](adr/0018-dsh-aligned-product-shell.md) for the current boundary.
 [ADR 0017](adr/0017-workspace-session-and-connection-memory.md) is the
-superseded historical restore design.
+superseded historical restore design. Durable detached turn ownership remains a
+Core contract tracked in
+[octos#2167](https://github.com/octos-org/octos/issues/2167).
 
 Detailed wire and compatibility rules live in
 [Protocol integration](protocol.md).
@@ -142,13 +160,13 @@ sub-11px text.
 
 ## Verification layers
 
-| Layer                   | Responsibility                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| Unit tests              | Parsers, reducers, queues, command rules, and feature rendering.                                  |
-| Playwright              | Launch decisions, live turns, session switching, responsive behavior, and WCAG gates in Chromium. |
-| Contract gate           | Generated vocabulary matches the immutable Core source/blob pin.                                  |
-| Real-Core gate          | A checksummed released Core completes the browser-critical transport flow.                        |
-| Deployment verification | Static artifact identity, contents, base path, and hosting assumptions.                           |
+| Layer                   | Responsibility                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Unit tests              | Parsers, reducers, queues, command rules, and feature rendering.                                              |
+| Playwright              | Launch decisions, background turns, exact Session switching/persistence, responsive behavior, and WCAG gates. |
+| Contract gate           | Generated vocabulary matches the immutable Core source/blob pin.                                              |
+| Real-Core gate          | A checksummed released Core completes the browser-critical transport flow.                                    |
+| Deployment verification | Static artifact identity, contents, base path, and hosting assumptions.                                       |
 
 An application error boundary contains unexpected React failures, offers a safe
 reload, and produces a bounded diagnostic with query tokens and bearer-shaped

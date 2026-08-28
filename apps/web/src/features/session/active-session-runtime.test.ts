@@ -16,6 +16,7 @@ import type { SessionConnectionInput } from "./connection-lifecycle.ts";
 import {
   ActiveSessionRuntime,
   StaleSessionAuthorityError,
+  prepareRetainedCandidateSession,
   type ActiveSessionRuntimeEvent,
 } from "./active-session-runtime.ts";
 
@@ -134,6 +135,51 @@ class FakeActiveClient {
 }
 
 describe("ActiveSessionRuntime", () => {
+  it("stages an already-connected retained owner without reconnecting or taking cleanup authority", async () => {
+    const owner = new FakeActiveClient();
+    owner.status = "connected";
+    owner.hydrateImplementation = async () => {
+      owner.emit(scopedNotification("buffered"));
+      return hydrated;
+    };
+    const controller = new AbortController();
+
+    const prepared = await prepareRetainedCandidateSession({
+      client: owner,
+      config: sessionConfig,
+      signal: controller.signal,
+      validateOpened: () => undefined,
+    });
+    const candidate = prepared.release();
+
+    expect(owner.calls).toEqual(["open", "hydrate"]);
+    expect(owner.disconnectCount).toBe(0);
+    expect(candidate.client).toBe(owner);
+    expect(candidate.notifications).toEqual([scopedNotification("buffered")]);
+  });
+
+  it("cancels retained-owner staging without disconnecting the parked authority", async () => {
+    const owner = new FakeActiveClient();
+    owner.status = "connected";
+    const opening = deferred<SessionOpenResult>();
+    owner.openImplementation = () => opening.promise;
+    const controller = new AbortController();
+
+    const preparing = prepareRetainedCandidateSession({
+      client: owner,
+      config: sessionConfig,
+      signal: controller.signal,
+      validateOpened: () => undefined,
+    });
+    controller.abort();
+
+    await expect(preparing).rejects.toThrow(
+      "Retained candidate opening was cancelled",
+    );
+    expect(owner.disconnectCount).toBe(0);
+    opening.resolve({ opened });
+  });
+
   it("authenticates a server without opening a hidden Session", async () => {
     const client = new FakeActiveClient();
     const createdWith: SessionConnectionInput[] = [];
@@ -210,6 +256,33 @@ describe("ActiveSessionRuntime", () => {
     ]);
   });
 
+  it("retires the old product binding without closing a preserved turn-owner transport", async () => {
+    const server = new FakeActiveClient();
+    const candidate = new FakeActiveClient();
+    candidate.status = "connected";
+    const { runtime } = testRuntime(() => server);
+    const previous = await runtime.authenticate(connection);
+    if (!previous) throw new Error("missing authority");
+
+    const next = runtime.adoptCandidate({
+      expected: previous,
+      config: sessionConfig,
+      candidate: candidateSnapshot(candidate),
+      preservePreviousTransport: true,
+    });
+
+    expect(runtime.currentAuthority()).toBe(next);
+    expect(server.disconnectCount).toBe(0);
+    expect(candidate.disconnectCount).toBe(0);
+
+    server.emit(scopedNotification("old-session-event"));
+    expect(runtime.currentAuthority()).toBe(next);
+    expect(runtime.getSnapshot()).toMatchObject({
+      session: { sessionId: "session-one" },
+      recovery: { phase: "healthy" },
+    });
+  });
+
   it("rejects a stale candidate without touching either transport", async () => {
     const first = new FakeActiveClient();
     const second = new FakeActiveClient();
@@ -235,6 +308,30 @@ describe("ActiveSessionRuntime", () => {
     ).toThrow(StaleSessionAuthorityError);
     expect(runtime.currentAuthority()).toBe(current);
     expect(second.disconnectCount).toBe(0);
+    expect(candidate.disconnectCount).toBe(0);
+  });
+
+  it("authorizes the launch commit before mutating transport authority", async () => {
+    const server = new FakeActiveClient();
+    const candidate = new FakeActiveClient();
+    candidate.status = "connected";
+    const { runtime } = testRuntime(() => server);
+    const previous = await runtime.authenticate(connection);
+    if (!previous) throw new Error("missing authority");
+    const authorizeCommit = vi.fn(() => false);
+
+    expect(() =>
+      runtime.adoptCandidate({
+        expected: previous,
+        config: sessionConfig,
+        candidate: candidateSnapshot(candidate),
+        authorizeCommit,
+      }),
+    ).toThrow(StaleSessionAuthorityError);
+
+    expect(authorizeCommit).toHaveBeenCalledOnce();
+    expect(runtime.currentAuthority()).toBe(previous);
+    expect(server.disconnectCount).toBe(0);
     expect(candidate.disconnectCount).toBe(0);
   });
 
@@ -433,6 +530,49 @@ describe("ActiveSessionRuntime", () => {
           "session/open returned session-other, expected session-one",
         ),
         session: { sessionId: "session-one" },
+      });
+      runtime.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails closed when reconnect crosses the committed Profile scope", async () => {
+    vi.useFakeTimers();
+    try {
+      const server = new FakeActiveClient();
+      const candidate = new FakeActiveClient();
+      candidate.status = "connected";
+      const reconnect = new FakeActiveClient();
+      reconnect.openImplementation = async () => ({
+        opened: { ...opened, active_profile_id: "review" },
+      });
+      const clients = [server, reconnect];
+      const { runtime } = testRuntime(() => {
+        const client = clients.shift();
+        if (!client) throw new Error("unexpected client request");
+        return client;
+      });
+      const previous = await runtime.authenticate(connection);
+      if (!previous) throw new Error("missing authority");
+      runtime.adoptCandidate({
+        expected: previous,
+        config: sessionConfig,
+        candidate: candidateSnapshot(candidate),
+      });
+
+      candidate.setStatus("disconnected");
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(reconnect.calls).toEqual(["connect", "open", "disconnect"]);
+      expect(runtime.currentAuthority()?.profileId).toBe("coding");
+      expect(runtime.getSnapshot()).toMatchObject({
+        phase: "reconnect_wait",
+        authenticated: true,
+        error: expect.stringContaining(
+          "session/open returned Profile review, expected coding",
+        ),
+        session: { profileId: "coding", cwd: "/srv/project" },
       });
       runtime.disconnect();
     } finally {

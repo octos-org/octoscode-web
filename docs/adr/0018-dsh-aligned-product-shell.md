@@ -4,6 +4,9 @@
 - Date: 2026-08-27
 - Supersedes: ADR 0012 and ADR 0017; the primary session-files presentation in
   ADR 0009
+- Superseded in part by:
+  [ADR 0019](0019-tab-session-navigation-and-background-turn-ownership.md) for
+  tab-confirmed Session references and acknowledged-turn background navigation
 
 ## Context
 

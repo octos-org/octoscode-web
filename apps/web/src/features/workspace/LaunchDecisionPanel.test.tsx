@@ -65,9 +65,9 @@ describe("LaunchDecisionPanel", () => {
           phase: "awaiting_choice",
           cwd: "/srv/work/project",
           decision: {
-            decision: "activate",
+            decision: "cross_profile",
             resolved_profile: "coding",
-            existing_profiles: [],
+            existing_profiles: ["review"],
           },
         }}
         onboarding={{
@@ -86,6 +86,7 @@ describe("LaunchDecisionPanel", () => {
     );
     expect(html).toContain('role="alert"');
     expect(html).toContain("The Session could not be hydrated.");
-    expect(html).toContain("Activate coding");
+    expect(html).toContain("Start coding here");
+    expect(html).not.toContain("Activate coding");
   });
 });

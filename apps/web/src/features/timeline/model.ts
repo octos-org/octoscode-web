@@ -231,6 +231,24 @@ export function terminalTurnId(notification: RpcNotification): string | null {
   return envelope?.payload.type === "turn_terminal" ? envelope.turn_id : null;
 }
 
+export function terminalTurnOutcome(
+  notification: RpcNotification,
+): "completed" | "failed" | null {
+  if (notification.method === CORE_UI_METHODS.TURN_COMPLETED) {
+    return "completed";
+  }
+  if (notification.method === CORE_UI_METHODS.TURN_ERROR) return "failed";
+  if (notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE) return null;
+  const envelope = parseProjectionEnvelope(notification.params);
+  if (
+    envelope?.payload.type !== "turn_terminal" ||
+    !isRecord(envelope.payload.data)
+  ) {
+    return null;
+  }
+  return envelope.payload.data.outcome === "completed" ? "completed" : "failed";
+}
+
 function foldProjection(
   entries: readonly TimelineEntry[],
   turnId: string,

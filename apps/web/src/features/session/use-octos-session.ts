@@ -17,9 +17,17 @@ import {
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
-import type {
-  ActiveSessionAuthority,
-  ActiveSessionRuntimeEvent,
+import {
+  BackgroundTurnManager,
+  type BackgroundTurnSessionScope,
+  type BackgroundTurnSnapshot,
+  type PreparedBackgroundTurn,
+  type PreparedBackgroundTurnReclaim,
+} from "./background-turn-manager.ts";
+import {
+  prepareRetainedCandidateSession,
+  type ActiveSessionAuthority,
+  type ActiveSessionRuntimeEvent,
 } from "./active-session-runtime.ts";
 import { useServerConnection } from "./use-server-connection.ts";
 import {
@@ -63,6 +71,7 @@ import {
   addSystemMessage,
   foldNotification,
   terminalTurnId,
+  terminalTurnOutcome,
   timelineFromHydrate,
   type TimelineEntry,
 } from "../timeline/model.ts";
@@ -170,6 +179,7 @@ export interface OctosSessionRuntime {
     state: WorkspaceProductState;
     launch: LaunchRuntimeState;
     transitioning: boolean;
+    backgroundTurns: readonly BackgroundTurnSnapshot[];
     onboarding: OnboardingRuntimeState;
     refresh: () => Promise<void>;
     listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
@@ -177,7 +187,8 @@ export interface OctosSessionRuntime {
     openSession: (input: {
       sessionId: string;
       cwd: string;
-      profileId?: string | null;
+      profileId?: string;
+      resolveLaunch?: boolean;
     }) => Promise<WorkspaceOpenOutcome>;
     deleteSession: (sessionId: string) => Promise<void>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
@@ -214,6 +225,21 @@ export function useOctosSession(): OctosSessionRuntime {
   const connectionSnapshot = serverConnection.snapshot;
   const eventId = useRef(0);
   const candidateAbortRef = useRef<AbortController | null>(null);
+  const lifecycleEpochRef = useRef(0);
+  const backgroundTurnManagerRef = useRef<BackgroundTurnManager<OctosUiClient>>(
+    new BackgroundTurnManager<OctosUiClient>(),
+  );
+  const pendingBackgroundHandoffRef = useRef<{
+    lease: LaunchTransitionLease;
+    sourceGeneration: number;
+    sourceClient: OctosUiClient;
+    handoff: PreparedBackgroundTurn;
+  } | null>(null);
+  const pendingBackgroundReclaimRef = useRef<{
+    lease: LaunchTransitionLease;
+    scope: BackgroundTurnSessionScope;
+    reclaim: PreparedBackgroundTurnReclaim<OctosUiClient>;
+  } | null>(null);
   const launchTransitionRef = useRef(
     new LaunchTransitionCoordinator<
       SessionConnectionInput,
@@ -225,6 +251,9 @@ export function useOctosSession(): OctosSessionRuntime {
   const pendingTurnAfterHydrateRef = useRef<PromptTurn | null>(null);
   const [restoreRejected, setRestoreRejected] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [backgroundTurns, setBackgroundTurns] = useState<
+    readonly BackgroundTurnSnapshot[]
+  >([]);
   const [eventLog, setEventLog] = useState<{
     events: ObservedEvent[];
     omitted: number;
@@ -347,17 +376,152 @@ export function useOctosSession(): OctosSessionRuntime {
   runtimeEventSinkRef.current = handleRuntimeEvent;
 
   useEffect(
-    () => () => {
-      candidateAbortRef.current?.abort();
-      launchTransitionRef.current.cancel();
-    },
+    () =>
+      backgroundTurnManagerRef.current.subscribe(() => {
+        setBackgroundTurns([...backgroundTurnManagerRef.current.getSnapshot()]);
+      }),
     [],
   );
+
+  useEffect(() => {
+    const epoch = ++lifecycleEpochRef.current;
+    return () => {
+      candidateAbortRef.current?.abort();
+      launchTransitionRef.current.cancel();
+      const pending = pendingBackgroundHandoffRef.current;
+      pendingBackgroundHandoffRef.current = null;
+      pending?.handoff.rollback();
+      const reclaim = pendingBackgroundReclaimRef.current;
+      pendingBackgroundReclaimRef.current = null;
+      reclaim?.reclaim.rollback();
+      queueMicrotask(() => {
+        // React StrictMode immediately mounts the same hook again after its
+        // development-only cleanup. Only a true final unmount owns shutdown
+        // of parked sockets; the remount advances this epoch first.
+        if (lifecycleEpochRef.current === epoch) {
+          backgroundTurnManagerRef.current.dispose();
+        }
+      });
+    };
+  }, []);
 
   const markTransitioning = (next: boolean) => {
     transitioningRef.current = next;
     setTransitioning(next);
   };
+
+  function rollbackBackgroundHandoff(lease?: LaunchTransitionLease): void {
+    const pending = pendingBackgroundHandoffRef.current;
+    if (!pending || (lease && pending.lease !== lease)) return;
+    pending.handoff.rollback();
+    pendingBackgroundHandoffRef.current = null;
+  }
+
+  function rollbackBackgroundReclaim(lease?: LaunchTransitionLease): void {
+    const pending = pendingBackgroundReclaimRef.current;
+    if (!pending || (lease && pending.lease !== lease)) return;
+    pending.reclaim.rollback();
+    pendingBackgroundReclaimRef.current = null;
+  }
+
+  function rollbackBackgroundOwnership(lease?: LaunchTransitionLease): void {
+    // Restore capacity only after the source reservation has been released.
+    rollbackBackgroundHandoff(lease);
+    rollbackBackgroundReclaim(lease);
+  }
+
+  function prepareBackgroundReclaim(
+    config: SessionConnectionInput,
+    lease: LaunchTransitionLease,
+  ): PreparedBackgroundTurnReclaim<OctosUiClient> | null {
+    const scope: BackgroundTurnSessionScope = {
+      workspaceRoot: config.cwd.trim(),
+      profileId: config.profileId.trim(),
+      sessionId: config.sessionId.trim(),
+    };
+    const existing = pendingBackgroundReclaimRef.current;
+    if (
+      existing?.lease === lease &&
+      sameBackgroundScope(existing.scope, scope) &&
+      existing.reclaim.client.status === "connected"
+    ) {
+      return existing.reclaim;
+    }
+    if (existing) {
+      // A target-scope exchange and its source handoff share one capacity
+      // transaction. Release the source reservation first, then restore the
+      // old target slot; the caller immediately prepares both for the new
+      // scope, so a full manager can never later commit MAX + 1 owners.
+      rollbackBackgroundHandoff(existing.lease);
+      rollbackBackgroundReclaim(existing.lease);
+    }
+    if (!scope.workspaceRoot || !scope.profileId || !scope.sessionId)
+      return null;
+    const reclaim = backgroundTurnManagerRef.current.prepareReclaim(scope);
+    if (!reclaim) return null;
+    pendingBackgroundReclaimRef.current = { lease, scope, reclaim };
+    return reclaim;
+  }
+
+  function prepareBackgroundHandoff(
+    authority: ActiveSessionAuthority<OctosUiClient>,
+    lease: LaunchTransitionLease,
+  ): boolean {
+    const existing = pendingBackgroundHandoffRef.current;
+    if (
+      existing?.lease === lease &&
+      existing.sourceGeneration === authority.generation &&
+      existing.sourceClient === authority.client
+    ) {
+      return true;
+    }
+    if (existing) rollbackBackgroundHandoff(existing.lease);
+    const queue = turnController.snapshot();
+    if (queue.pending.length) {
+      workspaceController.setError(
+        "Queued prompts belong to this Session. Let them run or stop queuing before switching.",
+      );
+      return false;
+    }
+    const ownership = turnController.activeTurnOwnership();
+    if (ownership === "dispatching") {
+      workspaceController.setError(
+        "Wait for Octos to accept the current turn before switching Sessions.",
+      );
+      return false;
+    }
+    if (ownership !== "local-owner") return true;
+    const turn = turnController.backgroundHandoffTurn();
+    if (!turn || !authority.sessionId) {
+      workspaceController.setError(
+        "The current turn cannot be moved to the background yet.",
+      );
+      return false;
+    }
+    try {
+      const handoff = backgroundTurnManagerRef.current.prepare({
+        client: authority.client,
+        workspaceRoot: authority.cwd,
+        profileId: authority.profileId,
+        sessionId: authority.sessionId,
+        turnId: turn.turnId,
+        initialState:
+          turn.state === "running" && (approval || question)
+            ? "waiting"
+            : turn.state,
+      });
+      pendingBackgroundHandoffRef.current = {
+        lease,
+        sourceGeneration: authority.generation,
+        sourceClient: authority.client,
+        handoff,
+      };
+      return true;
+    } catch (reason) {
+      workspaceController.setError(errorMessage(reason));
+      return false;
+    }
+  }
 
   function resetProductSessionState(): void {
     pendingTurnAfterHydrateRef.current = null;
@@ -403,9 +567,27 @@ export function useOctosSession(): OctosSessionRuntime {
         event.hydrated,
         event.authority.capabilities,
       );
+      const pendingReclaim = pendingBackgroundReclaimRef.current;
+      const reclaimedOwner =
+        event.reason === "candidate" &&
+        pendingReclaim?.reclaim.client === event.authority.client &&
+        sameBackgroundScope(pendingReclaim.scope, {
+          workspaceRoot: event.authority.cwd,
+          profileId: event.authority.profileId,
+          sessionId: event.authority.sessionId,
+        })
+          ? pendingReclaim.reclaim.snapshot()
+          : null;
       pendingTurnAfterHydrateRef.current = turnController.reconcileFromHydrate(
         event.hydrated,
+        event.reason === "recovery",
       );
+      if (reclaimedOwner) {
+        turnController.restoreTransportOwnership({
+          turnId: reclaimedOwner.turnId,
+          state: reclaimedOwner.state,
+        });
+      }
       // A same-transport durable recovery does not replace the capability/RPC
       // authority. Candidate and reconnect hydrates do, so only those retire
       // controller requests that may belong to an obsolete socket.
@@ -469,11 +651,16 @@ export function useOctosSession(): OctosSessionRuntime {
 
   function failLaunchTransition(
     lease: LaunchTransitionLease,
-    reason: unknown,
+    reason?: unknown,
   ): void {
     if (!launchTransitionRef.current.isCurrent(lease)) return;
-    workspaceController.setError(errorMessage(reason));
+    // Some preparation failures already set a precise, actionable product
+    // error (notably the retained-owner capacity boundary). Do not replace it
+    // with a generic transition failure while still cleaning up the lease.
+    if (reason !== undefined)
+      workspaceController.setError(errorMessage(reason));
     if (!restoreLaunchChoice(lease)) {
+      rollbackBackgroundOwnership(lease);
       launchTransitionRef.current.discard(lease);
       setLaunch(EMPTY_LAUNCH_RUNTIME);
     }
@@ -497,6 +684,8 @@ export function useOctosSession(): OctosSessionRuntime {
     input: SessionConnectionInput,
     restoreAfterAuthentication = false,
   ) => {
+    rollbackBackgroundOwnership();
+    backgroundTurnManagerRef.current.clear();
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
@@ -557,9 +746,15 @@ export function useOctosSession(): OctosSessionRuntime {
       ...(config.profileId ? { profile_id: config.profileId } : {}),
     });
     if (!stillOwnsTransition()) return null;
-    if (decision.decision === "resume" && decision.resolved_profile) {
+    const automaticProfile =
+      decision.decision === "resume" ||
+      (decision.decision === "activate" &&
+        config.sessionId.trim().startsWith("web-"))
+        ? decision.resolved_profile
+        : undefined;
+    if (automaticProfile) {
       setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
-      return launchProfileConfig(config, decision.resolved_profile);
+      return launchProfileConfig(config, automaticProfile);
     }
     if (!launchTransitionRef.current.rememberDecision(lease, decision)) {
       return null;
@@ -593,6 +788,18 @@ export function useOctosSession(): OctosSessionRuntime {
       );
       return "failed";
     }
+    let reclaim: PreparedBackgroundTurnReclaim<OctosUiClient> | null = null;
+    try {
+      reclaim = prepareBackgroundReclaim(config, lease);
+    } catch (reason) {
+      failLaunchTransition(lease, reason);
+      return "failed";
+    }
+    if (!prepareBackgroundHandoff(previous, lease)) {
+      rollbackBackgroundReclaim(lease);
+      failLaunchTransition(lease);
+      return "failed";
+    }
 
     candidateAbortRef.current?.abort();
     const abortController = new AbortController();
@@ -610,43 +817,72 @@ export function useOctosSession(): OctosSessionRuntime {
     let prepared: PreparedCandidateSession<OctosUiClient> | null = null;
     let released: CandidateSessionSnapshot<OctosUiClient> | null = null;
     try {
-      prepared = await prepareCandidateSession({
-        config,
-        signal: abortController.signal,
-        createClient: (candidateConfig) =>
-          new OctosUiClient({
-            endpoint: candidateConfig.endpoint,
-            token: candidateConfig.token,
-            features: DEFAULT_UI_FEATURES,
-          }),
-        validateOpened: (nextOpened) => {
-          assertCompatibleProtocol(nextOpened.capabilities);
-          assertCodingSessionContract(nextOpened.capabilities);
-        },
-      });
+      const validateOpened = (nextOpened: SessionOpened) =>
+        validateCandidateOpened(config, nextOpened, reclaim);
+      prepared = reclaim
+        ? await prepareRetainedCandidateSession({
+            client: reclaim.client,
+            config,
+            signal: abortController.signal,
+            validateOpened,
+          })
+        : await prepareCandidateSession({
+            config,
+            signal: abortController.signal,
+            createClient: (candidateConfig) =>
+              new OctosUiClient({
+                endpoint: candidateConfig.endpoint,
+                token: candidateConfig.token,
+                features: DEFAULT_UI_FEATURES,
+              }),
+            validateOpened,
+          });
       if (
         candidateAbortRef.current !== abortController ||
-        !launchTransitionRef.current.isCurrent(lease) ||
-        !activeRuntime.isCurrent(previous)
+        !launchTransitionRef.current.isCurrent(lease)
       ) {
         return "failed";
       }
+      if (!activeRuntime.isCurrent(previous)) {
+        throw new Error(
+          "The server connection changed while the new Session was opening.",
+        );
+      }
 
+      const pendingHandoff = pendingBackgroundHandoffRef.current;
+      const handoff =
+        pendingHandoff?.lease === lease ? pendingHandoff.handoff : null;
       const queueState = turnController.snapshot();
-      if (queueState.active || queueState.pending.length) {
+      const ownership = turnController.activeTurnOwnership();
+      if (queueState.pending.length || ownership === "dispatching") {
         throw new Error(
           "The previous session started work while the new session was opening.",
         );
+      }
+      if (ownership === "local-owner") {
+        const activeTurn = turnController.backgroundHandoffTurn();
+        if (!handoff || !activeTurn || activeTurn.turnId !== handoff.turnId) {
+          throw new Error(
+            "The previous session started another turn while the new session was opening.",
+          );
+        }
       }
       released = prepared.release();
       activeRuntime.adoptCandidate({
         expected: previous,
         config,
         candidate: released,
+        preservePreviousTransport: handoff?.shouldPreserveTransport ?? false,
+        authorizeCommit: () => launchTransitionRef.current.commit(lease),
       });
       committed = true;
-      if (!launchTransitionRef.current.commit(lease)) {
-        throw new Error("The launch transition was superseded before commit.");
+      handoff?.commit();
+      if (pendingBackgroundHandoffRef.current?.lease === lease) {
+        pendingBackgroundHandoffRef.current = null;
+      }
+      reclaim?.commit();
+      if (pendingBackgroundReclaimRef.current?.lease === lease) {
+        pendingBackgroundReclaimRef.current = null;
       }
       return "opened";
     } catch (reason) {
@@ -659,7 +895,7 @@ export function useOctosSession(): OctosSessionRuntime {
       return "failed";
     } finally {
       if (!committed) {
-        if (released) released.client.disconnect();
+        if (released && !reclaim) released.client.disconnect();
         else prepared?.dispose();
       }
       if (candidateAbortRef.current === abortController) {
@@ -679,6 +915,8 @@ export function useOctosSession(): OctosSessionRuntime {
   }
 
   const disconnect = () => {
+    rollbackBackgroundOwnership();
+    backgroundTurnManagerRef.current.clear();
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
@@ -698,53 +936,55 @@ export function useOctosSession(): OctosSessionRuntime {
     const target = sessionId.trim();
     const authority = currentAuthority();
     const config = authority?.config;
-    const queueState = turnController.snapshot();
     if (!target || target === authority?.sessionId || !config) return "failed";
-    if (queueState.active || queueState.pending.length) {
-      workspaceController.setError(
-        "The foreground queue must settle before this Web client can switch sessions.",
-      );
-      return "failed";
-    }
-    return openCandidateSession({ ...config, sessionId: target });
+    return openWorkspaceSession({
+      sessionId: target,
+      cwd: config.cwd,
+      profileId: authority.profileId,
+      resolveLaunch: false,
+    });
   };
 
   const openWorkspaceSession = async (input: {
     sessionId: string;
     cwd: string;
-    profileId?: string | null;
+    profileId?: string;
+    resolveLaunch?: boolean;
   }): Promise<WorkspaceOpenOutcome> => {
     const target = input.sessionId.trim();
     const cwd = input.cwd.trim();
     const authority = currentAuthority();
     const config = authority?.config;
-    const queueState = turnController.snapshot();
     if (!target || !cwd || !config || !authority) return "failed";
-    if (queueState.active || queueState.pending.length) {
-      workspaceController.setError(
-        "The foreground queue must settle before this Web client can open another workspace.",
-      );
-      return "failed";
-    }
     const candidateConfig = {
       ...config,
       sessionId: target,
       cwd,
-      profileId:
-        input.profileId === null
-          ? ""
-          : input.profileId?.trim() || config.profileId,
+      profileId: input.profileId?.trim() || config.profileId,
     };
-    const lease = launchTransitionRef.current.begin(candidateConfig);
+    rollbackBackgroundOwnership();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    const lease = launchTransitionRef.current.begin(candidateConfig);
+    try {
+      prepareBackgroundReclaim(candidateConfig, lease);
+    } catch (reason) {
+      workspaceController.setError(errorMessage(reason));
+      launchTransitionRef.current.discard(lease);
+      return "failed";
+    }
+    if (!prepareBackgroundHandoff(authority, lease)) {
+      rollbackBackgroundReclaim(lease);
+      launchTransitionRef.current.discard(lease);
+      return "failed";
+    }
     onboardingController.reset();
     workspaceController.setError(null);
     markTransitioning(true);
-    if (input.profileId === null) {
+    if (input.resolveLaunch === false) {
       // A catalog row already names an authoritative Session. Folder launch
-      // resolution is for creating a Session and may resolve an unrelated
-      // current/default profile; reopen the exact id without a stale hint.
+      // resolution is for creating a Session and may resolve another default
+      // profile; reopen with the server-confirmed id and profile tuple.
       setLaunch({ phase: "opening", cwd, decision: null });
       return openCandidateSession(candidateConfig, lease);
     }
@@ -804,6 +1044,7 @@ export function useOctosSession(): OctosSessionRuntime {
   };
 
   const cancelLaunch = () => {
+    rollbackBackgroundOwnership();
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
@@ -841,7 +1082,10 @@ export function useOctosSession(): OctosSessionRuntime {
     const terminal = foldIntoTimeline ? terminalTurnId(notification) : null;
     if (terminal) {
       interactionController.settleTurn(terminal);
-      turnController.settleTurn(terminal);
+      turnController.settleTurn(
+        terminal,
+        terminalTurnOutcome(notification) ?? "failed",
+      );
     }
   }
 
@@ -922,6 +1166,7 @@ export function useOctosSession(): OctosSessionRuntime {
       state: workspace,
       launch,
       transitioning,
+      backgroundTurns,
       onboarding: onboardingController.state,
       refresh: refreshWorkspace,
       listWorkspaceSessions: workspaceController.listWorkspaceSessions,
@@ -961,6 +1206,39 @@ function normalizeConnectionInput(
     profileId: input.profileId.trim(),
     cwd: input.cwd.trim(),
   };
+}
+
+function sameBackgroundScope(
+  left: BackgroundTurnSessionScope,
+  right: BackgroundTurnSessionScope,
+): boolean {
+  return (
+    left.workspaceRoot === right.workspaceRoot &&
+    left.profileId === right.profileId &&
+    left.sessionId === right.sessionId
+  );
+}
+
+function validateCandidateOpened(
+  config: SessionConnectionInput,
+  opened: SessionOpened,
+  reclaim: PreparedBackgroundTurnReclaim<OctosUiClient> | null,
+): void {
+  assertCompatibleProtocol(opened.capabilities);
+  assertCodingSessionContract(opened.capabilities);
+  if (opened.session_id !== config.sessionId) {
+    throw new Error("session/open returned another Session id");
+  }
+  if (config.profileId && opened.active_profile_id !== config.profileId) {
+    throw new Error("session/open returned another Profile");
+  }
+  if (
+    reclaim &&
+    (opened.workspace_root !== reclaim.workspaceRoot ||
+      opened.active_profile_id !== reclaim.profileId)
+  ) {
+    throw new Error("session/open returned another Session scope");
+  }
 }
 
 function isFatalSessionContractError(message: string): boolean {

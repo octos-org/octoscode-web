@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import {
   clearConnectionPreferences,
+  clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
+  loadKnownSessions,
+  rememberKnownSession,
   saveConnectionPreferences,
   setAutoConnect,
   type StorageLike,
@@ -35,7 +38,7 @@ describe("connection preferences", () => {
     expect(durable.getItem("octoscode-web.connection.v2")).toBe(
       '{"version":2,"endpoint":"https://octos.example"}',
     );
-    expect([...tab.values.keys()]).toEqual(["octoscode-web.tab-connection.v2"]);
+    expect([...tab.values.keys()]).toEqual(["octoscode-web.tab-connection.v3"]);
     expect(
       loadConnectionPreferences(defaults, durable, new MemoryStorage()),
     ).toEqual({
@@ -156,6 +159,152 @@ describe("connection preferences", () => {
 
     expect(loadConnectionPreferences(defaults, durable, tab)).toEqual(defaults);
     expect(loadAutoConnect(tab)).toBe(false);
+  });
+
+  it("keeps confirmed Sessions in the exact tab credential envelope", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = {
+      endpoint: "https://octos.example",
+      token: "token-a",
+    };
+    saveConnectionPreferences({ ...defaults, ...identity }, durable, tab);
+
+    rememberKnownSession(
+      tab,
+      identity,
+      {
+        session_id: "coding:api:web-one",
+        active_profile_id: "coding",
+        workspace_root: "/srv/work/one",
+      },
+      42,
+    );
+
+    expect(loadKnownSessions(tab, identity)).toEqual([
+      {
+        sessionId: "coding:api:web-one",
+        profileId: "coding",
+        workspaceRoot: "/srv/work/one",
+        lastOpenedAt: 42,
+      },
+    ]);
+    expect(loadKnownSessions(tab, { ...identity, token: "token-b" })).toEqual(
+      [],
+    );
+    expect([...tab.values.keys()]).toEqual(["octoscode-web.tab-connection.v3"]);
+  });
+
+  it("atomically drops the registry when endpoint or token identity changes", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const original = {
+      ...defaults,
+      endpoint: "https://octos.example",
+      token: "token-a",
+    };
+    saveConnectionPreferences(original, durable, tab);
+    rememberKnownSession(
+      tab,
+      original,
+      {
+        session_id: "coding:api:web-private",
+        active_profile_id: "coding",
+        workspace_root: "/srv/private",
+      },
+      42,
+    );
+
+    const next = { ...original, token: "token-b" };
+    saveConnectionPreferences(next, durable, tab);
+
+    expect(loadKnownSessions(tab, original)).toEqual([]);
+    expect(loadKnownSessions(tab, next)).toEqual([]);
+    expect(tab.getItem("octoscode-web.tab-connection.v3")).not.toContain(
+      "web-private",
+    );
+  });
+
+  it("never aliases an oversized credential by its stored prefix", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const prefix = "x".repeat(16_384);
+    const original = { ...defaults, token: `${prefix}a` };
+    saveConnectionPreferences(original, durable, tab);
+    rememberKnownSession(
+      tab,
+      original,
+      {
+        session_id: "coding:api:web-private",
+        active_profile_id: "coding",
+        workspace_root: "/srv/private",
+      },
+      42,
+    );
+
+    expect(loadKnownSessions(tab, original)).toEqual([]);
+    expect(
+      loadKnownSessions(tab, { ...original, token: `${prefix}b` }),
+    ).toEqual([]);
+  });
+
+  it("clears only a registry owned by the supplied identity", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = {
+      ...defaults,
+      endpoint: "https://octos.example",
+      token: "token-a",
+    };
+    saveConnectionPreferences(identity, durable, tab);
+    rememberKnownSession(
+      tab,
+      identity,
+      {
+        session_id: "coding:api:web-one",
+        active_profile_id: "coding",
+        workspace_root: "/srv/work/one",
+      },
+      42,
+    );
+
+    clearKnownSessions(tab, { ...identity, token: "token-b" });
+    expect(loadKnownSessions(tab, identity)).toHaveLength(1);
+    clearKnownSessions(tab, identity);
+    expect(loadKnownSessions(tab, identity)).toEqual([]);
+  });
+
+  it("migrates the v2 tab connection without legacy Session metadata", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    tab.setItem(
+      "octoscode-web.tab-connection.v2",
+      JSON.stringify({
+        version: 2,
+        endpoint: "https://octos.example",
+        token: "token-a",
+        sessionId: "coding:api:web-current",
+        profileId: "coding",
+        cwd: "/srv/work/current",
+        autoConnect: true,
+      }),
+    );
+
+    expect(loadConnectionPreferences(defaults, durable, tab)).toMatchObject({
+      endpoint: "https://octos.example",
+      token: "token-a",
+      sessionId: "coding:api:web-current",
+    });
+    expect(
+      loadKnownSessions(tab, {
+        endpoint: "https://octos.example",
+        token: "token-a",
+      }),
+    ).toEqual([]);
+
+    setAutoConnect(tab, true);
+    expect(tab.getItem("octoscode-web.tab-connection.v2")).toBeNull();
+    expect(tab.getItem("octoscode-web.tab-connection.v3")).not.toBeNull();
   });
 });
 

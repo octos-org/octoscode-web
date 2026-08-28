@@ -9,6 +9,136 @@ import {
 } from "./use-turn-controller.ts";
 
 describe("useTurnController async authority", () => {
+  it("does not expose an optimistic turn for background handoff before Core accepts it", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("ship it");
+    expect(harness.controller.snapshot().active).not.toBeNull();
+    expect(harness.controller.backgroundHandoffTurn()).toBeNull();
+    expect(harness.controller.activeTurnOwnership()).toBe("dispatching");
+
+    start.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(harness.controller.backgroundHandoffTurn()?.turnId).toBe(
+        harness.activeTurnId(),
+      );
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+  });
+
+  it("treats a hydrated active turn as observed, never as owner of this socket", () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+
+    harness.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 2 },
+      turns: [{ turn_id: "server-turn", state: "active" }],
+    });
+
+    expect(harness.controller.backgroundHandoffTurn()).toBeNull();
+    expect(harness.controller.activeTurnOwnership()).toBe("observed");
+  });
+
+  it("retains the local transport owner after terminal until it is handed off", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("ship it");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    const turnId = harness.activeTurnId();
+    harness.controller.settleTurn(turnId, "completed");
+
+    expect(harness.controller.snapshot().active).toBeNull();
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId,
+      state: "completed",
+    });
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+  });
+
+  it("does not carry local socket ownership across reconnect hydrate", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("ship it");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    const turnId = harness.activeTurnId();
+    harness.controller.reconcileFromHydrate(
+      {
+        session_id: "session-a",
+        cursor: { stream: "session-a", seq: 2 },
+        turns: [{ turn_id: turnId, state: "active" }],
+      },
+      false,
+    );
+
+    expect(harness.controller.backgroundHandoffTurn()).toBeNull();
+    expect(harness.controller.activeTurnOwnership()).toBe("observed");
+  });
+
+  it("stops treating a replacement reconnect client as the old turn owner before hydrate", async () => {
+    const older = fakeClient();
+    const newer = fakeClient();
+    const harness = renderController(older);
+
+    harness.controller.enqueuePrompt("ship it");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+
+    harness.setClient(newer);
+
+    expect(harness.controller.backgroundHandoffTurn()).toBeNull();
+    expect(harness.controller.activeTurnOwnership()).toBe("observed");
+  });
+
+  it("restores exact transport ownership when a parked owner is reclaimed", () => {
+    const owner = fakeClient();
+    const harness = renderController(owner);
+
+    expect(
+      harness.controller.restoreTransportOwnership({
+        turnId: "terminal-tail",
+        state: "completed",
+      }),
+    ).toBe(true);
+
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId: "terminal-tail",
+      state: "completed",
+    });
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+  });
+
+  it("replaces a reclaimed terminal lease when the same client starts another turn", async () => {
+    const owner = fakeClient();
+    const harness = renderController(owner);
+
+    harness.controller.restoreTransportOwnership({
+      turnId: "terminal-tail",
+      state: "completed",
+    });
+    harness.controller.enqueuePrompt("continue on the reclaimed transport");
+
+    await vi.waitFor(() => {
+      expect(harness.controller.backgroundHandoffTurn()).toEqual({
+        turnId: harness.activeTurnId(),
+        state: "running",
+      });
+    });
+    expect(harness.controller.backgroundHandoffTurn()?.turnId).not.toBe(
+      "terminal-tail",
+    );
+    expect(owner.startTurn).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a server-confirmed interrupt de-duplicated after hydrate", async () => {
     const interrupt = deferred<void>();
     const client = fakeClient({ interrupt: () => interrupt.promise });

@@ -2,8 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-08-26
-- Superseded in part by: [ADR 0018](0018-dsh-aligned-product-shell.md) for
-  primary session-files presentation
+- Superseded in part by:
+  - [ADR 0018](0018-dsh-aligned-product-shell.md) for primary session-files
+    presentation
+  - [ADR 0019](0019-tab-session-navigation-and-background-turn-ownership.md) for
+    acknowledged-turn background navigation
 
 Server ownership, session navigation, drafts, and usage projections remain in
 effect. ADR 0018 removes session files from the primary product navigation.

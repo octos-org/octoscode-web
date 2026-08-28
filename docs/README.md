@@ -16,16 +16,17 @@ your question.
 
 ## Understand and change
 
-| Document                                                   | Purpose                                                                   |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [Architecture](architecture.md)                            | Runtime ownership, dependency direction, state, and extension boundaries. |
-| [Protocol integration](protocol.md)                        | Capability negotiation, projections, Core pins, and compatibility gates.  |
-| [ADR index](adr/README.md)                                 | Accepted decisions, grouped by concern.                                   |
-| [Product shell ADR](adr/0018-dsh-aligned-product-shell.md) | Authentication, Workspace/Session navigation, and controls.               |
-| [Contributing](../CONTRIBUTING.md)                         | Development workflow and review expectations.                             |
-| [Testing](testing.md)                                      | Unit, browser, contract, runtime, and deployment verification.            |
-| [Releasing](releasing.md)                                  | Immutable publication, provenance, and rollback procedure.                |
-| [Agent guide](../AGENTS.md)                                | Non-negotiable repository rules for coding agents.                        |
+| Document                                                                                   | Purpose                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [Architecture](architecture.md)                                                            | Runtime ownership, dependency direction, state, and extension boundaries. |
+| [Protocol integration](protocol.md)                                                        | Capability negotiation, projections, Core pins, and compatibility gates.  |
+| [ADR index](adr/README.md)                                                                 | Accepted decisions, grouped by concern.                                   |
+| [Product shell ADR](adr/0018-dsh-aligned-product-shell.md)                                 | Authentication, Workspace/Session navigation, and controls.               |
+| [Session navigation ADR](adr/0019-tab-session-navigation-and-background-turn-ownership.md) | Confirmed Session refs and background turn ownership.                     |
+| [Contributing](../CONTRIBUTING.md)                                                         | Development workflow and review expectations.                             |
+| [Testing](testing.md)                                                                      | Unit, browser, contract, runtime, and deployment verification.            |
+| [Releasing](releasing.md)                                                                  | Immutable publication, provenance, and rollback procedure.                |
+| [Agent guide](../AGENTS.md)                                                                | Non-negotiable repository rules for coding agents.                        |
 
 ## Project records
 

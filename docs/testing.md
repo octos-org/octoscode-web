@@ -3,23 +3,53 @@
 Use the smallest gate that proves the change while developing, then run the
 complete gate before review.
 
-| Gate                  | Command                                         | Proves                                                  |
-| --------------------- | ----------------------------------------------- | ------------------------------------------------------- |
-| Unit                  | `pnpm test`                                     | parsers, reducers, state machines, and components       |
-| Types and lint        | `pnpm typecheck && pnpm lint`                   | package boundaries and exhaustive cases                 |
-| Repository policy     | `pnpm policy:verify`                            | UI tokens, style ownership, and ADR metadata            |
-| Product browser       | `pnpm test:e2e`                                 | launch, recovery, interactions, responsive layout, WCAG |
-| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, runtime model, tools, turn, and tab restore  |
-| Generated contract    | `pnpm contract:verify`                          | Core vocabulary matches the immutable source pin        |
-| Released Core runtime | `OCTOS_BINARY=/abs/octos pnpm integration:core` | a matching released Core completes the critical flow    |
-| Deployment            | `pnpm build && pnpm deploy:verify`              | artifact, CSP, nginx contract, and size budgets         |
-| Complete local gate   | `pnpm check`                                    | all deterministic non-browser gates                     |
+| Gate                  | Command                                         | Proves                                                 |
+| --------------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| Unit                  | `pnpm test`                                     | parsers, reducers, state machines, and components      |
+| Types and lint        | `pnpm typecheck && pnpm lint`                   | package boundaries and exhaustive cases                |
+| Repository policy     | `pnpm policy:verify`                            | UI tokens, style ownership, and ADR metadata           |
+| Product browser       | `pnpm test:e2e`                                 | launch, recovery, multi-Session/background turns, WCAG |
+| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, runtime model, tools, turn, and tab restore |
+| Generated contract    | `pnpm contract:verify`                          | Core vocabulary matches the immutable source pin       |
+| Released Core runtime | `OCTOS_BINARY=/abs/octos pnpm integration:core` | a matching released Core completes the critical flow   |
+| Deployment            | `pnpm build && pnpm deploy:verify`              | artifact, CSP, nginx contract, and size budgets        |
+| Complete local gate   | `pnpm check`                                    | all deterministic non-browser gates                    |
 
 Install Chromium once with `pnpm exec playwright install chromium`. E2E owns its
 fixture and Vite ports; it deliberately refuses to reuse an existing server so a
 developer's real Octos process cannot make a fixture test pass. Set
 `OCTOSCODE_E2E_FIXTURE_PORT` and `OCTOSCODE_E2E_WEB_PORT` when the defaults are
 occupied; the configured fixture origin is injected into the app.
+
+## Multi-Session and background-turn gate
+
+The deterministic AppUI fixture must model Session state per exact
+Workspace/Profile/Session tuple. Hydrate must return that Session's own
+messages, turns, and pending interactions, and durable turn events must reach
+every socket that has the Session open. A fixed completed hydrate or an
+arbitrary short timeout cannot prove background execution.
+
+The product browser gate covers these sequences:
+
+1. Start a held, server-acknowledged turn in A; create or select B; verify A's
+   owner socket remains open, A stays marked working, and A output does not
+   enter B's timeline.
+2. Complete independent work in B, return to A while it is still running, then
+   release A and verify its exact persisted result through hydrate/live replay.
+3. Queue a second prompt in A and prove New Session/selection sends no candidate
+   `session/open` until the browser-local FIFO settles.
+4. Hold the `turn/start` acknowledgement and prove navigation is rejected until
+   dispatch ownership is known.
+5. Create two Sessions in the same cwd, give them distinct transcripts, switch
+   by exact Session identity, reload the same tab, and verify both confirmed
+   rows and histories remain distinct. Tests must not use positional
+   `.first()`/`.last()` locators because opening a Session updates recency
+   order.
+
+Also cover candidate failure and a terminal event arriving during the handoff
+window. Closing an owner socket in the fixture must produce the same durable
+`connection_closed` result as Core rc.9, so a missing transport-preservation
+regression cannot pass accidentally.
 
 ## Opt-in live model gate
 
@@ -34,9 +64,9 @@ when required; the Session-runtime label must already report GLM-5.3-Flash
 before the turn begins.
 
 The gate disables Playwright traces, screenshots, and video so the tab-scoped
-auth token cannot enter test artifacts. The live config also disables
-Playwright's automatic failure-page accessibility snapshot because it can
-serialize password field values.
+auth token cannot enter test artifacts. Its launcher also disables Playwright's
+automatic failure-page accessibility snapshot before the worker starts because
+that snapshot can serialize password field values.
 
 Supply all four values explicitly:
 
@@ -47,6 +77,11 @@ OCTOSCODE_LIVE_TOKEN='<ephemeral server token>' \
 OCTOSCODE_LIVE_WORKSPACE=/absolute/path/on/server \
 pnpm test:e2e:live
 ```
+
+`OCTOSCODE_LIVE_PROXY_ORIGIN` must be an Origin that Core explicitly allows
+(normally the deployed Web origin), not merely the local preview URL. The Vite
+proxy rewrites the WebSocket Origin to this value; an untrusted local Origin is
+expected to fail the handshake with 403.
 
 There is no Session-id input: the product creates one through the same Add
 workspace flow used by a person. The environment supplies a server path, not a

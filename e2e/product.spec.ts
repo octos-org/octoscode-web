@@ -77,6 +77,10 @@ async function openSettings(page: Page): Promise<Locator> {
   return settings;
 }
 
+function sessionRowByTitle(sidebar: Locator, title: string): Locator {
+  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+}
+
 test("uses the DSH-aligned product sidebar and grouped or flat session views", async ({
   page,
 }) => {
@@ -95,7 +99,7 @@ test("uses the DSH-aligned product sidebar and grouped or flat session views", a
   ).toBeVisible();
   await expect(
     sidebar.locator('[role="treeitem"][aria-current="page"]'),
-  ).toContainText("New coding session");
+  ).toContainText("Session ");
 
   await sidebar.getByRole("button", { name: "Session view options" }).click();
   let menu = sidebar.getByRole("menu", { name: "Session view options" });
@@ -189,10 +193,32 @@ test("keeps authentication when a remembered Session can no longer open", async 
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 });
 
-test("keeps only the authoritative open Session when starting another", async ({
+test("keeps multiple confirmed Sessions in one Workspace and can reopen either", async ({
   page,
 }) => {
   const cwd = "/srv/work/per-workspace-session";
+  let deleteRequests = 0;
+  const openedSessions: Array<{ sessionId: string; profileId?: string }> = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (frame.includes('"method":"session/delete"')) {
+        deleteRequests += 1;
+      }
+      if (!frame.includes('"method":"session/open"')) return;
+      const request = JSON.parse(frame) as {
+        params?: { session_id?: unknown; profile_id?: unknown };
+      };
+      if (typeof request.params?.session_id === "string") {
+        openedSessions.push({
+          sessionId: request.params.session_id,
+          ...(typeof request.params.profile_id === "string"
+            ? { profileId: request.params.profile_id }
+            : {}),
+        });
+      }
+    });
+  });
   await connectServer(page);
   await startWorkspace(page, cwd);
 
@@ -203,9 +229,14 @@ test("keeps only the authoritative open Session when starting another", async ({
   });
   await expect(workspace).toBeVisible();
   const openSessions = sidebar.getByRole("treeitem", {
-    name: /New coding session/,
+    name: /Session /,
   });
   await expect(openSessions).toHaveCount(1);
+  const originalTitle = await openSessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected a confirmed Session title");
 
   await workspace
     .getByRole("button", { name: "per-workspace-session", exact: true })
@@ -216,12 +247,109 @@ test("keeps only the authoritative open Session when starting another", async ({
     })
     .click();
 
-  await expect(openSessions).toHaveCount(1);
-  await expect(openSessions).toHaveAttribute("aria-current", "page");
-  await expect(
-    sidebar.getByText("Only the open session is shown.", { exact: true }),
-  ).toBeVisible();
+  await expect(openSessions).toHaveCount(2);
+  await expect.poll(() => openedSessions.length).toBeGreaterThanOrEqual(2);
+  expect(openedSessions[0]?.sessionId).not.toBe(openedSessions[1]?.sessionId);
+  await expect(openSessions.first()).toHaveAttribute("aria-current", "page");
+  const originalSession = sessionRowByTitle(sidebar, originalTitle);
+  await originalSession.click();
+  await expect(originalSession).toHaveAttribute("aria-current", "page");
+  await expect
+    .poll(() => openedSessions.at(-1)?.sessionId)
+    .toBe(openedSessions[0]?.sessionId);
+  expect(openedSessions.at(-1)?.profileId).toBe(openedSessions[0]?.profileId);
+  await expect(openSessions).toHaveCount(2);
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
+  expect(deleteRequests).toBe(0);
+
+  await page.reload();
+  const restoredSessions = productNavigation(page).getByRole("treeitem", {
+    name: /Session /,
+  });
+  await expect(restoredSessions).toHaveCount(2);
+  await expect(
+    sessionRowByTitle(productNavigation(page), originalTitle),
+  ).toHaveAttribute("aria-current", "page");
+});
+
+test("keeps a server-accepted turn running while another Session is focused", async ({
+  page,
+}) => {
+  const cwd = "/srv/work/background-session";
+  let ownerSocketSeen = false;
+  let ownerSocketClosed = false;
+  let ownerSocketReopens = 0;
+  page.on("websocket", (socket) => {
+    let ownsStartedTurn = false;
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (ownsStartedTurn && frame.includes('"method":"session/open"')) {
+        ownerSocketReopens += 1;
+      }
+      if (frame.includes('"method":"turn/start"')) {
+        ownsStartedTurn = true;
+        ownerSocketSeen = true;
+      }
+    });
+    socket.on("close", () => {
+      if (ownsStartedTurn) ownerSocketClosed = true;
+    });
+  });
+
+  await connectAndStartWorkspace(page, cwd);
+  const sidebar = productNavigation(page);
+  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const originalTitle = await sessions
+    .first()
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  if (!originalTitle) throw new Error("Expected a confirmed Session title");
+
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Continue this turn while I open another Session");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect.poll(() => ownerSocketSeen).toBe(true);
+
+  const workspace = sidebar.getByRole("treeitem", {
+    name: "background-session",
+    exact: true,
+  });
+  await workspace
+    .getByRole("button", { name: "background-session", exact: true })
+    .hover();
+  await sidebar
+    .getByRole("button", { name: "New session in background-session" })
+    .click();
+
+  await expect(sessions).toHaveCount(2);
+  await expect(
+    sidebar.locator('[title="Completed in background"]'),
+  ).toBeVisible();
+  expect(ownerSocketClosed).toBe(false);
+  await expect(
+    page.getByText("Completed with pnpm check and all tests passing."),
+  ).toHaveCount(0);
+
+  const backgroundSession = sessionRowByTitle(sidebar, originalTitle);
+  await backgroundSession.click();
+  await expect(backgroundSession).toHaveAttribute("aria-current", "page");
+  expect(ownerSocketClosed).toBe(false);
+  expect(ownerSocketReopens).toBeGreaterThanOrEqual(1);
+
+  // Reclaiming a terminal owner must preserve its tail lease. Switching away
+  // again without starting another turn must park the same socket, not close it.
+  const siblingSession = sessions.filter({ hasNotText: originalTitle }).first();
+  await siblingSession.click();
+  await expect(siblingSession).toHaveAttribute("aria-current", "page");
+  expect(ownerSocketClosed).toBe(false);
+  await backgroundSession.click();
+  await expect(backgroundSession).toHaveAttribute("aria-current", "page");
+  expect(ownerSocketClosed).toBe(false);
+  expect(ownerSocketReopens).toBeGreaterThanOrEqual(2);
+
+  const settings = await openSettings(page);
+  await settings.getByRole("button", { name: "Disconnect" }).click();
+  await expect.poll(() => ownerSocketClosed).toBe(true);
 });
 
 test("does not project ambiguous legacy Session rows into a Workspace", async ({
@@ -235,12 +363,12 @@ test("does not project ambiguous legacy Session rows into a Workspace", async ({
   await expect(
     sidebar.getByRole("treeitem", { name: /Review protocol drift/ }),
   ).toHaveCount(0);
-  await expect(
-    sidebar.getByRole("treeitem", { name: /New coding session/ }),
-  ).toHaveCount(1);
+  await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
+    1,
+  );
   await expect(
     sidebar.getByText("Only the open session is shown.", { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 test("moves drafts only after a profile-choice Session transition commits", async ({
@@ -289,7 +417,7 @@ test("restores the origin, tab credential, session, and workspace after refresh"
   await expect(restoredNavigation).toBeVisible();
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
   await expect(
-    restoredNavigation.getByRole("treeitem", { name: /New coding session/ }),
+    restoredNavigation.getByRole("treeitem", { name: /Session / }),
   ).toHaveAttribute("aria-current", "page");
   const settings = await openSettings(page);
   await settings.getByRole("button", { name: "Disconnect" }).click();
@@ -588,22 +716,15 @@ test("preserves workspace launch decisions without exposing profile ids in conne
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 });
 
-test("keeps session controls gated until an activate decision commits", async ({
+test("automatically activates an unambiguous fresh coding Workspace", async ({
   page,
 }) => {
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/new");
 
-  const decision = page.getByRole("heading", {
-    name: "Activate this coding workspace?",
-  });
-  await expect(decision).toBeVisible();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeHidden();
-  await expect(page.getByRole("button", { name: /^Permission:/ })).toBeHidden();
-
-  await page.getByRole("button", { name: "Activate _main" }).click();
-
-  await expect(decision).toBeHidden();
+  await expect(
+    page.getByRole("heading", { name: "Activate this coding workspace?" }),
+  ).toHaveCount(0);
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
   await expect(
     page.getByRole("button", { name: /^Permission:/ }),

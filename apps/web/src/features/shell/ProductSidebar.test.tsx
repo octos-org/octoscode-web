@@ -200,7 +200,32 @@ describe("ProductSidebar", () => {
         ]}
       />,
     );
-    expect(flat).toContain("Only open sessions are shown.");
+    expect(flat).toContain("Showing sessions confirmed in this tab.");
+  });
+
+  it("renders tab-known Sessions without claiming they are a server catalog", () => {
+    const grouped = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        selectedSessionId="known-a"
+        workspaces={[
+          {
+            id: "workspace-known",
+            label: "known-workspace",
+            sessionCatalogStatus: "known-only",
+            sessions: [
+              { id: "known-a", title: "Session a1b2c3" },
+              { id: "known-b", title: "Session d4e5f6" },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(grouped).toContain("Session a1b2c3");
+    expect(grouped).toContain("Session d4e5f6");
+    expect(grouped).not.toContain("Only the open session is shown.");
+    expect(grouped).not.toContain("No sessions yet.");
   });
 
   it("does not claim an incomplete flat catalog has no sessions", () => {

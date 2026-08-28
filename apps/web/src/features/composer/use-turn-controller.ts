@@ -29,12 +29,31 @@ export interface TurnController {
   queue: PromptTurnQueueSnapshot;
   interruptingTurnId: string | null;
   snapshot: () => PromptTurnQueueSnapshot;
+  /**
+   * The active turn only after `turn/start` has been accepted by Core.
+   * Optimistic/in-flight starts cannot be detached because a rejected RPC
+   * would otherwise leave an owner socket parked without a terminal event.
+   */
+  backgroundHandoffTurn: () => {
+    turnId: string;
+    state: "running" | "waiting" | "completed" | "failed";
+  } | null;
+  activeTurnOwnership: () =>
+    "none" | "dispatching" | "local-owner" | "observed";
   reset: () => void;
   enqueuePrompt: (text: string) => void;
   interrupt: () => Promise<void>;
-  reconcileFromHydrate: (hydrated: SessionHydrateResult) => PromptTurn | null;
+  reconcileFromHydrate: (
+    hydrated: SessionHydrateResult,
+    preserveTransportOwnership?: boolean,
+  ) => PromptTurn | null;
+  clearTransportOwnership: () => void;
+  restoreTransportOwnership: (turn: {
+    turnId: string;
+    state: "running" | "waiting" | "completed" | "failed";
+  }) => boolean;
   startTurn: (turn: PromptTurn) => Promise<void>;
-  settleTurn: (turnId: string) => void;
+  settleTurn: (turnId: string, outcome?: "completed" | "failed") => void;
 }
 
 export function useTurnController(
@@ -47,6 +66,17 @@ export function useTurnController(
   const dependenciesRef = useRef(dependencies);
   dependenciesRef.current = dependencies;
   const queueRef = useRef(new PromptTurnQueue());
+  const locallyStartedTurnRef = useRef<{
+    client: OctosUiClient;
+    sessionId: string;
+    turnId: string;
+  } | null>(null);
+  const acceptedOwnerRef = useRef<{
+    client: OctosUiClient;
+    sessionId: string;
+    turnId: string;
+    state: "running" | "waiting" | "completed" | "failed";
+  } | null>(null);
   const interruptingTurnIdRef = useRef<string | null>(null);
   const [queue, setQueue] = useState<PromptTurnQueueSnapshot>(() =>
     queueRef.current.snapshot(),
@@ -61,6 +91,8 @@ export function useTurnController(
     startRequestsRef.current.invalidate();
     interruptRequestsRef.current.invalidate();
     queueRef.current.clear();
+    locallyStartedTurnRef.current = null;
+    acceptedOwnerRef.current = null;
     interruptingTurnIdRef.current = null;
     setInterruptingTurnId(null);
     sync();
@@ -71,6 +103,7 @@ export function useTurnController(
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
     if (!client || !sessionId || !currentDependencies.canStart()) return;
+    locallyStartedTurnRef.current = { client, sessionId, turnId: turn.turnId };
     const request = startRequestsRef.current.begin(client, sessionId);
 
     currentDependencies.setTimeline((current) =>
@@ -82,6 +115,15 @@ export function useTurnController(
         turn_id: turn.turnId,
         input: [{ kind: "text", text: turn.text }],
       });
+      if (requestIsCurrent()) {
+        acceptedOwnerRef.current = {
+          client,
+          sessionId,
+          turnId: turn.turnId,
+          state: "running",
+        };
+        locallyStartedTurnRef.current = null;
+      }
     } catch (reason) {
       if (!requestIsCurrent()) return;
       const message = reason instanceof Error ? reason.message : String(reason);
@@ -111,7 +153,19 @@ export function useTurnController(
     }
   };
 
-  const settleTurn = (turnId: string) => {
+  const settleTurn = (
+    turnId: string,
+    outcome: "completed" | "failed" = "completed",
+  ) => {
+    if (acceptedOwnerRef.current?.turnId === turnId) {
+      acceptedOwnerRef.current = {
+        ...acceptedOwnerRef.current,
+        state: outcome,
+      };
+    }
+    if (locallyStartedTurnRef.current?.turnId === turnId) {
+      locallyStartedTurnRef.current = null;
+    }
     const transition = queueRef.current.settle(turnId);
     if (!transition.settled) return;
     startRequestsRef.current.invalidate();
@@ -196,7 +250,19 @@ export function useTurnController(
 
   const reconcileFromHydrate = (
     hydrated: SessionHydrateResult,
+    preserveTransportOwnership = false,
   ): PromptTurn | null => {
+    if (!preserveTransportOwnership) {
+      locallyStartedTurnRef.current = null;
+      acceptedOwnerRef.current = null;
+    } else {
+      if (!leaseMatchesCurrent(locallyStartedTurnRef.current)) {
+        locallyStartedTurnRef.current = null;
+      }
+      if (!leaseMatchesCurrent(acceptedOwnerRef.current)) {
+        acceptedOwnerRef.current = null;
+      }
+    }
     const snapshot = queueRef.current.snapshot();
     const serverActive = hydrated.turns?.find(
       (turn) => turn.state === "active" || turn.state === "interrupting",
@@ -236,6 +302,15 @@ export function useTurnController(
       serverTurn.state !== "unknown"
     ) {
       const transition = queueRef.current.settle(snapshot.active.turnId);
+      if (locallyStartedTurnRef.current?.turnId === snapshot.active.turnId) {
+        locallyStartedTurnRef.current = null;
+      }
+      if (acceptedOwnerRef.current?.turnId === snapshot.active.turnId) {
+        acceptedOwnerRef.current = {
+          ...acceptedOwnerRef.current,
+          state: serverTurn.state === "completed" ? "completed" : "failed",
+        };
+      }
       sync();
       return transition.next;
     }
@@ -246,6 +321,33 @@ export function useTurnController(
     queue,
     interruptingTurnId,
     snapshot: () => queueRef.current.snapshot(),
+    backgroundHandoffTurn: () => {
+      const owner = acceptedOwnerRef.current;
+      return owner && leaseMatchesCurrent(owner)
+        ? { turnId: owner.turnId, state: owner.state }
+        : null;
+    },
+    activeTurnOwnership: () => {
+      const active = queueRef.current.snapshot().active;
+      if (leaseMatchesCurrent(locallyStartedTurnRef.current)) {
+        return "dispatching";
+      }
+      if (leaseMatchesCurrent(acceptedOwnerRef.current)) return "local-owner";
+      return active ? "observed" : "none";
+    },
+    clearTransportOwnership: () => {
+      locallyStartedTurnRef.current = null;
+      acceptedOwnerRef.current = null;
+    },
+    restoreTransportOwnership: (turn) => {
+      const current = dependenciesRef.current;
+      const client = current.client();
+      const sessionId = current.sessionId();
+      if (!client || !sessionId || !turn.turnId) return false;
+      locallyStartedTurnRef.current = null;
+      acceptedOwnerRef.current = { client, sessionId, ...turn };
+      return true;
+    },
     reset,
     enqueuePrompt,
     interrupt,
@@ -253,4 +355,15 @@ export function useTurnController(
     startTurn,
     settleTurn,
   };
+
+  function leaseMatchesCurrent(
+    lease: { client: OctosUiClient; sessionId: string } | null,
+  ): boolean {
+    const current = dependenciesRef.current;
+    return Boolean(
+      lease &&
+      lease.client === current.client() &&
+      lease.sessionId === current.sessionId(),
+    );
+  }
 }

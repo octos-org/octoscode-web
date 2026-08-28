@@ -22,6 +22,8 @@ const LAUNCH_DECISIONS = new Set([
   "cross_profile",
   "no_profile",
 ]);
+const MAX_LAUNCH_PROFILE_ID_LENGTH = 64;
+const MAX_LAUNCH_EXISTING_PROFILES = 256;
 
 export function parseConfigCapabilitiesListResult(
   value: unknown,
@@ -39,19 +41,29 @@ export function parseLaunchResolveResult(
     typeof value.decision !== "string" ||
     !LAUNCH_DECISIONS.has(value.decision) ||
     (value.resolved_profile !== undefined &&
-      !isNonEmptyString(value.resolved_profile)) ||
+      !isBoundedLaunchProfileId(value.resolved_profile)) ||
     (value.existing_profiles !== undefined &&
       (!Array.isArray(value.existing_profiles) ||
-        !value.existing_profiles.every(isNonEmptyString)))
+        value.existing_profiles.length > MAX_LAUNCH_EXISTING_PROFILES ||
+        !value.existing_profiles.every(isBoundedLaunchProfileId)))
   ) {
     return null;
   }
   const existingProfiles = value.existing_profiles ?? [];
+  const resolvedProfile = value.resolved_profile;
+  const singleProfileDecision =
+    value.decision === "resume" || value.decision === "activate";
   if (
-    (value.decision === "no_profile" && value.resolved_profile !== undefined) ||
-    (value.decision !== "no_profile" &&
-      !isNonEmptyString(value.resolved_profile)) ||
-    (value.decision === "cross_profile" && existingProfiles.length === 0)
+    (value.decision === "no_profile" &&
+      (resolvedProfile !== undefined || existingProfiles.length !== 0)) ||
+    (singleProfileDecision &&
+      (!isBoundedLaunchProfileId(resolvedProfile) ||
+        existingProfiles.length !== 0)) ||
+    (value.decision === "cross_profile" &&
+      (!isBoundedLaunchProfileId(resolvedProfile) ||
+        existingProfiles.length === 0 ||
+        new Set(existingProfiles).size !== existingProfiles.length ||
+        existingProfiles.includes(resolvedProfile)))
   ) {
     return null;
   }
@@ -60,6 +72,12 @@ export function parseLaunchResolveResult(
     ...optionalString(value.resolved_profile, "resolved_profile"),
     existing_profiles: existingProfiles,
   };
+}
+
+function isBoundedLaunchProfileId(value: unknown): value is string {
+  return (
+    isNonEmptyString(value) && value.length <= MAX_LAUNCH_PROFILE_ID_LENGTH
+  );
 }
 
 export function parseSessionListResult(

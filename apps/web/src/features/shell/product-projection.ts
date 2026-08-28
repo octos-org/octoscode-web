@@ -134,10 +134,11 @@ export function findModel(
 }
 
 export function formatRelativeTime(
-  timestamp: string | undefined,
+  timestamp: string | number | undefined,
   now = Date.now(),
 ): string | undefined {
-  const value = Date.parse(timestamp ?? "");
+  const value =
+    typeof timestamp === "number" ? timestamp : Date.parse(timestamp ?? "");
   if (!Number.isFinite(value)) return undefined;
   const elapsed = Math.max(0, now - value);
   if (elapsed < 60_000) return "now";

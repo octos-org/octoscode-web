@@ -1,8 +1,15 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
+import type { SessionOpened } from "@octos-org/octoscode-client";
+import {
+  parseKnownSessionRegistry,
+  rememberKnownSession as rememberRegistrySession,
+  type KnownSessionRef,
+} from "../session/known-session-registry.ts";
 
 const DURABLE_KEY = "octoscode-web.connection.v2";
 const LEGACY_DURABLE_KEY = "octoscode-web.connection.v1";
-const TAB_STATE_KEY = "octoscode-web.tab-connection.v2";
+const TAB_STATE_KEY = "octoscode-web.tab-connection.v3";
+const LEGACY_TAB_STATE_KEY = "octoscode-web.tab-connection.v2";
 const LEGACY_TAB_TOKEN_KEY = "octoscode-web.connection-token.v1";
 const LEGACY_TAB_AUTO_CONNECT_KEY = "octoscode-web.auto-connect.v1";
 const LEGACY_TAB_SESSION_KEY = "octoscode-web.active-session.v1";
@@ -27,14 +34,17 @@ interface DurableConnectionPreferences {
 }
 
 interface TabConnectionPreferences {
-  version: 2;
+  version: 3;
   endpoint: string;
   token: string;
   sessionId: string;
   profileId: string;
   cwd: string;
   autoConnect: boolean;
+  knownSessions: KnownSessionRef[];
 }
+
+type ConnectionIdentity = Pick<ConnectionDraft, "endpoint" | "token">;
 
 /**
  * Restore connection intent without making browser storage authoritative.
@@ -71,17 +81,24 @@ export function saveConnectionPreferences(
     endpoint: value.endpoint.slice(0, LIMITS.endpoint),
   };
   const previous = readTabConnection(tabStorage);
+  const endpoint = value.endpoint.slice(0, LIMITS.endpoint);
+  const token = value.token.slice(0, LIMITS.token);
+  const sameIdentity =
+    value.endpoint.length <= LIMITS.endpoint &&
+    value.token.length <= LIMITS.token &&
+    previous?.endpoint === endpoint &&
+    previous.token === token;
   const tab: TabConnectionPreferences = {
-    version: 2,
-    endpoint: value.endpoint.slice(0, LIMITS.endpoint),
-    token: value.token.slice(0, LIMITS.token),
+    version: 3,
+    endpoint,
+    token,
     sessionId: value.sessionId.slice(0, LIMITS.sessionId),
     profileId: value.profileId.slice(0, LIMITS.profileId),
     cwd: value.cwd.slice(0, LIMITS.cwd),
-    autoConnect:
-      previous?.endpoint === value.endpoint &&
-      previous.token === value.token &&
-      previous.autoConnect,
+    autoConnect: Boolean(sameIdentity && previous?.autoConnect),
+    // One envelope write changes the credential identity and invalidates its
+    // tab-known Session projection together. No token is copied into an entry.
+    knownSessions: sameIdentity ? previous.knownSessions : [],
   };
   safely(() => durableStorage.setItem(DURABLE_KEY, JSON.stringify(durable)));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
@@ -96,7 +113,53 @@ export function clearConnectionPreferences(
   safely(() => durableStorage.removeItem(DURABLE_KEY));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
   safely(() => tabStorage.removeItem(TAB_STATE_KEY));
+  safely(() => tabStorage.removeItem(LEGACY_TAB_STATE_KEY));
   clearLegacyTabState(tabStorage);
+}
+
+/**
+ * Read the Sessions confirmed for exactly this tab credential identity.
+ * Callers should render this only after the same identity authenticates.
+ */
+export function loadKnownSessions(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+): KnownSessionRef[] {
+  const current = readTabConnection(tabStorage);
+  return current && matchesIdentity(current, identity)
+    ? [...current.knownSessions]
+    : [];
+}
+
+/**
+ * Remember one committed, healthy session/open result for this tab identity.
+ * A missing server profile/workspace echo is not accepted as scope proof.
+ */
+export function rememberKnownSession(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+  opened: SessionOpened,
+  now = Date.now(),
+): KnownSessionRef[] {
+  const current = readTabConnection(tabStorage);
+  if (!current || !matchesIdentity(current, identity)) return [];
+  const knownSessions = rememberRegistrySession(
+    current.knownSessions,
+    opened,
+    now,
+  );
+  writeTabConnection(tabStorage, { ...current, knownSessions });
+  return knownSessions;
+}
+
+/** Clear only the registry belonging to the supplied current identity. */
+export function clearKnownSessions(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+): void {
+  const current = readTabConnection(tabStorage);
+  if (!current || !matchesIdentity(current, identity)) return;
+  writeTabConnection(tabStorage, { ...current, knownSessions: [] });
 }
 
 export function loadAutoConnect(tabStorage: StorageLike): boolean {
@@ -132,11 +195,15 @@ function readDurable(
 function readTabConnection(
   storage: StorageLike,
 ): TabConnectionPreferences | null {
-  const raw = safely(() => storage.getItem(TAB_STATE_KEY));
+  const raw =
+    safely(() => storage.getItem(TAB_STATE_KEY)) ??
+    safely(() => storage.getItem(LEGACY_TAB_STATE_KEY));
   if (!raw) return null;
   try {
     const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.version !== 2) return null;
+    if (!isRecord(value) || (value.version !== 2 && value.version !== 3)) {
+      return null;
+    }
     const endpoint = bounded(value.endpoint, LIMITS.endpoint);
     const token = bounded(value.token, LIMITS.token);
     const sessionId = bounded(value.sessionId, LIMITS.sessionId);
@@ -153,13 +220,17 @@ function readTabConnection(
       return null;
     }
     return {
-      version: 2,
+      version: 3,
       endpoint,
       token,
       sessionId,
       profileId,
       cwd,
       autoConnect: value.autoConnect,
+      knownSessions:
+        value.version === 3
+          ? parseKnownSessionRegistry(value.knownSessions)
+          : [],
     };
   } catch {
     return null;
@@ -170,7 +241,27 @@ function writeTabConnection(
   storage: StorageLike,
   value: TabConnectionPreferences,
 ): void {
-  safely(() => storage.setItem(TAB_STATE_KEY, JSON.stringify(value)));
+  try {
+    storage.setItem(TAB_STATE_KEY, JSON.stringify(value));
+  } catch {
+    return;
+  }
+  safely(() => storage.removeItem(LEGACY_TAB_STATE_KEY));
+}
+
+function matchesIdentity(
+  current: TabConnectionPreferences,
+  identity: ConnectionIdentity,
+): boolean {
+  if (
+    identity.endpoint.length > LIMITS.endpoint ||
+    identity.token.length > LIMITS.token
+  ) {
+    return false;
+  }
+  return (
+    current.endpoint === identity.endpoint && current.token === identity.token
+  );
 }
 
 function clearLegacyTabState(storage: StorageLike): void {

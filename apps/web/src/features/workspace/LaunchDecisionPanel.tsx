@@ -46,9 +46,9 @@ export function LaunchDecisionPanel({
     );
   }
 
+  if (decision.decision !== "cross_profile") return null;
   const resolvedProfile = decision.resolved_profile;
   if (!resolvedProfile) return null;
-  const crossProfile = decision.decision === "cross_profile";
 
   return (
     <section
@@ -57,15 +57,10 @@ export function LaunchDecisionPanel({
       aria-labelledby="launch-decision-title"
     >
       <span className="eyebrow">Workspace launch</span>
-      <h2 id="launch-decision-title">
-        {crossProfile
-          ? "Choose this workspace’s profile"
-          : "Activate this coding workspace?"}
-      </h2>
+      <h2 id="launch-decision-title">Choose this workspace’s profile</h2>
       <p>
-        {crossProfile
-          ? "This folder is known to more than one profile. Choose which profile should own the new Session."
-          : `Start a new ${resolvedProfile} Session in this folder.`}
+        This folder is known to more than one profile. Choose which profile
+        should own the new Session.
       </p>
       {state.cwd ? <code>{state.cwd}</code> : null}
       {error ? (
@@ -80,16 +75,8 @@ export function LaunchDecisionPanel({
           disabled={opening}
           onClick={() => onChooseProfile(resolvedProfile)}
         >
-          <strong>
-            {crossProfile
-              ? `Start ${resolvedProfile} here`
-              : `Activate ${resolvedProfile}`}
-          </strong>
-          <small>
-            {crossProfile
-              ? "Create this profile’s coding conversation in the folder"
-              : "Use the server-resolved profile for this folder"}
-          </small>
+          <strong>Start {resolvedProfile} here</strong>
+          <small>Create this profile’s coding conversation in the folder</small>
         </button>
         {decision.existing_profiles.map((profile) => (
           <button

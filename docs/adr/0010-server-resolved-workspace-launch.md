@@ -2,6 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-08-26
+- Superseded in part by:
+  [ADR 0019](0019-tab-session-navigation-and-background-turn-ownership.md) for
+  automatic fresh, unambiguous Web activation
 
 ## Context
 

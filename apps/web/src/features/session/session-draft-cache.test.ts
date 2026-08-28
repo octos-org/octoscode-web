@@ -16,6 +16,17 @@ describe("SessionDraftCache", () => {
     expect(cache.size).toBe(2);
   });
 
+  it("clears every draft when the authenticated principal changes", () => {
+    const cache = new SessionDraftCache();
+    cache.set("session-a", "private draft");
+    cache.set("session-b", "another draft");
+
+    cache.clear();
+
+    expect(cache.size).toBe(0);
+    expect(cache.get("session-a")).toBeUndefined();
+  });
+
   it("rejects invalid capacity instead of silently becoming unbounded", () => {
     expect(() => new SessionDraftCache(0)).toThrow(/positive integer/);
   });

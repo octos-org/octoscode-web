@@ -10,6 +10,7 @@ import {
 import type {
   CandidateSessionClient,
   CandidateSessionSnapshot,
+  PreparedCandidateSession,
 } from "./candidate-session.ts";
 import type { SessionConnectionInput } from "./connection-lifecycle.ts";
 import {
@@ -31,6 +32,150 @@ export interface ActiveSessionClient extends CandidateSessionClient {
   subscribeStatus(listener: (status: ConnectionStatus) => void): () => void;
   subscribeErrors(listener: (error: Error) => void): () => void;
   listConfigCapabilities(): Promise<ConfigCapabilitiesListResult>;
+}
+
+export interface PrepareRetainedCandidateSessionOptions<
+  Client extends ActiveSessionClient,
+> {
+  client: Client;
+  config: SessionConnectionInput;
+  signal: AbortSignal;
+  validateOpened(opened: SessionOpened): void;
+}
+
+/**
+ * Re-open and hydrate an already-connected parked owner without taking its
+ * cleanup authority. Failure only removes the staging listener; the background
+ * manager can then roll the reclaim reservation back safely.
+ */
+export async function prepareRetainedCandidateSession<
+  Client extends ActiveSessionClient,
+>(
+  options: PrepareRetainedCandidateSessionOptions<Client>,
+): Promise<PreparedCandidateSession<Client>> {
+  const { client, config, signal } = options;
+  const notifications: RpcNotification[] = [];
+  const terminalListeners = new Set<(error: Error) => void>();
+  let state: "preparing" | "prepared" | "released" | "disposed" = "preparing";
+  let terminalError: Error | null = null;
+  let unsubscribe: (() => void) | null = null;
+
+  const detach = () => {
+    const listener = unsubscribe;
+    unsubscribe = null;
+    listener?.();
+    signal.removeEventListener("abort", abort);
+  };
+  const fail = (error: Error) => {
+    terminalError ??= error;
+    if (state === "released" || state === "disposed") return;
+    state = "disposed";
+    for (const listener of terminalListeners) listener(terminalError);
+    terminalListeners.clear();
+    detach();
+  };
+  function abort() {
+    fail(new Error("Retained candidate opening was cancelled"));
+  }
+  const assertPreparing = () => {
+    if (terminalError) throw terminalError;
+    if (signal.aborted) abort();
+    if (client.status !== "connected") {
+      fail(new Error("The retained owner transport disconnected"));
+    }
+    if (terminalError) throw terminalError;
+  };
+  const waitForStage = <Value>(operation: Promise<Value>): Promise<Value> => {
+    assertPreparing();
+    return new Promise<Value>((resolve, reject) => {
+      let settled = false;
+      const failStage = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        terminalListeners.delete(failStage);
+        reject(error);
+      };
+      terminalListeners.add(failStage);
+      operation.then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          terminalListeners.delete(failStage);
+          resolve(value);
+        },
+        (reason: unknown) => {
+          if (settled) return;
+          settled = true;
+          terminalListeners.delete(failStage);
+          reject(reason);
+        },
+      );
+    });
+  };
+
+  try {
+    signal.addEventListener("abort", abort, { once: true });
+    unsubscribe = client.subscribeNotifications((notification) => {
+      if (notifications.length >= RECOVERY_NOTIFICATION_LIMIT) {
+        fail(
+          new Error(
+            "The retained candidate emitted too many events while opening.",
+          ),
+        );
+        return;
+      }
+      notifications.push(notification);
+    });
+    assertPreparing();
+    const result = await waitForStage(
+      client.openSession({
+        session_id: config.sessionId,
+        ...(config.profileId ? { profile_id: config.profileId } : {}),
+        ...(config.cwd ? { cwd: config.cwd } : {}),
+      }),
+    );
+    assertPreparing();
+    options.validateOpened(result.opened);
+    assertPreparing();
+    const hydrated = await waitForStage(
+      client.hydrateSession({
+        session_id: result.opened.session_id,
+        include: [...HYDRATE_INCLUDE],
+      }),
+    );
+    assertPreparing();
+    if (hydrated.session_id !== result.opened.session_id) {
+      throw new Error("session/hydrate returned another session");
+    }
+    state = "prepared";
+    return {
+      release() {
+        if (state !== "prepared") {
+          throw (
+            terminalError ?? new Error("Retained candidate is not prepared")
+          );
+        }
+        assertPreparing();
+        state = "released";
+        detach();
+        return {
+          client,
+          opened: result.opened,
+          hydrated,
+          notifications: [...notifications],
+        };
+      },
+      dispose() {
+        if (state === "released" || state === "disposed") return;
+        state = "disposed";
+        detach();
+      },
+    };
+  } catch (reason) {
+    const error = terminalError ?? errorFrom(reason);
+    fail(error);
+    throw error;
+  }
 }
 
 export type ActiveSessionRuntimePhase =
@@ -140,6 +285,17 @@ export interface AdoptCandidateOptions<Client extends ActiveSessionClient> {
   expected: ActiveSessionAuthority<Client>;
   config: SessionConnectionInput;
   candidate: CandidateSessionSnapshot<Client>;
+  /**
+   * Transfer cleanup of the previous transport to a background-turn owner.
+   *
+   * Core aborts foreground work when the WebSocket that started it closes.
+   * The caller may therefore keep that exact socket alive while another
+   * Session becomes the foreground product authority. The old binding is
+   * still retired here, so it can no longer publish into the new Session.
+   */
+  preservePreviousTransport?: boolean;
+  /** Final synchronous authorization immediately before authority mutation. */
+  authorizeCommit?: () => boolean;
 }
 
 export class StaleSessionAuthorityError extends Error {
@@ -341,6 +497,10 @@ export class ActiveSessionRuntime<
       this.#disposeBinding(nextBinding);
       throw new Error("The prepared candidate transport disconnected");
     }
+    if (options.authorizeCommit && !options.authorizeCommit()) {
+      this.#disposeBinding(nextBinding);
+      throw new StaleSessionAuthorityError();
+    }
 
     this.#invalidateRecoveryOperation();
     this.#authority = next;
@@ -363,10 +523,12 @@ export class ActiveSessionRuntime<
     this.#phase = "recovering";
 
     this.#disposeBinding(previousBinding);
-    try {
-      previous?.client.disconnect();
-    } catch {
-      // The new authority is already committed; old transport cleanup is best effort.
+    if (!options.preservePreviousTransport) {
+      try {
+        previous?.client.disconnect();
+      } catch {
+        // The new authority is already committed; old transport cleanup is best effort.
+      }
     }
 
     this.#publish();
@@ -599,6 +761,22 @@ export class ActiveSessionRuntime<
       if (result.opened.session_id !== target.config.sessionId) {
         throw new Error(
           `session/open returned ${result.opened.session_id}, expected ${target.config.sessionId}`,
+        );
+      }
+      if (
+        target.config.profileId &&
+        result.opened.active_profile_id !== target.config.profileId
+      ) {
+        throw new Error(
+          `session/open returned Profile ${result.opened.active_profile_id ?? "<missing>"}, expected ${target.config.profileId}`,
+        );
+      }
+      if (
+        target.config.cwd &&
+        result.opened.workspace_root !== target.config.cwd
+      ) {
+        throw new Error(
+          `session/open returned workspace ${result.opened.workspace_root ?? "<missing>"}, expected ${target.config.cwd}`,
         );
       }
       this.#options.validateServerCapabilities(result.opened.capabilities);
@@ -949,4 +1127,8 @@ function clampUnit(value: number): number {
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
+}
+
+function errorFrom(reason: unknown): Error {
+  return reason instanceof Error ? reason : new Error(String(reason));
 }

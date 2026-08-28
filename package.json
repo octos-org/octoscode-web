@@ -25,7 +25,7 @@
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "test:e2e:live": "node scripts/run-live-e2e.mjs",
     "check": "pnpm format:check && pnpm policy:verify && pnpm licenses:verify && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm deploy:verify"
   },
   "devDependencies": {

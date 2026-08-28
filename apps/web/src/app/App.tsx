@@ -15,16 +15,19 @@ import { codingProductCapabilities } from "../features/session/coding-capabiliti
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 import {
   clearConnectionPreferences,
+  clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
+  loadKnownSessions,
+  rememberKnownSession,
   saveConnectionPreferences,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
 import { freshWebSessionId } from "../features/session/session-identity.ts";
-import {
-  ProductSidebar,
-  type ProductSidebarSession,
-  type ProductSidebarWorkspace,
+import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
+import type {
+  ProductSidebarSession,
+  ProductSidebarWorkspace,
 } from "../features/shell/ProductSidebar.tsx";
 import {
   findModel,
@@ -37,7 +40,6 @@ import {
   profileDefaultNeedsRestart,
   selectedModel,
 } from "../features/shell/product-projection.ts";
-import { SessionControlBar } from "../features/product-controls/SessionControlBar.tsx";
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type {
   ModelSelection,
@@ -53,6 +55,14 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 
+const ProductSidebar = lazy(async () => ({
+  default: (await import("../features/shell/ProductSidebar.tsx"))
+    .ProductSidebar,
+}));
+const SessionControlBar = lazy(async () => ({
+  default: (await import("../features/product-controls/SessionControlBar.tsx"))
+    .SessionControlBar,
+}));
 const LaunchDecisionPanel = lazy(async () => ({
   default: (await import("../features/workspace/LaunchDecisionPanel.tsx"))
     .LaunchDecisionPanel,
@@ -158,6 +168,9 @@ export function App() {
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>(
     () => loadRecentWorkspaces(window.sessionStorage, connection.endpoint),
   );
+  const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
+    loadKnownSessions(window.sessionStorage, connection),
+  );
   const codingCapabilities = codingProductCapabilities(session.capabilities);
 
   useEffect(() => {
@@ -257,7 +270,15 @@ export function App() {
     setRecentWorkspaces(
       rememberWorkspace(window.sessionStorage, connection.endpoint, path),
     );
-  }, [connection.endpoint, session.connected, session.opened]);
+    setKnownSessions(
+      rememberKnownSession(window.sessionStorage, connection, opened),
+    );
+  }, [
+    connection.endpoint,
+    connection.token,
+    session.connected,
+    session.opened,
+  ]);
 
   const submit = (override?: string) => {
     const text = (override ?? draftRef.current).trim();
@@ -421,7 +442,11 @@ export function App() {
     ? []
     : commandSuggestions(draft, session.opened?.capabilities);
   const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
-  const switchBlocked = Boolean(
+  // A server-accepted turn may keep running on its owner socket while this
+  // tab focuses another Session. Browser-local queued prompts cannot: they
+  // still belong to the current controller and therefore block navigation.
+  const navigationBlocked = workspaceProduct.transitioning;
+  const runtimeMutationBlocked = Boolean(
     conversation.queue.active ||
     conversation.queue.pending.length ||
     workspaceProduct.transitioning,
@@ -431,7 +456,11 @@ export function App() {
     workspaceProduct.launch.cwd?.trim() ||
     "";
   const activeSessionKey = session.opened
-    ? workspaceSessionKey(activeWorkspacePath, session.opened.session_id)
+    ? workspaceSessionKey(
+        activeWorkspacePath,
+        session.opened.active_profile_id ?? "",
+        session.opened.session_id,
+      )
     : null;
   useEffect(() => {
     const previous = previousActiveSessionKeyRef.current;
@@ -450,30 +479,45 @@ export function App() {
     if (activeSessionKey) setConversationTab("chat");
   }, [activeSessionKey]);
   const sidebarProjection = useMemo(() => {
-    const workspaces = activeWorkspacePath
-      ? ensureActiveWorkspace(recentWorkspaces, activeWorkspacePath)
-      : recentWorkspaces;
+    const backgroundBySession = new Map(
+      workspaceProduct.backgroundTurns.map((turn) => [
+        workspaceSessionKey(turn.workspaceRoot, turn.profileId, turn.sessionId),
+        turn,
+      ]),
+    );
+    const workspaces = knownSessionWorkspaces(
+      recentWorkspaces,
+      knownSessions,
+      activeWorkspacePath,
+    );
     const targets = new Map<
       string,
-      { sessionId: string; workspacePath: string }
+      { sessionId: string; profileId: string; workspacePath: string }
     >();
     const projected: ProductSidebarWorkspace[] = workspaces.map((workspace) => {
       const isActiveWorkspace = workspace.path === activeWorkspacePath;
-      const sourceSessions = isActiveWorkspace
-        ? workspaceProduct.state.sessions.map((item) => ({
-            id: item.id,
-            title: item.title?.trim() || item.last_prompt?.trim() || item.id,
-            ...(item.updated_at ? { updatedAt: item.updated_at } : {}),
-          }))
-        : [];
+      const sourceSessions = knownSessions
+        .filter((item) => item.workspaceRoot === workspace.path)
+        .map((item) => ({
+          sessionId: item.sessionId,
+          profileId: item.profileId,
+          title: knownSessionTitle(item.sessionId),
+          updatedAt: item.lastOpenedAt,
+        }));
       if (
         isActiveWorkspace &&
         session.opened &&
-        !sourceSessions.some((item) => item.id === session.opened?.session_id)
+        !sourceSessions.some(
+          (item) =>
+            item.sessionId === session.opened?.session_id &&
+            item.profileId === (session.opened.active_profile_id ?? ""),
+        )
       ) {
         sourceSessions.unshift({
-          id: session.opened.session_id,
-          title: "New coding session",
+          sessionId: session.opened.session_id,
+          profileId: session.opened.active_profile_id ?? "",
+          title: knownSessionTitle(session.opened.session_id),
+          updatedAt: Date.now(),
         });
       }
       return {
@@ -481,18 +525,24 @@ export function App() {
         label: workspace.name,
         path: workspace.path,
         expanded: !collapsedWorkspaceIds.has(workspace.id),
-        // Core's compatibility list does not echo Workspace/Profile scope.
-        // Only the successfully opened Session is safe to project here.
-        sessionCatalogStatus: "current-only",
+        // Core rc.9 has no authoritative server-wide SessionRef catalog.
+        // These rows are only the server-confirmed refs opened in this tab.
+        sessionCatalogStatus: "known-only",
         sessions: sourceSessions.map((item): ProductSidebarSession => {
-          const productId = workspaceSessionKey(workspace.path, item.id);
+          const productId = workspaceSessionKey(
+            workspace.path,
+            item.profileId,
+            item.sessionId,
+          );
           targets.set(productId, {
-            sessionId: item.id,
+            sessionId: item.sessionId,
+            profileId: item.profileId,
             workspacePath: workspace.path,
           });
           const active = productId === activeSessionKey;
+          const background = backgroundBySession.get(productId);
           const updatedLabel = formatRelativeTime(item.updatedAt);
-          const updatedAt = Date.parse(item.updatedAt ?? "");
+          const updatedAt = item.updatedAt;
           return {
             id: productId,
             title: item.title,
@@ -505,7 +555,9 @@ export function App() {
                 }
               : active && activeTurnId
                 ? { status: "running" as const, statusLabel: "Working" }
-                : {}),
+                : background
+                  ? backgroundSessionStatus(background.state)
+                  : {}),
           };
         }),
       };
@@ -518,25 +570,27 @@ export function App() {
     collapsedWorkspaceIds,
     interactions.approval,
     interactions.question,
+    knownSessions,
     recentWorkspaces,
-    workspaceProduct.state.sessions,
+    workspaceProduct.backgroundTurns,
   ]);
 
   const moveToProductSession = async (productSessionId: string) => {
     const target = sidebarProjection.targets.get(productSessionId);
-    if (!target || switchBlocked || productSessionId === activeSessionKey)
+    if (!target || navigationBlocked || productSessionId === activeSessionKey)
       return;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
       cwd: target.workspacePath,
-      profileId: null,
+      profileId: target.profileId,
+      resolveLaunch: false,
     });
     if (outcome !== "opened") return;
   };
   const createSessionInWorkspace = async (workspacePath: string) => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
-      switchBlocked ||
+      navigationBlocked ||
       !workspacePath.trim()
     )
       return;
@@ -573,6 +627,7 @@ export function App() {
     const identityChanged =
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
+      clearKnownSessions(window.sessionStorage, connection);
       clearConnectionPreferences(window.localStorage, window.sessionStorage);
       for (const endpoint of new Set([
         connection.endpoint.trim(),
@@ -583,6 +638,11 @@ export function App() {
         clearRecentWorkspaces(window.localStorage, endpoint);
       }
       setRecentWorkspaces([]);
+      setKnownSessions([]);
+      sessionDraftsRef.current.clear();
+      previousActiveSessionKeyRef.current = null;
+      draftRef.current = "";
+      setDraft("");
     }
     setConnection(
       identityChanged
@@ -603,9 +663,15 @@ export function App() {
     session.disconnect();
   };
   const forgetConnection = () => {
+    clearKnownSessions(window.sessionStorage, connection);
     clearRecentWorkspaces(window.sessionStorage, connection.endpoint);
     clearRecentWorkspaces(window.localStorage, connection.endpoint);
     setRecentWorkspaces([]);
+    setKnownSessions([]);
+    sessionDraftsRef.current.clear();
+    previousActiveSessionKeyRef.current = null;
+    draftRef.current = "";
+    setDraft("");
     disconnect();
     clearConnectionPreferences(window.localStorage, window.sessionStorage);
     setConnection(initialConnection);
@@ -636,7 +702,7 @@ export function App() {
             )
           : null,
         locked:
-          switchBlocked ||
+          runtimeMutationBlocked ||
           safety.permission.busy ||
           !safety.permission.editable,
         labels: PERMISSION_LABELS,
@@ -698,35 +764,51 @@ export function App() {
   return (
     <div className="app-shell">
       <main className="workspace-grid">
-        <ProductSidebar
-          collapsed={sidebarCollapsed}
-          workspaces={sidebarProjection.workspaces}
-          selectedSessionId={activeSessionKey}
-          loading={workspaceProduct.state.loading}
-          error={workspaceProduct.state.error}
-          settingsActive={settingsOpen}
-          sessionCreationAvailable={codingCapabilities.sessionCreationAvailable}
-          viewMode={sidebarView}
-          orderMode="updated"
-          onCollapsedChange={setSidebarCollapsed}
-          onNewSession={requestNewSession}
-          onAddWorkspace={() => setWorkspacePicker({ open: true, view: "add" })}
-          onViewModeChange={setSidebarView}
-          onOrderModeChange={() => undefined}
-          onWorkspaceExpandedChange={(workspaceId, expanded) => {
-            setCollapsedWorkspaceIds((current) => {
-              const next = new Set(current);
-              if (expanded) next.delete(workspaceId);
-              else next.add(workspaceId);
-              return next;
-            });
-          }}
-          onSessionSelect={moveToProductSession}
-          onSettings={() => setSettingsOpen(true)}
-          onRetry={() => {
-            void workspaceProduct.refresh();
-          }}
-        />
+        <Suspense
+          fallback={
+            <aside
+              className={productStyles.sidebarFallback}
+              aria-label="Product navigation"
+              aria-busy="true"
+            >
+              Loading sessions…
+            </aside>
+          }
+        >
+          <ProductSidebar
+            collapsed={sidebarCollapsed}
+            workspaces={sidebarProjection.workspaces}
+            selectedSessionId={activeSessionKey}
+            loading={workspaceProduct.state.loading}
+            error={workspaceProduct.state.error}
+            settingsActive={settingsOpen}
+            sessionCreationAvailable={
+              codingCapabilities.sessionCreationAvailable
+            }
+            viewMode={sidebarView}
+            orderMode="updated"
+            onCollapsedChange={setSidebarCollapsed}
+            onNewSession={requestNewSession}
+            onAddWorkspace={() =>
+              setWorkspacePicker({ open: true, view: "add" })
+            }
+            onViewModeChange={setSidebarView}
+            onOrderModeChange={() => undefined}
+            onWorkspaceExpandedChange={(workspaceId, expanded) => {
+              setCollapsedWorkspaceIds((current) => {
+                const next = new Set(current);
+                if (expanded) next.delete(workspaceId);
+                else next.add(workspaceId);
+                return next;
+              });
+            }}
+            onSessionSelect={moveToProductSession}
+            onSettings={() => setSettingsOpen(true)}
+            onRetry={() => {
+              void workspaceProduct.refresh();
+            }}
+          />
+        </Suspense>
 
         <section className="conversation">
           <header className="conversation-header">
@@ -1012,29 +1094,40 @@ export function App() {
                   rows={3}
                 />
                 <div className="composer-footer">
-                  <SessionControlBar
-                    ariaLabel="Session controls"
-                    permission={permissionControl}
-                    model={null}
-                    runtimeModel={
-                      session.opened &&
-                      codingCapabilities.runtimeStatusAvailable &&
-                      work.supervision.statusAvailable
-                        ? {
-                            label: runtimeModelLabel,
-                            ...(pendingProfileDefault
-                              ? { pendingProfileDefault }
-                              : {}),
-                            onOpenSettings: () => {
-                              setSettingsSection(
-                                showModelsSettings ? "models" : "general",
-                              );
-                              setSettingsOpen(true);
-                            },
-                          }
-                        : null
-                    }
-                  />
+                  {session.opened ? (
+                    <Suspense
+                      fallback={
+                        <div
+                          className={productStyles.sessionControlsFallback}
+                          role="status"
+                          aria-label="Loading session controls"
+                        />
+                      }
+                    >
+                      <SessionControlBar
+                        ariaLabel="Session controls"
+                        permission={permissionControl}
+                        model={null}
+                        runtimeModel={
+                          codingCapabilities.runtimeStatusAvailable &&
+                          work.supervision.statusAvailable
+                            ? {
+                                label: runtimeModelLabel,
+                                ...(pendingProfileDefault
+                                  ? { pendingProfileDefault }
+                                  : {}),
+                                onOpenSettings: () => {
+                                  setSettingsSection(
+                                    showModelsSettings ? "models" : "general",
+                                  );
+                                  setSettingsOpen(true);
+                                },
+                              }
+                            : null
+                        }
+                      />
+                    </Suspense>
+                  ) : null}
                   <div className="composer-actions">
                     {contextPercent !== null ? (
                       <span
@@ -1119,7 +1212,7 @@ export function App() {
                   }
                   workspacePath={activeWorkspacePath || null}
                   displayProfile={session.opened?.active_profile_id ?? null}
-                  locked={switchBlocked}
+                  locked={runtimeMutationBlocked}
                   onDisconnect={disconnect}
                   onForgetConnection={forgetConnection}
                 />
@@ -1136,7 +1229,7 @@ export function App() {
                             runtimeModel={runtimeModelLabel}
                             restartRequired={restartPending}
                             selectionEnabled={models.state.editable}
-                            locked={switchBlocked || models.state.busy}
+                            locked={runtimeMutationBlocked || models.state.busy}
                             onRefresh={() => void models.refresh()}
                             onSelect={(selection) =>
                               void selectModel(selection)
@@ -1149,7 +1242,7 @@ export function App() {
                           profileId={models.management.profileId}
                           capabilities={models.management.capabilities}
                           profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
-                          locked={switchBlocked}
+                          locked={runtimeMutationBlocked}
                           onConfiguredModelsChange={models.refresh}
                         />
                       </>
@@ -1242,26 +1335,70 @@ function defaultEndpoint(): string {
   return window.location.origin;
 }
 
-function workspaceSessionKey(workspacePath: string, sessionId: string): string {
-  return JSON.stringify([workspacePath, sessionId]);
+function workspaceSessionKey(
+  workspacePath: string,
+  profileId: string,
+  sessionId: string,
+): string {
+  return JSON.stringify([workspacePath, profileId, sessionId]);
 }
 
-function ensureActiveWorkspace(
+function knownSessionWorkspaces(
   workspaces: readonly RecentWorkspace[],
-  path: string,
+  sessions: readonly KnownSessionRef[],
+  activePath: string,
 ): RecentWorkspace[] {
-  if (workspaces.some((workspace) => workspace.path === path)) {
-    return [...workspaces];
+  const projected = new Map(
+    workspaces.map((workspace) => [workspace.path, { ...workspace }]),
+  );
+  for (const session of sessions) {
+    const current = projected.get(session.workspaceRoot);
+    if (current) {
+      current.lastOpenedAt = Math.max(
+        current.lastOpenedAt,
+        session.lastOpenedAt,
+      );
+      continue;
+    }
+    projected.set(session.workspaceRoot, {
+      id: session.workspaceRoot,
+      name: workspaceName(session.workspaceRoot),
+      path: session.workspaceRoot,
+      lastOpenedAt: session.lastOpenedAt,
+    });
   }
-  return [
-    {
-      id: path,
-      name: workspaceName(path),
-      path,
+  if (activePath && !projected.has(activePath)) {
+    projected.set(activePath, {
+      id: activePath,
+      name: workspaceName(activePath),
+      path: activePath,
       lastOpenedAt: Date.now(),
-    },
-    ...workspaces,
-  ];
+    });
+  }
+  return [...projected.values()].sort(
+    (left, right) => right.lastOpenedAt - left.lastOpenedAt,
+  );
+}
+
+function knownSessionTitle(sessionId: string): string {
+  const wireLeaf = sessionId.split(":").at(-1)?.trim() || sessionId.trim();
+  const compact = wireLeaf.length > 10 ? wireLeaf.slice(-8) : wireLeaf;
+  return `Session ${compact || "unknown"}`;
+}
+
+function backgroundSessionStatus(
+  state: "running" | "waiting" | "completed" | "failed",
+): Pick<ProductSidebarSession, "status" | "statusLabel"> {
+  switch (state) {
+    case "running":
+      return { status: "running", statusLabel: "Working in background" };
+    case "waiting":
+      return { status: "waiting", statusLabel: "Waiting for input" };
+    case "completed":
+      return { status: "completed", statusLabel: "Completed in background" };
+    case "failed":
+      return { status: "failed", statusLabel: "Background turn failed" };
+  }
 }
 
 function sessionContextPercent(
