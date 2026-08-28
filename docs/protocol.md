@@ -69,12 +69,50 @@ Markdown tree.
   with the latest server status snapshot.
 
 The model served by a Session runtime and the active Profile default are
-different projections. The composer reports only the former. Capability-gated
-`profile/llm/list` and `profile/llm/select` populate Settings and manage the
-Profile default, which affects every Session on that Profile and may require an
-Octos restart. They are not treated as a Session override; that missing Core
-contract is tracked in
-[octos#2148](https://github.com/octos-org/octos/issues/2148).
+different projections. The composer reports only the former. Settings uses
+independently capability-gated Profile operations:
+
+- `profile/llm/list` without `session_id` reads the configured primary and
+  fallbacks. Its rows contain provider/model/route metadata and `has_api_key`,
+  never the secret value.
+- `profile/llm/catalog` supplies canonical families, models, and routes.
+- `profile/llm/test` probes the exact draft route/model and supplied or
+  Core-owned credential.
+- `profile/llm/fetch_models` asks Core to discover model ids for the draft
+  provider and route. An empty result or `provider_unavailable` is not treated
+  as proof that the credential is invalid; manual model-id entry remains
+  available.
+- `profile/llm/upsert` saves a tested configuration and may make it the Profile
+  primary.
+- `profile/llm/delete` removes an exact family/model/route tuple.
+- `profile/llm/select` changes the Profile default among configured entries.
+
+Capabilities are evaluated per operation: a server that advertises only list
+still gets a useful read-only page, while unavailable mutation or discovery
+controls remain absent. The API key remains transient form state in the open
+editor and is passed as an operation argument; it never enters published
+controller state or browser storage. Omitting it reuses a key already saved by
+Core. Core owns persistence and returns only the redacted `has_api_key`
+projection; the client does not assert that the server-side store is encrypted.
+A dedicated server-side credential contract is tracked in
+[octos#2163](https://github.com/octos-org/octos/issues/2163).
+
+Save performs Test and Upsert from one immutable draft so the two requests
+cannot diverge across an await. Responses are accepted only for the current
+transport/Profile authority, and reflected credential-shaped errors are redacted
+before publication. The currently implemented AppUI payload has no durable
+fields for `temperature`, `top_p`, token/context limits, or reasoning controls;
+the browser must not invent them or silently add ignored properties. Typed
+inference parameters are tracked in
+[octos#2166](https://github.com/octos-org/octos/issues/2166).
+
+Profile changes affect every Session on that Profile and may require an Octos
+restart. They are not treated as a Session override; that missing Core contract
+is tracked in [octos#2148](https://github.com/octos-org/octos/issues/2148),
+while upsert/delete runtime invalidation is tracked separately in
+[octos#2164](https://github.com/octos-org/octos/issues/2164). Provider-aware
+model discovery is tracked in
+[octos#2165](https://github.com/octos-org/octos/issues/2165).
 
 ## Workspace launch and onboarding
 

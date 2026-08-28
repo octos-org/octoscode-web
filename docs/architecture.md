@@ -60,7 +60,8 @@ bridge, or raw protocol event bus.
 | Remembered server endpoint                                    | `localStorage`; the only durable browser preference    |
 | Token, auto-connect, and active Session restore hints         | Endpoint-bound current tab (`sessionStorage`)          |
 | Recent Workspace paths                                        | Current tab (`sessionStorage`); never Session metadata |
-| Provider credential                                           | Memory only; never browser storage                     |
+| Provider credential draft                                     | Operation-local browser memory; sent only to Core      |
+| Saved provider credential                                     | `octos serve`; browser receives only `has_api_key`     |
 
 The foreground session orchestration boundary converts validated protocol
 notifications into feature-specific actions. Durable state is always
@@ -87,7 +88,9 @@ their presentation but not their state transition:
 - workspace resolution validates the server path/profile decision, while New
   Session uses a fresh opaque Web identity;
 - the composer reports the effective Session runtime model, while Settings may
-  manage only the active Profile default.
+  manage provider/model/route configuration and the active Profile default;
+- provider keys are write-only operation arguments in the client; Core owns
+  persistence and returns only a configured/not-configured projection.
 
 DeepSeek Harness supplies the audited browser-product and visual reference. Its
 Cordis host, agent runtime, and full plugin graph are not part of this system.

@@ -24,6 +24,7 @@ import type {
 import { useServerConnection } from "./use-server-connection.ts";
 import {
   coreProtocolCompatibilityError,
+  APPUI_ONBOARDING_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
   DEFAULT_UI_FEATURES,
@@ -83,6 +84,7 @@ import {
   useModelSelection,
   type ModelSelectionRuntimeState,
 } from "../models/use-model-selection.ts";
+import type { ModelSettingsClient } from "../models/model-settings.ts";
 
 export type {
   DiffReviewRuntimeState,
@@ -146,6 +148,13 @@ export interface OctosSessionRuntime {
     state: ModelSelectionRuntimeState;
     refresh: () => Promise<void>;
     select: (model: ProfileLlmModel) => Promise<void>;
+    management: {
+      client: ModelSettingsClient | null;
+      profileId: string;
+      authorityKey: string;
+      capabilities: UiProtocolCapabilities | undefined;
+      available: boolean;
+    };
   };
   work: {
     supervision: SupervisionRuntimeState;
@@ -294,13 +303,14 @@ export function useOctosSession(): OctosSessionRuntime {
     connectionConfig: () => currentAuthority()?.config ?? null,
   });
   const workspace = workspaceController.state;
+  const activeProfileId = () =>
+    currentAuthority()?.profileId ??
+    connectionSnapshot.session?.opened.active_profile_id ??
+    "";
   const modelController = useModelSelection({
     client: currentClient,
     sessionId: currentSessionId,
-    profileId: () =>
-      currentAuthority()?.profileId ??
-      connectionSnapshot.session?.opened.active_profile_id ??
-      "",
+    profileId: activeProfileId,
     capabilities: currentCapabilities,
   });
   const [launch, setLaunch] =
@@ -882,6 +892,21 @@ export function useOctosSession(): OctosSessionRuntime {
       state: modelController.state,
       refresh: modelController.refresh,
       select: modelController.select,
+      management: {
+        client: currentClient(),
+        profileId: activeProfileId(),
+        authorityKey: `${currentAuthority()?.generation ?? 0}:${activeProfileId()}`,
+        capabilities: currentCapabilities(),
+        available:
+          supportsMethod(
+            currentCapabilities(),
+            APPUI_ONBOARDING_METHODS.PROFILE_LLM_LIST,
+          ) ||
+          supportsMethod(
+            currentCapabilities(),
+            APPUI_ONBOARDING_METHODS.PROFILE_LLM_CATALOG,
+          ),
+      },
     },
     work: {
       supervision,

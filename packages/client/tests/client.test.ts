@@ -388,6 +388,136 @@ describe("OctosUiClient", () => {
     }
     await expect(Promise.all(pending)).resolves.toHaveLength(8);
   });
+
+  it("emits the exact profile model-management wire contract", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const route = {
+      route_id: "official",
+      label: "Official",
+      base_url: "https://api.z.ai/api/paas/v4",
+      api_key_env: "ZAI_API_KEY",
+      api_type: "openai",
+    };
+    const selection = {
+      family_id: "zai",
+      model_id: "glm-5.3-flash",
+      route,
+    };
+    const pending = [
+      client.readProfileLlmConfig({ profile_id: "coding" }),
+      client.fetchLlmModels({
+        profile_id: "coding",
+        selection: { family_id: "zai", route },
+      }),
+      client.deleteProfileModel({
+        profile_id: "coding",
+        family_id: "zai",
+        model_id: "glm-5.2",
+        route_id: "official",
+      }),
+      client.testLlmProfile({ profile_id: "coding", selection }),
+      client.upsertLlmProfile({
+        profile_id: "coding",
+        selection,
+        set_primary: true,
+      }),
+    ];
+    const frames = socket.send.mock.calls.map(([frame]) =>
+      JSON.parse(String(frame)),
+    ) as Array<{ id: string; method: string; params: Record<string, unknown> }>;
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        method: "profile/llm/list",
+        params: { profile_id: "coding" },
+      }),
+      expect.objectContaining({
+        method: "profile/llm/fetch_models",
+        params: {
+          profile_id: "coding",
+          selection: { family_id: "zai", route },
+        },
+      }),
+      expect.objectContaining({
+        method: "profile/llm/delete",
+        params: {
+          profile_id: "coding",
+          family_id: "zai",
+          model_id: "glm-5.2",
+          route_id: "official",
+        },
+      }),
+      expect.objectContaining({
+        method: "profile/llm/test",
+        params: { profile_id: "coding", selection },
+      }),
+      expect.objectContaining({
+        method: "profile/llm/upsert",
+        params: { profile_id: "coding", selection, set_primary: true },
+      }),
+    ]);
+    expect(frames[0]?.params).not.toHaveProperty("session_id");
+    expect(frames[1]?.params).not.toHaveProperty("api_key");
+    expect(frames[3]?.params).not.toHaveProperty("api_key");
+    expect(frames[4]?.params).not.toHaveProperty("api_key");
+
+    const configured = {
+      provider: "zai",
+      model: "glm-5.3-flash",
+      family_id: "zai",
+      model_id: "glm-5.3-flash",
+      route,
+      route_id: "official",
+      base_url: route.base_url,
+      api_key_env: route.api_key_env,
+      has_api_key: true,
+      selected: true,
+      available: true,
+    };
+    const results = [
+      {
+        profile_id: "coding",
+        primary: configured,
+        fallbacks: [],
+      },
+      {
+        profile_id: "coding",
+        family_id: "zai",
+        models: ["glm-5.3-flash"],
+      },
+      {
+        profile_id: "coding",
+        primary: null,
+        fallbacks: [],
+        applied: true,
+      },
+      {
+        profile_id: "coding",
+        applied: true,
+        message: "Provider connection verified",
+      },
+      { profile_id: "coding", applied: true },
+    ];
+    for (const [index, frame] of frames.entries()) {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          id: frame.id,
+          result: results[index],
+        }),
+      } as MessageEvent);
+    }
+    await expect(Promise.all(pending)).resolves.toHaveLength(5);
+  });
 });
 
 function createSocket() {

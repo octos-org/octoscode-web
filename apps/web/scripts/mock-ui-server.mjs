@@ -61,21 +61,33 @@ const sessionChannels = new Set([
   "wecom-bot",
   "whatsapp",
 ]);
-const profileModels = [
+const initialProfileModels = [
   {
-    model: "glm-5.2",
-    provider: "zai",
-    title: "GLM 5.2",
-    family: "zai",
-    route: "official",
+    family_id: "zai",
+    model_id: "glm-5.3-flash",
+    route: {
+      route_id: "official",
+      label: "Z.AI Coding Plan",
+      base_url: "https://api.z.ai/api/coding/paas/v4",
+      api_key_env: "ZAI_API_KEY",
+      api_type: "openai",
+    },
+    has_api_key: true,
+    selected: true,
     available: true,
   },
   {
-    model: "deepseek-v4-pro",
-    provider: "deepseek",
-    title: "DeepSeek V4 Pro",
-    family: "deepseek",
-    route: "official",
+    family_id: "deepseek",
+    model_id: "deepseek-v4-pro",
+    route: {
+      route_id: "official",
+      label: "DeepSeek",
+      base_url: "https://api.deepseek.com/v1",
+      api_key_env: "DEEPSEEK_API_KEY",
+      api_type: "openai",
+    },
+    has_api_key: false,
+    selected: false,
     available: true,
   },
 ];
@@ -84,12 +96,70 @@ const defaultRuntimeModel = {
   provider: "deepseek",
   title: "DeepSeek V4",
 };
-const profileDefaultModelByProfile = new Map([
-  [defaultProfileId, profileModels[0]],
+const configuredModelsByProfile = new Map([
+  [defaultProfileId, cloneConfiguredModels(initialProfileModels)],
 ]);
 const effectiveRuntimeModelByProfile = new Map([
   [defaultProfileId, defaultRuntimeModel],
 ]);
+
+function cloneConfiguredModels(models) {
+  return models.map((model) => ({
+    ...model,
+    route: { ...model.route },
+  }));
+}
+
+function configuredModelsForProfile(profileId) {
+  let configured = configuredModelsByProfile.get(profileId);
+  if (!configured) {
+    configured = cloneConfiguredModels(initialProfileModels);
+    configuredModelsByProfile.set(profileId, configured);
+  }
+  return configured;
+}
+
+function sessionModel(model) {
+  return {
+    model: model.model_id,
+    provider: model.family_id,
+    title: modelTitle(model.model_id),
+    family: model.family_id,
+    route: model.route.route_id,
+    selected: model.selected,
+    available: model.available,
+  };
+}
+
+function profileModelConfiguration(profileId) {
+  const configured = configuredModelsForProfile(profileId);
+  const selected = configured.find((model) => model.selected) ?? null;
+  return {
+    profile_id: profileId,
+    primary: selected ? configuredModelProjection(selected, true) : null,
+    fallbacks: configured
+      .filter((model) => model !== selected)
+      .map((model) => configuredModelProjection(model, false)),
+  };
+}
+
+function configuredModelProjection(model, selected) {
+  return {
+    family_id: model.family_id,
+    model_id: model.model_id,
+    route: { ...model.route },
+    has_api_key: model.has_api_key,
+    selected,
+    available: model.available,
+  };
+}
+
+function modelTitle(modelId) {
+  if (modelId === "glm-5.3-flash") return "GLM 5.3 Flash";
+  if (modelId === "deepseek-v4-pro") return "DeepSeek V4 Pro";
+  return modelId;
+}
+
 const http = createServer((request, response) => {
   if (request.url === "/health") {
     response
@@ -169,6 +239,8 @@ const capabilities = {
     "launch/resolve",
     "profile/local/create",
     "profile/llm/catalog",
+    "profile/llm/delete",
+    "profile/llm/fetch_models",
     "profile/llm/list",
     "profile/llm/select",
     "profile/llm/test",
@@ -267,6 +339,35 @@ sockets.on("connection", (socket, request) => {
     if (request.method === "profile/llm/catalog") {
       reply(socket, request.id, {
         families: {
+          zai: {
+            env: "ZAI_API_KEY",
+            models: [
+              {
+                id: "glm-5.3-flash",
+                endpoints: [
+                  {
+                    id: "official",
+                    label: "Z.AI Coding Plan",
+                    base_url: "https://api.z.ai/api/coding/paas/v4",
+                    api_key_env: "ZAI_API_KEY",
+                    api_type: "openai",
+                  },
+                ],
+              },
+              {
+                id: "glm-5.3",
+                endpoints: [
+                  {
+                    id: "official",
+                    label: "Z.AI Coding Plan",
+                    base_url: "https://api.z.ai/api/coding/paas/v4",
+                    api_key_env: "ZAI_API_KEY",
+                    api_type: "openai",
+                  },
+                ],
+              },
+            ],
+          },
           deepseek: {
             env: "DEEPSEEK_API_KEY",
             models: [
@@ -294,41 +395,41 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "profile/llm/list") {
       const profileId = profileIdFor(socket, request.params);
-      const selected =
-        profileDefaultModelByProfile.get(profileId) ?? profileModels[0];
+      if (!request.params?.session_id) {
+        reply(socket, request.id, profileModelConfiguration(profileId));
+        return;
+      }
       reply(socket, request.id, {
         session_id: sessionId,
-        models: profileModels.map((model) => ({
-          ...model,
-          selected:
-            model.model === selected.model &&
-            model.provider === selected.provider,
-        })),
+        models: configuredModelsForProfile(profileId).map(sessionModel),
       });
       return;
     }
     if (request.method === "profile/llm/select") {
       const modelId = request.params?.model_id;
-      const provider = request.params?.family_id;
-      const selected = profileModels.find(
-        (model) => model.model === modelId && model.family === provider,
+      const familyId = request.params?.family_id;
+      const routeId = request.params?.route_id ?? "official";
+      const configured = configuredModelsForProfile(
+        profileIdFor(socket, request.params),
+      );
+      const selected = configured.find(
+        (model) =>
+          model.model_id === modelId &&
+          model.family_id === familyId &&
+          model.route.route_id === routeId,
       );
       if (!selected) {
         replyError(socket, request.id, -32602, "Model is not configured");
         return;
       }
       const profileId = profileIdFor(socket, request.params);
-      const profileDefault = {
-        ...selected,
-        route: request.params?.route_id ?? selected.route,
-      };
-      profileDefaultModelByProfile.set(profileId, profileDefault);
+      for (const model of configured) model.selected = model === selected;
       const runtimeModel =
         effectiveRuntimeModelByProfile.get(profileId) ?? defaultRuntimeModel;
       reply(socket, request.id, {
         session_id: sessionId,
         selected: {
-          ...profileDefault,
+          ...sessionModel(selected),
           selected: true,
         },
         applied: true,
@@ -372,21 +473,114 @@ sockets.on("connection", (socket, request) => {
         message: applied
           ? "Provider test succeeded"
           : rejected
-            ? `Provider rejected ${request.params.api_key}`
+            ? "Provider rejected the supplied credential"
             : "Keyless compatibility probe missing",
         ...(!applied
           ? {
               error: rejected
-                ? `Provider rejected ${request.params.api_key}`
+                ? "Provider rejected the supplied credential"
                 : "Keyless compatibility probe missing",
             }
           : {}),
       });
       return;
     }
-    if (request.method === "profile/llm/upsert") {
+    if (request.method === "profile/llm/fetch_models") {
+      const familyId = request.params.selection?.family_id;
+      const route = request.params.selection?.route;
+      const profileId = profileIdFor(socket, request.params);
+      const savedCredential = configuredModelsForProfile(profileId).some(
+        (model) =>
+          model.family_id === familyId &&
+          model.route.route_id === route?.route_id &&
+          model.has_api_key,
+      );
+      if (
+        !request.params.api_key &&
+        !savedCredential &&
+        familyId !== "ollama"
+      ) {
+        reply(socket, request.id, {
+          profile_id: profileId,
+          family_id: familyId,
+          models: [],
+          reason: "no_api_key",
+        });
+        return;
+      }
+      const discovered =
+        familyId === "zai"
+          ? ["glm-5.3-flash", "glm-5.3", "glm-5.2"]
+          : familyId === "deepseek"
+            ? ["deepseek-chat", "deepseek-reasoner"]
+            : familyId === "ollama"
+              ? ["qwen3", "gpt-oss:20b"]
+              : [];
       reply(socket, request.id, {
-        profile_id: request.params.profile_id,
+        profile_id: profileId,
+        family_id: familyId,
+        models: discovered,
+        ...(discovered.length ? {} : { reason: "provider_unavailable" }),
+      });
+      return;
+    }
+    if (request.method === "profile/llm/upsert") {
+      const profileId = profileIdFor(socket, request.params);
+      const selection = request.params.selection;
+      const route = selection?.route;
+      const configured = configuredModelsForProfile(profileId);
+      const existing = configured.find(
+        (model) =>
+          model.family_id === selection?.family_id &&
+          model.model_id === selection?.model_id &&
+          model.route.route_id === route?.route_id,
+      );
+      const next = existing ?? {
+        family_id: selection?.family_id,
+        model_id: selection?.model_id,
+        route: {},
+        has_api_key: false,
+        selected: false,
+        available: true,
+      };
+      next.route = {
+        route_id: route?.route_id,
+        label: route?.label,
+        base_url: route?.base_url,
+        api_key_env: route?.api_key_env,
+        api_type: route?.api_type,
+      };
+      if (request.params.api_key) next.has_api_key = true;
+      if (!existing) configured.push(next);
+      if (
+        request.params.set_primary ||
+        !configured.some((model) => model.selected)
+      ) {
+        for (const model of configured) model.selected = model === next;
+      }
+      reply(socket, request.id, {
+        profile_id: profileId,
+        applied: true,
+      });
+      return;
+    }
+    if (request.method === "profile/llm/delete") {
+      const profileId = profileIdFor(socket, request.params);
+      const configured = configuredModelsForProfile(profileId);
+      const index = configured.findIndex(
+        (model) =>
+          model.family_id === request.params.family_id &&
+          model.model_id === request.params.model_id &&
+          model.route.route_id === request.params.route_id,
+      );
+      if (index < 0) {
+        replyError(socket, request.id, -32602, "Model is not configured");
+        return;
+      }
+      const [deleted] = configured.splice(index, 1);
+      if (deleted?.selected && configured[0]) configured[0].selected = true;
+      reply(socket, request.id, {
+        ...profileModelConfiguration(profileId),
         applied: true,
       });
       return;

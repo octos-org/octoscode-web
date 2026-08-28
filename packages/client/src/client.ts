@@ -71,14 +71,23 @@ import {
 } from "./workspace.ts";
 import {
   APPUI_ONBOARDING_METHODS,
+  parseLlmFetchModelsResult,
   parseLlmCatalogResult,
+  parseProfileLlmConfigResult,
+  parseProfileLlmDeleteResult,
   parseProfileLlmListResult,
   parseProfileLlmSelectResult,
   parseLlmTestResult,
   parseLlmUpsertResult,
   parseLocalProfileCreateResult,
   type LlmCatalogResult,
+  type LlmFetchModelsParams,
+  type LlmFetchModelsResult,
   type LlmProvisionParams,
+  type ProfileLlmConfigReadParams,
+  type ProfileLlmConfigResult,
+  type ProfileLlmDeleteParams,
+  type ProfileLlmDeleteResult,
   type ProfileLlmListParams,
   type ProfileLlmListResult,
   type ProfileLlmSelectParams,
@@ -460,6 +469,16 @@ export class OctosUiClient {
     );
   }
 
+  async readProfileLlmConfig(
+    params: ProfileLlmConfigReadParams = {},
+  ): Promise<ProfileLlmConfigResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_LIST,
+      params,
+      parseProfileLlmConfigResult,
+    );
+  }
+
   async selectProfileModel(
     params: ProfileLlmSelectParams,
   ): Promise<ProfileLlmSelectResult> {
@@ -467,6 +486,26 @@ export class OctosUiClient {
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_SELECT,
       params,
       parseProfileLlmSelectResult,
+    );
+  }
+
+  async deleteProfileModel(
+    params: ProfileLlmDeleteParams,
+  ): Promise<ProfileLlmDeleteResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_DELETE,
+      params,
+      parseProfileLlmDeleteResult,
+    );
+  }
+
+  async fetchLlmModels(
+    params: LlmFetchModelsParams,
+  ): Promise<LlmFetchModelsResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.PROFILE_LLM_FETCH_MODELS,
+      params,
+      parseLlmFetchModelsResult,
     );
   }
 

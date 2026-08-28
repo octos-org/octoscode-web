@@ -5,6 +5,8 @@ import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 export const APPUI_ONBOARDING_METHODS = {
   PROFILE_LOCAL_CREATE: CORE_UI_METHODS.PROFILE_LOCAL_CREATE,
   PROFILE_LLM_CATALOG: "profile/llm/catalog",
+  PROFILE_LLM_DELETE: "profile/llm/delete",
+  PROFILE_LLM_FETCH_MODELS: "profile/llm/fetch_models",
   PROFILE_LLM_LIST: "profile/llm/list",
   PROFILE_LLM_SELECT: "profile/llm/select",
   PROFILE_LLM_TEST: "profile/llm/test",
@@ -65,9 +67,10 @@ export interface LlmSelection {
 }
 
 export interface LlmProvisionParams {
-  profile_id: string;
+  profile_id?: string;
   selection: LlmSelection;
-  api_key: string;
+  /** Omit to reuse the secret already saved for selection.route.api_key_env. */
+  api_key?: string;
   set_primary?: boolean;
 }
 
@@ -80,6 +83,65 @@ export interface LlmTestResult {
 
 export interface LlmUpsertResult {
   profile_id: string;
+  applied: boolean;
+}
+
+/** Reads profile configuration, rather than the session-scoped model picker. */
+export interface ProfileLlmConfigReadParams {
+  profile_id?: string;
+}
+
+export interface ProfileLlmConfiguredRoute {
+  route_id?: string;
+  label?: string;
+  base_url?: string;
+  api_key_env?: string;
+  api_type?: string;
+}
+
+/** A secret-free projection of one configured primary or fallback model. */
+export interface ProfileLlmConfiguredModel {
+  family_id: string;
+  model_id: string;
+  route: ProfileLlmConfiguredRoute;
+  has_api_key: boolean;
+  selected: boolean;
+  available: boolean;
+}
+
+export interface ProfileLlmConfigResult {
+  profile_id: string;
+  primary: ProfileLlmConfiguredModel | null;
+  fallbacks: ProfileLlmConfiguredModel[];
+}
+
+export interface LlmModelFetchSelection {
+  family_id: string;
+  route: LlmRouteSelection;
+}
+
+export interface LlmFetchModelsParams {
+  profile_id?: string;
+  selection: LlmModelFetchSelection;
+  /** Omit to reuse the secret already saved for selection.route.api_key_env. */
+  api_key?: string;
+}
+
+export interface LlmFetchModelsResult {
+  profile_id: string;
+  family_id: string;
+  models: string[];
+  reason?: string;
+}
+
+export interface ProfileLlmDeleteParams {
+  profile_id?: string;
+  family_id: string;
+  model_id: string;
+  route_id: string;
+}
+
+export interface ProfileLlmDeleteResult extends ProfileLlmConfigResult {
   applied: boolean;
 }
 
@@ -223,6 +285,52 @@ export function parseLlmUpsertResult(value: unknown): LlmUpsertResult | null {
   return { profile_id: profileId, applied: value.applied };
 }
 
+export function parseProfileLlmConfigResult(
+  value: unknown,
+): ProfileLlmConfigResult | null {
+  const parsed = parseProfileLlmConfig(value);
+  if (!parsed) return null;
+  return parsed;
+}
+
+export function parseLlmFetchModelsResult(
+  value: unknown,
+): LlmFetchModelsResult | null {
+  if (!isRecord(value) || !Array.isArray(value.models)) return null;
+  const profileId = text(value.profile_id);
+  const familyId = text(value.family_id);
+  const reason = optionalText(value.reason);
+  if (
+    !profileId ||
+    !familyId ||
+    reason === null ||
+    value.models.length > MAX_MODELS
+  ) {
+    return null;
+  }
+  const models: string[] = [];
+  for (const source of value.models) {
+    const model = text(source);
+    if (!model) return null;
+    models.push(model);
+  }
+  return {
+    profile_id: profileId,
+    family_id: familyId,
+    models,
+    ...(reason ? { reason } : {}),
+  };
+}
+
+export function parseProfileLlmDeleteResult(
+  value: unknown,
+): ProfileLlmDeleteResult | null {
+  if (!isRecord(value) || typeof value.applied !== "boolean") return null;
+  const config = parseProfileLlmConfig(value);
+  if (!config) return null;
+  return { ...config, applied: value.applied };
+}
+
 export function parseProfileLlmListResult(
   value: unknown,
 ): ProfileLlmListResult | null {
@@ -289,6 +397,64 @@ function parseProfileLlmModel(value: unknown): ProfileLlmModel | null {
     title,
     ...(family ? { family } : {}),
     ...(route ? { route } : {}),
+    selected: value.selected,
+    available: value.available,
+  };
+}
+
+function parseProfileLlmConfig(value: unknown): ProfileLlmConfigResult | null {
+  if (!isRecord(value) || !Array.isArray(value.fallbacks)) return null;
+  const profileId = text(value.profile_id);
+  if (!profileId || value.fallbacks.length > MAX_MODELS) return null;
+
+  let primary: ProfileLlmConfiguredModel | null = null;
+  if (value.primary !== null) {
+    primary = parseProfileLlmConfiguredModel(value.primary);
+    if (!primary || !primary.selected) return null;
+  }
+
+  const fallbacks: ProfileLlmConfiguredModel[] = [];
+  for (const source of value.fallbacks) {
+    const fallback = parseProfileLlmConfiguredModel(source);
+    if (!fallback || fallback.selected) return null;
+    fallbacks.push(fallback);
+  }
+  return { profile_id: profileId, primary, fallbacks };
+}
+
+function parseProfileLlmConfiguredModel(
+  value: unknown,
+): ProfileLlmConfiguredModel | null {
+  if (!isRecord(value) || !isRecord(value.route)) return null;
+  const familyId = text(value.family_id);
+  const modelId = text(value.model_id);
+  if (
+    !familyId ||
+    !modelId ||
+    typeof value.has_api_key !== "boolean" ||
+    typeof value.selected !== "boolean" ||
+    typeof value.available !== "boolean"
+  ) {
+    return null;
+  }
+  const routeId = optionalText(value.route.route_id);
+  const label = optionalText(value.route.label);
+  const baseUrl = optionalText(value.route.base_url);
+  const apiKeyEnv = optionalText(value.route.api_key_env);
+  const apiType = optionalText(value.route.api_type);
+  if ([routeId, label, baseUrl, apiKeyEnv, apiType].includes(null)) return null;
+
+  return {
+    family_id: familyId,
+    model_id: modelId,
+    route: {
+      ...(routeId ? { route_id: routeId } : {}),
+      ...(label ? { label } : {}),
+      ...(baseUrl ? { base_url: baseUrl } : {}),
+      ...(apiKeyEnv ? { api_key_env: apiKeyEnv } : {}),
+      ...(apiType ? { api_type: apiType } : {}),
+    },
+    has_api_key: value.has_api_key,
     selected: value.selected,
     available: value.available,
   };

@@ -84,16 +84,38 @@ authenticated administration are tracked in
 ## A model is missing or Profile default differs from Session runtime
 
 The composer reports the effective model from the selected Session's runtime; it
-is not a Session-level selector. **Settings → Models** separately shows and,
-when allowed, changes the active Profile default. That default affects every
-Session using the Profile. Refresh the Models page after server configuration
-changes.
+is not a Session-level selector. **Settings → Models** separately reads the
+configured provider/model/routes and, when each Core method is advertised,
+offers Test, Fetch models, Save, Delete, and Profile-default selection. Missing
+controls mean that operation was not advertised; the Web does not infer it from
+another model capability.
+
+**Fetch models** is only provider discovery. Some compatible inference routes do
+not expose a model catalog, so an empty or unavailable result does not prove
+that the API key is wrong. Keep the manually entered model id and use **Test**
+to verify the exact draft. For GLM-5.3-Flash, the exact id is `glm-5.3-flash`.
+
+A saved API key is intentionally never displayed again. A blank field with a
+configured indicator means Core has a value; leave it blank to reuse that key,
+or enter a new key to replace it. The Web never stores it in browser storage and
+Core returns only `has_api_key`. This does not imply that Core encrypts the
+server-side value.
 
 If Settings says a restart is required, the saved Profile default and the model
 served by the current Octos process are intentionally shown as different values.
 Restart Octos before expecting new turns to use the default. A true
 Session-scoped override is tracked in
 [octos#2148](https://github.com/octos-org/octos/issues/2148).
+
+Temperature, `top_p`, maximum-token/context values, and reasoning controls are
+not missing because of a collapsed panel: the current Core AppUI configuration
+contract cannot persist them. Configure supported runtime parameters outside the
+Web until Core exports an explicit contract.
+
+If using GLM Coding Plan, confirm that your tool is in Z.AI's
+[official supported-tool list](https://docs.z.ai/devpack/tool/others). Octos is
+not currently named there; use the normal API endpoint unless Z.AI has granted
+separate authorization.
 
 ## Recovery is stuck
 

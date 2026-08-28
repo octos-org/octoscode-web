@@ -39,7 +39,8 @@ second agent loop, plugin host, sandbox, or session store.
 - Session-local Chat and Trajectory views, safe Markdown/code rendering,
   approvals, questions, plans, tasks, output, artifacts, and diff review.
 - Server-advertised permission control and effective runtime-model status in the
-  composer, plus provider-grouped Profile defaults in Settings.
+  composer, plus capability-gated provider, model, route, credential, test,
+  discovery, save/delete, and Profile-default management in Settings.
 - Browser onboarding for an empty solo server, with transient credentials and a
   truthful TUI fallback on older Core versions.
 - A responsive coding workspace informed by

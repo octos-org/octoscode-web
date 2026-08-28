@@ -92,6 +92,11 @@ const ModelsSettingsContent = lazy(async () => ({
     await import("../features/product-settings/ModelsSettingsContent.tsx")
   ).ModelsSettingsContent,
 }));
+const ModelManagementSettings = lazy(async () => ({
+  default: (
+    await import("../features/product-settings/ModelManagementSettings.tsx")
+  ).ModelManagementSettings,
+}));
 const DiffReviewDialog = lazy(async () => ({
   default: (await import("../features/review/DiffReviewDialog.tsx"))
     .DiffReviewDialog,
@@ -230,10 +235,14 @@ export function App() {
   ]);
 
   useEffect(() => {
-    if (settingsSection === "models" && !models.state.available) {
+    if (
+      settingsSection === "models" &&
+      !models.state.available &&
+      !models.management.available
+    ) {
       setSettingsSection("general");
     }
-  }, [models.state.available, settingsSection]);
+  }, [models.management.available, models.state.available, settingsSection]);
 
   useEffect(() => {
     // v1 persisted session ids/titles in localStorage. Remove that data rather
@@ -646,7 +655,9 @@ export function App() {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
-  const showModelsSettings = Boolean(session.opened && models.state.available);
+  const showModelsSettings = Boolean(
+    session.opened && (models.state.available || models.management.available),
+  );
   const restartPending = profileDefaultNeedsRestart(
     runtimeModel,
     models.state.models,
@@ -1116,17 +1127,32 @@ export function App() {
               ...(showModelsSettings
                 ? {
                     models: (
-                      <ModelsSettingsContent
-                        state={modelControlState(models.state)}
-                        groups={projectedModelGroups}
-                        selected={currentProfileModel}
-                        runtimeModel={runtimeModelLabel}
-                        restartRequired={restartPending}
-                        selectionEnabled={models.state.editable}
-                        locked={switchBlocked || models.state.busy}
-                        onRefresh={() => void models.refresh()}
-                        onSelect={(selection) => void selectModel(selection)}
-                      />
+                      <>
+                        {models.state.available ? (
+                          <ModelsSettingsContent
+                            state={modelControlState(models.state)}
+                            groups={projectedModelGroups}
+                            selected={currentProfileModel}
+                            runtimeModel={runtimeModelLabel}
+                            restartRequired={restartPending}
+                            selectionEnabled={models.state.editable}
+                            locked={switchBlocked || models.state.busy}
+                            onRefresh={() => void models.refresh()}
+                            onSelect={(selection) =>
+                              void selectModel(selection)
+                            }
+                          />
+                        ) : null}
+                        <ModelManagementSettings
+                          key={models.management.authorityKey}
+                          client={models.management.client}
+                          profileId={models.management.profileId}
+                          capabilities={models.management.capabilities}
+                          profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
+                          locked={switchBlocked}
+                          onConfiguredModelsChange={models.refresh}
+                        />
+                      </>
                     ),
                   }
                 : {}),

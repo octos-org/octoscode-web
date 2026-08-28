@@ -33,7 +33,7 @@ semantics. Octos Core remains the runtime and source of durable truth.
 | Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                      |
 | Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
-| Models        | Effective Session runtime model in the composer; provider-grouped Profile-default management in Settings.                   |
+| Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
 | Workspace     | Server-confirmed path, per-Workspace Session list/switch/create, per-Session drafts, and tab-scoped recent-path navigation. |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                      |
@@ -65,9 +65,25 @@ catalog. The authoritative object model and scoped SessionRef are tracked in
 
 Settings opens from the bottom of the sidebar. General shows the active server
 and Workspace and provides Disconnect and Forget server. Models distinguishes
-the Session runtime model from the active Profile default. Changing the latter
-affects every Session using that Profile and can require an Octos restart; it is
-not a Session-scoped choice. Runtime architecture, raw capabilities, boundary
+the Session runtime model from the active Profile default. It reads Core's
+configured primary and fallback models and, when the corresponding methods are
+advertised, can add, edit, test, discover, save, select, or delete a
+provider/model/route entry. The editable route fields are label, base URL,
+credential environment name, and protocol. Provider discovery supplies model id
+suggestions; it does not remove the manual model-id path.
+
+The provider API-key field is write-only. Its value exists only in the current
+open editor and request, and is sent to Core for Test, Fetch models, or Save.
+Core owns the saved credential and returns only `has_api_key`; the Web does not
+retrieve it or claim anything about Core's storage encryption. Leaving the field
+blank for a configured route preserves and reuses the Core-owned key. Save tests
+the exact draft before mutating the Profile, and Delete requires confirmation.
+
+Changing the Profile default affects every Session using that Profile and can
+require an Octos restart; it is not a Session-scoped choice. The current AppUI
+configuration contract does not persist `temperature`, `top_p`, token limits,
+context limits, or reasoning controls, so Settings does not present inert
+controls for them. Runtime architecture, raw capabilities, boundary
 explanations, session files, and global Activity do not occupy the product
 navigation.
 

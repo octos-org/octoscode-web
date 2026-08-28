@@ -26,13 +26,17 @@ occupied; the configured fixture origin is injected into the app.
 The live gate is intentionally separate from CI because it consumes a real
 provider and mutates a real server workspace. It runs the production Web client
 against a developer-supplied Core proxy, creates a fresh opaque Web Session,
-verifies the model reported by that Session runtime, performs one bounded file
-edit/read turn, and reloads the page to prove same-tab restore plus durable
-server hydrate. It does not change or infer the active Profile default. It
-disables Playwright traces, screenshots, and video so the tab-scoped auth token
-cannot enter test artifacts. The live config also disables Playwright's
-automatic failure-page accessibility snapshot because it can serialize password
-field values.
+requires the effective runtime model id to be exactly `glm-5.3-flash`, performs
+one bounded file edit/read turn, and reloads the page to prove same-tab restore
+plus durable server hydrate. It does not configure, change, or infer the active
+Profile default. Set the Profile default through Core first and restart Octos
+when required; the Session-runtime label must already report GLM-5.3-Flash
+before the turn begins.
+
+The gate disables Playwright traces, screenshots, and video so the tab-scoped
+auth token cannot enter test artifacts. The live config also disables
+Playwright's automatic failure-page accessibility snapshot because it can
+serialize password field values.
 
 Supply all four values explicitly:
 
@@ -47,6 +51,12 @@ pnpm test:e2e:live
 There is no Session-id input: the product creates one through the same Add
 workspace flow used by a person. The environment supplies a server path, not a
 browser-owned Workspace record.
+
+Model-settings changes need deterministic unit and product-fixture coverage for
+capability-gated read/edit, exact-draft Test/Save, model discovery with manual
+fallback, delete confirmation, Profile-default selection, and secret
+non-retention. Those tests must use a fake provider; only the opt-in live gate
+may spend a real credential.
 
 The live gate builds `apps/web/dist` first and serves that production artifact
 through Vite preview. `OCTOSCODE_DEV_PROXY_TARGET` and

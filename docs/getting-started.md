@@ -62,9 +62,55 @@ The active Session's permission control and effective runtime model are in the
 composer footer. Full access appears only when advertised and requires a risk
 acknowledgement. The runtime-model label is status, not a Session-level model
 selector. Open **Settings** at the bottom of the sidebar for General connection
-details, **Disconnect**, **Forget server**, or Models. The Models section
-manages the active Profile default, which affects all Sessions using that
-Profile and may require an Octos restart.
+details, **Disconnect**, **Forget server**, or Models.
+
+## Configure providers and models
+
+**Settings → Models** reads the active Profile's configured primary and fallback
+entries from Core. Depending on the connected server's advertised methods, it
+can be read-only or expose these actions:
+
+1. Select **Add provider** or edit one configured row. Enter the provider
+   family, model id, route id/label, base URL, credential environment name, and
+   API protocol. Catalog and discovered values are suggestions; the model id can
+   still be entered manually.
+2. Enter an API key only when adding or replacing one. A configured route
+   reopens with a blank password field and a configured indicator because Core
+   does not return the saved value. Leaving it blank preserves the Core-owned
+   key.
+3. **Test** probes the exact draft. **Fetch models** asks that provider/route
+   for suggestions and can be unavailable even when direct inference works.
+   Editing the draft invalidates its prior test result.
+4. **Save** tests that same draft again before it upserts the Profile. Set it as
+   the Profile default when that is the intended cross-Session change. Delete
+   removes the exact configured route after confirmation.
+
+The browser keeps a typed key only for the current request; it does not write
+provider keys to browser storage. Core owns any saved key and exposes only
+whether one is configured. This is a write-only protocol property, not a claim
+that every Core platform encrypts its credential store.
+
+The **Session runtime** row remains authoritative for the model actually served
+by the current process. **Profile default** is configuration shared by Sessions
+on that Profile. A changed default may require an Octos restart and is not a
+Session override. The current AppUI contract cannot persist `temperature`,
+`top_p`, maximum-token/context values, or reasoning controls, so those fields
+are intentionally absent from Web Settings.
+
+### GLM-5.3-Flash
+
+The exact API model id is `glm-5.3-flash` (lowercase). A normal Z.AI API account
+uses the OpenAI-compatible base URL `https://api.z.ai/api/paas/v4`; the
+dedicated Coding Plan base URL is `https://api.z.ai/api/coding/paas/v4`. See the
+official
+[GLM-5.3-Flash model page](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash)
+for current model behavior.
+
+The GLM Coding Plan is contractually limited to Z.AI's
+[listed supported tools](https://docs.z.ai/devpack/tool/others), and Octos is
+not currently named there. Use a normal API key/endpoint for Octos unless Z.AI
+has separately authorized this integration. Endpoint compatibility alone does
+not grant Coding Plan usage rights.
 
 An empty solo server can offer profile and provider onboarding after a Workspace
 is selected. Provider data comes from Core, the credential is tested before
@@ -134,8 +180,9 @@ profile save without contacting a model service.
   endpoint accepts a query token, so use HTTPS/WSS outside loopback and keep
   query strings out of proxy logs.
 - Auth tokens are never written to `localStorage`; they may survive refresh in
-  the current tab's `sessionStorage`. Provider API keys remain memory-only and
-  are never written to browser storage.
+  the current tab's `sessionStorage`. Provider API-key drafts remain memory-only
+  and are never written to browser storage; after Save, Core owns the credential
+  and returns only whether it is configured.
 - Unsupported methods and malformed safety-bearing payloads fail closed.
 
 For production hosting, continue with the [deployment contract](deployment.md).

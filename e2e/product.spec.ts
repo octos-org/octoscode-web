@@ -364,9 +364,11 @@ test("separates the Session runtime from the Profile default model", async ({
   await expect(
     settings.getByRole("heading", { name: "Profile model" }),
   ).toBeVisible();
-  await expect(settings.getByText("Session runtime")).toBeVisible();
   await expect(
-    settings.getByText("Session runtime").locator(".."),
+    settings.getByText("Session runtime", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByText("Session runtime", { exact: true }).locator(".."),
   ).toContainText("DeepSeek V4");
   await expect(
     settings.getByText("Profile default", { exact: true }),
@@ -375,7 +377,7 @@ test("separates the Session runtime from the Profile default model", async ({
   const models = settings.getByRole("radiogroup", {
     name: "Profile default model",
   });
-  const glm = models.getByRole("radio", { name: /GLM 5.2/ });
+  const glm = models.getByRole("radio", { name: /GLM 5\.3 Flash/ });
   await expect(glm).toHaveAttribute("aria-checked", "true");
   const deepseek = models.getByRole("radio", { name: /DeepSeek V4 Pro/ });
   await deepseek.click();
@@ -618,14 +620,16 @@ test("onboards an empty solo server from workspace creation", async ({
     name: "Create your local coding profile",
   });
   await expect(onboarding).toBeVisible();
-  await expect(onboarding.getByLabel("Provider")).toHaveValue("deepseek");
-  await expect(onboarding.getByLabel("Model")).toHaveValue("deepseek-chat");
+  await expect(onboarding.getByLabel("Provider")).toHaveValue("zai");
+  await expect(onboarding.getByLabel("Model")).toHaveValue("glm-5.3-flash");
 
   const apiKey = onboarding.getByLabel("API key");
   await apiKey.fill("sk-rejected-secret");
   await onboarding.getByRole("button", { name: "Test, save & open" }).click();
   const providerError = onboarding.getByRole("alert");
-  await expect(providerError).toContainText("[redacted]");
+  await expect(providerError).toContainText(
+    "Provider rejected the supplied credential",
+  );
   await expect(providerError).not.toContainText("sk-rejected-secret");
   await expect(onboarding).toContainText(
     "A retry only repeats provider test and save",

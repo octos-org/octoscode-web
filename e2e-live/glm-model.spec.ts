@@ -10,7 +10,7 @@ function productNavigation(page: Page): Locator {
   return page.getByRole("complementary", { name: "Product navigation" });
 }
 
-test("runs a GLM-5.2 coding turn and restores it after refresh", async ({
+test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
   page,
 }) => {
   await page.goto("/");
@@ -73,14 +73,14 @@ test("runs a GLM-5.2 coding turn and restores it after refresh", async ({
   }
 
   const runtimeModel = page.getByRole("button", {
-    name: /^Runtime model: .*glm[- .]?5\.2/i,
+    name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
   });
   await expect(runtimeModel).toBeVisible({ timeout: 30_000 });
 
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
   await composer.fill(
-    `Create GLM_E2E.md in this workspace with exactly one line: GLM-5.2 web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker ${MARKER}.`,
+    `Create GLM_E2E.md in this workspace with exactly one line: GLM-5.3-Flash web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker ${MARKER}.`,
   );
   await page.getByRole("button", { name: "Send prompt" }).click();
 
@@ -118,7 +118,7 @@ test("runs a GLM-5.2 coding turn and restores it after refresh", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: /^Runtime model: .*glm[- .]?5\.2/i,
+      name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
     }),
   ).toBeVisible({ timeout: 30_000 });
 
