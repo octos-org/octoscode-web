@@ -50,6 +50,17 @@
   min-width: 0;
 }
 
+.sessionMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 3px;
+  color: var(--dsw-alias-label-primary);
+}
+
 .eyebrow {
   margin-bottom: 3px;
   color: var(--dsw-alias-label-tertiary);

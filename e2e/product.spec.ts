@@ -177,15 +177,22 @@ test("uses the DSH-aligned product sidebar and grouped or flat session views", a
   const sidebar = productNavigation(page);
 
   await expect(sidebar.getByText("Octoscode", { exact: true })).toBeVisible();
-  await expect(
-    sidebar.getByRole("button", { name: "New session", exact: true }).last(),
-  ).toBeVisible();
+  const primaryNewSession = sidebar
+    .getByRole("button", { name: "New session", exact: true })
+    .last();
+  await expect(primaryNewSession).toBeVisible();
+  await expect(primaryNewSession.locator("[data-octopus-logo]")).toHaveCount(1);
   await expect(
     sidebar.getByRole("tree", { name: "Workspaces and sessions" }),
   ).toBeVisible();
   await expect(
     sidebar.getByRole("treeitem", { name: "octoscode-web", exact: true }),
   ).toBeVisible();
+  await expect(
+    sidebar
+      .locator('button[aria-label="New session in octoscode-web"]')
+      .locator("[data-octopus-logo]"),
+  ).toHaveCount(1);
   await expect(
     sidebar.locator('[role="treeitem"][aria-current="page"]'),
   ).toContainText("Session ");

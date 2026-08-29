@@ -91,11 +91,6 @@
   line-height: 24px;
 }
 
-.octosMark {
-  display: block;
-  color: var(--dsw-alias-label-primary);
-}
-
 .iconButton,
 .railButton {
   flex: none;

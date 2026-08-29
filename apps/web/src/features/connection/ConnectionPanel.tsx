@@ -1,4 +1,5 @@
 import type { ConnectionStatus } from "@octos-org/octoscode-client";
+import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./ConnectionPanel.module.css";
 
 export interface ConnectionDraft {
@@ -41,7 +42,9 @@ export function ConnectionPanel({
     <main className={styles.gate}>
       <section className={styles.card} aria-labelledby="connection-title">
         <div className={styles.brand}>
-          <span className={styles.mark}>O</span>
+          <span className={styles.mark} aria-hidden="true">
+            <OctopusLogo size={30} />
+          </span>
           <span>
             <strong>octoscode</strong>
             <small>web</small>

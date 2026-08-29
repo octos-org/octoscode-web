@@ -9,6 +9,7 @@
  */
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./NewSessionWorkspacePicker.module.css";
 
 export interface RecentWorkspacePath {
@@ -153,6 +154,9 @@ function PickerBody({
             <ArrowLeftIcon />
           </button>
         ) : null}
+        <span className={styles.sessionMark} aria-hidden="true">
+          <OctopusLogo size={32} />
+        </span>
         <div className={styles.heading}>
           <div className={styles.eyebrow}>New Session</div>
           <h2 id={titleId} className={styles.title}>
@@ -244,7 +248,7 @@ function PickerBody({
           ) : !loading && !error ? (
             <div className={styles.empty}>
               <span className={styles.emptyIcon} aria-hidden="true">
-                <FolderIcon />
+                <OctopusLogo size={22} />
               </span>
               <strong>No recent workspace paths</strong>
               <span>Enter a path on the Octos server to start a session.</span>

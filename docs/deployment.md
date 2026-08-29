@@ -40,6 +40,7 @@ Serve the extracted directory over HTTPS and route unknown application paths to
 `index.html`. Use these cache policies:
 
 - `index.html` and `octoscode-web-build.json`: `no-cache`;
+- stable favicon, launcher-icon, and Web app manifest filenames: `no-cache`;
 - hashed files under `assets/`: `public, max-age=31536000, immutable`;
 - `LICENSE`, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES.md`, and
   `DEPLOYMENT.md`: `no-cache`.

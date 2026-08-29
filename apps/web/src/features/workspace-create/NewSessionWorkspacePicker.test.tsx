@@ -110,5 +110,6 @@ describe("NewSessionWorkspacePicker", () => {
     );
     expect(empty).toContain("No recent workspace paths");
     expect(empty).toContain("Add workspace");
+    expect(empty.match(/data-octopus-logo=""/g)).toHaveLength(2);
   });
 });

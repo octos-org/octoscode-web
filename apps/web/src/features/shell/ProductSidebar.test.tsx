@@ -73,6 +73,7 @@ describe("ProductSidebar", () => {
     expect(html).toContain("Waiting for approval");
     expect(html).toContain('aria-haspopup="menu"');
     expect(html).toContain('aria-expanded="false"');
+    expect(html.match(/data-octopus-logo=""/g)).toHaveLength(3);
     expect(html).not.toMatch(
       /Runtime|Connection|Permissions|Boundary|Session files|Activity/,
     );

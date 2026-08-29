@@ -25,5 +25,7 @@ describe("fatal render recovery", () => {
     expect(html).toContain("durable session state remain");
     expect(html).toContain("Reload app");
     expect(html).toContain("Copy diagnostics");
+    expect(html).toContain('data-octopus-logo=""');
+    expect(html).not.toContain(">O<");
   });
 });

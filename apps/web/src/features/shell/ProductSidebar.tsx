@@ -18,6 +18,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./ProductSidebar.module.css";
 
 export type ProductSessionStatus =
@@ -61,7 +62,6 @@ export interface ProductSidebarProps {
   loading?: boolean;
   error?: string | null;
   brandName?: string;
-  brandMark?: ReactNode;
   sessionLimit?: number;
   settingsActive?: boolean;
   sessionCreationAvailable?: boolean;
@@ -101,7 +101,6 @@ export function ProductSidebar({
   loading = false,
   error = null,
   brandName = "Octoscode",
-  brandMark,
   sessionLimit = DEFAULT_SESSION_LIMIT,
   settingsActive = false,
   sessionCreationAvailable = true,
@@ -305,7 +304,7 @@ export function ProductSidebar({
             >
               <span className={styles.brandIdentity} aria-hidden="true">
                 <span className={styles.brandMark}>
-                  {brandMark ?? <OctosMark />}
+                  <OctopusLogo size={24} />
                 </span>
                 <span className={styles.brandName}>{brandName}</span>
               </span>
@@ -314,7 +313,7 @@ export function ProductSidebar({
             <div className={`${styles.brand} ${styles.brandStatic}`}>
               <span className={styles.brandIdentity}>
                 <span className={styles.brandMark}>
-                  {brandMark ?? <OctosMark />}
+                  <OctopusLogo size={24} />
                 </span>
                 <span className={styles.brandName}>{brandName}</span>
               </span>
@@ -331,7 +330,7 @@ export function ProductSidebar({
           {collapsed ? (
             <>
               <span className={styles.railMark} aria-hidden="true">
-                {brandMark ?? <OctosMark />}
+                <OctopusLogo size={24} />
               </span>
               <PanelIcon className={styles.panelIcon} />
             </>
@@ -349,7 +348,7 @@ export function ProductSidebar({
           title={collapsed ? "New session" : undefined}
           onClick={() => onNewSession()}
         >
-          <NewSessionIcon />
+          <OctopusLogo size={18} />
           {!collapsed ? <span>New Session</span> : null}
         </button>
       ) : null}
@@ -598,7 +597,7 @@ export function ProductSidebar({
                                 title={`New session in ${workspace.label}`}
                                 onClick={() => onNewSession(workspace.id)}
                               >
-                                <PlusIcon />
+                                <OctopusLogo size={16} />
                               </button>
                             ) : null}
                           </div>
@@ -996,51 +995,11 @@ function SvgIcon({ className, children }: IconProps & { children: ReactNode }) {
   );
 }
 
-function OctosMark() {
-  return (
-    <svg
-      className={styles.octosMark}
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M5 10.5a7 7 0 0 1 14 0v3.8c0 1.6-1.3 2.9-2.9 2.9-1 0-1.9-.5-2.4-1.3A3 3 0 0 1 11.2 18a3 3 0 0 1-2.5-1.3 2.9 2.9 0 0 1-3.7-2.8v-3.4Z"
-        fill="currentColor"
-      />
-      <circle
-        cx="9.3"
-        cy="10.5"
-        r="1"
-        fill="var(--dsw-specific-sidebar-fill)"
-      />
-      <circle
-        cx="14.7"
-        cy="10.5"
-        r="1"
-        fill="var(--dsw-specific-sidebar-fill)"
-      />
-    </svg>
-  );
-}
-
 function PanelIcon({ className }: IconProps) {
   return (
     <SvgIcon className={className}>
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
       <path d="M9 4v16" />
-    </SvgIcon>
-  );
-}
-
-function NewSessionIcon() {
-  return (
-    <SvgIcon>
-      <path d="M5 5.5h8.5a3 3 0 0 1 3 3v3" />
-      <path d="M5 5.5v13l3.3-3h3.2" />
-      <path d="M17 14v6M14 17h6" />
     </SvgIcon>
   );
 }
@@ -1105,14 +1064,6 @@ function ChevronIcon({ className }: IconProps) {
   return (
     <SvgIcon className={`${styles.chevronIcon} ${className ?? ""}`}>
       <path d="m9 6 6 6-6 6" />
-    </SvgIcon>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <SvgIcon>
-      <path d="M12 5v14M5 12h14" />
     </SvgIcon>
   );
 }

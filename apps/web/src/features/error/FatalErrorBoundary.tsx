@@ -1,4 +1,5 @@
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
+import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 
 interface FatalErrorBoundaryProps {
   children: ReactNode;
@@ -50,7 +51,7 @@ export function FatalCrashScreen({ report }: { report: string }) {
   return (
     <main className="fatal-shell" role="alert">
       <section className="fatal-card">
-        <div className="brand-mark">O</div>
+        <OctopusLogo className="fatal-brand-logo" size={32} />
         <span className="eyebrow">Octoscode Web stopped rendering</span>
         <h1>Reload the client safely</h1>
         <p>

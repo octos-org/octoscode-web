@@ -31,6 +31,9 @@ for (const required of [
   "DEPLOYMENT\\.md",
   "proxy_set_header Upgrade $http_upgrade",
   "try_files $uri $uri/ /index.html",
+  "octopus-mark\\.svg",
+  "octos-icon-(?:192|512)\\.png",
+  "site\\.webmanifest",
   "server_tokens off",
   "client_max_body_size 1m",
   "gzip on",
@@ -104,17 +107,87 @@ assert(
   expectedBase.startsWith("/") && expectedBase.endsWith("/"),
   "OCTOSCODE_WEB_BASE_PATH must be an absolute slash-terminated path",
 );
-const faviconPath = `${expectedBase}favicon.svg`;
-assert(
-  linkedResources.includes(faviconPath),
-  `built index is missing ${faviconPath}`,
-);
+const brandedResources = [
+  "favicon.svg",
+  "favicon-32.png",
+  "favicon-16.png",
+  "apple-touch-icon.png",
+  "octopus-mark.svg",
+  "site.webmanifest",
+];
+for (const resource of brandedResources) {
+  const brandedPath = `${expectedBase}${resource}`;
+  assert(
+    linkedResources.includes(brandedPath),
+    `built index is missing ${brandedPath}`,
+  );
+  assert(
+    (await stat(resolve(dist, resource))).size > 0,
+    `built branding resource ${resource} is empty`,
+  );
+}
 const favicon = await readFile(resolve(dist, "favicon.svg"), "utf8");
 assert(
   favicon.includes("<svg") &&
     !/<script|\son\w+=|(?:href|src)\s*=\s*["']https?:/i.test(favicon),
   "favicon must be a self-contained inert SVG",
 );
+const maskIcon = await readFile(resolve(dist, "octopus-mark.svg"), "utf8");
+assert(
+  maskIcon.includes('viewBox="0 0 16 16"') &&
+    maskIcon.includes('fill="#000"') &&
+    maskIcon.match(/<path\b/g)?.length === 1 &&
+    !/<script|\son\w+=|(?:href|src)\s*=|fill\s*=\s*["'](?!#000["'])/i.test(
+      maskIcon,
+    ),
+  "Safari mask icon must be a self-contained 16x16 black silhouette",
+);
+const webManifest = JSON.parse(
+  await readFile(resolve(dist, "site.webmanifest"), "utf8"),
+);
+assert(
+  webManifest.name === "Octoscode Web" &&
+    webManifest.short_name === "Octoscode" &&
+    webManifest.id === "." &&
+    webManifest.start_url === "." &&
+    webManifest.scope === "." &&
+    webManifest.display === "standalone",
+  "Web app manifest identity is invalid",
+);
+assert(
+  webManifest.theme_color === "#1b1b1c" &&
+    webManifest.background_color === "#1b1b1c",
+  "Web app manifest colors are invalid",
+);
+assert(
+  JSON.stringify(webManifest.icons) ===
+    JSON.stringify([
+      {
+        src: "octos-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+      {
+        src: "octos-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+    ]),
+  "Web app manifest icons are invalid",
+);
+for (const icon of webManifest.icons) {
+  assert(
+    (await stat(resolve(dist, icon.src))).size > 0,
+    `built launcher icon ${icon.src} is empty`,
+  );
+}
+await assertPng("favicon-16.png", 16, 16, 6);
+await assertPng("favicon-32.png", 32, 32, 6);
+await assertPng("apple-touch-icon.png", 180, 180, 2);
+await assertPng("octos-icon-192.png", 192, 192, 2);
+await assertPng("octos-icon-512.png", 512, 512, 2);
 const initialAssets = linkedResources.filter(
   (resource) => resource.endsWith(".js") || resource.endsWith(".css"),
 );
@@ -157,4 +230,21 @@ process.stdout.write(
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function assertPng(name, width, height, colorType) {
+  const png = await readFile(resolve(dist, name));
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  assert(
+    png.subarray(0, signature.length).equals(signature),
+    `${name} is not a PNG`,
+  );
+  assert(
+    png.subarray(12, 16).toString("ascii") === "IHDR" &&
+      png.readUInt32BE(16) === width &&
+      png.readUInt32BE(20) === height,
+    `${name} dimensions are invalid`,
+  );
+  assert(png[24] === 8, `${name} must use 8-bit color`);
+  assert(png[25] === colorType, `${name} PNG color type is invalid`);
 }

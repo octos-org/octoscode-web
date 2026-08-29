@@ -56,14 +56,11 @@
 }
 
 .mark {
-  display: grid;
+  display: inline-flex;
   width: 30px;
   height: 30px;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-base);
-  font-weight: 650;
+  align-items: center;
+  justify-content: center;
 }
 
 .heading {

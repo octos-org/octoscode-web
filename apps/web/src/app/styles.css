@@ -47,7 +47,7 @@ noscript {
   box-shadow: var(--dsw-shadow-lv3);
 }
 
-.fatal-card .brand-mark {
+.fatal-card .fatal-brand-logo {
   margin-bottom: 7px;
 }
 
@@ -170,19 +170,6 @@ a:focus-visible,
   min-width: 0;
   color: var(--dsw-alias-label-primary);
   text-decoration: none;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 9px;
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-base);
-  font-size: 16px;
-  font-weight: 600;
 }
 
 .brand > span:last-child {
@@ -895,7 +882,6 @@ label > span {
   border-radius: 14px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-state-business-primary);
-  font-size: 23px;
 }
 
 .empty-state h2 {

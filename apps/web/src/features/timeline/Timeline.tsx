@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import type { TimelineEntry } from "./model.ts";
 
 const MarkdownBody = lazy(() =>
@@ -16,7 +17,9 @@ export function Timeline({ entries, connected }: TimelineProps) {
   if (entries.length === 0) {
     return (
       <div className="empty-state">
-        <div className="empty-mark">⌁</div>
+        <div className="empty-mark">
+          <OctopusLogo size={28} />
+        </div>
         <span className="eyebrow">Coding workspace</span>
         <h2>
           {connected
