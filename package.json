@@ -31,7 +31,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.62.1",
-    "oxlint": "1.79.0",
+    "oxlint": "1.80.0",
     "prettier": "^3.9.0",
     "typescript": "~7.0.2",
     "vitest": "^4.1.8"
