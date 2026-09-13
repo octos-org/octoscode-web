@@ -1359,6 +1359,35 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(question).toBeHidden();
 });
 
+test("sidebar tree supports arrow-key navigation and Enter selection", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const tree = page.getByRole("tree");
+  await expect(tree).toBeVisible();
+  await tree.focus();
+
+  // No active row yet: the first ArrowDown activates the first tree item
+  // (the workspace group), the second moves to its session row.
+  await page.keyboard.press("ArrowDown");
+  const first = await tree.getAttribute("aria-activedescendant");
+  expect(first).toContain("tree-workspace-");
+
+  await page.keyboard.press("ArrowDown");
+  const second = await tree.getAttribute("aria-activedescendant");
+  expect(second).toContain("tree-session-");
+
+  await page.keyboard.press("Home");
+  expect(await tree.getAttribute("aria-activedescendant")).toBe(first);
+
+  // Enter on the focused session row selects it.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator('[role="treeitem"][aria-selected="true"]'),
+  ).toHaveCount(1);
+});
+
 test("restores a pending structured question across a reload", async ({
   page,
 }) => {
