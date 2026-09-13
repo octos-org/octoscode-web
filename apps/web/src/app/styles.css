@@ -1174,6 +1174,7 @@ label > span {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .recovery-banner.recovery-error,
@@ -1184,6 +1185,22 @@ label > span {
     var(--dsw-alias-state-error-primary) 35%,
     transparent
   );
+  /* Error-tinted surface: the banner is a blocking state and must read as
+     one at a glance, not as a neutral notice. */
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-error-primary) 6%,
+    var(--dsw-specific-input-major)
+  );
+}
+
+/* In-progress recovery keeps a neutral surface but gains an accent edge so
+   the wait state is visible without alarming. */
+.recovery-banner.recovery-reconnecting,
+.recovery-banner.recovery-hydrating {
+  box-shadow:
+    var(--dsw-shadow-lv2),
+    inset 3px 0 0 var(--dsw-alias-state-business-primary);
 }
 
 .recovery-banner.recovery-error .recovery-banner-mark,
