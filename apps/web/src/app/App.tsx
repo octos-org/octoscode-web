@@ -485,6 +485,16 @@ export function App() {
     setCommandPaletteDismissed(false);
     previousActiveSessionKeyRef.current = activeSessionKey;
     if (activeSessionKey) setConversationTab("chat");
+    // Keep the URL addressable: a selected session survives a bookmark or
+    // share. replaceState only — no history spam, and the parameter is
+    // stripped again when the selection clears.
+    const url = new URL(window.location.href);
+    if (activeSessionKey) {
+      url.searchParams.set("s", activeSessionKey);
+    } else {
+      url.searchParams.delete("s");
+    }
+    window.history.replaceState(null, "", url);
   }, [activeSessionKey]);
   const sidebarProjection = useMemo(() => {
     const backgroundBySession = new Map(
@@ -606,6 +616,24 @@ export function App() {
     });
     if (outcome !== "opened") return;
   };
+  // Deep link: ?s=<session key> restores the selection once the sidebar
+  // projection has the target. Consumed once, then stripped from the URL by
+  // the selection-sync effect when the session opens.
+  const [deepLinkSessionKey] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get("s");
+    return value === null || value === "" ? null : value;
+  });
+  const deepLinkConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!deepLinkSessionKey || deepLinkConsumedRef.current) return;
+    if (!sidebarProjection.targets.has(deepLinkSessionKey)) return;
+    deepLinkConsumedRef.current = true;
+    void moveToProductSession(deepLinkSessionKey);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("s");
+    window.history.replaceState(null, "", url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkSessionKey, sidebarProjection]);
   const createSessionInWorkspace = async (workspacePath: string) => {
     if (
       !codingCapabilities.sessionCreationAvailable ||

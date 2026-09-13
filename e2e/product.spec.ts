@@ -1439,6 +1439,21 @@ test("restores a pending structured question across a reload", async ({
   await expect(restored).toBeVisible({ timeout: 20_000 });
 });
 
+test("deep link: ?s= restores the selected session after reload", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
+  const key = new URL(page.url()).searchParams.get("s");
+  expect(key).toBeTruthy();
+
+  await page.reload();
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible({
+    timeout: 15_000,
+  });
+  expect(new URL(page.url()).searchParams.get("s")).toBe(key);
+});
+
 test("preserves workspace launch decisions without exposing profile ids in connect", async ({
   page,
 }) => {
