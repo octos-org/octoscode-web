@@ -17,6 +17,15 @@
   /* Numeric content (ids, timestamps, counters) — keeps digits aligned and
      visually distinct from prose (tasteskill numeric rule). */
   --dsw-font-numeric: var(--dsw-font-family-code);
+  /* Spacing scale (tasteskill spacing rule): single source for padding,
+     margin, and gap. Legacy magic values migrate onto these over time. */
+  --dsw-space-1: 4px;
+  --dsw-space-2: 8px;
+  --dsw-space-3: 12px;
+  --dsw-space-4: 16px;
+  --dsw-space-5: 24px;
+  --dsw-space-6: 32px;
+  --dsw-space-7: 48px;
   --dsw-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --dsw-transition-duration: 0.2s;
   --dsw-transition-duration-slow: 0.3s;
