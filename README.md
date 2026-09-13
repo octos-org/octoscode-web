@@ -20,8 +20,8 @@ octoscode-web brings the interaction model of
 is intentionally separate from the general-purpose
 [`octos-web`](https://github.com/octos-org/octos-web) product.
 
-| Coding session (light) | Coding session (dark) |
-| --- | --- |
+| Coding session (light)                                                                                                                                           | Coding session (dark)                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | ![A coding session in the light theme, with Shiki-highlighted TypeScript, a reasoning trace, and capability controls](docs/screenshots/coding-session-light.png) | ![The same coding session in the dark theme](docs/screenshots/coding-session-dark.png) |
 
 ```text
