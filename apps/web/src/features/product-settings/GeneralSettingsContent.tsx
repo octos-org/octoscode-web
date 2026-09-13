@@ -3,6 +3,7 @@
  * treatment at revision b150a551b8d465e31e418e1b2eaf5e79bbb7d28e.
  * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
  */
+import { useState } from "react";
 import styles from "./ProductSettings.module.css";
 
 export type ProductConnectionStatus =
@@ -18,6 +19,8 @@ export interface GeneralSettingsContentProps {
   locked?: boolean;
   onDisconnect: () => void;
   onForgetConnection: () => void;
+  /** Writes a redacted diagnostics snapshot to the clipboard. */
+  onCopyDiagnostics?: () => void;
 }
 
 const STATUS_COPY: Readonly<Record<ProductConnectionStatus, string>> = {
@@ -90,7 +93,9 @@ export function GeneralSettingsContent({
   locked = false,
   onDisconnect,
   onForgetConnection,
+  onCopyDiagnostics,
 }: GeneralSettingsContentProps) {
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const connectionBusy = connectionStatus === "connecting";
   const canDisconnect =
     connectionStatus === "connected" || connectionStatus === "error";
@@ -141,6 +146,32 @@ export function GeneralSettingsContent({
           description="The Octos profile backing this session."
           value={displayProfile}
         />
+      ) : null}
+
+      {onCopyDiagnostics ? (
+        <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
+          <div className={styles.settingCopy}>
+            <div className={styles.settingTitle}>Diagnostics</div>
+            <div className={styles.settingDescription}>
+              Copies a redacted snapshot: connection status, recovery detail,
+              and app identity. No credentials.
+            </div>
+          </div>
+          <div className={styles.actionGroup}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={locked}
+              onClick={() => {
+                onCopyDiagnostics();
+                setDiagnosticsCopied(true);
+                window.setTimeout(() => setDiagnosticsCopied(false), 1500);
+              }}
+            >
+              {diagnosticsCopied ? "Copied" : "Copy diagnostics"}
+            </button>
+          </div>
+        </div>
       ) : null}
 
       <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>

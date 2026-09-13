@@ -1278,6 +1278,32 @@ export function App() {
                   locked={runtimeMutationBlocked}
                   onDisconnect={disconnect}
                   onForgetConnection={forgetConnection}
+                  onCopyDiagnostics={() => {
+                    // Redacted by construction: origin only (never the
+                    // token, never the WS query string), plus state the
+                    // settings screen already displays.
+                    const snapshot = {
+                      generated_at: new Date().toISOString(),
+                      user_agent: navigator.userAgent,
+                      connection: {
+                        endpoint: connection.endpoint,
+                        status: session.status,
+                        error: session.error ?? null,
+                        recovery: session.recovery,
+                      },
+                      session: session.opened
+                        ? {
+                            session_id: session.opened.session_id,
+                            active_profile_id:
+                              session.opened.active_profile_id ?? null,
+                            capabilities: session.opened.capabilities ?? null,
+                          }
+                        : null,
+                    };
+                    void navigator.clipboard
+                      .writeText(JSON.stringify(snapshot, null, 2))
+                      .catch(() => {});
+                  }}
                 />
               ),
               ...(showModelsSettings
