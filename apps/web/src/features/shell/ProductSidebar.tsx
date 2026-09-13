@@ -273,10 +273,15 @@ export function ProductSidebar({
     const items = treeItems();
     const first = items[0];
     if (!first) return;
-    const activeId = activeTreeItemId ?? first.id;
-    const currentIndex = items.findIndex((el) => el.id === activeId);
+    // With no active row yet, the first ArrowDown/ArrowUp activates the
+    // first/last item instead of skipping past it.
+    const currentIndex = activeTreeItemId
+      ? items.findIndex((el) => el.id === activeTreeItemId)
+      : -1;
     const activeElement =
-      (activeId ? document.getElementById(activeId) : undefined) ?? first;
+      (activeTreeItemId
+        ? document.getElementById(activeTreeItemId)
+        : undefined) ?? first;
 
     const focusNext = (nextIndex: number) => {
       const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
@@ -288,10 +293,10 @@ export function ProductSidebar({
 
     switch (event.key) {
       case "ArrowDown":
-        focusNext(currentIndex + 1);
+        focusNext(currentIndex < 0 ? 0 : currentIndex + 1);
         return;
       case "ArrowUp":
-        focusNext(currentIndex - 1);
+        focusNext(currentIndex < 0 ? items.length - 1 : currentIndex - 1);
         return;
       case "Home":
         focusNext(0);
