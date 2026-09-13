@@ -798,6 +798,46 @@ describe("ActiveSessionRuntime", () => {
     ).toEqual([]);
   });
 
+  it("treats a hydrate session mismatch during recovery as fatal", async () => {
+    vi.useFakeTimers();
+    try {
+      const server = new FakeActiveClient();
+      const candidate = new FakeActiveClient();
+      candidate.status = "connected";
+      candidate.hydrateImplementation = () =>
+        Promise.resolve({ ...hydrated, session_id: "session-two" });
+      const { runtime, events } = testRuntime(() => server);
+      const previous = await runtime.authenticate(connection);
+      if (!previous) throw new Error("missing authority");
+      runtime.adoptCandidate({
+        expected: previous,
+        config: sessionConfig,
+        candidate: candidateSnapshot(candidate),
+      });
+      events.length = 0;
+
+      candidate.emit({
+        jsonrpc: "2.0",
+        method: CORE_UI_METHODS.REPLAY_LOSSY,
+        params: { session_id: "session-one", dropped_count: 1 },
+      });
+      await flushMicrotasks();
+
+      // The mismatch is a routing-class contract violation (issue #13):
+      // it must stop the reconnect loop and surface the real cause
+      // instead of being masked by the generic "Connection lost · retry N".
+      expect(runtime.getSnapshot().phase).toBe("error");
+      expect(runtime.getSnapshot().error).toContain("session-two");
+
+      // No retry is scheduled behind the fatal error.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(runtime.getSnapshot().phase).toBe("error");
+      runtime.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("ignores a hydrate rejection after transport loss invalidates recovery", async () => {
     vi.useFakeTimers();
     try {
