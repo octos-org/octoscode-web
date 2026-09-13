@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, memo, Suspense } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import type { TimelineEntry } from "./model.ts";
 
@@ -38,37 +38,49 @@ export function Timeline({ entries, connected }: TimelineProps) {
   return (
     <div className="timeline" role="log" aria-label="Conversation timeline">
       {entries.map((entry) => (
-        <article
-          className={`timeline-entry entry-${entry.kind}`}
-          key={entry.id}
-        >
-          <div className="entry-rail">
-            <span className={`entry-glyph glyph-${entry.status}`} />
-          </div>
-          <div className="entry-content">
-            <div className="entry-heading">
-              <strong>{entry.title}</strong>
-              {entry.status === "running" ? (
-                <span className="running-label">running</span>
-              ) : null}
-            </div>
-            {entry.body ? (
-              entry.kind === "assistant" ? (
-                <Suspense fallback={<pre>{entry.body}</pre>}>
-                  <MarkdownBody
-                    text={entry.body}
-                    streaming={entry.status === "running"}
-                  />
-                </Suspense>
-              ) : (
-                <pre>{entry.body}</pre>
-              )
-            ) : (
-              <span className="muted">No output yet</span>
-            )}
-          </div>
-        </article>
+        <TimelineEntryView key={entry.id} entry={entry} />
       ))}
     </div>
   );
 }
+
+/**
+ * Memo boundary: folding produces new objects only for entries that changed,
+ * so a streaming delta re-renders a single entry instead of re-evaluating
+ * markdown for the whole timeline.
+ */
+const TimelineEntryView = memo(function TimelineEntryView({
+  entry,
+}: {
+  entry: TimelineEntry;
+}) {
+  return (
+    <article className={`timeline-entry entry-${entry.kind}`}>
+      <div className="entry-rail">
+        <span className={`entry-glyph glyph-${entry.status}`} />
+      </div>
+      <div className="entry-content">
+        <div className="entry-heading">
+          <strong>{entry.title}</strong>
+          {entry.status === "running" ? (
+            <span className="running-label">running</span>
+          ) : null}
+        </div>
+        {entry.body ? (
+          entry.kind === "assistant" ? (
+            <Suspense fallback={<pre>{entry.body}</pre>}>
+              <MarkdownBody
+                text={entry.body}
+                streaming={entry.status === "running"}
+              />
+            </Suspense>
+          ) : (
+            <pre>{entry.body}</pre>
+          )
+        ) : (
+          <span className="muted">No output yet</span>
+        )}
+      </div>
+    </article>
+  );
+});

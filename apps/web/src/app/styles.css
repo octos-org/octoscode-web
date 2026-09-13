@@ -1046,6 +1046,11 @@ label > span {
 
 .timeline-entry {
   min-width: 0;
+  /* Skip render/paint cost for entries far outside the viewport; the
+     intrinsic size keeps the scrollbar stable. Content stays in the
+     accessibility tree. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .entry-rail {
