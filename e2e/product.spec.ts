@@ -1388,6 +1388,35 @@ test("sidebar tree supports arrow-key navigation and Enter selection", async ({
   ).toHaveCount(1);
 });
 
+test("keyboard and semantics guarantees from the a11y batch hold", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+
+  // Post-connect views carry an sr-only h1 (page-has-heading-one).
+  await expect(page.locator("main h1")).toHaveCount(1);
+
+  // The timeline announces to assistive tech via role=log (4.1.3).
+  const log = page.locator('[role="log"][aria-label="Conversation timeline"]');
+  await expect(log).toBeAttached();
+
+  // The tree is a single tab stop managing rows via activedescendant.
+  const tree = page.getByRole("tree");
+  await expect(tree).toHaveAttribute("tabindex", "0");
+  await expect(tree.locator('[role="treeitem"]')).not.toHaveCount(0);
+});
+
+test("skip link jumps to the main landmark", async ({ page }) => {
+  // The skip link lives in the post-connect app shell.
+  await connectAndStartWorkspace(page);
+
+  const skip = page.locator('a[href="#workspace-main"]');
+  await skip.focus();
+  await expect(skip).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#workspace-main")).toBeFocused();
+});
+
 test("restores a pending structured question across a reload", async ({
   page,
 }) => {
