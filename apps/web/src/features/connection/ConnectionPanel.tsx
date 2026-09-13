@@ -85,7 +85,9 @@ export function ConnectionPanel({
             {isHandshakeError(error) ? (
               <small>
                 Check the origin, token, allowed Web origins, and reverse-proxy
-                WebSocket forwarding.
+                WebSocket forwarding. If this server&apos;s token changed, use
+                Forget saved connection below to clear it and reconnect with a
+                fresh one.
               </small>
             ) : null}
           </div>
