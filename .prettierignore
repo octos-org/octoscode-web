@@ -6,3 +6,5 @@ coverage
 deploy/nginx.conf
 AGENTS.md
 SELF_REVIEW.md
+.octos/
+.octos-workspace.toml

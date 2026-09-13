@@ -75,6 +75,46 @@ for (const forbidden of [
   );
 }
 
+// nginx stops inheriting server-level add_header directives inside any
+// location that declares its own add_header (e.g. Cache-Control). A location
+// that sets any header must therefore repeat the full security header set,
+// or documents/assets silently ship without them while the server block
+// still looks correct. Static text checks alone cannot catch that, so the
+// contract below is structural: every header-declaring location block must
+// carry every security header itself.
+const securityHeaderNames = [
+  "Content-Security-Policy",
+  "Referrer-Policy",
+  "X-Content-Type-Options",
+  "X-Frame-Options",
+  "Cross-Origin-Opener-Policy",
+  "Cross-Origin-Resource-Policy",
+  "Permissions-Policy",
+];
+for (const header of securityHeaderNames) {
+  assert(
+    effectiveNginx.includes(`add_header ${header} `),
+    `nginx deployment contract is missing ${header}`,
+  );
+}
+const locationBlocks =
+  effectiveNginx.match(/location\s[^\{]+\{[^\{\}]*\}/g) ?? [];
+assert(
+  locationBlocks.length > 0,
+  "nginx reference configuration declares no location blocks",
+);
+for (const block of locationBlocks) {
+  if (!block.includes("add_header")) continue;
+  const label = block.match(/location\s+([^\{]+?)\s*\{/)?.[1] ?? "unnamed";
+  for (const header of securityHeaderNames) {
+    assert(
+      block.includes(`add_header ${header} `),
+      `nginx location ${label} declares its own add_header but does not repeat ${header}; ` +
+        "nginx stops inheriting server-level headers inside such locations",
+    );
+  }
+}
+
 assert(manifest.schema_version === 2, "build manifest schema is invalid");
 assert(
   manifest.supported_octos_contract?.protocol === "octos-ui/v1alpha1",
