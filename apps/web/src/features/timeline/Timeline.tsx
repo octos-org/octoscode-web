@@ -36,7 +36,7 @@ export function Timeline({ entries, connected }: TimelineProps) {
   }
 
   return (
-    <div className="timeline" role="region" aria-label="Conversation timeline">
+    <div className="timeline" role="log" aria-label="Conversation timeline">
       {entries.map((entry) => (
         <article
           className={`timeline-entry entry-${entry.kind}`}

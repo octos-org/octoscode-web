@@ -478,6 +478,24 @@ export function ProductSidebar({
               className={styles.treeBody}
               aria-busy={loading || catalogProgress.pending > 0}
             >
+              {/* Status, progress, and empty states stay outside the tree:
+                  interactive elements and bare content are not permitted as
+                  direct tree children, so the tree only contains its items. */}
+              {error ? (
+                <div className={styles.errorState} role="alert">
+                  <span>{error}</span>
+                  {onRetry ? (
+                    <button type="button" onClick={onRetry}>
+                      Retry
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!error && loading && workspaces.length === 0 ? (
+                <LoadingRows />
+              ) : null}
+
               <div
                 className={styles.tree}
                 role="tree"
@@ -489,50 +507,20 @@ export function ProductSidebar({
                       : "Workspaces and sessions"
                 }
               >
-                {error ? (
-                  <div className={styles.errorState} role="alert">
-                    <span>{error}</span>
-                    {onRetry ? (
-                      <button type="button" onClick={onRetry}>
-                        Retry
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {!error && loading && workspaces.length === 0 ? (
-                  <LoadingRows />
-                ) : null}
-
                 {!error && !loading && normalizedQuery ? (
                   searchResults.length > 0 ? (
-                    <>
-                      <div className={styles.searchResults}>
-                        {searchResults.map(({ session, workspace }) => (
-                          <SearchSessionRow
-                            key={`${workspace.id}:${session.id}`}
-                            session={session}
-                            workspace={workspace}
-                            selected={session.id === selectedSessionId}
-                            onSelect={onSessionSelect}
-                          />
-                        ))}
-                      </div>
-                      <CatalogProgress
-                        {...catalogProgress}
-                        hasResults
-                        onRetry={onRetry}
-                      />
-                    </>
-                  ) : catalogsIncomplete ? (
-                    <CatalogProgress
-                      {...catalogProgress}
-                      hasResults={false}
-                      onRetry={onRetry}
-                    />
-                  ) : (
-                    <p className={styles.emptyState}>No sessions found.</p>
-                  )
+                    <div className={styles.searchResults}>
+                      {searchResults.map(({ session, workspace }) => (
+                        <SearchSessionRow
+                          key={`${workspace.id}:${session.id}`}
+                          session={session}
+                          workspace={workspace}
+                          selected={session.id === selectedSessionId}
+                          onSelect={onSessionSelect}
+                        />
+                      ))}
+                    </div>
+                  ) : null
                 ) : null}
 
                 {!normalizedQuery &&
@@ -557,7 +545,7 @@ export function ProductSidebar({
                         orderedSessions.length - visibleSessions.length;
 
                       return (
-                        <section
+                        <div
                           className={styles.workspaceGroup}
                           role="treeitem"
                           aria-label={workspace.label}
@@ -648,55 +636,77 @@ export function ProductSidebar({
                               ) : null}
                             </div>
                           ) : null}
-                        </section>
+                        </div>
                       );
                     })
                   : null}
 
                 {!normalizedQuery &&
                 viewMode === "flat" &&
-                workspaces.length > 0 ? (
-                  flatSessions.length > 0 ? (
-                    <>
-                      <div className={styles.flatSessionList} role="group">
-                        {flatSessions.map(({ session, workspace }) => (
-                          <SessionRow
-                            key={`${workspace.id}:${session.id}`}
-                            session={session}
-                            selected={session.id === selectedSessionId}
-                            onSelect={onSessionSelect}
-                          />
-                        ))}
-                      </div>
-                      <CatalogProgress
-                        {...catalogProgress}
-                        hasResults
-                        onRetry={onRetry}
+                workspaces.length > 0 &&
+                flatSessions.length > 0 ? (
+                  <div className={styles.flatSessionList} role="group">
+                    {flatSessions.map(({ session, workspace }) => (
+                      <SessionRow
+                        key={`${workspace.id}:${session.id}`}
+                        session={session}
+                        selected={session.id === selectedSessionId}
+                        onSelect={onSessionSelect}
                       />
-                    </>
-                  ) : catalogsIncomplete ? (
-                    <CatalogProgress
-                      {...catalogProgress}
-                      hasResults={false}
-                      onRetry={onRetry}
-                    />
-                  ) : (
-                    <p className={styles.emptyState}>No sessions yet.</p>
-                  )
-                ) : null}
-
-                {!error &&
-                !loading &&
-                !normalizedQuery &&
-                workspaces.length === 0 ? (
-                  <div className={styles.emptyState}>
-                    <p>No workspaces yet.</p>
-                    <button type="button" onClick={onAddWorkspace}>
-                      Add workspace
-                    </button>
+                    ))}
                   </div>
                 ) : null}
               </div>
+
+              {!error && !loading && normalizedQuery ? (
+                searchResults.length > 0 ? (
+                  <CatalogProgress
+                    {...catalogProgress}
+                    hasResults
+                    onRetry={onRetry}
+                  />
+                ) : catalogsIncomplete ? (
+                  <CatalogProgress
+                    {...catalogProgress}
+                    hasResults={false}
+                    onRetry={onRetry}
+                  />
+                ) : (
+                  <p className={styles.emptyState}>No sessions found.</p>
+                )
+              ) : null}
+
+              {!normalizedQuery &&
+              viewMode === "flat" &&
+              workspaces.length > 0 ? (
+                flatSessions.length > 0 ? (
+                  <CatalogProgress
+                    {...catalogProgress}
+                    hasResults
+                    onRetry={onRetry}
+                  />
+                ) : catalogsIncomplete ? (
+                  <CatalogProgress
+                    {...catalogProgress}
+                    hasResults={false}
+                    onRetry={onRetry}
+                  />
+                ) : (
+                  <p className={styles.emptyState}>No sessions yet.</p>
+                )
+              ) : null}
+
+              {!error &&
+              !loading &&
+              !normalizedQuery &&
+              workspaces.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <p>No workspaces yet.</p>
+                  <button type="button" onClick={onAddWorkspace}>
+                    Add workspace
+                  </button>
+                </div>
+              ) : null}
               <div className={styles.fade} aria-hidden="true" />
             </div>
           </>
@@ -875,6 +885,15 @@ function SessionRow({
       role="treeitem"
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
+      aria-label={[
+        title,
+        showStatus ? session.statusLabel : null,
+        !session.blank && session.updatedLabel
+          ? `updated ${session.updatedLabel}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.statusSlot}>
