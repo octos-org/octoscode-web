@@ -123,6 +123,11 @@
     color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
 }
 
+/* Input value is data (mono); the placeholder is prose (body font). */
+.fields input::placeholder {
+  font-family: var(--dsw-font-family);
+}
+
 .error {
   display: grid;
   gap: 3px;

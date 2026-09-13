@@ -1,0 +1,45 @@
+.rows {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  width: 100%;
+}
+
+.row {
+  height: 32px;
+  border-radius: 8px;
+  background: var(--dsw-specific-selector);
+  animation: skeleton-pulse 1.2s var(--dsw-ease-in-out) infinite both;
+}
+
+.row:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.row:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.row:nth-child(4) {
+  animation-delay: 270ms;
+}
+
+.row:nth-child(n + 5) {
+  animation-delay: 360ms;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    animation: none;
+  }
+}
