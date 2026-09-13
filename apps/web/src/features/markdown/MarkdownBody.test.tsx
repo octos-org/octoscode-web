@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CodeBlock } from "./CodeBlock.tsx";
+import { highlightToHtml } from "./highlight.ts";
 import { MarkdownBody } from "./MarkdownBody.tsx";
 
 describe("MarkdownBody", () => {
@@ -42,7 +43,13 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("renders fenced code with DSH-style chrome and Shiki tokens", () => {
+  it("renders fenced code with DSH-style chrome and Shiki tokens", async () => {
+    // Grammars load on demand (see highlight.ts); make sure the typescript
+    // grammar finished loading before asserting on Shiki tokens.
+    await vi.waitFor(() => {
+      expect(highlightToHtml("const answer: number = 42", "ts")).toBeDefined();
+    });
+
     const html = renderToStaticMarkup(
       <CodeBlock code="const answer: number = 42" language="ts" />,
     );

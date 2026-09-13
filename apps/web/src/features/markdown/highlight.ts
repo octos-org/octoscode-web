@@ -10,15 +10,23 @@ import {
   createJavaScriptRegexEngine,
   defaultJavaScriptRegexConstructor,
 } from "shiki/engine/javascript";
-import langTypeScript from "@shikijs/langs/typescript";
-import langShell from "@shikijs/langs/shellscript";
-import langJson from "@shikijs/langs/json";
-import type { HighlighterCore } from "shiki/core";
+import type {
+  HighlighterCore,
+  LanguageRegistration,
+  MaybeArray,
+} from "shiki/core";
 
-type LanguageModule = { default: typeof langTypeScript };
+type LanguageModule = { default: MaybeArray<LanguageRegistration> };
 
-const bootLanguages = [langTypeScript, langShell, langJson];
+// Every grammar loads on demand so that no single language — or set of boot
+// languages — bloats the CodeBlock chunk. TypeScript, shell, and json used to
+// be bundled here, which made the chunk 376 kB; they are warmed at idle by
+// the warmup timer below so the common first-code-block path still highlights
+// promptly.
 const lazyLanguages = new Map<string, () => Promise<LanguageModule>>([
+  ["typescript", () => import("@shikijs/langs/typescript")],
+  ["shellscript", () => import("@shikijs/langs/shellscript")],
+  ["json", () => import("@shikijs/langs/json")],
   ["python", () => import("@shikijs/langs/python")],
   ["rust", () => import("@shikijs/langs/rust")],
   ["go", () => import("@shikijs/langs/go")],
@@ -85,7 +93,7 @@ let loadCount = 0;
 function highlighter(): HighlighterCore {
   singleton ??= createHighlighterCoreSync({
     themes: [theme],
-    langs: bootLanguages,
+    langs: [],
     engine,
   });
   return singleton;
@@ -106,7 +114,14 @@ function ensureLanguage(language: string): boolean {
   return false;
 }
 
-const warmup = setTimeout(() => highlighter(), 0);
+const warmup = setTimeout(() => {
+  highlighter();
+  // Warm the highest-traffic grammars so their chunks start loading at idle
+  // instead of on the first code block render.
+  for (const language of ["typescript", "shellscript", "json"]) {
+    ensureLanguage(language);
+  }
+}, 0);
 (warmup as { unref?: () => void }).unref?.();
 
 export function subscribeGrammarLoaded(listener: () => void): () => void {
