@@ -27,6 +27,13 @@ import type {
   SessionPermissionOption,
 } from "./types.ts";
 import styles from "./SessionControlBar.module.css";
+import { CheckIcon, ChevronDownIcon, ShieldIcon } from "../../ui/Icon.tsx";
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <ChevronDownIcon className={open ? styles.chevronOpen : styles.chevron} />
+  );
+}
 
 export interface PermissionControlProps {
   state: ControlState;
@@ -77,69 +84,6 @@ export type SessionControlBarProps = SessionControlBarBaseProps &
         runtimeModel?: RuntimeModelControlProps | null | undefined;
       }
   );
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      className={open ? styles.chevronOpen : styles.chevron}
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M3.5 5.25 7 8.75l3.5-3.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="m3.4 8.2 2.8 2.8 6.4-6.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ShieldIcon({ dangerous }: { dangerous: boolean }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M8 1.1 14 3.35v3.32c0 4.55-3.42 6.57-6 7.56-2.58-.99-6-3.01-6-7.56V3.35L8 1.1Z"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinejoin="round"
-      />
-      {dangerous ? (
-        <path
-          d="M8.7 4.5v4H7.3v-4h1.4Zm0 5v1.5H7.3V9.5h1.4Z"
-          fill="currentColor"
-        />
-      ) : (
-        <path
-          d="m5 7.8 1.9 1.9L11.2 5"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      )}
-    </svg>
-  );
-}
 
 function useOutsideDismiss(
   open: boolean,

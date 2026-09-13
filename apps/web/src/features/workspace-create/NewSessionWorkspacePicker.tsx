@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import { SkeletonRows } from "../../ui/Skeleton.tsx";
+import { ArrowLeftIcon, FolderIcon, PlusIcon } from "../../ui/Icon.tsx";
 import styles from "./NewSessionWorkspacePicker.module.css";
 
 export interface RecentWorkspacePath {
@@ -47,64 +48,6 @@ export function workspaceCreateRequest(
 ): WorkspaceCreateRequest | null {
   const workspacePath = serverPath.trim();
   return workspacePath ? { workspacePath } : null;
-}
-
-function FolderIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.25 4.5c0-.69.56-1.25 1.25-1.25h3.13l1.25 1.5h6.62c.69 0 1.25.56 1.25 1.25v7.25c0 .69-.56 1.25-1.25 1.25h-11c-.69 0-1.25-.56-1.25-1.25V4.5Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M8 3v10M3 8h10"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function ArrowLeftIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 15 15"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="m8.75 3.25-4.25 4.25 4.25 4.25M4.75 7.5h6"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 interface PickerBodyProps extends NewSessionWorkspacePickerProps {
