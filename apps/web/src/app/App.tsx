@@ -55,6 +55,7 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
+import { RefreshIcon } from "../ui/Icon.tsx";
 
 const ProductSidebar = lazy(async () => ({
   default: (await import("../features/shell/ProductSidebar.tsx"))
@@ -1001,7 +1002,9 @@ export function App() {
                 className={`recovery-banner recovery-${session.recovery.phase}`}
                 role="status"
               >
-                <span className="recovery-banner-mark">↻</span>
+                <span className="recovery-banner-mark">
+                  <RefreshIcon size={16} />
+                </span>
                 <span>
                   <strong>
                     {session.recovery.phase === "reconnecting"
