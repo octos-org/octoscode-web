@@ -21,7 +21,10 @@ export interface SessionRecoverySnapshot {
 
 export type ProjectionDecision =
   | { kind: "apply"; envelope: ProjectionEnvelopeV2 }
-  | { kind: "ignore"; reason: "not_projection" | "wrong_session" | "duplicate" }
+  | {
+      kind: "ignore";
+      reason: "not_projection" | "wrong_session" | "duplicate" | "stale";
+    }
   | { kind: "recover"; reason: string };
 
 /**
@@ -84,7 +87,10 @@ export class DurableSessionProjection {
     this.#detail = reason;
   }
 
-  observe(notification: RpcNotification): ProjectionDecision {
+  observe(
+    notification: RpcNotification,
+    options: { fromRecoveryBuffer?: boolean } = {},
+  ): ProjectionDecision {
     if (notification.method === CORE_UI_METHODS.REPLAY_LOSSY) {
       const event = parseReplayLossyEvent(notification.params);
       if (!event || !this.#matchesScope(event.session_id)) {
@@ -116,6 +122,21 @@ export class DurableSessionProjection {
       this.#phase = "gap";
       this.#detail = `Cursor stream changed from ${this.#cursor.stream} to ${envelope.cursor.stream}`;
       return { kind: "recover", reason: this.#detail };
+    }
+
+    // Buffered recovery replays at or below the hydrate cursor are already
+    // contained in the hydrated transcript. commitHydrate deliberately
+    // clears the per-thread window (hydrate lanes are partial), so for the
+    // buffered drain the durable cursor is the only staleness guard —
+    // without it those envelopes would be re-applied and duplicate
+    // assistant text. Live envelopes keep the old semantics: the transcript
+    // does not authoritatively cover deltas that were never received.
+    if (
+      options.fromRecoveryBuffer &&
+      this.#cursor &&
+      envelope.cursor.seq <= this.#cursor.seq
+    ) {
+      return { kind: "ignore", reason: "stale" };
     }
 
     const previous = this.#threadSeq.get(envelope.thread_id);

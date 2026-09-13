@@ -882,7 +882,9 @@ export class ActiveSessionRuntime<
     for (let index = 0; index < notifications.length; index += 1) {
       const entry = notifications[index];
       if (!entry) continue;
-      const disposition = this.#acceptNotification(authority, entry, false);
+      const disposition = this.#acceptNotification(authority, entry, false, {
+        fromRecoveryBuffer: true,
+      });
       if (disposition === "terminal") return disposition;
       if (disposition === "recovering") {
         for (const remainder of notifications.slice(index + 1)) {
@@ -898,6 +900,7 @@ export class ActiveSessionRuntime<
     authority: ActiveSessionAuthority<Client>,
     entry: BufferedNotification,
     raw: boolean,
+    options: { fromRecoveryBuffer?: boolean } = {},
   ): NotificationDisposition {
     if (!this.isCurrent(authority)) return "terminal";
     const { notification } = entry;
@@ -908,7 +911,7 @@ export class ActiveSessionRuntime<
         : "terminal";
     }
 
-    const decision = this.#projection.observe(notification);
+    const decision = this.#projection.observe(notification, options);
     this.#publish();
     if (decision.kind === "recover") {
       if (entry.retriedAfterHydrate) {

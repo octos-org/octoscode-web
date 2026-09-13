@@ -50,6 +50,32 @@ describe("DurableSessionProjection", () => {
     expect(projection.snapshot().phase).toBe("gap");
   });
 
+  it("ignores recovery-buffered envelopes already covered by the hydrate cursor", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.observe(envelope(1, 7));
+
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 12 },
+    });
+
+    // commitHydrate clears the per-thread window (hydrate lanes are
+    // partial), so envelopes at or below the hydrate cursor — already
+    // contained in the hydrated transcript — must be dropped as stale
+    // instead of being replayed as new.
+    expect(
+      projection.observe(envelope(2, 11), { fromRecoveryBuffer: true }),
+    ).toMatchObject({
+      kind: "ignore",
+      reason: "stale",
+    });
+    // Live envelopes (not from the recovery buffer) keep the old semantics:
+    // the transcript does not authoritatively cover undelivered deltas.
+    expect(projection.observe(envelope(2, 11)).kind).toBe("apply");
+    expect(projection.observe(envelope(3, 13)).kind).toBe("apply");
+  });
+
   it("rejects cross-session and cross-topic contamination", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main#review");

@@ -757,6 +757,47 @@ describe("ActiveSessionRuntime", () => {
     ).toEqual([1, 3, 4]);
   });
 
+  it("drops recovery-buffered envelopes already covered by the hydrate cursor", async () => {
+    const server = new FakeActiveClient();
+    const candidate = new FakeActiveClient();
+    candidate.status = "connected";
+    const recoveryHydrate = deferred<SessionHydrateResult>();
+    candidate.hydrateImplementation = () => recoveryHydrate.promise;
+    const { runtime, events } = testRuntime(() => server);
+    const previous = await runtime.authenticate(connection);
+    if (!previous) throw new Error("missing authority");
+    runtime.adoptCandidate({
+      expected: previous,
+      config: sessionConfig,
+      candidate: candidateSnapshot(candidate),
+    });
+    events.length = 0;
+
+    candidate.emit({
+      jsonrpc: "2.0",
+      method: CORE_UI_METHODS.REPLAY_LOSSY,
+      params: { session_id: "session-one", dropped_count: 1 },
+    });
+    // Buffered deltas the hydrate snapshot already contains (cursor seq 12):
+    // replaying them after commitHydrate would duplicate assistant text.
+    candidate.emit(envelope(1, 10));
+    candidate.emit(envelope(2, 11));
+
+    recoveryHydrate.resolve(hydrated);
+    await flushMicrotasks();
+
+    expect(runtime.getSnapshot().phase).toBe("ready");
+    expect(
+      events
+        .filter((event) => event.type === "notification")
+        .map((event) =>
+          "params" in event.notification
+            ? (event.notification.params as { seq?: number }).seq
+            : undefined,
+        ),
+    ).toEqual([]);
+  });
+
   it("ignores a hydrate rejection after transport loss invalidates recovery", async () => {
     vi.useFakeTimers();
     try {
