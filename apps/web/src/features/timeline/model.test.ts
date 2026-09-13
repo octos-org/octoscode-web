@@ -224,4 +224,65 @@ describe("timeline projection", () => {
       }),
     ).toBe("failed");
   });
+
+  it("sweeps stale streaming tails when the turn completes", () => {
+    let entries: TimelineEntry[] = [];
+    const push = (payload: Record<string, unknown>, seq: number) => {
+      entries = foldNotification(entries, {
+        jsonrpc: "2.0",
+        method: "projection/envelope",
+        params: {
+          session_id: "coding:local:main",
+          thread_id: "thread-1",
+          seq,
+          turn_id: "turn-1",
+          payload,
+        },
+      });
+    };
+
+    // Two streaming segments (a segment boundary split mid-word).
+    push(
+      {
+        type: "assistant_delta",
+        data: {
+          text: "TypeScript is a strongly ",
+          assistant_segment_id: "segment-1",
+        },
+      },
+      1,
+    );
+    push(
+      {
+        type: "assistant_delta",
+        data: {
+          text: "typed superset of JavaScript",
+          assistant_segment_id: "segment-2",
+        },
+      },
+      2,
+    );
+    // Persisted transcript covers the whole reply.
+    push(
+      {
+        type: "assistant_persisted",
+        data: {
+          text: "TypeScript is a strongly typed superset of JavaScript",
+          message_id: "msg-1",
+        },
+      },
+      3,
+    );
+    push({ type: "turn_terminal", data: { outcome: "completed" } }, 4);
+
+    const assistant = entries.filter(
+      (entry) => entry.turnId === "turn-1" && entry.kind === "assistant",
+    );
+    // The persisted message is the single authoritative assistant entry.
+    expect(assistant).toHaveLength(1);
+    expect(assistant[0]?.status).toBe("complete");
+    expect(assistant[0]?.body).toContain("typed superset");
+    // Nothing is left with a stale "running" badge after the terminal event.
+    expect(entries.some((entry) => entry.status === "running")).toBe(false);
+  });
 });

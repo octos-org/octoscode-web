@@ -336,14 +336,19 @@ function foldProjection(
                 : "error",
         },
       );
-    case "turn_terminal":
+    case "turn_terminal": {
+      const settled =
+        data.outcome === "completed"
+          ? sweepTurnStreamtails(entries, turnId)
+          : entries;
       return addSystemMessage(
-        entries,
+        settled,
         `terminal:${turnId}`,
         data.outcome === "completed" ? "Turn complete" : "Turn settled",
         data.error ? pretty(data.error) : String(data.outcome ?? "complete"),
         data.outcome === "completed" ? "complete" : "error",
       );
+    }
     case "background/spawn_complete":
       return upsert(entries, {
         id: `background:${String(data.task_id ?? turnId)}`,
@@ -382,6 +387,49 @@ function appendText(
     status: "running",
     turnId,
   });
+}
+
+/**
+ * When a turn completes, its streaming segment entries are superseded by
+ * the persisted transcript: drop tails whose text the persisted body
+ * already contains (they would render twice — issue #32) and settle any
+ * that remain, so no assistant/reasoning entry keeps a stale "running"
+ * badge after the terminal event.
+ */
+function sweepTurnStreamtails(
+  entries: readonly TimelineEntry[],
+  turnId: string,
+): TimelineEntry[] {
+  const persistedBodies = entries
+    .filter(
+      (entry) =>
+        entry.turnId === turnId &&
+        entry.kind === "assistant" &&
+        entry.status === "complete",
+    )
+    .map((entry) => entry.body.trim());
+  if (persistedBodies.length === 0) return entries.slice();
+  let changed = false;
+  const next: TimelineEntry[] = [];
+  for (const entry of entries) {
+    if (
+      entry.turnId === turnId &&
+      entry.status === "running" &&
+      (entry.id.startsWith(`assistant:${turnId}:`) ||
+        entry.id === `reasoning:${turnId}`)
+    ) {
+      changed = true;
+      const body = entry.body.trim();
+      if (body !== "" && persistedBodies.some((full) => full.includes(body))) {
+        // Duplicate tail: the persisted message already covers it.
+        continue;
+      }
+      next.push({ ...entry, status: "complete" });
+      continue;
+    }
+    next.push(entry);
+  }
+  return changed ? next : entries.slice();
 }
 
 function upsert(
