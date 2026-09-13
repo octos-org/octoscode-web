@@ -367,6 +367,11 @@ const capabilities = {
   ],
 };
 
+// Pending question/approval interactions are SESSION state, not socket
+// state: a page reload reconnects with a fresh socket and hydrate must still
+// return the interaction (restore path). Keyed by protocol session id.
+const pendingInteractionBySession = new Map();
+
 sockets.on("connection", (socket, request) => {
   const connectionProfileId = authenticatedProfileForToken(
     authTokenFromUpgradeRequest(request),
@@ -818,7 +823,30 @@ sockets.on("connection", (socket, request) => {
           heldForSession?.text === "Resolve approval during recovery fixture"
             ? [approvalRequest(sessionId, heldForSession.turnId)]
             : [],
-        pending_questions: [],
+        pending_questions:
+          pendingInteractionBySession.get(sessionId)?.kind === "question"
+            ? [
+                {
+                  session_id: sessionId,
+                  question_id: `question-${pendingInteractionBySession.get(sessionId).turnId}`,
+                  turn_id: pendingInteractionBySession.get(sessionId).turnId,
+                  title: "Choose verification depth",
+                  body: "Octos needs one product decision.",
+                  questions: [
+                    {
+                      header: "Checks",
+                      question: "Which checks should run?",
+                      options: [
+                        { label: "Fast", description: "Unit tests only" },
+                        { label: "Full", description: "All product gates" },
+                      ],
+                      multi_select: false,
+                      allow_free_text: false,
+                    },
+                  ],
+                },
+              ]
+            : [],
       };
       if (delayedHydrateSockets.delete(socket)) {
         if (
@@ -864,6 +892,7 @@ sockets.on("connection", (socket, request) => {
           request.params,
           () => ++projectionCursor,
         );
+        pendingInteractionBySession.set(sessionId, pendingInteraction);
         return true;
       };
       const reject = () => {
@@ -898,7 +927,15 @@ sockets.on("connection", (socket, request) => {
         status: request.params.decision === "approve" ? "approved" : "denied",
         runtime_resumed: true,
       });
-      if (pendingInteraction?.kind === "approval") {
+      const openedSessionId = openedSessionBySocket.get(socket);
+      const sessionInteraction =
+        openedSessionId !== undefined
+          ? pendingInteractionBySession.get(openedSessionId)
+          : undefined;
+      if (sessionInteraction?.kind === "approval") {
+        finishInteraction(socket, sessionInteraction);
+        pendingInteractionBySession.delete(openedSessionId);
+      } else if (pendingInteraction?.kind === "approval") {
         finishInteraction(socket, pendingInteraction);
         pendingInteraction = null;
       }
@@ -910,7 +947,15 @@ sockets.on("connection", (socket, request) => {
         accepted: true,
         runtime_resumed: true,
       });
-      if (pendingInteraction?.kind === "question") {
+      const questionSessionId = openedSessionBySocket.get(socket);
+      const questionInteraction =
+        questionSessionId !== undefined
+          ? pendingInteractionBySession.get(questionSessionId)
+          : undefined;
+      if (questionInteraction?.kind === "question") {
+        finishInteraction(socket, questionInteraction);
+        pendingInteractionBySession.delete(questionSessionId);
+      } else if (pendingInteraction?.kind === "question") {
         finishInteraction(socket, pendingInteraction);
         pendingInteraction = null;
       }

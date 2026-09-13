@@ -1359,12 +1359,7 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(question).toBeHidden();
 });
 
-// FIXME(fixture): the mock scopes pending interactions to the socket
-// (pendingInteraction in mock-ui-server.mjs), so a reload drops the question
-// before hydrate can return it — the restore path cannot be exercised until
-// the fixture models pending interactions as session state. See the tracking
-// issue for the full analysis; the body below is the ready-to-run repro.
-test.fixme("restores a pending structured question across a reload", async ({
+test("restores a pending structured question across a reload", async ({
   page,
 }) => {
   await connectAndStartWorkspace(page);
