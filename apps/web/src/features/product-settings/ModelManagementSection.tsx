@@ -7,6 +7,7 @@
  */
 import { useId, useMemo, useState, type FormEvent } from "react";
 import styles from "./ModelManagementSection.module.css";
+import { PlusIcon } from "../../ui/Icon.tsx";
 
 export type ModelManagementState =
   | { status: "ready" }
@@ -330,20 +331,6 @@ function uniqueSuggestions(
     if (result.length === 100) break;
   }
   return result;
-}
-
-function PlusIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path
-        d="M7 2.2v9.6M2.2 7h9.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 function CredentialIndicator({ configured }: { configured: boolean }) {
@@ -1243,7 +1230,7 @@ export function ModelManagementSection({
             disabled={locked || Boolean(editor)}
             onClick={openAdd}
           >
-            <PlusIcon />
+            <PlusIcon size={14} />
             Add provider
           </button>
         ) : null}
