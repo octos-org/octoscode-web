@@ -679,7 +679,7 @@ export function SessionControlBar({
     ? ` Profile default ${runtimeModel.pendingProfileDefault} is pending an Octos restart.`
     : "";
   return (
-    <div className={styles.bar} aria-label={ariaLabel}>
+    <div className={styles.bar} role="toolbar" aria-label={ariaLabel}>
       {permission ? (
         <div className={styles.leftSeat} data-control-seat="permission">
           <PermissionControl {...permission} />

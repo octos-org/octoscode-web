@@ -129,7 +129,8 @@
   border-radius: 12px;
   padding: 12px 13px;
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  /* -text token keeps 12px error copy at WCAG contrast on the tinted bg. */
+  color: var(--dsw-alias-state-error-text);
   font-size: 12px;
   line-height: 17px;
 }

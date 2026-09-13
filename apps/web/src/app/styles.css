@@ -130,6 +130,34 @@ a:focus-visible,
   clip-path: inset(50%);
 }
 
+/* Visually hidden until keyboard-focused: the skip link is the first
+   focusable element in the app shell. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.skip-link:focus-visible {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  width: auto;
+  height: auto;
+  clip: auto;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-on-accent);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+}
+
 .app-shell,
 .workspace-grid {
   height: 100%;
@@ -1198,6 +1226,13 @@ label > span {
   color: var(--dsw-alias-label-primary);
   font-size: 16px;
   line-height: 24px;
+}
+
+/* Keyboard focus visibility for the composer (the textarea itself resets the
+   global outline so it can sit flush inside the rounded wrapper). */
+.composer:has(textarea:focus-visible) {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 2px var(--dsw-alias-state-business-primary);
 }
 
 .composer textarea::placeholder {

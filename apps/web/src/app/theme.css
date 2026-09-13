@@ -46,11 +46,12 @@
   --dsw-alias-label-primary: #0f1115;
   --dsw-alias-label-primary-dimmed: #151517;
   --dsw-alias-label-secondary: #61666b;
-  --dsw-alias-label-tertiary: #696e75;
+  --dsw-alias-label-tertiary: #5f646b;
   --dsw-alias-label-on-accent: #fff;
   --dsw-alias-state-business-primary: #3564c6;
   --dsw-alias-state-error-primary: #ec1313;
   --dsw-alias-state-error-secondary: #f25a5a;
+  --dsw-alias-state-error-text: #c50f0f;
   --dsw-alias-state-success-primary: #22c55e;
   --dsw-alias-state-success-text: #166534;
   --dsw-alias-state-warn-primary: #f59e0b;
@@ -105,6 +106,7 @@
     --dsw-alias-state-business-primary: #679efe;
     --dsw-alias-state-error-primary: #ff6b6b;
     --dsw-alias-state-error-secondary: #ff6b6b;
+    --dsw-alias-state-error-text: #ff6b6b;
     --dsw-alias-state-success-text: #86efac;
     --dsw-alias-state-warn-text: #fbbf24;
     --dsw-alias-state-warn-tertiary: #27241f;

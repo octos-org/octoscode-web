@@ -142,7 +142,9 @@
 
 .dangerButton {
   background: transparent;
-  color: var(--dsw-alias-state-error-primary);
+  /* -text token keeps the destructive label at WCAG contrast on white; the
+     -primary token alone lands at 4.49:1. */
+  color: var(--dsw-alias-state-error-text);
 }
 
 .secondaryButton:hover:not(:disabled) {

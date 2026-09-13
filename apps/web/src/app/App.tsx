@@ -780,7 +780,11 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <main className="workspace-grid">
+      <a className="skip-link" href="#workspace-main">
+        Skip to content
+      </a>
+      <main className="workspace-grid" id="workspace-main">
+        <h1 className="sr-only">Octoscode coding workspace</h1>
         <Suspense
           fallback={
             <aside
@@ -1133,7 +1137,11 @@ export function App() {
                   aria-autocomplete="list"
                   aria-haspopup="listbox"
                   aria-expanded={suggestedCommands.length > 0}
-                  aria-controls={COMMAND_PALETTE_ID}
+                  aria-controls={
+                    suggestedCommands.length > 0
+                      ? COMMAND_PALETTE_ID
+                      : undefined
+                  }
                   aria-activedescendant={
                     suggestedCommands[selectedCommandIndex]
                       ? `${COMMAND_PALETTE_ID}-${suggestedCommands[selectedCommandIndex].name}`
