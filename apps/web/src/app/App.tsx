@@ -785,7 +785,7 @@ export function App() {
       <a className={productStyles.skipLink} href="#workspace-main">
         Skip to content
       </a>
-      <main className="workspace-grid" id="workspace-main">
+      <main className="workspace-grid" id="workspace-main" tabIndex={-1}>
         <h1 className="sr-only">Octoscode coding workspace</h1>
         <Suspense
           fallback={
