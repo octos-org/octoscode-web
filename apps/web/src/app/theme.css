@@ -14,6 +14,9 @@
   --dsw-font-family-code:
     "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono",
     Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+  /* Numeric content (ids, timestamps, counters) — keeps digits aligned and
+     visually distinct from prose (tasteskill numeric rule). */
+  --dsw-font-numeric: var(--dsw-font-family-code);
   --dsw-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --dsw-transition-duration: 0.2s;
   --dsw-transition-duration-slow: 0.3s;

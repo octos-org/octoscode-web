@@ -54,6 +54,7 @@ import {
   type RecentWorkspace,
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
+import { SkeletonRows } from "../ui/Skeleton.tsx";
 
 const ProductSidebar = lazy(async () => ({
   default: (await import("../features/shell/ProductSidebar.tsx"))
@@ -780,7 +781,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#workspace-main">
+      <a className={productStyles.skipLink} href="#workspace-main">
         Skip to content
       </a>
       <main className="workspace-grid" id="workspace-main">
@@ -792,7 +793,8 @@ export function App() {
               aria-label="Product navigation"
               aria-busy="true"
             >
-              Loading sessions…
+              <SkeletonRows rows={5} />
+              <span className="sr-only">Loading sessions…</span>
             </aside>
           }
         >
@@ -1344,7 +1346,8 @@ function assertNever(value: never): never {
 function DeferredSurface({ label }: { label: string }) {
   return (
     <div className={productStyles.deferredSurface} role="status">
-      {label}
+      <SkeletonRows rows={3} />
+      <span className="sr-only">{label}</span>
     </div>
   );
 }

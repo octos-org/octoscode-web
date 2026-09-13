@@ -119,6 +119,16 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+/* Tactile press feedback for every button (tasteskill interactive-state
+   rule); transform-only so it composes with module hover transitions. */
+button {
+  transition: transform 120ms var(--dsw-ease-in-out);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -128,34 +138,6 @@ a:focus-visible,
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   clip-path: inset(50%);
-}
-
-/* Visually hidden until keyboard-focused: the skip link is the first
-   focusable element in the app shell. */
-.skip-link {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-
-.skip-link:focus-visible {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 1000;
-  width: auto;
-  height: auto;
-  clip: auto;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-on-accent);
-  font-size: 14px;
-  line-height: 20px;
-  text-decoration: none;
 }
 
 .app-shell,
@@ -373,10 +355,16 @@ label > span {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
+  transition: transform 120ms var(--dsw-ease-in-out);
 }
 
 .button:hover:not(:disabled) {
   background: var(--dsw-alias-button-floating-hover);
+}
+
+/* Tactile press feedback (tasteskill interactive-state rule). */
+.button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .button:disabled {
@@ -867,6 +855,7 @@ label > span {
   border-radius: 999px;
   color: var(--dsw-alias-label-tertiary);
   font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+  font-variant-numeric: tabular-nums;
   text-transform: capitalize;
 }
 
