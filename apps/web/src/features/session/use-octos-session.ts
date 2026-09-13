@@ -1458,7 +1458,11 @@ function isFatalSessionContractError(message: string): boolean {
   return (
     message.startsWith("Server protocol contract is incompatible") ||
     message.startsWith("Server lacks the coding Session contract") ||
-    message === "session/hydrate returned an invalid result"
+    message === "session/hydrate returned an invalid result" ||
+    // Hydrate landed on a different session than the one we opened —
+    // retrying would loop forever on a routing fault (see issue #13).
+    message === "session/hydrate returned another session" ||
+    message.startsWith("session/hydrate returned session ")
   );
 }
 

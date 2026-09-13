@@ -305,6 +305,20 @@ export class StaleSessionAuthorityError extends Error {
   }
 }
 
+/**
+ * Hydrate landed on a different session than the one this runtime opened —
+ * a server routing fault. Inherently fatal: retrying would loop forever and
+ * the mismatch must reach the user (issue #13 / audit M2).
+ */
+export class HydrateSessionMismatchError extends Error {
+  constructor(returnedSessionId: string, expectedSessionId: string) {
+    super(
+      `session/hydrate returned session ${returnedSessionId}, expected ${expectedSessionId}`,
+    );
+    this.name = "HydrateSessionMismatchError";
+  }
+}
+
 interface RuntimeTarget {
   kind: "server" | "session";
   config: SessionConnectionInput;
@@ -820,6 +834,16 @@ export class ActiveSessionRuntime<
       throw reason;
     }
     if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
+    if (hydrated.session_id !== authority.sessionId) {
+      // Routing-class contract violation (the server accepted session/open
+      // but hydrate landed elsewhere). Inherently fatal, so the reconnect
+      // loop stops and the real cause reaches the UI instead of being
+      // masked by the generic reconnect banner.
+      throw new HydrateSessionMismatchError(
+        hydrated.session_id,
+        authority.sessionId,
+      );
+    }
     this.#projection.commitHydrate(hydrated);
     this.#recovering = false;
     this.#error = null;
@@ -988,7 +1012,11 @@ export class ActiveSessionRuntime<
     if (!authority) return;
     this.#invalidateRecoveryOperation();
     const message = errorMessage(reason);
-    const fatal = this.#options.isFatalSessionError?.(reason) ?? false;
+    // A hydrate routing mismatch is fatal in itself: the host cannot opt
+    // back into an endless retry loop by omitting the classifier.
+    const fatal =
+      reason instanceof HydrateSessionMismatchError ||
+      (this.#options.isFatalSessionError?.(reason) ?? false);
     if (fatal) {
       this.#retryEnabled = false;
       this.#identityValidated = false;
