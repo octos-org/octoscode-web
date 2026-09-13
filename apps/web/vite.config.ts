@@ -58,6 +58,22 @@ export default defineConfig({
       },
     },
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          // Keep react/react-dom in a stable vendor chunk so shipping app
+          // changes does not invalidate the largest dependency (178 kB) for
+          // returning users.
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)
+          ) {
+            return "vendor-react";
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 4173,
     ...developmentProxy(),
