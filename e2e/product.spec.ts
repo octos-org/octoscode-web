@@ -1359,6 +1359,33 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(question).toBeHidden();
 });
 
+// FIXME(fixture): the mock scopes pending interactions to the socket
+// (pendingInteraction in mock-ui-server.mjs), so a reload drops the question
+// before hydrate can return it — the restore path cannot be exercised until
+// the fixture models pending interactions as session state. See the tracking
+// issue for the full analysis; the body below is the ready-to-run repro.
+test.fixme("restores a pending structured question across a reload", async ({
+  page,
+}) => {
+  await connectAndStartWorkspace(page);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Request question fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  const question = page.getByRole("dialog", {
+    name: "Choose verification depth",
+  });
+  await expect(question).toBeVisible();
+
+  // Reload: the tab-scoped credential and autoConnect flag survive, and the
+  // pending question lane must come back through hydrate so the takeover
+  // is not silently lost (issue #14 follow-up, populated lane).
+  await page.reload();
+  const restored = page.getByRole("dialog", {
+    name: "Choose verification depth",
+  });
+  await expect(restored).toBeVisible({ timeout: 20_000 });
+});
+
 test("preserves workspace launch decisions without exposing profile ids in connect", async ({
   page,
 }) => {
