@@ -273,15 +273,6 @@
   cursor: pointer;
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--dsw-alias-border-l3);
-  border-top-color: var(--dsw-alias-state-business-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 .refreshing {
   padding: 9px 10px 2px;
   color: var(--dsw-alias-label-tertiary);
@@ -421,13 +412,6 @@
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 1px;
 }
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 560px) {
   .overlay {
     align-items: flex-end;

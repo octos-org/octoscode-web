@@ -113,7 +113,9 @@
     --dsw-alias-state-success-text: #86efac;
     --dsw-alias-state-warn-text: #fbbf24;
     --dsw-alias-state-warn-tertiary: #27241f;
-    --dsw-specific-bubble: #2c2c2e;
+    /* User bubble sits above the input/layer-2 surfaces (#2c2c2e) so the
+       conversation keeps a visible identity in dark mode. */
+    --dsw-specific-bubble: #353638;
     --dsw-specific-input-major: #2c2c2e;
     --dsw-specific-menu: #353638;
     --dsw-specific-selector: #353638;
