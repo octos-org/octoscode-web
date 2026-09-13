@@ -5,6 +5,7 @@
  */
 import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import { GearIcon, ModelsIcon, CloseIcon } from "../../ui/Icon.tsx";
 import { settingsNavigationIntent } from "./selection-policy.ts";
 import type {
   SettingsLabels,
@@ -30,72 +31,6 @@ export interface SettingsDialogProps {
   onClose: () => void;
 }
 
-function SettingsIcon({ small = false }: { small?: boolean }) {
-  const size = small ? 14 : 16;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M6.7 1.3h2.6l.36 1.5c.4.16.79.38 1.14.65l1.48-.45 1.3 2.25-1.12 1.04c.03.24.04.47.04.71s-.01.47-.04.71l1.12 1.04-1.3 2.25-1.48-.45c-.35.27-.73.49-1.14.65l-.36 1.5H6.7l-.36-1.5a5.3 5.3 0 0 1-1.14-.65L3.72 11l-1.3-2.25 1.12-1.04A5.8 5.8 0 0 1 3.5 7c0-.24.01-.47.04-.71L2.42 5.25 3.72 3l1.48.45c.35-.27.73-.49 1.14-.65l.36-1.5Z"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
-      <circle cx="8" cy="7" r="1.75" stroke="currentColor" strokeWidth="1.1" />
-    </svg>
-  );
-}
-
-function ModelsIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <ellipse
-        cx="8"
-        cy="3.5"
-        rx="5.5"
-        ry="2"
-        stroke="currentColor"
-        strokeWidth="1.1"
-      />
-      <path
-        d="M2.5 3.5v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-4M2.5 7.5v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-4"
-        stroke="currentColor"
-        strokeWidth="1.1"
-      />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="m3.5 3.5 7 7m0-7-7 7"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 /** Sidebar-footer trigger; deliberately separate from the controlled dialog. */
 export function SettingsTrigger({
   label,
@@ -114,7 +49,7 @@ export function SettingsTrigger({
       aria-expanded={open}
       onClick={onOpen}
     >
-      <SettingsIcon small={compact} />
+      <GearIcon size={compact ? 14 : 16} />
       {compact ? null : <span className={styles.triggerLabel}>{label}</span>}
     </button>
   );
@@ -176,7 +111,7 @@ export function SettingsDialog({
             aria-current={effectiveSection === "general" ? "page" : undefined}
             onClick={() => choose("general")}
           >
-            <SettingsIcon />
+            <GearIcon />
             <span className={styles.navLabel}>{labels.general}</span>
           </button>
           {hasModels ? (

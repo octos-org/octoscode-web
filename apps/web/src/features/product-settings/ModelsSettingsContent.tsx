@@ -9,6 +9,7 @@ import type {
   ModelSelection,
 } from "../product-controls/types.ts";
 import styles from "./ProductSettings.module.css";
+import { CheckIcon, RefreshIcon } from "../../ui/Icon.tsx";
 
 export type ModelsCapabilityState = ControlState;
 
@@ -22,41 +23,6 @@ export interface ModelsSettingsContentProps {
   locked: boolean;
   onRefresh: () => void;
   onSelect: (selection: ModelSelection) => void;
-}
-
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="m3.4 8.2 2.8 2.8 6.4-6.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M11.45 4.85A5 5 0 1 0 12 7M11.45 4.85V1.8m0 3.05H8.4"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 function isSelected(
@@ -110,7 +76,7 @@ export function ModelsSettingsContent({
             disabled={locked}
             onClick={onRefresh}
           >
-            <RefreshIcon />
+            <RefreshIcon size={14} />
             Refresh
           </button>
         ) : null}
