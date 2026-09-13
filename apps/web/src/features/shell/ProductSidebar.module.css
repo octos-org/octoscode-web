@@ -636,6 +636,12 @@
   }
 }
 
+/* Keyboard-active row (tree aria-activedescendant target). Uses the hover
+   token so it matches pointer-hover affordance. */
+.treeActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .sessionRow {
   display: flex;
   align-items: center;
