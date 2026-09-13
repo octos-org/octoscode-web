@@ -10,6 +10,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
+import { SkeletonRows } from "../../ui/Skeleton.tsx";
 import styles from "./NewSessionWorkspacePicker.module.css";
 
 export interface RecentWorkspacePath {
@@ -174,7 +175,7 @@ function PickerBody({
         <div className={styles.body}>
           {loading && !hasWorkspaces ? (
             <div className={styles.state} role="status" aria-live="polite">
-              <span className={styles.spinner} aria-hidden="true" />
+              <SkeletonRows rows={3} />
               <span>Loading recent workspace paths…</span>
             </div>
           ) : null}
