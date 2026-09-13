@@ -1291,6 +1291,10 @@ export function App() {
                         error: session.error ?? null,
                         recovery: session.recovery,
                       },
+                      // Runtime lifecycle ring — newest-last entries of
+                      // {at, kind, detail?}: method names and recovery
+                      // phases only, never task output or params.
+                      diagnostics: session.diagnostics,
                       session: session.opened
                         ? {
                             session_id: session.opened.session_id,
