@@ -201,6 +201,13 @@ export interface ActiveSessionRuntimeSessionSnapshot {
  * Presentation-safe state. Credentials and the mutable transport never enter
  * this snapshot, so React can subscribe without becoming transport authority.
  */
+export interface ActiveSessionDiagnostic {
+  at: string;
+  kind:
+    "connected" | "hydrated" | "recovered" | "reconnect-scheduled" | "failed";
+  detail?: string | undefined;
+}
+
 export interface ActiveSessionRuntimeSnapshot {
   phase: ActiveSessionRuntimePhase;
   status: ConnectionStatus;
@@ -210,6 +217,8 @@ export interface ActiveSessionRuntimeSnapshot {
   serverCapabilities: UiProtocolCapabilities | undefined;
   session: ActiveSessionRuntimeSessionSnapshot | null;
   recovery: SessionRecoverySnapshot;
+  /** Newest-last ring of significant lifecycle events (copy-diagnostics). */
+  diagnostics: readonly ActiveSessionDiagnostic[];
 }
 
 /**
@@ -379,6 +388,7 @@ export class ActiveSessionRuntime<
   #phase: ActiveSessionRuntimePhase = "idle";
   #status: ConnectionStatus = "idle";
   #error: string | null = null;
+  #diagnostics: ActiveSessionDiagnostic[] = [];
   #snapshot: ActiveSessionRuntimeSnapshot;
 
   constructor(options: ActiveSessionRuntimeOptions<Client>) {
@@ -712,6 +722,7 @@ export class ActiveSessionRuntime<
       this.#recoveryBuffer = [];
     }
     this.#phase = "reconnect_wait";
+    this.#logDiagnostic("reconnect-scheduled");
     this.#publish();
     const expectedTarget = this.#target;
     this.#reconnectTimer = this.#schedule(() => {
@@ -847,6 +858,7 @@ export class ActiveSessionRuntime<
     this.#projection.commitHydrate(hydrated);
     this.#recovering = false;
     this.#error = null;
+    this.#logDiagnostic("hydrated");
     this.#publish();
     this.#emit({
       type: "session-hydrate",
@@ -881,6 +893,7 @@ export class ActiveSessionRuntime<
     this.#phase = "ready";
     this.#status = authority.client.status;
     this.#retryAttempt = 0;
+    this.#logDiagnostic("recovered");
     this.#publish();
     this.#emit({ type: "session-ready", reason, authority });
   }
@@ -1012,6 +1025,7 @@ export class ActiveSessionRuntime<
     if (!authority) return;
     this.#invalidateRecoveryOperation();
     const message = errorMessage(reason);
+    this.#logDiagnostic("failed", message);
     // A hydrate routing mismatch is fatal in itself: the host cannot opt
     // back into an endless retry loop by omitting the classifier.
     const fatal =
@@ -1073,7 +1087,18 @@ export class ActiveSessionRuntime<
             }
           : null,
       recovery: this.#projection.snapshot(),
+      diagnostics: this.#diagnostics.slice(),
     };
+  }
+
+  #logDiagnostic(kind: ActiveSessionDiagnostic["kind"], detail?: string): void {
+    this.#diagnostics.push({
+      at: new Date().toISOString(),
+      kind,
+      ...(detail !== undefined ? { detail } : {}),
+    });
+    const overflow = this.#diagnostics.length - 20;
+    if (overflow > 0) this.#diagnostics.splice(0, overflow);
   }
 
   #publish(): void {

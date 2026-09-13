@@ -31,6 +31,7 @@ import {
 import {
   prepareRetainedCandidateSession,
   type ActiveSessionAuthority,
+  type ActiveSessionDiagnostic,
   type ActiveSessionRuntimeEvent,
 } from "./active-session-runtime.ts";
 import { useServerConnection } from "./use-server-connection.ts";
@@ -143,6 +144,7 @@ export interface OctosSessionRuntime {
     error: string | null;
     opened: SessionOpened | null;
     recovery: SessionRecoverySnapshot;
+    diagnostics: readonly ActiveSessionDiagnostic[];
     capabilities: UiProtocolCapabilities | undefined;
     authenticated: boolean;
     restoreRejected: boolean;
@@ -1304,6 +1306,7 @@ export function useOctosSession(): OctosSessionRuntime {
       error: connectionSnapshot.error,
       opened: connectionSnapshot.session?.opened ?? null,
       recovery: connectionSnapshot.recovery,
+      diagnostics: connectionSnapshot.diagnostics,
       capabilities:
         connectionSnapshot.session?.capabilities ??
         connectionSnapshot.serverCapabilities,
