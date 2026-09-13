@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
@@ -129,7 +130,11 @@ export function ProductSidebar({
   const searchInput = useRef<HTMLInputElement>(null);
   const viewOptionsButton = useRef<HTMLButtonElement>(null);
   const viewOptionsMenu = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
   const viewOptionsMenuId = useId();
+  // Roving focus via aria-activedescendant: the tree container keeps DOM
+  // focus while Arrow keys move the active row (WAI-ARIA tree pattern).
+  const [activeTreeItemId, setActiveTreeItemId] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleSessionLimit = Math.max(1, Math.floor(sessionLimit));
   const viewMode = controlledViewMode ?? uncontrolledViewMode;
@@ -242,6 +247,105 @@ export function ProductSidebar({
     if (event.key !== "Escape") return;
     event.preventDefault();
     closeSearch();
+  };
+
+  const treeItems = () =>
+    Array.from(
+      treeRef.current?.querySelectorAll<HTMLElement>('[role="treeitem"]') ?? [],
+    );
+
+  const moveTreeActive = (next: HTMLElement) => {
+    setActiveTreeItemId(next.id);
+    next.scrollIntoView({ block: "nearest" });
+  };
+
+  const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const keys = [
+      "ArrowDown",
+      "ArrowUp",
+      "ArrowLeft",
+      "ArrowRight",
+      "Home",
+      "End",
+      "Enter",
+    ];
+    if (!keys.includes(event.key)) return;
+    const items = treeItems();
+    const first = items[0];
+    if (!first) return;
+    const activeId = activeTreeItemId ?? first.id;
+    const currentIndex = items.findIndex((el) => el.id === activeId);
+    const activeElement =
+      (activeId ? document.getElementById(activeId) : undefined) ?? first;
+
+    const focusNext = (nextIndex: number) => {
+      const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
+      const next = items[clamped];
+      if (!next) return;
+      event.preventDefault();
+      moveTreeActive(next);
+    };
+
+    switch (event.key) {
+      case "ArrowDown":
+        focusNext(currentIndex + 1);
+        return;
+      case "ArrowUp":
+        focusNext(currentIndex - 1);
+        return;
+      case "Home":
+        focusNext(0);
+        return;
+      case "End":
+        focusNext(items.length - 1);
+        return;
+      case "Enter": {
+        event.preventDefault();
+        const expanded = activeElement.getAttribute("aria-expanded");
+        const workspaceId = activeElement.getAttribute("data-workspace-id");
+        if (workspaceId !== null && expanded !== null) {
+          onWorkspaceExpandedChange(workspaceId, expanded !== "true");
+        } else {
+          activeElement.click();
+        }
+        return;
+      }
+      case "ArrowRight": {
+        const workspaceId = activeElement.getAttribute("data-workspace-id");
+        if (
+          workspaceId !== null &&
+          activeElement.getAttribute("aria-expanded") === "false"
+        ) {
+          event.preventDefault();
+          onWorkspaceExpandedChange(workspaceId, true);
+        }
+        return;
+      }
+      case "ArrowLeft": {
+        const workspaceId = activeElement.getAttribute("data-workspace-id");
+        if (
+          workspaceId !== null &&
+          activeElement.getAttribute("aria-expanded") === "true"
+        ) {
+          event.preventDefault();
+          onWorkspaceExpandedChange(workspaceId, false);
+          return;
+        }
+        const parent = activeElement
+          .closest('[role="group"]')
+          ?.closest('[role="treeitem"]');
+        if (parent instanceof HTMLElement) {
+          event.preventDefault();
+          moveTreeActive(parent);
+        }
+        return;
+      }
+    }
+  };
+
+  const syncTreeActiveFromClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const item = (event.target as HTMLElement).closest('[role="treeitem"]');
+    if (item?.id) setActiveTreeItemId(item.id);
   };
 
   const revealWorkspace = (workspaceId: string) => {
@@ -497,8 +601,11 @@ export function ProductSidebar({
               ) : null}
 
               <div
+                ref={treeRef}
                 className={styles.tree}
                 role="tree"
+                tabIndex={0}
+                aria-activedescendant={activeTreeItemId ?? undefined}
                 aria-label={
                   normalizedQuery
                     ? "Session search results"
@@ -506,6 +613,8 @@ export function ProductSidebar({
                       ? "Sessions"
                       : "Workspaces and sessions"
                 }
+                onKeyDown={onTreeKeyDown}
+                onClickCapture={syncTreeActiveFromClick}
               >
                 {!error && !loading && normalizedQuery ? (
                   searchResults.length > 0 ? (
@@ -513,6 +622,10 @@ export function ProductSidebar({
                       {searchResults.map(({ session, workspace }) => (
                         <SearchSessionRow
                           key={`${workspace.id}:${session.id}`}
+                          id={`tree-search-${session.id}`}
+                          active={
+                            activeTreeItemId === `tree-search-${session.id}`
+                          }
                           session={session}
                           workspace={workspace}
                           selected={session.id === selectedSessionId}
@@ -546,11 +659,14 @@ export function ProductSidebar({
 
                       return (
                         <div
-                          className={styles.workspaceGroup}
+                          key={workspace.id}
+                          id={`tree-workspace-${workspace.id}`}
+                          data-workspace-id={workspace.id}
+                          className={`${styles.workspaceGroup} ${activeTreeItemId === `tree-workspace-${workspace.id}` ? styles.treeActive : ""}`}
                           role="treeitem"
+                          tabIndex={-1}
                           aria-label={workspace.label}
                           aria-expanded={expanded}
-                          key={workspace.id}
                         >
                           <div className={styles.workspaceRow}>
                             <button
@@ -595,6 +711,11 @@ export function ProductSidebar({
                               {visibleSessions.map((session) => (
                                 <SessionRow
                                   key={session.id}
+                                  id={`tree-session-${session.id}`}
+                                  active={
+                                    activeTreeItemId ===
+                                    `tree-session-${session.id}`
+                                  }
                                   session={session}
                                   selected={session.id === selectedSessionId}
                                   onSelect={onSessionSelect}
@@ -649,6 +770,10 @@ export function ProductSidebar({
                     {flatSessions.map(({ session, workspace }) => (
                       <SessionRow
                         key={`${workspace.id}:${session.id}`}
+                        id={`tree-session-${session.id}`}
+                        active={
+                          activeTreeItemId === `tree-session-${session.id}`
+                        }
                         session={session}
                         selected={session.id === selectedSessionId}
                         onSelect={onSessionSelect}
@@ -869,10 +994,14 @@ function SessionRow({
   session,
   selected,
   onSelect,
+  id,
+  active,
 }: {
   session: ProductSidebarSession;
   selected: boolean;
   onSelect: (sessionId: string) => void;
+  id?: string;
+  active?: boolean;
 }) {
   const title = session.blank ? "New session" : session.title;
   const status = session.status ?? "idle";
@@ -881,8 +1010,10 @@ function SessionRow({
   return (
     <button
       type="button"
-      className={`${styles.sessionRow} ${selected ? styles.selected : ""}`}
+      id={id}
+      className={`${styles.sessionRow} ${selected ? styles.selected : ""} ${active ? styles.treeActive : ""}`}
       role="treeitem"
+      tabIndex={-1}
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
       aria-label={[
@@ -914,18 +1045,24 @@ function SearchSessionRow({
   workspace,
   selected,
   onSelect,
+  id,
+  active,
 }: {
   session: ProductSidebarSession;
   workspace: ProductSidebarWorkspace;
   selected: boolean;
   onSelect: (sessionId: string) => void;
+  id?: string;
+  active?: boolean;
 }) {
   const status = session.status ?? "idle";
   return (
     <button
       type="button"
-      className={`${styles.searchResultRow} ${selected ? styles.selected : ""}`}
+      id={id}
+      className={`${styles.searchResultRow} ${selected ? styles.selected : ""} ${active ? styles.treeActive : ""}`}
       role="treeitem"
+      tabIndex={-1}
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
       onClick={() => onSelect(session.id)}
