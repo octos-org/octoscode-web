@@ -443,7 +443,6 @@ function sweepTurnStreamtails(
         entry.status === "complete",
     )
     .map((entry) => entry.body.trim());
-  if (persistedBodies.length === 0) return entries.slice();
   let changed = false;
   const next: TimelineEntry[] = [];
   for (const entry of entries) {
@@ -451,7 +450,7 @@ function sweepTurnStreamtails(
       entry.turnId === turnId &&
       entry.status === "running" &&
       (entry.id.startsWith(`assistant:${turnId}:`) ||
-        entry.id === `reasoning:${turnId}`)
+        entry.id.startsWith(`reasoning:${turnId}`))
     ) {
       changed = true;
       const body = entry.body.trim();
