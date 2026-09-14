@@ -68,8 +68,8 @@ jobs:
       # then download the visual-baselines artifact and commit it (keeps
       # baselines rendered by the same engine and fonts as CI).
       - run: >-
-          pnpm test:e2e e2e/visual.spec.ts
-          ${{ inputs.update_visual_snapshots == true && '--update-snapshots' || '' }}
+          pnpm test:e2e e2e/visual.spec.ts ${{ inputs.update_visual_snapshots ==
+          true && '--update-snapshots' || '' }}
         id: visual
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure() || inputs.update_visual_snapshots == true

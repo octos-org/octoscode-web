@@ -80,5 +80,8 @@ test("session reply matches baseline", async ({ page }) => {
   // The composer is masked: with field-sizing autogrow its height is
   // content-driven, and environment font metrics shift it by a few pixels.
   // The timeline above remains fully verified.
-  await expect(page.locator("main")).toHaveScreenshot("session-reply.png", SNAPSHOT);
+  await expect(page.locator("main")).toHaveScreenshot(
+    "session-reply.png",
+    SNAPSHOT,
+  );
 });
