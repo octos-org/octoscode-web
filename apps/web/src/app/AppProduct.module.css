@@ -195,3 +195,32 @@
   line-height: 20px;
   text-decoration: none;
 }
+
+/* Jump-latest pill: shown when the user scrolls away from the live tail
+   (timeline follow contract). */
+.jumpLatest {
+  position: absolute;
+  top: -44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv2);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  transition: transform 120ms var(--dsw-ease-in-out);
+}
+
+.jumpLatest:hover {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
+.jumpLatest:active:not(:disabled) {
+  transform: translateX(-50%) scale(0.98);
+}
