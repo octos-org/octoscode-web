@@ -1,0 +1,134 @@
+/* Timeline reasoning blocks and tool cards (from the #18/#42 UX overhaul).
+   Base structural styles (.timeline, .timeline-entry, .entry-content, etc.)
+   remain in the global styles.css; this module owns the new block types. */
+
+.reasoningBlock {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  padding: 0;
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-label-tertiary) 4%,
+    transparent
+  );
+}
+
+.reasoningBlock[data-live="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-business-primary) 25%,
+    transparent
+  );
+}
+
+.reasoningHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.reasoningHeader::-webkit-details-marker {
+  display: none;
+}
+
+.reasoningBody {
+  padding: 4px 12px 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.reasoningBody .thinkingText {
+  margin: 0;
+  font-family: var(--dsw-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.reasoningBlockLive {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-business-primary) 25%,
+    transparent
+  );
+}
+
+.reasoningMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolBlock {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  padding: 0;
+  background: var(--dsw-specific-tip);
+  overflow: hidden;
+}
+
+.toolBlock[data-live="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-business-primary) 30%,
+    transparent
+  );
+}
+
+.toolBlockLive {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-business-primary) 30%,
+    transparent
+  );
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.toolHeader::-webkit-details-marker {
+  display: none;
+}
+
+.toolStatusLabel {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolStatusLabel[data-status="error"] {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.toolBody {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding: 8px 12px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.toolBody .toolOutput {
+  margin: 0;
+  font-family: var(--dsw-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--dsw-alias-label-secondary);
+}

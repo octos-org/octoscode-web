@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
+import styles from "./Timeline.module.css";
 import type { TimelineEntry } from "./model.ts";
 
 const MarkdownBody = lazy(() =>
@@ -54,6 +55,78 @@ const TimelineEntryView = memo(function TimelineEntryView({
 }: {
   entry: TimelineEntry;
 }) {
+  switch (entry.kind) {
+    case "reasoning":
+      return <ReasoningBlock entry={entry} />;
+    case "tool":
+      return <ToolBlock entry={entry} />;
+    default:
+      return <DefaultEntry entry={entry} />;
+  }
+});
+
+/** Collapsible thinking block — streams open, auto-collapses on settle. */
+function ReasoningBlock({ entry }: { entry: TimelineEntry }) {
+  const running = entry.status === "running";
+  return (
+    <details
+      className={`${styles.reasoningBlock}${running ? ` ${styles.reasoningBlockLive}` : ""}`}
+      data-live={running}
+      open={running}
+    >
+      <summary className={styles.reasoningHeader}>
+        <span className={`entry-glyph glyph-${entry.status}`} />
+        <strong>{running ? "Thinking…" : "Thought"}</strong>
+        {!running ? (
+          <span className={styles.reasoningMeta}>
+            {entry.body.length > 0 ? `${entry.body.length} chars` : ""}
+          </span>
+        ) : null}
+      </summary>
+      <div className={styles.reasoningBody}>
+        {entry.body ? (
+          <pre className={styles.thinkingText}>{entry.body}</pre>
+        ) : (
+          <span className="muted">…</span>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** Collapsible tool card — streams output while running, collapses after. */
+function ToolBlock({ entry }: { entry: TimelineEntry }) {
+  const running = entry.status === "running";
+  return (
+    <details
+      className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
+      data-live={running}
+      open={running}
+    >
+      <summary className={styles.toolHeader}>
+        <span className={`entry-glyph glyph-${entry.status}`} />
+        <strong>{entry.title}</strong>
+        {running ? (
+          <span className={styles.runningLabel}>running</span>
+        ) : (
+          <span className={styles.toolStatusLabel} data-status={entry.status}>
+            {entry.status}
+          </span>
+        )}
+      </summary>
+      <div className={styles.toolBody}>
+        {entry.body ? (
+          <pre className={styles.toolOutput}>{entry.body}</pre>
+        ) : (
+          <span className="muted">No output yet</span>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** Assistant and user messages: full markdown rendering. */
+function DefaultEntry({ entry }: { entry: TimelineEntry }) {
   return (
     <article className={`timeline-entry entry-${entry.kind}`}>
       <div className="entry-rail">
@@ -83,4 +156,4 @@ const TimelineEntryView = memo(function TimelineEntryView({
       </div>
     </article>
   );
-});
+}
