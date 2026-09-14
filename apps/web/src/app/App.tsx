@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { addSystemMessage } from "../features/timeline/model.ts";
 import {
   ConnectionPanel,
@@ -150,6 +158,9 @@ export function App() {
     ),
   );
   const [draft, setDraft] = useState("");
+  const conversationScrollRef = useRef<HTMLDivElement | null>(null);
+  const followRef = useRef(true);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -496,6 +507,43 @@ export function App() {
     }
     window.history.replaceState(null, "", url);
   }, [activeSessionKey]);
+
+  // Timeline follow contract: while the user is at (or near) the bottom the
+  // view follows new content; scrolling up detaches, and the jump-latest
+  // pill re-enters follow mode. scrollend (baseline 2026) is the definitive
+  // "user stopped" signal; the scroll listener tracks detachment live.
+  const syncConversationFollow = useCallback(() => {
+    const el = conversationScrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const follow = distance <= 48;
+    followRef.current = follow;
+    setShowJumpLatest(!follow);
+  }, []);
+  const scrollConversationToBottom = useCallback((smooth: boolean) => {
+    const el = conversationScrollRef.current;
+    if (!el) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth && !reduceMotion ? "smooth" : "auto",
+    });
+  }, []);
+  useEffect(() => {
+    const el = conversationScrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", syncConversationFollow, { passive: true });
+    el.addEventListener("scrollend", syncConversationFollow);
+    return () => {
+      el.removeEventListener("scroll", syncConversationFollow);
+      el.removeEventListener("scrollend", syncConversationFollow);
+    };
+  }, [syncConversationFollow]);
+  useEffect(() => {
+    if (followRef.current) scrollConversationToBottom(false);
+  }, [conversation.timeline, scrollConversationToBottom]);
   const sidebarProjection = useMemo(() => {
     const backgroundBySession = new Map(
       workspaceProduct.backgroundTurns.map((turn) => [
@@ -908,10 +956,12 @@ export function App() {
             </div>
           </header>
           <div
+            ref={conversationScrollRef}
             className="conversation-scroll"
             role="region"
             aria-label="Conversation"
             tabIndex={0}
+            onScroll={syncConversationFollow}
           >
             {workspaceProduct.launch.decision ? (
               <Suspense fallback={<DeferredSurface label="Loading launch…" />}>
@@ -995,6 +1045,19 @@ export function App() {
           <div
             className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending) ? " is-hidden" : ""}`}
           >
+            {showJumpLatest ? (
+              <button
+                type="button"
+                className={productStyles.jumpLatest}
+                onClick={() => {
+                  followRef.current = true;
+                  setShowJumpLatest(false);
+                  scrollConversationToBottom(true);
+                }}
+              >
+                Back to latest ↓
+              </button>
+            ) : null}
             {navigationPending ? (
               <div
                 className={productStyles.pendingNavigation}
