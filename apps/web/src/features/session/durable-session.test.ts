@@ -149,4 +149,38 @@ describe("DurableSessionProjection", () => {
     expect(projection.observe(envelope(2, 18)).kind).toBe("apply");
     expect(projection.observe(envelope(3, 19)).kind).toBe("apply");
   });
+
+  it("keeps the failure cause visible across reconnect attempts", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+
+    projection.fail(
+      "Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
+    );
+    projection.beginReconnect(1);
+    expect(projection.snapshot()).toMatchObject({
+      phase: "reconnecting",
+      detail:
+        "Connection lost · retry 1 · Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
+    });
+
+    // Later attempts keep the cause instead of folding it into the banner.
+    projection.beginReconnect(2);
+    expect(projection.snapshot().detail).toBe(
+      "Connection lost · retry 2 · Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
+    );
+  });
+
+  it("drops the failure cause once recovery is healthy again", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+
+    projection.fail("boom");
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 12 },
+    });
+    projection.beginReconnect(1);
+    expect(projection.snapshot().detail).toBe("Connection lost · retry 1");
+  });
 });

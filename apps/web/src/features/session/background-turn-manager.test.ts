@@ -464,6 +464,86 @@ describe("BackgroundTurnManager", () => {
     expect(reconnected.disconnectCount).toBe(0);
   });
 
+  it("records the turn as failed when the owner socket dies before commit", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    const client = new FakeBackgroundClient();
+    const handoff = manager.prepare({
+      client,
+      ...identity("session-a", "turn-a"),
+    });
+
+    client.setStatus("disconnected");
+
+    expect(handoff.commit()).toBe("transport-ended");
+    expect(client.disconnectCount).toBe(1);
+    expect(manager.getSnapshot()).toEqual([
+      snapshot("session-a", "turn-a", "failed"),
+    ]);
+
+    // A later connect/disconnect cycle clears the record with everything
+    // else owned by the previous transport generation.
+    manager.clear();
+    expect(manager.getSnapshot()).toEqual([]);
+  });
+
+  it("keeps an observed terminal state when the socket dies before commit", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    const client = new FakeBackgroundClient();
+    const handoff = manager.prepare({
+      client,
+      ...identity("session-a", "turn-a"),
+    });
+
+    client.emit(completed("session-a", "turn-a"));
+    client.setStatus("disconnected");
+
+    expect(handoff.commit()).toBe("transport-ended");
+    expect(manager.getSnapshot()).toEqual([
+      snapshot("session-a", "turn-a", "completed"),
+    ]);
+  });
+
+  it("does not let a lost-handoff record consume a slot or be reclaimed", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    const lost = new FakeBackgroundClient();
+    const handoff = manager.prepare({
+      client: lost,
+      ...identity("session-a", "turn-a"),
+    });
+    lost.setStatus("disconnected");
+    expect(handoff.commit()).toBe("transport-ended");
+
+    // A record is not a live transport: reclaiming its Session scope finds
+    // nothing, and parking a fresh turn still succeeds.
+    expect(manager.prepareReclaim(identity("session-a", "ignored"))).toBeNull();
+    const parked = park(manager, "session-a", "turn-b");
+    expect(manager.getSnapshot()).toEqual([
+      snapshot("session-a", "turn-a", "failed"),
+      snapshot("session-a", "turn-b", "running"),
+    ]);
+    expect(parked.disconnectCount).toBe(0);
+  });
+
+  it("evicts the oldest lost-handoff record beyond the history bound", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    for (let index = 0; index <= MAX_BACKGROUND_TURN_TRANSPORTS; index += 1) {
+      const client = new FakeBackgroundClient();
+      const handoff = manager.prepare({
+        client,
+        ...identity("session-a", `turn-${index}`),
+      });
+      client.setStatus("disconnected");
+      expect(handoff.commit()).toBe("transport-ended");
+    }
+
+    const snapshotStates = manager.getSnapshot();
+    expect(snapshotStates).toHaveLength(MAX_BACKGROUND_TURN_TRANSPORTS);
+    expect(snapshotStates[0]?.turnId).toBe("turn-1");
+    expect(snapshotStates.at(-1)?.turnId).toBe(
+      `turn-${MAX_BACKGROUND_TURN_TRANSPORTS}`,
+    );
+  });
+
   it("dispose detaches a prepared authority without disconnecting it and is final", () => {
     const manager = new BackgroundTurnManager<FakeBackgroundClient>();
     const foreground = new FakeBackgroundClient();

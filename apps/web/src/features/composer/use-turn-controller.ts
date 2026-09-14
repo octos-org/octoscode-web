@@ -1,4 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { OctosUiRequestTimeoutError } from "@octos-org/octoscode-client";
 import type {
   OctosUiClient,
   SessionHydrateResult,
@@ -66,6 +67,12 @@ export interface TurnController {
     turnId: string;
     state: "running" | "waiting" | "completed" | "failed";
   }) => boolean;
+  /**
+   * Promote an unacknowledged dispatch once server-side activity for the
+   * turn proves Core accepted it (the start RPC may have timed out while
+   * the turn is live). No-op without a matching dispatch lease.
+   */
+  confirmTurnAccepted: (turnId: string) => boolean;
   startTurn: (turn: PromptTurn) => Promise<void>;
   settleTurn: (turnId: string, outcome?: "completed" | "failed") => void;
 }
@@ -92,6 +99,8 @@ export function useTurnController(
     state: "running" | "waiting" | "completed" | "failed";
   } | null>(null);
   const interruptingTurnIdRef = useRef<string | null>(null);
+  /** The start whose RPC timed out: unknown outcome until evidence arrives. */
+  const timedOutStartTurnIdRef = useRef<string | null>(null);
   const dispatchingTurnIdRef = useRef<string | null>(null);
   const [queue, setQueue] = useState<PromptTurnQueueSnapshot>(() =>
     queueRef.current.snapshot(),
@@ -112,6 +121,7 @@ export function useTurnController(
     locallyStartedTurnRef.current = null;
     acceptedOwnerRef.current = null;
     dispatchingTurnIdRef.current = null;
+    timedOutStartTurnIdRef.current = null;
     setDispatchingTurnId(null);
     interruptingTurnIdRef.current = null;
     setInterruptingTurnId(null);
@@ -148,6 +158,28 @@ export function useTurnController(
       }
     } catch (reason) {
       if (!requestIsCurrent()) return;
+      if (reason instanceof OctosUiRequestTimeoutError) {
+        // Server-side activity may already have promoted the dispatch while
+        // the ACK was still missing; then the timeout says nothing new.
+        if (locallyStartedTurnRef.current?.turnId !== turn.turnId) return;
+        // A timeout is not a rejection: Core may have accepted the turn and
+        // already be producing output. Keep the dispatch lease and the queue
+        // untouched — settling here would invite a resubmit into a running
+        // turn. Server-side activity promotes the dispatch
+        // (confirmTurnAccepted), the terminal event settles the queue, and a
+        // later hydrate that lacks the turn settles it as never accepted.
+        timedOutStartTurnIdRef.current = turn.turnId;
+        dependenciesRef.current.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `send-timeout:${turn.turnId}`,
+            "Turn start timed out",
+            "The server did not acknowledge the turn within the request timeout. It may still be running — do not resubmit; the turn settles when the server reports its outcome, or after a reconnect proves it was never accepted.",
+            "error",
+          ),
+        );
+        return;
+      }
       retireLocalDispatch(turn.turnId, "rejected");
       const message = reason instanceof Error ? reason.message : String(reason);
       dependenciesRef.current.setTimeline((current) =>
@@ -180,6 +212,9 @@ export function useTurnController(
     turnId: string,
     outcome: "completed" | "failed" = "completed",
   ) => {
+    if (timedOutStartTurnIdRef.current === turnId) {
+      timedOutStartTurnIdRef.current = null;
+    }
     if (acceptedOwnerRef.current?.turnId === turnId) {
       acceptedOwnerRef.current = {
         ...acceptedOwnerRef.current,
@@ -362,6 +397,30 @@ export function useTurnController(
       sync();
       return transition.next;
     }
+    // A timed-out start is different from an in-flight one: this hydrate is
+    // strictly later than any possible acceptance, so its silence is
+    // authoritative — Core never received the turn. Settle instead of
+    // wedging the queue behind a phantom. (This assumes Core registers a
+    // received turn/start before answering a later session/hydrate, i.e.
+    // requests are processed in connection order.)
+    if (
+      !serverTurn &&
+      timedOutStartTurnIdRef.current === snapshot.active.turnId
+    ) {
+      const lostTurnId = timedOutStartTurnIdRef.current;
+      timedOutStartTurnIdRef.current = null;
+      retireLocalDispatch(lostTurnId, "rejected");
+      dependenciesRef.current.setTimeline((current) =>
+        addSystemMessage(
+          current,
+          `send-timeout:${lostTurnId}`,
+          "Turn start timed out",
+          "Recovery confirmed the server never accepted the turn — it did not run. Safe to resubmit.",
+          "error",
+        ),
+      );
+      settleTurn(lostTurnId, "failed");
+    }
     return null;
   };
 
@@ -423,6 +482,22 @@ export function useTurnController(
       acceptedOwnerRef.current = { client, sessionId, ...turn };
       return true;
     },
+    confirmTurnAccepted: (turnId) => {
+      const wasTimedOut = timedOutStartTurnIdRef.current === turnId;
+      const accepted = acceptLocalDispatch(turnId, "running");
+      if (accepted && wasTimedOut) {
+        dependenciesRef.current.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `send-timeout:${turnId}`,
+            "Turn start timed out",
+            "The server had accepted the turn after all — no resubmission needed.",
+            "info",
+          ),
+        );
+      }
+      return accepted;
+    },
     reset,
     enqueuePrompt,
     interrupt,
@@ -459,6 +534,9 @@ export function useTurnController(
       !leaseMatchesCurrent(dispatch)
     ) {
       return false;
+    }
+    if (timedOutStartTurnIdRef.current === turnId) {
+      timedOutStartTurnIdRef.current = null;
     }
     acceptedOwnerRef.current = { ...dispatch, state };
     locallyStartedTurnRef.current = null;

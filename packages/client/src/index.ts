@@ -2,6 +2,7 @@ export {
   DEFAULT_UI_FEATURES,
   OctosUiClient,
   OctosUiProtocolError,
+  OctosUiRequestTimeoutError,
 } from "./client.ts";
 export {
   coreProtocolCompatibilityError,

@@ -910,7 +910,12 @@ describe("ActiveSessionRuntime", () => {
       expect(runtime.getSnapshot()).toMatchObject({
         phase: "reconnect_wait",
         error: expect.stringContaining("4096"),
-        recovery: { phase: "reconnecting" },
+        recovery: {
+          phase: "reconnecting",
+          // The reconnect banner must keep the actionable overflow cause
+          // instead of overwriting it with the generic retry text.
+          detail: expect.stringContaining("4096"),
+        },
       });
       const terminalEvents = events.length;
       recoveryHydrate.resolve(hydrated);
