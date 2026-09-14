@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      update_visual_snapshots:
+        description: "Regenerate e2e visual baselines in the CI environment"
+        type: boolean
+        default: false
+      visual_spec_filter:
+        description: "Which visual spec to update"
+        default: e2e/visual.spec.ts
 
 permissions:
   contents: read
@@ -55,7 +64,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      # Baseline regeneration: dispatch with update_visual_snapshots=true,
+      # then download the visual-baselines artifact and commit it (keeps
+      # baselines rendered by the same engine and fonts as CI).
+      - run: >-
+          pnpm test:e2e e2e/visual.spec.ts ${{ inputs.update_visual_snapshots ==
+          true && '--update-snapshots' || '' }}
+        id: visual
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure() || inputs.update_visual_snapshots == true
+        with:
+          name: visual-baselines
+          path: e2e/visual.spec.ts-snapshots/
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
