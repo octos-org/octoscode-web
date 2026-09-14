@@ -152,6 +152,45 @@ octos serve (18030)
 | 产品 | #51 | 深链接 |
 | 测试 | #36/#40/#45/#60 | 视觉基线/虚拟读屏/fixture 修复/单元锁定 |
 
+## 6.5 流式回合 UX 审计发现（2026-09-14，Playwright 实测，2 回合 + 高频采样）
+
+由独立审计 subagent 在真实部署上执行（截图 + DOM 采样 + settle 轮询 trace），产物在 `/tmp/ocw-audit/`（12 张截图、dom-*.json、settle-trace.json、timings.json）。
+
+### P1（已立案）
+
+| Issue | 问题 | 关键证据 |
+|---|---|---|
+| #81 | reasoning 块间歇性永久卡在 "Thinking…"/live 态（turn 完成后 180s 不落定）| settle-trace.json：120 个采样 live=1 |
+| #82 | tool 完成后到作答前 **8.5s 零反馈死窗**（showThinking 条件在 tool 出现后永不触发）| probe2-samples.json 7135→15585ms |
+| #83 | 全新浏览器看不到服务端任何 session（durable 可恢复仅限同 tab）| 12-session-restore.png |
+| #78 | 运行中刷新：时间线清空 + 指示器丢失 + 后台完成不回填 | 03a vs 03b 对比 |
+
+### P2（未立案，记录在案）
+
+- 答案无逐字流式，~15.6s 一次性整块到达（可能是 server flush 粒度）
+- 最终时间线残留展开的原始 tool 输出（700+ chars mono）与折叠卡片并存
+- 空 assistant 条目渲染 "No output yet"
+- assistant 正文行宽 ~100 chars（理想 45-75ch，736px 栏宽偏宽）
+- tool 卡完成即瞬时折叠，running 态从未被看见
+- 连接门 origin 预填硬编码 `:50080`（与实际部署不符）
+- 运行中 Stop + 禁用排队箭头双 affordance 噪音
+- 空态副文案泄露实现词汇 "durable projection events"
+
+### 审计亮点（做得好的）
+
+- composer 元信息透明度（权限/模型/上下文用量）是教科书级信任设计
+- 连接门安全叙事完整
+- 折叠卡密度控制 DSH 级
+- 全程 0 console 错误
+- 侧栏会话运行蓝点→结束灰点的环境状态表达
+
+### 审计者应重点验证的间歇性 bug
+
+Issue #81（reasoning 不落定）是**间歇性的**（1/2 复现）。修复方案（PR #77）修正了 sweep 的 ID 匹配，但竞态可能出在 reasoning_delta 到达与 sweep 执行之间的时序窗口。审计者应：
+1. 跑 10+ 回合验证复现率
+2. 检查 `sweepTurnStreamtails` 是否应改为 turn-scoped 而非 ID-pattern-matched
+3. 确认 `addSystemMessage` 是否会在 sweep 之后重新插入 running 条目
+
 ## 7. 我的自我评估（不客观，仅供参考）
 
 ### 做得还行的
