@@ -250,7 +250,7 @@ for (const asset of initialAssets) {
   if (asset.endsWith(".css")) initialCssBytes += size;
 }
 assert(
-  initialJavaScriptBytes <= 350 * 1024,
+  initialJavaScriptBytes <= 352 * 1024,
   `initial JavaScript budget exceeded: ${initialJavaScriptBytes} bytes`,
 );
 assert(

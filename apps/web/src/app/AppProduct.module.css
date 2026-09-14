@@ -235,3 +235,35 @@
     overflow-y: auto;
   }
 }
+
+/* Deep-thinking indicator: pulsing placeholder between send and the first
+   reasoning delta (the send→delta gap should never be silent). */
+.thinkingIndicator {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-3) 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.thinkingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  animation: thinking-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
