@@ -454,13 +454,14 @@ export function App() {
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
-  // Deep-thinking indicator: dispatched/accepted turn with no reasoning
-  // content yet — the send→first-delta gap should not be silent.
+  // Deep-thinking indicator: any active turn (dispatching OR accepted) with
+  // no reasoning content yet — the send→first-delta gap should not be silent.
   const showThinking = Boolean(
     activeTurnId &&
-    conversation.dispatchingTurnId !== null &&
     !conversation.timeline.some(
-      (entry) => entry.turnId === activeTurnId && entry.kind === "reasoning",
+      (entry) =>
+        entry.turnId === activeTurnId &&
+        (entry.kind === "reasoning" || entry.kind === "tool"),
     ),
   );
   const navigationPending = workspaceProduct.pendingNavigation;
