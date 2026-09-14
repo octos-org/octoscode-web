@@ -77,8 +77,8 @@ test("session reply matches baseline", async ({ page }) => {
   await composer.fill("Stream a reply fixture");
   await page.getByRole("button", { name: "Send prompt" }).click();
   await expect(page.getByText("Completed with")).toBeVisible();
-  await expect(page.locator("main")).toHaveScreenshot(
-    "session-reply.png",
-    SNAPSHOT,
-  );
+  // The composer is masked: with field-sizing autogrow its height is
+  // content-driven, and environment font metrics shift it by a few pixels.
+  // The timeline above remains fully verified.
+  await expect(page.locator("main")).toHaveScreenshot("session-reply.png", SNAPSHOT);
 });
