@@ -132,3 +132,108 @@
   word-break: break-word;
   color: var(--dsw-alias-label-secondary);
 }
+
+/* ── Motion layer ──────────────────────────────────────────────────
+   Patterns from taste-skill (MOTION_INTENSITY 4-7: fluid CSS, transform
+   + opacity only) and 21st.dev (duration-200/300 ease, active:scale).
+   No JS-driven animation; pure CSS transitions on hardware-accelerated
+   properties. */
+
+/* Collapsible open/close: interpolate-size lets <details> animate height.
+   Falls back gracefully on engines without support (instant toggle). */
+.reasoningBlock,
+.toolBlock {
+  interpolate-size: allow-keywords;
+  transition:
+    border-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reasoningBlock::details-content,
+.toolBlock::details-content {
+  block-size: 0;
+  overflow-y: clip;
+  transition:
+    block-size 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    content-visibility 300ms allow-discrete;
+}
+
+.reasoningBlock[open]::details-content,
+.toolBlock[open]::details-content {
+  block-size: auto;
+}
+
+/* Summary hover: subtle background lift */
+.reasoningHeader:hover,
+.toolHeader:hover {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-label-primary) 4%,
+    transparent
+  );
+  border-radius: inherit;
+  transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reasoningHeader,
+.toolHeader {
+  transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Running pulse: pulsing dot on live entries */
+.reasoningBlockLive .entry-glyph,
+.toolBlockLive .entry-glyph {
+  animation: timeline-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes timeline-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+/* Entry reveal: fade + slide for newly mounted entries */
+.reasoningBlock,
+.toolBlock,
+.timeline .timeline-entry {
+  animation: entry-reveal 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes entry-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Press feedback on interactive summaries (taste-skill Rule 5) */
+.reasoningHeader:active,
+.toolHeader:active {
+  transform: scale(0.98);
+}
+
+/* Chevron indicator on summary (21st.dev accordion pattern) */
+.reasoningHeader::after,
+.toolHeader::after {
+  content: "›";
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  transform: rotate(0deg);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reasoningBlock[open] .reasoningHeader::after,
+.toolBlock[open] .toolHeader::after {
+  transform: rotate(90deg);
+}
