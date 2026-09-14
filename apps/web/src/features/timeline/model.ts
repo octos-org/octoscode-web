@@ -299,14 +299,23 @@ function foldProjection(
     case "reasoning_delta":
       return appendText(
         entries,
-        `reasoning:${turnId}`,
+        `reasoning:${turnId}:${reasoningSegment(entries, turnId)}`,
         "reasoning",
         "Reasoning",
         data.text,
         turnId,
       );
-    case "tool_start":
-      return upsert(entries, {
+    case "tool_start": {
+      // A tool call ends the current reasoning segment: settle any running
+      // reasoning entry so it doesn't keep a stale "running" badge.
+      const settled = entries.map((entry) =>
+        entry.turnId === turnId &&
+        entry.kind === "reasoning" &&
+        entry.status === "running"
+          ? { ...entry, status: "complete" as const }
+          : entry,
+      );
+      return upsert(settled, {
         id: `tool:${String(data.tool_call_id ?? turnId)}`,
         kind: "tool",
         title: String(data.name ?? "Tool"),
@@ -314,6 +323,7 @@ function foldProjection(
         status: "running",
         turnId,
       });
+    }
     case "tool_progress":
       return patchEntry(
         entries,
@@ -322,12 +332,18 @@ function foldProjection(
           body: typeof data.message === "string" ? data.message : "",
         },
       );
-    case "tool_end":
+    case "tool_end": {
+      const raw = String(
+        data.output_preview ?? data.error ?? data.reason ?? "",
+      );
+      // Cap tool output in the timeline; the trajectory view holds the
+      // full output. Keeps the streaming timeline readable.
+      const body = raw.length > 500 ? raw.slice(0, 497) + "…" : raw;
       return patchEntry(
         entries,
         `tool:${String(data.tool_call_id ?? turnId)}`,
         {
-          body: String(data.output_preview ?? data.error ?? data.reason ?? ""),
+          body,
           status:
             data.status === "complete"
               ? "complete"
@@ -336,6 +352,7 @@ function foldProjection(
                 : "error",
         },
       );
+    }
     case "turn_terminal": {
       const settled =
         data.outcome === "completed"
@@ -367,6 +384,24 @@ function appendMedia(content: string, media: readonly string[]): string {
   if (!media.length) return content;
   const attachments = media.map((path) => `Attachment: ${path}`).join("\n");
   return content ? `${content}\n\n${attachments}` : attachments;
+}
+
+/**
+ * Reasoning segments are bounded by tool calls: each tool_end increments
+ * the segment counter for the turn, so post-tool reasoning starts a new
+ * collapsible block instead of appending to an ever-growing single entry.
+ */
+function reasoningSegment(
+  entries: readonly TimelineEntry[],
+  turnId: string,
+): number {
+  let tools = 0;
+  for (const entry of entries) {
+    if (entry.turnId === turnId && entry.id.startsWith("tool:")) {
+      tools += 1;
+    }
+  }
+  return tools;
 }
 
 function appendText(
