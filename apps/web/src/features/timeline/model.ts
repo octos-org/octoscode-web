@@ -231,6 +231,19 @@ export function terminalTurnId(notification: RpcNotification): string | null {
   return envelope?.payload.type === "turn_terminal" ? envelope.turn_id : null;
 }
 
+/** The turn a notification carries activity for, regardless of method. */
+export function notificationTurnId(
+  notification: RpcNotification,
+): string | null {
+  if (notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) {
+    return parseProjectionEnvelope(notification.params)?.turn_id ?? null;
+  }
+  return isRecord(notification.params) &&
+    typeof notification.params.turn_id === "string"
+    ? notification.params.turn_id
+    : null;
+}
+
 export function terminalTurnOutcome(
   notification: RpcNotification,
 ): "completed" | "failed" | null {

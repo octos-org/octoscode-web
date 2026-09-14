@@ -581,6 +581,69 @@ test("drops a queued Session creation when turn/start is rejected", async ({
   ).toHaveCount(0);
 });
 
+test("reports a start acknowledgement timeout as unknown, then settles on release", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const cwd = "/srv/work/timeout-turn-start";
+  await connectAndStartWorkspace(page, cwd);
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Hold this turn past the request timeout");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await waitForHeldTurnStart(request);
+
+  // The acknowledgement never arrives within the 30s request timeout. The
+  // turn must not be reported as rejected: the fixture still holds it and
+  // may accept it later, so the queue must not advance or invite resubmit.
+  await expect(
+    page.getByText("Turn start timed out", { exact: true }),
+  ).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText(/do not resubmit/)).toBeVisible();
+  await expect(page.getByText("Turn rejected", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send prompt" })).toHaveCount(
+    0,
+  );
+
+  // The server had actually accepted the turn: releasing the held
+  // acknowledgement streams the reply and the terminal event settles the
+  // queue without any resubmission.
+  await settleHeldTurnStart(request, "release");
+  await expect(page.getByText(/Completed with/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send prompt" })).toBeVisible();
+});
+
+test("settles a timed-out start as lost once recovery proves it never ran", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const cwd = "/srv/work/timeout-turn-start-lost";
+  await connectAndStartWorkspace(page, cwd);
+
+  await holdNextTurnStart(request);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Hold this turn past the request timeout");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await waitForHeldTurnStart(request);
+
+  await expect(
+    page.getByText("Turn start timed out", { exact: true }),
+  ).toBeVisible({ timeout: 45_000 });
+
+  // The server drops the start unprocessed, then the transport dies. The
+  // recovery hydrate is strictly later than any possible acceptance, so its
+  // silence is authoritative: the queue must settle instead of wedging.
+  await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
+  await expect(
+    page.getByText(/Recovery confirmed the server never accepted/),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Send prompt" })).toBeVisible();
+});
+
 test("releases pending navigation when recovery proves the held start active", async ({
   page,
   request,

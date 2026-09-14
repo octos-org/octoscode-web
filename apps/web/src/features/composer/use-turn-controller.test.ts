@@ -1,6 +1,7 @@
 import { createElement, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { OctosUiRequestTimeoutError } from "@octos-org/octoscode-client";
 import type { OctosUiClient } from "@octos-org/octoscode-client";
 import type { TimelineEntry } from "../timeline/model.ts";
 import {
@@ -76,6 +77,128 @@ describe("useTurnController async authority", () => {
       "dispatching",
       "cancelled",
     ]);
+  });
+
+  it("treats a start timeout as an unknown outcome instead of a rejection", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("slow server");
+    const turnId = harness.activeTurnId();
+    start.reject(new OctosUiRequestTimeoutError("turn/start"));
+
+    await vi.waitFor(() => {
+      expect(
+        harness.timeline.some(
+          (entry) =>
+            entry.kind === "system" && entry.title === "Turn start timed out",
+        ),
+      ).toBe(true);
+    });
+    // The queue must not advance into a turn that may still be running.
+    expect(harness.controller.snapshot().active?.turnId).toBe(turnId);
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+    ]);
+
+    // Server-side activity proves acceptance and promotes the dispatch.
+    expect(harness.controller.confirmTurnAccepted(turnId)).toBe(true);
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "accepted",
+    ]);
+
+    // The terminal event then settles the queue as usual.
+    harness.controller.settleTurn(turnId, "completed");
+    expect(harness.controller.snapshot().active).toBeNull();
+  });
+
+  it("ignores a start timeout once server activity already accepted the turn", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("racy server");
+    const turnId = harness.activeTurnId();
+    expect(harness.controller.confirmTurnAccepted(turnId)).toBe(true);
+    start.reject(new OctosUiRequestTimeoutError("turn/start"));
+    // Give the rejected promise's handlers a chance to run.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(
+      harness.timeline.some(
+        (entry) =>
+          entry.kind === "system" && entry.title === "Turn start timed out",
+      ),
+    ).toBe(false);
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+  });
+
+  it("settles a timed-out start once hydrate proves the server never saw it", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("lost start");
+    const turnId = harness.activeTurnId();
+    start.reject(new OctosUiRequestTimeoutError("turn/start"));
+    await vi.waitFor(() => {
+      expect(harness.controller.snapshot().active?.turnId).toBe(turnId);
+    });
+
+    // Hydrate is strictly later than any possible acceptance: its silence
+    // is authoritative for a start that already timed out.
+    harness.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 2 },
+      turns: [],
+    });
+
+    expect(harness.controller.snapshot().active).toBeNull();
+    expect(
+      harness.timeline.some(
+        (entry) =>
+          entry.kind === "system" &&
+          entry.title === "Turn start timed out" &&
+          entry.body.includes("never accepted"),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps a timed-out start when hydrate still lists the turn", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+
+    harness.controller.enqueuePrompt("slow but alive");
+    const turnId = harness.activeTurnId();
+    start.reject(new OctosUiRequestTimeoutError("turn/start"));
+    await vi.waitFor(() => {
+      expect(harness.controller.snapshot().active?.turnId).toBe(turnId);
+    });
+
+    harness.controller.reconcileFromHydrate(
+      {
+        session_id: "session-a",
+        cursor: { stream: "session-a", seq: 2 },
+        turns: [{ turn_id: turnId, state: "active" }],
+      },
+      true,
+    );
+
+    expect(harness.controller.snapshot().active?.turnId).toBe(turnId);
+    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+  });
+
+  it("ignores acceptance evidence for a turn it never dispatched", () => {
+    const harness = renderController(fakeClient());
+
+    expect(harness.controller.confirmTurnAccepted("turn-elsewhere")).toBe(
+      false,
+    );
+    expect(harness.dispatchEvents).toEqual([]);
   });
 
   it("uses recovery hydrate as the authoritative ACK without waiting forever for the RPC", async () => {

@@ -78,6 +78,7 @@ import type {
 import {
   addSystemMessage,
   foldNotification,
+  notificationTurnId,
   terminalTurnId,
   terminalTurnOutcome,
   timelineFromHydrate,
@@ -1289,6 +1290,11 @@ export function useOctosSession(): OctosSessionRuntime {
         interaction.turnId,
       );
     }
+
+    // Server-side activity for a turn proves acceptance even when its
+    // turn/start RPC timed out locally.
+    const activeTurnId = notificationTurnId(notification);
+    if (activeTurnId) turnController.confirmTurnAccepted(activeTurnId);
 
     const terminal = foldIntoTimeline ? terminalTurnId(notification) : null;
     if (terminal) {

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_UI_FEATURES, OctosUiClient } from "../src/client.ts";
+import {
+  DEFAULT_UI_FEATURES,
+  OctosUiClient,
+  OctosUiRequestTimeoutError,
+} from "../src/client.ts";
 import type { PermissionProfileSetParams } from "../src/types.ts";
 import fixture from "./fixtures/ui-protocol-v1.json";
 
@@ -264,6 +268,95 @@ describe("OctosUiClient", () => {
         }),
       } as MessageEvent);
       expect(errors).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a timed-out request with an identifiable timeout error", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createSocket();
+      const client = new OctosUiClient({
+        endpoint: "http://127.0.0.1:50080",
+        requestTimeoutMs: 50,
+        webSocketFactory: () => socket as unknown as WebSocket,
+      });
+      const connecting = client.connect();
+      socket.readyState = 1;
+      socket.onopen?.({} as Event);
+      await connecting;
+
+      const pending = client.startTurn({
+        session_id: "s1",
+        turn_id: "t1",
+        input: [],
+      });
+      const rejection = expect(pending).rejects.toThrow(
+        OctosUiRequestTimeoutError,
+      );
+      await vi.advanceTimersByTimeAsync(50);
+      await rejection;
+      await expect(pending).rejects.toMatchObject({
+        message: "turn/start timed out",
+        method: "turn/start",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives LLM probe requests a longer timeout than the default", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createSocket();
+      const client = new OctosUiClient({
+        endpoint: "http://127.0.0.1:50080",
+        requestTimeoutMs: 50,
+        webSocketFactory: () => socket as unknown as WebSocket,
+      });
+      const connecting = client.connect();
+      socket.readyState = 1;
+      socket.onopen?.({} as Event);
+      await connecting;
+
+      const route = {
+        route_id: "official",
+        label: "Official",
+        base_url: "https://api.z.ai/api/paas/v4",
+        api_key_env: "ZAI_API_KEY",
+        api_type: "openai",
+      };
+      const probe = client.testLlmProfile({
+        profile_id: "coding",
+        selection: { family_id: "zai", model_id: "glm-5.3-flash", route },
+      });
+      const models = client.fetchLlmModels({
+        profile_id: "coding",
+        selection: { family_id: "zai", route },
+      });
+      const settled = { probe: false, models: false };
+      const probeRejection = expect(probe).rejects.toThrow(
+        OctosUiRequestTimeoutError,
+      );
+      const modelsRejection = expect(models).rejects.toThrow(
+        OctosUiRequestTimeoutError,
+      );
+      void probe.catch(() => {
+        settled.probe = true;
+      });
+      void models.catch(() => {
+        settled.models = true;
+      });
+
+      // A slow provider must not trip the ordinary request timeout.
+      await vi.advanceTimersByTimeAsync(50);
+      expect(settled).toEqual({ probe: false, models: false });
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      await probeRejection;
+      await modelsRejection;
+      expect(settled).toEqual({ probe: true, models: true });
     } finally {
       vi.useRealTimers();
     }

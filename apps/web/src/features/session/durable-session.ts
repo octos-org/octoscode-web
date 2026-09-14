@@ -41,6 +41,7 @@ export class DurableSessionProjection {
   #threadSeq = new Map<string, number>();
   #phase: SessionRecoveryPhase = "idle";
   #detail: string | undefined;
+  #failureDetail: string | undefined;
   #reconnectAttempt = 0;
 
   reset(sessionId: string): void {
@@ -49,6 +50,7 @@ export class DurableSessionProjection {
     this.#threadSeq.clear();
     this.#phase = "idle";
     this.#detail = undefined;
+    this.#failureDetail = undefined;
     this.#reconnectAttempt = 0;
   }
 
@@ -56,12 +58,19 @@ export class DurableSessionProjection {
     this.#sessionId = sessionId;
     this.#phase = "hydrating";
     this.#detail = "Restoring authoritative session state";
+    // The transport is back; any failure recorded before the reconnect has
+    // had its banner. A later drop must not blame the old cause.
+    this.#failureDetail = undefined;
   }
 
   beginReconnect(attempt: number): void {
     this.#phase = "reconnecting";
     this.#reconnectAttempt = attempt;
-    this.#detail = `Connection lost · retry ${attempt}`;
+    // Keep the recorded failure cause visible: "4096 events dropped" is
+    // actionable, the bare retry banner is not.
+    this.#detail = this.#failureDetail
+      ? `Connection lost · retry ${attempt} · ${this.#failureDetail}`
+      : `Connection lost · retry ${attempt}`;
   }
 
   commitHydrate(result: SessionHydrateResult): void {
@@ -79,12 +88,14 @@ export class DurableSessionProjection {
     this.#threadSeq.clear();
     this.#phase = "healthy";
     this.#detail = undefined;
+    this.#failureDetail = undefined;
     this.#reconnectAttempt = 0;
   }
 
   fail(reason: string): void {
     this.#phase = "error";
     this.#detail = reason;
+    this.#failureDetail = reason;
   }
 
   observe(
@@ -156,6 +167,7 @@ export class DurableSessionProjection {
     if (this.#phase !== "healthy") {
       this.#phase = "healthy";
       this.#detail = undefined;
+      this.#failureDetail = undefined;
     }
     return { kind: "apply", envelope };
   }

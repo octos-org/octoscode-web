@@ -15,6 +15,13 @@ import { notificationMatchesSessionScope } from "./scope.ts";
 // another slot; reaching this bound requires explicit user cleanup.
 export const MAX_BACKGROUND_TURN_TRANSPORTS = 8;
 
+/**
+ * Upper bound on retained terminal records of handoffs lost to a dead
+ * transport. Records exist so a lost turn stays visible, but a flapping
+ * connection must not grow the sidebar history without limit.
+ */
+const MAX_LOST_TURN_RECORDS = MAX_BACKGROUND_TURN_TRANSPORTS;
+
 export type BackgroundTurnState =
   "running" | "waiting" | "completed" | "failed";
 
@@ -304,6 +311,29 @@ export class BackgroundTurnManager<
       // `commit` means the foreground runtime already preserved this socket
       // for us. If it cannot be retained, this is now our cleanup duty.
       safeDisconnect(owner.client);
+      if (owner.transportEnded && !this.#disposed) {
+        // The socket died before the turn's outcome was observed. Keep a
+        // terminal record so the turn does not silently vanish from every
+        // surface; without an observed terminal event the honest state is
+        // "failed" — Core terminates the turn when its owner connection
+        // closes.
+        if (!isTerminalState(owner.state)) owner.state = "failed";
+        this.#owners.set(owner.key, owner);
+        // Records are terminal and detached, so the oldest can be evicted
+        // once the history itself would drown the live list.
+        let records = 0;
+        for (const candidate of this.#owners.values()) {
+          if (candidate.phase === "disposed") records += 1;
+        }
+        if (records > MAX_LOST_TURN_RECORDS) {
+          for (const [key, candidate] of this.#owners) {
+            if (candidate.phase !== "disposed") continue;
+            this.#owners.delete(key);
+            break;
+          }
+        }
+        this.#publish();
+      }
       return "transport-ended";
     }
 

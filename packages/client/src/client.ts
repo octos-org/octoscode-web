@@ -113,6 +113,12 @@ export const DEFAULT_UI_FEATURES = [
 
 export type WebSocketFactory = (url: string) => WebSocket;
 
+/**
+ * LLM probes round-trip a live provider (list models, run a test completion);
+ * a slow provider needs far more headroom than an in-process Core call.
+ */
+const LLM_PROBE_TIMEOUT_MS = 120_000;
+
 export interface OctosUiClientOptions {
   endpoint: string;
   token?: string;
@@ -137,6 +143,21 @@ export class OctosUiProtocolError extends Error {
     this.name = "OctosUiProtocolError";
     this.code = code;
     this.data = data;
+  }
+}
+
+/**
+ * A request that received no response within its timeout. Distinct from a
+ * server-side rejection: the server may still have accepted the request, so
+ * callers must not report it as a failure or invite a retry blindly.
+ */
+export class OctosUiRequestTimeoutError extends Error {
+  readonly method: string;
+
+  constructor(method: string) {
+    super(`${method} timed out`);
+    this.name = "OctosUiRequestTimeoutError";
+    this.method = method;
   }
 }
 
@@ -253,7 +274,11 @@ export class OctosUiClient {
     this.setStatus("disconnected");
   }
 
-  private request(method: string, params: unknown): Promise<unknown> {
+  private request(
+    method: string,
+    params: unknown,
+    timeoutMs = this.options.requestTimeoutMs,
+  ): Promise<unknown> {
     const socket = this.socket;
     if (
       this.currentStatus !== "connected" ||
@@ -270,8 +295,8 @@ export class OctosUiClient {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
         this.markRequestSettled(id);
-        reject(new Error(`${method} timed out`));
-      }, this.options.requestTimeoutMs);
+        reject(new OctosUiRequestTimeoutError(method));
+      }, timeoutMs);
 
       this.pending.set(id, {
         method,
@@ -506,6 +531,7 @@ export class OctosUiClient {
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_FETCH_MODELS,
       params,
       parseLlmFetchModelsResult,
+      LLM_PROBE_TIMEOUT_MS,
     );
   }
 
@@ -514,6 +540,7 @@ export class OctosUiClient {
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_TEST,
       params,
       parseLlmTestResult,
+      LLM_PROBE_TIMEOUT_MS,
     );
   }
 
@@ -559,8 +586,9 @@ export class OctosUiClient {
     method: string,
     params: unknown,
     parse: (value: unknown) => Result | null,
+    timeoutMs?: number,
   ): Promise<Result> {
-    const result = await this.request(method, params);
+    const result = await this.request(method, params, timeoutMs);
     const parsed = parse(result);
     if (!parsed) throw new Error(`${method} returned an invalid result`);
     return parsed;
