@@ -1059,6 +1059,7 @@ label > span {
 
 .entry-content {
   min-width: 0;
+  padding-left: var(--dsw-space-2); /* room for heading outdent */
 }
 
 .entry-user .entry-content {
@@ -1092,8 +1093,7 @@ label > span {
   display: flex;
   align-items: center;
   gap: var(--dsw-space-2);
-  margin-left: calc(-1 * var(--dsw-space-2)); /* outdent: speaker label */
-  margin-bottom: var(--dsw-space-1);
+  margin: 0 0 var(--dsw-space-1) calc(-1 * var(--dsw-space-2)); /* outdent */
 }
 
 .entry-user .entry-heading {
