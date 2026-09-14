@@ -1092,6 +1092,7 @@ label > span {
   display: flex;
   align-items: center;
   gap: var(--dsw-space-2);
+  margin-left: calc(-1 * var(--dsw-space-2)); /* outdent: speaker label */
   margin-bottom: var(--dsw-space-1);
 }
 
