@@ -224,3 +224,14 @@
 .jumpLatest:active:not(:disabled) {
   transform: translateX(-50%) scale(0.98);
 }
+
+/* Composer autogrow: field-sizing where the platform supports it
+   (Baseline Newly Available); fixed min-height stays the fallback. */
+.composerField {
+  @supports (field-sizing: content) {
+    field-sizing: content;
+    min-height: 68px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+}

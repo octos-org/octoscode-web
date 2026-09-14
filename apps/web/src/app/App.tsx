@@ -1229,6 +1229,7 @@ export function App() {
                     workspaceProduct.transitioning ||
                     Boolean(navigationPending)
                   }
+                  className={productStyles.composerField}
                   role="combobox"
                   aria-autocomplete="list"
                   aria-haspopup="listbox"

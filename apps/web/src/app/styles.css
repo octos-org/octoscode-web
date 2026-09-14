@@ -1239,17 +1239,6 @@ label > span {
   line-height: 24px;
 }
 
-/* Auto-grow with content where the platform supports it (Baseline Newly
-   Available); the fixed min-height remains the fallback floor. */
-@supports (field-sizing: content) {
-  .composer textarea {
-    field-sizing: content;
-    min-height: 68px;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-}
-
 /* Keyboard focus visibility for the composer (the textarea itself resets the
    global outline so it can sit flush inside the rounded wrapper). */
 .composer:has(textarea:focus-visible) {
