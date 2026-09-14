@@ -454,6 +454,15 @@ export function App() {
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
+  // Deep-thinking indicator: dispatched/accepted turn with no reasoning
+  // content yet — the send→first-delta gap should not be silent.
+  const showThinking = Boolean(
+    activeTurnId &&
+    conversation.dispatchingTurnId !== null &&
+    !conversation.timeline.some(
+      (entry) => entry.turnId === activeTurnId && entry.kind === "reasoning",
+    ),
+  );
   const navigationPending = workspaceProduct.pendingNavigation;
   const suggestedCommands =
     commandPaletteDismissed || navigationPending
@@ -1036,10 +1045,21 @@ export function App() {
                 />
               </Suspense>
             ) : (
-              <Timeline
-                entries={conversation.timeline}
-                connected={session.connected}
-              />
+              <>
+                <Timeline
+                  entries={conversation.timeline}
+                  connected={session.connected}
+                />
+                {showThinking ? (
+                  <div
+                    className={productStyles.thinkingIndicator}
+                    role="status"
+                  >
+                    <span className={productStyles.thinkingDot} />
+                    <span>Deep diving…</span>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
           <div
