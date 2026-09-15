@@ -60,6 +60,7 @@ export interface PrepareCandidateSessionOptions<
   createClient: CandidateSessionClientFactory<Client>;
   signal: AbortSignal;
   validateOpened: (opened: SessionOpened) => void;
+  prepareHydrate?: (hydrated: SessionHydrateResult) => Promise<void>;
 }
 
 /**
@@ -182,6 +183,10 @@ export async function prepareCandidateSession<
     assertPreparing();
     if (hydrated.session_id !== result.opened.session_id) {
       throw new Error("session/hydrate returned another session");
+    }
+    if (options.prepareHydrate) {
+      await waitForStage(options.prepareHydrate(hydrated));
+      assertPreparing();
     }
 
     state = "prepared";

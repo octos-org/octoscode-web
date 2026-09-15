@@ -1,7 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { DiffPreviewLine } from "@octos-org/octoscode-client";
 import type { DiffReviewRuntimeState } from "./use-coding-safety.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import {
+  grammarLoadCount,
+  subscribeGrammarLoaded,
+} from "../markdown/highlight.ts";
+import {
+  canDecorateDiff,
+  decorateDiffHunk,
+  diffKind,
+  diffLanguage,
+  type DiffToken,
+} from "./diff-presentation.ts";
 import styles from "./DiffReviewDialog.module.css";
 
 interface DiffReviewDialogProps {
@@ -21,13 +32,27 @@ export function DiffReviewDialog({
     for (const file of state.result?.preview.files ?? []) {
       for (const hunk of file.hunks) {
         for (const line of hunk.lines) {
-          if (isAdded(line.kind)) additions += 1;
-          if (isRemoved(line.kind)) deletions += 1;
+          if (diffKind(line.kind) === "added") additions += 1;
+          if (diffKind(line.kind) === "removed") deletions += 1;
         }
       }
     }
     return { additions, deletions };
   }, [state.result]);
+  const grammarVersion = useSyncExternalStore(
+    subscribeGrammarLoaded,
+    grammarLoadCount,
+    grammarLoadCount,
+  );
+  const decorations = useMemo(() => {
+    const files = state.result?.preview.files;
+    if (!state.active || !files || !canDecorateDiff(files)) return undefined;
+    return files.map((file) =>
+      file.hunks.map((hunk) =>
+        decorateDiffHunk(hunk.lines, diffLanguage(file.path)),
+      ),
+    );
+  }, [state.active, state.result, grammarVersion]);
 
   if (!state.active) return null;
   const preview = state.result?.preview;
@@ -69,6 +94,14 @@ export function DiffReviewDialog({
         <code>{state.latestPreviewId}</code>
       </div>
       <div className="review-content">
+        {Boolean(preview?.files.length) &&
+        !decorations &&
+        !state.loading &&
+        !state.error ? (
+          <p className={styles.plainNotice}>
+            Large preview shown as plain text. All lines are included.
+          </p>
+        ) : null}
         {state.loading ? (
           <div className="review-empty">Loading the server snapshot…</div>
         ) : state.error ? (
@@ -114,6 +147,9 @@ export function DiffReviewDialog({
                           <DiffLine
                             key={`${lineIndex}:${line.old_line ?? ""}:${line.new_line ?? ""}`}
                             line={line}
+                            tokens={
+                              decorations?.[index]?.[hunkIndex]?.[lineIndex]
+                            }
                           />
                         ))}
                       </div>
@@ -133,12 +169,14 @@ export function DiffReviewDialog({
   );
 }
 
-function DiffLine({ line }: { line: DiffPreviewLine }) {
-  const kind = isAdded(line.kind)
-    ? "added"
-    : isRemoved(line.kind)
-      ? "removed"
-      : "context";
+function DiffLine({
+  line,
+  tokens,
+}: {
+  line: DiffPreviewLine;
+  tokens: DiffToken[] | undefined;
+}) {
+  const kind = diffKind(line.kind);
   return (
     <div className={`diff-line diff-${kind}`} role="row">
       <span role="cell">{line.old_line ?? ""}</span>
@@ -146,17 +184,20 @@ function DiffLine({ line }: { line: DiffPreviewLine }) {
       <span className="diff-prefix" role="cell" aria-label={kind}>
         {kind === "added" ? "+" : kind === "removed" ? "−" : " "}
       </span>
-      <code role="cell">{line.content || " "}</code>
+      <code role="cell" className={styles.code}>
+        {tokens?.length
+          ? tokens.map((token, index) => (
+              <span
+                key={index}
+                className={`${token.className}${token.changed ? ` ${styles.changedWord}` : ""}`}
+              >
+                {token.content}
+              </span>
+            ))
+          : line.content}
+      </code>
     </div>
   );
-}
-
-function isAdded(kind: string) {
-  return ["added", "insert", "inserted"].includes(kind);
-}
-
-function isRemoved(kind: string) {
-  return ["removed", "delete", "deleted"].includes(kind);
 }
 
 function statusClass(status: string) {

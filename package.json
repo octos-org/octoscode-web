@@ -20,10 +20,11 @@
     "policy:verify": "node scripts/verify-repository-policy.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "oxlint --deny-warnings apps packages e2e e2e-live playwright.config.ts playwright.live.config.ts",
+    "lint": "oxlint --deny-warnings apps packages e2e e2e-live playwright.config.ts playwright.live.config.ts playwright.smoke.config.ts",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
+    "test:e2e:cross-browser": "playwright test --config playwright.smoke.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:live": "node scripts/run-live-e2e.mjs",
     "check": "pnpm format:check && pnpm policy:verify && pnpm licenses:verify && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm deploy:verify"

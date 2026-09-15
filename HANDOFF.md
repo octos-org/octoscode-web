@@ -1,7 +1,7 @@
 # octoscode-web 全量审计 Handoff
 
-> 最新：2026-09-15 Codex
-> 0.10 的[完整独立验证](docs/reviews/2026-09-15-codex010-verification.md)及[bug / 体验分类、修复与发布复核](docs/reviews/2026-09-15-codex010-release-readiness.md)。原交接内容作为历史记录保留。
+> 最新：2026-09-15
+> Codex 当前个人／可信团队自托管范围、完整工作流程准入、bug 与体验改进及开放项时效性见[产品发布复核](docs/reviews/2026-09-15-product-release-gate.md)。0.10 的[完整独立验证](docs/reviews/2026-09-15-codex010-verification.md)及[bug / 体验分类、修复与发布复核](docs/reviews/2026-09-15-codex010-release-readiness.md)。原交接内容作为历史记录保留。
 
 > 复核说明：本文保留为历史交接记录。2026-09-14 的实测修复、交接事实更正和剩余风险见
 > [产品审计报告](docs/reviews/2026-09-14-product-audit.md)与

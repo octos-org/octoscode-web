@@ -41,6 +41,7 @@ export interface PrepareRetainedCandidateSessionOptions<
   config: SessionConnectionInput;
   signal: AbortSignal;
   validateOpened(opened: SessionOpened): void;
+  prepareHydrate?: (hydrated: SessionHydrateResult) => Promise<void>;
 }
 
 /**
@@ -146,6 +147,10 @@ export async function prepareRetainedCandidateSession<
     assertPreparing();
     if (hydrated.session_id !== result.opened.session_id) {
       throw new Error("session/hydrate returned another session");
+    }
+    if (options.prepareHydrate) {
+      await waitForStage(options.prepareHydrate(hydrated));
+      assertPreparing();
     }
     state = "prepared";
     return {
@@ -282,6 +287,8 @@ export interface ActiveSessionRuntimeOptions<
     capabilities: UiProtocolCapabilities | undefined,
   ): void;
   isFatalSessionError?(reason: unknown): boolean;
+  /** Complete optional projection preparation inside the hydrate transaction. */
+  prepareHydrate?: (hydrated: SessionHydrateResult) => Promise<void>;
   random?: () => number;
   schedule?: (
     callback: () => void,
@@ -862,6 +869,15 @@ export class ActiveSessionRuntime<
         hydrated.session_id,
         authority.sessionId,
       );
+    }
+    if (this.#options.prepareHydrate) {
+      try {
+        await this.#options.prepareHydrate(hydrated);
+      } catch (reason) {
+        if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
+        throw reason;
+      }
+      if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
     }
     this.#projection.commitHydrate(hydrated);
     this.#recovering = false;

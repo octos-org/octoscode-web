@@ -1,5 +1,5 @@
 import type { PromptTurn } from "./turn-queue.ts";
-import { CloseIcon } from "../../ui/Icon.tsx";
+import { CloseIcon } from "../../ui/ShellIcons.tsx";
 import styles from "./QueuedPrompts.module.css";
 
 export function QueuedPrompts({

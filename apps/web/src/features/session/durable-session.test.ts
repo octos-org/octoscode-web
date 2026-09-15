@@ -22,6 +22,83 @@ function envelope(
 }
 
 describe("DurableSessionProjection", () => {
+  it("resumes compacted canonical threads at server checkpoints without replaying old deltas", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 20 },
+      replayed_projection_envelopes: [],
+      projection_thread_sequences: { "thread-1": 8 },
+    });
+    expect(projection.observe(envelope(8, 20))).toMatchObject({
+      kind: "ignore",
+      reason: "stale",
+    });
+    expect(projection.observe(envelope(10, 22)).kind).toBe("recover");
+    expect(projection.snapshot().cursor?.seq).toBe(20);
+    expect(projection.observe(envelope(9, 21)).kind).toBe("apply");
+    expect(projection.snapshot().cursor?.seq).toBe(21);
+  });
+
+  it("rejects late live events before a full canonical checkpoint without consuming their thread sequence", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 20 },
+      replayed_projection_envelopes: [],
+      projection_thread_sequences: { "thread-1": 8 },
+    });
+    for (const thread_id of ["thread-1", "previously-unseen"]) {
+      expect(projection.observe(envelope(9, 19, { thread_id }))).toMatchObject({
+        kind: "ignore",
+        reason: "stale",
+      });
+      expect(projection.snapshot().cursor?.seq).toBe(20);
+    }
+    expect(projection.observe(envelope(9, 21))).toMatchObject({
+      kind: "apply",
+    });
+    expect(
+      projection.observe(envelope(1, 22, { thread_id: "previously-unseen" })),
+    ).toMatchObject({ kind: "apply" });
+    expect(projection.snapshot().cursor?.seq).toBe(22);
+  });
+
+  it("does not carry a complete snapshot cutoff into a reset or legacy partial snapshot", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 20 },
+      replayed_projection_envelopes: [],
+      projection_thread_sequences: {},
+    });
+    projection.commitHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 21 },
+    });
+    expect(projection.observe(envelope(1, 19)).kind).toBe("apply");
+    projection.reset("coding:local:main");
+    expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
+  });
+
+  it("does not commit a malformed continuation checkpoint", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.observe(envelope(1, 7));
+    expect(() =>
+      projection.commitHydrate({
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 20 },
+        replayed_projection_envelopes: [],
+        projection_thread_sequences: { "thread-1": -1 },
+      }),
+    ).toThrow("Invalid canonical hydrate checkpoint");
+    expect(projection.snapshot().cursor?.seq).toBe(7);
+  });
+
   it("accepts monotonic envelopes and rejects a replayed duplicate", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");

@@ -4,12 +4,14 @@ import styles from "./LeaveConnectionDialog.module.css";
 
 export interface LeaveConnectionDialogProps {
   action: "disconnect" | "forget";
+  unsavedDraft?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 export function LeaveConnectionDialog({
   action,
+  unsavedDraft = false,
   onCancel,
   onConfirm,
 }: LeaveConnectionDialogProps) {
@@ -36,6 +38,12 @@ export function LeaveConnectionDialog({
           Current and background work may stop when this connection closes.
           Queued messages will be discarded.
         </p>
+        {unsavedDraft ? (
+          <p>
+            This input has not been saved. Copy it before leaving this
+            conversation.
+          </p>
+        ) : null}
         <p>
           {forget
             ? "This also removes the saved server address and this tab’s sign-in details."

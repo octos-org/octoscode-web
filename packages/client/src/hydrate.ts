@@ -6,7 +6,7 @@ import type {
   ProjectionEnvelopeV2,
   SessionHydrateResult,
 } from "./types.ts";
-import { parseUiCursor } from "./wire-decoders.ts";
+import { isNonNegativeInteger, parseUiCursor } from "./wire-decoders.ts";
 
 export function parseSessionHydrateResult(
   value: unknown,
@@ -26,11 +26,30 @@ export function parseSessionHydrateResult(
     value.replayed_tool_envelopes,
     (entry) => parseHydratedEnvelope(entry, sessionId),
   );
+  const replayedProjectionEnvelopes = parseOptionalArray(
+    value.replayed_projection_envelopes,
+    (entry) => parseHydratedEnvelope(entry, sessionId),
+  );
+  const threadSequences = parseThreadSequences(
+    value.projection_thread_sequences,
+  );
   if (
     messages === null ||
     turns === null ||
     replayedEnvelopes === null ||
     replayedToolEnvelopes === null ||
+    replayedProjectionEnvelopes === null ||
+    threadSequences === null ||
+    // Core supplies these as one atomic snapshot. A partial extension cannot
+    // prove which text was retained or where live continuation begins.
+    (replayedProjectionEnvelopes === undefined) !==
+      (threadSequences === undefined) ||
+    (replayedProjectionEnvelopes !== undefined &&
+      !validReplayCheckpoint(
+        replayedProjectionEnvelopes,
+        threadSequences!,
+        cursor,
+      )) ||
     !isOptionalArray(value.threads) ||
     !isOptionalArray(value.pending_approvals) ||
     !isOptionalArray(value.pending_questions)
@@ -60,6 +79,12 @@ export function parseSessionHydrateResult(
     ...(replayedToolEnvelopes === undefined
       ? {}
       : { replayed_tool_envelopes: replayedToolEnvelopes }),
+    ...(replayedProjectionEnvelopes === undefined
+      ? {}
+      : { replayed_projection_envelopes: replayedProjectionEnvelopes }),
+    ...(threadSequences === undefined
+      ? {}
+      : { projection_thread_sequences: threadSequences }),
   };
 }
 
@@ -130,8 +155,50 @@ function parseHydratedEnvelope(
   value: unknown,
   sessionId: string,
 ): ProjectionEnvelopeV2 | null {
-  if (!isRecord(value)) return null;
+  if (
+    !isRecord(value) ||
+    (value.session_id !== undefined && value.session_id !== sessionId)
+  )
+    return null;
   return parseProjectionEnvelope({ ...value, session_id: sessionId });
+}
+
+function parseThreadSequences(
+  value: unknown,
+): Record<string, number> | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const entries = Object.entries(value);
+  if (
+    entries.some(
+      ([thread, seq]) => !thread.trim() || !isNonNegativeInteger(seq),
+    )
+  )
+    return null;
+  return Object.fromEntries(entries) as Record<string, number>;
+}
+
+function validReplayCheckpoint(
+  replay: ProjectionEnvelopeV2[],
+  checkpoints: Record<string, number>,
+  cursor: NonNullable<SessionHydrateResult["cursor"]>,
+): boolean {
+  const seen = new Set<string>();
+  return replay.every((event) => {
+    const key = JSON.stringify([event.thread_id, event.seq]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const checkpoint = Object.hasOwn(checkpoints, event.thread_id)
+      ? checkpoints[event.thread_id]
+      : undefined;
+    return (
+      checkpoint !== undefined &&
+      event.seq <= checkpoint &&
+      (!event.cursor ||
+        (event.cursor.stream === cursor.stream &&
+          event.cursor.seq <= cursor.seq))
+    );
+  });
 }
 
 function parseOptionalArray<T>(

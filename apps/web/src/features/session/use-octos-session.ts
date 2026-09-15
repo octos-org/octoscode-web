@@ -56,6 +56,7 @@ import {
   type ProfileLlmModel,
   type RpcNotification,
   type SessionOpened,
+  type SessionHydrateResult,
   type SessionListEntry,
   type UiProtocolCapabilities,
   type UserQuestionAnswer,
@@ -241,6 +242,18 @@ export interface OctosSessionRuntime {
 export type WorkspaceOpenOutcome = "opened" | "awaiting_choice" | "failed";
 
 export function useOctosSession(): OctosSessionRuntime {
+  const preparedTimelinesRef = useRef(
+    new WeakMap<SessionHydrateResult, TimelineEntry[]>(),
+  );
+  const prepareHydrate = async (hydrated: SessionHydrateResult) => {
+    if (hydrated.replayed_projection_envelopes === undefined) return;
+    const { timelineFromCanonicalHydrate } =
+      await import("../timeline/canonical-hydrate.ts");
+    preparedTimelinesRef.current.set(
+      hydrated,
+      timelineFromCanonicalHydrate(hydrated),
+    );
+  };
   const runtimeEventSinkRef = useRef<
     (event: ActiveSessionRuntimeEvent<OctosUiClient>) => void
   >(() => undefined);
@@ -258,6 +271,7 @@ export function useOctosSession(): OctosSessionRuntime {
     },
     isFatalSessionError: (reason) =>
       isFatalSessionContractError(errorMessage(reason)),
+    prepareHydrate,
     onEvent: (event) => runtimeEventSinkRef.current(event),
   });
   const activeRuntime = serverConnection.runtime;
@@ -739,7 +753,10 @@ export function useOctosSession(): OctosSessionRuntime {
         pendingRestoreConfigRef.current = null;
         setRestoreRejected(false);
       }
-      setTimeline(timelineFromHydrate(event.hydrated));
+      setTimeline(
+        preparedTimelinesRef.current.get(event.hydrated) ??
+          timelineFromHydrate(event.hydrated),
+      );
       const restoredInteraction = interactionController.restore(
         event.hydrated,
         event.authority.capabilities,
@@ -1019,6 +1036,7 @@ export function useOctosSession(): OctosSessionRuntime {
             config,
             signal: abortController.signal,
             validateOpened,
+            prepareHydrate,
           })
         : await prepareCandidateSession({
             config,
@@ -1030,6 +1048,7 @@ export function useOctosSession(): OctosSessionRuntime {
                 features: DEFAULT_UI_FEATURES,
               }),
             validateOpened,
+            prepareHydrate,
           });
       if (
         candidateAbortRef.current !== abortController ||

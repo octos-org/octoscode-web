@@ -16,6 +16,7 @@ interface ConnectionPanelProps {
   value: ConnectionDraft;
   status: ConnectionStatus;
   error: string | null;
+  storageWarning?: string;
   onChange: (next: ConnectionDraft) => void;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -26,6 +27,7 @@ export function ConnectionPanel({
   value,
   status,
   error,
+  storageWarning,
   onChange,
   onConnect,
   onDisconnect,
@@ -186,6 +188,11 @@ export function ConnectionPanel({
             ) : (
               <span>{error}</span>
             )}
+          </div>
+        ) : null}
+        {storageWarning ? (
+          <div className={styles.error} role="alert">
+            {storageWarning}
           </div>
         ) : null}
         {connecting ? (

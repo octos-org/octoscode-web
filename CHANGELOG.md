@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Preserve unsent drafts across same-tab refresh, isolate them by sign-in and
+  Session, and report browser storage failures without silently losing editing
+  state.
+- Keep earlier drafts at the cache limit and make failed Forget operations
+  visible, including browsers that reject storage reads or deletions.
+- Add unread tab counts and explicitly enabled desktop notifications for hidden
+  or background responses; suppress historical/repeated notifications.
+- Improve diff review with syntax highlighting and conservative word changes,
+  retaining full raw text when highlighting is unavailable or the preview is
+  large.
+- Bound silent connection handshakes and consume newer Core canonical hydrate
+  replay without changing attached execution or old-server capabilities.
+- Add continuous Firefox/WebKit critical-flow checks alongside the Chromium
+  suite.
+
 - Preserve active work, drafts and queued messages when an optional view fails
   to load; make modal loading cancellable and keep recovery actions available.
 - Resolve uncertain turns through the advertised status query without automatic

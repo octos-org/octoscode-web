@@ -89,6 +89,66 @@ class FakeCandidateClient implements CandidateSessionClient {
 }
 
 describe("prepareCandidateSession", () => {
+  it("buffers live events until optional hydrate preparation finishes", async () => {
+    const client = new FakeCandidateClient();
+    const ready = deferred<void>();
+    const prepareHydrate = vi.fn(() => ready.promise);
+    const preparing = prepareCandidateSession({
+      config,
+      signal: new AbortController().signal,
+      createClient: () => client,
+      validateOpened: () => undefined,
+      prepareHydrate,
+    });
+    await vi.waitFor(() => expect(prepareHydrate).toHaveBeenCalledOnce());
+    client.emit(notification(13));
+    expect(client.listenerCount).toBe(1);
+    ready.resolve();
+    const prepared = await preparing;
+    expect(prepared.release().notifications).toEqual([notification(13)]);
+    expect(client.disconnectCount).toBe(0);
+  });
+
+  it("cancels an unfinished hydrate preparation and ignores its later completion", async () => {
+    const client = new FakeCandidateClient();
+    const ready = deferred<void>();
+    const controller = new AbortController();
+    const prepareHydrate = vi.fn(() => ready.promise);
+    const preparing = prepareCandidateSession({
+      config,
+      signal: controller.signal,
+      createClient: () => client,
+      validateOpened: () => undefined,
+      prepareHydrate,
+    });
+    const rejected = expect(preparing).rejects.toBeInstanceOf(
+      CandidateSessionCancelledError,
+    );
+    await vi.waitFor(() => expect(prepareHydrate).toHaveBeenCalledOnce());
+    controller.abort();
+    await rejected;
+    ready.resolve();
+    expect(client.disconnectCount).toBe(1);
+    expect(client.listenerCount).toBe(0);
+  });
+
+  it("fails optional hydrate preparation without releasing a candidate", async () => {
+    const client = new FakeCandidateClient();
+    await expect(
+      prepareCandidateSession({
+        config,
+        signal: new AbortController().signal,
+        createClient: () => client,
+        validateOpened: () => undefined,
+        prepareHydrate: async () => {
+          throw new Error("Recovery module unavailable");
+        },
+      }),
+    ).rejects.toThrow("Recovery module unavailable");
+    expect(client.disconnectCount).toBe(1);
+    expect(client.listenerCount).toBe(0);
+  });
+
   it.each([undefined, "/srv/another-project"])(
     "rejects an unconfirmed saved-link workspace before hydrate: %s",
     async (workspaceRoot) => {

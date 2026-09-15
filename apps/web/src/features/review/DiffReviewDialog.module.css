@@ -21,3 +21,88 @@
 .dialog :global(.diff-hunk) {
   min-width: 0;
 }
+
+.plainNotice {
+  margin: 0 0 var(--dsw-space-3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.dialog :global(.diff-line) {
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.dialog :global(.diff-line) > .code {
+  color: var(--dsw-alias-label-primary);
+}
+
+.changedWord {
+  border-radius: 2px;
+  box-decoration-break: clone;
+}
+
+:global(.diff-added) .changedWord {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-success-primary) 22%,
+    transparent
+  );
+}
+
+:global(.diff-removed) .changedWord {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-error-primary) 20%,
+    transparent
+  );
+}
+
+.code :global(.shiki-color-foreground) {
+  color: var(--shiki-foreground);
+}
+
+.code :global(.shiki-color-constant) {
+  color: var(--shiki-token-constant);
+}
+
+.code :global(.shiki-color-string),
+.code :global(.shiki-color-string-expression) {
+  color: var(--shiki-token-string);
+}
+
+.code :global(.shiki-color-comment) {
+  color: var(--shiki-token-comment);
+}
+
+.code :global(.shiki-color-keyword) {
+  color: var(--shiki-token-keyword);
+}
+
+.code :global(.shiki-color-parameter) {
+  color: var(--shiki-token-parameter);
+}
+
+.code :global(.shiki-color-function) {
+  color: var(--shiki-token-function);
+}
+
+.code :global(.shiki-color-punctuation) {
+  color: var(--shiki-token-punctuation);
+}
+
+.code :global(.shiki-color-link) {
+  color: var(--shiki-token-link);
+}
+
+.code :global(.shiki-italic) {
+  font-style: italic;
+}
+
+.code :global(.shiki-bold) {
+  font-weight: 600;
+}
+
+.code :global(.shiki-underline) {
+  text-decoration: underline;
+}

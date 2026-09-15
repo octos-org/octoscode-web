@@ -99,6 +99,7 @@ export interface OctosUiClientOptions {
   token?: string;
   features?: readonly string[];
   requestTimeoutMs?: number;
+  connectTimeoutMs?: number;
   webSocketFactory?: WebSocketFactory;
 }
 
@@ -214,7 +215,26 @@ export class OctosUiClient {
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const error = new Error(
+          "Connection timed out. Check that Octos is running and the server address is reachable.",
+        );
+        reject(error);
+        if (this.socket !== socket) return;
+        this.socket = null;
+        this.emitError(error);
+        this.setStatus("error");
+        try {
+          socket.close(1000, "connection timeout");
+        } catch {
+          /* Already closed. */
+        }
+      }, this.options.connectTimeoutMs ?? 15_000);
       socket.onopen = () => {
+        clearTimeout(timeout);
+        if (settled) return;
         if (this.socket !== socket) {
           if (!settled)
             reject(new Error("Octos UI Protocol connection replaced"));
@@ -226,6 +246,7 @@ export class OctosUiClient {
         resolve();
       };
       socket.onerror = () => {
+        clearTimeout(timeout);
         const error = new Error(
           "Could not open the Octos UI Protocol connection",
         );
@@ -236,9 +257,13 @@ export class OctosUiClient {
         }
         this.emitError(error);
         this.setStatus("error");
-        if (!settled) reject(error);
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
       };
       socket.onclose = () => {
+        clearTimeout(timeout);
         const error = new Error("Octos UI Protocol connection closed");
         // disconnect() may already have started another connection on this
         // client. The old close still rejects its own pending connect, but

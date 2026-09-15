@@ -17,6 +17,30 @@ function memoryStorage() {
 }
 
 describe("workspace recents", () => {
+  it("keeps navigation in memory and reports failed cleanup when storage becomes read-only", () => {
+    const storage = memoryStorage();
+    rememberWorkspace(storage, "https://octos.example", "/old", 1);
+    const readOnly = {
+      getItem: storage.getItem,
+      setItem() {
+        throw new Error("blocked");
+      },
+      removeItem() {
+        throw new Error("blocked");
+      },
+    };
+    expect(
+      rememberWorkspace(readOnly, "https://octos.example", "/new", 2)[0]?.path,
+    ).toBe("/new");
+    expect(clearRecentWorkspaces(readOnly, "https://octos.example")).toBe(
+      false,
+    );
+    expect(
+      loadRecentWorkspaces(readOnly, "https://octos.example")[0]?.path,
+    ).toBe("/old");
+    expect(clearRecentWorkspaces(storage, "https://octos.example")).toBe(true);
+  });
+
   it("remembers only a server workspace descriptor", () => {
     const storage = memoryStorage();
     rememberWorkspace(

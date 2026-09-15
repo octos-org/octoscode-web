@@ -5,7 +5,7 @@ import {
   workspaceName,
   type RecentWorkspace,
 } from "../workspace/workspace-recents.ts";
-import { formatRelativeTime } from "./product-projection.ts";
+import { formatRelativeTime } from "./relative-time.ts";
 import {
   ProductSidebar,
   type ProductSidebarProps,

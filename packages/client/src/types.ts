@@ -545,6 +545,9 @@ export interface SessionHydrateResult {
   pending_questions?: unknown[];
   replayed_envelopes?: ProjectionEnvelopeV2[];
   replayed_tool_envelopes?: ProjectionEnvelopeV2[];
+  /** Optional bounded canonical replay and continuation checkpoints (Core #2296). */
+  replayed_projection_envelopes?: ProjectionEnvelopeV2[];
+  projection_thread_sequences?: Record<string, number>;
 }
 
 export interface ReplayLossyEvent {
