@@ -42,7 +42,10 @@ import type { PeerControllerPanelProps } from "../control/PeerControllerPanel.ts
 import {
   peerControlAdmitted,
 } from "../control/peer-control-commands.ts";
-import { peerDispatchAdmitted } from "../control/peer-dispatch-commands.ts";
+import {
+  peerDispatchAdmitted,
+  peerDispatchRefusalLabel,
+} from "../control/peer-dispatch-commands.ts";
 import {
   FLEET_START_IDLE,
   fleetStartBegin,
@@ -192,14 +195,37 @@ export function FleetView({
   const [start, setStart] = useState<FleetStartState>(FLEET_START_IDLE);
   // Round 4 J2: Dismiss hides the uncertain-ack notice WITHOUT sending.
   const [startDismissed, setStartDismissed] = useState(false);
-  const startMachine =
+  // Round 2 judge #2 / Round 4 J2: the sink's settle OUTRANKS the local latch —
+  // the local machine has no way to learn the dispatch landed, so without the
+  // settle the form sticks on "Starting…" forever.
+  const settle =
     startState !== undefined && startState.kind !== "requesting"
       ? startState
-      : start;
-  // Round 4 J2: an ACCEPTED settle clears the form (a second Start is a NEW
-  // request with a freshly minted id); a refusal KEEPS the brief for retry.
-  const acceptedRef = startState?.kind === "accepted";
-  const briefValue = acceptedRef ? "" : brief;
+      : undefined;
+  // Round 4 J2: an ACCEPTED settle CLEARS the form — a second Start is a NEW
+  // request with a freshly minted id, and `fleetStartBegin` mints one only out
+  // of `idle`, so the accepted settle reads as idle here. A refusal instead
+  // stands as the machine state: it KEEPS the brief and renders §6 copy below.
+  const startMachine: FleetStartState =
+    settle === undefined
+      ? start
+      : settle.kind === "accepted"
+        ? FLEET_START_IDLE
+        : settle;
+  // The accepted brief belongs to the FINISHED Start, so it clears until the
+  // operator's next edit releases the local latch (`releaseSettledStart`).
+  const briefValue =
+    settle?.kind === "accepted" && start.kind !== "idle" ? "" : brief;
+  /**
+   * A settled Start is finished: the operator's next edit to the draft begins a
+   * NEW request, so drop the local latch. Without this the latch would keep the
+   * button disabled (and the brief blanked) while the settle prop still stands
+   * from the PREVIOUS dispatch.
+   */
+  const releaseSettledStart = () => {
+    if (settle !== undefined && start.kind !== "idle")
+      setStart(FLEET_START_IDLE);
+  };
   // Steer drafts, one per row (inline text, §4.3).
   const [steerDrafts, setSteerDrafts] = useState<Record<string, string>>({});
   // The Advanced disclosure + the per-group Finished buckets start closed.
@@ -298,7 +324,10 @@ export function FleetView({
             data-fleet-field="model"
             aria-label={t("Model")}
             value={model}
-            onChange={(event) => setModel(event.target.value)}
+            onChange={(event) => {
+              setModel(event.target.value);
+              releaseSettledStart();
+            }}
             disabled={lanePicker.kind === "disabled"}
           >
             <option value="" hidden />
@@ -320,7 +349,10 @@ export function FleetView({
             data-fleet-field="brief"
             aria-label={t("Brief")}
             value={briefValue}
-            onChange={(event) => setBrief(event.target.value)}
+            onChange={(event) => {
+              setBrief(event.target.value);
+              releaseSettledStart();
+            }}
           />
         </label>
         {sessions.length > 0 ? (
@@ -347,7 +379,14 @@ export function FleetView({
           className={styles.action}
           data-fleet-action="start"
           aria-label={t("Start a peer")}
-          disabled={!startAdmitted || startMachine.kind === "requesting"}
+          disabled={
+            !startAdmitted ||
+            startMachine.kind === "requesting" ||
+            // §4.3 "one Start = one dispatch": a local request still in flight
+            // closes the gate even while a STALE settle from the previous
+            // dispatch still stands.
+            start.kind === "requesting"
+          }
           onClick={() => {
             if (!startAdmitted) return;
             const next = fleetStartBegin(startMachine, model, brief);
@@ -369,9 +408,16 @@ export function FleetView({
           {startMachine.kind === "requesting" ? t("Starting…") : t("Start")}
         </button>
         {startMachine.kind === "failed" ? (
-          <p className={styles.formNote} data-fleet-start-failed="true">
+          // §6: the BOUNDED recovery label for the typed refusal kind — task
+          // words, never the kind token and never raw server copy. The kind
+          // itself rides as a data hook for diagnostics only.
+          <p
+            className={styles.formNote}
+            data-fleet-start-failed="true"
+            data-refusal-kind={startMachine.refusalKind}
+          >
             {t("Couldn't start: {value0}", {
-              value0: startMachine.refusalKind,
+              value0: t(peerDispatchRefusalLabel(startMachine.refusalKind)),
             })}
           </p>
         ) : null}

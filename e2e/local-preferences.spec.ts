@@ -17,6 +17,12 @@ const preferences = (page: Page) =>
       name: /^(Browser preferences|浏览器偏好设置)$/,
     }),
   });
+// v0.10.0's QueuedPrompts replaced our pre-rebase `.prompt-queue` div with
+// `<section aria-label="Queued prompts">` under CSS-module class names
+// (apps/web/src/features/composer/QueuedPrompts.tsx:14). Target the accessible
+// name — the stable contract — never a module-hashed class.
+const promptQueue = (page: Page) =>
+  page.getByRole("region", { name: "Queued prompts" });
 const row = (page: Page, idSuffix: string) =>
   page.locator('button[role="treeitem"]').filter({
     has: page.locator('[class*="sessionTitle"]', {
@@ -102,7 +108,10 @@ async function title(page: Page) {
 async function sibling(page: Page, workspace: string) {
   const navigation = page.locator("aside");
   await navigation
-    .locator(`section[role="treeitem"][aria-label="${workspace}"]`)
+    // v0.10.0's sidebar renders the workspace group as a <div role="treeitem">
+    // (ProductSidebar.tsx:765-772) so its tree navigation can own the node id;
+    // the role + accessible name are the contract, the tag name never was.
+    .locator(`[role="treeitem"][aria-label="${workspace}"]`)
     .locator('button[class*="workspaceToggle"]')
     .hover();
   await navigation
@@ -200,7 +209,7 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
     await command(page, "Preference A first held turn");
     await held(request, aOwner);
     await command(page, "Preference A second queued turn");
-    await expect(page.locator(".prompt-queue")).toContainText(
+    await expect(promptQueue(page)).toContainText(
       "Preference A second queued turn",
     );
     await command(page, "/images");
@@ -372,7 +381,7 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
     expect(wire.calls("turn/interrupt")).toHaveLength(0);
     expect(wire.sockets()).toBe(1);
     expect((await storage(page))[storageKey]).toBeUndefined();
-    await expect(page.locator(".prompt-queue")).toContainText(
+    await expect(promptQueue(page)).toContainText(
       "Preference A second queued turn",
     );
     await command(page, "/images");
@@ -387,7 +396,7 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
       .click();
     await row(page, b).click();
     await expect(input(page)).toHaveValue("B untouched draft");
-    await expect(page.locator(".prompt-queue")).toHaveCount(0);
+    await expect(promptQueue(page)).toHaveCount(0);
     await row(page, a).click();
     await release(request, aOwner);
     await expect.poll(() => wire.calls("turn/start").length).toBe(3);
@@ -509,7 +518,7 @@ test("Vim editing keeps Insert Escape and pending-operator Escape local, while N
     await input(page).press("x");
     await expect(input(page)).toHaveValue("alpha eta");
     await input(page).press("Enter");
-    await expect(page.locator(".prompt-queue")).toContainText("alpha eta");
+    await expect(promptQueue(page)).toContainText("alpha eta");
     expect(wire.calls("turn/start")).toHaveLength(1);
     await release(request, owner);
     await expect.poll(() => wire.calls("turn/start").length).toBe(2);
@@ -518,7 +527,7 @@ test("Vim editing keeps Insert Escape and pending-operator Escape local, while N
       input: [{ kind: "text", text: "alpha eta" }],
     });
     expect(wire.calls("turn/interrupt")).toHaveLength(0);
-    await expect(page.locator(".prompt-queue")).toHaveCount(0);
+    await expect(promptQueue(page)).toHaveCount(0);
   } finally {
     await request.post(`${origin}/__test__/terminal/reset`);
   }
@@ -680,7 +689,16 @@ test("only explicit save persists versioned display preferences; reload restores
     "claude",
   );
   await expect(input(page)).toBeEnabled();
-  await expect(input(page)).toHaveValue("");
+  // v0.10.0 ships tab-scoped draft recovery: an unsent draft is written to
+  // sessionStorage and restored verbatim after a reload (draft-recovery.spec.ts
+  // :21-52, App.tsx:370-390). The subject of THIS row is what localStorage may
+  // hold, so the draft must come back in the composer while still never
+  // appearing in localStorage — asserted immediately below, not weakened.
+  await expect(input(page)).toHaveValue("PRIVATE_LOCAL_DRAFT_NOT_SAVED");
+  expect(JSON.stringify(await storage(page))).not.toContain(
+    "PRIVATE_LOCAL_DRAFT_NOT_SAVED",
+  );
+  await input(page).fill("");
   await expect(input(page)).toHaveAttribute("data-vim-mode", "insert");
   await command(page, "/theme");
   await expect(

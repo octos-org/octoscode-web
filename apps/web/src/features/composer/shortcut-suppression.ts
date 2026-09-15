@@ -35,6 +35,17 @@ export const DIALOG_SUPPRESSION_SELECTOR = '[role="dialog"]';
  */
 export function shortcutTargetSuppressed(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  if (target.closest(TEXT_INPUT_SUPPRESSION_SELECTOR) !== null) return true;
+  if (shortcutTargetIsTextInput(target)) return true;
   return target.closest(DIALOG_SUPPRESSION_SELECTOR) !== null;
+}
+
+/**
+ * The TEXT-ENTRY half of §8 alone. A chord whose OWN target is the open dialog
+ * is not "stealing" anything from it (Alt+A re-reveals the approval surface it
+ * already owns), so such a handler waives the dialog half — but never the text
+ * half: an IME or a text control inside that dialog still owns its keys.
+ */
+export function shortcutTargetIsTextInput(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest(TEXT_INPUT_SUPPRESSION_SELECTOR) !== null;
 }

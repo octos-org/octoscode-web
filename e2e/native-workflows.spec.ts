@@ -60,6 +60,13 @@ async function selectSession(page: Page, title: string) {
   await expect.poll(() => selectedTitle(page)).toBe(title);
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
 }
+// v0.10.0's QueuedPrompts replaced our pre-rebase `.prompt-queue` div with
+// `<section aria-label="Queued prompts">` under CSS-module class names
+// (apps/web/src/features/composer/QueuedPrompts.tsx:14). Target the accessible
+// name — the stable contract — never a module-hashed class.
+const promptQueue = (page: Page) =>
+  page.getByRole("region", { name: "Queued prompts" });
+
 async function connect(page: Page, probe: Probe, name: string, native = true) {
   const cwd = `/srv/work/${native ? "native-workflows-" : "native-disabled-"}${name}`;
   await page.goto("/");
@@ -182,10 +189,20 @@ test("native commands fail closed when the original fixture does not advertise t
 }) => {
   const probe = observe(page);
   await connect(page, probe, "capabilities", false);
+  // v0.10.0 promoted `turn/state/get` + `state.turn_state_get.v1` into the
+  // fixture's BASE capabilities (mock-ui-server.mjs:1866,1899) and answers them
+  // for non-native Sessions through the generic lookup (:2779-2783, :3418), so
+  // `/turn` is no longer one of the withheld natives. Keep it covered on the
+  // OTHER side of the same gate — an advertised command must resolve — rather
+  // than dropping the case.
+  await submit(page, "/turn state 00000000-0000-4000-8000-000000000001");
+  const advertised = page.getByRole("dialog", { name: "Turn state" });
+  await expect(advertised).toBeVisible();
+  await advertised.getByRole("button", { name: "Close inspector" }).click();
+  await expect(advertised).toHaveCount(0);
   for (const command of [
     "/btw explain",
     "/threads",
-    "/turn state 00000000-0000-4000-8000-000000000001",
     "/goal",
     "/agents",
     "/loop",
@@ -199,12 +216,13 @@ test("native commands fail closed when the original fixture does not advertise t
     ).toBeVisible();
   }
   expect(probe.calls("turn/start")).toHaveLength(0);
+  // `turn/state/get` is intentionally absent from this list: it is advertised
+  // here (see above) and the `/turn` case asserts it is actually driven.
   expect(
     probe.sent.filter((frame) =>
       [
         "session/btw",
         "thread/graph/get",
-        "turn/state/get",
         "approval/scopes/list",
         "session/goal/get",
         "agent/list",
@@ -212,6 +230,7 @@ test("native commands fail closed when the original fixture does not advertise t
       ].includes(frame.method ?? ""),
     ),
   ).toHaveLength(0);
+  expect(probe.calls("turn/state/get").length).toBeGreaterThanOrEqual(1);
 });
 
 test("native asides remain ephemeral and owned by their original Session across delayed A to B replies", async ({
@@ -384,15 +403,15 @@ test("a dropped native steer returns once to its owning FIFO while a different S
     )
     .toBe(2);
   expect(await selectedTitle(page)).toBe(b.title);
-  await expect(page.locator(".prompt-queue")).toHaveCount(0);
+  await expect(promptQueue(page)).toHaveCount(0);
   await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
     "Retain native B draft",
   );
   await selectSession(page, a.title);
-  await expect(page.locator(".prompt-queue strong")).toHaveText("1 queued");
+  await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
   await submit(page, "/steer off");
   await submit(page, "Ordinary native FIFO successor");
-  await expect(page.locator(".prompt-queue strong")).toHaveText("2 queued");
+  await expect(promptQueue(page).locator("strong")).toHaveText("2 queued");
   await selectSession(page, b.title);
   await expect
     .poll(async () =>

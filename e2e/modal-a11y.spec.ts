@@ -16,20 +16,24 @@ async function connectAndStartWorkspace(
   cwd: string,
 ): Promise<void> {
   await page.goto("/");
-  await expect(
-    page.locator("#connection-title"),
-  ).toBeVisible();
+  await expect(page.locator("#connection-title")).toBeVisible();
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: /Add & Start|Start session/ }).click();
+  await addWorkspace
+    .getByRole("button", { name: /Add & Start|Start session/ })
+    .click();
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
 }
@@ -42,9 +46,7 @@ async function openSettings(page: Page): Promise<Locator> {
 }
 
 function focusIsInside(dialog: Locator): Promise<boolean> {
-  return dialog.evaluate((element) =>
-    element.contains(document.activeElement),
-  );
+  return dialog.evaluate((element) => element.contains(document.activeElement));
 }
 
 function backgroundHidden(background: Locator): Promise<boolean> {
@@ -101,7 +103,10 @@ test("background content is hidden from assistive tech while open", async ({
   page,
 }) => {
   await connectAndStartWorkspace(page, "/srv/work/modal-a11y-background");
-  const background = page.locator("main.workspace-grid");
+  // The workspace shell is a <div class="workspace-grid"> since v0.10.0 — the
+  // <main> landmark now sits inside it as #workspace-main. The background this
+  // test guards is still the whole shell, so match it by class.
+  const background = page.locator(".workspace-grid");
   await expect(background).toHaveCount(1);
 
   const dialog = await openSettings(page);

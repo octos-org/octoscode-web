@@ -9,6 +9,22 @@ const selectedRow = (page: Page) =>
   sidebar(page).locator('button[role="treeitem"][aria-current="page"]');
 const historyDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Resume historical conversation" });
+/**
+ * The transcript's reasoning entry. v0.10.0's Timeline replaced the old
+ * `.entry-reasoning` row with a native <details> whose <summary> reads
+ * "Thinking…" while the turn runs and "Thought process" once it ends
+ * (Timeline.tsx ReasoningBlock). Matching the summary copy keeps the old
+ * hook's meaning — "a reasoning entry is rendered" — instead of a dead class
+ * name that would make every `toHaveCount(0)` below vacuously true.
+ */
+const reasoningEntries = (page: Page) =>
+  page
+    .locator("details")
+    .filter({
+      has: page.locator("summary", { hasText: /Thought process|Thinking…/ }),
+    });
+/** The reasoning entry's own disclosure control (the collapsed default). */
+const reasoningFold = (page: Page) => reasoningEntries(page).locator("summary");
 type Rpc = {
   id: string;
   method: string;
@@ -332,7 +348,7 @@ test("reasoning visibility is retained per Session and does not change captured 
   await expect(
     page.getByText("Completed with pnpm check and all tests passing."),
   ).toBeVisible();
-  await expect(page.locator(".entry-reasoning")).toHaveCount(0);
+  await expect(reasoningEntries(page)).toHaveCount(0);
   await row(page, b).click();
   await send(page, "Verify native reasoning effort B");
   await expect.poll(() => rpc("turn/start").length).toBe(2);
@@ -340,12 +356,13 @@ test("reasoning visibility is retained per Session and does not change captured 
   // UX5 folds: the reasoning entry renders COLLAPSED by default as a
   // ThinkingDisclosure button whose summary is "Thinking · N s · N words"
   // (folds.ts:83). Expand it to read the fixture's reasoning body.
-  const reasoningB = page.locator(".entry-reasoning");
-  await expect(reasoningB.getByRole("button", { name: /Thinking · / })).toBeVisible();
-  await reasoningB.getByRole("button", { name: /Thinking · / }).click();
+  const reasoningB = reasoningEntries(page);
+  await expect(reasoningB).toHaveCount(1);
+  await expect(reasoningFold(page)).toBeVisible();
+  await reasoningFold(page).click();
   await expect(reasoningB).toContainText("Native workflow reasoning for");
   await row(page, a).click();
-  await expect(page.locator(".entry-reasoning")).toHaveCount(0);
+  await expect(reasoningEntries(page)).toHaveCount(0);
   await send(page, "/thinking");
   dialog = page.getByRole("dialog", { name: "Thinking effort" });
   await dialog
@@ -357,10 +374,13 @@ test("reasoning visibility is retained per Session and does not change captured 
   // The re-enabled entry stays EXPANDED for this session (folds state), or
   // re-expands per the show-reasoning pref; either way the body is one click
   // away behind the same disclosure.
-  const reasoningA = page.locator(".entry-reasoning");
-  const foldA = reasoningA.getByRole("button", { name: /Thinking · / });
-  if (await foldA.isVisible()) await foldA.click();
-  await expect(page.locator(".entry-reasoning")).toContainText(
+  const foldA = reasoningFold(page);
+  await expect(reasoningEntries(page)).toHaveCount(1);
+  if (!(await reasoningEntries(page).first().evaluate(
+    (node) => (node as HTMLDetailsElement).open,
+  )))
+    await foldA.click();
+  await expect(reasoningEntries(page)).toContainText(
     "Native workflow reasoning for",
   );
   expect(rpc("turn/start")).toHaveLength(2);

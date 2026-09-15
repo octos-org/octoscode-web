@@ -59,7 +59,11 @@ export function ModalSurface({
     const backdrop = backdropRef.current;
     if (!backdrop) return;
     const background =
-      document.querySelector<HTMLElement>("main.workspace-grid") ??
+      // The workspace shell is a plain <div> since v0.10.0 (the <main>
+      // landmark moved inside it, onto #workspace-main), so match the shell by
+      // class alone. A tag-qualified "main.workspace-grid" silently found
+      // nothing and left the whole background announced to assistive tech.
+      document.querySelector<HTMLElement>(".workspace-grid") ??
       backdrop.parentElement?.querySelector<HTMLElement>(":scope > main") ??
       null;
     // Never hide a container that holds this surface.

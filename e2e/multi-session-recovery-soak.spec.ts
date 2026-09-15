@@ -525,7 +525,8 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   const trace = "A-after-parked-approval";
 
   const titleA = await selectedSessionTitle(sidebar);
-  // The composer — and the `.prompt-queue` strip it renders — is mounted only
+  // The composer — and the "N queued" strip it renders (v0.10.0's QueuedPrompts,
+  // `<section aria-label="Queued prompts">`) — is mounted only
   // while NO interaction owns the surface: the shipped contract swaps in
   // ApprovalPanel/UserQuestionPanel and replaces `.composer` outright
   // (local-preferences.spec.ts:112-117, interaction-ownership.spec.ts:442,

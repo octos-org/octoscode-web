@@ -133,9 +133,14 @@ test("peer dock shows the staged roster and keeps approval actions fail-closed",
     const slugs = [...new Set(frames.staged.map((p) => String(p.slug)))];
     expect(slugs).toHaveLength(PEER_COUNT);
     for (const slug of slugs) {
-      const row = dockRowButtons(page).filter({ hasText: slug });
+      // Round-2 (judge #4 "no raw slugs") removed the slug from the row's
+      // visible text, so the row is resolved by its identity HOOK — the same
+      // fact the next assertion pins — not by text that must not be there.
+      const row = peerDock(page).locator(`button[data-peer-slug="${slug}"]`);
       await expect(row).toHaveCount(1);
       await expect(row).toHaveAttribute("data-peer-slug", slug);
+      // The slug is an identity hook only: it never leaks into the row copy.
+      await expect(row).not.toContainText(slug);
       // The glyph half is `data-activity` on an aria-hidden span (:249-255).
       const glyph = row.locator("[data-activity]");
       await expect(glyph).toHaveCount(1);

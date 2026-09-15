@@ -11,6 +11,19 @@ import { describe, expect, it } from "vitest";
  */
 const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
+/**
+ * One §8 window keydown handler, sliced from its shortcut-matcher line to the
+ * `window.addEventListener` that registers it.
+ */
+function handlerBody(matcher: RegExp): string {
+  const start = app.search(matcher);
+  if (start < 0) throw new Error(`no handler matched ${String(matcher)}`);
+  const rest = app.slice(start);
+  const end = rest.indexOf("window.addEventListener");
+  if (end <= 0) throw new Error(`no registration after ${String(matcher)}`);
+  return rest.slice(0, end);
+}
+
 describe("App suppresses parity shortcuts inside text entry and dialogs (§8)", () => {
   it("imports the co-owner DOM classifier", () => {
     expect(app).toContain("shortcutTargetSuppressed");
@@ -20,9 +33,13 @@ describe("App suppresses parity shortcuts inside text entry and dialogs (§8)", 
   });
 
   it("guards the show-approval (Alt+A) handler", () => {
-    expect(app).toMatch(
-      /id !== "show-approval"\)[\s\S]{0,400}shortcutTargetSuppressed/,
-    );
+    // Alt+A keeps the TEXT half unconditionally; the DIALOG half is waived
+    // only for the approval surface itself, which is this chord's own target
+    // (re-revealing it is not "stealing" a chord another dialog owns).
+    const body = handlerBody(/id !== "show-approval"/);
+    expect(body).toMatch(/shortcutTargetIsTextInput\(event\.target\)\) return;/);
+    expect(body).toMatch(/shortcutTargetSuppressed\(event\.target\)\) return;/);
+    expect(body).toMatch(/insideApproval/);
   });
 
   it("guards the toggle-peer-dock (Alt+P) handler", () => {
@@ -40,10 +57,22 @@ describe("App suppresses parity shortcuts inside text entry and dialogs (§8)", 
   it("treats a suppressed event as a no-op before any preventDefault or focus", () => {
     // The guard must return BEFORE the handler's preventDefault/focus work:
     // a suppressed chord belongs to the text control or dialog, never to us.
-    const guardCount = (
-      app.match(/if \(shortcutTargetSuppressed\(event\.target\)\) return;/g) ??
-      []
-    ).length;
-    expect(guardCount).toBeGreaterThanOrEqual(3);
+    // Asserted per handler on the ORDER of the guard and the first side
+    // effect, so a handler may read the DOM first (Alt+A resolves its own
+    // target surface) without weakening the rule.
+    for (const matcher of [
+      /id !== "show-approval"/,
+      /id === "toggle-peer-dock"/,
+      /id !== "focus-dispatch"/,
+    ]) {
+      const body = handlerBody(matcher);
+      const guard = body.search(
+        /shortcutTarget(?:IsTextInput|Suppressed)\(event\.target\)\) return;/,
+      );
+      expect(guard).toBeGreaterThanOrEqual(0);
+      const effect = body.search(/preventDefault\(\)|\.focus\(\)/);
+      expect(effect).toBeGreaterThanOrEqual(0);
+      expect(guard).toBeLessThan(effect);
+    }
   });
 });

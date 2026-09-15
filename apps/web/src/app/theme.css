@@ -113,8 +113,13 @@
 }
 
 /* Named colors follow the pinned native Octoscode Theme palettes. Terminal
-   deliberately inherits app/theme.css and its browser light/dark preference. */
-:root[data-display-theme="terminal"] {
+   deliberately inherits app/theme.css. In System mode it follows the browser
+   light/dark preference; a manual Theme override must still win, so this rule
+   stands down whenever [data-theme] is set (it is declared after the
+   [data-theme] rules above and would otherwise clobber them at equal
+   specificity). The dark-only named palettes below keep color-scheme: dark
+   because their --display-* colors are dark by construction. */
+:root[data-display-theme="terminal"]:not([data-theme]) {
   color-scheme: light dark;
 }
 

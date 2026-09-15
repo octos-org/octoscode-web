@@ -663,7 +663,14 @@ describe("Round 4 J2 — Start lifecycle: submit contract + every settle state",
       },
     });
     const label = one(html, "data-fleet-start-failed", "true");
-    expect(textOf(label).join(" ")).toContain("driver_model_unavailable");
+    // §6: the rendered copy is the BOUNDED recovery label, never the typed
+    // kind token (protocol vocabulary) and never raw server copy; the kind
+    // itself stays available as a diagnostic data hook.
+    expect(textOf(label).join(" ")).toContain(
+      "That model is not configured on this server",
+    );
+    expect(textOf(label).join(" ")).not.toContain("driver_model_unavailable");
+    expect(label.props!["data-refusal-kind"]).toBe("driver_model_unavailable");
   });
 
   it("unknown after 15 s renders 'Not sure it started' with SAME-id Retry and Dismiss", () => {

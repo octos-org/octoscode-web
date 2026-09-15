@@ -174,6 +174,9 @@ export type {
   PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
 
+const TURN_RECOVERY_NAVIGATION_MESSAGE =
+  "Check the current turn status before switching Sessions, or disconnect in Settings.";
+
 export type { SessionConnectionInput } from "./connection-lifecycle.ts";
 
 export interface WorkspaceSessionOpenInput {
@@ -3228,6 +3231,7 @@ export function useOctosSession(): OctosSessionRuntime {
   ): Promise<WorkspaceOpenOutcome> => {
     if (!input.sessionId.trim() || !input.cwd.trim())
       return Promise.resolve("failed");
+    if (navigationBlockedByTurnRecovery()) return Promise.resolve("failed");
     const retained = recordManager
       .records()
       .find(
@@ -3254,6 +3258,19 @@ export function useOctosSession(): OctosSessionRuntime {
     // The launch coordinator and candidate abort provide latest-intent fencing.
     return performWorkspaceSessionOpen(input);
   };
+
+  /**
+   * The selected Session's unresolved turn is BROWSER-HELD evidence, not
+   * discoverable history: it lives only in this record's recovery state, and
+   * navigating away (a switch or a new Session) would leave the operator with
+   * no record to resolve it from — and could later permit an unsafe resend.
+   * Resolving it through "Check status" clears the block.
+   */
+  function navigationBlockedByTurnRecovery(): boolean {
+    if (!turnController.turnRecovery) return false;
+    workspaceController.setError(TURN_RECOVERY_NAVIGATION_MESSAGE);
+    return true;
+  }
 
   async function performWorkspaceSessionOpen(
     input: WorkspaceSessionOpenInput,

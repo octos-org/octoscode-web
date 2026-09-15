@@ -37,6 +37,24 @@ const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
   productNavigation(page).locator('button[role="treeitem"]');
+/** v0.10.0's sidebar is an aria-activedescendant TREE: the container owns the
+ *  single tab stop and the items carry tabindex=-1, so "keyboard order" is the
+ *  tree's roving order, not the document tab order. */
+const sessionTree = (page: Page) =>
+  productNavigation(page).locator('[role="tree"]');
+/** A non-input, non-dialog focus target for the §8 chords. `body.focus()` is a
+ *  no-op in Chromium (body is not a focusable area), so it would leave focus in
+ *  the composer and every chord would be correctly SUPPRESSED — testing
+ *  nothing. The sidebar's Settings button is a plain button that always
+ *  exists. */
+async function focusOutsideTextEntry(page: Page): Promise<void> {
+  const target = productNavigation(page).getByRole("button", {
+    name: "Settings",
+    exact: true,
+  });
+  await target.focus();
+  await expect(target).toBeFocused();
+}
 
 type Frame = {
   id?: string;
@@ -154,7 +172,7 @@ test("switches sessions by keyboard and preserves sidebar focus order", async ({
   // then activate it with Enter. Scoped CSS attribute locator, per repo
   // precedent (interaction-ownership.spec.ts:188, local-preferences.spec.ts:103).
   const firstWorkspace = productNavigation(page).locator(
-    'section[role="treeitem"][aria-label="keyboard-sidebar"]',
+    '[role="treeitem"][aria-label="keyboard-sidebar"]',
   );
   await firstWorkspace.locator('button[class*="workspaceToggle"]').focus();
   await firstWorkspace
@@ -163,15 +181,40 @@ test("switches sessions by keyboard and preserves sidebar focus order", async ({
   await expect(rows).toHaveCount(2);
   await expect(composer(page)).toBeEnabled();
 
-  // Focus order: consecutive SessionRows are adjacent in tab order because the
-  // group maps rows contiguously with no interleaved focusable
-  // (ProductSidebar.tsx:620-667; the show-more button only mounts on overflow).
-  await rows.nth(0).focus();
-  await expect(rows.nth(0)).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(rows.nth(1)).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
-  await expect(rows.nth(0)).toBeFocused();
+  // Focus order: consecutive SessionRows are adjacent in the sidebar's keyboard
+  // order. v0.10.0 moved that order from the document tab order to the tree's
+  // roving aria-activedescendant model (ProductSidebar.tsx onTreeKeyDown): the
+  // container is the single tab stop and ArrowDown/ArrowUp walk the items, so
+  // the parity fact is asserted on aria-activedescendant. The rows are still
+  // contiguous — one ArrowDown steps from the first to the second with nothing
+  // interleaved, and ArrowUp returns.
+  const firstRowId = await rows.nth(0).getAttribute("id");
+  const secondRowId = await rows.nth(1).getAttribute("id");
+  expect(firstRowId).toBeTruthy();
+  expect(secondRowId).toBeTruthy();
+  // The freshly created Session autofocuses the composer, so claim the tree's
+  // single tab stop once that settles.
+  await expect(async () => {
+    await sessionTree(page).focus();
+    await expect(sessionTree(page)).toBeFocused({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await page.keyboard.press("Home");
+  // Home lands on the workspace group; the first ArrowDown enters its rows.
+  await page.keyboard.press("ArrowDown");
+  await expect(sessionTree(page)).toHaveAttribute(
+    "aria-activedescendant",
+    firstRowId!,
+  );
+  await page.keyboard.press("ArrowDown");
+  await expect(sessionTree(page)).toHaveAttribute(
+    "aria-activedescendant",
+    secondRowId!,
+  );
+  await page.keyboard.press("ArrowUp");
+  await expect(sessionTree(page)).toHaveAttribute(
+    "aria-activedescendant",
+    firstRowId!,
+  );
 
   // The freshly created sibling owns aria-current; switch back to the OTHER row
   // by keyboard activation (Enter → onClick → onSessionSelect).
@@ -296,7 +339,7 @@ test("Alt+A focuses the pending approval panel and announces when none waits", a
   // (App.tsx:618) — a press while the COMPOSER (a textarea) holds focus is a
   // suppressed no-op that never announces. Press from a non-input target so
   // the announcement path itself is exercised.
-  await page.locator("body").focus();
+  await focusOutsideTextEntry(page);
   await page.keyboard.press("Alt+KeyA");
   // The hint lands in the app's polite live region (App.tsx:1692, an
   // `sr-only` p[role=status] whose content IS the hint). The redesign added
@@ -338,10 +381,11 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
   // MOUNTED-but-hidden while Fleet is routed (App.tsx:1647), so the pre-state
   // is "chat visible, Fleet wrapper hidden" — not field absence. Both panes
   // share className "conversation"; disambiguate by aria-label.
-  const fleetWrapper = page.locator(
-    'section.conversation[aria-label="Fleet"]',
-  );
-  const chatPane = page.locator('section[aria-label="Conversation"]');
+  // Round-2 routing mounts Fleet in a PLAIN wrapper pane beside the chat pane
+  // (App.tsx `div.conversation.fleet-pane`); the labelled "Fleet" region is the
+  // FleetView root inside it. The chat pane is the sibling <section>.
+  const fleetWrapper = page.locator("div.conversation.fleet-pane");
+  const chatPane = page.locator("section.conversation");
   await expect(chatPane).toBeVisible();
   await expect(fleetWrapper).toBeHidden();
   await composer(page).focus();
@@ -353,7 +397,7 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
   // judge #1: Fleet replaces the chat pane as the active view) and lands
   // focus on the Start form's Brief field. The routed surface carries the
   // Back affordance; the composer leaves the view.
-  await page.locator("body").focus();
+  await focusOutsideTextEntry(page);
   await page.keyboard.press("Alt+KeyD");
   await expect(fleetWrapper).toBeVisible();
   await expect(fleetBrief(page)).toBeFocused();
@@ -362,7 +406,11 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
     page.locator('[data-fleet-back="true"]'),
   ).toBeVisible();
 
-  // §8 dialog half: an open dialog (the pane) suppresses the chord too.
+  // §8 dialog half: an open dialog (the pane) suppresses the chord too. The
+  // pane's trigger lives on the CHAT pane's status strip, which is hidden while
+  // Fleet is routed — so leave Fleet through its own Back affordance first.
+  await page.locator('[data-fleet-back="true"]').press("Enter");
+  await expect(fleetWrapper).toBeHidden();
   await page
     .getByRole("button", { name: "Session settings", exact: true })
     .click();
@@ -371,7 +419,6 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
     exact: true,
   });
   await expect(pane).toBeVisible();
-  await page.locator("body").focus();
   await pane.focus();
   await page.keyboard.press("Alt+KeyD");
   // The pane keeps focus (no close, no Fleet steal) while the dialog is open.
@@ -433,7 +480,10 @@ test("Alt+P toggles the peer dock fold, expanding and collapsing symmetrically",
     await expect(dockRowButtons(page)).toHaveCount(2);
 
     // Alt+P collapses: the rows unmount and only the aria-expanded="false" pill
-    // remains in the dock region.
+    // remains in the dock region. §8 suppresses the chord inside a text input,
+    // so the press comes from a non-input target (focus is still in the
+    // composer from the `/peer` setup above).
+    await focusOutsideTextEntry(page);
     await page.keyboard.press("Alt+KeyP");
     await expect(
       peerDock(page).locator('button[aria-expanded="false"]'),

@@ -1322,11 +1322,19 @@ test("separates the Session runtime from the Profile default model", async ({
     exact: true,
   });
   await expect(modelSection).toBeVisible();
-  await expect(
-    modelSection.getByText("Saved for this profile:"),
-  ).toBeVisible();
+  // The region separates the two facts: the SESSION RUNTIME (what this Octos
+  // process is actually serving) and the profile default it saves. They are
+  // distinct values, each on its own labelled row — one value shown twice
+  // would make the separation unobservable.
+  await expect(modelSection.getByText("Saved for this profile:")).toBeVisible();
   await expect(
     modelSection.getByText("Saved for this profile:").locator(".."),
+  ).toContainText("GLM 5.3 Flash");
+  await expect(
+    modelSection.getByText("Session runtime", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    modelSection.getByText("Session runtime", { exact: true }).locator(".."),
   ).toContainText("DeepSeek V4");
 
   // The Settings dialog's Models tab carries the Profile default model.
@@ -1613,7 +1621,15 @@ test("keyboard and semantics guarantees from the a11y batch hold", async ({
   // Post-connect views carry an sr-only h1 (page-has-heading-one).
   await expect(page.locator("main h1")).toHaveCount(1);
 
-  // The timeline announces to assistive tech via role=log (4.1.3).
+  // The timeline announces to assistive tech via role=log (4.1.3). A newly
+  // created Session deliberately starts empty (see the static-demo-transcript
+  // guarantee above), and an empty conversation renders the empty state rather
+  // than the log, so drive one turn to put the timeline on screen.
+  await page
+    .getByPlaceholder(COMPOSER_PLACEHOLDER)
+    .fill("Stream a reply fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByText("Completed with")).toBeVisible();
   const log = page.locator('[role="log"][aria-label="Conversation timeline"]');
   await expect(log).toBeAttached();
 

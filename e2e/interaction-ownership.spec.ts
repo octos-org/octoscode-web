@@ -11,6 +11,13 @@ const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const APPROVAL_TITLE = "Run product checks?";
 const QUESTION_TITLE = "Choose verification depth";
 
+// v0.10.0's QueuedPrompts replaced our pre-rebase `.prompt-queue` div with
+// `<section aria-label="Queued prompts">` under CSS-module class names
+// (apps/web/src/features/composer/QueuedPrompts.tsx:14). Target the accessible
+// name — the stable contract — never a module-hashed class.
+const promptQueue = (page: Page) =>
+  page.getByRole("region", { name: "Queued prompts" });
+
 function productNavigation(page: Page): Locator {
   // A ModalSurface dialog sets aria-hidden on main.workspace-grid — the required
   // a11y contract (ModalSurface.tsx:50-60) — which hides the product nav from
@@ -410,7 +417,7 @@ for (const kind of ["approval", "question"] as const) {
     expect(sessionId).not.toContain("#");
     await composer.fill("Continue after the genuine owner interaction");
     await page.getByRole("button", { name: "Queue prompt" }).click();
-    await expect(page.locator(".prompt-queue strong")).toHaveText("1 queued");
+    await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
     const hydrationCount = probe.hydrates().length;
     const ownerDialog = page.getByRole("dialog", {
       name: kind === "approval" ? APPROVAL_TITLE : QUESTION_TITLE,
@@ -487,7 +494,7 @@ for (const kind of ["approval", "question"] as const) {
         hasText: "Completed with pnpm check and all tests passing.",
       }),
     ).toHaveCount(1);
-    await expect(page.locator(".prompt-queue")).toHaveCount(0);
+    await expect(promptQueue(page)).toHaveCount(0);
     await expect(foreignDialog).toHaveCount(0);
     expect(probe.hydrates()).toHaveLength(hydrationCount);
     const foreignRequests = probe.received.filter(

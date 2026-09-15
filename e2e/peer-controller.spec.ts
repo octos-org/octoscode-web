@@ -70,10 +70,10 @@ const fleetEntry = (page: Page): Locator =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
 /** The Fleet surface (FleetView.tsx:161). */
 const fleet = (page: Page): Locator =>
-  // Round-2 routing (judge #1) mounts Fleet in a wrapper conversation pane
-  // that ALSO carries aria-label="Fleet" (App.tsx:2075) and keeps the inner
-  // FleetView root (FleetView.tsx:239) — two sections, one label. The Start
-  // form lives ONLY in the inner component root, so filter on it.
+  // Round-2 routing (judge #1) mounts Fleet inside the routed pane wrapper
+  // (`div.conversation.fleet-pane`, App.tsx) — a PLAIN div, so the labelled
+  // region is now the FleetView root alone. The Start-form filter stays: it
+  // pins the surface that owns the form rather than any labelled ancestor.
   page
     .locator('section[aria-label="Fleet"]')
     .filter({ has: page.locator('[data-fleet-form="start"]') });
@@ -93,12 +93,11 @@ const fleetAction = (page: Page, slug: string, action: string): Locator =>
 const fleetSteerInput = (page: Page, slug: string): Locator =>
   fleetRow(page, slug).locator(`[data-fleet-field="steer-${slug}"]`);
 /** The Fleet footer's Advanced disclosure — the protocol console's ONLY home.
- *  Round-2 rows also carry per-row aria-expanded disclosures (the Finished
- *  buckets), so target the console-adjacent one through its next section. */
+ *  Round 4 C3 made it a compact NATIVE <details>/<summary> (FleetView.tsx),
+ *  so the activation target is the summary, not an aria-expanded button; the
+ *  per-row Finished buckets keep the button form and are NOT this control. */
 const fleetAdvanced = (page: Page): Locator =>
-  fleet(page)
-    .locator("button[aria-expanded]")
-    .filter({ hasText: "Advanced" });
+  fleet(page).locator('summary[data-fleet-advanced-summary="true"]');
 const advancedConsole = (page: Page): Locator =>
   fleet(page).locator('[data-control-panel="peer-controller"]');
 
@@ -107,6 +106,8 @@ const advancedConsole = (page: Page): Locator =>
 // ---------------------------------------------------------------------------
 interface SentFrame {
   readonly method: string | null;
+  /** The frame's own `session_id`, when it carries one. */
+  readonly sessionId: string | null;
   /** `peer/dispatch` lane key, or the `peer/control` command kind. */
   readonly detail: string | null;
   readonly operationId: string | null;
@@ -139,6 +140,7 @@ function projectSent(raw: unknown): SentFrame | null {
       : null;
   return {
     method: asString(frame.method),
+    sessionId: asString(params?.session_id),
     detail: asString(params?.model) ?? asString(command?.kind),
     operationId: asString(params?.operation_id),
     steerText: asString(steerFirst?.text),
@@ -344,12 +346,48 @@ test.describe("Fleet view (migrated console semantics)", () => {
 
   test("Approve from the row emits exactly ONE approval_respond frame", async ({
     page,
+    request,
   }) => {
+    // The fixture's staged-peer map is process-global and every Start in this
+    // file adopts the SAME synthetic slug, so clear it first: the activity
+    // frames below must reach THIS test's peer Session, not an earlier one's.
+    await request.post(`${FIXTURE_ORIGIN}/__test__/peers/reset`);
     const w = wire(page);
     await connectAndStartWorkspace(page, cwd(""));
     await openFleet(page);
     await startPeer(page);
     const slug = await adoptedRowSlug(page);
+
+    // §4.4 / Round 4 C5: Approve is a FAIL-CLOSED affordance — it is offered
+    // only while that row is actually waiting for an approval, so a Working /
+    // Starting row exposes no Approve control at all.
+    await expect(fleetAction(page, slug, "approve")).toHaveCount(0);
+    // Raise a REAL pending approval on the adopted peer's OWN Session. The
+    // root composer cannot: Start's acquire holds the external fence, so the
+    // Core refuses `turn/start` with ExternalMasterHeld
+    // (mock-ui-server.mjs turn/start gate) — the fixture hook emits the peer's
+    // own `turn/started` + `approval/requested` on the same owner socket.
+    const master = w.sent.find(
+      (frame) => frame.method === "session/open" && frame.sessionId !== null,
+    )?.sessionId;
+    expect(master).toBeTruthy();
+    const drive = async (kind: string) => {
+      const response = await request.post(
+        `${FIXTURE_ORIGIN}/__test__/peer-control/peer-activity?session_id=${encodeURIComponent(
+          master as string,
+        )}&kind=${kind}&slug=${encodeURIComponent(slug)}`,
+      );
+      expect(response.status()).toBe(204);
+    };
+    await drive("turn");
+    await drive("approval");
+    // The peer's own approval rides its own Session; the row settles once the
+    // coordinator has attributed it, which can outlast the default 5 s budget.
+    await expect(fleetRow(page, slug)).toHaveAttribute(
+      "data-fleet-status",
+      "Waiting for your approval",
+      { timeout: 20_000 },
+    );
 
     const before = w.calls(CONTROL_METHOD).length;
     await fleetAction(page, slug, "approve").press("Enter");

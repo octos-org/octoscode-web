@@ -22,6 +22,14 @@ interface ConnectionPanelProps {
   focusTokenField?: boolean;
   /** The classifier's named next actions, rendered under the error. */
   failureActions?: readonly string[];
+  /**
+   * The raw failure was the handshake error, which the browser CANNOT tell
+   * apart from a rejected token. §5.1's classified message names the address;
+   * this flag keeps the honest second half — "if it requires authentication,
+   * enter its token above" — so an empty-token connect is never diagnosed as
+   * an address problem alone.
+   */
+  handshakeAmbiguous?: boolean;
   onChange: (next: ConnectionDraft) => void;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -35,6 +43,7 @@ export function ConnectionPanel({
   storageWarning,
   focusTokenField = false,
   failureActions,
+  handshakeAmbiguous = false,
   onChange,
   onConnect,
   onDisconnect,
@@ -184,8 +193,9 @@ export function ConnectionPanel({
         {error ? (
           <div className={styles.error} role="alert">
             <strong>{t("Could not connect")}</strong>
-            {isHandshakeError(error) ? (
+            {isHandshakeError(error) || handshakeAmbiguous ? (
               <>
+                {isHandshakeError(error) ? null : <span>{error}</span>}
                 <span>
                   {value.token.trim()
                     ? t(

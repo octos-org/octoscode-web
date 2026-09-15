@@ -1,4 +1,9 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { usePreferences } from "../preferences/preferences.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
@@ -10,6 +15,19 @@ import { clearVimPending, reduceVimEdit, resetVimMode } from "./vim-edit.ts";
 
 interface ComposerInputProps {
   recordKey: string;
+  /**
+   * The captured parent keeps a handle on the textarea so it can return the
+   * keyboard to the composer (session attach, a takeover dialog closing). The
+   * composer still owns the element; this only mirrors it outward.
+   */
+  inputRef?: RefObject<HTMLTextAreaElement | null> | undefined;
+  /**
+   * A takeover (approval / question) replaces the composer rather than
+   * overlaying it, so finishing one REMOUNTS this component. Claiming the
+   * keyboard on mount is what hands the operator straight back to their draft
+   * instead of dropping focus on <body>.
+   */
+  focusOnMount?: boolean | undefined;
   value: string;
   disabled: boolean;
   placeholder: string;
@@ -40,6 +58,11 @@ export function ComposerInput(props: ComposerInputProps) {
     props.peerRoster ?? [],
     props.peerSessionId ?? null,
   );
+  // Command entry: the palette trigger is a leading "/" (registry.ts
+  // `commandSuggestions`). It survives an Escape dismissal, which is why the
+  // combobox wiring keys off the draft rather than the open list.
+  const commandMode =
+    props.commandCount > 0 || props.value.trimStart().startsWith("/");
   const textarea = useRef<HTMLTextAreaElement>(null);
   // a11y review 0800 §1: disabling a FOCUSED textarea drops focus to <body>.
   // Keep a legal landing (the status row) and the intent to use it — focus is
@@ -77,6 +100,12 @@ export function ComposerInput(props: ComposerInputProps) {
     selection.current = null;
   }
   useLayoutEffect(() => {
+    if (!props.focusOnMount) return;
+    const frame = requestAnimationFrame(() => textarea.current?.focus());
+    return () => cancelAnimationFrame(frame);
+    // Mount only: a later render must never steal the keyboard back.
+  }, []);
+  useLayoutEffect(() => {
     const caret = selection.current;
     const target = textarea.current;
     selection.current = null;
@@ -109,7 +138,10 @@ export function ComposerInput(props: ComposerInputProps) {
   return (
     <>
       <textarea
-        ref={textarea}
+        ref={(node) => {
+          textarea.current = node;
+          if (props.inputRef) props.inputRef.current = node;
+        }}
         value={props.value}
         disabled={props.disabled || readOnlyPeerSlug !== null}
         placeholder={props.placeholder}
@@ -227,12 +259,21 @@ export function ComposerInput(props: ComposerInputProps) {
             props.onInterrupt();
           }
         }}
-        role={props.commandCount > 0 ? "combobox" : undefined}
-        aria-autocomplete="list"
-        aria-haspopup="listbox"
-        aria-expanded={props.commandCount > 0}
-        aria-controls={props.paletteId}
-        aria-activedescendant={props.selectedCommandId}
+        // ARIA 1.2: `aria-expanded` is NOT supported on role=textbox, so a
+        // plain draft must not carry it (axe `aria-allowed-attr`). The
+        // composer IS a combobox while it is in command entry — a draft that
+        // opens with "/" — and only then does an expanded state exist to
+        // report, whether or not the list is currently showing.
+        {...(commandMode
+          ? {
+              role: "combobox" as const,
+              "aria-autocomplete": "list" as const,
+              "aria-haspopup": "listbox" as const,
+              "aria-expanded": props.commandCount > 0,
+              "aria-controls": props.paletteId,
+              "aria-activedescendant": props.selectedCommandId,
+            }
+          : {})}
         rows={3}
       />
       {readOnlyPeerSlug !== null ? (

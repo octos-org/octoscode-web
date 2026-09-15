@@ -1259,6 +1259,29 @@ const http = createServer((request, response) => {
         state.sessionId,
         url.searchParams.get("variant") ?? "",
       );
+    } else if (url.pathname === "/__test__/peer-control/peer-activity") {
+      // Drive a DISPATCHED peer's own Session lifecycle (turn | approval |
+      // resolve | complete). The root-composer trigger (PEER_ACTIVITY_TRIGGER)
+      // cannot reach a peer-control workspace: Start's acquire makes the
+      // binding external-held, and `turn/start` is then refused with
+      // ExternalMasterHeld — so this is the ONLY way to observe an adopted row
+      // waiting for approval. Frames ride the SAME owner socket as the staging.
+      const kind = url.searchParams.get("kind") ?? "";
+      const slug = url.searchParams.get("slug") ?? peerControlSlug();
+      let owner = null;
+      for (const client of sockets.clients)
+        if (openedSessionsBySocket.get(client)?.has(state.sessionId))
+          owner = client;
+      if (
+        owner === null ||
+        !["turn", "approval", "resolve", "complete"].includes(kind) ||
+        !emitPeerActivityFrame(owner, kind, slug)
+      ) {
+        response
+          .writeHead(409)
+          .end("No staged peer for this fixture Session");
+        return;
+      }
     } else if (url.pathname === "/__test__/peer-control/reset") {
       peerControlVariantOverrides.delete(state.sessionId);
       peerControlCalls.delete(state.sessionId);
@@ -1831,6 +1854,34 @@ function recordProjection(sessionId, params) {
   return recorded;
 }
 
+// The Markdown surface fixture. A demo (server-authored) Session serves this
+// as static hydrate history; a DURABLE Session earns the same transcript by
+// running the MARKDOWN_TRANSCRIPT_PROMPT turn, so a bookmarked conversation has
+// real persisted Markdown — code fence included — to restore.
+const MARKDOWN_TRANSCRIPT_PROMPT = "Show the Markdown transcript surface";
+const MARKDOWN_TRANSCRIPT_ANSWER = [
+  "## Durable coding transcript",
+  "",
+  "The renderer supports **GFM**, safe [external links](https://github.com/octos-org/octoscode-web), and `inline code`.",
+  "",
+  "- [x] Hydrate the session",
+  "- [x] Preserve code formatting",
+  "- [ ] Review the diff",
+  "",
+  "| Surface | State |",
+  "| --- | --- |",
+  "| Cursor replay | Ready |",
+  "| Syntax highlighting | Ready |",
+  "",
+  "```ts",
+  "export function answer(value: number): number {",
+  "  return value * 2;",
+  "}",
+  "```",
+  "",
+  "> Raw HTML stays inert: <script>never runs</script>",
+].join("\n");
+
 function isDurableSessionId(sessionId) {
   return (
     isBrowserSessionId(sessionId) ||
@@ -2394,6 +2445,22 @@ sockets.on("connection", (socket, request) => {
         const interruptedOwner =
           state.activeTurn?.ownerSocket === socket ||
           state.interaction?.ownerSocket === socket;
+        // A turn parked on a USER QUESTION is not in-flight model work — it is
+        // blocked on the OPERATOR. The Core keeps it so the question returns
+        // through hydrate's `pending_questions` lane (that lane exists for
+        // exactly this case; killing it here would make it unreachable). The
+        // owner is dropped, and the next client to hydrate adopts the parked
+        // question below.
+        const parkedOnQuestion =
+          state.interaction?.kind === "question" &&
+          state.interaction.turnId === state.activeTurn?.turnId;
+        if (interruptedOwner && parkedOnQuestion) {
+          if (state.interaction.ownerSocket === socket)
+            state.interaction.ownerSocket = null;
+          if (state.activeTurn && state.activeTurn.ownerSocket === socket)
+            state.activeTurn.ownerSocket = null;
+          continue;
+        }
         if (interruptedOwner && state.activeTurn) {
           heldTerminals.delete(sessionId);
           // Core rc.11 kills connection-owned turns when the owner
@@ -2412,10 +2479,18 @@ sockets.on("connection", (socket, request) => {
             cursor: { stream: sessionId, seq: 0 },
             turn_id: active.turnId,
             payload: {
+              // v0.10.0 validates canonical payloads before they mutate the
+              // cursor (packages/client/src/projection-payload.ts:62-70):
+              // `turn_terminal.error` is the structured Core shape, not a bare
+              // code string. A string here is rejected as a malformed envelope
+              // and parks the record in permanent recovery.
               type: "turn_terminal",
               data: {
                 outcome: "interrupted",
-                error: "connection_closed",
+                error: {
+                  code: "connection_closed",
+                  message: "The connection closed before the turn completed.",
+                },
               },
             },
           };
@@ -3236,6 +3311,14 @@ sockets.on("connection", (socket, request) => {
         );
         return;
       }
+      // Adopt a question the previous owner left parked when it disconnected
+      // (see the close handler): the hydrating client becomes its owner, so a
+      // restored takeover can actually be answered.
+      if (state.interaction?.ownerSocket === null) {
+        state.interaction.ownerSocket = socket;
+        if (state.activeTurn && state.activeTurn.ownerSocket === null)
+          state.activeTurn.ownerSocket = socket;
+      }
       const replayedEvents = isDurableSessionId(sessionId)
         ? state.log.events
         : [];
@@ -3246,7 +3329,7 @@ sockets.on("connection", (socket, request) => {
             {
               seq: 1,
               role: "user",
-              content: "Show the Markdown transcript surface",
+              content: MARKDOWN_TRANSCRIPT_PROMPT,
               turn_id: "fixture-turn",
               persisted_at: "2026-08-26T00:00:00Z",
               media: [],
@@ -3254,28 +3337,7 @@ sockets.on("connection", (socket, request) => {
             {
               seq: 2,
               role: "assistant",
-              content: [
-                "## Durable coding transcript",
-                "",
-                "The renderer supports **GFM**, safe [external links](https://github.com/octos-org/octoscode-web), and `inline code`.",
-                "",
-                "- [x] Hydrate the session",
-                "- [x] Preserve code formatting",
-                "- [ ] Review the diff",
-                "",
-                "| Surface | State |",
-                "| --- | --- |",
-                "| Cursor replay | Ready |",
-                "| Syntax highlighting | Ready |",
-                "",
-                "```ts",
-                "export function answer(value: number): number {",
-                "  return value * 2;",
-                "}",
-                "```",
-                "",
-                "> Raw HTML stays inert: <script>never runs</script>",
-              ].join("\n"),
+              content: MARKDOWN_TRANSCRIPT_ANSWER,
               turn_id: "fixture-turn",
               thread_id: "fixture-thread",
               message_id: "fixture-message",
@@ -3852,8 +3914,16 @@ sockets.on("connection", (socket, request) => {
           cursor: { stream: sessionId, seq: 0 },
           turn_id: active.turnId,
           payload: {
+            // Structured `turn_terminal.error` (see the disconnect terminal
+            // above): v0.10.0's payload guard rejects a bare code string.
             type: "turn_terminal",
-            data: { outcome: "interrupted", error: "interrupted_by_user" },
+            data: {
+              outcome: "interrupted",
+              error: {
+                code: "interrupted_by_user",
+                message: "The turn was interrupted by the user.",
+              },
+            },
           },
         };
         const recorded = recordProjection(sessionId, params) ?? params;
@@ -4311,7 +4381,10 @@ function streamTurn(socket, sessionId, params, nextCursor) {
         nextCursor(),
         "assistant_persisted",
         {
-          text: "Completed with `pnpm check` and **all tests passing**.",
+          text:
+            text === MARKDOWN_TRANSCRIPT_PROMPT
+              ? MARKDOWN_TRANSCRIPT_ANSWER
+              : "Completed with `pnpm check` and **all tests passing**.",
           assistant_segment_id: "segment-1",
           meta: {
             message_id: `message-${turnId}`,

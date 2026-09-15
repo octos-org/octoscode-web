@@ -344,12 +344,38 @@
   :global(.header-actions):empty {
     display: none;
   }
+  /* Our compact header carries one control more than upstream's (the browser
+     preferences trigger) beside the review chip. Tighten the action gap so the
+     extra affordance is not paid for out of the workspace name's width. */
+  :global(.header-actions) {
+    gap: var(--dsw-space-2);
+  }
   :global(.composer-wrap) {
     padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
   .conversationTabs button {
-    padding: 0 8px;
+    padding: 0 6px;
     min-height: 44px;
+  }
+}
+
+/* Phone widths. The conversation header carries one control more than
+   upstream's (the browser preferences trigger), so at 320-400px the padding,
+   the gaps and the tab padding give way first — the workspace name never does,
+   because it is the only thing on screen that says which repository you are
+   about to change. */
+@media (max-width: 400px) {
+  :global(.workspace-grid .conversation-header) {
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  :global(.header-actions) {
+    gap: 6px;
+  }
+
+  .conversationTabs button {
+    padding: 0 4px;
   }
 }
 
