@@ -9,7 +9,6 @@ import {
   findCommand,
   looksLikeSlashCommand,
   parseCommandInvocation,
-  WEB_COMMANDS,
 } from "./registry.ts";
 
 const capabilities = (
@@ -68,23 +67,6 @@ describe("octoscode command registry slice", () => {
     expect(
       commandAvailability(stop!, capabilities([CORE_UI_METHODS.TURN_INTERRUPT]))
         .available,
-    ).toBe(true);
-  });
-
-  it("requires all methods for resume, matching octoscode", () => {
-    const resume = WEB_COMMANDS.find(({ name }) => name === "resume");
-    expect(resume).toBeDefined();
-    const implementedResume = { ...resume!, implemented: true };
-
-    expect(
-      commandAvailability(implementedResume, capabilities(["session/list"]))
-        .available,
-    ).toBe(false);
-    expect(
-      commandAvailability(
-        implementedResume,
-        capabilities(["session/list", "session/hydrate"]),
-      ).available,
     ).toBe(true);
   });
 });

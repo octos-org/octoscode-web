@@ -6,9 +6,12 @@ import {
 
 describe("SessionDraftCache", () => {
   it("refuses a new draft at its bound without evicting anyone’s unsent text", () => {
-    const cache = new SessionDraftCache(2);
+    const cache = new SessionDraftCache();
     cache.set("one", "first");
     cache.set("two", "second");
+    for (let index = 2; index < 50; index += 1) {
+      cache.set(String(index), "draft");
+    }
     expect(cache.get("one")).toBe("first");
 
     expect(cache.set("three", "third")).toBe(false);
@@ -16,7 +19,7 @@ describe("SessionDraftCache", () => {
     expect(cache.get("one")).toBe("first");
     expect(cache.get("three")).toBeUndefined();
     expect(cache.set("one", "updated first")).toBe(true);
-    expect(cache.size).toBe(2);
+    expect(cache.snapshot()).toHaveLength(50);
     expect(cache.set("two", "")).toBe(true);
     expect(cache.set("three", "third")).toBe(true);
     expect(cache.get("one")).toBe("updated first");

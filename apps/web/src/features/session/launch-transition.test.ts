@@ -50,18 +50,6 @@ describe("LaunchTransitionCoordinator", () => {
     expect(coordinator.isCurrent(lease)).toBe(true);
   });
 
-  it("treats a falsy generic decision as remembered rather than absent", () => {
-    const coordinator = new LaunchTransitionCoordinator<Config, false>();
-    const launchConfig = config("/srv/falsy");
-    const lease = coordinator.begin(launchConfig);
-
-    expect(coordinator.rememberDecision(lease, false)).toBe(true);
-    expect(coordinator.restoreChoice(lease)).toEqual({
-      config: launchConfig,
-      decision: false,
-    });
-  });
-
   it("does not let a stale candidate commit or restore over its successor", () => {
     const coordinator = new LaunchTransitionCoordinator<Config, Decision>();
     const older = coordinator.begin(config("/srv/older"));
@@ -111,15 +99,12 @@ function deferred<Value>(): {
   promise: Promise<Value>;
   resolve: (value: Value) => void;
 } {
-  let resolve: ((value: Value) => void) | undefined;
+  let resolve!: (value: Value) => void;
   const promise = new Promise<Value>((complete) => {
     resolve = complete;
   });
   return {
     promise,
-    resolve(value) {
-      if (!resolve) throw new Error("Deferred promise is not initialized");
-      resolve(value);
-    },
+    resolve,
   };
 }

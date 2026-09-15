@@ -1,15 +1,10 @@
-/**
- * Bounded storage for unsent per-session composer text.
- *
- * Drafts are convenience state, not durable server state. Keeping the policy in
- * one bounded object prevents long-lived browser tabs from accumulating every
- * session id they have ever visited.
- */
+const MAX_DRAFTS = 50;
+
 export type SessionDraftRecord = [sessionKey: string, text: string];
 
 /** Bound tab storage without truncating any user's draft. */
 export function parseSessionDrafts(value: unknown): SessionDraftRecord[] {
-  if (!Array.isArray(value) || value.length > 50) return [];
+  if (!Array.isArray(value) || value.length > MAX_DRAFTS) return [];
   let size = 0;
   const seen = new Set<string>();
   for (const entry of value) {
@@ -32,34 +27,23 @@ export function parseSessionDrafts(value: unknown): SessionDraftRecord[] {
 }
 
 export class SessionDraftCache {
-  readonly #limit: number;
-  readonly #drafts = new Map<string, string>();
+  readonly #drafts: Map<string, string>;
 
-  constructor(limit = 50, initial: unknown = []) {
-    if (!Number.isSafeInteger(limit) || limit < 1) {
-      throw new Error("SessionDraftCache limit must be a positive integer");
-    }
-    this.#limit = limit;
-    for (const [key, text] of parseSessionDrafts(initial)) this.set(key, text);
+  constructor(initial: SessionDraftRecord[] = []) {
+    this.#drafts = new Map(initial);
   }
 
   get(sessionId: string): string | undefined {
-    const value = this.#drafts.get(sessionId);
-    if (value === undefined) return undefined;
-    this.#drafts.delete(sessionId);
-    this.#drafts.set(sessionId, value);
-    return value;
+    return this.#drafts.get(sessionId);
   }
 
   set(sessionId: string, draft: string): boolean {
-    if (!sessionId) return false;
     if (!draft) {
       this.#drafts.delete(sessionId);
       return true;
     }
-    if (!this.#drafts.has(sessionId) && this.#drafts.size >= this.#limit)
+    if (!this.#drafts.has(sessionId) && this.#drafts.size >= MAX_DRAFTS)
       return false;
-    this.#drafts.delete(sessionId);
     this.#drafts.set(sessionId, draft);
     return true;
   }

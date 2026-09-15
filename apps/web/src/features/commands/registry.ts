@@ -13,8 +13,6 @@ export type CommandIntent =
 
 export interface CommandRequirement {
   methodsAll?: readonly string[];
-  methodsAny?: readonly string[];
-  featuresAll?: readonly string[];
 }
 
 export interface WebCommandSpec {
@@ -145,29 +143,11 @@ export function commandAvailability(
     return { available: false, reason: "Server capabilities unavailable" };
   }
 
-  const features = new Set(capabilities.supported_features ?? []);
   const missingAll = requirement.methodsAll?.find(
     (method) => !supportsMethod(capabilities, method),
   );
   if (missingAll) {
     return { available: false, reason: `Server lacks ${missingAll}` };
-  }
-  if (
-    requirement.methodsAny?.length &&
-    !requirement.methodsAny.some((method) =>
-      supportsMethod(capabilities, method),
-    )
-  ) {
-    return {
-      available: false,
-      reason: `Server lacks one of ${requirement.methodsAny.join(", ")}`,
-    };
-  }
-  const missingFeature = requirement.featuresAll?.find(
-    (feature) => !features.has(feature),
-  );
-  if (missingFeature) {
-    return { available: false, reason: `Server lacks ${missingFeature}` };
   }
   return { available: true };
 }

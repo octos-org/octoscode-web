@@ -12,7 +12,6 @@ function memoryStorage() {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => values.set(key, value),
     removeItem: (key: string) => values.delete(key),
-    dump: () => [...values.values()].join("\n"),
   };
 }
 
@@ -39,26 +38,7 @@ describe("workspace recents", () => {
       loadRecentWorkspaces(readOnly, "https://octos.example")[0]?.path,
     ).toBe("/old");
     expect(clearRecentWorkspaces(storage, "https://octos.example")).toBe(true);
-  });
-
-  it("remembers only a server workspace descriptor", () => {
-    const storage = memoryStorage();
-    rememberWorkspace(
-      storage,
-      "https://octos.example",
-      "/srv/projects/octoscode",
-      42,
-    );
-
-    expect(loadRecentWorkspaces(storage, "https://octos.example")).toEqual([
-      {
-        id: "/srv/projects/octoscode",
-        name: "octoscode",
-        path: "/srv/projects/octoscode",
-        lastOpenedAt: 42,
-      },
-    ]);
-    expect(storage.dump()).not.toContain("Fix auth");
+    expect(loadRecentWorkspaces(storage, "https://octos.example")).toEqual([]);
   });
 
   it("keeps deployments isolated and fails closed on malformed storage", () => {
@@ -75,13 +55,6 @@ describe("workspace recents", () => {
   it("derives a human workspace name from host paths", () => {
     expect(workspaceName("/srv/projects/octoscode/")).toBe("octoscode");
     expect(workspaceName("C:\\work\\octoscode")).toBe("octoscode");
-  });
-
-  it("forgets the server-scoped navigation cache", () => {
-    const storage = memoryStorage();
-    rememberWorkspace(storage, "https://octos.example", "/srv/work", 1);
-    clearRecentWorkspaces(storage, "https://octos.example");
-    expect(loadRecentWorkspaces(storage, "https://octos.example")).toEqual([]);
   });
 
   it("removes the legacy cache that contained session metadata", () => {

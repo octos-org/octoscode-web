@@ -170,18 +170,6 @@ describe("PendingNavigationIntentController", () => {
     expect(controller.acceptDispatch(stale)).toBeNull();
   });
 
-  it("fails closed when a dispatch has no authority or turn identity", () => {
-    const controller =
-      new PendingNavigationIntentController<NavigationIntent>();
-
-    expect(() => controller.beginDispatch("", "turn-a")).toThrow(
-      "Navigation authority is required",
-    );
-    expect(() => controller.beginDispatch("transport-1:session-a", "")).toThrow(
-      "Turn id is required",
-    );
-  });
-
   it("keeps an accepted intent authority-scoped until recovery is ready", () => {
     const controller =
       new PendingNavigationIntentController<NavigationIntent>();

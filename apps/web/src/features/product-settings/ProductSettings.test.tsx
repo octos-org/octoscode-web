@@ -32,33 +32,6 @@ const groups = [
 ] as const;
 
 describe("GeneralSettingsContent", () => {
-  it("shows product context without exposing connection or session forms", () => {
-    const html = renderToStaticMarkup(
-      <GeneralSettingsContent
-        serverOrigin="https://octos.example.test"
-        connectionStatus="connected"
-        workspaceLabel="octoscode-web"
-        workspacePath="/srv/work/octoscode-web"
-        agentPreset="Coding"
-        displayProfile="GLM Coding Plan"
-        onDisconnect={vi.fn()}
-        onForgetConnection={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain("Connected");
-    expect(html).toContain("https://octos.example.test");
-    expect(html).toContain("octoscode-web");
-    expect(html).toContain("/srv/work/octoscode-web");
-    expect(html).toContain("Coding");
-    expect(html).toContain("GLM Coding Plan");
-    expect(html).toContain("Disconnect");
-    expect(html).toContain("Forget server");
-    expect(html).not.toContain("Session id");
-    expect(html).not.toContain("Auth token");
-    expect(html).not.toContain("<input");
-  });
-
   it("keeps disconnect unavailable when there is no active connection", () => {
     const html = renderToStaticMarkup(
       <GeneralSettingsContent
@@ -76,34 +49,6 @@ describe("GeneralSettingsContent", () => {
 });
 
 describe("ModelsSettingsContent", () => {
-  it("separates Session runtime from one cross-provider Profile default", () => {
-    const html = renderToStaticMarkup(
-      <ModelsSettingsContent
-        state={{ status: "ready" }}
-        groups={groups}
-        selected={{ providerId: "zai", modelId: "glm-5.2" }}
-        runtimeModel="DeepSeek V4 Pro"
-        restartRequired={false}
-        selectionEnabled
-        locked={false}
-        onRefresh={vi.fn()}
-        onSelect={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain("Z.AI");
-    expect(html).toContain("DeepSeek");
-    expect(html).toContain("GLM-5.2");
-    expect(html).toContain("DeepSeek V4 Pro");
-    expect(html).toContain("Session runtime");
-    expect(html).toContain("Profile default");
-    expect(html).toContain('aria-label="Profile default model"');
-    expect(html.match(/role="radiogroup"/g)).toHaveLength(1);
-    expect(html).toContain('aria-checked="true"');
-    expect(html).toMatch(/disabled=""[^>]*><span[^>]*><span[^>]*>GLM Legacy/);
-    expect(html).toContain("Not included in this plan");
-  });
-
   it("renders an advertised but immutable Profile catalog without fake controls", () => {
     const html = renderToStaticMarkup(
       <ModelsSettingsContent

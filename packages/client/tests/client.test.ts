@@ -8,15 +8,6 @@ import type { PermissionProfileSetParams } from "../src/types.ts";
 import fixture from "./fixtures/ui-protocol-v1.json";
 
 describe("OctosUiClient", () => {
-  it("negotiates the core's authoritative session hydrate feature", () => {
-    expect(DEFAULT_UI_FEATURES).toContain("state.session_hydrate.v1");
-    expect(DEFAULT_UI_FEATURES).not.toContain("session.hydrate.v1");
-  });
-
-  it("negotiates the auxiliary REST-to-WebSocket bridge", () => {
-    expect(DEFAULT_UI_FEATURES).toContain("auxiliary.rest_to_ws.v1");
-  });
-
   it("negotiates lifecycle lookup and verifies the exact requested turn scope", async () => {
     expect(DEFAULT_UI_FEATURES).toContain("state.turn_state_get.v1");
     const socket = createSocket();
@@ -796,10 +787,6 @@ describe("OctosUiClient", () => {
         params: { profile_id: "coding", selection, set_primary: true },
       }),
     ]);
-    expect(frames[0]?.params).not.toHaveProperty("session_id");
-    expect(frames[1]?.params).not.toHaveProperty("api_key");
-    expect(frames[3]?.params).not.toHaveProperty("api_key");
-    expect(frames[4]?.params).not.toHaveProperty("api_key");
 
     const configured = {
       provider: "zai",

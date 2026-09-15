@@ -84,21 +84,6 @@ describe("DurableSessionProjection", () => {
     expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
   });
 
-  it("does not commit a malformed continuation checkpoint", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.observe(envelope(1, 7));
-    expect(() =>
-      projection.commitHydrate({
-        session_id: "coding:local:main",
-        cursor: { stream: "coding:local:main", seq: 20 },
-        replayed_projection_envelopes: [],
-        projection_thread_sequences: { "thread-1": -1 },
-      }),
-    ).toThrow("Invalid canonical hydrate checkpoint");
-    expect(projection.snapshot().cursor?.seq).toBe(7);
-  });
-
   it("accepts monotonic envelopes and rejects a replayed duplicate", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");

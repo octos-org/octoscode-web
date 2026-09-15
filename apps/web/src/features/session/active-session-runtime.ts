@@ -525,10 +525,6 @@ export class ActiveSessionRuntime<
       capabilities: candidate.opened.capabilities,
     });
     const nextBinding = this.#bind(next);
-    if (candidate.client.status !== "connected") {
-      this.#disposeBinding(nextBinding);
-      throw new Error("The prepared candidate transport disconnected");
-    }
     if (options.authorizeCommit && !options.authorizeCommit()) {
       this.#disposeBinding(nextBinding);
       throw new StaleSessionAuthorityError();
@@ -710,11 +706,7 @@ export class ActiveSessionRuntime<
     if (!binding) return;
     binding.active = false;
     for (const unsubscribe of binding.unsubscribe.splice(0)) {
-      try {
-        unsubscribe();
-      } catch {
-        // Listener cleanup must not compromise the active authority.
-      }
+      unsubscribe();
     }
   }
 
@@ -724,7 +716,7 @@ export class ActiveSessionRuntime<
     const attempt = this.#retryAttempt + 1;
     this.#retryAttempt = attempt;
     const baseDelay = Math.min(500 * 2 ** Math.min(attempt - 1, 4), 5_000);
-    const random = clampUnit((this.#options.random ?? Math.random)());
+    const random = (this.#options.random ?? Math.random)();
     const delayMs = Math.round(baseDelay * (0.8 + random * 0.4));
     if (this.#target.kind === "session") {
       this.#projection.beginReconnect(attempt);
@@ -1198,11 +1190,6 @@ function normalizeConfig(
     profileId: input.profileId.trim(),
     cwd: input.cwd.trim(),
   };
-}
-
-function clampUnit(value: number): number {
-  if (!Number.isFinite(value)) return 0.5;
-  return Math.min(1, Math.max(0, value));
 }
 
 function assertConnected(client: ActiveSessionClient): void {

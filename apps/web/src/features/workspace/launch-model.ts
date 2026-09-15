@@ -11,7 +11,3 @@ export const EMPTY_LAUNCH_RUNTIME: LaunchRuntimeState = {
   cwd: null,
   decision: null,
 };
-
-export function codingSessionIdForProfile(profileId: string): string {
-  return `${profileId}:local:tui#coding`;
-}

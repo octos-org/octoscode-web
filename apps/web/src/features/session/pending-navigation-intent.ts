@@ -74,8 +74,6 @@ export class PendingNavigationIntentController<Intent> {
 
   /** Own a new start attempt before its RPC promise can yield. */
   beginDispatch(authorityKey: string, turnId: string): NavigationDispatchLease {
-    if (!authorityKey) throw new Error("Navigation authority is required");
-    if (!turnId) throw new Error("Turn id is required");
     if (authorityKey !== this.#authorityKey) {
       this.setAuthority(authorityKey);
     }

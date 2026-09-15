@@ -171,6 +171,7 @@ describe("prepareCandidateSession", () => {
       ).rejects.toThrow("different workspace from the saved link");
       expect(client.calls).toEqual(["connect", "open"]);
       expect(client.disconnectCount).toBe(1);
+      expect(client.listenerCount).toBe(0);
     },
   );
 
@@ -232,25 +233,6 @@ describe("prepareCandidateSession", () => {
 
     controller.abort();
     expect(client.disconnectCount).toBe(0);
-  });
-
-  it("disconnects and rejects when opened Session validation fails", async () => {
-    const client = new FakeCandidateClient();
-
-    await expect(
-      prepareCandidateSession({
-        config,
-        signal: new AbortController().signal,
-        createClient: () => client,
-        validateOpened: () => {
-          throw new Error("incompatible candidate");
-        },
-      }),
-    ).rejects.toThrow("incompatible candidate");
-
-    expect(client.calls).toEqual(["connect", "open"]);
-    expect(client.disconnectCount).toBe(1);
-    expect(client.listenerCount).toBe(0);
   });
 
   it("fails closed when hydrate returns another Session", async () => {
@@ -371,15 +353,12 @@ function deferred<Value>(): {
   promise: Promise<Value>;
   resolve: (value: Value) => void;
 } {
-  let resolve: ((value: Value) => void) | undefined;
+  let resolve!: (value: Value) => void;
   const promise = new Promise<Value>((complete) => {
     resolve = complete;
   });
   return {
     promise,
-    resolve(value) {
-      if (!resolve) throw new Error("Deferred promise is not initialized");
-      resolve(value);
-    },
+    resolve,
   };
 }

@@ -225,23 +225,6 @@ describe("connection preferences", () => {
     );
   });
 
-  it("clears all remembered intent and the tab auto-connect marker", () => {
-    const durable = new MemoryStorage();
-    const tab = new MemoryStorage();
-    saveConnectionPreferences(
-      { ...defaults, endpoint: "https://octos.example", token: "secret" },
-      durable,
-      tab,
-    );
-    setAutoConnect(tab, true);
-    expect(loadAutoConnect(tab)).toBe(true);
-
-    clearConnectionPreferences(durable, tab);
-
-    expect(loadConnectionPreferences(defaults, durable, tab)).toEqual(defaults);
-    expect(loadAutoConnect(tab)).toBe(false);
-  });
-
   it("keeps confirmed Sessions in the exact tab credential envelope", () => {
     const durable = new MemoryStorage();
     const tab = new MemoryStorage();

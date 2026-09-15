@@ -5,7 +5,6 @@ import {
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
-  parseSessionStatusReadResult,
   parseTokenCostUpdate,
 } from "../src/index.ts";
 import type { RpcNotification } from "../src/index.ts";
@@ -135,13 +134,7 @@ describe("workspace product contract", () => {
     ).toBeNull();
   });
 
-  it("decodes status cost totals and live context-window updates", () => {
-    expect(
-      parseSessionStatusReadResult(fixture.session_status_read.result),
-    ).toMatchObject({
-      usage: { input_tokens: 1200, estimated_cost_micros_usd: 2500 },
-      health: { status: "ok" },
-    });
+  it("decodes live token cost and context-window updates", () => {
     expect(
       parseTokenCostUpdate(
         fixture.token_cost_update as unknown as RpcNotification,

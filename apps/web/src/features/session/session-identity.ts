@@ -7,10 +7,8 @@ const WEB_SESSION_PREFIX = "web-";
  * that decision would make a legitimate cross-profile choice fail Core's
  * session-scope validation.
  */
-export function freshWebSessionId(
-  randomUuid: () => string = () => crypto.randomUUID(),
-): string {
-  return `${WEB_SESSION_PREFIX}${randomUuid()}`;
+export function freshWebSessionId(): string {
+  return `${WEB_SESSION_PREFIX}${crypto.randomUUID()}`;
 }
 
 /**

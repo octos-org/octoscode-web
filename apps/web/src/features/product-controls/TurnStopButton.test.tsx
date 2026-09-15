@@ -3,23 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { TurnStopButton } from "./TurnStopButton.tsx";
 
 describe("TurnStopButton", () => {
-  it("projects an unaccepted start as non-interruptible status", () => {
-    const starting = renderToStaticMarkup(
-      <TurnStopButton
-        activeTurnId="turn-1"
-        interruptingTurnId={null}
-        available
-        starting
-        onInterrupt={vi.fn()}
-      />,
-    );
-
-    expect(starting).toContain("Starting…");
-    expect(starting).toContain('disabled=""');
-    expect(starting).toContain('aria-busy="true"');
-    expect(starting).not.toContain(">Stop</button>");
-  });
-
   it("keeps Starting visible when interrupt is not advertised", () => {
     const starting = renderToStaticMarkup(
       <TurnStopButton

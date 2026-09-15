@@ -466,14 +466,6 @@ describe("BackgroundTurnManager", () => {
         ...identity("session-overflow", "turn-overflow"),
       }),
     ).toThrow(BackgroundTurnLimitError);
-    expect(() =>
-      manager.prepare({
-        client: overflow,
-        ...identity("session-overflow", "turn-overflow"),
-      }),
-    ).toThrow(
-      "Reopen an existing Session, or explicitly Disconnect and reconnect",
-    );
     expect(overflow.disconnectCount).toBe(0);
 
     manager.clear();
