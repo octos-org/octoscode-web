@@ -81,22 +81,6 @@ export class DurableSessionProjection {
         `Hydrate returned session ${result.session_id}, expected ${this.#sessionId}`,
       );
     }
-    const checkpoints = new Map<string, number>();
-    if (result.projection_thread_sequences !== undefined) {
-      if (!result.replayed_projection_envelopes) {
-        throw new Error(
-          "Canonical hydrate checkpoints require their replay snapshot",
-        );
-      }
-      for (const [thread, seq] of Object.entries(
-        result.projection_thread_sequences,
-      )) {
-        if (!thread.trim() || !Number.isSafeInteger(seq) || seq < 0) {
-          throw new Error("Invalid canonical hydrate checkpoint");
-        }
-        checkpoints.set(thread, seq);
-      }
-    }
     this.#cursor = { ...result.cursor };
     this.#canonicalSnapshotCursor =
       result.projection_thread_sequences === undefined
@@ -110,7 +94,9 @@ export class DurableSessionProjection {
     // Newer Core's atomic full projection snapshot supplies continuation
     // checkpoints even for compacted threads. Never infer these from rc.9's
     // partial tool/background lanes.
-    this.#threadSeq = checkpoints;
+    this.#threadSeq = new Map(
+      Object.entries(result.projection_thread_sequences ?? {}),
+    );
     this.#phase = "healthy";
     this.#detail = undefined;
     this.#failureDetail = undefined;
