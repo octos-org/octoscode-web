@@ -59,6 +59,23 @@ messages" 展开已收数据）；IME/radio 焦点逃逸；跨会话晚到剪贴
 **请验证**：`SurfaceBoundary` 是否正确隔离所有 lazy-loaded feature；history
 expansion 是否保持滚动位置；`/copy` 的异步结果是否锁定到原会话。
 
+### 主题 token 全量覆盖（#91）
+
+**解决了**：暗色切换按钮上线后发现手动模式只覆盖了 ~20% 的 token——侧栏/Settings 在暗色下仍是亮底（对比度低至 1.05:1）。两个 override 块现在完整镜像 media
+query 的全部 ~50 个 token（含 specific-_/shiki-_/state-_/interactive-_/bg-mask）。
+
+**请验证**：手动暗色 vs OS 暗色是否视觉一致；手动亮色（OS 为暗色时）同理。
+
+### 0.10 polish（#90）
+
+**解决了**：assistant 正文 65ch 上限；tool 空条目移除 "No output
+yet"；空态文案去实现词汇。
+
+### CLS / layout shift 审计结论
+
+CLS 总分 0.0069-0.0257（通过 <0.1 发布门槛）。用户可见的"加载大小 ≠ 实际大小"集中在 Settings 对话框 fallback（440×307→800×800）和 DeferredSurface 占位（184px
+vs 626-788px）。这些是 P1，已知待修（不阻塞发布因为 CLS 分数达标）。
+
 ### 行宽 + 复制清理（#90）
 
 **解决了**：assistant 正文 65ch 上限；tool 空条目移除 "No output
