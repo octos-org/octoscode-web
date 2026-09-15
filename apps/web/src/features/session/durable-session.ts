@@ -6,7 +6,11 @@ import {
   type RpcNotification,
   type SessionHydrateResult,
   type UiCursor,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
+import {
+  matchesSessionScope,
+  notificationMatchesSessionScope,
+} from "./scope.ts";
 
 export type SessionRecoveryPhase =
   "idle" | "hydrating" | "healthy" | "reconnecting" | "gap" | "lossy" | "error";
@@ -113,6 +117,13 @@ export class DurableSessionProjection {
     notification: RpcNotification,
     options: { fromRecoveryBuffer?: boolean } = {},
   ): ProjectionDecision {
+    if (
+      (notification.method === CORE_UI_METHODS.REPLAY_LOSSY ||
+        notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) &&
+      !notificationMatchesSessionScope(notification, this.#sessionId)
+    ) {
+      return { kind: "ignore", reason: "wrong_session" };
+    }
     if (notification.method === CORE_UI_METHODS.REPLAY_LOSSY) {
       const event = parseReplayLossyEvent(notification.params);
       if (!event || !this.#matchesScope(event.session_id)) {
@@ -203,16 +214,9 @@ export class DurableSessionProjection {
   }
 
   #matchesScope(sessionId: string, topic?: string): boolean {
-    if (!this.#sessionId) return false;
-    if (sessionId === this.#sessionId) {
-      const expectedTopic = this.#sessionId.split("#", 2)[1];
-      return (
-        expectedTopic === undefined ||
-        topic === undefined ||
-        topic === expectedTopic
-      );
-    }
-    if (!topic) return false;
-    return `${sessionId}#${topic}` === this.#sessionId;
+    return (
+      Boolean(this.#sessionId) &&
+      matchesSessionScope(this.#sessionId, sessionId, topic)
+    );
   }
 }

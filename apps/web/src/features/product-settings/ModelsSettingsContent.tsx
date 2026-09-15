@@ -10,6 +10,7 @@ import type {
 } from "../product-controls/types.ts";
 import styles from "./ProductSettings.module.css";
 import { CheckIcon, RefreshIcon } from "../../ui/Icon.tsx";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export type ModelsCapabilityState = ControlState;
 
@@ -48,6 +49,7 @@ export function ModelsSettingsContent({
   onRefresh,
   onSelect,
 }: ModelsSettingsContentProps) {
+  const t = useUiText();
   const ready = state.status === "ready";
   const empty = ready && groups.every((group) => group.models.length === 0);
   const selectedName = groups
@@ -63,10 +65,11 @@ export function ModelsSettingsContent({
     >
       <div className={styles.sectionHeading}>
         <div className={styles.headingCopy}>
-          <h2 className={styles.sectionTitle}>Profile model</h2>
+          <h2 className={styles.sectionTitle}>{t("Profile model")}</h2>
           <p className={styles.sectionIntro}>
-            Sets the default for the active Octos profile and affects every
-            Session using that profile. This is not a Session-only override.
+            {t(
+              "Sets the default for the active Octos profile and affects every Session using that profile. This is not a Session-only override.",
+            )}
           </p>
         </div>
         {ready ? (
@@ -77,39 +80,41 @@ export function ModelsSettingsContent({
             onClick={onRefresh}
           >
             <RefreshIcon size={14} />
-            Refresh
+            {t("Refresh")}
           </button>
         ) : null}
       </div>
 
       <div className={styles.modelTruth}>
         <span>
-          <strong>Session runtime</strong>
-          {runtimeName ?? "Not reported by this server"}
+          <strong>{t("Session runtime")}</strong>
+          {runtimeName ?? t("Not reported by this server")}
         </span>
         <span>
-          <strong>Profile default</strong>
-          {selectedName ?? "Not reported by this server"}
+          <strong>{t("Profile default")}</strong>
+          {selectedName ?? t("Not reported by this server")}
         </span>
       </div>
 
       {restartRequired ? (
         <div className={styles.restartNotice} role="status">
-          Profile default is {selectedName ?? "saved"}. This Octos process is
-          still serving {runtimeName ?? "its current runtime model"}. Restart
-          Octos to apply the new default.
+          {t("Profile default is") + " "}
+          {selectedName ?? t("saved")}
+          {t(". This Octos process is still serving") + " "}
+          {runtimeName ?? t("its current runtime model")}
+          {t(". Restart Octos to apply the new default.")}
         </div>
       ) : null}
 
       {state.status === "unavailable" ? (
         <div className={styles.emptyState}>
-          This Octos server does not advertise profile model management.
+          {t("This Octos server does not advertise profile model management.")}
         </div>
       ) : null}
 
       {state.status === "loading" ? (
         <div className={styles.emptyState} role="status">
-          Loading models…
+          {t("Loading models…")}
         </div>
       ) : null}
 
@@ -122,18 +127,18 @@ export function ModelsSettingsContent({
             disabled={locked}
             onClick={onRefresh}
           >
-            Try again
+            {t("Try again")}
           </button>
         </div>
       ) : null}
 
       {empty ? (
-        <div className={styles.emptyState}>No models are available.</div>
+        <div className={styles.emptyState}>{t("No models are available.")}</div>
       ) : null}
 
       {ready && !empty && !selectionEnabled ? (
         <div className={styles.emptyState}>
-          Profile defaults are read-only on this server.
+          {t("Profile defaults are read-only on this server.")}
         </div>
       ) : null}
 
@@ -143,8 +148,8 @@ export function ModelsSettingsContent({
           role={selectionEnabled ? "radiogroup" : "group"}
           aria-label={
             selectionEnabled
-              ? "Profile default model"
-              : "Configured profile models"
+              ? t("Profile default model")
+              : t("Configured profile models")
           }
         >
           {groups.map((group) => (

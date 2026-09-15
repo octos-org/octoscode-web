@@ -84,6 +84,26 @@ describe("DurableSessionProjection", () => {
     expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
   });
 
+  it("ignores foreign-topic terminals with the same turn ID before cursor or thread recovery", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
+    const before = projection.snapshot();
+    for (const stream of ["coding:local:main", "foreign-stream"]) {
+      expect(
+        projection.observe(
+          envelope(2, 2, {
+            session_id: "coding:local:main",
+            topic: "foreign",
+            cursor: { stream, seq: 2 },
+            payload: { type: "turn_terminal", data: { outcome: "completed" } },
+          }),
+        ),
+      ).toEqual({ kind: "ignore", reason: "wrong_session" });
+      expect(projection.snapshot()).toEqual(before);
+    }
+    expect(projection.observe(envelope(2, 2)).kind).toBe("apply");
+  });
   it("accepts monotonic envelopes and rejects a replayed duplicate", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");

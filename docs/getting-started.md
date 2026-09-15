@@ -70,27 +70,34 @@ contract is tracked in
 
 ## Switch Sessions while a turn is running
 
-After Core acknowledges a turn started by this tab, you can select another
-Session or create one in the same or another Workspace. The original Session
-continues to show its running or waiting status in the sidebar, and selecting it
-again restores its authoritative hydrate/replay projection. Browser-local queued
-prompts cannot move with that owner socket, so they block navigation. The queue
-above the composer shows each pending message and its remove control. Remove
-unwanted queued messages before switching. A `turn/start` whose acknowledgement
-has not arrived is shown as **Starting**; one create/switch intent is retained
-locally (latest click wins) and runs automatically after that exact request is
-accepted. Rejection or cancellation clears the intent without leaving the source
-Session. **Stop** becomes available only after acceptance; `/stop` also fails
-closed during Starting.
+Select or create another Session while the source is running, starting, waiting,
+or holding queued prompts. Each confirmed Session keeps its own FIFO and
+interactions; a terminal event can advance a background queue without selecting
+it. The queue above the composer shows each pending message and its remove
+control. The shared WebSocket stays open across selection changes. There is no
+eight-connection Session cap or deferred-until-ACK navigation action. Stop and
+other mutations remain subject to the selected Session's own readiness checks.
 
-This is same-live-tab continuation, not a detached server job. Refreshing or
-closing the tab, losing the WebSocket through a network or proxy failure, or
-selecting **Disconnect** closes the rc.9 owner socket and terminates a
-still-running turn. The browser warns before refresh or close while foreground,
-queued, or background work is active; this warning does not keep work alive
-after leaving. Disconnect keeps the current tab's confirmed Session refs for
-reconnect. **Forget server** and endpoint/token identity changes clear those
-refs, recent Workspace paths, and in-memory drafts.
+Use the sidebar's waiting state to return to the Session that owns an approval
+or question. Native peer Sessions are also retained without stealing focus; use
+`/peer` or `/gather` when the server advertises those operations. Unsupported
+controls remain unavailable rather than starting a browser-owned agent loop.
+
+This is same-live-tab continuation, not a detached server job. Core rc11 still
+interrupts connection-owned work when refresh, tab close, network/proxy loss, or
+**Disconnect** closes the pooled socket. Ordinary reconnect retains local queues
+but pauses dispatch until hydrate/replay reconciles each Session. The browser
+warns before refresh or close while foreground, queued, or background work is
+active; this warning does not keep work alive after leaving. Reload discards
+queued prompts and image drafts; it cannot recover them from the server.
+Disconnect keeps confirmed navigation refs, not live records. **Forget server**
+and endpoint/token changes clear the refs and drafts.
+
+The retained-Session implementation has passed local real-provider capacity,
+recovery and endurance checkpoints. New source additions still require their own
+acceptance: see the artifact-specific results in
+[Feature parity](feature-parity.md). The separately pinned rc9 baseline remains
+unchanged.
 
 For a fresh Web Session, an unambiguous `activate` result opens automatically
 with Core's resolved Profile. A `cross_profile` result still asks which Profile
@@ -133,6 +140,49 @@ conversation. The input stays inside the viewport and retains its draft.
 Settings scrolls within its dialog. Escape closes the topmost dialog; closing a
 Diff review above an approval returns to that approval without interrupting it.
 
+## Session commands and local display preferences
+
+Type a slash command into the composer; unsupported commands and arguments fail
+closed instead of becoming model prompts. The palette lists only usable
+commands.
+
+| Command                                          | Browser interaction                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `/sessions`                                      | Focus the confirmed-Session search; switching does not pause other records.                       |
+| `/resume [search]`                               | Browse scoped historical candidates and explicitly confirm opening one.                           |
+| `/btw question` or `/aside question`             | Ask an ephemeral side question; its reply stays with the originating Session.                     |
+| `/steer on` / `/steer off`                       | Opt into native mid-turn text steering for this Session; otherwise inputs remain FIFO.            |
+| `/threads`, `/turn state [UUID]`, `/permissions` | Inspect the connected Core's exact scoped graph, lifecycle or remembered approval decisions.      |
+| `/goal`, `/agents`, `/loop`, `/monitor`          | Open capability-gated native controls; the browser does not run a scheduler or agent loop.        |
+| `/thinking`, `/images`                           | Choose future-turn reasoning effort / display visibility, or explicitly select and upload images. |
+| `/theme`, `/lang`                                | Open browser preferences; `/lang en` and `/lang zh` change interface language directly.           |
+| `/vimmode`                                       | Toggle the pinned TUI's normal/insert editing subset; this is not a full Vim implementation.      |
+| `/saveconfig`                                    | Explicitly save language, theme and Vim preference in this browser only.                          |
+
+**Browser preferences** is also available without a Core connection. Its five
+palettes are Terminal, Codex, Claude, Slate and Solarized. Terminal preserves
+the browser's automatic light/dark appearance; named palettes also affect code
+highlighting. Language changes UI text, not user/model content or wire values.
+Changes take effect immediately, but only **Save browser preferences** or
+`/saveconfig` persists them. This is not a write to the server's TUI config.
+
+Vim starts in Insert when enabled or toggled. In the focused composer, Escape
+enters Normal without interrupting. A Normal-mode pending operator is cancelled
+by Escape; a subsequent bare Escape can interrupt that Session's accepted turn.
+Enter still uses the same command/turn admission and FIFO. Clipboard shortcuts,
+IME composition and modal/approval/question focus retain priority. Supported
+operations are `h j k l 0 $ w b e G gg x dd dw cc i a A I o O`; counts, Visual
+mode, macros and registers are not implemented. Pending operators never carry
+into another Session's draft.
+
+With Vim disabled, bare Escape in the composer dismisses an open command palette
+first; otherwise it interrupts the selected Session's accepted turn when
+allowed.
+
+The browser preference additions are source work undergoing their own
+artifact-specific acceptance; do not infer that an already published build
+contains them. See [Feature parity](feature-parity.md).
+
 ## Configure providers and models
 
 **Settings → Models** reads the active Profile's configured primary and fallback
@@ -162,9 +212,14 @@ that every Core platform encrypts its credential store.
 The **Session runtime** row remains authoritative for the model actually served
 by the current process. **Profile default** is configuration shared by Sessions
 on that Profile. A changed default may require an Octos restart and is not a
-Session override. The current AppUI contract cannot persist `temperature`,
-`top_p`, maximum-token/context values, or reasoning controls, so those fields
-are intentionally absent from Web Settings.
+Session override. Web and the pinned TUI do not expose an inference-override
+editor, although rc11 Core can persist typed per-model sampling, context, and
+reasoning defaults. Existing known overrides are preserved during provider
+edits; unsupported configured fields make an entry edit-ineligible. `/thinking`
+separately captures reasoning effort for new turns in the selected Session,
+including queued turns. `/images` accepts explicit image selection/upload, up to
+four images of at most 20 MiB each; typing a local path does not read a file
+from your computer.
 
 ### GLM-5.3-Flash
 
@@ -187,12 +242,14 @@ saving, and the API key is never written to browser storage. Older servers
 display the canonical `octoscode onboard` fallback instead.
 
 After a successful connection, refreshing the same tab reopens the established
-Session. Only the server origin is durable. The token, auto-connect marker,
-selected Session/Workspace/Profile restore hints, recent Workspace paths, and
-confirmed Session refs are bound to that endpoint and token in tab-scoped
+Session. Only the server origin and explicitly saved local display preferences
+are durable browser configuration. The token, auto-connect marker, selected
+Session/Workspace/Profile restore hints, recent Workspace paths, and confirmed
+Session refs are bound to that endpoint and token in tab-scoped
 `sessionStorage`; closing the tab forgets all of them. **Disconnect** keeps the
 endpoint and current tab navigation data but stops automatic reconnection and
-terminates live owner transports; **Forget server** clears both storage scopes.
+closes the pooled transport and retires local queues; **Forget server** clears
+both storage scopes.
 
 ## Run the product fixture
 

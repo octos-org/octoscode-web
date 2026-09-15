@@ -1,5 +1,5 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
-import type { SessionOpened } from "@octos-org/octoscode-client";
+import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
 import { connectionEndpointError } from "./validation.ts";
 import {
   parseSessionDrafts,

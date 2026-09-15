@@ -10,7 +10,7 @@ import {
   type PermissionProfileUpdate,
   type RpcNotification,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
 
 export interface PermissionRuntimeState {

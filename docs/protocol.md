@@ -17,13 +17,15 @@ Missing optional capabilities reduce the interface; they do not trigger a
 best-effort wire guess.
 
 The generic request primitive is private. Every public method with a structured
-result applies a fail-closed decoder before returning, and shared cursor/string
-primitives come from one decoder module. Request timeouts and disconnects move
-their ids into a bounded quarantine so a valid late server response is ignored
-instead of reported as an unrelated protocol error. Method and feature names
-exported by Core come from the generated contract index; only the isolated CLI
-AppUI extensions used for onboarding and Profile model management remain
-handwritten until Core exports them.
+result applies a fail-closed decoder before returning. Cold receipt decoders
+load asynchronously without deferring the authority-sensitive RPC dispatch; live
+event decoders remain synchronous. Request timeouts and disconnects move their
+ids into a bounded quarantine so a valid late server response is ignored instead
+of reported as an unrelated protocol error. Method and feature names exported by
+Core come from the generated contract index; only the isolated CLI AppUI
+extensions (including onboarding, Profile configuration, peer prepare/gather,
+context, inventory, skills, and research lanes) remain isolated handwritten
+contracts until Core exports them.
 
 Browser WebSockets cannot attach an `Authorization` header. The current Core
 endpoint accepts `?token=` and repeated `ui_feature` parameters. Tokens remain
@@ -70,30 +72,45 @@ Markdown tree.
 
 ## Turn ownership during Session navigation
 
-Core rc.9 couples an interactive turn to the WebSocket that accepted its
-`turn/start`. Physically closing that connection aborts the turn and appends a
-durable `connection_closed` terminal. The Web may therefore switch or create a
-Session during a running turn only after all of these conditions hold:
+The rc11 candidate uses one physical pooled WebSocket for all confirmed
+Sessions. One `SessionRecord` per full endpoint/Workspace/Profile/Session/auth
+epoch owns its controller, FIFO, interactions, cursor, and bounded timeline.
+Selection does not close a socket, reset a queue, or wait for another turn's
+ACK. Candidate open/hydrate commits only while its captured scope, transport,
+and generation remain current; rejected candidates cannot replace a live record.
 
-1. the turn was started by this tab rather than merely observed through hydrate;
-2. Core has acknowledged `turn/start`;
-3. the browser-local FIFO has no pending prompts;
-4. the exact old Workspace/Profile/Session/turn owner transport can be retained.
+Every record receives its own admitted events, including background approvals,
+questions, and canonical terminals. Terminal handling advances only that
+record's FIFO. Reconnect suspends all record leases, rehydrates them through the
+single new transport, and reconciles sent versus unsent work before drain.
+Changing authentication retires the old semantic authority. Page reload does not
+restore browser-local pending prompts or attachment drafts.
 
-The destination uses the normal isolated candidate transaction. Observation of
-the old exact owner begins before candidate open, closing the terminal-event
-race. Candidate failure rolls observation back and leaves the foreground owner
-untouched. Candidate success preserves that transport and projects only its
-background status; conversation state in the new foreground Session still comes
-from its own hydrate/replay lane.
+Core rc11 still couples interactive execution to the accepting connection.
+Closing it interrupts connection-owned work; ordinary teardown persists a
+`connection_closed` terminal. A daemon restart likewise requires fresh hydrate
+and cannot be presented as continuous detached execution. A terminal event is
+not permission to close the shared transport while other work may remain. This
+supersedes ADR 0019's ACK navigation guard and eight retained-owner-socket
+budget, not Core's execution-lifetime boundary. The separately pinned rc9
+baseline is unchanged by rc11 candidate testing.
 
-A terminal turn event is not a transport-release signal on rc.9. Core can still
-perform persistence, task, goal, and accounting tail work, so the compatibility
-owner remains retained until explicit cleanup or transport loss. Refresh, tab
-close, network/proxy loss, and manual Disconnect close it and terminate a
-still-live turn. This behavior cannot provide durable detached execution across
-tabs or transport loss; that requires an explicit Core turn lease or quiesced
-signal.
+Native peer `peer/staged` and `peer/closed` events route to the retained master
+record even while backgrounded. The coordinator binds one peer manager to that
+record, buffers bounded events during its typed factory load with a transport
+fence, and opens the server-supplied full peer identity without selecting it.
+Kickoff uses the peer record's ordinary FIFO/native turn UUID; enqueue alone is
+not a server receipt. Existing peer history or uncertain dispatch is not
+automatically kicked off again after recovery. Close invalidates pending host
+work and retires only the matching peer, preserving an honest selected view.
+
+`peer/gather` itself is a Profile-scoped read. **Refresh blackboard** remains
+read-only. The candidate `/gather [all|slug…]` composes the pinned TUI's bounded
+64 KiB UTF-8 synthesis prompt and admits it to the originating master record's
+ordinary FIFO. Empty results create no turn; a busy master queues synthesis.
+Selection changes do not redirect it, while authority/recovery changes prevent
+late dispatch. This acceptance correction still needs its browser verification;
+a successful blackboard read alone does not prove synthesis.
 
 The model served by a Session runtime and the active Profile default are
 different projections. The composer reports only the former. Settings uses
@@ -127,11 +144,16 @@ A dedicated server-side credential contract is tracked in
 Save performs Test and Upsert from one immutable draft so the two requests
 cannot diverge across an await. Responses are accepted only for the current
 transport/Profile authority, and reflected credential-shaped errors are redacted
-before publication. The currently implemented AppUI payload has no durable
-fields for `temperature`, `top_p`, token/context limits, or reasoning controls;
-the browser must not invent them or silently add ignored properties. Typed
-inference parameters are tracked in
-[octos#2166](https://github.com/octos-org/octos/issues/2166).
+before publication. The inspected rc11 AppUI model selection accepts typed
+`temperature`, `top_p`, `context_window`, `reasoning_effort`, and `model_hints`.
+Upsert replaces the complete inference configuration: null and omission both
+mean inherit, not retain the prior value. Web preserves known configured values
+on existing edits and blocks edits containing unsupported configuration; it does
+not provide an inference editor absent from the pinned TUI. `max_output_tokens`
+is gateway-owned and rejected by this RPC, not an additional model-selection
+field. Per-turn reasoning is a separate `turn/start.reasoning_effort` contract,
+captured in each queued prompt. This rc11 runtime observation does not change
+the repository's generated Core contract pin.
 
 Profile changes affect every Session on that Profile and may require an Octos
 restart. They are not treated as a Session override; that missing Core contract
@@ -225,6 +247,9 @@ supervision, and status without making an external model turn.
 
 Unit fixtures provide deterministic parser and reducer coverage. Playwright
 provides browser product coverage. Neither replaces the pinned real-Core gate.
+The expanded rc11 parity implementation is still an acceptance candidate;
+passing any one of these layers does not establish a full native-peer live soak
+or complete TUI parity. See [Feature parity](feature-parity.md).
 
 ## Related decisions
 

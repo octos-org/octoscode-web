@@ -34,6 +34,27 @@ import {
   permissionOptionId,
   permissionOptions,
 } from "../shell/permission-projection.ts";
+import { useUiText, type UiText } from "../preferences/ui-text.tsx";
+import type {
+  DriverInventoryDisclosure,
+  DriverInventoryState,
+} from "../session/driver-discovery.ts";
+import type { SessionControlReadiness } from "../session/session-record-manager.ts";
+import {
+  PeerControlPanel,
+  type PeerControlPanelState,
+} from "../control/PeerControlPanel.tsx";
+import type {
+  PeerControlCommand,
+  PeerControlFence,
+  PeerControlLeaf,
+  PeerControlTarget,
+} from "../control/peer-control-commands.ts";
+import {
+  PeerControllerPanel,
+  type PeerControllerPanelProps,
+} from "../control/PeerControllerPanel.tsx";
+import type { UiProtocolCapabilities } from "@octos-org/octoscode-client/protocol";
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -140,6 +161,56 @@ interface SessionControlBarBaseProps {
   ariaLabel: string;
   /** Null means the server did not advertise the permission capability. */
   permission: PermissionControlProps | null;
+  /**
+   * Read-only external-driver disclosure for the SELECTED record. Omitted, or
+   * any non-complete state, exposes NO controller seat and no owner. This is
+   * presentation of public server facts only, never execution authority.
+   */
+  driverInventory?: DriverInventoryState | undefined;
+  /**
+   * The external-master CONTROL seat (grant 0745). Mounted ONLY when the
+   * selected record snapshot reports `readiness === "ready"` — i.e. caps admit
+   * peer/control + external_driver_v1 AND an external binding is observed. The
+   * leaf/fence/target are CALLER-held (never minted here) and the caller owns
+   * the observable state; this bar is presentation, exactly like the permission
+   * and model seats. Omitted ⇒ no control seat, no frames.
+   */
+  peerControl?: PeerControlSeat | undefined;
+  /**
+   * The peer CONTROLLER console (grant 2840). A SIBLING section of the control
+   * seat: the seat drives an ALREADY-ACCEPTED peer, this console STAGES one. It
+   * mounts under the SAME readiness gate as the seat, and the panel itself
+   * re-gates on `peer/control` + `peer/dispatch`. Omitted ⇒ no console.
+   */
+  peerController?:
+    | (PeerControllerPanelProps & {
+        readonly readiness: SessionControlReadiness;
+      })
+    | undefined;
+}
+
+/**
+ * One record's control seat, as resolved by the session command plumbing
+ * (`useOctosSession`, features/session/use-octos-session.ts): its
+ * `connection` snapshot already feeds `driverInventory` into this bar, and its
+ * `protocol.client` is the shared transport the leaf is built from. Routing a
+ * command is the caller's job — this bar only forwards the activation.
+ */
+export interface PeerControlSeat {
+  /** The record snapshot's derived readiness; the ONLY mount gate here. */
+  readonly readiness: SessionControlReadiness;
+  /** Negotiated caps for the CURRENT authority (the panel re-gates on these). */
+  readonly capabilities: UiProtocolCapabilities | undefined;
+  /** The `peer/control` leaf, or null before one is built (null ⇒ no seat). */
+  readonly leaf: PeerControlLeaf | null;
+  /** Caller-held fence; the token is passed through, never rendered. */
+  readonly fence: PeerControlFence;
+  /** Caller-held target identity. */
+  readonly target: PeerControlTarget;
+  /** Observable state, owned by the caller. */
+  readonly state: PeerControlPanelState;
+  /** Activation sink; the bar never calls the leaf on render. */
+  readonly onSend?: ((command: PeerControlCommand) => void) | undefined;
 }
 
 /**
@@ -684,13 +755,102 @@ function ControlError({ message, retryLabel, onRetry }: ControlErrorProps) {
  * the right seat. Missing capabilities remove their seat instead of exposing
  * a dead product control.
  */
+const MS_DATE_MAX = 8_640_000_000_000_000;
+
+/**
+ * Neutral lease copy. Zero is the ONLY "no active lease" case; a positive
+ * lease is never rendered as live and never throws — a finite in-range value
+ * gets an ISO timestamp, an out-of-range/non-finite wire u64 falls back to its
+ * raw value instead of a false "no lease" claim.
+ */
+function leaseCopy(leaseExpiresAtMs: number, t: UiText): string {
+  if (leaseExpiresAtMs <= 0) return t("No active lease");
+  const shown =
+    Number.isFinite(leaseExpiresAtMs) && leaseExpiresAtMs <= MS_DATE_MAX
+      ? new Date(leaseExpiresAtMs).toISOString()
+      : String(leaseExpiresAtMs);
+  return t("Lease expires {value0}", { value0: shown });
+}
+
+/**
+ * Read-only, keyboard-native controller disclosure. Only the four public
+ * disclosure fields are read: `mode` is authoritative (a zero-lease external
+ * stays external), `recovery` is the untruncated union, and the binding is
+ * rendered only when present. No control token, workspace path, raw RPC map,
+ * or non-whitelisted extra is ever spread or rendered.
+ */
+function DriverControllerDisclosure({
+  disclosure,
+}: {
+  disclosure: DriverInventoryDisclosure;
+}) {
+  const t = useUiText();
+  const mode =
+    disclosure.mode === "external"
+      ? t("External controller")
+      : t("Internal controller");
+  const recovery =
+    disclosure.recovery === "interrupted"
+      ? t("Interrupted")
+      : disclosure.recovery === "recovery_required"
+        ? t("Recovery required")
+        : t("No recovery pending");
+  const binding = disclosure.binding;
+  return (
+    <details
+      className={styles.disclosure}
+      data-control-disclosure="driver"
+      aria-label={t("Session controller")}
+    >
+      <summary className={styles.disclosureSummary}>{mode}</summary>
+      <dl className={styles.disclosureFacts}>
+        <div className={styles.disclosureRow}>
+          <dt>{t("Recovery")}</dt>
+          <dd>{recovery}</dd>
+        </div>
+        {binding ? (
+          <>
+            <div className={styles.disclosureRow}>
+              <dt>{t("Driver")}</dt>
+              <dd className={styles.disclosureValue}>{binding.driverId}</dd>
+            </div>
+            <div className={styles.disclosureRow}>
+              <dt>{t("Epoch")}</dt>
+              <dd>{String(binding.epoch)}</dd>
+            </div>
+            <div className={styles.disclosureRow}>
+              <dt>{t("Revision")}</dt>
+              <dd>{String(binding.revision)}</dd>
+            </div>
+            <div className={styles.disclosureRow}>
+              <dt>{t("Lease")}</dt>
+              <dd>{leaseCopy(binding.leaseExpiresAtMs, t)}</dd>
+            </div>
+          </>
+        ) : null}
+      </dl>
+    </details>
+  );
+}
+
 export function SessionControlBar({
   ariaLabel,
   permission,
   model,
   runtimeModel = null,
+  driverInventory,
+  peerControl,
+  peerController,
 }: SessionControlBarProps) {
-  if (permission === null && model === null && runtimeModel === null)
+  const t = useUiText();
+  const disclosure =
+    driverInventory?.kind === "complete" ? driverInventory.disclosure : null;
+  if (
+    permission === null &&
+    model === null &&
+    runtimeModel === null &&
+    disclosure === null
+  )
     return null;
   const runtimeLabel = runtimeModel?.label?.trim() || "not reported";
   const pendingRestartCopy = runtimeModel?.pendingProfileDefault
@@ -703,26 +863,77 @@ export function SessionControlBar({
           <PermissionControl {...permission} />
         </div>
       ) : null}
+      {disclosure ? (
+        <div className={styles.controllerSeat} data-control-seat="driver">
+          <DriverControllerDisclosure disclosure={disclosure} />
+        </div>
+      ) : null}
+      {peerControl && peerControl.readiness === "ready" ? (
+        <div className={styles.controllerSeat} data-control-seat="peer">
+          <PeerControlPanel
+            capabilities={peerControl.capabilities}
+            leaf={peerControl.leaf}
+            fence={peerControl.fence}
+            target={peerControl.target}
+            state={peerControl.state}
+            {...(peerControl.onSend ? { onSend: peerControl.onSend } : {})}
+          />
+        </div>
+      ) : null}
+      {peerController && peerController.readiness === "ready" ? (
+        <div
+          className={styles.controllerSeat}
+          data-control-seat="peer-controller"
+        >
+          <PeerControllerPanel
+            capabilities={peerController.capabilities}
+            lanePicker={peerController.lanePicker}
+            seatHeld={peerController.seatHeld}
+            binding={peerController.binding}
+            roster={peerController.roster}
+            state={peerController.state}
+            {...(peerController.onDispatch
+              ? { onDispatch: peerController.onDispatch }
+              : {})}
+            {...(peerController.onReleaseSeat
+              ? { onReleaseSeat: peerController.onReleaseSeat }
+              : {})}
+            {...(peerController.seatReleased ? { seatReleased: true } : {})}
+            {...(peerController.onAcquireSeat
+              ? { onAcquireSeat: peerController.onAcquireSeat }
+              : {})}
+            {...(peerController.onRowAction
+              ? { onRowAction: peerController.onRowAction }
+              : {})}
+          />
+        </div>
+      ) : null}
       {runtimeModel || model ? (
         <div className={styles.rightSeat} data-control-seat="model">
           {runtimeModel ? (
             <button
               type="button"
               className={styles.trigger}
-              aria-label={`Runtime model: ${runtimeLabel}.${pendingRestartCopy} Open Settings.`}
+              aria-label={t("Runtime model: {value0}.{value1} Open Settings.", {
+                value0: String(runtimeLabel),
+                value1: String(pendingRestartCopy),
+              })}
               aria-haspopup="dialog"
-              title="The model reported by this Session runtime."
+              title={t("The model reported by this Session runtime.")}
               onClick={runtimeModel.onOpenSettings}
             >
               <span className={styles.triggerLabel}>
                 {runtimeLabel === "not reported"
-                  ? "Runtime not reported"
+                  ? t("Runtime not reported")
                   : runtimeLabel}
               </span>
               {runtimeModel.pendingProfileDefault ? (
                 <span
                   className={styles.pendingDot}
-                  title={`Profile default ${runtimeModel.pendingProfileDefault} is pending an Octos restart`}
+                  title={t(
+                    "Profile default {value0} is pending an Octos restart",
+                    { value0: String(runtimeModel.pendingProfileDefault) },
+                  )}
                   aria-hidden="true"
                 />
               ) : null}

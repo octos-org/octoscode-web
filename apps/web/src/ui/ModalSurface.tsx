@@ -48,8 +48,33 @@ export function ModalSurface({
   children,
 }: ModalSurfaceProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
+
+  // While open, hide the app background from assistive tech so this surface is
+  // the only announced content. The exact prior state is restored on close or
+  // unmount, including an unmount while the surface is still open.
+  useEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    const background =
+      document.querySelector<HTMLElement>("main.workspace-grid") ??
+      backdrop.parentElement?.querySelector<HTMLElement>(":scope > main") ??
+      null;
+    // Never hide a container that holds this surface.
+    if (!background || background.contains(backdrop)) return;
+    const previousAriaHidden = background.getAttribute("aria-hidden");
+    background.setAttribute("aria-hidden", "true");
+    return () => {
+      if (background.getAttribute("aria-hidden") !== "true") return;
+      if (previousAriaHidden === null) {
+        background.removeAttribute("aria-hidden");
+      } else {
+        background.setAttribute("aria-hidden", previousAriaHidden);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -157,6 +182,7 @@ export function ModalSurface({
   return (
     <div
       className={backdropClassName}
+      ref={backdropRef}
       role="presentation"
       onMouseDown={(event) => {
         if (

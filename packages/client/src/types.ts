@@ -1,3 +1,6 @@
+import type { ContextSnapshot } from "./context.ts";
+import type { TurnMedia } from "./media.ts";
+
 export interface UiCursor {
   stream: string;
   seq: number;
@@ -342,6 +345,7 @@ export interface PlanUpdated {
 
 export interface SessionStatusReadResult {
   session_id: string;
+  contextSnapshot?: ContextSnapshot;
   runtime_mode?: string;
   profile_id?: string;
   cwd?: string;
@@ -562,6 +566,7 @@ export interface TurnStartParams {
   input: Array<{ kind: "text"; text: string }>;
   topic?: string;
   reasoning_effort?: string;
+  media?: TurnMedia[];
 }
 
 export interface ProjectionPayload {

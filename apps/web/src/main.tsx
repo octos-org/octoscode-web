@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { FatalErrorBoundary } from "./features/error/FatalErrorBoundary.tsx";
+import { PreferencesProvider } from "./features/preferences/preferences.tsx";
 import "./app/theme.css";
 import "./app/styles.css";
 
@@ -11,7 +12,9 @@ if (!root) throw new Error("Missing #root mount point");
 createRoot(root).render(
   <StrictMode>
     <FatalErrorBoundary>
-      <App />
+      <PreferencesProvider>
+        <App />
+      </PreferencesProvider>
     </FatalErrorBoundary>
   </StrictMode>,
 );

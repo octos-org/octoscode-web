@@ -17,9 +17,7 @@ async function connectAndStartWorkspace(page: Page): Promise<void> {
 }
 
 async function openModelSettings(page: Page): Promise<Locator> {
-  const productNavigation = page.getByRole("complementary", {
-    name: "Product navigation",
-  });
+  const productNavigation = page.locator("aside");
   await productNavigation.getByRole("button", { name: "Settings" }).click();
 
   const settings = page.getByRole("dialog", { name: "Settings" });
@@ -177,7 +175,7 @@ test("keeps a rejected provider draft while redacting the failure", async ({
   await editor.getByLabel("API key").fill(rejectedCredential);
   await editor.getByRole("button", { name: "Test connection" }).click();
 
-  await expect(editor.getByRole("alert")).toHaveText(
+  await expect(editor.locator('[role="alert"]')).toHaveText(
     "Connection failed. Check the endpoint, protocol, model, and credential.",
   );
   await expect(editor.getByLabel("Provider / family ID")).toHaveValue(

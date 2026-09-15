@@ -139,6 +139,39 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.contextUsage {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+}
+
+.preferencesTrigger {
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preferencesTrigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Skip-link target that hosts both routed panes (chat + Fleet) in the
+   workspace grid's content column; only one pane is unhidden at a time. */
+.workspaceMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sessionControlsFallback {
   flex: 1;
   min-width: 0;
@@ -203,6 +236,17 @@
 }
 
 @media (max-width: 760px) {
+  .preferencesTrigger {
+    width: 32px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .preferencesTrigger::before {
+    content: "⚙︎";
+    font-size: 18px;
+  }
+
   .sidebarFallback {
     width: 100%;
     min-height: 220px;

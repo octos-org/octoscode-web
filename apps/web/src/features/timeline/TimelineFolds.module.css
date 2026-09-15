@@ -1,0 +1,93 @@
+/* Foldable transcript blocks (UX5). Colocated CSS module consuming DSH aliases. */
+
+.foldHeaderButton {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.foldHeaderButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-focus, currentColor);
+  outline-offset: 2px;
+}
+
+.foldSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foldChevron {
+  flex: none;
+  font-size: 10px;
+  color: var(--dsw-alias-label-caption, inherit);
+  transition: transform 120ms ease-in-out;
+}
+
+.foldChevronOpen {
+  transform: rotate(90deg);
+}
+
+.foldBody {
+  margin: 4px 0 8px;
+}
+
+.timelineFoldsBar {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.timelineFoldsButton {
+  background: none;
+  border: none;
+  color: var(--dsw-alias-label-caption, inherit);
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.timelineFoldsButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-focus, currentColor);
+  outline-offset: 2px;
+}
+
+/* The TUI's galaxy-swirl spinner, as a CSS animation. */
+.thinkingSpinner {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  animation: galaxy-swirl 0.96s linear infinite;
+}
+
+@keyframes galaxy-swirl {
+  0% { content: "◜"; }
+  12.5% { content: "◠"; }
+  25% { content: "◝"; }
+  37.5% { content: "◞"; }
+  50% { content: "◡"; }
+  62.5% { content: "◟"; }
+  75% { content: "✦"; }
+  87.5% { content: "✧"; }
+  100% { content: "◜"; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinkingSpinner {
+    animation: none;
+  }
+  .foldChevron {
+    transition: none;
+  }
+}

@@ -32,6 +32,47 @@ function basePath(): string {
 
 export default defineConfig({
   base: basePath(),
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          // Receipts load only after their explicit typed RPC. Narrow tests
+          // keep live-event/capability helpers out of these cold chunks and
+          // leave unrelated app/vendor modules to normal chunk optimization.
+          groups: ["hydrate", "session", "client"].map((name) => ({
+            name: `receipt-${name}`,
+            test: (id: string) =>
+              id
+                .replaceAll("\\", "/")
+                .endsWith(`packages/client/src/${name}.ts`),
+            includeDependenciesRecursively: false,
+          })).concat([
+            {
+              // v0.10.0: guards and contract constants shared by synchronous
+              // notifications and lazy response decoders stay isolated so a
+              // notification guard cannot preload task/workspace/hydrate
+              // decoders.
+              name: "protocol-values",
+              test: (id: string) =>
+                /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|turn-state-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
+                  id,
+                ),
+              includeDependenciesRecursively: false,
+            },
+            {
+              // v0.10.0: stable React vendor chunk for returning users.
+              name: "vendor-react",
+              test: (id: string) =>
+                /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(
+                  id,
+                ),
+              includeDependenciesRecursively: true,
+            },
+          ]),
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     {
@@ -58,33 +99,6 @@ export default defineConfig({
       },
     },
   ],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id: string) {
-          // These guards and contract constants are shared by synchronous
-          // notifications and lazy response decoders. Isolate that edge so
-          // importing a notification guard or method name cannot preload
-          // task, workspace or hydration decoders.
-          if (
-            /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|turn-state-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
-              id,
-            )
-          ) {
-            return "protocol-values";
-          }
-          // Keep react/react-dom in a stable vendor chunk so shipping app
-          // changes does not invalidate the largest dependency (178 kB) for
-          // returning users.
-          if (
-            /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)
-          ) {
-            return "vendor-react";
-          }
-        },
-      },
-    },
-  },
   server: {
     port: 4173,
     ...developmentProxy(),

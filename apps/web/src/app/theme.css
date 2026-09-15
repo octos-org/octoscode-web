@@ -111,3 +111,135 @@
 :root[data-theme="light"] {
   color-scheme: light;
 }
+
+/* Named colors follow the pinned native Octoscode Theme palettes. Terminal
+   deliberately inherits app/theme.css and its browser light/dark preference. */
+:root[data-display-theme="terminal"] {
+  color-scheme: light dark;
+}
+
+:root[data-display-theme="codex"],
+:root[data-display-theme="claude"],
+:root[data-display-theme="slate"],
+:root[data-display-theme="solarized"] {
+  color-scheme: dark;
+  --dsw-alias-bg-base: var(--display-surface);
+  --dsw-alias-bg-layer-1: var(--display-alt);
+  --dsw-alias-bg-layer-2: var(--display-alt);
+  --dsw-alias-bg-layer-3: var(--display-frame);
+  --dsw-alias-bg-mask-1: rgb(0 0 0 / 50%);
+  --dsw-alias-bg-mask-strong: rgb(0 0 0 / 68%);
+  --dsw-alias-border-l1: color-mix(
+    in srgb,
+    var(--display-frame) 50%,
+    transparent
+  );
+  --dsw-alias-border-l2: var(--display-frame);
+  --dsw-alias-border-l2-darkmode-thin: var(--display-frame);
+  --dsw-alias-border-l3: var(--display-muted);
+  --dsw-alias-button-elevated-fill: var(--display-alt);
+  --dsw-alias-button-floating-fill: var(--display-alt);
+  --dsw-alias-button-floating-hover: var(--display-frame);
+  --dsw-alias-button-info-fill: var(--display-accent);
+  --dsw-alias-button-info-hover: color-mix(
+    in srgb,
+    var(--display-accent) 85%,
+    white
+  );
+  --dsw-alias-interactive-bg-hover: color-mix(
+    in srgb,
+    var(--display-frame) 40%,
+    transparent
+  );
+  --dsw-alias-interactive-bg-hover-solid: var(--display-frame);
+  --dsw-alias-interactive-bg-hover-danger: var(--display-danger-bg);
+  --dsw-alias-label-caption: var(--display-muted);
+  --dsw-alias-label-primary: var(--display-text);
+  --dsw-alias-label-primary-dimmed: var(--display-text);
+  --dsw-alias-label-secondary: color-mix(
+    in srgb,
+    var(--display-text) 80%,
+    var(--display-muted)
+  );
+  --dsw-alias-label-tertiary: var(--display-muted);
+  --dsw-alias-label-on-accent: var(--display-surface);
+  --dsw-alias-state-business-primary: var(--display-accent);
+  --dsw-alias-state-error-primary: var(--display-danger);
+  --dsw-alias-state-error-secondary: var(--display-danger);
+  --dsw-alias-state-success-primary: var(--display-success);
+  --dsw-alias-state-success-text: var(--display-success);
+  --dsw-alias-state-warn-primary: var(--display-highlight);
+  --dsw-alias-state-warn-text: var(--display-highlight);
+  --dsw-alias-state-warn-secondary: var(--display-highlight);
+  --dsw-alias-state-warn-tertiary: var(--display-alt);
+  --dsw-specific-bubble: var(--display-alt);
+  --dsw-specific-input-major: var(--display-alt);
+  --dsw-specific-menu: var(--display-alt);
+  --dsw-specific-selector: var(--display-alt);
+  --dsw-specific-sidebar-fill: var(--display-surface);
+  --dsw-specific-tip: var(--display-code);
+  --shiki-foreground: var(--display-text);
+  --shiki-background: var(--display-code);
+  --shiki-token-constant: var(--display-accent);
+  --shiki-token-string: var(--display-success);
+  --shiki-token-comment: var(--display-muted);
+  --shiki-token-keyword: var(--display-danger);
+  --shiki-token-parameter: var(--display-highlight);
+  --shiki-token-function: var(--display-accent);
+  --shiki-token-string-expression: var(--display-success);
+  --shiki-token-punctuation: var(--display-text);
+  --shiki-token-link: var(--display-accent);
+}
+
+:root[data-display-theme="codex"] {
+  --display-surface: #0f1218;
+  --display-alt: #1a1e27;
+  --display-frame: #5a5e6c;
+  --display-accent: #6ebcff;
+  --display-highlight: #ffd166;
+  --display-text: #eceff4;
+  --display-muted: #9aa2af;
+  --display-success: #68d391;
+  --display-danger: #f87171;
+  --display-danger-bg: #401b20;
+  --display-code: #161a22;
+}
+:root[data-display-theme="claude"] {
+  --display-surface: #261f1a;
+  --display-alt: #362c24;
+  --display-frame: #5c4e41;
+  --display-accent: #f28f5d;
+  --display-highlight: #7ed2a6;
+  --display-text: #f4f1ea;
+  --display-muted: #aea496;
+  --display-success: #78cd96;
+  --display-danger: #eb6f6a;
+  --display-danger-bg: #462622;
+  --display-code: #2d251f;
+}
+:root[data-display-theme="slate"] {
+  --display-surface: #141923;
+  --display-alt: #1c222e;
+  --display-frame: #303949;
+  --display-accent: #6397ff;
+  --display-highlight: #f6c75e;
+  --display-text: #e6ecf2;
+  --display-muted: #919caa;
+  --display-success: #5bc481;
+  --display-danger: #e85f5f;
+  --display-danger-bg: #3a1c20;
+  --display-code: #181f2b;
+}
+:root[data-display-theme="solarized"] {
+  --display-surface: #002b36;
+  --display-alt: #073642;
+  --display-frame: #586e75;
+  --display-accent: #268bd2;
+  --display-highlight: #b58900;
+  --display-text: #eee8d5;
+  --display-muted: #93a1a1;
+  --display-success: #859900;
+  --display-danger: #dc322f;
+  --display-danger-bg: #4b2c30;
+  --display-code: #05323d;
+}

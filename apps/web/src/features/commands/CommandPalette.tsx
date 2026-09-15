@@ -1,4 +1,5 @@
 import type { WebCommandSpec } from "./registry.ts";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface CommandPaletteProps {
   id: string;
@@ -13,6 +14,7 @@ export function CommandPalette({
   selectedIndex,
   onSelect,
 }: CommandPaletteProps) {
+  const t = useUiText();
   if (commands.length === 0) return null;
 
   return (
@@ -20,7 +22,7 @@ export function CommandPalette({
       className="command-palette"
       id={id}
       role="listbox"
-      aria-label="Commands"
+      aria-label={t("Commands")}
     >
       {commands.map((command, index) => (
         <button
@@ -36,9 +38,9 @@ export function CommandPalette({
         >
           <span>
             <strong>/{command.name}</strong>
-            <small>{command.description}</small>
+            <small>{t(command.description)}</small>
           </span>
-          <em>{command.category}</em>
+          <em>{t(command.category)}</em>
         </button>
       ))}
     </div>

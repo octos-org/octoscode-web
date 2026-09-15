@@ -1,0 +1,34 @@
+.panel {
+  display: grid;
+  gap: var(--dsw-space-4, 1rem);
+  color: var(--dsw-alias-label-primary);
+}
+
+.form,
+.form label {
+  display: grid;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.form textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.roster {
+  display: grid;
+  gap: var(--dsw-space-3, 0.75rem);
+  padding-inline-start: 1.5rem;
+}
+
+.row {
+  padding-block: var(--dsw-space-3, 0.75rem);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.result {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+}

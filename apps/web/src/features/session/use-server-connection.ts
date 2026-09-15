@@ -1,18 +1,19 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import type { OctosUiClient } from "@octos-org/octoscode-client";
-import {
-  ActiveSessionRuntime,
-  type ActiveSessionRuntimeEvent,
-  type ActiveSessionRuntimeOptions,
-  type ActiveSessionRuntimeSnapshot,
+import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
+import type {
+  ActiveSessionRuntimeEvent,
+  ActiveSessionRuntimeOptions,
+  ActiveSessionRuntimeSnapshot,
 } from "./active-session-runtime.ts";
+import { LazyServerRuntime } from "./lazy-server-runtime.ts";
 
-interface UseServerConnectionOptions extends ActiveSessionRuntimeOptions<OctosUiClient> {
+interface UseServerConnectionOptions extends Omit<ActiveSessionRuntimeOptions<OctosUiClient>, "createClient"> {
+  loadClientFactory(): Promise<ActiveSessionRuntimeOptions<OctosUiClient>["createClient"]>;
   onEvent(event: ActiveSessionRuntimeEvent<OctosUiClient>): void;
 }
 
 export interface ServerConnectionController {
-  runtime: ActiveSessionRuntime<OctosUiClient>;
+  runtime: LazyServerRuntime<OctosUiClient>;
   snapshot: ActiveSessionRuntimeSnapshot;
 }
 
@@ -22,9 +23,12 @@ export function useServerConnection(
 ): ServerConnectionController {
   const eventSinkRef = useRef(options.onEvent);
   eventSinkRef.current = options.onEvent;
-  const runtimeRef = useRef<ActiveSessionRuntime<OctosUiClient> | null>(null);
+  const runtimeRef = useRef<LazyServerRuntime<OctosUiClient> | null>(null);
   if (!runtimeRef.current) {
-    runtimeRef.current = new ActiveSessionRuntime(options);
+    runtimeRef.current = new LazyServerRuntime(async () => ({
+      ...options,
+      createClient: await options.loadClientFactory(),
+    }));
   }
   const runtime = runtimeRef.current;
   const snapshot = useSyncExternalStore(

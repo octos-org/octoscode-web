@@ -4,7 +4,23 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./transport": "./src/client.ts",
+    "./protocol": "./src/protocol.ts",
+    "./history": "./src/history.ts",
+    "./inspection": "./src/inspection.ts",
+    "./btw": "./src/btw.ts",
+    "./steer": "./src/steer.ts",
+    "./inventory": "./src/inventory.ts",
+    "./skills": "./src/skills.ts",
+    "./research": "./src/research.ts",
+    "./media": "./src/media.ts",
+    "./peers": "./src/peers.ts",
+    "./peer-protocol": "./src/peer-protocol.ts",
+    "./autonomy": "./src/autonomy.ts",
+    "./external-driver": "./src/external-driver.ts",
+    "./external-driver-meta": "./src/external-driver-meta.ts",
+    "./onboarding": "./src/onboarding.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

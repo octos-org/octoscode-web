@@ -11,7 +11,7 @@ import {
   type RpcNotification,
   type TaskArtifactRecord,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import {
   appendTaskArtifactPage,
   appendTaskOutputDelta,
@@ -165,7 +165,7 @@ export function useSupervision(
       !sessionId ||
       !state.taskListAvailable ||
       (!state.taskOutputAvailable && !state.artifactsAvailable) ||
-      !state.tasks.some((task) => task.id === taskId)
+      !taskId
     ) {
       return;
     }

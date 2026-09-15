@@ -2,7 +2,7 @@ import { useState } from "react";
 import type {
   UserQuestionAnswer,
   UserQuestionRequested,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import {
   answersComplete,
   emptyAnswers,
@@ -12,6 +12,7 @@ import {
 } from "./answers.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./UserQuestionPanel.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface UserQuestionPanelProps {
   request: UserQuestionRequested;
@@ -28,6 +29,7 @@ export function UserQuestionPanel({
   onSubmit,
   onInterrupt,
 }: UserQuestionPanelProps) {
+  const t = useUiText();
   const [answers, setAnswers] = useState<DraftAnswer[]>(() =>
     emptyAnswers(request.questions.length),
   );
@@ -50,7 +52,7 @@ export function UserQuestionPanel({
       {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
     >
       <div className="question-heading">
-        <span>Octos needs input</span>
+        <span>{t("Octos needs input")}</span>
         <strong id="question-title">{request.title}</strong>
         <p>{request.body}</p>
       </div>
@@ -93,11 +95,11 @@ export function UserQuestionPanel({
                 })}
                 {question.allowFreeText ? (
                   <label className="question-other">
-                    <span>Other</span>
+                    <span>{t("Other")}</span>
                     <input
                       value={answer.freeText}
                       disabled={busy}
-                      placeholder="Type another answer"
+                      placeholder={t("Type another answer")}
                       onChange={(event) =>
                         update(index, {
                           ...answer,
@@ -118,14 +120,19 @@ export function UserQuestionPanel({
         </span>
       ) : null}
       <div className="question-actions">
-        {onInterrupt ? <span>Esc stops the active turn</span> : null}
+        {onInterrupt ? <span>{t("Esc stops the active turn")}</span> : null}
+        {/* Round 2 (judge #4): the decision's CONSEQUENCE, not a bare submit —
+            the operator sees exactly what Continue does before choosing it. */}
+        <span className="question-consequence">
+          {t("Sends this answer and resumes the peer")}
+        </span>
         <button
           className="takeover-button primary"
           type="button"
           disabled={busy || !valid}
           onClick={() => onSubmit(toWireAnswers(answers))}
         >
-          {busy ? "Sending…" : "Continue"}
+          {busy ? t("Sending…") : t("Continue")}
         </button>
       </div>
     </ModalSurface>

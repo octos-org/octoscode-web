@@ -1,4 +1,4 @@
-import type { SessionOpened } from "@octos-org/octoscode-client";
+import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
 
 const MAX_KNOWN_SESSIONS = 100;
 const LIMITS = {

@@ -766,6 +766,35 @@ label > span {
   background: var(--dsw-alias-bg-base);
 }
 
+/* 4200c: `display: grid` above OUTRANKS the UA's [hidden] { display: none },
+   so a "hidden" pane still took a grid cell (Fleet rendered 240px wide in the
+   sidebar column while chat filled the main slot). The explicit override
+   restores the attribute's meaning: hidden panes leave the layout entirely. */
+.conversation[hidden] {
+  display: none;
+}
+
+/* Round 4 A: the routed Fleet pane wrapper (a non-landmark div; FleetView's
+   own <section aria-label="Fleet"> stays the ONE Fleet region). Secondary
+   styling matches the app's picker buttons. */
+.fleet-pane {
+  grid-template-rows: 52px minmax(0, 1fr);
+}
+
+.fleet-back {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  border-radius: var(--dsw-radius-control, 6px);
+  padding: 4px 12px;
+  font-size: var(--dsw-font-size-micro);
+  cursor: pointer;
+}
+
+.fleet-back:hover:not(:disabled) {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
 .conversation-header {
   display: flex;
   align-items: center;

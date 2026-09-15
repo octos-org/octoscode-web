@@ -4,7 +4,7 @@ import {
   parseProjectionEnvelope,
   type RpcNotification,
   type SessionHydrateResult,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 
 export type TimelineKind =
   "user" | "assistant" | "reasoning" | "tool" | "system";
@@ -23,10 +23,29 @@ export interface TimelineEntry {
   turnSettled?: true;
   toolSettled?: true;
   latestTurnOutcome?: string;
+  /** Explicit terminal state from this owner's hydrate/live lifecycle. */
+  textTerminal?: "completed" | "errored" | "interrupted";
+  omittedCount?: number;
+  /** First-seen wall-clock for a streamed block (duration in fold headers). */
+  startedAtMs?: number;
+  /** Latest stream time while running; final time once settled. */
+  endedAtMs?: number;
+}
+
+export interface HydratedAssistantIdentity {
+  messageId: string;
+  turnId: string;
+  segmentId: string;
+}
+
+export interface HydratedTimelineIdentityOptions {
+  previous?: readonly TimelineEntry[];
+  assistantIdentities?: readonly HydratedAssistantIdentity[];
 }
 
 export function timelineFromHydrate(
   result: SessionHydrateResult,
+  identities: HydratedTimelineIdentityOptions = {},
 ): TimelineEntry[] {
   let entries: TimelineEntry[] = [];
   // rc.9 transcript rows carry a thread_id but usually no turn_id. Only a
@@ -101,6 +120,62 @@ export function timelineFromHydrate(
       ...(turnId ? { turnId } : {}),
       ...(message.message_id ? { messageId: message.message_id } : {}),
     });
+  }
+
+  // Hydrate prose is authoritative. Retain only a one-to-one, explicitly
+  // witnessed message/turn/segment relationship; never correlate by text.
+  const claims = [
+    ...(identities.previous ?? []).flatMap((entry) =>
+      entry.kind === "assistant" &&
+      entry.messageId &&
+      entry.turnId &&
+      entry.streamId?.startsWith(`assistant:${entry.turnId}:`)
+        ? [
+            {
+              messageId: entry.messageId,
+              turnId: entry.turnId,
+              streamId: entry.streamId,
+            },
+          ]
+        : [],
+    ),
+    ...(identities.assistantIdentities ?? []).map((identity) => ({
+      ...identity,
+      streamId: `assistant:${identity.turnId}:${identity.segmentId}`,
+    })),
+  ];
+  const messageCounts = new Map<string, number>();
+  for (const message of result.messages ?? []) {
+    if (message.message_id)
+      messageCounts.set(
+        message.message_id,
+        (messageCounts.get(message.message_id) ?? 0) + 1,
+      );
+  }
+  const byMessage = new Map<string, Set<string>>();
+  const byStream = new Map<string, Set<string>>();
+  for (const claim of claims) {
+    const messages = byMessage.get(claim.messageId) ?? new Set<string>();
+    messages.add(JSON.stringify([claim.turnId, claim.streamId]));
+    byMessage.set(claim.messageId, messages);
+    const streams = byStream.get(claim.streamId) ?? new Set<string>();
+    streams.add(claim.messageId);
+    byStream.set(claim.streamId, streams);
+  }
+  for (const claim of claims) {
+    if (
+      messageCounts.get(claim.messageId) !== 1 ||
+      byMessage.get(claim.messageId)?.size !== 1 ||
+      byStream.get(claim.streamId)?.size !== 1
+    )
+      continue;
+    entries = entries.map((entry) =>
+      entry.kind === "assistant" &&
+      entry.messageId === claim.messageId &&
+      entry.turnId === claim.turnId
+        ? { ...entry, streamId: claim.streamId }
+        : entry,
+    );
   }
 
   const replayed = [
@@ -181,11 +256,16 @@ export function timelineFromHydrate(
       }
     }
   }
-  entries = entries.map((entry) =>
-    entry.turnId && terminalTurns.has(entry.turnId)
-      ? { ...entry, turnSettled: true }
-      : entry,
-  );
+  entries = entries.map((entry) => {
+    const outcome = entry.turnId ? terminalTurns.get(entry.turnId) : undefined;
+    return outcome
+      ? {
+          ...entry,
+          turnSettled: true,
+          textTerminal: outcome as NonNullable<TimelineEntry["textTerminal"]>,
+        }
+      : entry;
+  });
   return withHydratedTurnOutcome(entries, result);
 }
 
@@ -330,6 +410,7 @@ export function foldNotification(
         body: pretty(params.arguments),
         status: "running",
         turnId,
+        startedAtMs: Date.now(),
       });
     case CORE_UI_METHODS.TOOL_PROGRESS:
       return progressTool(
@@ -487,6 +568,7 @@ function foldProjection(
         body: stringOf(data.arguments_preview),
         status: "running",
         turnId,
+        startedAtMs: Date.now(),
       });
     }
     case "tool_progress":
@@ -588,7 +670,13 @@ function appendText(
   const existing = entries.find(
     (entry) => entry.id === id || entry.streamId === id,
   );
-  if (!value || (kind === "assistant" && existing?.status === "complete")) {
+  // rc11 can emit its canonical full persisted segment before queued streaming
+  // deltas with larger cursors. Receipt finality wins over delivery order.
+  if (
+    !value ||
+    (kind === "assistant" &&
+      (existing?.status === "complete" || existing?.status === "error"))
+  ) {
     return entries.slice();
   }
   return upsert(entries, {
@@ -598,6 +686,8 @@ function appendText(
     body: `${existing?.body ?? ""}${value}`,
     status: "running",
     turnId,
+    startedAtMs: existing?.startedAtMs ?? Date.now(),
+    endedAtMs: Date.now(),
   });
 }
 
@@ -642,6 +732,9 @@ function sweepTurnStreamtails(
       }
       next.push({
         ...entry,
+        ...(entry.startedAtMs !== undefined
+          ? { endedAtMs: entry.endedAtMs ?? Date.now() }
+          : {}),
         status:
           entry.kind === "tool"
             ? outcome === "completed" || outcome === "interrupted"
@@ -666,7 +759,8 @@ function hasTerminal(
   return entries.some(
     (entry) =>
       entry.id === `terminal:${turnId}` ||
-      (entry.turnId === turnId && entry.turnSettled),
+      (entry.turnId === turnId &&
+        (entry.turnSettled || entry.textTerminal !== undefined)),
   );
 }
 
@@ -678,7 +772,13 @@ function settleReasoning(
     entry.turnId === turnId &&
     entry.kind === "reasoning" &&
     entry.status === "running"
-      ? { ...entry, status: "complete" }
+      ? {
+          ...entry,
+          status: "complete",
+          ...(entry.startedAtMs !== undefined
+            ? { endedAtMs: entry.endedAtMs ?? Date.now() }
+            : {}),
+        }
       : entry,
   );
 }
@@ -774,6 +874,7 @@ function completeTool(
       turnId,
     }),
     ...result,
+    ...(existing?.startedAtMs !== undefined ? { endedAtMs: Date.now() } : {}),
     toolSettled: true,
     ...(hasTerminal(entries, turnId) ? { turnSettled: true } : {}),
   });
@@ -973,6 +1074,14 @@ function upsert(
 ): TimelineEntry[] {
   const index = entries.findIndex((entry) => entry.id === next.id);
   if (index < 0) return [...entries, next];
+  const previous = entries[index];
+  // A hydrated terminal fence survives later canonical refinement of the row.
+  if (
+    previous?.textTerminal &&
+    previous.turnId === next.turnId &&
+    next.textTerminal === undefined
+  )
+    next = { ...next, textTerminal: previous.textTerminal };
   return entries.map((entry, current) => (current === index ? next : entry));
 }
 
@@ -983,6 +1092,7 @@ function patchEntry(
     body?: string | undefined;
     status?: TimelineStatus;
     statusLabel?: string;
+    endedAtMs?: number;
   },
 ): TimelineEntry[] {
   return entries.map((entry) =>
@@ -994,6 +1104,9 @@ function patchEntry(
           ...(patch.statusLabel === undefined
             ? {}
             : { statusLabel: patch.statusLabel }),
+          ...(patch.endedAtMs === undefined
+            ? {}
+            : { endedAtMs: patch.endedAtMs }),
         }
       : entry,
   );

@@ -11,6 +11,9 @@ const fixtureAuthTokens = [
   "forget-me-token",
   fixtureProfileAuthToken,
 ];
+const e2eChannel = explicitBrowserChannel("OCTOSCODE_E2E_CHANNEL");
+const buildCommand =
+  process.env.OCTOSCODE_E2E_SKIP_BUILD === "1" ? "" : "pnpm build && ";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -29,6 +32,11 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
+        // Default to the Playwright-bundled Chromium so the product gate runs
+        // on any machine that ran `playwright install chromium`. Developers
+        // with a real browser may opt into a release channel explicitly;
+        // CI keeps the hermetic bundled default.
+        ...(e2eChannel ? { channel: e2eChannel } : {}),
       },
     },
   ],
@@ -47,11 +55,11 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: `pnpm --filter @octos-org/octoscode-web exec vite --host 127.0.0.1 --port ${webPort}`,
+      command: `${buildCommand}pnpm --filter @octos-org/octoscode-web exec vite preview --host 127.0.0.1 --port ${webPort}`,
       url: webOrigin,
       env: { VITE_OCTOS_DEFAULT_ENDPOINT: fixtureOrigin },
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 120_000,
     },
   ],
 });
@@ -62,4 +70,10 @@ function testPort(name: string, fallback: number): number {
     throw new Error(`${name} must be a valid TCP port`);
   }
   return value;
+}
+
+function explicitBrowserChannel(name: string): string | undefined {
+  const channel = process.env[name]?.trim();
+  if (!channel) return undefined;
+  return channel;
 }

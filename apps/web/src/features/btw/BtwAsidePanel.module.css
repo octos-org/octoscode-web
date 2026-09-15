@@ -1,0 +1,41 @@
+.panel {
+  max-height: min(50dvh, 480px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  overflow-wrap: anywhere;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.header button {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+}
+
+.question {
+  white-space: pre-wrap;
+}
+
+.note {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.85rem;
+}

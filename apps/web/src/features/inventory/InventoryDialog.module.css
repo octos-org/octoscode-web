@@ -1,0 +1,64 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--dsw-alias-bg-mask-1);
+}
+.dialog {
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.header h2 {
+  margin: 0;
+}
+.scope {
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-tertiary);
+}
+.rows {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.rows article {
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.rows h3,
+.rows p {
+  margin: 0 0 8px;
+}
+.dialog button,
+.dialog input {
+  padding: 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+.dialog button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dialog input {
+  box-sizing: border-box;
+  width: 100%;
+}

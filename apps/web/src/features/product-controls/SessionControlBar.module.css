@@ -401,6 +401,92 @@
   cursor: default;
 }
 
+/* Read-only external-driver disclosure seat. Native details/summary keeps
+ * keyboard focus/expand semantics; the row wraps and clamps long driver ids. */
+.controllerSeat {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(320px, 40cqw);
+}
+
+.disclosure {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.disclosureSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 24px;
+  outline: none;
+  color: inherit;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosureSummary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosureSummary:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.disclosureSummary:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.disclosure[open] .disclosureSummary {
+  color: var(--dsw-alias-label-primary);
+}
+
+.disclosureFacts {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  color: var(--dsw-alias-label-primary);
+}
+
+.disclosureRow {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.disclosureRow dt,
+.disclosureRow dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.disclosureRow dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.disclosureValue {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @container (max-width: 460px) {
   .trigger:has(.triggerIcon) .triggerLabel {
     display: none;
@@ -419,6 +505,11 @@
 
   .bar {
     gap: 6px;
+  }
+
+  .disclosureRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
   }
 }
 

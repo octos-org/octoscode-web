@@ -1,6 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { ProductSidebar, type ProductSidebarProps } from "./ProductSidebar.tsx";
+import {
+  ProductSidebar,
+  ProductSidebarViewOptionsMenu,
+  type ProductSidebarProps,
+} from "./ProductSidebar.tsx";
+import type { PeerRosterEntry } from "../peers/peer-manager.ts";
 
 const baseProps: ProductSidebarProps = {
   collapsed: false,
@@ -222,4 +227,144 @@ describe("ProductSidebar", () => {
       );
     },
   );
+
+  it("renders accessible grouping choices from the controlled view mode", () => {
+    const onViewModeChange = vi.fn();
+    const onSelectComplete = vi.fn();
+    const props = {
+      viewMode: "grouped" as const,
+      orderMode: "manual" as const,
+      onViewModeChange,
+      onOrderModeChange: vi.fn(),
+      onSelectComplete,
+    };
+    const html = renderToStaticMarkup(
+      <div role="menu">
+        <ProductSidebarViewOptionsMenu {...props} />
+      </div>,
+    );
+
+    expect(html).toContain('role="menuitemradio"');
+    expect(html).toContain('aria-label="Group sessions by"');
+    expect(html).toContain("Workspace");
+    expect(html).toContain("In one list");
+    expect(html).not.toContain("Order by");
+
+    const flat = renderToStaticMarkup(
+      <ProductSidebarViewOptionsMenu {...props} viewMode="flat" />,
+    );
+    expect(html).toMatch(/aria-checked="true"[^>]*><span>Workspace<\/span>/);
+    expect(html).toMatch(/aria-checked="false"[^>]*><span>In one list<\/span>/);
+    expect(flat).toMatch(/aria-checked="false"[^>]*><span>Workspace<\/span>/);
+    expect(flat).toMatch(/aria-checked="true"[^>]*><span>In one list<\/span>/);
+    expect(onViewModeChange).not.toHaveBeenCalled();
+    expect(onSelectComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProductSidebar peer dock mount (dock plan §1)", () => {
+  const rosterEntry = (
+    overrides: Partial<PeerRosterEntry> = {},
+  ): PeerRosterEntry => ({
+    identity: "dev:local:tui#peer-review",
+    profileId: "dev",
+    topic: "peer-review",
+    slug: "review",
+    cwd: "/srv/octoscode-web",
+    briefPath: "/briefs/review.md",
+    origin: "staged",
+    turnId: "turn-1",
+    status: "started",
+    activity: "live",
+    openedAt: 1,
+    finishedAt: null,
+    error: null,
+    canRetry: false,
+    ...overrides,
+  });
+
+  const managerWith = (peers: readonly PeerRosterEntry[]) => {
+    const snapshot = {
+      peers,
+      blackboard: [] as const,
+      prepareBusy: false,
+      gatherBusy: false,
+      prepareError: null,
+      gatherError: null,
+      prepareUncertain: false,
+      dispatchRefusalKind: null,
+    };
+    return {
+      subscribe: () => () => undefined,
+      getSnapshot: () => snapshot,
+    };
+  };
+
+  it("omits the peer dock until a manager is mounted", () => {
+    const html = renderToStaticMarkup(<ProductSidebar {...baseProps} />);
+
+    expect(html).not.toContain('aria-label="Peers"');
+    expect(html).not.toContain("Hide peers");
+  });
+
+  it("mounts the dock between the session tree and Settings", () => {
+    const html = renderToStaticMarkup(
+      <ProductSidebar {...baseProps} peerDock={managerWith([rosterEntry()])} />,
+    );
+
+    const tree = html.indexOf('role="tree"');
+    const dock = html.indexOf('aria-label="Peers"');
+    const settings = html.indexOf('aria-label="Settings"');
+    expect(tree).toBeGreaterThanOrEqual(0);
+    expect(dock).toBeGreaterThan(tree);
+    expect(settings).toBeGreaterThan(dock);
+    // Triage 4510 P2: the row body shows "Peer N · model", never the raw slug
+    // (the slug survives only as the data-peer-slug diagnostic attribute).
+    expect(html).toContain(">Peer 1<");
+    expect(html).toContain('data-peer-slug="review"');
+    expect(html).toContain(">started<");
+  });
+
+  it("renders no dock while the roster is empty", () => {
+    const html = renderToStaticMarkup(
+      <ProductSidebar {...baseProps} peerDock={managerWith([])} />,
+    );
+
+    expect(html).not.toContain('aria-label="Peers"');
+  });
+
+  it("threads onApprovalRespond through to the dock (web gap 6)", () => {
+    const blocked = rosterEntry({
+      identity: "dev:local:tui#peer-approve",
+      slug: "approve",
+      activity: "blocked",
+      requestId: "req-1",
+      requestKind: "approval",
+    });
+    const html = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        peerDock={managerWith([blocked])}
+        onApprovalRespond={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('data-row-action="approve"');
+    expect(html).toContain('data-row-action="deny"');
+  });
+
+  it("omits the dock's row actions when no handler is threaded (web gap 6)", () => {
+    const blocked = rosterEntry({
+      identity: "dev:local:tui#peer-approve",
+      slug: "approve",
+      activity: "blocked",
+      requestId: "req-1",
+      requestKind: "approval",
+    });
+    const html = renderToStaticMarkup(
+      <ProductSidebar {...baseProps} peerDock={managerWith([blocked])} />,
+    );
+
+    expect(html).not.toContain("data-row-action=");
+  });
 });

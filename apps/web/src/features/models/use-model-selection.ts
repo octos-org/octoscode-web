@@ -5,8 +5,14 @@ import {
   type OctosUiClient,
   type ProfileLlmModel,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
+import {
+  nextModelNoticeBoard,
+  parseRuntimeDisposition,
+  type ModelNoticeBoard,
+  type ModelRuntimeDisposition,
+} from "./model-settings.ts";
 
 export interface ModelSelectionRuntimeState {
   available: boolean;
@@ -16,6 +22,8 @@ export interface ModelSelectionRuntimeState {
   models: ProfileLlmModel[];
   restartHint: boolean;
   error: string | null;
+  /** §4.2 sticky disposition notices (deferred / persisted_but_not_live / restart_required …). */
+  noticeBoard: ModelNoticeBoard;
 }
 
 const EMPTY_MODEL_SELECTION: ModelSelectionRuntimeState = {
@@ -26,6 +34,7 @@ const EMPTY_MODEL_SELECTION: ModelSelectionRuntimeState = {
   models: [],
   restartHint: false,
   error: null,
+  noticeBoard: { notices: [] },
 };
 
 interface ModelSelectionDependencies {
@@ -46,11 +55,20 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
   const [state, setState] = useState<ModelSelectionRuntimeState>(
     EMPTY_MODEL_SELECTION,
   );
+  /** §4.2: notices are kept on the session record with their time. */
+  const noticeBoardRef = useRef<ModelNoticeBoard>({ notices: [] });
+  const lastSeenSelectionRef = useRef<{
+    model: string;
+    provider: string;
+    route?: string;
+  } | null>(null);
 
   const reset = () => {
     refreshRequestsRef.current.invalidate();
     selectionRequestsRef.current.invalidate();
     busyRef.current = false;
+    noticeBoardRef.current = { notices: [] };
+    lastSeenSelectionRef.current = null;
     setState(EMPTY_MODEL_SELECTION);
   };
 
@@ -63,6 +81,8 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
     refreshRequestsRef.current.invalidate();
     selectionRequestsRef.current.invalidate();
     busyRef.current = false;
+    noticeBoardRef.current = { notices: [] };
+    lastSeenSelectionRef.current = null;
     setState((current) => ({
       ...current,
       loading: false,
@@ -113,6 +133,7 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
         loading: false,
         models: result.models,
       }));
+      observeListResult(result.models);
     } catch (reason) {
       if (!refreshRequestIsCurrent(request)) return;
       setState((snapshot) => ({
@@ -138,6 +159,87 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
     }
   };
 
+  /** Case 23: a refreshed list proving another actor changed the selection. */
+  const observeListResult = (
+    models: readonly {
+      model: string;
+      provider: string;
+      route?: string;
+      selected: boolean;
+    }[],
+  ) => {
+    const selected = models.find((model) => model.selected);
+    const identity = selected
+      ? {
+          model: selected.model,
+          provider: selected.provider,
+          ...(selected.route ? { route: selected.route } : {}),
+        }
+      : undefined;
+    const previouslySeen = lastSeenSelectionRef.current;
+    noticeBoardRef.current = nextModelNoticeBoard(noticeBoardRef.current, {
+      listRefreshed: models,
+      ...(previouslySeen ? { lastSeenSelection: previouslySeen } : {}),
+      atMs: Date.now(),
+    });
+    if (identity) lastSeenSelectionRef.current = identity;
+    setState((snapshot) => ({
+      ...snapshot,
+      noticeBoard: noticeBoardRef.current,
+    }));
+  };
+
+  /** Judge #6: fold a select result's runtime_disposition into the board. */
+  const applyDisposition = (
+    raw: unknown,
+    selected: { model: string; provider: string; route?: string | undefined },
+    runningModel: string | null | undefined,
+    failed: string | null,
+  ) => {
+    const parsed = failed
+      ? ({ disposition: "refused", reason: failed } as const)
+      : (parseRuntimeDisposition(raw) ?? {
+          disposition: "persisted" as ModelRuntimeDisposition,
+        });
+    noticeBoardRef.current = nextModelNoticeBoard(
+      noticeBoardRef.current,
+      {
+        disposition: parsed.disposition,
+        savedModel: {
+          model: selected.model,
+          provider: selected.provider,
+          ...(selected.route ? { route: selected.route } : {}),
+        },
+        ...("condition" in parsed && parsed.condition
+          ? { condition: parsed.condition }
+          : {}),
+        ...(runningModel ? { runningModel } : {}),
+        ...("runtimeError" in parsed && parsed.runtimeError
+          ? { runtimeError: parsed.runtimeError }
+          : {}),
+        ...("reason" in parsed && parsed.reason ? { reason: parsed.reason } : {}),
+        atMs: Date.now(),
+      },
+      { t: (source) => source },
+    );
+    lastSeenSelectionRef.current = {
+      model: selected.model,
+      provider: selected.provider,
+      ...(selected.route ? { route: selected.route } : {}),
+    };
+    setState((snapshot) => ({
+      ...snapshot,
+      noticeBoard: noticeBoardRef.current,
+      // A refused save reverts the selection: restartHint never lights.
+      restartHint:
+      parsed.disposition === "restart_required"
+          ? true
+          : parsed.disposition === "refused"
+            ? false
+            : snapshot.restartHint,
+    }));
+  };
+
   const select = async (target: ProfileLlmModel): Promise<void> => {
     const current = dependenciesRef.current;
     const client = current.client();
@@ -161,12 +263,18 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
     refreshRequestsRef.current.invalidate();
     const request = selectionRequestsRef.current.begin(client, sessionId);
     busyRef.current = true;
+    noticeBoardRef.current = nextModelNoticeBoard(noticeBoardRef.current, {
+      saving: true,
+    });
     setState((snapshot) => ({
       ...snapshot,
       loading: false,
       busy: true,
       error: null,
+      noticeBoard: noticeBoardRef.current,
     }));
+    let rawResult: unknown = null;
+    let failedReason: string | null = null;
     try {
       const result = await client.selectProfileModel({
         session_id: sessionId,
@@ -176,6 +284,7 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
         ...(target.route ? { route_id: target.route } : {}),
       });
       if (!selectionRequestIsCurrent(request)) return;
+      rawResult = result as unknown;
       if (result.session_id !== sessionId || !result.applied) {
         throw new Error("The server did not apply the model selection");
       }
@@ -192,9 +301,30 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
         })),
       }));
       busyRef.current = false;
+      applyDisposition(
+        rawResult,
+        {
+          model: result.selected.model,
+          provider: result.selected.provider,
+          route: result.selected.route,
+        },
+        undefined,
+        null,
+      );
       await refresh(client);
     } catch (reason) {
       if (!selectionRequestIsCurrent(request)) return;
+      failedReason = errorMessage(reason);
+      applyDisposition(
+        rawResult,
+        {
+          model: target.model,
+          provider: target.provider,
+          route: target.route,
+        },
+        undefined,
+        failedReason,
+      );
       setState((snapshot) => ({
         ...snapshot,
         error: errorMessage(reason),
