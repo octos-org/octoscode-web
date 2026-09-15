@@ -1,0 +1,270 @@
+{
+  "errors": [],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "responses": [
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/assets/OctopusLogo-DzjWLOv6.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/Skeleton-BAcgBIXB.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-ZmDWuHGN.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/rolldown-runtime-hePW80VL.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModalSurface-DCamhzFt.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/preload-helper-Czpn1I53.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/protocol-values-D4L8dl7p.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-96z4cRQt.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/model-Cts8quCN.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/src-CuD1MmZA.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/vendor-react-CbYonmBs.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/OctopusLogo-DGGVZGzG.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Icon-CUHQs5hh.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/registry-CKYrhWqL.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/saved-session-link-NQARjAJt.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/request-authority-BO7mG4ZU.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/model-Bfy5TyT3.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Skeleton-C1q-xd3-.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/use-onboarding-BvJRmpwr.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/workspace-recents-ClR4qUB7.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/workspace-BIDuL5Lo.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionSidebar-DnihiQg1.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/NewSessionWorkspacePicker-CG09mVVq.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/PromptComposer-BRd-dS4p.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/NewSessionWorkspacePicker-Bt1OD8s5.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/PromptComposer-D5BmjUPw.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionSidebar-cAhvZ-WU.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/session-BJHpX2mY.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/hydrate-KBZ1Q-74.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Timeline-DfsPtxe4.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionControlBar-CjVOyEMD.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/Timeline-BAEBDTa3.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionControlBar-BPOwzk-q.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/selection-policy-NXICaHp5.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/coding-Bg1VHuo1.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/MarkdownBody-6NbzM7fL.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/supervision-C0HrtV0N.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/onboarding-ChjiwthQ.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/lib-BjSpPGYi.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/MarkdownBody-BJ4O0Qaw.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/execute-local-command-CPPPv0K2.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/CodeBlock-C-3cok_n.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/json-qhed-kSA.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/shellscript-CLZ0U2zV.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/typescript-bsJCZSQ-.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SettingsDialog-CkTGS9pb.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SettingsDialog-Bf-D9OR7.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSettings-Bh9TolYX.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelsSettingsContent-bDyPEyPX.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSettings.module-DLln2XG2.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelManagementSettings-DC_Cio-t.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelManagementSettings-B1oINBGG.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/GeneralSettingsContent-Bg063p8p.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/GeneralSettingsContent-BI5BIXdc.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/DiffReviewDialog-D7BJjCFc.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/DiffReviewDialog-DqXz0Eqq.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionTrajectory-BD4WSdaO.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionTrajectory-DkhOEFPI.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/TaskDetailDialog-eggLTBNC.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/TaskDetailDialog-YiAtn9AD.js",
+      "status": 200
+    }
+  ],
+  "cspViolations": [],
+  "coldGate": {
+    "cpuThrottle": 4,
+    "networkThrottle": "none; loopback",
+    "lcp": 308,
+    "cls": 0,
+    "paints": [
+      {
+        "name": "first-paint",
+        "startTime": 308
+      },
+      {
+        "name": "first-contentful-paint",
+        "startTime": 308
+      }
+    ],
+    "resources": 20
+  },
+  "csp": "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; manifest-src 'self'"
+}

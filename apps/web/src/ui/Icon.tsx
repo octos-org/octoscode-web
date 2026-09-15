@@ -123,3 +123,27 @@ export function ArrowLeftIcon({ size = 15, className }: IconProps) {
     </svg>
   );
 }
+
+export function ArrowUpIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M8 13V3m-4 4 4-4 4 4" />
+    </svg>
+  );
+}
+
+export function MenuIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M3 4h10M3 8h10M3 12h10" />
+    </svg>
+  );
+}
+
+export function DiffIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M9 1.5H3v13h10V5.5L9 1.5Zm0 0v4h4M5.5 8h5M5.5 11h5M8 6v4" />
+    </svg>
+  );
+}

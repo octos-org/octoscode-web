@@ -144,6 +144,26 @@ describe("connection preferences", () => {
     });
   });
 
+  it("never remembers credentials pasted into an address or reconnects a replaced draft", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    saveConnectionPreferences(defaults, durable, tab);
+    setAutoConnect(tab, true);
+    saveConnectionPreferences(
+      { ...defaults, endpoint: "https://example.test?token=pasted-secret" },
+      durable,
+      tab,
+    );
+    expect([...durable.values.values()].join("")).not.toContain(
+      "pasted-secret",
+    );
+    expect([...tab.values.values()].join("")).not.toContain("pasted-secret");
+    expect(loadAutoConnect(tab)).toBe(false);
+    expect(loadConnectionPreferences(defaults, durable, tab).endpoint).toBe(
+      defaults.endpoint,
+    );
+  });
+
   it("clears all remembered intent and the tab auto-connect marker", () => {
     const durable = new MemoryStorage();
     const tab = new MemoryStorage();

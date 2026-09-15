@@ -17,6 +17,46 @@ describe("OctosUiClient", () => {
     expect(DEFAULT_UI_FEATURES).toContain("auxiliary.rest_to_ws.v1");
   });
 
+  it("negotiates lifecycle lookup and verifies the exact requested turn scope", async () => {
+    expect(DEFAULT_UI_FEATURES).toContain("state.turn_state_get.v1");
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+    for (const result of [
+      { session_id: "s1", turn_id: "t1", state: "unknown" },
+      { session_id: "s2", turn_id: "t1", state: "completed" },
+      { session_id: "s1", turn_id: "t2", state: "completed" },
+      { session_id: "s1", turn_id: "t1", state: "future" },
+    ]) {
+      const pending = client.getTurnState({ session_id: "s1", turn_id: "t1" });
+      const frame = JSON.parse(String(socket.send.mock.calls.at(-1)?.[0])) as {
+        id: string;
+        method: string;
+        params: unknown;
+      };
+      expect(frame).toMatchObject({
+        method: "turn/state/get",
+        params: { session_id: "s1", turn_id: "t1" },
+      });
+      socket.onmessage?.({
+        data: JSON.stringify({ jsonrpc: "2.0", id: frame.id, result }),
+      } as MessageEvent);
+      if (result.state === "unknown")
+        await expect(pending).resolves.toEqual({
+          ...result,
+          committed_seqs: [],
+        });
+      else await expect(pending).rejects.toThrow("returned an invalid result");
+    }
+    client.disconnect();
+  });
+
   it("rejects connect when the socket closes before opening", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
@@ -29,6 +69,125 @@ describe("OctosUiClient", () => {
 
     await expect(connecting).rejects.toThrow("connection closed");
     expect(client.status).toBe("error");
+  });
+
+  it.each(["open", "close", "error", "message"] as const)(
+    "ignores a replaced socket's late %s callback on the same client",
+    async (event) => {
+      const oldSocket = createSocket();
+      const socket = createSocket();
+      const sockets = [oldSocket, socket];
+      const client = new OctosUiClient({
+        endpoint: "http://127.0.0.1:50080",
+        webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+      });
+      const errors = vi.fn();
+      const notifications = vi.fn();
+      client.subscribeErrors(errors);
+      client.subscribeNotifications(notifications);
+      const first = client.connect();
+      oldSocket.readyState = 1;
+      oldSocket.onopen?.({} as Event);
+      await first;
+      client.disconnect();
+      const second = client.connect();
+      socket.readyState = 1;
+      socket.onopen?.({} as Event);
+      await second;
+      const pending = client.startTurn({
+        session_id: "s",
+        turn_id: "t",
+        input: [],
+      });
+      const outcome = pending.then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      const settled = vi.fn();
+      void outcome.then(settled);
+      const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0]));
+      if (event === "message") {
+        oldSocket.onmessage?.({
+          data: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "old/notification",
+            params: {},
+          }),
+        } as MessageEvent);
+        oldSocket.onmessage?.({
+          data: JSON.stringify({
+            jsonrpc: "2.0",
+            id: frame.id,
+            result: { stale: true },
+          }),
+        } as MessageEvent);
+      } else if (event === "close") oldSocket.onclose?.({} as CloseEvent);
+      else if (event === "error") oldSocket.onerror?.({} as Event);
+      else oldSocket.onopen?.({} as Event);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(client.status).toBe("connected");
+      expect(errors).not.toHaveBeenCalled();
+      expect(notifications).not.toHaveBeenCalled();
+      expect(settled).not.toHaveBeenCalled();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          id: frame.id,
+          result: { current: true },
+        }),
+      } as MessageEvent);
+      await expect(outcome).resolves.toEqual({ value: { current: true } });
+      client.disconnect();
+    },
+  );
+
+  it("rejects a cancelled connection without poisoning its replacement when the old socket closes", async () => {
+    const oldSocket = createSocket();
+    const socket = createSocket();
+    const sockets = [oldSocket, socket];
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+    });
+    const first = client.connect();
+    const rejected = expect(first).rejects.toThrow("connection closed");
+    client.disconnect();
+    const second = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await second;
+
+    oldSocket.onclose?.({} as CloseEvent);
+
+    await rejected;
+    expect(client.status).toBe("connected");
+    client.disconnect();
+  });
+
+  it("does not publish connected when a cancelled socket opens ahead of its replacement", async () => {
+    const oldSocket = createSocket();
+    const socket = createSocket();
+    const sockets = [oldSocket, socket];
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+    });
+    const first = client.connect();
+    const rejected = expect(first).rejects.toThrow("connection replaced");
+    client.disconnect();
+    const second = client.connect();
+
+    oldSocket.onopen?.({} as Event);
+
+    await rejected;
+    expect(client.status).toBe("connecting");
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await second;
+    expect(client.status).toBe("connected");
+    client.disconnect();
   });
 
   it("correlates successful JSON-RPC responses", async () => {
@@ -156,10 +315,20 @@ describe("OctosUiClient", () => {
         question_id: "q1",
         answers: [],
       }),
+      client.getLlmCatalog(),
+      client.listTasks({ session_id: "s1" }),
+      client.readSessionStatus("s1"),
+      client.hydrateSession({ session_id: "s1" }),
+      client.listSessions(fixture.session_list.request),
+      client.listSessionFiles(fixture.session_files_list.request),
+      client.listConfigCapabilities(),
+      client.resolveLaunch(fixture.launch_resolve.request),
     ];
     const frames = socket.send.mock.calls.map(([frame]) =>
       JSON.parse(String(frame)),
     ) as Array<{ id: string }>;
+    // Lazy result decoding must not defer request dispatch to a later turn.
+    expect(frames).toHaveLength(pending.length);
     for (const frame of frames) {
       socket.onmessage?.({
         data: JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: {} }),
@@ -174,6 +343,55 @@ describe("OctosUiClient", () => {
         expect(String(result.reason)).toContain("returned an invalid result");
       }
     }
+  });
+
+  it("validates lazily loaded task and model results before resolving callers", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const tasks = client.listTasks({ session_id: "s1" });
+    const catalog = client.getLlmCatalog();
+    const frames = socket.send.mock.calls.map(([frame]) =>
+      JSON.parse(String(frame)),
+    ) as Array<{ id: string; method: string }>;
+    expect(frames.map(({ method }) => method)).toEqual([
+      "task/list",
+      "profile/llm/catalog",
+    ]);
+    socket.onmessage?.({
+      data: JSON.stringify({
+        jsonrpc: "2.0",
+        id: frames[0]?.id,
+        result: fixture.task_list.result,
+      }),
+    } as MessageEvent);
+    socket.onmessage?.({
+      data: JSON.stringify({
+        jsonrpc: "2.0",
+        id: frames[1]?.id,
+        result: {
+          families: { local: { env: "", models: [{ id: "local-model" }] } },
+        },
+      }),
+    } as MessageEvent);
+
+    await expect(tasks).resolves.toEqual(fixture.task_list.result);
+    await expect(catalog).resolves.toEqual({
+      families: [
+        {
+          id: "local",
+          env: "",
+          models: [{ id: "local-model", endpoints: [] }],
+        },
+      ],
+    });
   });
 
   it("preserves JSON-RPC failures and rejects pending work on disconnect", async () => {
@@ -360,6 +578,47 @@ describe("OctosUiClient", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("dispatches session open immediately and delivers notifications while its response is decoded", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+    const notifications = vi.fn();
+    client.subscribeNotifications(notifications);
+    const opened = client.openSession({ session_id: "s1" });
+    expect(socket.send).toHaveBeenCalledTimes(1);
+    const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as {
+      id: string;
+      method: string;
+    };
+    expect(frame.method).toBe("session/open");
+    const result = {
+      opened: {
+        session_id: "s1",
+        capabilities: fixture.config_capabilities_list.result.capabilities,
+      },
+    };
+    socket.onmessage?.({
+      data: JSON.stringify({ jsonrpc: "2.0", id: frame.id, result }),
+    } as MessageEvent);
+    const notification = {
+      jsonrpc: "2.0",
+      method: "progress/updated",
+      params: { session_id: "s1", metadata: { kind: "status" } },
+    };
+    socket.onmessage?.({
+      data: JSON.stringify(notification),
+    } as MessageEvent);
+    expect(notifications).toHaveBeenCalledWith(notification);
+    await expect(opened).resolves.toEqual(result);
+    client.disconnect();
   });
 
   it("validates session/hydrate before returning it", async () => {

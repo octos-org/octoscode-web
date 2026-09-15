@@ -15,7 +15,6 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     baseURL: webOrigin,
-    channel: "chrome",
     screenshot: "off",
     trace: "off",
     video: "off",

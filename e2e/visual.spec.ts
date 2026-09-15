@@ -26,19 +26,25 @@ async function connect(page: Page): Promise<void> {
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
 }
 
 async function startDefaultWorkspace(page: Page): Promise<void> {
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await expect(addWorkspace).toBeVisible();
   await addWorkspace
     .getByLabel("Server workspace path")
     .fill("/workspace/octoscode-web");
-  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await addWorkspace.getByRole("button", { name: "Start session" }).click();
   await expect(addWorkspace).toBeHidden();
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 }
@@ -54,7 +60,7 @@ test("connect gate matches baseline", async ({ page }) => {
 test("empty chooser matches baseline", async ({ page }) => {
   await connect(page);
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
   await expect(page).toHaveScreenshot("workspace-chooser.png", SNAPSHOT);
 });
@@ -77,9 +83,8 @@ test("session reply matches baseline", async ({ page }) => {
   await composer.fill("Stream a reply fixture");
   await page.getByRole("button", { name: "Send prompt" }).click();
   await expect(page.getByText("Completed with")).toBeVisible();
-  // The composer is masked: with field-sizing autogrow its height is
-  // content-driven, and environment font metrics shift it by a few pixels.
-  // The timeline above remains fully verified.
+  // Include the entire workspace, including the composer, so layout and
+  // input placement remain part of the visual regression surface.
   await expect(page.locator("main")).toHaveScreenshot(
     "session-reply.png",
     SNAPSHOT,

@@ -18,11 +18,12 @@ describe("fatal render recovery", () => {
     expect(report).not.toContain("second-secret");
   });
 
-  it("explains durable-state safety and renders recovery actions", () => {
+  it("explains connection and draft loss without promising continued execution", () => {
     const html = renderToStaticMarkup(
       <FatalCrashScreen report="Error: render failed" />,
     );
-    expect(html).toContain("durable session state remain");
+    expect(html).toContain("may have stopped running work");
+    expect(html).toContain("Octos keeps persisted history");
     expect(html).toContain("Reload app");
     expect(html).toContain("Copy diagnostics");
     expect(html).toContain('data-octopus-logo=""');

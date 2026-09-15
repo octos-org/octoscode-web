@@ -37,6 +37,7 @@ export interface NewSessionWorkspacePickerProps {
   loading?: boolean;
   error?: string | null;
   creating?: boolean;
+  cancelLabel?: string;
   onRetry?: () => void;
   onCancel: () => void;
   onCreate: (request: WorkspaceCreateRequest) => void;
@@ -57,6 +58,8 @@ interface PickerBodyProps extends NewSessionWorkspacePickerProps {
   serverPath: string;
   validationError: string | null;
   cancelRef: React.RefObject<HTMLButtonElement | null>;
+  pathRef: React.RefObject<HTMLInputElement | null>;
+  firstWorkspaceRef: React.RefObject<HTMLButtonElement | null>;
   onViewChange: (view: WorkspacePickerView) => void;
   onServerPathChange: (path: string) => void;
   onServerPathSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -72,9 +75,12 @@ function PickerBody({
   loading = false,
   error = null,
   creating = false,
+  cancelLabel = "Cancel",
   serverPath,
   validationError,
   cancelRef,
+  pathRef,
+  firstWorkspaceRef,
   onRetry,
   onCancel,
   onCreate,
@@ -87,7 +93,7 @@ function PickerBody({
   return (
     <>
       <header className={styles.header}>
-        {view === "add" ? (
+        {view === "add" && hasWorkspaces ? (
           <button
             type="button"
             className={styles.back}
@@ -109,7 +115,7 @@ function PickerBody({
           <p id={descriptionId} className={styles.description}>
             {view === "choose"
               ? "Choose where this coding session will run."
-              : "Use a path on the server running Octos."}
+              : "Choose a project folder to start your coding session."}
           </p>
         </div>
       </header>
@@ -146,16 +152,18 @@ function PickerBody({
               className={styles.workspaceList}
               aria-label="Recent workspace paths"
             >
-              {workspaces.map((workspace) => {
+              {workspaces.map((workspace, index) => {
                 const selected = workspace.id === selectedWorkspaceId;
                 const recent = workspace.id === recentWorkspaceId;
                 const request = workspaceCreateRequest(workspace.path);
                 return (
                   <li key={workspace.id}>
                     <button
+                      ref={index === 0 ? firstWorkspaceRef : undefined}
                       type="button"
                       className={`${styles.workspace} ${selected ? styles.selected : ""}`}
                       aria-label={`Start a new session in ${workspace.name}`}
+                      aria-describedby={`${titleId}-workspace-${index}`}
                       aria-current={selected ? "true" : undefined}
                       disabled={creating || request === null}
                       onClick={() => {
@@ -169,7 +177,11 @@ function PickerBody({
                         <span className={styles.workspaceName}>
                           {workspace.name}
                         </span>
-                        <span className={styles.workspacePath}>
+                        <span
+                          id={`${titleId}-workspace-${index}`}
+                          className={styles.workspacePath}
+                          title={workspace.path}
+                        >
                           {workspace.path}
                         </span>
                       </span>
@@ -204,9 +216,21 @@ function PickerBody({
               Refreshing recent paths…
             </div>
           ) : null}
+          {creating ? (
+            <p className={styles.refreshing} role="status">
+              Starting your session…
+            </p>
+          ) : null}
         </div>
       ) : (
-        <form className={styles.body} onSubmit={onServerPathSubmit}>
+        <form
+          className={styles.body}
+          onSubmit={onServerPathSubmit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && event.nativeEvent.isComposing)
+              event.preventDefault();
+          }}
+        >
           <label
             className={styles.fieldLabel}
             htmlFor={`${titleId}-server-path`}
@@ -214,12 +238,15 @@ function PickerBody({
             Server workspace path
           </label>
           <input
+            ref={pathRef}
             id={`${titleId}-server-path`}
             className={styles.pathInput}
             type="text"
             value={serverPath}
             placeholder="/srv/projects/octoscode"
             autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
             spellCheck={false}
             disabled={creating}
             aria-invalid={validationError ? "true" : undefined}
@@ -227,7 +254,8 @@ function PickerBody({
             onChange={(event) => onServerPathChange(event.target.value)}
           />
           <p id={`${titleId}-path-help`} className={styles.pathHelp}>
-            This is a path on the Octos server, not a folder in this browser.
+            Enter a path on the Octos server, for example
+            /home/you/projects/my-app.
           </p>
           {validationError ? (
             <p
@@ -244,6 +272,16 @@ function PickerBody({
               role="alert"
             >
               <span>{error}</span>
+              {onRetry ? (
+                <button
+                  type="button"
+                  className={styles.retry}
+                  onClick={onRetry}
+                  disabled={creating}
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div className={styles.formSpacer} />
@@ -255,14 +293,14 @@ function PickerBody({
               disabled={creating}
               onClick={onCancel}
             >
-              Cancel
+              {cancelLabel}
             </button>
             <button
               type="submit"
               className={styles.primaryButton}
               disabled={creating || !serverPath.trim()}
             >
-              {creating ? "Starting…" : "Add & Start"}
+              {creating ? "Starting…" : "Start session"}
             </button>
           </div>
         </form>
@@ -271,6 +309,7 @@ function PickerBody({
       {view === "choose" ? (
         <footer className={styles.footer}>
           <button
+            ref={!hasWorkspaces ? firstWorkspaceRef : undefined}
             type="button"
             className={styles.addButton}
             disabled={creating}
@@ -286,7 +325,7 @@ function PickerBody({
             disabled={creating}
             onClick={onCancel}
           >
-            Cancel
+            {cancelLabel}
           </button>
         </footer>
       ) : null}
@@ -307,9 +346,16 @@ export function NewSessionWorkspacePicker({
   const titleId = useId();
   const descriptionId = `${titleId}-description`;
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const pathRef = useRef<HTMLInputElement>(null);
+  const firstWorkspaceRef = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<WorkspacePickerView>(initialView);
   const [serverPath, setServerPath] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  // A fresh browser has no paths to choose from. Open the useful step directly.
+  const activeView =
+    view === "choose" && !props.workspaces.length && !props.loading
+      ? "add"
+      : view;
 
   useEffect(() => {
     if (!open) return;
@@ -317,6 +363,12 @@ export function NewSessionWorkspacePicker({
     setServerPath("");
     setValidationError(null);
   }, [initialView, open]);
+
+  useEffect(() => {
+    if (!open || activeView !== "add") return;
+    const frame = requestAnimationFrame(() => pathRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open, activeView]);
 
   if (!open) return null;
 
@@ -332,6 +384,7 @@ export function NewSessionWorkspacePicker({
 
   const submitServerPath = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (props.creating) return;
     const request = workspaceCreateRequest(serverPath);
     if (!request) {
       setValidationError("Enter a workspace path on the Octos server.");
@@ -348,10 +401,12 @@ export function NewSessionWorkspacePicker({
       initialView={initialView}
       titleId={titleId}
       descriptionId={descriptionId}
-      view={view}
+      view={activeView}
       serverPath={serverPath}
       validationError={validationError}
       cancelRef={cancelRef}
+      pathRef={pathRef}
+      firstWorkspaceRef={firstWorkspaceRef}
       onViewChange={changeView}
       onServerPathChange={changeServerPath}
       onServerPathSubmit={submitServerPath}
@@ -364,6 +419,7 @@ export function NewSessionWorkspacePicker({
         className={`${styles.surface} ${styles.hero}`}
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        aria-busy={props.creating || undefined}
       >
         {body}
       </section>
@@ -376,9 +432,11 @@ export function NewSessionWorkspacePicker({
       dialogClassName={styles.surface ?? ""}
       labelledBy={titleId}
       describedBy={descriptionId}
-      initialFocusRef={cancelRef}
-      closeOnBackdrop
-      onEscape={props.onCancel}
+      initialFocusRef={activeView === "add" ? pathRef : firstWorkspaceRef}
+      closeOnBackdrop={!props.creating}
+      onEscape={() => {
+        if (!props.creating) props.onCancel();
+      }}
     >
       {body}
     </ModalSurface>

@@ -62,6 +62,17 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
+          // These guards and contract constants are shared by synchronous
+          // notifications and lazy response decoders. Isolate that edge so
+          // importing a notification guard or method name cannot preload
+          // task, workspace or hydration decoders.
+          if (
+            /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
+              id,
+            )
+          ) {
+            return "protocol-values";
+          }
           // Keep react/react-dom in a stable vendor chunk so shipping app
           // changes does not invalidate the largest dependency (178 kB) for
           // returning users.

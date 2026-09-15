@@ -221,6 +221,22 @@ export class CandidateSessionCancelledError extends Error {
   }
 }
 
+/** Saved references already contain a canonical path confirmed by Core. */
+export function validateCandidateWorkspace(
+  config: SessionConnectionInput,
+  opened: SessionOpened,
+  requireExactWorkspace = false,
+): void {
+  if (
+    requireExactWorkspace &&
+    (!config.cwd || opened.workspace_root !== config.cwd)
+  ) {
+    throw new Error(
+      "The server opened a different workspace from the saved link.",
+    );
+  }
+}
+
 function openParams(config: SessionConnectionInput): SessionOpenParams {
   return {
     session_id: config.sessionId,

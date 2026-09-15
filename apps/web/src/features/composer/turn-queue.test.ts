@@ -38,6 +38,23 @@ describe("PromptTurnQueue", () => {
     expect(queue.snapshot().active).toEqual(turn("two"));
   });
 
+  it("removes only pending prompts and preserves the remaining FIFO", () => {
+    const queue = new PromptTurnQueue();
+    queue.enqueue(turn("one"));
+    queue.enqueue(turn("two"));
+    queue.enqueue(turn("three"));
+
+    expect(queue.removePending("one")).toBe(false);
+    expect(queue.removePending("missing")).toBe(false);
+    expect(queue.removePending("two")).toBe(true);
+    expect(queue.removePending("two")).toBe(false);
+    expect(queue.snapshot()).toEqual({
+      active: turn("one"),
+      pending: [turn("three")],
+    });
+    expect(queue.settle("one").next).toEqual(turn("three"));
+  });
+
   it("restores a server-active turn without starting a second one", () => {
     const queue = new PromptTurnQueue();
 

@@ -1,0 +1,21 @@
+{
+  "renderErrors": [],
+  "socketsOpened": 2,
+  "socketsClosed": 2,
+  "requests": [
+    "config/capabilities/list",
+    "launch/resolve",
+    "session/open",
+    "session/hydrate",
+    "permission/profile/list",
+    "task/list",
+    "session/status/read",
+    "profile/llm/list",
+    "turn/start"
+  ],
+  "closedBefore": 1,
+  "crashScreen": 1,
+  "stopAvailable": 0,
+  "composerAvailable": 0,
+  "text": "OCTOSCODE WEB STOPPED RENDERING\nReload the client safely\n\nAgent execution and durable session state remain in Octos. Reloading discards only unsent text in this browser tab.\n\nTypeError: Failed to fetch dynamically imported module: http://127.0.0.1:54220/assets/SettingsDialog-CJze0I8c.js\nTypeError: Failed to fetch dynamically imported module: http://127.0.0.1:54220/assets/SettingsDialog-CJze0I8c.js\n\n    at Lazy (<anonymous>)\n    at Suspense (<anonymous>)\n    at div (<anonymous>)\n    at xr (http://127.0.0.1:54220/assets/index-miQ5AHFh.js:3:88147)\n    at kr (http://127.0.0.1:54220/assets/index-miQ5AHFh.js:4:18384)\nReload app\nCopy diagnostics\nReport this crash ↗"
+}

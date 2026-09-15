@@ -5,9 +5,10 @@
  * b150a551b8d465e31e418e1b2eaf5e79bbb7d28e.
  * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
  */
-import { useId, useMemo, useState, type FormEvent } from "react";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import styles from "./ModelManagementSection.module.css";
 import { PlusIcon } from "../../ui/Icon.tsx";
+import { ModalSurface } from "../../ui/ModalSurface.tsx";
 
 export type ModelManagementState =
   | { status: "ready" }
@@ -896,66 +897,66 @@ function DeleteProviderDialog({
 }) {
   const titleId = useId();
   const descriptionId = useId();
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const phrase = providerDeleteConfirmation(confirmation.provider);
   const matches = confirmation.value === phrase;
   return (
-    <div className={styles.dialogBackdrop}>
-      <div
-        className={styles.deleteDialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        aria-busy={confirmation.busy}
-      >
-        <h3 id={titleId}>Delete model provider?</h3>
-        <p id={descriptionId}>
-          This removes the configured route for{" "}
-          <strong>{providerName(confirmation.provider)}</strong>. Existing
-          sessions may still refer to it.
+    <ModalSurface
+      backdropClassName={styles.dialogBackdrop ?? ""}
+      dialogClassName={styles.deleteDialog ?? ""}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      busy={confirmation.busy}
+      initialFocusRef={cancelRef}
+      {...(confirmation.busy ? {} : { onEscape: onCancel })}
+    >
+      <h3 id={titleId}>Delete model provider?</h3>
+      <p id={descriptionId}>
+        This removes the configured route for{" "}
+        <strong>{providerName(confirmation.provider)}</strong>. Existing
+        sessions may still refer to it.
+      </p>
+      <label className={styles.deleteField}>
+        <span>
+          Type <code>{phrase}</code> to confirm
+        </span>
+        <input
+          className={styles.input + " " + styles.codeInput}
+          type="text"
+          value={confirmation.value}
+          disabled={confirmation.busy}
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+      {confirmation.failed ? (
+        <p className={styles.operationError} role="alert">
+          Could not delete this provider. The configuration was kept; try again.
         </p>
-        <label className={styles.deleteField}>
-          <span>
-            Type <code>{phrase}</code> to confirm
-          </span>
-          <input
-            className={styles.input + " " + styles.codeInput}
-            type="text"
-            value={confirmation.value}
-            disabled={confirmation.busy}
-            autoComplete="off"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        </label>
-        {confirmation.failed ? (
-          <p className={styles.operationError} role="alert">
-            Could not delete this provider. The configuration was kept; try
-            again.
-          </p>
-        ) : null}
-        <div className={styles.dialogActions}>
-          <button
-            type="button"
-            className={styles.textButton}
-            disabled={confirmation.busy}
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={styles.deleteButton}
-            disabled={!matches || confirmation.busy}
-            onClick={onConfirm}
-          >
-            {confirmation.busy ? "Deleting…" : "Delete provider"}
-          </button>
-        </div>
+      ) : null}
+      <div className={styles.dialogActions}>
+        <button
+          ref={cancelRef}
+          type="button"
+          className={styles.textButton}
+          disabled={confirmation.busy}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={styles.deleteButton}
+          disabled={!matches || confirmation.busy}
+          onClick={onConfirm}
+        >
+          {confirmation.busy ? "Deleting…" : "Delete provider"}
+        </button>
       </div>
-    </div>
+    </ModalSurface>
   );
 }
 

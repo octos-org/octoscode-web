@@ -1,5 +1,6 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import type { SessionOpened } from "@octos-org/octoscode-client";
+import { connectionEndpointError } from "./validation.ts";
 import {
   parseKnownSessionRegistry,
   rememberKnownSession as rememberRegistrySession,
@@ -76,6 +77,13 @@ export function saveConnectionPreferences(
   durableStorage: StorageLike,
   tabStorage: StorageLike,
 ): void {
+  // App saves drafts as they change, before form submission. Never persist a
+  // pasted credential-bearing URL, and do not auto-connect an old draft after
+  // the user has started replacing its address.
+  if (connectionEndpointError(value.endpoint)) {
+    setAutoConnect(tabStorage, false);
+    return;
+  }
   const durable: DurableConnectionPreferences = {
     version: 2,
     endpoint: value.endpoint.slice(0, LIMITS.endpoint),
@@ -186,7 +194,9 @@ function readDurable(
     const value: unknown = JSON.parse(raw);
     if (!isRecord(value) || value.version !== 2) return null;
     const endpoint = bounded(value.endpoint, LIMITS.endpoint);
-    return endpoint === undefined ? null : { version: 2, endpoint };
+    return endpoint === undefined || connectionEndpointError(endpoint)
+      ? null
+      : { version: 2, endpoint };
   } catch {
     return null;
   }
@@ -211,6 +221,7 @@ function readTabConnection(
     const cwd = bounded(value.cwd, LIMITS.cwd);
     if (
       endpoint === undefined ||
+      connectionEndpointError(endpoint) ||
       token === undefined ||
       sessionId === undefined ||
       profileId === undefined ||

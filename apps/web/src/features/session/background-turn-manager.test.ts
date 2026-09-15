@@ -174,7 +174,7 @@ describe("BackgroundTurnManager", () => {
     expect(manager.getSnapshot()[0]?.state).toBe("completed");
   });
 
-  it("isolates multiple Sessions when one transport ends", () => {
+  it("retains a failed record when a parked transport ends without a terminal", () => {
     const manager = new BackgroundTurnManager<FakeBackgroundClient>();
     const first = park(manager, "session-a", "turn-a");
     const second = park(manager, "session-b", "turn-b");
@@ -189,9 +189,47 @@ describe("BackgroundTurnManager", () => {
     expect(second.disconnectCount).toBe(0);
 
     second.setStatus("error");
-    expect(manager.getSnapshot()).toEqual([]);
+    expect(manager.getSnapshot()).toEqual([
+      snapshot("session-b", "turn-b", "failed"),
+    ]);
     expect(second.listenerCount).toBe(0);
     expect(second.disconnectCount).toBe(1);
+    expect(manager.prepareReclaim(identity("session-b", "ignored"))).toBeNull();
+  });
+
+  it("preserves a waiting turn as failed when its reclaim transport dies", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    const owner = park(manager, "session-a", "turn-a");
+    manager.setState(identity("session-a", "turn-a"), "waiting");
+    const reclaim = manager.prepareReclaim(identity("session-a", "ignored"));
+    if (!reclaim) throw new Error("Expected a reclaimable owner");
+
+    owner.setStatus("disconnected");
+
+    expect(reclaim.commit()).toBe("transport-ended");
+    reclaim.rollback();
+    expect(manager.getSnapshot()).toEqual([
+      snapshot("session-a", "turn-a", "failed"),
+    ]);
+    expect(owner.listenerCount).toBe(0);
+    expect(manager.prepareReclaim(identity("session-a", "ignored"))).toBeNull();
+  });
+
+  it("bounds lost parked records without consuming live transport slots", () => {
+    const manager = new BackgroundTurnManager<FakeBackgroundClient>();
+    for (let index = 0; index <= MAX_BACKGROUND_TURN_TRANSPORTS; index += 1) {
+      const client = park(manager, `session-${index}`, `turn-${index}`);
+      client.setStatus("disconnected");
+    }
+
+    expect(manager.getSnapshot()).toHaveLength(MAX_BACKGROUND_TURN_TRANSPORTS);
+    expect(manager.getSnapshot()[0]?.turnId).toBe("turn-1");
+    for (let index = 0; index < MAX_BACKGROUND_TURN_TRANSPORTS; index += 1) {
+      park(manager, `live-session-${index}`, `live-turn-${index}`);
+    }
+    expect(manager.getSnapshot()).toHaveLength(
+      MAX_BACKGROUND_TURN_TRANSPORTS * 2,
+    );
   });
 
   it("does not duplicate an already parked exact Session and turn", () => {

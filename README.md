@@ -38,6 +38,9 @@ second agent loop, plugin host, sandbox, or session store.
 - Octoscode-compatible launch, prompt queue, interrupt, approval, question,
   command, and session behavior.
 - Durable hydrate, cursor replay, deduplication, gap recovery, and reconnect.
+  Capability-gated turn-state checks preserve uncertainty without resending.
+- Saved conversation links can reopen an exact server-confirmed reference in a
+  new browser after authentication and explicit review.
 - A DSH-aligned Workspace/Session sidebar with search, New Session, Add
   workspace, tab-confirmed Session navigation, and Settings.
 - Same-tab background continuation for server-acknowledged turns while another
@@ -65,14 +68,16 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run `octos serve` separately, then enter its origin and optional auth token.
-After connecting, use **New Session** to choose a known Workspace, or **Add
-workspace** to enter a path on the Octos server and create a fresh Session. The
-sidebar remembers the Sessions this tab successfully opens, so multiple
-conversations in the same Workspace remain distinct and can be selected again.
-The selected Session is restored on refresh in the same tab; only the server
-origin survives after that tab closes. These confirmed references are navigation
-memory, not a complete Session catalog: Core rc.9 can misroute
+Run `octos serve` separately, then enter its origin and optional auth token. The
+connection form defaults to this page's origin; **Use this page** restores that
+address after a custom server was saved. After connecting for the first time,
+enter a workspace path on the Octos server and select **Start session**. For
+later conversations, **New Session** offers recent Workspaces and **Add
+workspace**. The sidebar remembers the Sessions this tab successfully opens, so
+multiple conversations in the same Workspace remain distinct and can be selected
+again. The selected Session is restored on refresh in the same tab; only the
+server origin survives after that tab closes. These confirmed references are
+navigation memory, not a complete Session catalog: Core rc.9 can misroute
 `session/list({cwd})` for unscoped/admin connections, so the Web client cannot
 promise a complete or correctly grouped catalog until the server-owned
 SessionRef contract in
@@ -81,9 +86,10 @@ cannot start or provision the Octos binary.
 
 A turn that this tab started and Core acknowledged can keep running while you
 select or create another Session in the same live tab. Browser-local queued
-prompts still block navigation. If `turn/start` is awaiting acknowledgement, the
-Web app labels the turn **Starting**, remembers the latest create/switch click,
-and executes it exactly once after Core accepts the turn. Rejection or local
+prompts still block navigation; remove unwanted entries from the queue above the
+composer before switching. If `turn/start` is awaiting acknowledgement, the Web
+app labels the turn **Starting**, remembers the latest create/switch click, and
+executes it exactly once after Core accepts the turn. Rejection or local
 cancellation drops that intent and keeps the source Session selected. Core rc.9
 provides no safe post-turn release signal, so the Web app retains at most eight
 owner connections. Reopening one of those retained Sessions reuses its
@@ -91,10 +97,12 @@ connection even at the limit; opening a ninth new target is refused until you
 explicitly Disconnect and reconnect. No completed owner is silently evicted.
 This is not detached server execution: refreshing or closing the tab, losing the
 network connection, or selecting **Disconnect** closes the owner WebSocket and
-Core rc.9 terminates a still-running turn. Disconnect keeps the current tab's
-confirmed Session references; **Forget server** or changing the server identity
-clears them. Durable detached execution and exact stale-connection cleanup are
-tracked in [octos#2167](https://github.com/octos-org/octos/issues/2167).
+Core rc.9 terminates a still-running turn. A browser leave warning helps prevent
+accidental refresh or close while work is active. Disconnect keeps the current
+tab's confirmed Session references; **Forget server** or changing the server
+identity clears them. Durable detached execution and exact stale-connection
+cleanup are tracked in
+[octos#2167](https://github.com/octos-org/octos/issues/2167).
 
 For UI work without a local Octos installation, start the deterministic AppUI
 fixture in another terminal:

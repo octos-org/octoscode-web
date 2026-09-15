@@ -108,8 +108,24 @@ describe("NewSessionWorkspacePicker", () => {
         onCreate={vi.fn()}
       />,
     );
-    expect(empty).toContain("No recent workspace paths");
+    expect(empty).toContain("Server workspace path");
     expect(empty).toContain("Add workspace");
-    expect(empty.match(/data-octopus-logo=""/g)).toHaveLength(2);
+    expect(empty).toContain("Start session");
+    expect(empty).not.toContain("Back to workspaces");
+    expect(empty.match(/data-octopus-logo=""/g)).toHaveLength(1);
+  });
+
+  it("allows the first-session entry to describe its actual cancel action", () => {
+    const html = renderToStaticMarkup(
+      <NewSessionWorkspacePicker
+        presentation="hero"
+        workspaces={[]}
+        cancelLabel="Change server"
+        onCancel={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Change server");
+    expect(html).not.toContain(">Cancel<");
   });
 });

@@ -4,6 +4,9 @@
  * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
  */
 import { useState } from "react";
+import { CopySessionLink } from "../session-links/CopySessionLink.tsx";
+import type { SavedSessionReference } from "../session-links/saved-session-link.ts";
+import { knownSessionKey } from "../session/known-session-registry.ts";
 import styles from "./ProductSettings.module.css";
 
 export type ProductConnectionStatus =
@@ -16,11 +19,12 @@ export interface GeneralSettingsContentProps {
   workspacePath?: string | null;
   agentPreset?: string | null;
   displayProfile?: string | null;
+  sessionReference?: SavedSessionReference;
   locked?: boolean;
   onDisconnect: () => void;
   onForgetConnection: () => void;
   /** Writes a redacted diagnostics snapshot to the clipboard. */
-  onCopyDiagnostics?: () => void;
+  onCopyDiagnostics?: () => void | Promise<void>;
 }
 
 const STATUS_COPY: Readonly<Record<ProductConnectionStatus, string>> = {
@@ -90,12 +94,14 @@ export function GeneralSettingsContent({
   workspacePath,
   agentPreset,
   displayProfile,
+  sessionReference,
   locked = false,
   onDisconnect,
   onForgetConnection,
   onCopyDiagnostics,
 }: GeneralSettingsContentProps) {
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState(false);
   const connectionBusy = connectionStatus === "connecting";
   const canDisconnect =
     connectionStatus === "connected" || connectionStatus === "error";
@@ -148,6 +154,23 @@ export function GeneralSettingsContent({
         />
       ) : null}
 
+      {sessionReference ? (
+        <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
+          <div className={styles.settingCopy}>
+            <div className={styles.settingTitle}>Conversation link</div>
+            <div className={styles.settingDescription}>
+              Save this link to open the conversation in another browser. You
+              will need access to the same Octos server.
+            </div>
+          </div>
+          <CopySessionLink
+            key={knownSessionKey(sessionReference)}
+            reference={sessionReference}
+            disabled={locked}
+          />
+        </div>
+      ) : null}
+
       {onCopyDiagnostics ? (
         <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
           <div className={styles.settingCopy}>
@@ -162,14 +185,26 @@ export function GeneralSettingsContent({
               type="button"
               className={styles.secondaryButton}
               disabled={locked}
-              onClick={() => {
-                onCopyDiagnostics();
-                setDiagnosticsCopied(true);
-                window.setTimeout(() => setDiagnosticsCopied(false), 1500);
+              onClick={async () => {
+                setDiagnosticsCopied(false);
+                setDiagnosticsError(false);
+                try {
+                  await onCopyDiagnostics();
+                  setDiagnosticsCopied(true);
+                  window.setTimeout(() => setDiagnosticsCopied(false), 1500);
+                } catch {
+                  setDiagnosticsError(true);
+                }
               }}
             >
               {diagnosticsCopied ? "Copied" : "Copy diagnostics"}
             </button>
+            {diagnosticsError ? (
+              <span role="alert">
+                Could not copy diagnostics. Check clipboard access and try
+                again.
+              </span>
+            ) : null}
           </div>
         </div>
       ) : null}

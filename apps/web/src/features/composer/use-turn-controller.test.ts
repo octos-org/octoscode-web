@@ -1,8 +1,14 @@
 import { createElement, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { OctosUiRequestTimeoutError } from "@octos-org/octoscode-client";
-import type { OctosUiClient } from "@octos-org/octoscode-client";
+import {
+  OctosUiProtocolError,
+  OctosUiRequestTimeoutError,
+} from "@octos-org/octoscode-client";
+import type {
+  OctosUiClient,
+  TurnStateGetResult,
+} from "@octos-org/octoscode-client";
 import type { TimelineEntry } from "../timeline/model.ts";
 import {
   useTurnController,
@@ -11,6 +17,88 @@ import {
 } from "./use-turn-controller.ts";
 
 describe("useTurnController async authority", () => {
+  it("cancels a queued prompt without interrupting or dispatching server work", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("active prompt");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    harness.controller.enqueuePrompt("remove this prompt");
+    const activeTurnId = harness.activeTurnId();
+    const pending = harness.controller.snapshot().pending[0];
+    if (!pending) throw new Error("Expected a queued prompt");
+
+    expect(harness.controller.cancelQueuedPrompt(activeTurnId)).toBe(false);
+    expect(harness.controller.cancelQueuedPrompt(pending.turnId)).toBe(true);
+    expect(harness.controller.snapshot().pending).toEqual([]);
+    expect(harness.activeTurnId()).toBe(activeTurnId);
+    harness.controller.settleTurn(activeTurnId);
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    expect(client.interruptTurn).not.toHaveBeenCalled();
+  });
+
+  it("resumes a promoted queued prompt after recovery blocked its dispatch", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first prompt");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    const firstTurnId = harness.activeTurnId();
+    harness.controller.enqueuePrompt("queued prompt");
+    harness.setCanStart(false);
+    harness.controller.settleTurn(firstTurnId);
+    const queuedTurnId = harness.activeTurnId();
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+
+    const next = harness.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 4 },
+      turns: [{ turn_id: firstTurnId, state: "completed" }],
+    });
+
+    expect(next).toEqual({ turnId: queuedTurnId, text: "queued prompt" });
+    harness.setCanStart(true);
+    if (!next) throw new Error("Expected the undispatched queued prompt");
+    await harness.controller.startTurn(next);
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+    expect(client.startTurn).toHaveBeenLastCalledWith(
+      expect.objectContaining({ turn_id: queuedTurnId }),
+    );
+  });
+
+  it("keeps an undispatched prompt behind a server turn recovered after losing its ACK", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first prompt");
+    const firstTurnId = harness.activeTurnId();
+    harness.controller.enqueuePrompt("queued prompt");
+    harness.controller.enqueuePrompt("last prompt");
+    const pending = harness.controller.snapshot().pending;
+    harness.setCanStart(false);
+    start.reject(new OctosUiProtocolError(-32000, "turn rejected"));
+    await vi.waitFor(() => {
+      expect(harness.activeTurnId()).toBe(pending[0]?.turnId);
+    });
+
+    const next = harness.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 2 },
+      turns: [{ turn_id: firstTurnId, state: "active" }],
+    });
+
+    expect(next).toBeNull();
+    expect(harness.activeTurnId()).toBe(firstTurnId);
+    expect(harness.controller.snapshot().pending).toEqual(pending);
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    harness.setCanStart(true);
+    harness.controller.settleTurn(firstTurnId);
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+    expect(harness.activeTurnId()).toBe(pending[0]?.turnId);
+  });
+
   it("does not expose an optimistic turn for background handoff before Core accepts it", async () => {
     const start = deferred<void>();
     const client = fakeClient({ start: () => start.promise });
@@ -55,7 +143,7 @@ describe("useTurnController async authority", () => {
       fakeClient({ start: () => rejectedStart.promise }),
     );
     rejected.controller.enqueuePrompt("reject me");
-    rejectedStart.reject(new Error("not accepted"));
+    rejectedStart.reject(new OctosUiProtocolError(-32000, "not accepted"));
     await vi.waitFor(() => {
       expect(rejected.dispatchEvents.map((event) => event.state)).toEqual([
         "dispatching",
@@ -136,35 +224,400 @@ describe("useTurnController async authority", () => {
     expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
   });
 
-  it("settles a timed-out start once hydrate proves the server never saw it", async () => {
+  it("keeps a timed-out start when hydrate and targeted lookup cannot find it", async () => {
     const start = deferred<void>();
     const client = fakeClient({ start: () => start.promise });
     const harness = renderController(client);
-
-    harness.controller.enqueuePrompt("lost start");
+    harness.controller.enqueuePrompt("lost acknowledgement");
     const turnId = harness.activeTurnId();
     start.reject(new OctosUiRequestTimeoutError("turn/start"));
-    await vi.waitFor(() => {
-      expect(harness.controller.snapshot().active?.turnId).toBe(turnId);
-    });
-
-    // Hydrate is strictly later than any possible acceptance: its silence
-    // is authoritative for a start that already timed out.
-    harness.controller.reconcileFromHydrate({
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery?.phase).toBe("unknown"),
+    );
+    expect(harness.activeTurnId()).toBe(turnId);
+    expect(client.getTurnState).toHaveBeenCalledWith({
       session_id: "session-a",
-      cursor: { stream: "session-a", seq: 2 },
-      turns: [],
+      turn_id: turnId,
+    });
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    expect(
+      harness.timeline.some((entry) => entry.body.includes("never accepted")),
+    ).toBe(false);
+  });
+
+  it("does not treat a transport failure as a rejected start or advance the FIFO", async () => {
+    const start = deferred<void>();
+    const client = fakeClient({ start: () => start.promise });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    harness.controller.enqueuePrompt("second");
+    start.reject(new Error("Octos UI Protocol connection closed"));
+    await vi.waitFor(() =>
+      expect(
+        harness.timeline.some(
+          (entry) => entry.title === "Turn start unconfirmed",
+        ),
+      ).toBe(true),
+    );
+    expect(harness.activeTurnId()).toBe(turnId);
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    expect(harness.controller.snapshot().pending).toHaveLength(1);
+  });
+
+  it.each(["completed", "errored", "interrupted"] as const)(
+    "settles missing accepted turn from explicit %s lookup and resumes FIFO once",
+    async (state) => {
+      const client = fakeClient({
+        state: async (params) => ({ ...params, state, committed_seqs: [] }),
+      });
+      const harness = renderController(client);
+      harness.controller.enqueuePrompt("first");
+      const turnId = harness.activeTurnId();
+      await vi.waitFor(() =>
+        expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+      );
+      harness.controller.enqueuePrompt("second");
+      harness.controller.enqueuePrompt("third");
+      const pending = harness.controller.snapshot().pending;
+      harness.timeline.push({
+        id: "assistant-tail",
+        kind: "assistant",
+        title: "Octos",
+        body: "partial",
+        status: "running",
+        turnId,
+      });
+      harness.controller.reconcileFromHydrate(emptyHydrate());
+      await vi.waitFor(() => expect(client.startTurn).toHaveBeenCalledTimes(2));
+      expect(harness.activeTurnId()).toBe(pending[0]?.turnId);
+      expect(harness.controller.snapshot().pending).toEqual(pending.slice(1));
+      expect(harness.controller.turnRecovery).toBeNull();
+      expect(
+        harness.timeline.find((entry) => entry.id === "assistant-tail")?.status,
+      ).not.toBe("running");
+      expect(
+        harness.timeline.find((entry) => entry.id === `terminal:${turnId}`)
+          ?.title,
+      ).toBe(
+        state === "completed"
+          ? "Turn complete"
+          : state === "interrupted"
+            ? "Turn stopped"
+            : "Turn failed",
+      );
+      expect(harness.recoveredTerminals).toEqual([turnId]);
+    },
+  );
+
+  it.each(["active", "interrupting"] as const)(
+    "observes targeted %s state on a replacement transport without claiming ownership",
+    async (state) => {
+      const original = fakeClient();
+      const newer = fakeClient({
+        state: async (params) => ({ ...params, state, committed_seqs: [] }),
+      });
+      const harness = renderController(original);
+      harness.controller.enqueuePrompt("first");
+      const turnId = harness.activeTurnId();
+      await vi.waitFor(() =>
+        expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+      );
+      harness.setClient(newer);
+      harness.controller.reconcileFromHydrate(emptyHydrate());
+      await vi.waitFor(() =>
+        expect(harness.controller.turnRecovery).toBeNull(),
+      );
+      expect(harness.activeTurnId()).toBe(turnId);
+      expect(harness.controller.activeTurnOwnership()).toBe("observed");
+      expect(harness.controller.backgroundHandoffTurn()).toBeNull();
+      await harness.controller.interrupt();
+      expect(newer.interruptTurn).toHaveBeenCalledTimes(
+        state === "interrupting" ? 0 : 1,
+      );
+    },
+  );
+
+  it("holds unknown turns, blocks new admission, and lets an explicit status retry recover", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("pending");
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery?.phase).toBe("unknown"),
+    );
+    harness.controller.enqueuePrompt("must remain in draft");
+    await harness.controller.interrupt();
+    expect(harness.controller.snapshot().pending).toHaveLength(1);
+    expect(client.interruptTurn).not.toHaveBeenCalled();
+    client.getTurnState.mockImplementation(async (params) => ({
+      ...params,
+      state: "completed",
+      committed_seqs: [],
+    }));
+    await harness.controller.retryTurnRecovery();
+    expect(harness.activeTurnId()).not.toBe(turnId);
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds a missing turn when the server does not advertise lifecycle lookup", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.setCanGetTurnState(false);
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    expect(harness.controller.turnRecovery?.phase).toBe("unavailable");
+    expect(client.getTurnState).not.toHaveBeenCalled();
+    expect(harness.controller.snapshot().active).not.toBeNull();
+  });
+
+  it("reports lookup errors without settling and accepts a later retry", async () => {
+    const client = fakeClient({
+      state: async () => {
+        throw new Error("read failed");
+      },
+    });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery).toMatchObject({
+        phase: "error",
+        message: "read failed",
+      }),
+    );
+    expect(harness.controller.snapshot().active).not.toBeNull();
+    client.getTurnState.mockImplementation(async (params) => ({
+      ...params,
+      state: "active",
+      committed_seqs: [],
+    }));
+    await harness.controller.retryTurnRecovery();
+    expect(harness.controller.turnRecovery).toBeNull();
+  });
+
+  it.each(["client", "session", "turn", "notification"] as const)(
+    "ignores stale lookup completion after %s changes",
+    async (change) => {
+      const state = deferred<TurnStateGetResult>();
+      const start = deferred<void>();
+      const client = fakeClient({
+        state: () => state.promise,
+        ...(change === "notification" ? { start: () => start.promise } : {}),
+      });
+      const harness = renderController(client);
+      harness.controller.enqueuePrompt("first");
+      const turnId = harness.activeTurnId();
+      if (change !== "notification") {
+        await vi.waitFor(() =>
+          expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+        );
+      }
+      harness.controller.reconcileFromHydrate(
+        emptyHydrate(),
+        change === "notification",
+      );
+      expect(harness.controller.turnRecovery?.phase).toBe("checking");
+      await harness.controller.retryTurnRecovery();
+      expect(client.getTurnState).toHaveBeenCalledTimes(1);
+      if (change === "client") harness.setClient(fakeClient());
+      if (change === "session") harness.setSessionId("session-b");
+      if (change === "turn") {
+        harness.controller.settleTurn(turnId);
+        harness.controller.enqueuePrompt("new turn");
+      }
+      if (change === "notification")
+        expect(harness.controller.confirmTurnAccepted(turnId)).toBe(true);
+      const activeBefore = harness.activeTurnId();
+      state.resolve({
+        session_id: "session-a",
+        turn_id: turnId,
+        state: "completed",
+        committed_seqs: [],
+      });
+      await state.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(harness.activeTurnId()).toBe(activeBefore);
+      expect(harness.recoveredTerminals).toEqual([]);
+      start.resolve(undefined);
+    },
+  );
+
+  it("does not dispatch queued work over a different hydrated foreground turn", async () => {
+    const client = fakeClient({
+      state: async (params) => ({
+        ...params,
+        state: "completed",
+        committed_seqs: [],
+      }),
+    });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("pending");
+    const pending = harness.controller.snapshot().pending;
+    harness.controller.reconcileFromHydrate({
+      ...emptyHydrate(),
+      turns: [{ turn_id: "other-active", state: "active" }],
+    });
+    await vi.waitFor(() => expect(harness.activeTurnId()).toBe("other-active"));
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    expect(harness.controller.snapshot().pending).toEqual(pending);
+    harness.controller.settleTurn("other-active");
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a lifecycle lookup authoritative when observed background activity has no local dispatch lease", async () => {
+    const state = deferred<TurnStateGetResult>();
+    const client = fakeClient({ state: () => state.promise });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("next");
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    expect(harness.controller.confirmTurnAccepted(turnId)).toBe(false);
+    expect(harness.controller.turnRecovery?.phase).toBe("checking");
+
+    state.resolve({
+      session_id: "session-a",
+      turn_id: turnId,
+      state: "completed",
+      committed_seqs: [],
+    });
+    await state.promise;
+    await vi.waitFor(() => expect(client.startTurn).toHaveBeenCalledTimes(2));
+    expect(harness.controller.turnRecovery).toBeNull();
+    expect(harness.recoveredTerminals).toEqual([turnId]);
+  });
+
+  it("keeps FIFO behind a different hydrated turn when the old terminal notification beats its lookup", async () => {
+    const response = deferred<TurnStateGetResult>();
+    const client = fakeClient({ state: () => response.promise });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("pending");
+    const pending = harness.controller.snapshot().pending;
+    harness.controller.reconcileFromHydrate({
+      ...emptyHydrate(),
+      turns: [{ turn_id: "other-active", state: "active" }],
     });
 
-    expect(harness.controller.snapshot().active).toBeNull();
-    expect(
-      harness.timeline.some(
-        (entry) =>
-          entry.kind === "system" &&
-          entry.title === "Turn start timed out" &&
-          entry.body.includes("never accepted"),
-      ),
-    ).toBe(true);
+    harness.controller.confirmTurnAccepted(turnId);
+    harness.controller.settleTurn(turnId);
+
+    expect(harness.activeTurnId()).toBe("other-active");
+    expect(harness.controller.snapshot().pending).toEqual(pending);
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    response.resolve({
+      session_id: "session-a",
+      turn_id: turnId,
+      state: "completed",
+      committed_seqs: [],
+    });
+    await response.promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(harness.activeTurnId()).toBe("other-active");
+    harness.controller.settleTurn("other-active");
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+    expect(harness.activeTurnId()).toBe(pending[0]?.turnId);
+  });
+
+  it("does not treat a future unrecognized hydrate state as terminal", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.reconcileFromHydrate({
+      ...emptyHydrate(),
+      turns: [{ turn_id: turnId, state: "future_state" }],
+    });
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery?.phase).toBe("unknown"),
+    );
+    expect(harness.activeTurnId()).toBe(turnId);
+  });
+
+  it("preserves the accepted owner through a same-transport lookup and its terminal tail", async () => {
+    const client = fakeClient({
+      state: async (params) => ({
+        ...params,
+        state: "active",
+        committed_seqs: [],
+      }),
+    });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.reconcileFromHydrate(emptyHydrate(), true);
+    await vi.waitFor(() => expect(harness.controller.turnRecovery).toBeNull());
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId,
+      state: "running",
+    });
+    client.getTurnState.mockImplementation(async (params) => ({
+      ...params,
+      state: "completed",
+      committed_seqs: [],
+    }));
+    harness.controller.reconcileFromHydrate(emptyHydrate(), true);
+    await vi.waitFor(() =>
+      expect(harness.controller.snapshot().active).toBeNull(),
+    );
+    expect(harness.controller.backgroundHandoffTurn()).toEqual({
+      turnId,
+      state: "completed",
+    });
+  });
+
+  it("keeps pending prompts behind another server turn when hydrate also contains the old terminal", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("pending");
+    const next = harness.controller.reconcileFromHydrate({
+      ...emptyHydrate(),
+      turns: [
+        { turn_id: turnId, state: "completed" },
+        { turn_id: "other-active", state: "active" },
+      ],
+    });
+    expect(next).toBeNull();
+    expect(harness.activeTurnId()).toBe("other-active");
+    expect(harness.controller.snapshot().pending).toHaveLength(1);
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
+    expect(client.getTurnState).not.toHaveBeenCalled();
   });
 
   it("keeps a timed-out start when hydrate still lists the turn", async () => {
@@ -461,7 +914,7 @@ describe("useTurnController async authority", () => {
       cursor: { stream: "session-a", seq: 2 },
       turns: [],
     });
-    start.reject(new Error("start was rejected"));
+    start.reject(new OctosUiProtocolError(-32000, "start was rejected"));
 
     await vi.waitFor(() => {
       expect(harness.controller.snapshot().active).toBeNull();
@@ -497,11 +950,19 @@ function renderController(initialClient: FakeTurnClient): {
   timeline: TimelineEntry[];
   connectionErrors: string[];
   dispatchEvents: TurnDispatchStateEvent[];
+  recoveredTerminals: string[];
+  setCanGetTurnState(value: boolean): void;
+  setSessionId(value: string): void;
   setClient(client: FakeTurnClient): void;
+  setCanStart(value: boolean): void;
   activeTurnId(): string;
 } {
   let controller: TurnController | null = null;
   let client: FakeTurnClient = initialClient;
+  let canStart = true;
+  let canGetTurnState = true;
+  let sessionId = "session-a";
+  const recoveredTerminals: string[] = [];
   const timeline: TimelineEntry[] = [];
   const connectionErrors: string[] = [];
   const dispatchEvents: TurnDispatchStateEvent[] = [];
@@ -513,10 +974,12 @@ function renderController(initialClient: FakeTurnClient): {
   function Probe() {
     controller = useTurnController({
       client: () => client as unknown as OctosUiClient,
-      sessionId: () => "session-a",
+      sessionId: () => sessionId,
       canEnqueue: () => true,
-      canStart: () => true,
+      canStart: () => canStart,
       canInterrupt: () => true,
+      canGetTurnState: () => canGetTurnState,
+      onRecoveredTerminal: (turnId) => recoveredTerminals.push(turnId),
       setTimeline,
       setConnectionError: (message) => connectionErrors.push(message),
       onDispatchState: (event) => dispatchEvents.push(event),
@@ -532,8 +995,18 @@ function renderController(initialClient: FakeTurnClient): {
     timeline,
     connectionErrors,
     dispatchEvents,
+    recoveredTerminals,
+    setSessionId(value) {
+      sessionId = value;
+    },
+    setCanGetTurnState(value) {
+      canGetTurnState = value;
+    },
     setClient(next) {
       client = next;
+    },
+    setCanStart(value) {
+      canStart = value;
     },
     activeTurnId() {
       const turnId = renderedController.snapshot().active?.turnId;
@@ -546,15 +1019,28 @@ function renderController(initialClient: FakeTurnClient): {
 interface FakeTurnClient {
   startTurn: ReturnType<typeof vi.fn>;
   interruptTurn: ReturnType<typeof vi.fn>;
+  getTurnState: ReturnType<typeof vi.fn>;
 }
 
 function fakeClient(options?: {
   start?: () => Promise<void>;
   interrupt?: () => Promise<void>;
+  state?: (params: {
+    session_id: string;
+    turn_id: string;
+  }) => Promise<TurnStateGetResult>;
 }): FakeTurnClient {
   return {
     startTurn: vi.fn(options?.start ?? (async () => undefined)),
     interruptTurn: vi.fn(options?.interrupt ?? (async () => undefined)),
+    getTurnState: vi.fn(
+      options?.state ??
+        (async (params) => ({
+          ...params,
+          state: "unknown",
+          committed_seqs: [],
+        })),
+    ),
   };
 }
 
@@ -579,5 +1065,13 @@ function deferred<Value>(): {
       if (!reject) throw new Error("Deferred promise is not initialized");
       reject(reason);
     },
+  };
+}
+
+function emptyHydrate() {
+  return {
+    session_id: "session-a",
+    cursor: { stream: "session-a", seq: 2 },
+    turns: [],
   };
 }

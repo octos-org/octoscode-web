@@ -1,0 +1,36 @@
+.field {
+  @supports (field-sizing: content) {
+    field-sizing: content;
+    min-height: 68px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+}
+
+.hint {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: 768px;
+  margin: 7px auto 0;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.contextUsage {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+}
+
+@media (max-width: 760px) {
+  .field {
+    max-height: min(200px, 28dvh);
+  }
+  .hint > span:last-child {
+    display: none;
+  }
+}

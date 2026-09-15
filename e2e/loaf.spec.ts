@@ -19,15 +19,12 @@ async function connectAndStart(page: Page): Promise<void> {
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await expect(chooser).toBeVisible();
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
   const add = page.getByRole("region", { name: "Add workspace" });
   await expect(add).toBeVisible();
   await add
     .getByLabel("Server workspace path")
     .fill("/workspace/octoscode-web");
-  await add.getByRole("button", { name: "Add & Start" }).click();
+  await add.getByRole("button", { name: "Start session" }).click();
   await expect(add).toBeHidden();
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 }

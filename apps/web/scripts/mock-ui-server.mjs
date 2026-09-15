@@ -14,6 +14,7 @@ const rejectedSessionIds = new Set();
 const delayedHydrateSockets = new WeakSet();
 let holdNextTurnStartAcknowledgement = false;
 let heldTurnStart = null;
+const turnStateBySession = new Map();
 let rejectNextSessionOpen = false;
 const mockAuthMode = process.env.OCTOSCODE_MOCK_AUTH_MODE ?? "optional";
 if (!new Set(["optional", "required"]).has(mockAuthMode)) {
@@ -333,6 +334,7 @@ const capabilities = {
     "session/open",
     "session/hydrate",
     "turn/start",
+    "turn/state/get",
     "turn/interrupt",
     "approval/respond",
     "user_question/respond",
@@ -357,6 +359,7 @@ const capabilities = {
   ],
   supported_features: [
     "state.session_hydrate.v1",
+    "state.turn_state_get.v1",
     "projection.envelope.v2",
     "approval.typed.v1",
     "user_question.v1",
@@ -882,6 +885,34 @@ sockets.on("connection", (socket, request) => {
       }
       return;
     }
+    if (request.method === "turn/state/get") {
+      if (openedSessionBySocket.get(socket) !== sessionId) {
+        replyError(
+          socket,
+          request.id,
+          -32_004,
+          `unknown session: ${sessionId}`,
+        );
+        return;
+      }
+      const turnId = request.params?.turn_id;
+      if (typeof turnId !== "string" || !turnId) {
+        replyError(socket, request.id, -32602, "turn_id is required");
+        return;
+      }
+      const held =
+        heldTurnStart?.sessionId === sessionId &&
+        heldTurnStart.turnId === turnId;
+      reply(socket, request.id, {
+        session_id: sessionId,
+        turn_id: turnId,
+        state: held
+          ? "active"
+          : (turnStateBySession.get(sessionId)?.get(turnId) ??
+            (turnId === "fixture-turn" ? "completed" : "unknown")),
+      });
+      return;
+    }
     if (request.method === "turn/start") {
       const accept = () => {
         if (socket.readyState !== WebSocket.OPEN) return false;
@@ -1161,6 +1192,7 @@ sockets.on("connection", (socket, request) => {
 
 function streamTurn(socket, sessionId, params, nextCursor) {
   const turnId = params.turn_id;
+  rememberTurnState(sessionId, turnId, "active");
   const threadId = `thread-${turnId}`;
   const text = params.input?.[0]?.text ?? "Fixture prompt";
   const completionDelayMs =
@@ -1598,7 +1630,28 @@ function takeHeldTurnStart() {
   return controlled;
 }
 
+function rememberTurnState(sessionId, turnId, state) {
+  let turns = turnStateBySession.get(sessionId);
+  if (!turns) {
+    turns = new Map();
+    turnStateBySession.set(sessionId, turns);
+  }
+  turns.set(turnId, state);
+}
+
 function notify(socket, sessionId, threadId, turnId, seq, cursor, type, data) {
+  if (type === "turn_terminal") {
+    const outcome = data.outcome;
+    rememberTurnState(
+      sessionId,
+      turnId,
+      outcome === "completed"
+        ? "completed"
+        : outcome === "interrupted"
+          ? "interrupted"
+          : "errored",
+    );
+  }
   socket.send(
     JSON.stringify({
       jsonrpc: "2.0",

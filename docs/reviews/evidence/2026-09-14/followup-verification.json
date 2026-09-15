@@ -1,0 +1,42 @@
+{
+  "date": "2026-09-14",
+  "branch": "fix/workspace-interaction-audit",
+  "source_state": "local uncommitted changes; no deployment",
+  "pnpm_check": "passed",
+  "client_tests": 77,
+  "web_tests": 367,
+  "playwright": {
+    "passed": 77,
+    "failed": 0,
+    "duration_minutes": 4.2,
+    "visual_comparisons": 4,
+    "second_pass_visual_baselines_updated": false
+  },
+  "initial_bytes": {
+    "javascript": 359801,
+    "javascript_budget": 360448,
+    "css": 66064,
+    "css_budget": 81920
+  },
+  "streaming_long_animation_frame": {
+    "worst_ms": 124.8,
+    "budget_ms": 200,
+    "environment": "local Chromium deterministic fixture"
+  },
+  "contract_verification": "passed; existing pinned contract unchanged",
+  "core_integration": {
+    "result": "passed",
+    "runtime": "v2.0.3-rc.9",
+    "revision": "5ea987813de4fd2afdd1d78f2106ad2868f0d923",
+    "scope": "isolated temporary state; no production change"
+  },
+  "production_browser": {
+    "result": "passed",
+    "responses": 101,
+    "http_200": 60,
+    "http_304": 41,
+    "page_or_console_errors": 0,
+    "failed_requests": 0,
+    "named_lazy_chunks_verified": 11
+  }
+}

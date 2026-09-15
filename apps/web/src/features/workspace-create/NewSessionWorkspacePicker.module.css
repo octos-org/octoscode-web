@@ -24,7 +24,7 @@
   max-height: min(720px, calc(100vh - 48px));
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 22px;
+  border-radius: 18px;
   outline: none;
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-shadow-dialog);
@@ -99,6 +99,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
+  transition: background-color 160ms ease;
 }
 
 .back:hover:not(:disabled) {
@@ -212,7 +213,7 @@
   color: var(--dsw-alias-state-business-primary);
   font-size: 12px;
   line-height: 18px;
-  opacity: 0;
+  opacity: 0.7;
 }
 
 .workspace:hover .rowAction,
@@ -301,10 +302,15 @@
   font-family: var(--dsw-font-family-code);
   font-size: 13px;
   line-height: 22px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .pathInput:focus {
   border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
 }
 
 .pathInput:disabled {
@@ -328,7 +334,7 @@
 
 .formSpacer {
   flex: 1;
-  min-height: 36px;
+  min-height: 24px;
 }
 
 .footer {
@@ -354,7 +360,7 @@
   justify-content: center;
   gap: 6px;
   min-width: 76px;
-  height: 36px;
+  height: 40px;
   padding: 7px 14px;
   border-radius: 10px;
   font-family: inherit;
@@ -362,6 +368,7 @@
   font-weight: 500;
   line-height: 20px;
   cursor: pointer;
+  transition: background-color 160ms ease;
 }
 
 .addButton {
@@ -451,10 +458,19 @@
   .badges {
     display: none;
   }
+
+  .pathInput {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation: none;
+  .back,
+  .workspace,
+  .pathInput,
+  .addButton,
+  .secondaryButton,
+  .primaryButton {
+    transition: none;
   }
 }

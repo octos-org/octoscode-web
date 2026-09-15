@@ -3,30 +3,22 @@
   width: 100%;
   height: 100%;
   min-height: 100dvh;
-  place-items: center;
+  place-items: safe center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 32px 20px;
-  background:
-    radial-gradient(
-      circle at 50% 35%,
-      color-mix(
-        in srgb,
-        var(--dsw-alias-state-business-primary) 7%,
-        transparent
-      ),
-      transparent 34%
-    ),
-    var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-base);
 }
 
 .card {
   display: grid;
-  width: min(100%, 420px);
+  width: min(100%, 440px);
   gap: 24px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 24px;
-  padding: 28px;
+  border-radius: 18px;
+  padding: 32px;
   background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-shadow-lv3);
+  box-shadow: var(--dsw-shadow-lv2);
 }
 
 .brand {
@@ -83,8 +75,8 @@
 .heading p,
 .note {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .fields {
@@ -92,16 +84,39 @@
   gap: 14px;
 }
 
-.fields label {
+.fields > label,
+.tokenField {
   display: grid;
   gap: 7px;
   margin: 0;
 }
 
-.fields label > span {
+.fieldHeading label,
+.tokenField > label {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
+}
+
+.fieldHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.usePage {
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.usePage:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 .fields input {
@@ -114,7 +129,10 @@
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family-code);
-  font-size: 12px;
+  font-size: 13px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .fields input:focus {
@@ -126,6 +144,48 @@
 /* Input value is data (mono); the placeholder is prose (body font). */
 .fields input::placeholder {
   font-family: var(--dsw-font-family);
+}
+
+.fieldHelp {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.validation {
+  color: var(--dsw-alias-state-error-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.fields input[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-text);
+}
+
+.tokenInput {
+  position: relative;
+}
+
+.tokenInput input {
+  padding-right: 62px;
+}
+
+.showToken {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  height: 36px;
+  min-width: 50px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.showToken:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .error {
@@ -140,8 +200,17 @@
   line-height: 17px;
 }
 
-.error small {
+.troubleshooting {
+  margin-top: 5px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.troubleshooting summary {
+  cursor: pointer;
+}
+
+.troubleshooting p {
+  margin: 6px 0 0;
 }
 
 .connect {
@@ -153,6 +222,9 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 550;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .connect:hover:not(:disabled) {
@@ -162,6 +234,45 @@
 .connect:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.connect:active {
+  transform: scale(0.99);
+}
+
+.connecting {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.connecting > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--dsw-alias-label-secondary);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.cancel {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
 }
 
 .forget {
@@ -178,4 +289,46 @@
 
 .forget:hover {
   color: var(--dsw-alias-label-primary);
+}
+
+.forget:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.card button:focus-visible,
+.troubleshooting summary:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .gate {
+    padding: 20px 16px;
+  }
+
+  .card {
+    padding: 24px;
+  }
+
+  .fields input {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+
+  .fields input,
+  .connect {
+    transition: none;
+  }
 }

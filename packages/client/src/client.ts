@@ -39,64 +39,42 @@ import type {
   TaskOutputReadParams,
   TaskOutputReadResult,
   TurnStartParams,
+  TurnStateGetParams,
+  TurnStateGetResult,
   UserQuestionRespondParams,
   UserQuestionRespondResult,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
-import { parseSessionHydrateResult } from "./hydrate.ts";
-import { parseSessionOpenResult } from "./session.ts";
+import { parseTurnStateGetResult } from "./turn-state.ts";
 import {
   parseApprovalRespondResult,
   parseUserQuestionRespondResult,
 } from "./interaction.ts";
-import {
-  parseDiffPreviewGetResult,
-  parsePermissionProfileListResult,
-  parsePermissionProfileSetResult,
-} from "./coding.ts";
-import {
-  parseSessionStatusReadResult,
-  parseTaskArtifactListResult,
-  parseTaskArtifactReadResult,
-  parseTaskCancelResult,
-  parseTaskListResult,
-  parseTaskOutputReadResult,
-} from "./supervision.ts";
-import {
-  parseConfigCapabilitiesListResult,
-  parseLaunchResolveResult,
-  parseSessionDeleteResult,
-  parseSessionFilesListResult,
-  parseSessionListResult,
-} from "./workspace.ts";
-import {
-  APPUI_ONBOARDING_METHODS,
-  parseLlmFetchModelsResult,
-  parseLlmCatalogResult,
-  parseProfileLlmConfigResult,
-  parseProfileLlmDeleteResult,
-  parseProfileLlmListResult,
-  parseProfileLlmSelectResult,
-  parseLlmTestResult,
-  parseLlmUpsertResult,
-  parseLocalProfileCreateResult,
-  type LlmCatalogResult,
-  type LlmFetchModelsParams,
-  type LlmFetchModelsResult,
-  type LlmProvisionParams,
-  type ProfileLlmConfigReadParams,
-  type ProfileLlmConfigResult,
-  type ProfileLlmDeleteParams,
-  type ProfileLlmDeleteResult,
-  type ProfileLlmListParams,
-  type ProfileLlmListResult,
-  type ProfileLlmSelectParams,
-  type ProfileLlmSelectResult,
-  type LlmTestResult,
-  type LlmUpsertResult,
-  type LocalProfileCreateParams,
-  type LocalProfileCreateResult,
+import { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
+import type {
+  LlmCatalogResult,
+  LlmFetchModelsParams,
+  LlmFetchModelsResult,
+  LlmProvisionParams,
+  ProfileLlmConfigReadParams,
+  ProfileLlmConfigResult,
+  ProfileLlmDeleteParams,
+  ProfileLlmDeleteResult,
+  ProfileLlmListParams,
+  ProfileLlmListResult,
+  ProfileLlmSelectParams,
+  ProfileLlmSelectResult,
+  LlmTestResult,
+  LlmUpsertResult,
+  LocalProfileCreateParams,
+  LocalProfileCreateResult,
 } from "./onboarding.ts";
+
+// Reuse each loader so production builds emit one preload closure per family.
+const loadCodingResponses = () => import("./coding.ts");
+const loadSupervisionResponses = () => import("./supervision.ts");
+const loadOnboardingResponses = () => import("./onboarding.ts");
+const loadWorkspaceResponses = () => import("./workspace.ts");
 
 export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
@@ -104,6 +82,7 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
+  CORE_UI_FEATURES.TURN_STATE_GET_V1,
   CORE_UI_FEATURES.USER_QUESTION_V1,
   CORE_UI_FEATURES.PLAN_TODOS_V1,
   CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
@@ -233,11 +212,19 @@ export class OctosUiClient {
     }
     this.socket = socket;
 
-    socket.onmessage = (event) => this.handleMessage(event.data);
+    socket.onmessage = (event) => {
+      if (this.socket === socket) this.handleMessage(event.data);
+    };
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       socket.onopen = () => {
+        if (this.socket !== socket) {
+          if (!settled)
+            reject(new Error("Octos UI Protocol connection replaced"));
+          settled = true;
+          return;
+        }
         settled = true;
         this.setStatus("connected");
         resolve();
@@ -246,13 +233,26 @@ export class OctosUiClient {
         const error = new Error(
           "Could not open the Octos UI Protocol connection",
         );
+        if (this.socket !== socket) {
+          if (!settled) reject(error);
+          settled = true;
+          return;
+        }
         this.emitError(error);
         this.setStatus("error");
         if (!settled) reject(error);
       };
       socket.onclose = () => {
-        if (this.socket === socket) this.socket = null;
         const error = new Error("Octos UI Protocol connection closed");
+        // disconnect() may already have started another connection on this
+        // client. The old close still rejects its own pending connect, but
+        // cannot reject RPCs or change state on the replacement transport.
+        if (this.socket !== socket) {
+          if (!settled) reject(error);
+          settled = true;
+          return;
+        }
+        this.socket = null;
         this.rejectPending(error);
         if (!settled) {
           settled = true;
@@ -319,7 +319,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_OPEN,
       params,
-      parseSessionOpenResult,
+      async (value) =>
+        (await import("./session.ts")).parseSessionOpenResult(value),
     );
   }
 
@@ -329,12 +330,27 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_HYDRATE,
       params,
-      parseSessionHydrateResult,
+      async (value) =>
+        (await import("./hydrate.ts")).parseSessionHydrateResult(value),
     );
   }
 
   startTurn(params: TurnStartParams): Promise<unknown> {
     return this.request(CORE_UI_METHODS.TURN_START, params);
+  }
+
+  getTurnState(params: TurnStateGetParams): Promise<TurnStateGetResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.TURN_STATE_GET,
+      params,
+      (value) => {
+        const result = parseTurnStateGetResult(value);
+        return result?.session_id === params.session_id &&
+          result.turn_id === params.turn_id
+          ? result
+          : null;
+      },
+    );
   }
 
   interruptTurn(sessionId: string, turnId: string): Promise<unknown> {
@@ -370,7 +386,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.PERMISSION_PROFILE_LIST,
       params,
-      parsePermissionProfileListResult,
+      async (value) =>
+        (await loadCodingResponses()).parsePermissionProfileListResult(value),
     );
   }
 
@@ -380,7 +397,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.PERMISSION_PROFILE_SET,
       params,
-      parsePermissionProfileSetResult,
+      async (value) =>
+        (await loadCodingResponses()).parsePermissionProfileSetResult(value),
     );
   }
 
@@ -390,7 +408,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.DIFF_PREVIEW_GET,
       params,
-      parseDiffPreviewGetResult,
+      async (value) =>
+        (await loadCodingResponses()).parseDiffPreviewGetResult(value),
     );
   }
 
@@ -398,7 +417,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_LIST,
       params,
-      parseTaskListResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseTaskListResult(value),
     );
   }
 
@@ -406,7 +426,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_CANCEL,
       params,
-      parseTaskCancelResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseTaskCancelResult(value),
     );
   }
 
@@ -416,7 +437,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_OUTPUT_READ,
       params,
-      parseTaskOutputReadResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseTaskOutputReadResult(value),
     );
   }
 
@@ -426,7 +448,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_ARTIFACT_LIST,
       params,
-      parseTaskArtifactListResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseTaskArtifactListResult(value),
     );
   }
 
@@ -436,7 +459,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_ARTIFACT_READ,
       params,
-      parseTaskArtifactReadResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseTaskArtifactReadResult(value),
     );
   }
 
@@ -444,7 +468,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_STATUS_READ,
       { session_id: sessionId },
-      parseSessionStatusReadResult,
+      async (value) =>
+        (await loadSupervisionResponses()).parseSessionStatusReadResult(value),
     );
   }
 
@@ -454,7 +479,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_LIST,
       params,
-      parseSessionListResult,
+      async (value) =>
+        (await loadWorkspaceResponses()).parseSessionListResult(value),
     );
   }
 
@@ -462,7 +488,10 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.CONFIG_CAPABILITIES_LIST,
       {},
-      parseConfigCapabilitiesListResult,
+      async (value) =>
+        (await loadWorkspaceResponses()).parseConfigCapabilitiesListResult(
+          value,
+        ),
     );
   }
 
@@ -472,7 +501,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LOCAL_CREATE,
       params,
-      parseLocalProfileCreateResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseLocalProfileCreateResult(value),
     );
   }
 
@@ -480,7 +510,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_CATALOG,
       {},
-      parseLlmCatalogResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseLlmCatalogResult(value),
     );
   }
 
@@ -490,7 +521,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_LIST,
       params,
-      parseProfileLlmListResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseProfileLlmListResult(value),
     );
   }
 
@@ -500,7 +532,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_LIST,
       params,
-      parseProfileLlmConfigResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseProfileLlmConfigResult(value),
     );
   }
 
@@ -510,7 +543,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_SELECT,
       params,
-      parseProfileLlmSelectResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseProfileLlmSelectResult(value),
     );
   }
 
@@ -520,7 +554,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_DELETE,
       params,
-      parseProfileLlmDeleteResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseProfileLlmDeleteResult(value),
     );
   }
 
@@ -530,7 +565,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_FETCH_MODELS,
       params,
-      parseLlmFetchModelsResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseLlmFetchModelsResult(value),
       LLM_PROBE_TIMEOUT_MS,
     );
   }
@@ -539,7 +575,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_TEST,
       params,
-      parseLlmTestResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseLlmTestResult(value),
       LLM_PROBE_TIMEOUT_MS,
     );
   }
@@ -548,7 +585,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       APPUI_ONBOARDING_METHODS.PROFILE_LLM_UPSERT,
       params,
-      parseLlmUpsertResult,
+      async (value) =>
+        (await loadOnboardingResponses()).parseLlmUpsertResult(value),
     );
   }
 
@@ -558,7 +596,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.LAUNCH_RESOLVE,
       params,
-      parseLaunchResolveResult,
+      async (value) =>
+        (await loadWorkspaceResponses()).parseLaunchResolveResult(value),
     );
   }
 
@@ -568,7 +607,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_DELETE,
       params,
-      parseSessionDeleteResult,
+      async (value) =>
+        (await loadWorkspaceResponses()).parseSessionDeleteResult(value),
     );
   }
 
@@ -578,18 +618,19 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.SESSION_FILES_LIST,
       params,
-      parseSessionFilesListResult,
+      async (value) =>
+        (await loadWorkspaceResponses()).parseSessionFilesListResult(value),
     );
   }
 
   private async validatedRequest<Result>(
     method: string,
     params: unknown,
-    parse: (value: unknown) => Result | null,
+    parse: (value: unknown) => Result | null | Promise<Result | null>,
     timeoutMs?: number,
   ): Promise<Result> {
     const result = await this.request(method, params, timeoutMs);
-    const parsed = parse(result);
+    const parsed = await parse(result);
     if (!parsed) throw new Error(`${method} returned an invalid result`);
     return parsed;
   }

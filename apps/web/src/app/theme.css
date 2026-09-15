@@ -27,6 +27,9 @@
   --dsw-space-6: 32px;
   --dsw-space-7: 48px;
   --dsw-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dsw-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dsw-motion-enter: 180ms;
+  --dsw-motion-feedback: 120ms;
   --dsw-transition-duration: 0.2s;
   --dsw-transition-duration-slow: 0.3s;
   --dsw-font-size-micro: 11px;
