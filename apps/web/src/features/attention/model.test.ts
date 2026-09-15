@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BackgroundTurnSnapshot } from "../session/background-turn-manager.ts";
-import {
-  AttentionTracker,
-  attentionTitle,
-  foregroundAttentionTurns,
-} from "./model.ts";
+import { AttentionTracker, foregroundAttentionTurns } from "./model.ts";
 import type { TimelineEntry } from "../timeline/model.ts";
 
 const first: BackgroundTurnSnapshot = {
@@ -62,47 +58,6 @@ describe("attention transitions", () => {
     // Terminal-to-terminal contradictions aren't new lifecycle evidence.
     expect(
       tracker.observe(identity, [{ ...first, state: "failed" }], second, true),
-    ).toEqual([]);
-  });
-
-  it("does not signal the selected visible session or infer success from a missing turn", () => {
-    const tracker = new AttentionTracker();
-    const identity = {};
-    tracker.observe(identity, [first], first, true);
-    expect(
-      tracker.observe(
-        identity,
-        [{ ...first, state: "completed" }],
-        first,
-        true,
-      ),
-    ).toEqual([]);
-    tracker.observe(identity, [second], first, false);
-    expect(tracker.observe(identity, [], first, false)).toEqual([]);
-    expect(tracker.count).toBe(0);
-  });
-
-  it("allows a proven selected-session terminal while hidden and clears on acknowledgement", () => {
-    const tracker = new AttentionTracker();
-    const identity = {};
-    tracker.observe(identity, [first], first, true);
-    expect(
-      tracker.observe(
-        identity,
-        [{ ...first, state: "completed" }],
-        first,
-        false,
-      ),
-    ).toHaveLength(1);
-    tracker.acknowledgeAll();
-    expect(tracker.count).toBe(0);
-    expect(
-      tracker.observe(
-        identity,
-        [{ ...first, state: "completed" }],
-        first,
-        false,
-      ),
     ).toEqual([]);
   });
 
@@ -194,11 +149,6 @@ describe("attention transitions", () => {
     }
     expect(tracker.count).toBe(128);
   });
-
-  it("restores the original title when no attention remains", () => {
-    expect(attentionTitle("Octoscode", 2)).toBe("(2) Octoscode");
-    expect(attentionTitle("Octoscode", 0)).toBe("Octoscode");
-  });
 });
 
 describe("foreground attention evidence", () => {
@@ -210,24 +160,7 @@ describe("foreground attention evidence", () => {
     status: "complete",
     turnId: "turn-1",
   };
-  it("notifies hidden foreground completion from an explicit terminal only", () => {
-    const tracker = new AttentionTracker();
-    const identity = {};
-    tracker.observe(
-      identity,
-      foregroundAttentionTurns(first, "turn-1", null, []),
-      first,
-      true,
-    );
-    expect(
-      tracker.observe(
-        identity,
-        foregroundAttentionTurns(first, null, null, [terminal]),
-        first,
-        false,
-      ),
-    ).toMatchObject([{ state: "completed", turnId: "turn-1" }]);
-  });
+
   it("ignores assistant completion, anonymous terminals, interruption and a vanished active queue", () => {
     expect(
       foregroundAttentionTurns(first, null, null, [

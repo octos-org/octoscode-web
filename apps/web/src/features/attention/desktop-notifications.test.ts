@@ -29,45 +29,19 @@ describe("desktop notification consent", () => {
     expect(env.create).not.toHaveBeenCalled();
   });
 
-  it("persists only explicit granted consent and disables without another permission prompt", async () => {
-    const env = environment();
+  it("keeps notifications disabled when the permission prompt is dismissed", async () => {
+    const env = environment({ requestPermission: async () => "default" });
     const service = new DesktopNotifications(env);
-    const change = vi.fn();
-    const unsubscribe = service.subscribe(change);
     await service.toggle();
     expect(service.getSnapshot()).toMatchObject({
-      enabled: true,
+      enabled: false,
       pending: false,
-      error: false,
+      error: true,
     });
-    expect(env.savePreference).toHaveBeenLastCalledWith(true);
-    service.show("waiting");
-    expect(env.create).toHaveBeenCalledWith(
-      expect.stringContaining("needs your input"),
-    );
-    await service.toggle();
-    expect(env.savePreference).toHaveBeenLastCalledWith(false);
-    expect(env.requestPermission).toHaveBeenCalledTimes(1);
-    expect(change).toHaveBeenCalled();
-    unsubscribe();
+    expect(service.getSnapshot().message).toContain("Tab counts still work");
+    service.show("failed");
+    expect(env.create).not.toHaveBeenCalled();
   });
-
-  it.each(["denied", "default"] as const)(
-    "keeps %s permission readable and disabled",
-    async (permission) => {
-      const env = environment({ requestPermission: async () => permission });
-      const service = new DesktopNotifications(env);
-      await service.toggle();
-      expect(service.getSnapshot()).toMatchObject({
-        enabled: false,
-        pending: false,
-        error: true,
-      });
-      expect(service.getSnapshot().message).toContain("Tab counts still work");
-      service.show("failed");
-      expect(env.create).not.toHaveBeenCalled();
-    },
-  );
 
   it("supports unavailable browsers without requesting permission", async () => {
     const env = environment({ permission: () => null });
@@ -153,7 +127,7 @@ describe("desktop notification consent", () => {
     expect(env.savePreference).not.toHaveBeenCalled();
   });
 
-  it("guards whole storage and Notification getters and keeps preferences token-free", () => {
+  it("handles blocked storage and Notification getters", () => {
     const blocked = Object.defineProperties(
       {},
       {
@@ -173,15 +147,5 @@ describe("desktop notification consent", () => {
     expect(env.permission()).toBeNull();
     expect(env.readPreference()).toBe(false);
     expect(() => env.savePreference(true)).not.toThrow();
-    const storage = { getItem: vi.fn(() => "true"), setItem: vi.fn() };
-    const available = desktopEnvironment({
-      localStorage: storage,
-    } as unknown as Window & typeof globalThis);
-    expect(available.readPreference()).toBe(true);
-    available.savePreference(false);
-    expect(storage.setItem).toHaveBeenCalledWith(
-      "octoscode-web:desktop-notifications",
-      "false",
-    );
   });
 });

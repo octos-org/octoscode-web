@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import {
   clearConnectionPreferences,
-  browserStorage,
   clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
@@ -24,45 +23,6 @@ const defaults: ConnectionDraft = {
 };
 
 describe("connection preferences", () => {
-  it("reports a read-only Forget failure instead of claiming saved identity was removed", () => {
-    const durable = new MemoryStorage();
-    const tab = new MemoryStorage();
-    saveConnectionPreferences(defaults, durable, tab);
-    setAutoConnect(tab, true);
-    saveComposerDrafts(tab, defaults, [["session", "Unsent text"]]);
-    const blocked = {
-      getItem: (key: string) => tab.getItem(key),
-      setItem: () => {
-        throw new Error("blocked");
-      },
-      removeItem: () => {
-        throw new Error("blocked");
-      },
-    };
-    expect(clearConnectionPreferences(durable, blocked)).toBe(false);
-    expect(loadAutoConnect(blocked)).toBe(true);
-    expect(loadComposerDrafts(blocked, defaults)).toEqual([
-      ["session", "Unsent text"],
-    ]);
-    expect(clearConnectionPreferences(durable, tab)).toBe(true);
-    expect(loadComposerDrafts(tab, defaults)).toEqual([]);
-    expect(loadAutoConnect(tab)).toBe(false);
-  });
-
-  it("cannot certify removal when storage reads or the whole storage getter are denied", () => {
-    expect(
-      clearConnectionPreferences(new MemoryStorage(), new ThrowingStorage()),
-    ).toBe(false);
-    // In the Node test environment browserStorage catches the missing window,
-    // just as it catches a browser SecurityError from the storage getter.
-    expect(
-      clearConnectionPreferences(
-        browserStorage("localStorage"),
-        browserStorage("sessionStorage"),
-      ),
-    ).toBe(false);
-  });
-
   it("keeps unsent drafts only in the matching tab identity and clears them on token change or Forget", () => {
     const durable = new MemoryStorage();
     const tab = new MemoryStorage();

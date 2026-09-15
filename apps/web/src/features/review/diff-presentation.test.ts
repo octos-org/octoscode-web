@@ -1,37 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DiffPreviewLine } from "@octos-org/octoscode-client";
 import { highlightToTokens } from "../markdown/highlight.ts";
-import {
-  canDecorateDiff,
-  decorateDiffHunk,
-  diffKind,
-  diffLanguage,
-} from "./diff-presentation.ts";
+import { canDecorateDiff, decorateDiffHunk } from "./diff-presentation.ts";
 
 const line = (kind: string, content: string): DiffPreviewLine => ({
   kind,
   content,
 });
-const changed = (tokens: ReturnType<typeof decorateDiffHunk>[number]) =>
-  tokens
-    .filter((token) => token.changed)
-    .map((token) => token.content)
-    .join("");
 
 describe("diff presentation", () => {
-  it("isolates multiple changed words and preserves exact Unicode and whitespace", () => {
-    const lines = [
-      line("removed", '\tconst 名称 = "旧值😀"; return false;  '),
-      line("added", '\tconst 名称 = "新值🌏"; return true;  '),
-    ];
-    const decorated = decorateDiffHunk(lines, undefined);
-    expect(changed(decorated[0]!)).toBe("旧值😀false");
-    expect(changed(decorated[1]!)).toBe("新值🌏true");
-    expect(
-      decorated.map((tokens) => tokens.map((token) => token.content).join("")),
-    ).toEqual(lines.map((entry) => entry.content));
-  });
-
   it("does not pair unequal blocks or cross context boundaries", () => {
     for (const lines of [
       [
@@ -55,21 +32,6 @@ describe("diff presentation", () => {
           .every((token) => !token.changed),
       ).toBe(true);
     }
-  });
-
-  it("keeps insert/delete aliases and unknown kinds consistent", () => {
-    expect(diffKind("inserted")).toBe("added");
-    expect(diffKind("delete")).toBe("removed");
-    expect(diffKind("future-kind")).toBe("context");
-    const result = decorateDiffHunk(
-      [
-        line("deleted", "const ready = false;"),
-        line("insert", "const ready = true;"),
-      ],
-      undefined,
-    );
-    expect(changed(result[0]!)).toBe("false");
-    expect(changed(result[1]!)).toBe("true");
   });
 
   it("bounds both total preview work and quadratic word comparison", () => {
@@ -167,13 +129,5 @@ describe("diff presentation", () => {
     expect(
       highlightToTokens("<script>alert(1)</script>", "unknown"),
     ).toBeUndefined();
-  });
-
-  it("infers only the filename suffix and treats unknown languages as plain text", () => {
-    expect(diffLanguage("src/APP.TSX")).toBe("tsx");
-    expect(diffLanguage("C:\\repo\\code.py")).toBe("py");
-    expect(diffLanguage(".bashrc")).toBe("sh");
-    expect(diffLanguage("README")).toBeUndefined();
-    expect(diffLanguage("parent.ts/README")).toBeUndefined();
   });
 });

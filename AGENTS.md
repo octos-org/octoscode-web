@@ -35,6 +35,19 @@ or plugin execution. Those remain in `octos serve`.
 
 ## Required checks
 
+Keep test additions proportionate:
+
+- Name the regression or invariant and check existing coverage before adding a
+  test. Prefer extending the owning test or fixture over another overlapping
+  suite.
+- Unit tests own protocol inputs, identity boundaries, algorithms and races.
+  Browser tests own user flows, focus and rendering. Cover a behavior in both
+  only when each catches a different failure.
+- Do not add tests for static wording, cosmetic styling, trivial getters,
+  React's own escaping, or mock plumbing. Assert observable results; avoid
+  locking incidental implementation details. Test counts and coverage
+  percentages are not delivery goals.
+
 Before committing, run:
 
 ```sh
