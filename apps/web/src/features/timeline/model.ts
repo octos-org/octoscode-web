@@ -28,6 +28,17 @@ export function timelineFromHydrate(
   result: SessionHydrateResult,
 ): TimelineEntry[] {
   let entries: TimelineEntry[] = [];
+  // rc.9 transcript rows carry a thread_id but usually no turn_id. Only a
+  // unique server-provided mapping can supply the missing turn identity.
+  const turnByThread = new Map<string, string | null>();
+  for (const turn of result.turns ?? []) {
+    if (!turn.thread_id || !turn.turn_id) continue;
+    const existing = turnByThread.get(turn.thread_id);
+    turnByThread.set(
+      turn.thread_id,
+      existing === undefined || existing === turn.turn_id ? turn.turn_id : null,
+    );
+  }
   const positions = new Map<string, number>();
   const hydrateEntry = (entry: TimelineEntry) => {
     const index = positions.get(entry.id);
@@ -39,7 +50,11 @@ export function timelineFromHydrate(
   for (const message of [...(result.messages ?? [])].sort(
     (left, right) => left.seq - right.seq,
   )) {
-    const turnId = message.turn_id;
+    const turnId =
+      message.turn_id ??
+      (message.thread_id
+        ? (turnByThread.get(message.thread_id) ?? undefined)
+        : undefined);
     const stableId =
       message.message_id ??
       message.client_message_id ??
@@ -56,7 +71,9 @@ export function timelineFromHydrate(
     }
     const role = message.role.toLowerCase();
     hydrateEntry({
-      id: role === "user" && turnId ? `user:${turnId}` : `hydrated:${stableId}`,
+      // A turn can contain several persisted user inputs (turn/steer). Turn
+      // identity associates their activity; it is not a unique message key.
+      id: `hydrated:${stableId}`,
       kind:
         role === "user"
           ? "user"
@@ -149,7 +166,7 @@ export function addOptimisticUser(
   turnId: string,
   text: string,
 ): TimelineEntry[] {
-  return upsert(entries, {
+  return upsertUser(entries, {
     id: `user:${turnId}`,
     kind: "user",
     title: "You",
@@ -178,10 +195,21 @@ export function foldNotification(
     if (!envelope) {
       return addSystemMessage(
         entries,
-        `invalid-projection:${Date.now()}`,
+        nextNoticeId(entries, "invalid-projection"),
         "Protocol frame rejected",
         "projection/envelope did not match the negotiated v2 shape.",
         "error",
+      );
+    }
+    if (
+      envelope.payload.type === "user_message" &&
+      isRecord(envelope.payload.data)
+    ) {
+      return upsertCanonicalUser(
+        entries,
+        envelope.turn_id,
+        `user-event:${JSON.stringify([envelope.thread_id, envelope.seq])}`,
+        textOf(envelope.payload.data),
       );
     }
     return foldProjection(
@@ -228,9 +256,9 @@ export function foldNotification(
       );
     case CORE_UI_METHODS.TOOL_STARTED:
       return startTool(settleReasoning(entries, turnId), {
-        id: `tool:${String(params.tool_call_id ?? turnId)}`,
+        id: `tool:${stringOf(params.tool_call_id, turnId)}`,
         kind: "tool",
-        title: String(params.tool_name ?? "Tool"),
+        title: stringOf(params.tool_name, "Tool"),
         body: pretty(params.arguments),
         status: "running",
         turnId,
@@ -238,7 +266,7 @@ export function foldNotification(
     case CORE_UI_METHODS.TOOL_PROGRESS:
       return progressTool(
         entries,
-        `tool:${String(params.tool_call_id ?? turnId)}`,
+        `tool:${stringOf(params.tool_call_id, turnId)}`,
         {
           body: typeof params.message === "string" ? params.message : undefined,
         },
@@ -263,14 +291,14 @@ export function foldNotification(
         entries,
         turnId,
         "errored",
-        String(params.message ?? "Unknown server error"),
+        stringOf(params.message, "Unknown server error"),
       );
     case CORE_UI_METHODS.WARNING:
       return addSystemMessage(
         entries,
-        `warning:${Date.now()}`,
-        String(params.code ?? "Warning"),
-        String(params.message ?? "The server reported a warning."),
+        nextNoticeId(entries, CORE_UI_METHODS.WARNING),
+        stringOf(params.code, "Warning"),
+        stringOf(params.message, "The server reported a warning."),
         "error",
       );
     default:
@@ -340,19 +368,10 @@ function foldProjection(
     return entries.slice();
   }
   switch (type) {
-    case "user_message":
-      return upsert(entries, {
-        id: `user:${turnId}`,
-        kind: "user",
-        title: "You",
-        body: textOf(data),
-        status: "complete",
-        turnId,
-      });
     case "assistant_delta":
       return appendText(
         settleReasoning(entries, turnId),
-        `assistant:${turnId}:${String(data.assistant_segment_id ?? "default")}`,
+        `assistant:${turnId}:${stringOf(data.assistant_segment_id, "default")}`,
         "assistant",
         "Octos",
         data.text,
@@ -367,7 +386,7 @@ function foldProjection(
       const hydrated = messageId
         ? entries.find((entry) => entry.messageId === messageId)
         : undefined;
-      const streamId = `assistant:${turnId}:${String(data.assistant_segment_id ?? "default")}`;
+      const streamId = `assistant:${turnId}:${stringOf(data.assistant_segment_id, "default")}`;
       return upsert(settleReasoning(entries, turnId), {
         id: hydrated?.id ?? streamId,
         kind: "assistant",
@@ -394,10 +413,10 @@ function foldProjection(
       // reasoning entry so it doesn't keep a stale "running" badge.
       const settled = settleReasoning(entries, turnId);
       return startTool(settled, {
-        id: `tool:${String(data.tool_call_id ?? turnId)}`,
+        id: `tool:${stringOf(data.tool_call_id, turnId)}`,
         kind: "tool",
-        title: String(data.name ?? "Tool"),
-        body: String(data.arguments_preview ?? ""),
+        title: stringOf(data.name, "Tool"),
+        body: stringOf(data.arguments_preview),
         status: "running",
         turnId,
       });
@@ -405,15 +424,13 @@ function foldProjection(
     case "tool_progress":
       return progressTool(
         entries,
-        `tool:${String(data.tool_call_id ?? turnId)}`,
+        `tool:${stringOf(data.tool_call_id, turnId)}`,
         {
           body: typeof data.message === "string" ? data.message : "",
         },
       );
     case "tool_end": {
-      const raw = String(
-        data.output_preview ?? data.error ?? data.reason ?? "",
-      );
+      const raw = stringOf(data.output_preview ?? data.error ?? data.reason);
       return completeTool(entries, turnId, data.tool_call_id, {
         body: raw,
         status:
@@ -436,19 +453,32 @@ function foldProjection(
       return settleTimelineTurn(
         entries,
         turnId,
-        String(data.outcome ?? "errored"),
-        data.error ? pretty(data.error) : "",
+        stringOf(data.outcome, "errored"),
+        terminalErrorText(data.error),
       );
     }
-    case "background/spawn_complete":
+    case "background/spawn_complete": {
+      const messageId = stringOf(data.message_id);
+      const hydrated = messageId
+        ? entries.find(
+            (entry) =>
+              entry.kind === "assistant" && entry.messageId === messageId,
+          )
+        : undefined;
       return upsert(entries, {
-        id: `background:${String(data.task_id ?? turnId)}`,
+        id: hydrated?.id ?? `background:${stringOf(data.task_id, turnId)}`,
         kind: "assistant",
         title: "Background agent",
-        body: String(data.content ?? "Background task completed."),
+        body: appendMedia(
+          stringOf(data.content, "Background task completed."),
+          mediaOf(data.media),
+        ),
         status: "complete",
         turnId,
+        ...(messageId ? { messageId } : {}),
+        ...(hasTerminal(entries, turnId) ? { turnSettled: true } : {}),
       });
+    }
     default:
       return entries.slice();
   }
@@ -684,9 +714,29 @@ function coalesceHydratedTools(
   entries: TimelineEntry[],
   replayed: NonNullable<SessionHydrateResult["replayed_envelopes"]>,
 ): TimelineEntry[] {
-  let next = entries;
+  const cards = new Map<
+    string,
+    { card: TimelineEntry; candidates: TimelineEntry[] }
+  >();
+  const starts = new Map<string, { thread: string; seq: number } | null>();
   for (const envelope of replayed) {
     const { type, data } = envelope.payload;
+    if (
+      type === "tool_start" &&
+      isRecord(data) &&
+      typeof data.tool_call_id === "string"
+    ) {
+      const id = `tool:${data.tool_call_id}`;
+      const previous = starts.get(id);
+      starts.set(
+        id,
+        previous === undefined ||
+          (previous?.thread === envelope.thread_id &&
+            previous.seq === envelope.seq)
+          ? { thread: envelope.thread_id, seq: envelope.seq }
+          : null,
+      );
+    }
     if (
       type !== "tool_end" ||
       !isRecord(data) ||
@@ -695,29 +745,157 @@ function coalesceHydratedTools(
       continue;
     const preview = data.output_preview.trim();
     if (!preview) continue;
-    const toolId = `tool:${String(data.tool_call_id ?? envelope.turn_id)}`;
-    const card = next.find((entry) => entry.id === toolId);
+    const truncatedPrefix = toolPreviewPrefix(data.output_preview);
+    const toolId = `tool:${stringOf(data.tool_call_id, envelope.turn_id)}`;
+    const card = entries.find((entry) => entry.id === toolId);
     if (!card) continue;
-    // Hydrated rows have no tool_call_id. Only merge an unambiguous same-turn
-    // exact output (or substantial preview prefix), retaining its full text
-    // and transcript position. Unmatched rows remain available as disclosures.
-    const candidates = next.filter(
+    const candidates = entries.filter(
       (entry) =>
         entry.kind === "tool" &&
         entry.id.startsWith("hydrated:") &&
         entry.turnId === envelope.turn_id &&
         (entry.body.trim() === preview ||
-          (preview.length >= 80 && entry.body.trim().startsWith(preview))),
+          (preview.length >= 80 && entry.body.trim().startsWith(preview)) ||
+          (truncatedPrefix !== null &&
+            entry.body.trim().startsWith(truncatedPrefix))),
     );
-    if (candidates.length !== 1) continue;
-    const match = candidates[0]!;
-    next = next
-      .filter((entry) => entry.id !== toolId)
-      .map((entry) =>
-        entry.id === match.id ? { ...entry, ...card, body: entry.body } : entry,
+    cards.set(toolId, { card, candidates });
+  }
+  // Hydrated rows have no tool_call_id. Require a one-to-one match in both
+  // directions before replacing a raw row; a greedy merge can erase ambiguity
+  // when two calls have the same output. Keep each matched row's full text.
+  const owners = new Map<string, number>();
+  for (const { candidates } of cards.values()) {
+    for (const candidate of candidates) {
+      owners.set(candidate.id, (owners.get(candidate.id) ?? 0) + 1);
+    }
+  }
+  const replacements = new Map<string, TimelineEntry>();
+  const merged = new Set<string>();
+  for (const { card, candidates } of cards.values()) {
+    const match = candidates[0];
+    if (candidates.length !== 1 || !match || owners.get(match.id) !== 1)
+      continue;
+    replacements.set(match.id, { ...match, ...card, body: match.body });
+    merged.add(card.id);
+  }
+  const next = entries
+    .filter((entry) => !merged.has(entry.id))
+    .map((entry) => replacements.get(entry.id) ?? entry);
+  // Parallel tools can persist in completion order. Restore authoritative
+  // start order only inside consecutive, fully identified tool groups.
+  // Missing/conflicting starts, raw rows and other content remain boundaries.
+  for (let index = 0; index < next.length;) {
+    const first = next[index]!;
+    const start = merged.has(first.id) ? starts.get(first.id) : null;
+    let end = index + 1;
+    if (start) {
+      while (
+        end < next.length &&
+        next[end]!.turnId === first.turnId &&
+        merged.has(next[end]!.id) &&
+        starts.get(next[end]!.id)?.thread === start.thread
+      ) {
+        end += 1;
+      }
+      next.splice(
+        index,
+        end - index,
+        ...next
+          .slice(index, end)
+          .sort(
+            (left, right) =>
+              starts.get(left.id)!.seq - starts.get(right.id)!.seq,
+          ),
       );
+    }
+    index = end;
   }
   return next;
+}
+
+function toolPreviewPrefix(preview: string): string | null {
+  const limit = preview.endsWith("...")
+    ? 200
+    : preview.endsWith("…")
+      ? 2048
+      : 0;
+  if (!limit) return null;
+  const prefix = preview.slice(0, limit === 200 ? -3 : -1);
+  // rc.9 agent completion previews use 200 UTF-8 bytes + "..."; the protocol
+  // boundary separately caps other producers at 2048 bytes + "…".
+  // Recognize those boundaries, not arbitrary prose ending in an ellipsis.
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(prefix).length;
+  const normalized = prefix.trim();
+  return bytes >= limit - 3 &&
+    bytes <= limit &&
+    encoder.encode(normalized).length >= 80
+    ? normalized
+    : null;
+}
+
+function upsertCanonicalUser(
+  entries: readonly TimelineEntry[],
+  turnId: string,
+  eventId: string,
+  text: string,
+): TimelineEntry[] {
+  const replayed = entries.find((entry) => entry.streamId === eventId);
+  const users = entries.filter(
+    (entry) => entry.kind === "user" && entry.turnId === turnId,
+  );
+  const optimistic = users.find(
+    (entry) =>
+      entry.id === `user:${turnId}` && !entry.streamId && entry.body === text,
+  );
+  const user: TimelineEntry = {
+    id:
+      replayed?.id ??
+      optimistic?.id ??
+      (users.length ? eventId : `user:${turnId}`),
+    kind: "user",
+    title: "You",
+    body: text,
+    status: "complete",
+    turnId,
+    streamId: eventId,
+  };
+  // A drained steer can precede persistence of the original prompt. Match an
+  // optimistic prompt by its text; never replace it with an unrelated input.
+  // Only the first observed question may need moving before its replies.
+  return users.length ? upsert(entries, user) : upsertUser(entries, user);
+}
+
+function upsertUser(
+  entries: readonly TimelineEntry[],
+  user: TimelineEntry,
+): TimelineEntry[] {
+  const existing = entries.findIndex((entry) => entry.id === user.id);
+  const firstReply = entries.findIndex(
+    (entry) =>
+      entry.turnId === user.turnId &&
+      ["reasoning", "tool", "assistant"].includes(entry.kind),
+  );
+  if (firstReply < 0 || (existing >= 0 && existing < firstReply)) {
+    return upsert(entries, user);
+  }
+  // Canonical user_message can arrive after streaming replies. Place only its
+  // display row before that turn's activity; retain every other row's order.
+  const next = entries.filter((entry) => entry.id !== user.id);
+  next.splice(firstReply, 0, user);
+  return next;
+}
+
+function nextNoticeId(
+  entries: readonly TimelineEntry[],
+  prefix: string,
+): string {
+  let ordinal = entries.length;
+  while (entries.some((entry) => entry.id === `${prefix}:${ordinal}`)) {
+    ordinal += 1;
+  }
+  return `${prefix}:${ordinal}`;
 }
 
 function upsert(
@@ -754,6 +932,21 @@ function patchEntry(
 
 function textOf(value: Record<string, unknown>): string {
   return typeof value.text === "string" ? value.text : "";
+}
+
+function stringOf(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function terminalErrorText(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (!isRecord(error)) return "";
+  const message = stringOf(error.message).trim();
+  if (message) return message;
+  const code = stringOf(error.code).trim();
+  return code
+    ? `Server error (${code}).`
+    : "The server could not complete this turn.";
 }
 
 function pretty(value: unknown): string {

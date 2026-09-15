@@ -39,7 +39,7 @@ test("retains an unresolved turn when navigation would discard its only status r
                   data: {
                     name: "run",
                     tool_call_id: "background-cleanup",
-                    progress: "Cleaning up background work",
+                    message: "Cleaning up background work",
                   },
                 },
               },
@@ -71,7 +71,7 @@ test("retains an unresolved turn when navigation would discard its only status r
     .getByLabel("Server workspace path")
     .fill("/workspace/runtime-recovery");
   await page.getByLabel("Server workspace path").press("Enter");
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeVisible();
   await composer.fill(
     "A turn whose acknowledgement survives but ledger does not",

@@ -12,7 +12,7 @@ async function start(page: Page) {
   await page.getByLabel("Server workspace path").fill("/workspace/final-input");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
 }
 
@@ -39,7 +39,7 @@ test("approval shortcuts ignore modified keys and IME composition", async ({
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request approval fixture");
   await input.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -88,7 +88,7 @@ test("long approval remains readable and actionable in a short phone viewport", 
   });
   await start(page);
   await page.setViewportSize({ width: 320, height: 360 });
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request approval fixture");
   await input.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -193,7 +193,7 @@ test("long questions retain free text and selections after a failed response", a
   });
   await start(page);
   await page.setViewportSize({ width: 320, height: 360 });
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request question fixture");
   await input.press("Enter");
   const question = page.getByRole("dialog", {
@@ -260,7 +260,7 @@ test("composer preserves IME confirmation and multiline edits around commands", 
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("/");
   await expect(page.getByRole("listbox", { name: "Commands" })).toBeVisible();
   const selected = await input.getAttribute("aria-activedescendant");
@@ -289,7 +289,7 @@ test("question radio selection keeps backward Tab inside its dialog", async ({
   page,
 }) => {
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request question fixture");
   await input.press("Enter");
   const question = page.getByRole("dialog", {

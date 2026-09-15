@@ -38,6 +38,37 @@ describe("DurableSessionProjection", () => {
     });
   });
 
+  it("rejects malformed terminal payloads before advancing durable identity", () => {
+    const projection = new DurableSessionProjection();
+    projection.reset("coding:local:main");
+    projection.observe(envelope(1, 7));
+    for (const data of [
+      null,
+      { outcome: "completed", error: "bad" },
+      { outcome: "unexpected" },
+    ]) {
+      expect(
+        projection.observe(
+          envelope(2, 8, {
+            payload: { type: "turn_terminal", data },
+          }),
+        ).kind,
+      ).toBe("recover");
+      expect(projection.snapshot().cursor?.seq).toBe(7);
+    }
+    expect(
+      projection.observe(
+        envelope(2, 8, {
+          payload: {
+            type: "turn_terminal",
+            data: { outcome: "completed", finished_at_ms: 1 },
+          },
+        }),
+      ).kind,
+    ).toBe("apply");
+    expect(projection.snapshot().cursor?.seq).toBe(8);
+  });
+
   it("fails closed on a per-thread sequence gap", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");

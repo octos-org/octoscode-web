@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const settingsModule =
-  /\/(?:assets\/SettingsDialog-[^/]+\.js|src\/features\/product-controls\/SettingsDialog\.tsx)(?:\?.*)?$/;
+  /\/(?:assets\/(?:SettingsView|SettingsDialog)-[^/]+\.js|src\/features\/product-controls\/SettingsDialog\.tsx)(?:\?.*)?$/;
 const reviewModule =
   /\/(?:assets\/DiffReviewDialog-[^/]+\.js|src\/features\/review\/DiffReviewDialog\.tsx)(?:\?.*)?$/;
 
@@ -18,7 +18,7 @@ async function start(page: Page) {
     .fill("/workspace/surface-recovery");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
 }
 
@@ -53,7 +53,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Keep this response active");
   await composer.press("Enter");
   await expect(
@@ -105,7 +105,7 @@ test("a slow Settings import can be canceled and never opens after cancellation"
     await route.fulfill({ response });
     fulfilled = true;
   });
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Keep typing after cancellation");
   await settingsTrigger(page).click();
   const loading = page.getByRole("dialog", { name: "Loading settings…" });
@@ -152,7 +152,7 @@ test("Escape from a failed review returns to approval without interrupting", asy
       body: "Resource unavailable",
     }),
   );
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Request approval fixture");
   await composer.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -191,7 +191,7 @@ test("a failed local-command chunk restores input and never sends command text t
         body: "Resource unavailable",
       }),
   );
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("/help");
   await composer.press("Enter");
   await expect(page.getByRole("alert")).toContainText(
@@ -216,7 +216,7 @@ test("a late clipboard command result does not enter a different conversation", 
     });
   });
   await start(page);
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Write a short response for the clipboard");
   await composer.press("Enter");
   await expect(page.locator(".entry-assistant").last()).toBeVisible();

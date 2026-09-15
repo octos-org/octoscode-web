@@ -14,7 +14,7 @@ async function start(page: Page) {
     .fill("/workspace/final-reading");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
 }
 
@@ -259,7 +259,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await expect(
     page.getByRole("link", { name: "safe link", exact: true }),
   ).toHaveAttribute("rel", "noreferrer noopener");
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Continue from history");
   await composer.press("Enter");
   await expect.poll(() => Boolean(emit)).toBe(true);
@@ -354,7 +354,7 @@ test("Diff review keeps long headings and file content inside the narrow viewpor
     });
   });
   await start(page);
-  const composer = page.getByRole("combobox", { name: "Message Octos" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review the final reading fixture");
   await composer.press("Enter");
   const trigger = page.getByRole("button", {

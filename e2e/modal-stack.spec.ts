@@ -12,7 +12,7 @@ async function start(page: Page) {
   await page.getByLabel("Server workspace path").fill("/workspace/modal-stack");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
 }
 
@@ -46,7 +46,7 @@ for (const viewport of [
       });
     });
     await start(page);
-    const composer = page.getByRole("combobox", { name: "Message Octos" });
+    const composer = page.getByRole("textbox", { name: "Message Octos" });
     await composer.fill("Request approval fixture");
     await composer.press("Enter");
     const approval = page.getByRole("dialog", { name: "Run product checks?" });

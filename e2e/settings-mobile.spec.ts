@@ -14,7 +14,7 @@ async function start(page: Page) {
     .fill("/workspace/mobile-settings");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
 }
 

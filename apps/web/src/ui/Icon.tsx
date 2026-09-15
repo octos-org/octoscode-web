@@ -4,29 +4,7 @@
  * default (`aria-hidden`): pair with an aria-label or visually-hidden text
  * when the icon is the only content of a control.
  */
-interface IconProps {
-  size?: number | undefined;
-  className?: string | undefined;
-}
-
-function svgProps(
-  size: number,
-  viewBox: string,
-  className: string | undefined,
-) {
-  return {
-    width: size,
-    height: size,
-    viewBox,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.5,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-    className,
-  };
-}
+import { svgProps, type IconProps } from "./svg-props.ts";
 
 export function RefreshIcon({ size = 16, className }: IconProps) {
   return (

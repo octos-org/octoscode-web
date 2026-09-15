@@ -1,0 +1,180 @@
+{
+  "session_id": "coding:local:parallel-tools-fixture",
+  "cursor": {
+    "stream": "coding:local:parallel-tools-fixture",
+    "seq": 482
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "role": "user",
+      "content": "Inspect the repository.",
+      "thread_id": "thread-1",
+      "message_id": "message-0",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    },
+    {
+      "seq": 1,
+      "role": "assistant",
+      "content": "Inspection complete.",
+      "thread_id": "thread-1",
+      "message_id": "message-1",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    },
+    {
+      "seq": 2,
+      "role": "tool",
+      "content": "/workspace/octoscode-web\n\n\nExit code: 0",
+      "thread_id": "thread-1",
+      "message_id": "message-2",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    },
+    {
+      "seq": 3,
+      "role": "tool",
+      "content": "?? .octos-workspace.toml\n?? .octos/\n?? docs/reviews/2026-09-15-codex010-fold-boundary.md\n?? docs/reviews/2026-09-15-codex010-fresh-browser.md\n?? docs/reviews/2026-09-15-codex010-theme-layout.md\n?? docs/reviews/2026-09-15-codex010-verification.md\n?? docs/reviews/2026-09-15-codex010-wire-inputs.md\n\n\nExit code: 0",
+      "thread_id": "thread-1",
+      "message_id": "message-3",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    },
+    {
+      "seq": 4,
+      "role": "tool",
+      "content": " 1│ {\n 2│   \"name\": \"@octos-org/octoscode-web-workspace\",\n 3│   \"version\": \"0.0.0\",\n 4│   \"private\": true,\n 5│   \"type\": \"module\",\n 6│   \"packageManager\": \"pnpm@11.5.2\",\n 7│   \"engines\": {\n 8│     \"node\": \">=22.0.0\"\n 9│   },\n10│   \"scripts\": {\n11│     \"dev\": \"pnpm --filter @octos-org/octoscode-web dev\",\n12│     \"mock:server\": \"pnpm --filter @octos-org/octoscode-web mock:server\",\n13│     \"build\": \"pnpm --filter @octos-org/octoscode-web build\",\n14│     \"contract:verify\": \"node scripts/sync-core-contract.mjs --check\",\n15│     \"contract:update\": \"node scripts/sync-core-contract.mjs --write\",\n16│     \"deploy:verify\": \"node scripts/verify-deployment.mjs\",\n17│     \"integration:core\": \"node scripts/verify-core-integration.mjs\",\n18│     \"licenses:verify\": \"node scripts/generate-third-party-licenses.mjs --check\",\n19│     \"licenses:update\": \"node scripts/generate-third-party-licenses.mjs --write\",\n20│     \"policy:verify\": \"node scripts/verify-repository-policy.mjs\",\n21│     \"format\": \"prettier --write .\",\n22│     \"format:check\": \"prettier --check .\",\n23│     \"lint\": \"oxlint --deny-warnings apps packages e2e e2e-live playwright.config.ts playwright.live.config.ts\",\n24│     \"typecheck\": \"pnpm -r typecheck\",\n25│     \"test\": \"pnpm -r test\",\n26│     \"test:e2e\": \"playwright test\",\n27│     \"test:e2e:ui\": \"playwright test --ui\",\n28│     \"test:e2e:live\": \"node scripts/run-live-e2e.mjs\",\n29│     \"check\": \"pnpm format:check && pnpm policy:verify && pnpm licenses:verify && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm deploy:verify\"\n30│   },\n31│   \"devDependencies\": {\n32│     \"@axe-core/playwright\": \"4.13.0\",\n33│     \"@playwright/test\": \"1.63.0\",\n34│     \"oxlint\": \"1.81.0\",\n35│     \"prettier\": \"^3.9.0\",\n36│     \"typescript\": \"~7.0.2\",\n37│     \"vitest\": \"^5.0.0\"\n38│   }\n39│ }\n",
+      "thread_id": "thread-1",
+      "message_id": "message-4",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    },
+    {
+      "seq": 5,
+      "role": "assistant",
+      "content": "Inspection complete.",
+      "thread_id": "thread-1",
+      "message_id": "message-5",
+      "persisted_at": "2026-09-15T07:35:00Z",
+      "media": []
+    }
+  ],
+  "turns": [
+    {
+      "turn_id": "turn-1",
+      "thread_id": "thread-1",
+      "state": "completed"
+    }
+  ],
+  "replayed_tool_envelopes": [
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 83,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 92
+      },
+      "payload": {
+        "type": "tool_start",
+        "data": {
+          "tool_call_id": "read-call",
+          "name": "read_file"
+        }
+      }
+    },
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 84,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 94
+      },
+      "payload": {
+        "type": "tool_end",
+        "data": {
+          "tool_call_id": "read-call",
+          "status": "complete",
+          "output_preview": " 1│ {\n 2│   \"name\": \"@octos-org/octoscode-web-workspace\",\n 3│   \"version\": \"0.0.0\",\n 4│   \"private\": true,\n 5│   \"type\": \"module\",\n 6│   \"packageManager\": \"pnpm@11.5.2\",\n 7│   \"engines\":...",
+          "duration_ms": 0
+        }
+      }
+    },
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 85,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 97
+      },
+      "payload": {
+        "type": "tool_start",
+        "data": {
+          "tool_call_id": "pwd-call",
+          "name": "bash"
+        }
+      }
+    },
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 86,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 99
+      },
+      "payload": {
+        "type": "tool_end",
+        "data": {
+          "tool_call_id": "pwd-call",
+          "status": "complete",
+          "output_preview": "/workspace/octoscode-web\n\n\nExit code: 0",
+          "duration_ms": 19
+        }
+      }
+    },
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 87,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 102
+      },
+      "payload": {
+        "type": "tool_start",
+        "data": {
+          "tool_call_id": "status-call",
+          "name": "bash"
+        }
+      }
+    },
+    {
+      "session_id": "coding:local:parallel-tools-fixture",
+      "thread_id": "thread-1",
+      "turn_id": "turn-1",
+      "seq": 88,
+      "cursor": {
+        "stream": "coding:local:parallel-tools-fixture",
+        "seq": 104
+      },
+      "payload": {
+        "type": "tool_end",
+        "data": {
+          "tool_call_id": "status-call",
+          "status": "complete",
+          "output_preview": "?? .octos-workspace.toml\n?? .octos/\n?? docs/reviews/2026-09-15-codex010-fold-boundary.md\n?? docs/reviews/2026-09-15-codex010-fresh-browser.md\n?? docs/reviews/2026-09-15-codex010-theme-layout.md\n?? doc...",
+          "duration_ms": 25
+        }
+      }
+    }
+  ]
+}

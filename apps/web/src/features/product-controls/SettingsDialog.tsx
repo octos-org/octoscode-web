@@ -13,6 +13,7 @@ import type {
   SettingsSlots,
 } from "./types.ts";
 import styles from "./SettingsDialog.module.css";
+import shell from "../../ui/SettingsSurface.module.css";
 
 export interface SettingsTriggerProps {
   label: string;
@@ -88,8 +89,8 @@ export function SettingsDialog({
 
   return (
     <ModalSurface
-      backdropClassName={styles.overlay ?? ""}
-      dialogClassName={styles.panel ?? ""}
+      backdropClassName={shell.overlay!}
+      dialogClassName={`${shell.frame} ${styles.panel}`}
       labelledBy={titleId}
       initialFocusRef={closeRef}
       closeOnBackdrop

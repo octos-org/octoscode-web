@@ -469,6 +469,11 @@
   scrollbar-color: var(--dsw-alias-border-l3) transparent;
 }
 
+.tree:empty {
+  flex: none;
+  padding-block: 0;
+}
+
 .fade {
   position: absolute;
   right: 12px;
@@ -918,5 +923,22 @@
     width: 56px;
     height: 64px;
     border-bottom: 0;
+  }
+}
+
+.searchExpanded:focus-within {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+.searchInput:focus-visible {
+  outline: none;
+}
+.emptyState button {
+  min-height: 32px;
+  border-radius: 4px;
+}
+@media (max-width: 760px) {
+  .emptyState button {
+    min-height: 44px;
   }
 }

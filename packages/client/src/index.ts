@@ -26,7 +26,8 @@ export type {
 } from "./rpc.ts";
 export { parseProjectionEnvelope } from "./projection.ts";
 export { parseSessionOpenResult } from "./session.ts";
-export { isTurnLifecycleState, parseTurnStateGetResult } from "./turn-state.ts";
+export { isTurnLifecycleState } from "./turn-state-values.ts";
+export { parseTurnStateGetResult } from "./turn-state.ts";
 export { parseSessionHydrateResult } from "./hydrate.ts";
 export { parseReplayLossyEvent } from "./replay-events.ts";
 export { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
@@ -75,9 +76,7 @@ export {
   approvalResolutionId,
   notificationDiffPreviewId,
   parseApprovalRequested,
-  parseApprovalRespondResult,
   parseUserQuestionRequested,
-  parseUserQuestionRespondResult,
   supportsFeature,
   supportsMethod,
   supportsTurnStateGet,
@@ -191,4 +190,8 @@ export type {
   LocalProfileCreateParams,
   LocalProfileCreateResult,
 } from "./onboarding.ts";
+export {
+  parseApprovalRespondResult,
+  parseUserQuestionRespondResult,
+} from "./interaction-responses.ts";
 export { buildUiProtocolUrl, UI_PROTOCOL_PATH } from "./url.ts";
