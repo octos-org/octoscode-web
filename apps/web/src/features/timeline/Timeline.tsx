@@ -196,17 +196,20 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
   return (
     <article
       className={`timeline-entry entry-${entry.kind}${entry.kind === "assistant" ? ` ${styles.assistantEntry}` : ""}`}
+      aria-label={entry.kind === "assistant" ? "Assistant response" : undefined}
     >
       <div className="entry-rail">
         <span className={`entry-glyph glyph-${entry.status}`} />
       </div>
       <div className="entry-content">
-        <div className="entry-heading">
-          <strong>{entry.title}</strong>
-          {entry.status === "running" ? (
-            <span className="running-label">running</span>
-          ) : null}
-        </div>
+        {entry.kind !== "assistant" ? (
+          <div className="entry-heading">
+            <strong>{entry.title}</strong>
+            {entry.status === "running" ? (
+              <span className="running-label">running</span>
+            ) : null}
+          </div>
+        ) : null}
         {entry.body ? (
           entry.kind === "assistant" ? (
             <Suspense fallback={<pre>{entry.body}</pre>}>
