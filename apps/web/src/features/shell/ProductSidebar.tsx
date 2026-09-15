@@ -78,6 +78,8 @@ export interface ProductSidebarProps {
   onWorkspaceExpandedChange: (workspaceId: string, expanded: boolean) => void;
   onSessionSelect: (sessionId: string) => void;
   onSettings: () => void;
+  theme?: "system" | "light" | "dark";
+  onThemeToggle?: () => void;
   onRetry?: () => void;
 }
 
@@ -116,6 +118,8 @@ export function ProductSidebar({
   onWorkspaceExpandedChange,
   onSessionSelect,
   onSettings,
+  theme = "system",
+  onThemeToggle,
   onRetry,
 }: ProductSidebarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -882,6 +886,26 @@ export function ProductSidebar({
       </div>
 
       <div className={styles.footer}>
+        {onThemeToggle ? (
+          <button
+            type="button"
+            className={styles.settings}
+            aria-label={`Theme: ${theme}`}
+            title={collapsed ? `Theme: ${theme}` : undefined}
+            onClick={onThemeToggle}
+          >
+            {theme === "dark" ? "◐" : theme === "light" ? "○" : "◑"}
+            {!collapsed ? (
+              <span>
+                {theme === "dark"
+                  ? "Dark"
+                  : theme === "light"
+                    ? "Light"
+                    : "System"}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.settings} ${settingsActive ? styles.settingsActive : ""}`}

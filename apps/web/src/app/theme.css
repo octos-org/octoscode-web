@@ -144,3 +144,44 @@
     --shiki-token-link: #74c0fc;
   }
 }
+
+/* Manual theme override — takes precedence over prefers-color-scheme.
+   data-theme="dark" duplicates the dark tokens from the media query;
+   data-theme="light" forces light values over the OS preference. */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --dsw-alias-bg-base: #151517;
+  --dsw-alias-bg-layer-1: #232324;
+  --dsw-alias-bg-layer-2: #2c2c2e;
+  --dsw-alias-bg-layer-3: #353638;
+  --dsw-alias-border-l1: rgb(255 255 255 / 8%);
+  --dsw-alias-border-l2: rgb(255 255 255 / 14%);
+  --dsw-alias-border-l3: rgb(255 255 255 / 22%);
+  --dsw-alias-label-primary: #e8e8ea;
+  --dsw-alias-label-secondary: #a0a0a4;
+  --dsw-alias-label-tertiary: #6c6c70;
+  --dsw-specific-input-major: #1c1c1e;
+  --dsw-specific-tip: #1a1a1c;
+  --dsw-alias-bubble: #1e2c3e;
+  --dsw-alias-button-elevated-fill: #2c2c2e;
+  --dsw-alias-button-floating-hover: #3a3a3e;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --dsw-alias-bg-base: #fafafa;
+  --dsw-alias-bg-layer-1: #ffffff;
+  --dsw-alias-bg-layer-2: #f5f5f5;
+  --dsw-alias-border-l1: rgb(0 0 0 / 6%);
+  --dsw-alias-border-l2: rgb(0 0 0 / 12%);
+  --dsw-alias-border-l3: rgb(0 0 0 / 20%);
+  --dsw-alias-label-primary: #1a1a1c;
+  --dsw-alias-label-secondary: #5c5c60;
+  --dsw-alias-label-tertiary: #99999d;
+  --dsw-specific-input-major: #ffffff;
+  --dsw-specific-tip: #f5f5f5;
+  --dsw-alias-bubble: #e8f0fe;
+  --dsw-alias-button-elevated-fill: #ffffff;
+  --dsw-alias-button-floating-hover: #f0f0f0;
+}
