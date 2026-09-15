@@ -524,23 +524,23 @@ describe("SessionRecordManager three-record concurrency", () => {
       expect(rows(a)).toEqual([
         ["user:A1", "A1"],
         ["assistant:A1:default", "a1"],
-        ["terminal:A1", "completed"],
+        ["terminal:A1", ""],
         ["user:A2", "A2"],
-        ["terminal:A2", "completed"],
+        ["terminal:A2", ""],
       ]);
       expect(rows(b)).toEqual([
         ["user:B1", "B1"],
         ["assistant:B1:default", "b1"],
-        ["terminal:B1", "completed"],
+        ["terminal:B1", ""],
         ["user:B2", "B2"],
-        ["terminal:B2", "completed"],
+        ["terminal:B2", ""],
       ]);
       expect(rows(c)).toEqual([
         ["user:C1", "C1"],
         ["assistant:C1:default", "c1"],
-        ["terminal:C1", "completed"],
+        ["terminal:C1", ""],
         ["user:C2", "C2"],
-        ["terminal:C2", "completed"],
+        ["terminal:C2", ""],
       ]);
       expect(h.client.status).toBe("connected");
     } finally {

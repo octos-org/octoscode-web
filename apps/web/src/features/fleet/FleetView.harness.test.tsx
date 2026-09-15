@@ -140,6 +140,14 @@ function fleetRow(
   };
 }
 
+type StartSubmit = {
+  sessionId: string;
+  operationId: string;
+  model: string;
+  brief: string;
+  laneKey?: string;
+};
+
 function mount(
   input: {
     readonly peers?: readonly Record<string, unknown>[];
@@ -150,7 +158,7 @@ function mount(
     readonly selectedSessionId?: string;
     readonly laneReadStatus?: "loading" | "empty" | "ready";
     readonly peerController?: Record<string, unknown> | null;
-    readonly onStart?: (submit: { laneKey: string; brief: string }) => void;
+    readonly onStart?: (submit: StartSubmit) => void;
     readonly onRowAction?: (
       row: { slug: string },
       action: string,
@@ -228,8 +236,11 @@ describe("§4.3 empty view", () => {
 
 describe("§4.3 Start form — the ONLY implicit acquisition", () => {
   it("Start enables only with a model, a brief and a holdable seat", () => {
-    const calls: { laneKey: string; brief: string }[] = [];
-    const harness = mount({ onStart: (submit) => calls.push(submit) });
+    const calls: StartSubmit[] = [];
+    const harness = mount({
+      selectedSessionId: "coding:local:tui#s1",
+      onStart: (submit) => calls.push(submit),
+    });
     const first = harness.render();
     expect(isDisabled(one(first, "data-fleet-action", "start"))).toBe(true);
 
@@ -242,11 +253,21 @@ describe("§4.3 Start form — the ONLY implicit acquisition", () => {
     expect(isDisabled(one(third, "data-fleet-action", "start"))).toBe(false);
 
     (one(third, "data-fleet-action", "start").props!.onClick as () => void)();
-    expect(calls).toEqual([{ laneKey: "glm-5.3", brief: "Review the diff" }]);
+    // Round 4 J2 contract: the whole Start identity — the selected session,
+    // a minted operation id, the model (lane key) and the brief.
+    expect(calls).toEqual([
+      {
+        sessionId: "coding:local:tui#s1",
+        operationId: expect.any(String),
+        model: "glm-5.3",
+        brief: "Review the diff",
+      },
+    ]);
+    expect(calls[0]!.operationId).not.toBe("");
   });
 
   it("sends nothing while the seat is not held", () => {
-    const calls: { laneKey: string; brief: string }[] = [];
+    const calls: StartSubmit[] = [];
     const harness = mount({
       seatHeld: false,
       onStart: (submit) => calls.push(submit),
@@ -258,7 +279,15 @@ describe("§4.3 Start form — the ONLY implicit acquisition", () => {
     // implicit acquisition (walkthrough 4200 step 8; mock run 20's 8 reds).
     expect(isDisabled(one(third, "data-fleet-action", "start"))).toBe(false);
     (one(third, "data-fleet-action", "start").props!.onClick as () => void)();
-    expect(calls).toEqual([{ laneKey: "glm-5.3", brief: "Review" }]);
+    expect(calls).toEqual([
+      {
+        sessionId: "",
+        operationId: expect.any(String),
+        model: "glm-5.3",
+        brief: "Review",
+      },
+    ]);
+    expect(calls[0]!.operationId).not.toBe("");
   });
 });
 
@@ -303,7 +332,7 @@ describe("Fixes 4210 — model NAMES, styled surface, styled empty/Advanced", ()
 
 describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept brief", () => {
   it("Start click with model+brief enters requesting and blocks a repeat submit", () => {
-    const calls: { laneKey: string; brief: string }[] = [];
+    const calls: StartSubmit[] = [];
     const harness = mount({ onStart: (submit) => calls.push(submit) });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "Review");
@@ -311,7 +340,15 @@ describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept
     (
       one(enabled, "data-fleet-action", "start").props!.onClick as () => void
     )();
-    expect(calls).toEqual([{ laneKey: "glm-5.3", brief: "Review" }]);
+    expect(calls).toEqual([
+      {
+        sessionId: "",
+        operationId: expect.any(String),
+        model: "glm-5.3",
+        brief: "Review",
+      },
+    ]);
+    expect(calls[0]!.operationId).not.toBe("");
     // REQUESTING: the button now shows the requesting copy and is disabled,
     // so a second click can never issue a second acquire/dispatch.
     const requesting = harness.render();
@@ -330,7 +367,7 @@ describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept
   });
 
   it("a refused Start keeps the brief visible for retry", () => {
-    const calls: { laneKey: string; brief: string }[] = [];
+    const calls: StartSubmit[] = [];
     const harness = mount({ onStart: (submit) => calls.push(submit) });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "Review the diff");
@@ -454,7 +491,7 @@ describe("Fixes 4220 — lane-read triage: no session vs loading vs empty read",
 
 describe("Round 4 section C — status/word/spacing/a11y polish (4200d 08.png)", () => {
   it("C1: Start returns to its idle label once dispatch is acknowledged", () => {
-    const calls: { laneKey: string; brief: string }[] = [];
+    const calls: StartSubmit[] = [];
     const harness = mount({ onStart: (submit) => calls.push(submit) });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "Review");

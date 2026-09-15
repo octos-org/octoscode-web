@@ -150,7 +150,13 @@ describe("timeline projection", () => {
         12,
       ),
     );
-    expect(entries.map((entry) => entry.body)).toEqual(["refined canonical"]);
+    // Upstream v0.10.0 renders server truth for an interrupted hydrated turn
+    // as a "Turn stopped" row; the ghost delta still never reopens the turn.
+    expect(entries.map((entry) => [entry.id, entry.body])).toEqual([
+      ["hydrated:message-1", "refined canonical"],
+      ["terminal:turn-1", "This turn was stopped before it completed."],
+    ]);
+    expect(entries.some((entry) => entry.status === "running")).toBe(false);
   });
 
   it("keeps the real Core persisted answer final when later-sequenced deltas arrive", () => {
@@ -250,7 +256,9 @@ describe("timeline projection", () => {
     expect(entries[0]).toMatchObject({ body: "canonical", status: "complete" });
   });
 
-  it.each(["completed", "failed"])(
+  // "errored" is Core's failure outcome; the pinned protocol rejects "failed"
+  // as a malformed turn_terminal frame.
+  it.each(["completed", "errored"])(
     "settles live text at a %s terminal without reopening it on late deltas",
     (outcome) => {
       let entries = foldNotification(

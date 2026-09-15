@@ -41,10 +41,16 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    expect(html).toContain("Thinking · 12 s · 6 words");
-    expect(html).not.toContain("let me think about this carefully");
+    // Timeline renders upstream's native <details> disclosure: folded means
+    // no `open` attribute; the one-line summary is the <summary> element and
+    // the reasoning text lives only in the (natively hidden) body.
+    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*reasoningBlock/);
+    const summary = summaryOf(html);
+    expect(summary).toContain("Thought process");
+    expect(summary).toContain("12 s · 6 words");
+    expect(summary).not.toContain("let me think about this carefully");
     expect(html).toMatch(
-      /<button[^>]*aria-expanded="false"[^>]*aria-controls=/,
+      /<\/summary><div[^>]*reasoningBody[^>]*><pre[^>]*>let me think about this carefully<\/pre>/,
     );
   });
 
@@ -62,6 +68,8 @@ describe("Timeline foldable rendering", () => {
     );
     expect(html).not.toContain("let me think about this carefully");
     expect(html).not.toContain("Thinking · ");
+    expect(html).not.toContain("Thought process");
+    expect(html).not.toContain("reasoningBlock");
     expect(html).not.toContain("thinking hidden");
     expect(html).toContain("cargo test");
   });
@@ -78,8 +86,14 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    expect(html).toContain("shell · cargo test · ✓ · 3 s");
-    expect(html).not.toMatch(/<pre>/);
+    // Folded by default; the header line carries tool name, target, status
+    // mark (check glyph + label) and duration.
+    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
+    const summary = summaryOf(html);
+    expect(summary).toContain("shell · cargo test");
+    expect(summary).toMatch(/completedGlyph/);
+    expect(summary).toMatch(/data-status="complete"[^>]*>Done · 3 s</);
+    expect(summary).not.toContain("<pre");
   });
 
   it("exposes Expand all / Collapse all at the transcript top", () => {
@@ -115,9 +129,18 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    expect(html).toContain("✗");
+    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
+    const summary = summaryOf(html);
+    expect(summary).toContain("shell · cargo test");
+    expect(summary).toMatch(/data-status="error"[^>]*aria-hidden="true"/);
+    expect(summary).toMatch(/data-status="error"[^>]*>Failed · 3 s</);
+    expect(summary).not.toMatch(/completedGlyph/);
   });
 });
+
+function summaryOf(html: string): string {
+  return /<summary[^>]*>([\s\S]*?)<\/summary>/.exec(html)?.[1] ?? "";
+}
 
 describe("ThinkingDisclosure", () => {
   it("is a native disclosure button announcing expanded state", () => {

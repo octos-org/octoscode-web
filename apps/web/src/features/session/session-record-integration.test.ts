@@ -13,6 +13,7 @@ import {
   type TurnStartParams,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
+import { OctosUiProtocolError } from "@octos-org/octoscode-client/protocol";
 import {
   SessionRecordManager,
   type SessionRecord,
@@ -542,10 +543,12 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
           .filter((entry) => entry.kind === "assistant")
           .map((entry) => entry.body),
       ).toEqual(["canonical from hydrate"]);
+      // Upstream #29: recovery-buffered frames at or below the hydrate cursor
+      // (seq 10) are already covered by hydrate and are dropped, not replayed.
       if (a)
         expect(
           h.view.events.filter((type) => type === "notification"),
-        ).toHaveLength(2);
+        ).toHaveLength(0);
     },
   );
 
@@ -1005,7 +1008,7 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     expect(rows(a)).toEqual([
       ["user:A1", "A1"],
       ["assistant:A1:default", "hello"],
-      ["terminal:A1", "completed"],
+      ["terminal:A1", ""],
     ]);
     expect(h.view.timeline).toEqual(a.timeline);
   });
@@ -1019,7 +1022,10 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     enqueue(a, "A1");
     const b = await open(h, "B");
     h.manager.select(b.scope);
-    rpc.reject(new Error("Core rejected A1"));
+    // A definite server rejection is a JSON-RPC protocol error. Upstream
+    // v0.10.0 keeps a plain transport Error/timeout pending as an unknown
+    // outcome ("does not treat a transport failure as a rejected start").
+    rpc.reject(new OctosUiProtocolError(-32000, "Core rejected A1"));
     await flush();
     expect(a.queue.snapshot().active).toBeNull();
     expect(rows(a)).toEqual([
@@ -1052,7 +1058,7 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     ]);
     expect(rows(a)).toEqual([
       ["user:A1", "A1"],
-      ["terminal:A1", "completed"],
+      ["terminal:A1", ""],
       ["user:A2", "A2"],
     ]);
     expect(b.timeline).toEqual([]);
@@ -1115,8 +1121,10 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
       ["A", "A1"],
       ["A", "A2"],
     ]);
+    // Upstream v0.10.0 renders the hydrated interrupted A1 as a stopped row.
     expect(rows(a)).toEqual([
       ["user:A1", "A1"],
+      ["terminal:A1", "This turn was stopped before it completed."],
       ["user:A2", "A2"],
     ]);
     h.client.emit(terminal("A", "A2", 10));
@@ -1128,8 +1136,9 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     ]);
     expect(rows(a)).toEqual([
       ["user:A1", "A1"],
+      ["terminal:A1", "This turn was stopped before it completed."],
       ["user:A2", "A2"],
-      ["terminal:A2", "completed"],
+      ["terminal:A2", ""],
       ["user:A3", "A3"],
     ]);
     expect(h.view.timeline).toEqual(b.timeline);
@@ -2715,7 +2724,7 @@ describe("SessionRecordManager read-only driver discovery", () => {
       expect(rows(a)).toEqual([
         ["user:A1", "A1"],
         ["assistant:A1:default", "xy"],
-        ["terminal:A1", "completed"],
+        ["terminal:A1", ""],
         ["user:A2", "A2"],
       ]);
       expect(b.timeline).toEqual([]);

@@ -166,6 +166,7 @@
   --dsw-alias-state-business-primary: var(--display-accent);
   --dsw-alias-state-error-primary: var(--display-danger);
   --dsw-alias-state-error-secondary: var(--display-danger);
+  --dsw-alias-state-error-text: var(--display-danger);
   --dsw-alias-state-success-primary: var(--display-success);
   --dsw-alias-state-success-text: var(--display-success);
   --dsw-alias-state-warn-primary: var(--display-highlight);

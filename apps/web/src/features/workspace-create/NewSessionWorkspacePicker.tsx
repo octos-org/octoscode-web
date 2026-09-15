@@ -411,9 +411,15 @@ export function NewSessionWorkspacePicker({
   const [view, setView] = useState<WorkspacePickerView>(initialView);
   const [serverPath, setServerPath] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
-  // A fresh browser has no paths to choose from. Open the useful step directly.
+  // A fresh browser has no paths to choose from. Open the useful step directly
+  // — unless the §5.1 "Server's working directory" row is there to choose
+  // (including its disabled "(path not reported)" variant, which must stay
+  // visible so the user sees why an explicit path is needed).
   const activeView =
-    view === "choose" && !props.workspaces.length && !props.loading
+    view === "choose" &&
+    !props.workspaces.length &&
+    !props.serverWorkingDirectory &&
+    !props.loading
       ? "add"
       : view;
 

@@ -70,14 +70,24 @@ export function timelineFromHydrate(
       entries.push(entry);
     } else entries[index] = entry;
   };
+  const messageTurnId = (message: {
+    turn_id?: string | undefined;
+    thread_id?: string | undefined;
+  }): string | undefined =>
+    message.turn_id ??
+    (message.thread_id
+      ? (turnByThread.get(message.thread_id) ?? undefined)
+      : undefined);
+  const userInputsByTurn = new Map<string, number>();
+  for (const message of result.messages ?? []) {
+    const turnId = messageTurnId(message);
+    if (message.role.toLowerCase() === "user" && turnId !== undefined)
+      userInputsByTurn.set(turnId, (userInputsByTurn.get(turnId) ?? 0) + 1);
+  }
   for (const message of [...(result.messages ?? [])].sort(
     (left, right) => left.seq - right.seq,
   )) {
-    const turnId =
-      message.turn_id ??
-      (message.thread_id
-        ? (turnByThread.get(message.thread_id) ?? undefined)
-        : undefined);
+    const turnId = messageTurnId(message);
     const stableId =
       message.message_id ??
       message.client_message_id ??
@@ -93,10 +103,18 @@ export function timelineFromHydrate(
       });
     }
     const role = message.role.toLowerCase();
+    // A turn can contain several persisted user inputs (turn/steer). Turn
+    // identity associates their activity; it is not a unique message key.
+    // Only a turn's SOLE persisted prompt is unambiguous: it takes the
+    // canonical `user:<turn>` key so its optimistic row and replayed
+    // user_message echo reconcile onto it exactly once. Several inputs for
+    // one turn keep their own message identity and are never collapsed.
+    const soleUserOfTurn =
+      role === "user" &&
+      turnId !== undefined &&
+      userInputsByTurn.get(turnId) === 1;
     hydrateEntry({
-      // A turn can contain several persisted user inputs (turn/steer). Turn
-      // identity associates their activity; it is not a unique message key.
-      id: `hydrated:${stableId}`,
+      id: soleUserOfTurn ? `user:${turnId}` : `hydrated:${stableId}`,
       kind:
         role === "user"
           ? "user"
