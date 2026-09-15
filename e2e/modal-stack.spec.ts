@@ -54,6 +54,23 @@ for (const viewport of [
     await reviewTrigger.click();
     const review = page.getByRole("dialog", { name: "Mock coding change" });
     await expect(review).toBeVisible();
+    // Each surface mounts at document.body through its own portal, so the
+    // review is not nested in the approval that opened it. Safari does not
+    // anchor a position:fixed dialog to the viewport once an ancestor scrolls
+    // or establishes a containing block, which left such a nested dialog
+    // unreachable behind its own backdrop.
+    const nesting = await review.evaluate((element) => ({
+      reviewAtBody: element.parentElement?.parentElement === document.body,
+      insideAnotherDialog:
+        element.parentElement?.parentElement?.closest("[role='dialog']") !==
+        null,
+    }));
+    expect(nesting).toEqual({ reviewAtBody: true, insideAnotherDialog: false });
+    expect(
+      await approval.evaluate(
+        (element) => element.parentElement?.parentElement === document.body,
+      ),
+    ).toBe(true);
     const visited = new Set<string>();
     for (let index = 0; index < 5; index++) {
       await page.keyboard.press("Tab");
