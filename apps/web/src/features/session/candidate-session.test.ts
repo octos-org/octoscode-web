@@ -10,6 +10,7 @@ import type {
 import {
   CandidateSessionCancelledError,
   prepareCandidateSession,
+  validateCandidateWorkspace,
   type CandidateSessionClient,
 } from "./candidate-session.ts";
 import type { SessionConnectionInput } from "./connection-lifecycle.ts";
@@ -88,6 +89,43 @@ class FakeCandidateClient implements CandidateSessionClient {
 }
 
 describe("prepareCandidateSession", () => {
+  it.each([undefined, "/srv/another-project"])(
+    "rejects an unconfirmed saved-link workspace before hydrate: %s",
+    async (workspaceRoot) => {
+      const client = new FakeCandidateClient();
+      const response: SessionOpened = {
+        session_id: opened.session_id,
+        active_profile_id: opened.active_profile_id!,
+        ...(workspaceRoot ? { workspace_root: workspaceRoot } : {}),
+      };
+      client.openImplementation = async () => ({ opened: response });
+
+      await expect(
+        prepareCandidateSession({
+          config,
+          signal: new AbortController().signal,
+          createClient: () => client,
+          validateOpened: (result) =>
+            validateCandidateWorkspace(config, result, true),
+        }),
+      ).rejects.toThrow("different workspace from the saved link");
+      expect(client.calls).toEqual(["connect", "open"]);
+      expect(client.disconnectCount).toBe(1);
+    },
+  );
+
+  it("accepts the exact saved workspace while fresh launches may canonicalize", async () => {
+    expect(() =>
+      validateCandidateWorkspace(config, opened, true),
+    ).not.toThrow();
+    expect(() =>
+      validateCandidateWorkspace(
+        { ...config, cwd: "/srv/project/../project" },
+        opened,
+      ),
+    ).not.toThrow();
+  });
+
   it("stages open and hydrate before releasing the isolated client", async () => {
     const client = new FakeCandidateClient();
     const controller = new AbortController();

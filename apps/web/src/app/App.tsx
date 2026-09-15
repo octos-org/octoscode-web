@@ -1,23 +1,16 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { addSystemMessage } from "../features/timeline/model.ts";
+import { lazy, useEffect, useRef, useState } from "react";
+import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
+import { timelineActivity } from "../features/timeline/model.ts";
+import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
+import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
+import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
+import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
+import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
 import {
   ConnectionPanel,
   type ConnectionDraft,
 } from "../features/connection/ConnectionPanel.tsx";
-import { Timeline } from "../features/timeline/Timeline.tsx";
 import { resolveComposerIntent } from "../features/composer/intent.ts";
-import {
-  commandSuggestions,
-  type WebCommandSpec,
-} from "../features/commands/registry.ts";
 import { useOctosSession } from "../features/session/use-octos-session.ts";
 import { codingProductCapabilities } from "../features/session/coding-capabilities.ts";
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
@@ -33,13 +26,9 @@ import {
 } from "../features/connection/preferences.ts";
 import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
-import type {
-  ProductSidebarSession,
-  ProductSidebarWorkspace,
-} from "../features/shell/ProductSidebar.tsx";
+import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
 import {
   findModel,
-  formatRelativeTime,
   modelControlState,
   modelGroups,
   permissionControlState,
@@ -48,7 +37,6 @@ import {
   profileDefaultNeedsRestart,
   selectedModel,
 } from "../features/shell/product-projection.ts";
-import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type {
   ModelSelection,
   SettingsSectionId,
@@ -63,11 +51,33 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
-import { RefreshIcon } from "../ui/Icon.tsx";
+import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/Icon.tsx";
 
-const ProductSidebar = lazy(async () => ({
-  default: (await import("../features/shell/ProductSidebar.tsx"))
-    .ProductSidebar,
+const LeaveConnectionDialog = lazy(async () => ({
+  default: (await import("../features/connection/LeaveConnectionDialog.tsx"))
+    .LeaveConnectionDialog,
+}));
+
+const TurnRecoveryNotice = lazy(async () => ({
+  default: (await import("../features/composer/TurnRecoveryNotice.tsx"))
+    .TurnRecoveryNotice,
+}));
+const SavedSessionLinkPanel = lazy(async () => ({
+  default: (await import("../features/session-links/SavedSessionLinkPanel.tsx"))
+    .SavedSessionLinkPanel,
+}));
+
+const PromptComposer = lazy(async () => ({
+  default: (await import("../features/composer/PromptComposer.tsx"))
+    .PromptComposer,
+}));
+
+const Timeline = lazy(async () => ({
+  default: (await import("../features/timeline/Timeline.tsx")).Timeline,
+}));
+const SessionSidebar = lazy(async () => ({
+  default: (await import("../features/shell/SessionSidebar.tsx"))
+    .SessionSidebar,
 }));
 const SessionControlBar = lazy(async () => ({
   default: (await import("../features/product-controls/SessionControlBar.tsx"))
@@ -76,10 +86,6 @@ const SessionControlBar = lazy(async () => ({
 const LaunchDecisionPanel = lazy(async () => ({
   default: (await import("../features/workspace/LaunchDecisionPanel.tsx"))
     .LaunchDecisionPanel,
-}));
-const CommandPalette = lazy(async () => ({
-  default: (await import("../features/commands/CommandPalette.tsx"))
-    .CommandPalette,
 }));
 const ApprovalPanel = lazy(async () => ({
   default: (await import("../features/approval/ApprovalPanel.tsx"))
@@ -133,7 +139,6 @@ const initialConnection: ConnectionDraft = {
   profileId: "",
   cwd: "",
 };
-const COMMAND_PALETTE_ID = "composer-command-palette";
 
 export function App() {
   const {
@@ -145,6 +150,8 @@ export function App() {
     work,
     workspaceProduct,
   } = useOctosSession();
+  const commandSessionRef = useRef(session.opened);
+  commandSessionRef.current = session.opened;
   const draftRef = useRef("");
   const sessionDraftsRef = useRef(new SessionDraftCache());
   const previousActiveSessionKeyRef = useRef<string | null>(null);
@@ -158,17 +165,21 @@ export function App() {
     ),
   );
   const [draft, setDraft] = useState("");
-  const conversationScrollRef = useRef<HTMLDivElement | null>(null);
-  const followRef = useRef(true);
-  const [showJumpLatest, setShowJumpLatest] = useState(false);
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
-  const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const compact = useCompactLayout();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(compact);
+  useEffect(() => setSidebarCollapsed(compact), [compact]);
+  const [sidebarOrder, setSidebarOrder] =
+    useState<ProductSidebarOrderMode>("updated");
   const [sidebarView, setSidebarView] = useState<"grouped" | "flat">("grouped");
   const [collapsedWorkspaceIds, setCollapsedWorkspaceIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leaveConnectionAction, setLeaveConnectionAction] = useState<
+    "disconnect" | "forget" | null
+  >(null);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   const [conversationTab, setConversationTab] = useState<"chat" | "trajectory">(
@@ -184,6 +195,13 @@ export function App() {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(window.sessionStorage, connection),
   );
+  const [savedLink, setSavedLink] = useState(() => {
+    const key = new URLSearchParams(window.location.search).get("s");
+    return key ? { key, reference: parseSavedSessionReference(key) } : null;
+  });
+  const [savedLinkOpening, setSavedLinkOpening] = useState(false);
+  const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
+  const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
 
   useEffect(() => {
@@ -200,6 +218,20 @@ export function App() {
       if (restoreAttemptedRef.current) return;
       restoreAttemptedRef.current = true;
       if (connection.endpoint.trim() && connection.sessionId.trim()) {
+        if (savedLink) {
+          const rememberedKey = workspaceSessionKey(
+            connection.cwd,
+            connection.profileId,
+            connection.sessionId,
+          );
+          // A new link takes precedence over the tab's previous selection.
+          if (savedLink.key !== rememberedKey) {
+            session.connect(connection);
+            return;
+          }
+          // The existing restore path already opens this exact reference.
+          autoLinkAttempted.current = true;
+        }
         session.restore(connection);
       }
     }, 0);
@@ -214,6 +246,19 @@ export function App() {
 
   useEffect(() => {
     if (!session.authenticated || !session.restoreRejected) return;
+    if (
+      savedLink?.key ===
+      workspaceSessionKey(
+        connection.cwd,
+        connection.profileId,
+        connection.sessionId,
+      )
+    ) {
+      setSavedLink(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("s");
+      window.history.replaceState(null, "", url);
+    }
     setConnection((current) =>
       current.cwd || current.profileId
         ? {
@@ -306,170 +351,71 @@ export function App() {
 
     const intent = resolveComposerIntent(text, opened.capabilities);
     if (intent.kind === "empty-command") return;
+    if (intent.kind === "prompt" && conversation.turnRecovery) return;
     if (intent.kind === "prompt" && !codingCapabilities.turnStartAvailable)
       return;
 
     draftRef.current = "";
     setDraft("");
-    setSelectedCommandIndex(0);
-    setCommandPaletteDismissed(false);
+    setCommandError(null);
 
-    switch (intent.kind) {
-      case "prompt":
-        conversation.enqueuePrompt(intent.text);
-        return;
-      case "interrupt":
-        void conversation.interrupt();
-        return;
-      case "help": {
-        const available = commandSuggestions("/", opened.capabilities)
-          .map(
-            (command) =>
-              `/${command.name}${command.aliases.length ? ` (${command.aliases.map((alias) => `/${alias}`).join(", ")})` : ""}`,
-          )
-          .join(" · ");
-        conversation.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `help:${crypto.randomUUID()}`,
-            "Commands",
-            `${available}. Unsupported slash commands are never sent to the model.`,
-          ),
-        );
-        return;
-      }
-      case "process-status":
-        conversation.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `process-status:${crypto.randomUUID()}`,
-            "Process status",
-            conversation.queue.active
-              ? `Foreground turn ${conversation.queue.active.turnId.slice(0, 8)} is active. ${conversation.queue.pending.length} prompt${conversation.queue.pending.length === 1 ? "" : "s"} queued.`
-              : "No foreground turn is active and the prompt queue is empty.",
-          ),
-        );
-        return;
-      case "status": {
-        const runtimeModel = work.supervision.runtimeStatus?.model;
-        const profileDefault = models.state.models.find(
-          (model) => model.selected,
-        );
-        const currentPermission = safety.permission.result?.current;
-        conversation.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `status:${crypto.randomUUID()}`,
-            "Session status",
-            [
-              `Workspace: ${opened.workspace_root ?? "server default"}`,
-              `Runtime model: ${runtimeModel?.title ?? runtimeModel?.model ?? "not reported"}`,
-              `Profile default: ${profileDefault?.title ?? profileDefault?.model ?? "not reported"}`,
-              `Access: ${currentPermission ? `${currentPermission.mode} · network ${currentPermission.network}` : "server default"}`,
-              `Queue: ${conversation.queue.active ? "working" : "idle"}`,
-            ].join("\n"),
-          ),
-        );
-        return;
-      }
-      case "copy": {
-        const lastReply = conversation.timeline.findLast(
-          (entry) => entry.kind === "assistant" && entry.body,
-        );
-        if (!lastReply) {
-          conversation.setTimeline((current) =>
-            addSystemMessage(
-              current,
-              `copy-empty:${crypto.randomUUID()}`,
-              "Nothing to copy",
-              "There is no assistant reply in this session yet.",
-            ),
-          );
-          return;
-        }
-        void navigator.clipboard
-          .writeText(lastReply.body)
-          .then(() =>
-            conversation.setTimeline((current) =>
-              addSystemMessage(
-                current,
-                `copy-ok:${crypto.randomUUID()}`,
-                "Copied",
-                "The last assistant reply is on the clipboard.",
-                "complete",
-              ),
-            ),
-          )
-          .catch((reason: unknown) =>
-            conversation.setTimeline((current) =>
-              addSystemMessage(
-                current,
-                `copy-error:${crypto.randomUUID()}`,
-                "Copy failed",
-                reason instanceof Error ? reason.message : String(reason),
-                "error",
-              ),
-            ),
-          );
-        return;
-      }
-      case "local-shell-unavailable":
-        conversation.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `shell-unavailable:${crypto.randomUUID()}`,
-            "Local shell unavailable",
-            "Octoscode's ! command runs on the TUI host. A browser cannot execute a local process, so nothing was sent.",
-            "error",
-          ),
-        );
-        return;
-      case "unsupported-command":
-        conversation.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `unsupported-command:${crypto.randomUUID()}`,
-            `/${intent.command} is unavailable`,
-            "This Web build cannot execute that Octoscode command. Nothing was sent to the model.",
-            "error",
-          ),
-        );
-        return;
-      default:
-        return assertNever(intent);
+    if (intent.kind === "prompt") {
+      jumpToLatest();
+      conversation.enqueuePrompt(intent.text);
+      return;
     }
+    if (intent.kind === "interrupt") {
+      void conversation.interrupt();
+      return;
+    }
+    const isCurrent = () => commandSessionRef.current === opened;
+    void import("../features/commands/execute-local-command.ts")
+      .then(({ executeLocalCommand }) =>
+        executeLocalCommand({
+          intent,
+          opened,
+          conversation,
+          models,
+          safety,
+          work,
+          isCurrent,
+        }),
+      )
+      .catch(() => {
+        // A failed local command load must never fall through to model dispatch.
+        if (!isCurrent()) return;
+        if (!draftRef.current) {
+          draftRef.current = text;
+          setDraft(text);
+        }
+        setCommandError(
+          "Command unavailable. Nothing was sent. Try the command again when the connection is stable.",
+        );
+      });
   };
-
-  function insertComposerNewline(target: HTMLTextAreaElement) {
-    const value = draftRef.current;
-    const start = target.selectionStart;
-    const end = target.selectionEnd;
-    const next = `${value.slice(0, start)}\n${value.slice(end)}`;
-    draftRef.current = next;
-    setDraft(next);
-    requestAnimationFrame(() => target.setSelectionRange(start + 1, start + 1));
-  }
 
   const activeTurnId = conversation.queue.active?.turnId ?? null;
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
-  // Deep-thinking indicator: any active turn (dispatching OR accepted) with
-  // no reasoning content yet — the send→first-delta gap should not be silent.
-  const showThinking = Boolean(
-    activeTurnId &&
-    !conversation.timeline.some(
-      (entry) =>
-        entry.turnId === activeTurnId &&
-        (entry.kind === "reasoning" || entry.kind === "tool"),
+  const activityLabel = timelineActivity(conversation.timeline, activeTurnId);
+  const hasUnfinishedWork = Boolean(
+    activeTurnId ||
+    conversation.queue.pending.length ||
+    workspaceProduct.backgroundTurns.some(
+      (turn) => turn.state === "running" || turn.state === "waiting",
     ),
   );
+  useEffect(() => {
+    if (!hasUnfinishedWork) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [hasUnfinishedWork]);
   const navigationPending = workspaceProduct.pendingNavigation;
-  const suggestedCommands =
-    commandPaletteDismissed || navigationPending
-      ? []
-      : commandSuggestions(draft, session.opened?.capabilities);
-  const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
   // A server-accepted turn may keep running on its owner socket while this
   // tab focuses another Session. Browser-local queued prompts cannot: they
   // still belong to the current controller and therefore block navigation.
@@ -502,13 +448,14 @@ export function App() {
       : "";
     draftRef.current = restored;
     setDraft(restored);
-    setSelectedCommandIndex(0);
-    setCommandPaletteDismissed(false);
+
+    setCommandError(null);
     previousActiveSessionKeyRef.current = activeSessionKey;
     if (activeSessionKey) setConversationTab("chat");
     // Keep the URL addressable: a selected session survives a bookmark or
     // share. replaceState only — no history spam, and the parameter is
     // stripped again when the selection clears.
+    if (savedLink && savedLink.key !== activeSessionKey) return;
     const url = new URL(window.location.href);
     if (activeSessionKey) {
       url.searchParams.set("s", activeSessionKey);
@@ -518,142 +465,20 @@ export function App() {
     window.history.replaceState(null, "", url);
   }, [activeSessionKey]);
 
-  // Timeline follow contract: while the user is at (or near) the bottom the
-  // view follows new content; scrolling up detaches, and the jump-latest
-  // pill re-enters follow mode. scrollend (baseline 2026) is the definitive
-  // "user stopped" signal; the scroll listener tracks detachment live.
-  const syncConversationFollow = useCallback(() => {
-    const el = conversationScrollRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const follow = distance <= 48;
-    followRef.current = follow;
-    setShowJumpLatest(!follow);
-  }, []);
-  const scrollConversationToBottom = useCallback((smooth: boolean) => {
-    const el = conversationScrollRef.current;
-    if (!el) return;
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: smooth && !reduceMotion ? "smooth" : "auto",
-    });
-  }, []);
+  const {
+    scrollRef: conversationScrollRef,
+    contentRef: conversationContentRef,
+    onScroll: syncConversationFollow,
+    onDisclosureInteraction,
+    showJumpLatest,
+    jumpToLatest,
+  } = useConversationScroll(activeSessionKey, conversationTab);
+
   useEffect(() => {
-    const el = conversationScrollRef.current;
-    if (!el) return;
-    el.addEventListener("scroll", syncConversationFollow, { passive: true });
-    el.addEventListener("scrollend", syncConversationFollow);
-    return () => {
-      el.removeEventListener("scroll", syncConversationFollow);
-      el.removeEventListener("scrollend", syncConversationFollow);
-    };
-  }, [syncConversationFollow]);
-  useEffect(() => {
-    if (followRef.current) scrollConversationToBottom(false);
-  }, [conversation.timeline, scrollConversationToBottom]);
-  const sidebarProjection = useMemo(() => {
-    const backgroundBySession = new Map(
-      workspaceProduct.backgroundTurns.map((turn) => [
-        workspaceSessionKey(turn.workspaceRoot, turn.profileId, turn.sessionId),
-        turn,
-      ]),
-    );
-    const workspaces = knownSessionWorkspaces(
-      recentWorkspaces,
-      knownSessions,
-      activeWorkspacePath,
-    );
-    const targets = new Map<
-      string,
-      { sessionId: string; profileId: string; workspacePath: string }
-    >();
-    const projected: ProductSidebarWorkspace[] = workspaces.map((workspace) => {
-      const isActiveWorkspace = workspace.path === activeWorkspacePath;
-      const sourceSessions = knownSessions
-        .filter((item) => item.workspaceRoot === workspace.path)
-        .map((item) => ({
-          sessionId: item.sessionId,
-          profileId: item.profileId,
-          title: knownSessionTitle(item.sessionId),
-          updatedAt: item.lastOpenedAt,
-        }));
-      if (
-        isActiveWorkspace &&
-        session.opened &&
-        !sourceSessions.some(
-          (item) =>
-            item.sessionId === session.opened?.session_id &&
-            item.profileId === (session.opened.active_profile_id ?? ""),
-        )
-      ) {
-        sourceSessions.unshift({
-          sessionId: session.opened.session_id,
-          profileId: session.opened.active_profile_id ?? "",
-          title: knownSessionTitle(session.opened.session_id),
-          updatedAt: Date.now(),
-        });
-      }
-      return {
-        id: workspace.id,
-        label: workspace.name,
-        path: workspace.path,
-        expanded: !collapsedWorkspaceIds.has(workspace.id),
-        // Core rc.9 has no authoritative server-wide SessionRef catalog.
-        // These rows are only the server-confirmed refs opened in this tab.
-        sessionCatalogStatus: "known-only",
-        sessions: sourceSessions.map((item): ProductSidebarSession => {
-          const productId = workspaceSessionKey(
-            workspace.path,
-            item.profileId,
-            item.sessionId,
-          );
-          targets.set(productId, {
-            sessionId: item.sessionId,
-            profileId: item.profileId,
-            workspacePath: workspace.path,
-          });
-          const active = productId === activeSessionKey;
-          const background = backgroundBySession.get(productId);
-          const updatedLabel = formatRelativeTime(item.updatedAt);
-          const updatedAt = item.updatedAt;
-          return {
-            id: productId,
-            title: item.title,
-            ...(updatedLabel ? { updatedLabel } : {}),
-            ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
-            ...(active && (interactions.approval || interactions.question)
-              ? {
-                  status: "waiting" as const,
-                  statusLabel: "Waiting for input",
-                }
-              : active && activeTurnId
-                ? {
-                    status: "running" as const,
-                    statusLabel: turnStarting ? "Starting" : "Working",
-                  }
-                : background
-                  ? backgroundSessionStatus(background.state)
-                  : {}),
-          };
-        }),
-      };
-    });
-    return { workspaces: projected, targets };
-  }, [
-    activeSessionKey,
-    activeTurnId,
-    activeWorkspacePath,
-    collapsedWorkspaceIds,
-    interactions.approval,
-    interactions.question,
-    knownSessions,
-    recentWorkspaces,
-    turnStarting,
-    workspaceProduct.backgroundTurns,
-  ]);
+    if (!activeSessionKey || conversationTab !== "chat" || compact) return;
+    const frame = requestAnimationFrame(() => composerRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [activeSessionKey, conversationTab, compact]);
 
   useEffect(() => {
     if (!navigationPending) return;
@@ -663,35 +488,129 @@ export function App() {
   }, [navigationPending]);
 
   const moveToProductSession = async (productSessionId: string) => {
-    const target = sidebarProjection.targets.get(productSessionId);
+    const target = knownSessions.find(
+      (item) =>
+        workspaceSessionKey(
+          item.workspaceRoot,
+          item.profileId,
+          item.sessionId,
+        ) === productSessionId,
+    );
     if (!target || navigationBlocked || productSessionId === activeSessionKey)
       return;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
-      cwd: target.workspacePath,
+      cwd: target.workspaceRoot,
       profileId: target.profileId,
       resolveLaunch: false,
     });
     if (outcome !== "opened") return;
+    if (compact) setSidebarCollapsed(true);
   };
-  // Deep link: ?s=<session key> restores the selection once the sidebar
-  // projection has the target. Consumed once, then stripped from the URL by
-  // the selection-sync effect when the session opens.
-  const [deepLinkSessionKey] = useState(() => {
-    const value = new URLSearchParams(window.location.search).get("s");
-    return value === null || value === "" ? null : value;
-  });
-  const deepLinkConsumedRef = useRef(false);
-  useEffect(() => {
-    if (!deepLinkSessionKey || deepLinkConsumedRef.current) return;
-    if (!sidebarProjection.targets.has(deepLinkSessionKey)) return;
-    deepLinkConsumedRef.current = true;
-    void moveToProductSession(deepLinkSessionKey);
+  const dismissSavedLink = () => {
+    setSavedLink(null);
+    setSavedLinkError(null);
     const url = new URL(window.location.href);
-    url.searchParams.delete("s");
+    if (activeSessionKey) url.searchParams.set("s", activeSessionKey);
+    else url.searchParams.delete("s");
     window.history.replaceState(null, "", url);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLinkSessionKey, sidebarProjection]);
+  };
+  const openSavedLink = async () => {
+    const reference = savedLink?.reference;
+    if (!reference || !session.authenticated || savedLinkOpening) return;
+    if (
+      navigationBlocked ||
+      activeTurnId ||
+      conversation.queue.pending.length
+    ) {
+      setSavedLinkError(
+        "Finish the current response and remove queued messages before opening this conversation.",
+      );
+      return;
+    }
+    setSavedLinkOpening(true);
+    setSavedLinkError(null);
+    try {
+      const outcome = await workspaceProduct.openSession({
+        sessionId: reference.sessionId,
+        profileId: reference.profileId,
+        cwd: reference.workspaceRoot,
+        resolveLaunch: false,
+        requireExactWorkspace: true,
+      });
+      if (outcome === "opened") {
+        setSavedLink(null);
+        if (compact) setSidebarCollapsed(true);
+      } else
+        setSavedLinkError(
+          "The saved conversation could not be opened. Check the server and try again.",
+        );
+    } finally {
+      setSavedLinkOpening(false);
+    }
+  };
+  useEffect(() => {
+    if (
+      !savedLink ||
+      !session.authenticated ||
+      session.status !== "connected" ||
+      navigationBlocked
+    )
+      return;
+    if (savedLink.key === activeSessionKey) {
+      setSavedLink(null);
+      return;
+    }
+    if (activeTurnId || autoLinkAttempted.current) return;
+    if (
+      !knownSessions.some(
+        (item) =>
+          workspaceSessionKey(
+            item.workspaceRoot,
+            item.profileId,
+            item.sessionId,
+          ) === savedLink.key,
+      )
+    )
+      return;
+    autoLinkAttempted.current = true;
+    void openSavedLink();
+  }, [
+    savedLink,
+    session.authenticated,
+    session.status,
+    navigationBlocked,
+    activeTurnId,
+    activeSessionKey,
+    knownSessions,
+  ]);
+  const savedLinkPanel = savedLink ? (
+    savedLink.reference ? (
+      <SurfaceBoundary
+        fallback={<DeferredSurface label="Loading saved conversation…" />}
+      >
+        <SavedSessionLinkPanel
+          reference={savedLink.reference}
+          serverOrigin={connection.endpoint}
+          opening={savedLinkOpening}
+          error={savedLinkError ?? workspaceProduct.state.error}
+          onOpen={() => void openSavedLink()}
+          onDismiss={dismissSavedLink}
+        />
+      </SurfaceBoundary>
+    ) : (
+      <section className={productStyles.sessionUnavailable} role="alert">
+        <strong>This conversation link is invalid</strong>
+        <p>
+          It does not contain a complete server workspace and conversation
+          reference.
+        </p>
+        <button type="button" onClick={dismissSavedLink}>
+          Dismiss link
+        </button>
+      </section>
+    )
+  ) : null;
   const createSessionInWorkspace = async (workspacePath: string) => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
@@ -709,10 +628,12 @@ export function App() {
       return;
     }
     if (outcome !== "opened") return;
+    if (compact) setSidebarCollapsed(true);
     setWorkspacePicker((current) => ({ ...current, open: false }));
   };
   const requestNewSession = (workspaceId?: string) => {
     if (!codingCapabilities.sessionCreationAvailable) return;
+    if (compact) setSidebarCollapsed(true);
     const workspace = workspaceId
       ? recentWorkspaces.find((candidate) => candidate.id === workspaceId)
       : null;
@@ -847,6 +768,12 @@ export function App() {
     workspaceProduct.state.tokenCost?.contextWindow,
   );
 
+  const recoveryStop = conversation.interruptible ? (
+    <button type="button" onClick={() => void conversation.interrupt()}>
+      Stop
+    </button>
+  ) : null;
+
   const showProductShell = Boolean(
     session.authenticated || workspaceProduct.launch.decision,
   );
@@ -873,55 +800,88 @@ export function App() {
       </a>
       <main className="workspace-grid" id="workspace-main" tabIndex={-1}>
         <h1 className="sr-only">Octoscode coding workspace</h1>
-        <Suspense
-          fallback={
-            <aside
-              className={productStyles.sidebarFallback}
-              aria-label="Product navigation"
-              aria-busy="true"
-            >
-              <SkeletonRows rows={5} />
-              <span className="sr-only">Loading sessions…</span>
-            </aside>
-          }
+        <NavigationSurface
+          compact={compact}
+          open={!sidebarCollapsed}
+          onClose={() => setSidebarCollapsed(true)}
         >
-          <ProductSidebar
-            collapsed={sidebarCollapsed}
-            workspaces={sidebarProjection.workspaces}
-            selectedSessionId={activeSessionKey}
-            loading={workspaceProduct.state.loading}
-            error={workspaceProduct.state.error}
-            settingsActive={settingsOpen}
-            sessionCreationAvailable={
-              codingCapabilities.sessionCreationAvailable
+          <SurfaceBoundary
+            fallback={
+              <aside
+                className={productStyles.sidebarFallback}
+                aria-label="Product navigation"
+                aria-busy="true"
+              >
+                <SkeletonRows rows={5} />
+                <span className="sr-only">Loading sessions…</span>
+              </aside>
             }
-            viewMode={sidebarView}
-            orderMode="updated"
-            onCollapsedChange={setSidebarCollapsed}
-            onNewSession={requestNewSession}
-            onAddWorkspace={() =>
-              setWorkspacePicker({ open: true, view: "add" })
-            }
-            onViewModeChange={setSidebarView}
-            onOrderModeChange={() => undefined}
-            onWorkspaceExpandedChange={(workspaceId, expanded) => {
-              setCollapsedWorkspaceIds((current) => {
-                const next = new Set(current);
-                if (expanded) next.delete(workspaceId);
-                else next.add(workspaceId);
-                return next;
-              });
-            }}
-            onSessionSelect={moveToProductSession}
-            onSettings={() => setSettingsOpen(true)}
-            onRetry={() => {
-              void workspaceProduct.refresh();
-            }}
-          />
-        </Suspense>
+          >
+            <SessionSidebar
+              collapsed={sidebarCollapsed}
+              recentWorkspaces={recentWorkspaces}
+              knownSessions={knownSessions}
+              activeWorkspacePath={activeWorkspacePath}
+              opened={session.opened}
+              collapsedWorkspaceIds={collapsedWorkspaceIds}
+              backgroundTurns={workspaceProduct.backgroundTurns}
+              hasPendingInteraction={Boolean(
+                interactions.approval || interactions.question,
+              )}
+              recoveryPhase={conversation.turnRecovery?.phase ?? null}
+              activeTurnId={activeTurnId}
+              turnStarting={turnStarting}
+              selectedSessionId={activeSessionKey}
+              loading={workspaceProduct.state.loading}
+              error={workspaceProduct.state.error}
+              settingsActive={settingsOpen}
+              sessionCreationAvailable={
+                codingCapabilities.sessionCreationAvailable
+              }
+              viewMode={sidebarView}
+              orderMode={sidebarOrder}
+              onCollapsedChange={setSidebarCollapsed}
+              onNewSession={requestNewSession}
+              onAddWorkspace={() => {
+                if (compact) setSidebarCollapsed(true);
+                setWorkspacePicker({ open: true, view: "add" });
+              }}
+              onViewModeChange={setSidebarView}
+              onOrderModeChange={setSidebarOrder}
+              onWorkspaceExpandedChange={(workspaceId, expanded) => {
+                setCollapsedWorkspaceIds((current) => {
+                  const next = new Set(current);
+                  if (expanded) next.delete(workspaceId);
+                  else next.add(workspaceId);
+                  return next;
+                });
+              }}
+              onSessionSelect={moveToProductSession}
+              onSettings={() => {
+                if (compact) setSidebarCollapsed(true);
+                setSettingsOpen(true);
+              }}
+              onRetry={() => {
+                void workspaceProduct.refresh();
+              }}
+            />
+          </SurfaceBoundary>
+        </NavigationSurface>
 
         <section className="conversation">
           <header className="conversation-header">
+            {compact ? (
+              <button
+                type="button"
+                className={productStyles.navigationTrigger}
+                aria-label="Open sessions"
+                aria-haspopup="dialog"
+                aria-expanded={!sidebarCollapsed}
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <MenuIcon size={20} />
+              </button>
+            ) : null}
             <div className="workspace-title">
               <span>{workspaceName(activeWorkspacePath || "Workspace")}</span>
               <small>{activeWorkspacePath || "Choose a workspace"}</small>
@@ -956,11 +916,15 @@ export function App() {
               {safety.diffReview.available &&
               safety.diffReview.latestPreviewId ? (
                 <button
-                  className="review-chip"
+                  className={
+                    compact ? productStyles.compactReview : "review-chip"
+                  }
                   type="button"
+                  aria-label="Review changes"
+                  title="Review changes"
                   onClick={() => void safety.openDiffReview()}
                 >
-                  Review changes
+                  {compact ? <DiffIcon size={20} /> : "Review changes"}
                 </button>
               ) : null}
             </div>
@@ -973,95 +937,130 @@ export function App() {
             tabIndex={0}
             onScroll={syncConversationFollow}
           >
-            {workspaceProduct.launch.decision ? (
-              <Suspense fallback={<DeferredSurface label="Loading launch…" />}>
-                <LaunchDecisionPanel
-                  state={workspaceProduct.launch}
-                  onboarding={workspaceProduct.onboarding}
-                  error={workspaceProduct.state.error}
-                  onSubmitOnboarding={(submission) =>
-                    void workspaceProduct.submitOnboarding(submission)
-                  }
-                  onRetryOnboarding={() =>
-                    void workspaceProduct.retryOnboarding()
-                  }
-                  onChooseProfile={(profileId) =>
-                    void workspaceProduct.chooseLaunchProfile(profileId)
-                  }
-                  onCancel={workspaceProduct.cancelLaunch}
-                />
-              </Suspense>
-            ) : !session.opened ? (
-              <div className={productStyles.newSessionHero}>
-                {codingCapabilities.sessionCreationAvailable ? (
-                  <Suspense
-                    fallback={<DeferredSurface label="Loading workspaces…" />}
+            <div
+              ref={conversationContentRef}
+              className={productStyles.conversationContent}
+              onClickCapture={onDisclosureInteraction}
+              onKeyDownCapture={onDisclosureInteraction}
+            >
+              {workspaceProduct.launch.decision ? (
+                <SurfaceBoundary
+                  fallback={<DeferredSurface label="Loading launch…" />}
+                >
+                  <LaunchDecisionPanel
+                    state={workspaceProduct.launch}
+                    onboarding={workspaceProduct.onboarding}
+                    error={workspaceProduct.state.error}
+                    onSubmitOnboarding={(submission) =>
+                      void workspaceProduct.submitOnboarding(submission)
+                    }
+                    onRetryOnboarding={() =>
+                      void workspaceProduct.retryOnboarding()
+                    }
+                    onChooseProfile={(profileId) =>
+                      void workspaceProduct.chooseLaunchProfile(profileId)
+                    }
+                    onCancel={workspaceProduct.cancelLaunch}
+                  />
+                </SurfaceBoundary>
+              ) : !session.opened && savedLink ? (
+                savedLinkPanel
+              ) : !session.opened ? (
+                <div className={productStyles.newSessionHero}>
+                  {codingCapabilities.sessionCreationAvailable ? (
+                    <SurfaceBoundary
+                      fallback={<DeferredSurface label="Loading workspaces…" />}
+                    >
+                      <NewSessionWorkspacePicker
+                        presentation="hero"
+                        cancelLabel="Change server"
+                        workspaces={recentWorkspaces.map((workspace) => ({
+                          id: workspace.id,
+                          name: workspace.name,
+                          path: workspace.path,
+                        }))}
+                        {...(recentWorkspaces[0]
+                          ? { recentWorkspaceId: recentWorkspaces[0].id }
+                          : {})}
+                        error={workspaceProduct.state.error}
+                        creating={
+                          session.status === "connecting" ||
+                          workspaceProduct.transitioning
+                        }
+                        onCancel={disconnect}
+                        onCreate={({ workspacePath }) =>
+                          createSessionInWorkspace(workspacePath)
+                        }
+                      />
+                    </SurfaceBoundary>
+                  ) : (
+                    <section
+                      className={productStyles.sessionUnavailable}
+                      role="status"
+                    >
+                      <strong>Coding sessions unavailable</strong>
+                      <p>
+                        This Octos server does not support starting coding
+                        sessions in this Web app.
+                      </p>
+                      <button type="button" onClick={disconnect}>
+                        Change server
+                      </button>
+                    </section>
+                  )}
+                </div>
+              ) : conversationTab === "trajectory" ? (
+                <SurfaceBoundary
+                  fallback={<DeferredSurface label="Loading trajectory…" />}
+                >
+                  <SessionTrajectory
+                    state={work.supervision}
+                    onRefresh={() => void work.refresh()}
+                    onOpenTask={(taskId) => void work.openTask(taskId)}
+                    onCancelTask={(taskId) => void work.cancelTask(taskId)}
+                  />
+                </SurfaceBoundary>
+              ) : (
+                <>
+                  {savedLinkPanel}
+                  <SurfaceBoundary
+                    key={activeSessionKey ?? undefined}
+                    name="Conversation"
+                    fallback={<DeferredSurface label="Loading conversation…" />}
                   >
-                    <NewSessionWorkspacePicker
-                      presentation="hero"
-                      workspaces={recentWorkspaces.map((workspace) => ({
-                        id: workspace.id,
-                        name: workspace.name,
-                        path: workspace.path,
-                      }))}
-                      {...(recentWorkspaces[0]
-                        ? { recentWorkspaceId: recentWorkspaces[0].id }
-                        : {})}
-                      error={workspaceProduct.state.error}
-                      creating={
-                        session.status === "connecting" ||
-                        workspaceProduct.transitioning
-                      }
-                      onCancel={disconnect}
-                      onCreate={({ workspacePath }) =>
-                        createSessionInWorkspace(workspacePath)
-                      }
+                    <Timeline
+                      key={activeSessionKey ?? undefined}
+                      entries={conversation.timeline}
+                      connected={session.connected}
                     />
-                  </Suspense>
-                ) : (
-                  <section
-                    className={productStyles.sessionUnavailable}
-                    role="status"
-                  >
-                    <strong>Coding sessions unavailable</strong>
-                    <p>
-                      This Octos server does not support starting coding
-                      sessions in this Web app.
-                    </p>
-                    <button type="button" onClick={disconnect}>
-                      Change server
-                    </button>
-                  </section>
-                )}
-              </div>
-            ) : conversationTab === "trajectory" ? (
-              <Suspense
-                fallback={<DeferredSurface label="Loading trajectory…" />}
-              >
-                <SessionTrajectory
-                  state={work.supervision}
-                  onRefresh={() => void work.refresh()}
-                  onOpenTask={(taskId) => void work.openTask(taskId)}
-                  onCancelTask={(taskId) => void work.cancelTask(taskId)}
-                />
-              </Suspense>
-            ) : (
-              <>
-                <Timeline
-                  entries={conversation.timeline}
-                  connected={session.connected}
-                />
-                {showThinking ? (
-                  <div
-                    className={productStyles.thinkingIndicator}
-                    role="status"
-                  >
-                    <span className={productStyles.thinkingDot} />
-                    <span>Deep diving…</span>
-                  </div>
-                ) : null}
-              </>
-            )}
+                  </SurfaceBoundary>
+                  {conversation.turnRecovery ? (
+                    <SurfaceBoundary
+                      fallback={
+                        <DeferredSurface label="Checking response status…" />
+                      }
+                    >
+                      <TurnRecoveryNotice
+                        recovery={conversation.turnRecovery}
+                        onRetry={() => void conversation.retryTurnRecovery()}
+                      />
+                    </SurfaceBoundary>
+                  ) : null}
+                  {activityLabel &&
+                  !conversation.turnRecovery &&
+                  !interactions.approval &&
+                  !interactions.question ? (
+                    <div
+                      className={productStyles.thinkingIndicator}
+                      role="status"
+                    >
+                      <span className={productStyles.thinkingDot} />
+                      <span>{turnStarting ? "Starting…" : activityLabel}</span>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
           </div>
           <div
             className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending) ? " is-hidden" : ""}`}
@@ -1070,11 +1069,7 @@ export function App() {
               <button
                 type="button"
                 className={productStyles.jumpLatest}
-                onClick={() => {
-                  followRef.current = true;
-                  setShowJumpLatest(false);
-                  scrollConversationToBottom(true);
-                }}
+                onClick={jumpToLatest}
               >
                 Back to latest ↓
               </button>
@@ -1127,12 +1122,15 @@ export function App() {
                   </strong>
                   <small>
                     {session.recovery.detail ??
-                      "Prompts are paused until the durable projection is synchronized."}
+                      "Your session is reconnecting. Queued messages will wait until it is ready."}
                   </small>
                 </span>
               </div>
             ) : interactions.approval ? (
-              <Suspense
+              <SurfaceBoundary
+                key={`approval:${interactions.approval.approvalId}`}
+                name="Approval"
+                actions={recoveryStop}
                 fallback={<DeferredSurface label="Loading approval…" />}
               >
                 <ApprovalPanel
@@ -1149,9 +1147,12 @@ export function App() {
                     void safety.openDiffReview(previewId)
                   }
                 />
-              </Suspense>
+              </SurfaceBoundary>
             ) : interactions.question ? (
-              <Suspense
+              <SurfaceBoundary
+                key={`question:${interactions.question.questionId}`}
+                name="Question"
+                actions={recoveryStop}
                 fallback={<DeferredSurface label="Loading question…" />}
               >
                 <UserQuestionPanel
@@ -1166,183 +1167,123 @@ export function App() {
                     ? { onInterrupt: () => void conversation.interrupt() }
                     : {})}
                 />
-              </Suspense>
+              </SurfaceBoundary>
             ) : conversationTab === "trajectory" ? null : (
-              <div className="composer">
-                {suggestedCommands.length > 0 ? (
-                  <Suspense fallback={null}>
-                    <CommandPalette
-                      id={COMMAND_PALETTE_ID}
-                      commands={suggestedCommands}
-                      selectedIndex={Math.min(
-                        selectedCommandIndex,
-                        Math.max(0, suggestedCommands.length - 1),
-                      )}
-                      onSelect={chooseCommand}
-                    />
-                  </Suspense>
-                ) : null}
-                {conversation.queue.pending.length > 0 ? (
-                  <div className="prompt-queue" aria-live="polite">
-                    <strong>{conversation.queue.pending.length} queued</strong>
-                    <span>{conversation.queue.pending[0]?.text}</span>
-                  </div>
-                ) : null}
-                <textarea
-                  value={draft}
-                  onChange={(event) => {
-                    draftRef.current = event.target.value;
-                    setDraft(event.target.value);
-                    setSelectedCommandIndex(0);
-                    setCommandPaletteDismissed(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (suggestedCommands.length && event.key === "ArrowDown") {
-                      event.preventDefault();
-                      setSelectedCommandIndex(
-                        (current) => (current + 1) % suggestedCommands.length,
-                      );
-                    } else if (
-                      suggestedCommands.length &&
-                      event.key === "ArrowUp"
-                    ) {
-                      event.preventDefault();
-                      setSelectedCommandIndex(
-                        (current) =>
-                          (current - 1 + suggestedCommands.length) %
-                          suggestedCommands.length,
-                      );
-                    } else if (
-                      suggestedCommands.length &&
-                      event.key === "Escape"
-                    ) {
-                      event.preventDefault();
-                      setCommandPaletteDismissed(true);
-                      setSelectedCommandIndex(0);
-                    } else if (
-                      (event.key === "Enter" && event.altKey) ||
-                      (event.key.toLowerCase() === "j" && event.ctrlKey)
-                    ) {
-                      event.preventDefault();
-                      insertComposerNewline(event.currentTarget);
-                    } else if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.ctrlKey &&
-                      !event.metaKey
-                    ) {
-                      event.preventDefault();
-                      const selected = suggestedCommands[selectedCommandIndex];
-                      if (selected) chooseCommand(selected);
-                      else submit();
-                    }
-                  }}
-                  placeholder={
-                    session.connected && codingCapabilities.turnStartAvailable
-                      ? "Ask Octos to change, explain, or review code…"
-                      : session.connected
-                        ? "This server cannot start coding turns"
-                        : "Connect a workspace to begin"
-                  }
-                  disabled={
-                    !session.connected ||
-                    !codingCapabilities.turnStartAvailable ||
-                    workspaceProduct.transitioning ||
-                    Boolean(navigationPending)
-                  }
-                  className={productStyles.composerField}
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-haspopup="listbox"
-                  aria-expanded={suggestedCommands.length > 0}
-                  aria-controls={
-                    suggestedCommands.length > 0
-                      ? COMMAND_PALETTE_ID
-                      : undefined
-                  }
-                  aria-activedescendant={
-                    suggestedCommands[selectedCommandIndex]
-                      ? `${COMMAND_PALETTE_ID}-${suggestedCommands[selectedCommandIndex].name}`
-                      : undefined
-                  }
-                  rows={3}
+              <>
+                {commandError ? <p role="alert">{commandError}</p> : null}
+                <QueuedPrompts
+                  prompts={conversation.queue.pending}
+                  onRemove={(turnId) => conversation.cancelQueuedPrompt(turnId)}
                 />
-                <div className="composer-footer">
-                  {session.opened ? (
-                    <Suspense
-                      fallback={
-                        <div
-                          className={productStyles.sessionControlsFallback}
-                          role="status"
-                          aria-label="Loading session controls"
-                        />
-                      }
-                    >
-                      <SessionControlBar
-                        ariaLabel="Session controls"
-                        permission={permissionControl}
-                        model={null}
-                        runtimeModel={
-                          codingCapabilities.runtimeStatusAvailable &&
-                          work.supervision.statusAvailable
-                            ? {
-                                label: runtimeModelLabel,
-                                ...(pendingProfileDefault
-                                  ? { pendingProfileDefault }
-                                  : {}),
-                                onOpenSettings: () => {
-                                  setSettingsSection(
-                                    showModelsSettings ? "models" : "general",
-                                  );
-                                  setSettingsOpen(true);
-                                },
+                <SurfaceBoundary
+                  key={activeSessionKey ?? undefined}
+                  name="Message input"
+                  actions={recoveryStop}
+                  fallback={<DeferredSurface label="Loading message input…" />}
+                >
+                  <PromptComposer
+                    key={activeSessionKey}
+                    inputRef={composerRef}
+                    draft={draft}
+                    onDraftChange={(value) => {
+                      draftRef.current = value;
+                      setDraft(value);
+                    }}
+                    onSubmit={submit}
+                    sendDisabled={Boolean(conversation.turnRecovery)}
+                    recoveryHint={
+                      conversation.turnRecovery ? (
+                        <button
+                          className={productStyles.recoveryLink}
+                          type="button"
+                          onClick={jumpToLatest}
+                        >
+                          Sending paused · View response status
+                        </button>
+                      ) : undefined
+                    }
+                    capabilities={session.opened?.capabilities}
+                    disabled={
+                      !session.connected ||
+                      !codingCapabilities.turnStartAvailable ||
+                      workspaceProduct.transitioning ||
+                      Boolean(navigationPending)
+                    }
+                    focusOnMount={
+                      !compact && !settingsOpen && !workspacePicker.open
+                    }
+                    placeholder={
+                      session.connected && codingCapabilities.turnStartAvailable
+                        ? "Ask Octos to change, explain, or review code…"
+                        : session.connected
+                          ? "This server cannot start coding turns"
+                          : "Connect a workspace to begin"
+                    }
+                    turn={{
+                      activeTurnId,
+                      starting: turnStarting,
+                      interruptingTurnId: conversation.interruptingTurnId,
+                      available: conversation.interruptible,
+                      onInterrupt: () => void conversation.interrupt(),
+                    }}
+                    contextPercent={contextPercent}
+                    controls={
+                      <>
+                        {session.opened ? (
+                          <SurfaceBoundary
+                            fallback={
+                              <div
+                                className={
+                                  productStyles.sessionControlsFallback
+                                }
+                                role="status"
+                                aria-label="Loading session controls"
+                              />
+                            }
+                          >
+                            <SessionControlBar
+                              ariaLabel="Session controls"
+                              permission={permissionControl}
+                              model={null}
+                              runtimeModel={
+                                codingCapabilities.runtimeStatusAvailable &&
+                                work.supervision.statusAvailable
+                                  ? {
+                                      label: runtimeModelLabel,
+                                      ...(pendingProfileDefault
+                                        ? { pendingProfileDefault }
+                                        : {}),
+                                      onOpenSettings: () => {
+                                        setSettingsSection(
+                                          showModelsSettings
+                                            ? "models"
+                                            : "general",
+                                        );
+                                        setSettingsOpen(true);
+                                      },
+                                    }
+                                  : null
                               }
-                            : null
-                        }
-                      />
-                    </Suspense>
-                  ) : null}
-                  <div className="composer-actions">
-                    {contextPercent !== null ? (
-                      <span
-                        className={productStyles.contextUsage}
-                        title={`${contextPercent}% of the model context window used`}
-                      >
-                        {contextPercent}%
-                      </span>
-                    ) : null}
-                    <TurnStopButton
-                      activeTurnId={activeTurnId}
-                      starting={turnStarting}
-                      interruptingTurnId={conversation.interruptingTurnId}
-                      available={conversation.interruptible}
-                      onInterrupt={() => void conversation.interrupt()}
-                    />
-                    <button
-                      className="send-button"
-                      type="button"
-                      onClick={() => submit()}
-                      disabled={
-                        !session.connected ||
-                        !codingCapabilities.turnStartAvailable ||
-                        workspaceProduct.transitioning ||
-                        Boolean(navigationPending) ||
-                        !draft.trim()
-                      }
-                      aria-label={activeTurnId ? "Queue prompt" : "Send prompt"}
-                      title={activeTurnId ? "Queue prompt" : "Send prompt"}
-                    >
-                      ↑
-                    </button>
-                  </div>
-                </div>
-              </div>
+                            />
+                          </SurfaceBoundary>
+                        ) : null}
+                      </>
+                    }
+                  />
+                </SurfaceBoundary>
+              </>
             )}
           </div>
         </section>
       </main>
       {codingCapabilities.sessionCreationAvailable && workspacePicker.open ? (
-        <Suspense fallback={<DeferredSurface label="Loading workspaces…" />}>
+        <SurfaceBoundary
+          name="Workspaces"
+          onDismiss={() =>
+            setWorkspacePicker((current) => ({ ...current, open: false }))
+          }
+          fallback={<DeferredSurface label="Loading workspaces…" />}
+        >
           <NewSessionWorkspacePicker
             open
             initialView={workspacePicker.view}
@@ -1368,10 +1309,14 @@ export function App() {
               createSessionInWorkspace(workspacePath)
             }
           />
-        </Suspense>
+        </SurfaceBoundary>
       ) : null}
       {settingsOpen ? (
-        <Suspense fallback={<DeferredSurface label="Loading settings…" />}>
+        <SurfaceBoundary
+          name="Settings"
+          onDismiss={() => setSettingsOpen(false)}
+          fallback={<DeferredSurface label="Loading settings…" />}
+        >
           <SettingsDialog
             open
             activeSection={settingsSection}
@@ -1379,6 +1324,16 @@ export function App() {
             slots={{
               general: (
                 <GeneralSettingsContent
+                  {...(session.opened?.active_profile_id &&
+                  session.opened.workspace_root
+                    ? {
+                        sessionReference: {
+                          workspaceRoot: session.opened.workspace_root,
+                          profileId: session.opened.active_profile_id,
+                          sessionId: session.opened.session_id,
+                        },
+                      }
+                    : {})}
                   serverOrigin={connection.endpoint}
                   connectionStatus={session.status}
                   workspaceLabel={
@@ -1388,9 +1343,19 @@ export function App() {
                   }
                   workspacePath={activeWorkspacePath || null}
                   displayProfile={session.opened?.active_profile_id ?? null}
-                  locked={runtimeMutationBlocked}
-                  onDisconnect={disconnect}
-                  onForgetConnection={forgetConnection}
+                  locked={
+                    workspaceProduct.transitioning || Boolean(navigationPending)
+                  }
+                  onDisconnect={() =>
+                    hasUnfinishedWork
+                      ? setLeaveConnectionAction("disconnect")
+                      : disconnect()
+                  }
+                  onForgetConnection={() =>
+                    hasUnfinishedWork
+                      ? setLeaveConnectionAction("forget")
+                      : forgetConnection()
+                  }
                   onCopyDiagnostics={() => {
                     // Redacted by construction: origin only (never the
                     // token, never the WS query string), plus state the
@@ -1417,9 +1382,9 @@ export function App() {
                           }
                         : null,
                     };
-                    void navigator.clipboard
-                      .writeText(JSON.stringify(snapshot, null, 2))
-                      .catch(() => {});
+                    return navigator.clipboard.writeText(
+                      JSON.stringify(snapshot, null, 2),
+                    );
                   }}
                 />
               ),
@@ -1459,19 +1424,47 @@ export function App() {
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
           />
-        </Suspense>
+        </SurfaceBoundary>
+      ) : null}
+      {leaveConnectionAction ? (
+        <SurfaceBoundary
+          name="Connection confirmation"
+          onDismiss={() => setLeaveConnectionAction(null)}
+          fallback={
+            <DeferredSurface label="Loading connection confirmation…" />
+          }
+        >
+          <LeaveConnectionDialog
+            action={leaveConnectionAction}
+            onCancel={() => setLeaveConnectionAction(null)}
+            onConfirm={() => {
+              const action = leaveConnectionAction;
+              setLeaveConnectionAction(null);
+              if (action === "forget") forgetConnection();
+              else disconnect();
+            }}
+          />
+        </SurfaceBoundary>
       ) : null}
       {safety.diffReview.active ? (
-        <Suspense fallback={<DeferredSurface label="Loading review…" />}>
+        <SurfaceBoundary
+          name="Review"
+          onDismiss={safety.closeDiffReview}
+          fallback={<DeferredSurface label="Loading review…" />}
+        >
           <DiffReviewDialog
             state={safety.diffReview}
             onClose={safety.closeDiffReview}
             onRefresh={() => void safety.openDiffReview()}
           />
-        </Suspense>
+        </SurfaceBoundary>
       ) : null}
       {work.supervision.detail.active ? (
-        <Suspense fallback={<DeferredSurface label="Loading task…" />}>
+        <SurfaceBoundary
+          name="Task"
+          onDismiss={work.closeTask}
+          fallback={<DeferredSurface label="Loading task…" />}
+        >
           <TaskDetailDialog
             state={work.supervision}
             onClose={work.closeTask}
@@ -1479,14 +1472,10 @@ export function App() {
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
           />
-        </Suspense>
+        </SurfaceBoundary>
       ) : null}
     </div>
   );
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled composer intent: ${JSON.stringify(value)}`);
 }
 
 function DeferredSurface({ label }: { label: string }) {
@@ -1530,15 +1519,6 @@ const SETTINGS_LABELS = {
 function defaultEndpoint(): string {
   const configured = import.meta.env.VITE_OCTOS_DEFAULT_ENDPOINT?.trim();
   if (configured) return configured;
-  const hostname = window.location.hostname;
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname === "::1"
-  ) {
-    return "http://127.0.0.1:50080";
-  }
   return window.location.origin;
 }
 
@@ -1548,64 +1528,6 @@ function workspaceSessionKey(
   sessionId: string,
 ): string {
   return JSON.stringify([workspacePath, profileId, sessionId]);
-}
-
-function knownSessionWorkspaces(
-  workspaces: readonly RecentWorkspace[],
-  sessions: readonly KnownSessionRef[],
-  activePath: string,
-): RecentWorkspace[] {
-  const projected = new Map(
-    workspaces.map((workspace) => [workspace.path, { ...workspace }]),
-  );
-  for (const session of sessions) {
-    const current = projected.get(session.workspaceRoot);
-    if (current) {
-      current.lastOpenedAt = Math.max(
-        current.lastOpenedAt,
-        session.lastOpenedAt,
-      );
-      continue;
-    }
-    projected.set(session.workspaceRoot, {
-      id: session.workspaceRoot,
-      name: workspaceName(session.workspaceRoot),
-      path: session.workspaceRoot,
-      lastOpenedAt: session.lastOpenedAt,
-    });
-  }
-  if (activePath && !projected.has(activePath)) {
-    projected.set(activePath, {
-      id: activePath,
-      name: workspaceName(activePath),
-      path: activePath,
-      lastOpenedAt: Date.now(),
-    });
-  }
-  return [...projected.values()].sort(
-    (left, right) => right.lastOpenedAt - left.lastOpenedAt,
-  );
-}
-
-function knownSessionTitle(sessionId: string): string {
-  const wireLeaf = sessionId.split(":").at(-1)?.trim() || sessionId.trim();
-  const compact = wireLeaf.length > 10 ? wireLeaf.slice(-8) : wireLeaf;
-  return `Session ${compact || "unknown"}`;
-}
-
-function backgroundSessionStatus(
-  state: "running" | "waiting" | "completed" | "failed",
-): Pick<ProductSidebarSession, "status" | "statusLabel"> {
-  switch (state) {
-    case "running":
-      return { status: "running", statusLabel: "Working in background" };
-    case "waiting":
-      return { status: "waiting", statusLabel: "Waiting for input" };
-    case "completed":
-      return { status: "completed", statusLabel: "Completed in background" };
-    case "failed":
-      return { status: "failed", statusLabel: "Background turn failed" };
-  }
 }
 
 function sessionContextPercent(

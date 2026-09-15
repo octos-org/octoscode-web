@@ -10,13 +10,9 @@ async function connectAndStartWorkspace(page: Page): Promise<void> {
   await page.getByLabel("Auth token").fill(AUTH_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await expect(chooser).toBeVisible();
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
-
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await addWorkspace.getByLabel("Server workspace path").fill(WORKSPACE);
-  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await addWorkspace.getByRole("button", { name: "Start session" }).click();
   await expect(page.getByText(WORKSPACE, { exact: true })).toBeVisible();
 }
 

@@ -12,6 +12,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,13 +27,13 @@ export type ProductSessionStatus =
   "idle" | "running" | "waiting" | "completed" | "failed";
 
 export type ProductSidebarViewMode = "grouped" | "flat";
-export type ProductSidebarOrderMode = "manual" | "updated";
+export type ProductSidebarOrderMode = "manual" | "updated" | "oldest";
 
 export interface ProductSidebarSession {
   id: string;
   title: string;
   blank?: boolean | undefined;
-  /** Epoch milliseconds or an ISO timestamp used only for Last updated ordering. */
+  /** Last-opened time, as epoch milliseconds or an ISO timestamp. */
   updatedAt?: number | string | undefined;
   updatedLabel?: string | undefined;
   status?: ProductSessionStatus | undefined;
@@ -128,6 +129,7 @@ export function ProductSidebar({
     ReadonlySet<string>
   >(() => new Set());
   const searchInput = useRef<HTMLInputElement>(null);
+  const searchButton = useRef<HTMLButtonElement>(null);
   const viewOptionsButton = useRef<HTMLButtonElement>(null);
   const viewOptionsMenu = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
@@ -203,6 +205,15 @@ export function ProductSidebar({
     if (!collapsed && searchOpen) searchInput.current?.focus();
   }, [collapsed, searchOpen]);
 
+  useLayoutEffect(() => {
+    if (
+      activeTreeItemId &&
+      !treeRef.current?.contains(document.getElementById(activeTreeItemId))
+    ) {
+      setActiveTreeItemId(null);
+    }
+  }, [activeTreeItemId, normalizedQuery, viewMode, workspaces]);
+
   useEffect(() => {
     if (!viewOptionsOpen) return;
     viewOptionsMenu.current
@@ -216,7 +227,8 @@ export function ProductSidebar({
       closeViewOptions();
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.isComposing || event.keyCode === 229)
+        return;
       event.preventDefault();
       closeViewOptions(true);
     };
@@ -241,11 +253,18 @@ export function ProductSidebar({
   const closeSearch = () => {
     setQuery("");
     setSearchOpen(false);
+    searchButton.current?.focus();
   };
 
   const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Escape") return;
+    if (
+      event.key !== "Escape" ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    )
+      return;
     event.preventDefault();
+    event.stopPropagation();
     closeSearch();
   };
 
@@ -260,6 +279,14 @@ export function ProductSidebar({
   };
 
   const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // The tree owns its roving focus keys. Nested buttons keep their native
+    // keyboard activation (for example New session and Show more).
+    if (
+      event.target !== event.currentTarget ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    )
+      return;
     const keys = [
       "ArrowDown",
       "ArrowUp",
@@ -323,6 +350,14 @@ export function ProductSidebar({
         ) {
           event.preventDefault();
           onWorkspaceExpandedChange(workspaceId, true);
+        } else if (activeElement.getAttribute("aria-expanded") === "true") {
+          const child = activeElement.querySelector<HTMLElement>(
+            '[role="group"] [role="treeitem"]',
+          );
+          if (child) {
+            event.preventDefault();
+            moveTreeActive(child);
+          }
         }
         return;
       }
@@ -362,6 +397,8 @@ export function ProductSidebar({
   };
 
   const onViewOptionsKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+      return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -501,6 +538,7 @@ export function ProductSidebar({
                   className={`${styles.search} ${searchOpen ? styles.searchExpanded : ""}`}
                 >
                   <button
+                    ref={searchButton}
                     type="button"
                     className={styles.searchButton}
                     aria-label="Search sessions"
@@ -904,7 +942,13 @@ function CatalogProgress({
 export function ProductSidebarViewOptionsMenu(
   props: ProductSidebarViewOptionsMenuProps,
 ) {
-  const { viewMode, onViewModeChange, onSelectComplete } = props;
+  const {
+    viewMode,
+    orderMode,
+    onViewModeChange,
+    onOrderModeChange,
+    onSelectComplete,
+  } = props;
   const selectViewMode = (next: ProductSidebarViewMode) => {
     onViewModeChange(next);
     onSelectComplete?.();
@@ -936,6 +980,29 @@ export function ProductSidebarViewOptionsMenu(
           <span>In one list</span>
           {viewMode === "flat" ? <CheckIcon /> : null}
         </button>
+      </div>
+      <div className={styles.viewOptionsLabel} role="presentation">
+        Sort by
+      </div>
+      <div role="group" aria-label="Sort sessions by">
+        {(["updated", "oldest"] as const).map((order) => (
+          <button
+            key={order}
+            type="button"
+            className={styles.viewOptionsItem}
+            role="menuitemradio"
+            aria-checked={orderMode === order}
+            onClick={() => {
+              onOrderModeChange(order);
+              onSelectComplete?.();
+            }}
+          >
+            <span>
+              {order === "updated" ? "Last opened" : "Least recently opened"}
+            </span>
+            {orderMode === order ? <CheckIcon /> : null}
+          </button>
+        ))}
       </div>
     </>
   );
@@ -981,7 +1048,11 @@ function stableUpdatedOrder<T>(
       }
       if (left.updatedAt === undefined) return 1;
       if (right.updatedAt === undefined) return -1;
-      return right.updatedAt - left.updatedAt || left.index - right.index;
+      const difference = left.updatedAt - right.updatedAt;
+      return (
+        (orderMode === "oldest" ? difference : -difference) ||
+        left.index - right.index
+      );
     })
     .map(({ item }) => item);
 }

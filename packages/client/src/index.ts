@@ -26,24 +26,28 @@ export type {
 } from "./rpc.ts";
 export { parseProjectionEnvelope } from "./projection.ts";
 export { parseSessionOpenResult } from "./session.ts";
-export { parseReplayLossyEvent, parseSessionHydrateResult } from "./hydrate.ts";
+export { isTurnLifecycleState, parseTurnStateGetResult } from "./turn-state.ts";
+export { parseSessionHydrateResult } from "./hydrate.ts";
+export { parseReplayLossyEvent } from "./replay-events.ts";
+export { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
 export {
-  isPreviewId,
   parseDiffPreviewGetResult,
   parsePermissionProfileListResult,
   parsePermissionProfileSetResult,
 } from "./coding.ts";
+export { isProtocolUuid } from "./supervision-values.ts";
 export {
-  isProtocolUuid,
   parsePlanUpdated,
+  parseTaskOutputDelta,
+  parseTaskUpdated,
+} from "./supervision-events.ts";
+export {
   parseSessionStatusReadResult,
   parseTaskArtifactListResult,
   parseTaskArtifactReadResult,
   parseTaskCancelResult,
   parseTaskListResult,
-  parseTaskOutputDelta,
   parseTaskOutputReadResult,
-  parseTaskUpdated,
 } from "./supervision.ts";
 export {
   parseConfigCapabilitiesListResult,
@@ -51,11 +55,11 @@ export {
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
-  parseTokenCostUpdate,
   parseUiProtocolCapabilities,
 } from "./workspace.ts";
+export { parseTokenCostUpdate } from "./workspace-events.ts";
+export { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
 export {
-  APPUI_ONBOARDING_METHODS,
   parseLlmCatalogResult,
   parseLlmFetchModelsResult,
   parseProfileLlmConfigResult,
@@ -76,6 +80,7 @@ export {
   parseUserQuestionRespondResult,
   supportsFeature,
   supportsMethod,
+  supportsTurnStateGet,
 } from "./interaction.ts";
 export type {
   ApprovalDecision,
@@ -146,6 +151,9 @@ export type {
   SessionOpenParams,
   SessionOpenResult,
   TurnStartParams,
+  TurnLifecycleState,
+  TurnStateGetParams,
+  TurnStateGetResult,
   UiCursor,
   UiProtocolCapabilities,
   UiProtocolVersion,

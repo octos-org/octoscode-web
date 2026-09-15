@@ -35,6 +35,8 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
     [trimmed, language, loaded],
   );
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const resetTimerRef = useRef<number | null>(null);
 
   useEffect(
@@ -46,9 +48,12 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
     [],
   );
 
-  const copy = () => {
-    if (copied) return;
-    void navigator.clipboard.writeText(trimmed).then(() => {
+  const copy = async () => {
+    if (copied || copying) return;
+    setCopying(true);
+    setCopyError(false);
+    try {
+      await navigator.clipboard.writeText(trimmed);
       setCopied(true);
       if (resetTimerRef.current !== null) {
         window.clearTimeout(resetTimerRef.current);
@@ -57,17 +62,31 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
         resetTimerRef.current = null;
         setCopied(false);
       }, 1_000);
-    });
+    } catch {
+      setCopyError(true);
+    } finally {
+      setCopying(false);
+    }
   };
 
   return (
     <div className="md-code-block">
       <div className="md-code-banner">
         <span>{language ?? "text"}</span>
-        <button type="button" onClick={copy} aria-label="Copy code block">
+        <button
+          type="button"
+          onClick={() => void copy()}
+          disabled={copying}
+          aria-label="Copy code block"
+        >
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
+      {copyError ? (
+        <div className="md-copy-error" role="alert">
+          Could not copy. Select the code to copy it, or try again.
+        </div>
+      ) : null}
       {html ? (
         <div dangerouslySetInnerHTML={{ __html: html }} />
       ) : (

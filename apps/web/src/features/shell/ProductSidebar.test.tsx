@@ -306,14 +306,63 @@ describe("ProductSidebar", () => {
     expect(html).toContain('aria-current="page"');
   });
 
+  it.each([
+    ["grouped", "updated"],
+    ["grouped", "oldest"],
+    ["flat", "updated"],
+    ["flat", "oldest"],
+  ] as const)(
+    "sorts %s sessions by %s with stable ties and missing times last",
+    (viewMode, orderMode) => {
+      const html = renderToStaticMarkup(
+        <ProductSidebar
+          {...baseProps}
+          viewMode={viewMode}
+          orderMode={orderMode}
+          workspaces={[
+            {
+              id: "sort-workspace",
+              label: "Sort workspace",
+              expanded: true,
+              sessions: [
+                { id: "missing", title: "Missing timestamp" },
+                { id: "newer", title: "Newer session", updatedAt: 200 },
+                { id: "older", title: "Older session", updatedAt: 100 },
+                { id: "tie", title: "Tied session", updatedAt: 100 },
+                {
+                  id: "invalid",
+                  title: "Invalid timestamp",
+                  updatedAt: "invalid",
+                },
+              ],
+            },
+          ]}
+        />,
+      );
+      const titles = [
+        ...(orderMode === "oldest"
+          ? ["Older session", "Tied session", "Newer session"]
+          : ["Newer session", "Older session", "Tied session"]),
+        "Missing timestamp",
+        "Invalid timestamp",
+      ];
+      const positions = titles.map((title) => html.indexOf(title));
+      expect(positions.every((position) => position >= 0)).toBe(true);
+      expect(positions).toEqual(
+        [...positions].sort((left, right) => left - right),
+      );
+    },
+  );
+
   it("exposes accessible grouping choices and dispatches the controlled change", () => {
     const onViewModeChange = vi.fn();
     const onSelectComplete = vi.fn();
+    const onOrderModeChange = vi.fn();
     const props = {
       viewMode: "grouped" as const,
       orderMode: "manual" as const,
       onViewModeChange,
-      onOrderModeChange: vi.fn(),
+      onOrderModeChange,
       onSelectComplete,
     };
     const menu = ProductSidebarViewOptionsMenu(props);
@@ -328,6 +377,11 @@ describe("ProductSidebar", () => {
     findButton(menu, "In one list").props.onClick();
     expect(onViewModeChange).toHaveBeenCalledWith("flat");
     expect(onSelectComplete).toHaveBeenCalledTimes(1);
+    findButton(menu, "Least recently opened").props.onClick();
+    expect(onOrderModeChange).toHaveBeenLastCalledWith("oldest");
+    findButton(menu, "Last opened").props.onClick();
+    expect(onOrderModeChange).toHaveBeenLastCalledWith("updated");
+    expect(onSelectComplete).toHaveBeenCalledTimes(3);
   });
 });
 

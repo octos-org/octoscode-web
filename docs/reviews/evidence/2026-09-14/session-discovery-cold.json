@@ -1,0 +1,199 @@
+{
+  "core_version": "2.0.3-rc.9",
+  "core_revision": "5ea987813de4fd2afdd1d78f2106ad2868f0d923",
+  "isolation": "Temporary data directory, temporary workspace, loopback provider fixture; no deployment or real user sessions touched.",
+  "core_restarted_before_new_connection": true,
+  "provider_response": "OK",
+  "advertised_methods": [
+    "session/list",
+    "session/snapshot",
+    "session/messages_page",
+    "session/workspace.get",
+    "session/title.set"
+  ],
+  "probes": [
+    {
+      "label": "global_list",
+      "method": "session/list",
+      "result": {
+        "sessions": []
+      }
+    },
+    {
+      "label": "workspace_list",
+      "method": "session/list",
+      "error": {
+        "message": "session/open cwd requires a configured profile runtime",
+        "code": -32602,
+        "data": {
+          "kind": "cwd_runtime_unavailable",
+          "cwd": "/tmp/octoscode-web-integration-SkG64G/workspace",
+          "active_profile_id": null
+        }
+      }
+    },
+    {
+      "label": "missing_before_open",
+      "method": "session/hydrate",
+      "error": {
+        "message": "unknown session: octoscode-web-ci:api:web-never-existed",
+        "code": -32100,
+        "data": {
+          "kind": "unknown_session",
+          "session_id": "octoscode-web-ci:api:web-never-existed"
+        }
+      }
+    },
+    {
+      "label": "persist_message",
+      "method": "turn/start",
+      "result": {
+        "accepted": true
+      }
+    },
+    {
+      "label": "persisted_source",
+      "result": {
+        "session_id": "octoscode-web-ci:local:tui#coding",
+        "cursor": {
+          "stream": "octoscode-web-ci:local:tui#coding\u0000~cwd-cf70782455cd6ac2",
+          "seq": 21
+        },
+        "messages": [
+          {
+            "seq": 0,
+            "role": "user",
+            "content": "Reply with only the word RECOVERED.",
+            "thread_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a",
+            "persisted_at": "2026-09-14T18:12:47.074298642Z",
+            "message_id": "octoscode-web-ci:local:tui#coding:0:1789409567074298642"
+          },
+          {
+            "seq": 1,
+            "role": "assistant",
+            "content": "OK",
+            "thread_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a",
+            "persisted_at": "2026-09-14T18:12:54.093966777Z",
+            "message_id": "octoscode-web-ci:local:tui#coding:1:1789409574093966777"
+          }
+        ],
+        "turns": [
+          {
+            "turn_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a",
+            "state": "completed",
+            "started_at": "2026-09-14T18:12:47.057031376Z",
+            "completed_at": "2026-09-14T18:12:54.123824128Z",
+            "thread_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a"
+          }
+        ],
+        "replayed_envelopes": [],
+        "replayed_tool_envelopes": []
+      }
+    },
+    {
+      "label": "fresh_connection_list",
+      "method": "session/list",
+      "error": {
+        "message": "session/open cwd requires a configured profile runtime",
+        "code": -32602,
+        "data": {
+          "kind": "cwd_runtime_unavailable",
+          "cwd": "/tmp/octoscode-web-integration-SkG64G/workspace",
+          "active_profile_id": null
+        }
+      }
+    },
+    {
+      "label": "fresh_connection_hydrate_before_open",
+      "method": "session/hydrate",
+      "error": {
+        "message": "unknown session: octoscode-web-ci:local:tui#coding",
+        "code": -32100,
+        "data": {
+          "kind": "unknown_session",
+          "session_id": "octoscode-web-ci:local:tui#coding"
+        }
+      }
+    },
+    {
+      "label": "exact_reference_open",
+      "method": "session/open",
+      "result": {
+        "opened": {
+          "session_id": "octoscode-web-ci:local:tui#coding",
+          "active_profile_id": "octoscode-web-ci",
+          "workspace_root": "/tmp/octoscode-web-integration-SkG64G/workspace"
+        }
+      }
+    },
+    {
+      "label": "exact_reference_hydrate",
+      "method": "session/hydrate",
+      "result": {
+        "session_id": "octoscode-web-ci:local:tui#coding",
+        "cursor": {
+          "stream": "octoscode-web-ci:local:tui#coding\u0000~cwd-cf70782455cd6ac2",
+          "seq": 22
+        },
+        "messages": [
+          {
+            "seq": 0,
+            "role": "user",
+            "content": "Reply with only the word RECOVERED.",
+            "thread_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a",
+            "persisted_at": "2026-09-14T18:12:47.074298642Z",
+            "message_id": "octoscode-web-ci:local:tui#coding:0:1789409567074298642"
+          },
+          {
+            "seq": 1,
+            "role": "assistant",
+            "content": "OK",
+            "thread_id": "dad3c2fd-3434-4abc-8afe-e76bf09eac6a",
+            "persisted_at": "2026-09-14T18:12:54.093966777Z",
+            "message_id": "octoscode-web-ci:local:tui#coding:1:1789409574093966777"
+          }
+        ],
+        "replayed_envelopes": [],
+        "replayed_tool_envelopes": []
+      }
+    },
+    {
+      "label": "list_after_exact_open",
+      "method": "session/list",
+      "error": {
+        "message": "session/open cwd requires a configured profile runtime",
+        "code": -32602,
+        "data": {
+          "kind": "cwd_runtime_unavailable",
+          "cwd": "/tmp/octoscode-web-integration-SkG64G/workspace",
+          "active_profile_id": null
+        }
+      }
+    },
+    {
+      "label": "never_existed_open",
+      "method": "session/open",
+      "result": {
+        "opened": {
+          "session_id": "octoscode-web-ci:api:web-never-existed",
+          "active_profile_id": "octoscode-web-ci",
+          "workspace_root": "/tmp/octoscode-web-integration-SkG64G/workspace"
+        }
+      }
+    },
+    {
+      "label": "never_existed_hydrate",
+      "method": "session/hydrate",
+      "result": {
+        "session_id": "octoscode-web-ci:api:web-never-existed",
+        "cursor": {
+          "stream": "octoscode-web-ci:api:web-never-existed\u0000~cwd-cf70782455cd6ac2",
+          "seq": 1
+        },
+        "messages": [],
+        "replayed_envelopes": [],
+        "replayed_tool_envelopes": []
+      }
+    }
+  ]
+}

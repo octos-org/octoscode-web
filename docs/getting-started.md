@@ -32,10 +32,13 @@ pnpm install --frozen-lockfile
    | Server origin | HTTP(S) origin for the Octos server.                                |
    | Auth token    | Credential when the server requires one; retained only in this tab. |
 
-4. Select **Connect**. Authentication happens before work selection; there are
-   no Workspace path, profile, or Session identity fields on this screen.
-5. In the product sidebar, select **New Session** and choose a known Workspace.
-   To use another repository, select **Add workspace** and enter its path on the
+4. Select **Connect** or press Enter. The address defaults to this page's
+   origin; **Use this page** restores it after a custom address was saved.
+   Authentication happens before work selection; there are no Workspace path,
+   profile, or Session identity fields on this screen.
+5. On your first connection, enter a workspace path and select **Start
+   session**. For later conversations, select **New Session** in the sidebar and
+   choose a recent Workspace, or select **Add workspace**. Enter paths on the
    **Octos server host**, not the browser device. Add workspace validates that
    path and creates a fresh Session; it is not Workspace-registry CRUD.
 6. Select any Session this tab has already confirmed to reopen it. Chat and
@@ -71,18 +74,22 @@ After Core acknowledges a turn started by this tab, you can select another
 Session or create one in the same or another Workspace. The original Session
 continues to show its running or waiting status in the sidebar, and selecting it
 again restores its authoritative hydrate/replay projection. Browser-local queued
-prompts cannot move with that owner socket, so they block navigation. A
-`turn/start` whose acknowledgement has not arrived is shown as **Starting**; one
-create/switch intent is retained locally (latest click wins) and runs
-automatically after that exact request is accepted. Rejection or cancellation
-clears the intent without leaving the source Session. **Stop** becomes available
-only after acceptance; `/stop` also fails closed during Starting.
+prompts cannot move with that owner socket, so they block navigation. The queue
+above the composer shows each pending message and its remove control. Remove
+unwanted queued messages before switching. A `turn/start` whose acknowledgement
+has not arrived is shown as **Starting**; one create/switch intent is retained
+locally (latest click wins) and runs automatically after that exact request is
+accepted. Rejection or cancellation clears the intent without leaving the source
+Session. **Stop** becomes available only after acceptance; `/stop` also fails
+closed during Starting.
 
 This is same-live-tab continuation, not a detached server job. Refreshing or
 closing the tab, losing the WebSocket through a network or proxy failure, or
 selecting **Disconnect** closes the rc.9 owner socket and terminates a
-still-running turn. Disconnect keeps the current tab's confirmed Session refs
-for reconnect. **Forget server** and endpoint/token identity changes clear those
+still-running turn. The browser warns before refresh or close while foreground,
+queued, or background work is active; this warning does not keep work alive
+after leaving. Disconnect keeps the current tab's confirmed Session refs for
+reconnect. **Forget server** and endpoint/token identity changes clear those
 refs, recent Workspace paths, and in-memory drafts.
 
 For a fresh Web Session, an unambiguous `activate` result opens automatically
@@ -94,6 +101,37 @@ composer footer. Full access appears only when advertised and requires a risk
 acknowledgement. The runtime-model label is status, not a Session-level model
 selector. Open **Settings** at the bottom of the sidebar for General connection
 details, **Disconnect**, **Forget server**, or Models.
+
+## Read and write comfortably
+
+To save the current conversation for another browser, use **Settings → General →
+Copy conversation link**. The link contains its server workspace and routing
+reference, without your login token. Sign in to the same server in the new
+browser, check the target, and select **Open conversation**. If it no longer
+exists, Core may open an empty Session; opening a link never sends a prompt.
+
+After a connection loss, a missing response can require a separate status check.
+**Check status** asks Core about that exact response. An unknown result pauses
+sending and retains queued messages; it does not establish that the work never
+ran. You can edit your draft, remove queued entries, and manage the connection
+in Settings. Disconnecting or forgetting the server while work is unfinished
+asks for confirmation because running work can stop and queued messages are
+discarded.
+
+Enter sends a message; Shift+Enter adds a line. Confirming an IME candidate does
+not send. During a turn, typing another message makes the queue action
+available; Stop remains available once Core has accepted the active turn.
+
+New output follows the end of the conversation while you are there. Scroll up to
+read history without being pulled down by streaming text. **Back to latest**
+resumes following. Reasoning and tool details start collapsed, support keyboard
+activation, and stay open when the tool finishes.
+
+On a phone, the header's navigation button opens Sessions and Workspaces in a
+drawer. Close it with Escape or by selecting a Session to return to the
+conversation. The input stays inside the viewport and retains its draft.
+Settings scrolls within its dialog. Escape closes the topmost dialog; closing a
+Diff review above an approval returns to that approval without interrupting it.
 
 ## Configure providers and models
 

@@ -458,6 +458,7 @@ export class ActiveSessionRuntime<
       if (!this.isCurrent(authority)) return null;
       const result = await authority.client.listConfigCapabilities();
       if (!this.isCurrent(authority)) return null;
+      assertConnected(authority.client);
       this.#options.validateServerCapabilities(result.capabilities);
       this.#serverCapabilities = result.capabilities;
       this.#authority = authorityWith(authority, {
@@ -672,7 +673,12 @@ export class ActiveSessionRuntime<
         }
         if (status === "error") this.#phase = "error";
         this.#publish();
-        if (status === "disconnected") this.#scheduleReconnect();
+        // Browser WebSockets report error before close. The client preserves
+        // that error status on close, so waiting only for "disconnected"
+        // strands an established Session after an ordinary network failure.
+        if (status === "disconnected" || status === "error") {
+          this.#scheduleReconnect();
+        }
       }),
       authority.client.subscribeErrors((error) => {
         if (!binding.active || !this.isCurrent(authority)) return;
@@ -755,6 +761,7 @@ export class ActiveSessionRuntime<
       if (target.kind === "server") {
         const result = await authority.client.listConfigCapabilities();
         if (!this.isCurrent(authority)) return;
+        assertConnected(authority.client);
         this.#options.validateServerCapabilities(result.capabilities);
         this.#serverCapabilities = result.capabilities;
         this.#authority = authorityWith(authority, {
@@ -783,6 +790,7 @@ export class ActiveSessionRuntime<
         ...(resumeCursor ? { after: resumeCursor } : {}),
       });
       if (!this.isCurrent(authority)) return;
+      assertConnected(authority.client);
       if (result.opened.session_id !== target.config.sessionId) {
         throw new Error(
           `session/open returned ${result.opened.session_id}, expected ${target.config.sessionId}`,
@@ -1179,6 +1187,17 @@ function normalizeConfig(
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 0.5;
   return Math.min(1, Math.max(0, value));
+}
+
+function assertConnected(client: ActiveSessionClient): void {
+  // A response may already be received while its lazy decoder is loading.
+  // Closing the socket then cannot reject that promise; do not let its late
+  // completion authenticate a dead client or replace the scheduled retry target.
+  if (client.status !== "connected") {
+    throw new Error(
+      "The server transport disconnected before the response was ready",
+    );
+  }
 }
 
 function errorMessage(reason: unknown): string {

@@ -1,0 +1,78 @@
+{
+  "date": "2026-09-15",
+  "branch": "fix/workspace-interaction-audit",
+  "state": "pre-merge verification snapshot; consult the associated PR and main commit for integration status",
+  "checks": {
+    "pnpm_check": "passed",
+    "client_unit": 83,
+    "web_unit": 383,
+    "unit_total": 466,
+    "playwright_total": 97,
+    "playwright_passed": 97,
+    "playwright_duration": "5.1m",
+    "existing_visual_comparisons": 4,
+    "production_csp_error_recovery": {
+      "passed": 5,
+      "duration": "10.2s"
+    },
+    "contract": "passed; unchanged pin",
+    "isolated_rc9_core": "passed; no model turn",
+    "premerge_lifecycle": {
+      "targeted_unit": 57,
+      "targeted_browser": 3,
+      "result": "passed after demonstrated failures"
+    },
+    "ci_scope": "PR and main run the complete browser suite; snapshot regeneration remains opt-in",
+    "premerge_real_model": {
+      "passed": 3,
+      "read_only_permission": true,
+      "model": "glm-5.3-flash",
+      "duration_ms": [9086, 13941, 6386],
+      "page_errors": 0,
+      "console_errors": 0,
+      "rendering": "production build"
+    }
+  },
+  "budgets": {
+    "initial_js_bytes": 360311,
+    "initial_js_limit": 360448,
+    "initial_css_bytes": 67057,
+    "initial_css_limit": 81920,
+    "global_css_lines": 2864,
+    "global_css_limit": 2877,
+    "streaming_worst_loaf_ms": 121.7,
+    "streaming_loaf_limit_ms": 200
+  },
+  "production_smoke": {
+    "responses": 61,
+    "page_errors": 0,
+    "console_errors": 0,
+    "failed_requests": 0,
+    "csp_violations": 0,
+    "serving": "Vite preview with repository CSP and same-origin fixture proxy; not nginx deployment"
+  },
+  "cold_gate_sample": {
+    "cpu_throttle": 4,
+    "cache_disabled": true,
+    "network": "loopback, unthrottled",
+    "fcp_ms": 308,
+    "lcp_ms": 308,
+    "cls": 0,
+    "scope": "one lab sample; not field performance"
+  },
+  "remaining_limits": [
+    "Core must supply guaranteed execution across owner disconnect/refresh, safe release, and complete cross-browser catalog",
+    "Earlier-message expansion displays already received entries; not remote pagination or unbounded virtualization",
+    "Chromium fixture and isolated Core checks are not all mobile browsers or real-model network combinations"
+  ],
+  "evidence": [
+    "pnpm-check.log",
+    "e2e-all.log",
+    "production-recovery.log",
+    "contract.log",
+    "real-core.log",
+    "production-smoke.json",
+    "chunk-failure-before.json",
+    "chunk-failure-after.json"
+  ]
+}

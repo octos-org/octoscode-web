@@ -11,6 +11,7 @@ import {
   type DraftAnswer,
 } from "./answers.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import styles from "./UserQuestionPanel.module.css";
 
 interface UserQuestionPanelProps {
   request: UserQuestionRequested;
@@ -44,7 +45,7 @@ export function UserQuestionPanel({
   return (
     <ModalSurface
       backdropClassName="takeover-wrap"
-      dialogClassName="question-card"
+      dialogClassName={`question-card ${styles.card}`}
       labelledBy="question-title"
       {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
     >
@@ -111,7 +112,11 @@ export function UserQuestionPanel({
           );
         })}
       </div>
-      {error ? <span className="takeover-error">{error}</span> : null}
+      {error ? (
+        <span className="takeover-error" role="alert">
+          {error}
+        </span>
+      ) : null}
       <div className="question-actions">
         {onInterrupt ? <span>Esc stops the active turn</span> : null}
         <button

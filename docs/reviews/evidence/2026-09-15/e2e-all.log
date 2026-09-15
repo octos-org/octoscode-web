@@ -1,0 +1,138 @@
+$ playwright test
+[WebServer] (node:3058739) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3058763) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] $ pnpm --filter @octos-org/octoscode-web mock:server
+[WebServer] (node:3058800) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3058836) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] $ node scripts/mock-ui-server.mjs
+[WebServer] (node:3058854) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3058958) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3058987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3059003) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 97 tests using 1 worker
+
+(node:3059106) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › e2e/auth-identity.spec.ts:42:1 › rejects invalid auth before the product shell is ever mounted (734ms)
+  ✓   2 [chromium] › e2e/auth-identity.spec.ts:89:1 › accepts a profile-routable web identity but closes a scoped mismatch (572ms)
+  ✓   3 [chromium] › e2e/auth-identity.spec.ts:117:1 › binds a cross-profile launch to the resolved profile before open (2.0s)
+  ✓   4 [chromium] › e2e/final-input.spec.ts:28:1 › approval shortcuts ignore modified keys and IME composition (2.4s)
+  ✓   5 [chromium] › e2e/final-input.spec.ts:69:1 › long approval remains readable and actionable in a short phone viewport (2.4s)
+  ✓   6 [chromium] › e2e/final-input.spec.ts:113:1 › connection actions can be reached by scrolling at 320×320 (1.6s)
+  ✓   7 [chromium] › e2e/final-input.spec.ts:147:1 › long questions retain free text and selections after a failed response (2.5s)
+  ✓   8 [chromium] › e2e/final-input.spec.ts:249:1 › composer preserves IME confirmation and multiline edits around commands (2.2s)
+  ✓   9 [chromium] › e2e/final-input.spec.ts:288:1 › question radio selection keeps backward Tab inside its dialog (2.2s)
+  ✓  10 [chromium] › e2e/final-input.spec.ts:319:1 › phone search and view menus consume Escape before the sessions drawer (2.5s)
+  ✓  11 [chromium] › e2e/final-reading.spec.ts:21:1 › code copy reports rejected and missing clipboard APIs without losing the code (2.1s)
+  ✓  12 [chromium] › e2e/final-reading.spec.ts:70:1 › sidebar native buttons keep Enter behavior and search Escape restores its trigger (2.3s)
+  ✓  13 [chromium] › e2e/final-reading.spec.ts:109:1 › tree focus follows a collapsed parent and no longer references a removed search row (2.4s)
+  ✓  14 [chromium] › e2e/final-reading.spec.ts:149:1 › 360-message history stays readable while new output streams and unsafe Markdown stays inert (6.3s)
+  ✓  15 [chromium] › e2e/final-reading.spec.ts:331:1 › Diff review keeps long headings and file content inside the narrow viewport (2.4s)
+  ✓  16 [chromium] › e2e/final-reading.spec.ts:389:1 › a missing optional syntax grammar leaves readable and copyable plain code (1.9s)
+  ✓  17 [chromium] › e2e/final-reading.spec.ts:427:1 › task output and artifact controls fit a short phone viewport with long titles (2.4s)
+  ✓  18 [chromium] › e2e/modal-stack.spec.ts:23:3 › review above an approval owns Tab and Escape at 320px (2.3s)
+  ✓  19 [chromium] › e2e/modal-stack.spec.ts:85:3 › canceling a provider confirmation preserves Settings at 320px (2.4s)
+  ✓  20 [chromium] › e2e/modal-stack.spec.ts:23:3 › review above an approval owns Tab and Escape at 1280px (2.8s)
+  ✓  21 [chromium] › e2e/modal-stack.spec.ts:85:3 › canceling a provider confirmation preserves Settings at 1280px (2.4s)
+  ✓  22 [chromium] › e2e/model-management.spec.ts:64:1 › manages a provider through the DSH-style Models settings flow (3.2s)
+  ✓  23 [chromium] › e2e/model-management.spec.ts:167:1 › keeps a rejected provider draft while redacting the failure (2.8s)
+  ✓  24 [chromium] › e2e/onboarding.spec.ts:18:1 › validates the address without opening a socket and leaves focus on the correction (693ms)
+  ✓  25 [chromium] › e2e/onboarding.spec.ts:47:1 › explains missing authentication while preserving password privacy and IME entry (775ms)
+  ✓  26 [chromium] › e2e/onboarding.spec.ts:75:1 › starts a first workspace with the keyboard and focuses the useful field when adding another (1.5s)
+  ✓  27 [chromium] › e2e/onboarding.spec.ts:101:1 › keeps an in-flight workspace creation visible when Escape or the backdrop is used (1.7s)
+  ✓  28 [chromium] › e2e/product.spec.ts:181:1 › uses the DSH-aligned product sidebar and grouped or flat session views (1.8s)
+  ✓  29 [chromium] › e2e/product.spec.ts:229:1 › authenticates before any session and owns workspace selection in the hero (1.1s)
+  ✓  30 [chromium] › e2e/product.spec.ts:261:1 › keeps authentication when a remembered Session can no longer open (3.0s)
+  ✓  31 [chromium] › e2e/product.spec.ts:304:1 › keeps multiple confirmed Sessions in one Workspace and can reopen either (2.3s)
+  ✓  32 [chromium] › e2e/product.spec.ts:383:1 › keeps a server-accepted turn running while another Session is focused (3.8s)
+  ✓  33 [chromium] › e2e/product.spec.ts:463:1 › queues one New Session click until turn/start is accepted (3.7s)
+  ✓  34 [chromium] › e2e/product.spec.ts:539:1 › drops a queued Session creation when turn/start is rejected (1.8s)
+  ✓  35 [chromium] › e2e/product.spec.ts:596:1 › reports a start acknowledgement timeout as unknown, then settles on release (32.2s)
+  ✓  36 [chromium] › e2e/product.spec.ts:630:1 › keeps a missing timed-out turn unknown until a targeted lookup confirms terminal (33.2s)
+  ✓  37 [chromium] › e2e/product.spec.ts:699:1 › releases pending navigation when recovery proves the held start active (2.9s)
+  ✓  38 [chromium] › e2e/product.spec.ts:773:1 › parks a recovery-admitted approval as Waiting, not Working (2.0s)
+  ✓  39 [chromium] › e2e/product.spec.ts:841:3 › folds a buffered approval request before parking the Session (2.0s)
+  ✓  40 [chromium] › e2e/product.spec.ts:841:3 › folds a buffered approval resolution before parking the Session (2.1s)
+  ✓  41 [chromium] › e2e/product.spec.ts:892:1 › cancels queued navigation without cancelling the held turn/start (3.7s)
+  ✓  42 [chromium] › e2e/product.spec.ts:953:1 › opens only the latest Session target after delayed turn/start acceptance (4.2s)
+  ✓  43 [chromium] › e2e/product.spec.ts:1039:1 › rolls a delayed-navigation candidate failure back to the turn owner (3.9s)
+  ✓  44 [chromium] › e2e/product.spec.ts:1133:1 › does not project ambiguous legacy Session rows into a Workspace (1.2s)
+  ✓  45 [chromium] › e2e/product.spec.ts:1152:1 › moves drafts only after a profile-choice Session transition commits (2.7s)
+  ✓  46 [chromium] › e2e/product.spec.ts:1185:1 › restores the origin, tab credential, session, and workspace after refresh (2.2s)
+  ✓  47 [chromium] › e2e/product.spec.ts:1212:1 › offers whole permission presets and confirms full access (1.9s)
+  ✓  48 [chromium] › e2e/product.spec.ts:1257:1 › separates the Session runtime from the Profile default model (2.2s)
+  ✓  49 [chromium] › e2e/product.spec.ts:1306:1 › keeps server connection actions in General settings (1.9s)
+  ✓  50 [chromium] › e2e/product.spec.ts:1336:1 › owns plan and background work under the active session Trajectory (2.0s)
+  ✓  51 [chromium] › e2e/product.spec.ts:1363:1 › does not expose implementation and diagnostic concepts as product IA (1.4s)
+  ✓  52 [chromium] › e2e/product.spec.ts:1382:1 › sends prompts from the session composer (1.7s)
+  ✓  53 [chromium] › e2e/product.spec.ts:1400:1 › recovers the durable session after disconnect and lossy replay (2.5s)
+  ✓  54 [chromium] › e2e/product.spec.ts:1442:1 › resolves approval and structured-question takeovers (3.1s)
+  ✓  55 [chromium] › e2e/product.spec.ts:1477:1 › sidebar tree supports arrow-key navigation and Enter selection (1.6s)
+  ✓  56 [chromium] › e2e/product.spec.ts:1506:1 › keyboard and semantics guarantees from the a11y batch hold (1.6s)
+  ✓  57 [chromium] › e2e/product.spec.ts:1524:1 › skip link jumps to the main landmark (1.3s)
+  ✓  58 [chromium] › e2e/product.spec.ts:1535:1 › restores a pending structured question across a reload (2.6s)
+  ✓  59 [chromium] › e2e/product.spec.ts:1557:1 › deep link: ?s= restores the selected session after reload (1.7s)
+  ✓  60 [chromium] › e2e/product.spec.ts:1572:1 › preserves workspace launch decisions without exposing profile ids in connect (2.1s)
+  ✓  61 [chromium] › e2e/product.spec.ts:1592:1 › automatically activates an unambiguous fresh coding Workspace (1.5s)
+  ✓  62 [chromium] › e2e/product.spec.ts:1607:1 › onboards an empty solo server from workspace creation (2.2s)
+  ✓  63 [chromium] › e2e/product.spec.ts:1641:1 › preserves Octoscode keyless-provider onboarding semantics (1.6s)
+  ✓  64 [chromium] › e2e/product.spec.ts:1660:1 › keeps the DSH-aligned dark product shell WCAG A/AA clean (2.5s)
+  ✓  65 [chromium] › e2e/runtime-recovery.spec.ts:5:1 › retains an unresolved turn when navigation would discard its only status record (3.1s)
+  ✓  66 [chromium] › e2e/session-links.spec.ts:94:1 › a different saved link takes precedence over the tab's remembered conversation (3.3s)
+  ✓  67 [chromium] › e2e/session-links.spec.ts:128:1 › opens a bookmarked conversation in a fresh browser only after an explicit choice (4.5s)
+  ✓  68 [chromium] › e2e/session-links.spec.ts:194:1 › keeps a failed saved link visible and retries only when requested (2.0s)
+  ✓  69 [chromium] › e2e/session-links.spec.ts:224:1 › rejects invalid links without opening a session and allows normal entry after dismissal (1.1s)
+  ✓  70 [chromium] › e2e/session-links.spec.ts:243:1 › refuses a saved-link candidate with a different workspace before requesting history (1.5s)
+  ✓  71 [chromium] › e2e/session-links.spec.ts:268:1 › reports a copied link only after the clipboard operation succeeds (2.4s)
+  ✓  72 [chromium] › e2e/session-links.spec.ts:314:1 › provides a selected readonly link when clipboard access is denied (2.4s)
+  ✓  73 [chromium] › e2e/session-links.spec.ts:348:1 › does not claim diagnostics were copied after clipboard rejection and allows retry (3.0s)
+  ✓  74 [chromium] › e2e/settings-mobile.spec.ts:46:3 › Settings remain operable at 320×480 (3.5s)
+  ✓  75 [chromium] › e2e/settings-mobile.spec.ts:46:3 › Settings remain operable at 390×844 (3.6s)
+[WebServer] 4:08:05 AM [vite] (client) [console.error] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:54227/src/features/product-controls/SettingsDialog.tsx
+[WebServer]
+[WebServer] The above error occurred in one of your React components.
+[WebServer]
+[WebServer] React will try to recreate this component tree from scratch using the error boundary you provided, SurfaceBoundary.
+[WebServer]
+  ✓  76 [chromium] › e2e/surface-recovery.spec.ts:31:1 › a failed Settings chunk preserves the owner, queue, draft and Stop (2.5s)
+  ✓  77 [chromium] › e2e/surface-recovery.spec.ts:93:1 › a slow Settings import can be canceled and never opens after cancellation (2.5s)
+[WebServer] 4:08:10 AM [vite] (client) [console.error] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:54227/src/features/review/DiffReviewDialog.tsx
+[WebServer]
+[WebServer] The above error occurred in one of your React components.
+[WebServer]
+[WebServer] React will try to recreate this component tree from scratch using the error boundary you provided, SurfaceBoundary.
+[WebServer]
+  ✓  78 [chromium] › e2e/surface-recovery.spec.ts:125:1 › Escape from a failed review returns to approval without interrupting (2.3s)
+  ✓  79 [chromium] › e2e/surface-recovery.spec.ts:171:1 › a failed local-command chunk restores input and never sends command text to the model (1.7s)
+  ✓  80 [chromium] › e2e/surface-recovery.spec.ts:204:1 › a late clipboard command result does not enter a different conversation (2.5s)
+  ✓  81 [chromium] › e2e/timeline-interactions.spec.ts:6:1 › keeps activity and reader-controlled disclosures correct across ten streamed turns (5.2s)
+  ✓  82 [chromium] › e2e/workspace-ux.spec.ts:65:1 › IME confirmation and multiline editing never send; queued messages can be removed (2.4s)
+  ✓  83 [chromium] › e2e/workspace-ux.spec.ts:110:1 › protects a running turn from closing the tab and removes the warning on completion (2.1s)
+  ✓  84 [chromium] › e2e/workspace-ux.spec.ts:138:1 › keeps the mobile composer on screen and makes navigation an accessible drawer (3.9s)
+  ✓  85 [chromium] › e2e/workspace-ux.spec.ts:189:1 › mobile review actions leave room for workspace context after a completed turn (3.3s)
+  ✓  86 [chromium] › e2e/workspace-ux.spec.ts:219:1 › follows arriving content but leaves a reader in history until they jump to latest (2.4s)
+  ✓  87 [chromium] › e2e/workspace-ux.spec.ts:266:1 › opening tool output keeps its heading in view instead of following the expansion (2.3s)
+  ✓  88 [chromium] › e2e/workspace-ux.spec.ts:320:1 › sidebar sort controls reorder sessions and track which Session was last opened (2.9s)
+  ✓  89 [chromium] › e2e/workspace-ux.spec.ts:377:1 › long queued messages and a multiline draft keep mobile actions inside the viewport (2.4s)
+  ✓  90 [chromium] › e2e/workspace-ux.spec.ts:422:1 › finishing approval and question takeovers returns the keyboard to the composer (4.3s)
+  ✓  91 [chromium] › e2e/workspace-ux.spec.ts:452:3 › Disconnect is available during active work but requires an explicit confirmation (3.9s)
+  ✓  92 [chromium] › e2e/workspace-ux.spec.ts:452:3 › Forget server is available during active work but requires an explicit confirmation (4.0s)
+(node:3074706) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[loaf] frames=2 worst=121.7ms
+  ✓  93 [chromium] › e2e/loaf.spec.ts:32:1 › streaming turn stays under the long-frame budget (2.9s)
+  ✓  94 [chromium] › e2e/visual.spec.ts:52:1 › connect gate matches baseline (791ms)
+  ✓  95 [chromium] › e2e/visual.spec.ts:60:1 › empty chooser matches baseline (1.1s)
+  ✓  96 [chromium] › e2e/visual.spec.ts:68:1 › approval takeover matches baseline (2.0s)
+  ✓  97 [chromium] › e2e/visual.spec.ts:79:1 › session reply matches baseline (2.0s)
+
+  97 passed (5.1m)

@@ -27,14 +27,16 @@ export function TaskDetailDialog({
   return (
     <ModalSurface
       backdropClassName="review-backdrop"
-      dialogClassName="task-dialog"
+      dialogClassName={`task-dialog ${styles.dialog}`}
       labelledBy="task-detail-title"
       onEscape={onClose}
     >
       <header className="review-header">
         <div>
           <span className="eyebrow">Supervised task</span>
-          <h2 id="task-detail-title">{task?.title ?? "Task output"}</h2>
+          <h2 id="task-detail-title" title={task?.title}>
+            {task?.title ?? "Task output"}
+          </h2>
         </div>
         <div className="review-header-actions">
           <span
@@ -52,7 +54,7 @@ export function TaskDetailDialog({
         </div>
       </header>
       <div
-        className={`task-detail-grid ${
+        className={`task-detail-grid ${styles.detailGrid} ${
           state.taskOutputAvailable && state.artifactsAvailable
             ? ""
             : styles.singlePane
@@ -87,7 +89,9 @@ export function TaskDetailDialog({
           </section>
         ) : null}
         {state.artifactsAvailable ? (
-          <aside className="artifact-pane">
+          <aside
+            className={`artifact-pane ${selected ? styles.artifactSelected : ""}`}
+          >
             <div className="task-pane-heading">
               <span>Artifacts</span>
               <small>{state.detail.artifacts?.artifacts.length ?? 0}</small>

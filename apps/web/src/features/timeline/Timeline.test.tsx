@@ -31,4 +31,60 @@ describe("Timeline", () => {
     expect(html).toContain('role="log"');
     expect(html).toContain('aria-label="Conversation timeline"');
   });
+
+  it("omits empty assistant rows without hiding useful system messages", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={[
+          {
+            id: "assistant-empty",
+            kind: "assistant",
+            title: "Octos",
+            body: "   ",
+            status: "complete",
+          },
+          {
+            id: "terminal",
+            kind: "system",
+            title: "Turn complete",
+            body: "",
+            status: "complete",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toContain("entry-assistant");
+    expect(html).not.toContain("No output yet");
+    expect(html).toContain("Turn complete");
+  });
+
+  it("keeps live thinking and tools compact with native reader-controlled disclosures", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={[
+          {
+            id: "reasoning",
+            kind: "reasoning",
+            title: "Reasoning",
+            body: "Inspecting README",
+            status: "running",
+          },
+          {
+            id: "tool",
+            kind: "tool",
+            title: "read_file",
+            body: "file contents",
+            status: "running",
+          },
+        ]}
+      />,
+    );
+    expect(html.match(/<details/g)).toHaveLength(2);
+    expect(html).toContain("Thinking…");
+    expect(html).toContain("Running");
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+    expect(html).not.toContain("chars");
+  });
 });

@@ -1,5 +1,6 @@
-import { lazy, memo, Suspense } from "react";
+import { lazy, memo, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
+import { CheckIcon, ChevronDownIcon } from "../../ui/Icon.tsx";
 import styles from "./Timeline.module.css";
 import type { TimelineEntry } from "./model.ts";
 
@@ -15,7 +16,32 @@ interface TimelineProps {
 }
 
 export function Timeline({ entries, connected }: TimelineProps) {
-  if (entries.length === 0) {
+  const visibleEntries = entries.filter(
+    (entry) => entry.kind !== "assistant" || entry.body.trim(),
+  );
+  // Keep the server-provided projection intact; only bound the initial DOM.
+  // Anchoring by identity prevents incoming messages evicting a reader's row.
+  const [firstVisibleId, setFirstVisibleId] = useState<string | null>(null);
+  const knownIndex = visibleEntries.findIndex(
+    (entry) => entry.id === firstVisibleId,
+  );
+  const startIndex =
+    knownIndex < 0 ? Math.max(0, visibleEntries.length - 200) : knownIndex;
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const revealAnchor = useRef<{ element: Element; top: number } | null>(null);
+  useLayoutEffect(() => {
+    if (knownIndex < 0 && visibleEntries[startIndex]) {
+      setFirstVisibleId(visibleEntries[startIndex]!.id);
+    }
+    const anchor = revealAnchor.current;
+    const scroll = timelineRef.current?.closest(".conversation-scroll");
+    if (anchor && scroll) {
+      scroll.scrollTop +=
+        anchor.element.getBoundingClientRect().top - anchor.top;
+      revealAnchor.current = null;
+    }
+  });
+  if (visibleEntries.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-mark">
@@ -29,16 +55,40 @@ export function Timeline({ entries, connected }: TimelineProps) {
         </h2>
         <p>
           {connected
-            ? "Streaming messages, tool activity, and durable projection events will appear here."
-            : "This Web client keeps the agent, tools, and sandbox on the server where they belong."}
+            ? "Describe a change, investigate a bug, or ask how the code works."
+            : "Connect to your server to open a repository and start working."}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="timeline" role="log" aria-label="Conversation timeline">
-      {entries.map((entry) => (
+    <div
+      ref={timelineRef}
+      className={`timeline ${styles.timeline}`}
+      role="log"
+      aria-label="Conversation timeline"
+    >
+      {startIndex > 0 ? (
+        <button
+          type="button"
+          className={styles.earlierButton}
+          onClick={() => {
+            const first = timelineRef.current?.children[1];
+            if (first)
+              revealAnchor.current = {
+                element: first,
+                top: first.getBoundingClientRect().top,
+              };
+            setFirstVisibleId(
+              visibleEntries[Math.max(0, startIndex - 100)]!.id,
+            );
+          }}
+        >
+          Show {Math.min(startIndex, 100)} earlier messages
+        </button>
+      ) : null}
+      {visibleEntries.slice(startIndex).map((entry) => (
         <TimelineEntryView key={entry.id} entry={entry} />
       ))}
     </div>
@@ -65,23 +115,18 @@ const TimelineEntryView = memo(function TimelineEntryView({
   }
 });
 
-/** Collapsible thinking block — streams open, auto-collapses on settle. */
+/** Disclosure state belongs to the reader, so completion never closes it. */
 function ReasoningBlock({ entry }: { entry: TimelineEntry }) {
   const running = entry.status === "running";
   return (
     <details
       className={`${styles.reasoningBlock}${running ? ` ${styles.reasoningBlockLive}` : ""}`}
       data-live={running}
-      open={running}
     >
       <summary className={styles.reasoningHeader}>
-        <span className={`entry-glyph glyph-${entry.status}`} />
-        <strong>{running ? "Thinking…" : "Thought"}</strong>
-        {!running ? (
-          <span className={styles.reasoningMeta}>
-            {entry.body.length > 0 ? `${entry.body.length} chars` : ""}
-          </span>
-        ) : null}
+        <ActivityGlyph status={entry.status} />
+        <strong>{running ? "Thinking…" : "Thought process"}</strong>
+        <ChevronDownIcon className={styles.chevron} />
       </summary>
       <div className={styles.reasoningBody}>
         {entry.body ? (
@@ -94,41 +139,64 @@ function ReasoningBlock({ entry }: { entry: TimelineEntry }) {
   );
 }
 
-/** Collapsible tool card — streams output while running, collapses after. */
+/** Tool details stay available without pushing the response down as output arrives. */
 function ToolBlock({ entry }: { entry: TimelineEntry }) {
   const running = entry.status === "running";
   return (
     <details
       className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
       data-live={running}
-      open={running}
     >
       <summary className={styles.toolHeader}>
-        <span className={`entry-glyph glyph-${entry.status}`} />
+        <ActivityGlyph status={entry.status} />
         <strong>{entry.title}</strong>
         {running ? (
-          <span className={styles.runningLabel}>running</span>
+          <span className={styles.runningLabel}>Running</span>
         ) : (
           <span className={styles.toolStatusLabel} data-status={entry.status}>
-            {entry.status}
+            {entry.statusLabel ??
+              (entry.status === "complete"
+                ? "Done"
+                : entry.status === "error"
+                  ? "Failed"
+                  : "Finished")}
           </span>
         )}
+        <ChevronDownIcon className={styles.chevron} />
       </summary>
       <div className={styles.toolBody}>
         {entry.body ? (
           <pre className={styles.toolOutput}>{entry.body}</pre>
         ) : (
-          <span className="muted">No output yet</span>
+          <span className="muted">
+            {running
+              ? "Waiting for tool output…"
+              : "Finished without text output."}
+          </span>
         )}
       </div>
     </details>
   );
 }
 
+function ActivityGlyph({ status }: { status: TimelineEntry["status"] }) {
+  return status === "complete" ? (
+    <CheckIcon size={14} className={styles.completedGlyph} />
+  ) : (
+    <span
+      className={styles.statusGlyph}
+      data-status={status}
+      aria-hidden="true"
+    />
+  );
+}
+
 /** Assistant and user messages: full markdown rendering. */
 function DefaultEntry({ entry }: { entry: TimelineEntry }) {
   return (
-    <article className={`timeline-entry entry-${entry.kind}`}>
+    <article
+      className={`timeline-entry entry-${entry.kind}${entry.kind === "assistant" ? ` ${styles.assistantEntry}` : ""}`}
+    >
       <div className="entry-rail">
         <span className={`entry-glyph glyph-${entry.status}`} />
       </div>
@@ -150,9 +218,7 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
           ) : (
             <pre>{entry.body}</pre>
           )
-        ) : (
-          <span className="muted">No output yet</span>
-        )}
+        ) : null}
       </div>
     </article>
   );

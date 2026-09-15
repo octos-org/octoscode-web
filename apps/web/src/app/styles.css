@@ -759,6 +759,7 @@ label > span {
 
 .conversation {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 52px minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
@@ -879,7 +880,9 @@ label > span {
 .conversation-scroll {
   min-height: 0;
   overflow-y: auto;
-  padding: 38px max(24px, calc((100% - 736px) / 2)) 180px;
+  padding: 32px max(24px, calc((100% - 736px) / 2)) 28px;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
 }
 
 .empty-state {
@@ -1125,10 +1128,11 @@ label > span {
 }
 
 .composer-wrap {
+  min-width: 0;
   position: sticky;
   bottom: 0;
   z-index: 7;
-  padding: 8px max(24px, calc((100% - 768px) / 2));
+  padding: 8px max(24px, calc((100% - 768px) / 2)) 12px;
   background: linear-gradient(transparent, var(--dsw-alias-bg-base) 34%);
 }
 
@@ -1218,11 +1222,12 @@ label > span {
 
 .composer {
   position: relative;
+  min-width: 0;
   width: 100%;
   max-width: 768px;
   margin: 0 auto;
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  border-radius: 22px;
+  border-radius: 18px;
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-shadow-lv2);
 }
@@ -1287,40 +1292,22 @@ label > span {
   color: var(--dsw-alias-label-on-accent);
   cursor: pointer;
   font-size: 18px;
-  transition: background-color 100ms ease;
+  transition:
+    background-color var(--dsw-motion-feedback) ease,
+    transform var(--dsw-motion-feedback) ease;
 }
 
 .send-button:hover:not(:disabled) {
   background: var(--dsw-alias-button-info-hover);
 }
 
+.send-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .send-button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
-}
-
-.prompt-queue {
-  display: flex;
-  align-items: center;
-  gap: var(--dsw-space-2);
-  margin: -38px 16px 0;
-  padding: 8px 12px 11px;
-  border-radius: 12px 12px 0 0;
-  background: var(--dsw-specific-tip);
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-}
-
-.prompt-queue strong {
-  flex: none;
-  color: var(--dsw-alias-label-primary);
-  font-weight: 500;
-}
-
-.prompt-queue span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .command-palette {
@@ -2752,18 +2739,18 @@ kbd {
 
 @media (max-width: 760px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .app-shell,
   .workspace-grid {
-    height: auto;
-    min-height: 100%;
+    height: 100dvh;
+    min-height: 0;
   }
 
   .workspace-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
@@ -2780,7 +2767,7 @@ kbd {
   }
 
   .conversation {
-    min-height: 720px;
+    min-height: 0;
   }
 
   .conversation-scroll {

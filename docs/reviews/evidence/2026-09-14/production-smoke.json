@@ -1,0 +1,166 @@
+{
+  "source": "production build on 45176, deterministic fixture on 54080",
+  "steps": [
+    "connect, first workspace, Markdown and highlighted code",
+    "permission list and set response decoders",
+    "Trajectory, session status, task list and task output decoder",
+    "Models configured provider response decoder"
+  ],
+  "errors": [],
+  "failedRequests": [],
+  "resources": [
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/assets/rolldown-runtime-hePW80VL.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-B6Sd-HkP.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/protocol-values-B8NxiIFz.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/preload-helper-Czpn1I53.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/src-CRkJoQPR.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-BSd0ZaS9.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/vendor-react-CbYonmBs.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSidebar-DnihiQg1.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/NewSessionWorkspacePicker-CG09mVVq.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/NewSessionWorkspacePicker-BsqH7-Km.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSidebar-DyAl3b57.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Timeline-Bd_7LkWY.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionControlBar-CjVOyEMD.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/selection-policy-NXICaHp5.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionControlBar-DlBAMqpN.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Timeline-DvgxODQn.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/coding-BOSnNr1X.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/supervision-Cj1NuMGn.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/onboarding-47sH9jPE.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/MarkdownBody-UAxzJkZn.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/MarkdownBody-xeCccb8v.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/CodeBlock-P6CFhx8w.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/json-qhed-kSA.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/shellscript-CLZ0U2zV.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/typescript-bsJCZSQ-.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionTrajectory-BD4WSdaO.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SessionTrajectory-CXtF0iXr.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/TaskDetailDialog-A6O2Pq95.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/TaskDetailDialog-Kt7KUV8V.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/SettingsDialog-5QsSy4Ou.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/SettingsDialog-Dtm1lser.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSettings-Bh9TolYX.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/GeneralSettingsContent-ts-ghqHp.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ProductSettings.module-DLln2XG2.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelsSettingsContent-CelbZnDN.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelManagementSettings-DC_Cio-t.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/ModelManagementSettings-C2W5uPzA.js",
+      "status": 200
+    }
+  ],
+  "ok": true
+}

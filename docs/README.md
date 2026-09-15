@@ -30,6 +30,16 @@ your question.
 
 ## Project records
 
+- [Frontend baseline](frontend-baseline.md) — interaction, motion, and usability
+  acceptance rules, with TasteSkill and 21st.dev references.
+- [September 2026 product audit](reviews/2026-09-14-product-audit.md) —
+  reproduced issues, implemented repairs, browser evidence, and remaining Core
+  limits.
+- [Follow-up usability and recovery audit](reviews/2026-09-14-followup-audit.md)
+  — uncertain turn recovery, saved conversations, mobile controls, and modal
+  focus.
+- [Final audit and repairs](reviews/2026-09-15-final-audit.md) — final runtime,
+  keyboard, long-history, resource-failure and production verification.
 - [Changelog](../CHANGELOG.md) — release-level user and operator changes.
 - [Third-party notices](../THIRD_PARTY_NOTICES.md) — copied or adapted source
 - [Production dependency licenses](../THIRD_PARTY_LICENSES.md) — generated

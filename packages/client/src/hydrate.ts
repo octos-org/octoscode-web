@@ -4,7 +4,6 @@ import type {
   HydratedMessage,
   HydratedTurn,
   ProjectionEnvelopeV2,
-  ReplayLossyEvent,
   SessionHydrateResult,
 } from "./types.ts";
 import { parseUiCursor } from "./wire-decoders.ts";
@@ -61,28 +60,6 @@ export function parseSessionHydrateResult(
     ...(replayedToolEnvelopes === undefined
       ? {}
       : { replayed_tool_envelopes: replayedToolEnvelopes }),
-  };
-}
-
-export function parseReplayLossyEvent(value: unknown): ReplayLossyEvent | null {
-  if (
-    !isRecord(value) ||
-    typeof value.session_id !== "string" ||
-    typeof value.dropped_count !== "number" ||
-    !Number.isSafeInteger(value.dropped_count) ||
-    value.dropped_count < 0
-  ) {
-    return null;
-  }
-  const cursor =
-    value.last_durable_cursor === undefined
-      ? undefined
-      : parseUiCursor(value.last_durable_cursor);
-  if (cursor === null) return null;
-  return {
-    session_id: value.session_id,
-    dropped_count: value.dropped_count,
-    ...(cursor === undefined ? {} : { last_durable_cursor: cursor }),
   };
 }
 
@@ -181,3 +158,5 @@ function copyOptionalStrings<const Keys extends readonly string[]>(
     ),
   ) as Partial<Record<Keys[number], string>>;
 }
+
+export { parseReplayLossyEvent } from "./replay-events.ts";

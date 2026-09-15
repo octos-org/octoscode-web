@@ -29,7 +29,15 @@ export function ApprovalPanel({
   const previewId = approvalDiffPreviewId(approval);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (busy) return;
+    if (
+      busy ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    )
+      return;
     if (event.key.toLowerCase() === "d" && previewId && onReviewDiff) {
       event.preventDefault();
       onReviewDiff(previewId);

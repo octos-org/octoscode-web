@@ -185,6 +185,18 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.md-code-banner button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+.md-copy-error {
+  padding: 8px 13px;
+  color: var(--dsw-alias-state-error-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .md-code-block pre {
   margin: 0;
   overflow-x: auto;

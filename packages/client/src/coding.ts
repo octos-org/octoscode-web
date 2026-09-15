@@ -1,4 +1,5 @@
 import { isRecord } from "./rpc.ts";
+import { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
 import type {
   DiffPreview,
   DiffPreviewFile,
@@ -11,9 +12,6 @@ import type {
   PermissionProfileSelection,
   PermissionProfileSetResult,
 } from "./types.ts";
-
-const PREVIEW_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function parsePermissionProfileListResult(
   value: unknown,
@@ -63,10 +61,6 @@ export function parseDiffPreviewGetResult(
   return preview
     ? { status: value.status, source: value.source, preview }
     : null;
-}
-
-export function isPreviewId(value: unknown): value is string {
-  return typeof value === "string" && PREVIEW_ID.test(value);
 }
 
 function parsePermissionProfileSelection(

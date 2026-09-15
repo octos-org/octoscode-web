@@ -33,11 +33,13 @@ async function connectServer(
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   const navigation = productNavigation(page);
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(navigation).toBeVisible();
   await expect(chooser).toBeVisible();
   await expect(
-    chooser.getByRole("heading", { name: "Choose a workspace" }),
+    chooser.getByRole("heading", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Session views" }),
@@ -48,12 +50,18 @@ async function connectServer(
 }
 
 async function requestInitialWorkspace(page: Page, cwd: string): Promise<void> {
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await expect(addWorkspace).toBeVisible();
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await addWorkspace.getByRole("button", { name: "Start session" }).click();
   await expect(addWorkspace).toBeHidden();
 }
 
@@ -237,7 +245,11 @@ test("authenticates before any session and owns workspace selection in the hero"
   await expect(
     page.getByText("Ship octoscode-web", { exact: true }),
   ).toHaveCount(0);
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   await expect(
     page.getByRole("region", { name: "Add workspace" }),
   ).toBeVisible();
@@ -615,33 +627,73 @@ test("reports a start acknowledgement timeout as unknown, then settles on releas
   await expect(page.getByRole("button", { name: "Send prompt" })).toBeVisible();
 });
 
-test("settles a timed-out start as lost once recovery proves it never ran", async ({
+test("keeps a missing timed-out turn unknown until a targeted lookup confirms terminal", async ({
   page,
   request,
 }) => {
   test.setTimeout(120_000);
-  const cwd = "/srv/work/timeout-turn-start-lost";
+  let recoverAsTerminal = false;
+  const starts: string[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        id: string;
+        method: string;
+        params: { session_id: string; turn_id: string };
+      };
+      if (frame.method === "turn/start") starts.push(frame.params.turn_id);
+      if (frame.method === "turn/state/get" && recoverAsTerminal) {
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: frame.id,
+            result: { ...frame.params, state: "interrupted" },
+          }),
+        );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  const cwd = "/srv/work/timeout-turn-start-unknown";
   await connectAndStartWorkspace(page, cwd);
-
   await holdNextTurnStart(request);
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await composer.fill("Hold this turn past the request timeout");
   await page.getByRole("button", { name: "Send prompt" }).click();
   await waitForHeldTurnStart(request);
-
+  await composer.fill("Follow up only after an explicit terminal result");
+  await composer.press("Enter");
   await expect(
     page.getByText("Turn start timed out", { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
 
-  // The server drops the start unprocessed, then the transport dies. The
-  // recovery hydrate is strictly later than any possible acceptance, so its
-  // silence is authoritative: the queue must settle instead of wedging.
+  // Losing the registry or ledger does not establish rejection. Hydrate and
+  // a targeted unknown lookup must retain the active turn and pending FIFO.
   await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
   await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
   await expect(
-    page.getByText(/Recovery confirmed the server never accepted/),
+    page.getByRole("button", { name: "Check status", exact: true }),
   ).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Send prompt" })).toBeVisible();
+  expect(starts).toHaveLength(1);
+  await expect(page.getByText(/never accepted|Safe to resubmit/)).toHaveCount(
+    0,
+  );
+  await composer.fill("Keep this recovery draft");
+  await composer.press("Enter");
+  expect(starts).toHaveLength(1);
+  await expect(composer).toHaveValue("Keep this recovery draft");
+
+  // The existing queued prompt can proceed only after the server explicitly
+  // confirms completion, failure or interruption; the original is not resent.
+  recoverAsTerminal = true;
+  await page.getByRole("button", { name: "Check status", exact: true }).click();
+  await expect.poll(() => starts.length).toBe(2);
+  expect(new Set(starts).size).toBe(2);
+  await expect(page.getByText(/Completed with/)).toBeVisible();
+  await expect(composer).toHaveValue("Keep this recovery draft");
 });
 
 test("releases pending navigation when recovery proves the held start active", async ({
@@ -1112,7 +1164,7 @@ test("moves drafts only after a profile-choice Session transition commits", asyn
     await addWorkspace
       .getByLabel("Server workspace path")
       .fill("/srv/work/cross");
-    await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+    await addWorkspace.getByRole("button", { name: "Start session" }).click();
     await expect(
       page.getByRole("heading", { name: "Choose this workspace’s profile" }),
     ).toBeVisible();

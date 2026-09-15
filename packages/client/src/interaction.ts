@@ -1,6 +1,9 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
-import { isPreviewId } from "./coding.ts";
-import { CORE_UI_METHODS } from "./generated/core-contract.ts";
+import { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
+import {
+  CORE_UI_FEATURES,
+  CORE_UI_METHODS,
+} from "./generated/core-contract.ts";
 import type {
   ApprovalRequested,
   ApprovalRespondResult,
@@ -25,6 +28,15 @@ export function supportsFeature(
   feature: string,
 ): boolean {
   return capabilities?.supported_features?.includes(feature) ?? false;
+}
+
+export function supportsTurnStateGet(
+  capabilities: UiProtocolCapabilities | undefined,
+): boolean {
+  return (
+    supportsMethod(capabilities, CORE_UI_METHODS.TURN_STATE_GET) &&
+    supportsFeature(capabilities, CORE_UI_FEATURES.TURN_STATE_GET_V1)
+  );
 }
 
 export function parseApprovalRequested(

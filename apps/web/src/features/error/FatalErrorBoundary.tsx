@@ -53,10 +53,11 @@ export function FatalCrashScreen({ report }: { report: string }) {
       <section className="fatal-card">
         <OctopusLogo className="fatal-brand-logo" size={32} />
         <span className="eyebrow">Octoscode Web stopped rendering</span>
-        <h1>Reload the client safely</h1>
+        <h1>Client view unavailable</h1>
         <p>
-          Agent execution and durable session state remain in Octos. Reloading
-          discards only unsent text in this browser tab.
+          The client could not recover this view. Closing its connection may
+          have stopped running work. Octos keeps persisted history; unsent
+          drafts and queued messages may be lost when you reload.
         </p>
         <pre aria-label="Redacted crash diagnostics">{report}</pre>
         <div className="fatal-actions">

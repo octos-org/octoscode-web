@@ -496,6 +496,28 @@ export interface HydratedMessage {
   media: string[];
 }
 
+export type TurnLifecycleState =
+  | "active"
+  | "interrupting"
+  | "completed"
+  | "errored"
+  | "interrupted"
+  | "unknown";
+
+export interface TurnStateGetParams {
+  session_id: string;
+  turn_id: string;
+}
+
+/** Narrow lifecycle slice; unconsumed optional context extensions are ignored. */
+export interface TurnStateGetResult extends TurnStateGetParams {
+  state: TurnLifecycleState;
+  started_at?: string;
+  completed_at?: string;
+  thread_id?: string;
+  committed_seqs: number[];
+}
+
 export interface HydratedTurn {
   turn_id: string;
   state:

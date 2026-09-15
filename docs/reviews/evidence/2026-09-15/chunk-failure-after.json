@@ -1,0 +1,21 @@
+{
+  "renderErrors": [],
+  "socketsOpened": 2,
+  "socketsClosed": 1,
+  "requests": [
+    "config/capabilities/list",
+    "launch/resolve",
+    "session/open",
+    "session/hydrate",
+    "permission/profile/list",
+    "task/list",
+    "session/status/read",
+    "profile/llm/list",
+    "turn/start"
+  ],
+  "closedBefore": 1,
+  "crashScreen": 0,
+  "stopAvailable": 1,
+  "composerAvailable": 1,
+  "text": "Skip to content\nOctoscode coding workspace\nOctoscode\nNew Session\nWorkspaces\nchunk-recovery\nWorking\nSession 6b4d6f47\nnow\nSettings\nchunk-recovery\n/workspace/chunk-recovery\nChat\nTrajectory\nShow the Markdown transcript surface\nOctos\nDurable coding transcript\n\nThe renderer supports GFM, safe external links, and inline code.\n\nHydrate the session\nPreserve code formatting\nReview the diff\nSurface\tState\nCursor replay\tReady\nSyntax highlighting\tReady\nts\nCopy\nexport function answer(value: number): number {\n  return value * 2;\n}\n\nRaw HTML stays inert: <script>never runs</script>\n\nKeep this response active\nWorking…\n1 queued\nSent in order after the current response\n1\n\nKeep this queued message\n\nWrite · Network blocked\nDeepSeek V4\nStop\nMessages you send now will join the queue.\nType / for commands\nSettings unavailable\n\nThis view could not be displayed. Other parts of the app remain available.\n\nReload the page to try again. Reloading may stop running work and discard drafts and queued messages.\n\nClose\nReload app"
+}

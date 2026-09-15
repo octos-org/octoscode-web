@@ -1,239 +1,203 @@
-/* Timeline reasoning blocks and tool cards (from the #18/#42 UX overhaul).
-   Base structural styles (.timeline, .timeline-entry, .entry-content, etc.)
-   remain in the global styles.css; this module owns the new block types. */
+.timeline {
+  gap: 20px;
+}
+
+.earlierButton {
+  justify-self: center;
+  min-height: 36px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.earlierButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.earlierButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+.assistantEntry :global(.entry-content) {
+  max-width: 68ch;
+}
+
+.reasoningBlock,
+.toolBlock {
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-specific-tip);
+  interpolate-size: allow-keywords;
+  transition: border-color 160ms ease;
+}
 
 .reasoningBlock {
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
-  padding: 0;
-  background: color-mix(
-    in srgb,
-    var(--dsw-alias-label-tertiary) 4%,
-    transparent
-  );
+  background: transparent;
 }
 
-.reasoningBlock[data-live="true"] {
-  border-color: color-mix(
-    in srgb,
-    var(--dsw-alias-state-business-primary) 25%,
-    transparent
-  );
-}
-
-.reasoningHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  list-style: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.reasoningHeader::-webkit-details-marker {
-  display: none;
-}
-
-.reasoningBody {
-  padding: 4px 12px 10px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-}
-
-.reasoningBody .thinkingText {
-  margin: 0;
-  font-family: var(--dsw-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.reasoningBlockLive {
-  border-color: color-mix(
-    in srgb,
-    var(--dsw-alias-state-business-primary) 25%,
-    transparent
-  );
-}
-
-.reasoningMeta {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.toolBlock {
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
-  padding: 0;
-  background: var(--dsw-specific-tip);
-  overflow: hidden;
-}
-
-.toolBlock[data-live="true"] {
-  border-color: color-mix(
-    in srgb,
-    var(--dsw-alias-state-business-primary) 30%,
-    transparent
-  );
-}
-
+.reasoningBlockLive,
 .toolBlockLive {
   border-color: color-mix(
     in srgb,
-    var(--dsw-alias-state-business-primary) 30%,
-    transparent
+    var(--dsw-alias-state-business-primary) 28%,
+    var(--dsw-alias-border-l1)
   );
 }
 
+.reasoningHeader,
 .toolHeader {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: inherit;
   cursor: pointer;
   list-style: none;
-  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
   line-height: 20px;
+  transition: background 160ms ease;
 }
 
+.toolHeader {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.reasoningHeader strong,
+.toolHeader strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.reasoningHeader::-webkit-details-marker,
 .toolHeader::-webkit-details-marker {
   display: none;
 }
 
+.reasoningHeader:hover,
+.toolHeader:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.reasoningHeader:focus-visible,
+.toolHeader:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+.completedGlyph,
+.statusGlyph,
+.chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.statusGlyph {
+  width: 6px;
+  height: 6px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.statusGlyph[data-status="running"] {
+  background: var(--dsw-alias-state-business-primary);
+  animation: activity-pulse 1600ms ease-in-out infinite;
+}
+
+.statusGlyph[data-status="error"] {
+  background: var(--dsw-alias-state-error-text);
+}
+
+.chevron {
+  margin-left: auto;
+  transform: rotate(-90deg);
+  transition: transform 160ms ease;
+}
+
+.reasoningBlock[open] .chevron,
+.toolBlock[open] .chevron {
+  transform: rotate(0deg);
+}
+
+.runningLabel,
 .toolStatusLabel {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 16px;
-  color: var(--dsw-alias-label-tertiary);
-  font-variant-numeric: tabular-nums;
+}
+
+.runningLabel {
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .toolStatusLabel[data-status="error"] {
   color: var(--dsw-alias-state-error-text);
 }
 
+.reasoningBody,
 .toolBody {
-  border-top: 1px solid var(--dsw-alias-border-l1);
-  padding: 8px 12px;
   max-height: 320px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
-.toolBody .toolOutput {
+.thinkingText,
+.toolOutput {
   margin: 0;
-  font-family: var(--dsw-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: pre-wrap;
-  word-break: break-word;
   color: var(--dsw-alias-label-secondary);
+  font: 400 12px/20px var(--dsw-font-family-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-/* ── Motion layer ──────────────────────────────────────────────────
-   Patterns from taste-skill (MOTION_INTENSITY 4-7: fluid CSS, transform
-   + opacity only) and 21st.dev (duration-200/300 ease, active:scale).
-   No JS-driven animation; pure CSS transitions on hardware-accelerated
-   properties. */
-
-/* Collapsible open/close: interpolate-size lets <details> animate height.
-   Falls back gracefully on engines without support (instant toggle). */
-.reasoningBlock,
-.toolBlock {
-  interpolate-size: allow-keywords;
-  transition:
-    border-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.reasoningBlock::details-content,
-.toolBlock::details-content {
-  block-size: 0;
-  overflow-y: clip;
-  transition:
-    block-size 300ms cubic-bezier(0.16, 1, 0.3, 1),
-    content-visibility 300ms allow-discrete;
-}
-
-.reasoningBlock[open]::details-content,
-.toolBlock[open]::details-content {
-  block-size: auto;
-}
-
-/* Summary hover: subtle background lift */
-.reasoningHeader:hover,
-.toolHeader:hover {
-  background: color-mix(
-    in srgb,
-    var(--dsw-alias-label-primary) 4%,
-    transparent
-  );
-  border-radius: inherit;
-  transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.reasoningHeader,
-.toolHeader {
-  transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Running pulse: pulsing dot on live entries */
-.reasoningBlockLive .entry-glyph,
-.toolBlockLive .entry-glyph {
-  animation: timeline-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-@keyframes timeline-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
+/* Native disclosure keeps keyboard support and reader-controlled expansion.
+   Size animation is progressive enhancement; streaming never forces a toggle. */
+@supports (interpolate-size: allow-keywords) {
+  .reasoningBlock::details-content,
+  .toolBlock::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 180ms ease,
+      content-visibility 180ms allow-discrete;
   }
+
+  .reasoningBlock[open]::details-content,
+  .toolBlock[open]::details-content {
+    block-size: auto;
+  }
+}
+
+@keyframes activity-pulse {
   50% {
-    opacity: 0.5;
-    transform: scale(0.85);
+    opacity: 0.4;
   }
 }
 
-/* Entry reveal: fade + slide for newly mounted entries */
-.reasoningBlock,
-.toolBlock,
-.timeline .timeline-entry {
-  animation: entry-reveal 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes entry-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
+@media (prefers-reduced-motion: reduce) {
+  .reasoningBlock,
+  .toolBlock,
+  .reasoningHeader,
+  .toolHeader,
+  .chevron,
+  .statusGlyph[data-status="running"],
+  .reasoningBlock::details-content,
+  .toolBlock::details-content {
+    animation: none;
+    transition: none;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Press feedback on interactive summaries (taste-skill Rule 5) */
-.reasoningHeader:active,
-.toolHeader:active {
-  transform: scale(0.98);
-}
-
-/* Chevron indicator on summary (21st.dev accordion pattern) */
-.reasoningHeader::after,
-.toolHeader::after {
-  content: "›";
-  margin-left: auto;
-  font-size: 14px;
-  color: var(--dsw-alias-label-tertiary);
-  transform: rotate(0deg);
-  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.reasoningBlock[open] .reasoningHeader::after,
-.toolBlock[open] .toolHeader::after {
-  transform: rotate(90deg);
 }

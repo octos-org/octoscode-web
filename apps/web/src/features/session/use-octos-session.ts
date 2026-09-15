@@ -8,6 +8,7 @@ import {
 import { type SessionConnectionInput } from "./connection-lifecycle.ts";
 import {
   prepareCandidateSession,
+  validateCandidateWorkspace,
   type CandidateSessionSnapshot,
   type PreparedCandidateSession,
 } from "./candidate-session.ts";
@@ -45,6 +46,7 @@ import {
   parseTokenCostUpdate,
   supportsFeature,
   supportsMethod,
+  supportsTurnStateGet,
   type ApprovalDecision,
   type ApprovalRequested,
   type ApprovalScope,
@@ -70,6 +72,7 @@ import {
 import {
   useTurnController,
   type TurnDispatchStateEvent,
+  type TurnRecoveryState,
 } from "../composer/use-turn-controller.ts";
 import type {
   PromptTurn,
@@ -109,6 +112,9 @@ export type {
   PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
 
+const TURN_RECOVERY_NAVIGATION_MESSAGE =
+  "Check the current turn status before switching Sessions, or disconnect in Settings.";
+
 const LEGACY_PROJECTION_METHODS = new Set<string>([
   CORE_UI_METHODS.MESSAGE_DELTA,
   CORE_UI_METHODS.MESSAGE_REASONING_DELTA,
@@ -126,6 +132,7 @@ export interface WorkspaceSessionOpenInput {
   cwd: string;
   profileId?: string;
   resolveLaunch?: boolean;
+  requireExactWorkspace?: boolean;
 }
 
 export interface PendingWorkspaceNavigation {
@@ -159,9 +166,12 @@ export interface OctosSessionRuntime {
     setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
     queue: PromptTurnQueueSnapshot;
     dispatchingTurnId: string | null;
+    turnRecovery: TurnRecoveryState | null;
+    retryTurnRecovery: () => Promise<void>;
     interruptible: boolean;
     interruptingTurnId: string | null;
     enqueuePrompt: (text: string) => void;
+    cancelQueuedPrompt: (turnId: string) => boolean;
     interrupt: () => Promise<void>;
   };
   interactions: {
@@ -350,6 +360,8 @@ export function useOctosSession(): OctosSessionRuntime {
     },
     canInterrupt: () =>
       supportsMethod(currentCapabilities(), CORE_UI_METHODS.TURN_INTERRUPT),
+    canGetTurnState: () => supportsTurnStateGet(currentCapabilities()),
+    onRecoveredTerminal: (turnId) => interactionController.settleTurn(turnId),
     setTimeline,
     setConnectionError: (message) => activeRuntime.reportError(message),
     onDispatchState: (event) => turnDispatchEventSinkRef.current(event),
@@ -628,6 +640,7 @@ export function useOctosSession(): OctosSessionRuntime {
     authority: ActiveSessionAuthority<OctosUiClient>,
     lease: LaunchTransitionLease,
   ): boolean {
+    if (navigationBlockedByTurnRecovery()) return false;
     const existing = pendingBackgroundHandoffRef.current;
     if (
       existing?.lease === lease &&
@@ -948,6 +961,7 @@ export function useOctosSession(): OctosSessionRuntime {
   async function openCandidateSession(
     config: SessionConnectionInput,
     existingLease?: LaunchTransitionLease,
+    requireExactWorkspace = false,
   ): Promise<WorkspaceOpenOutcome> {
     const lease = existingLease ?? launchTransitionRef.current.begin(config);
     if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
@@ -993,7 +1007,12 @@ export function useOctosSession(): OctosSessionRuntime {
     let released: CandidateSessionSnapshot<OctosUiClient> | null = null;
     try {
       const validateOpened = (nextOpened: SessionOpened) =>
-        validateCandidateOpened(config, nextOpened, reclaim);
+        validateCandidateOpened(
+          config,
+          nextOpened,
+          reclaim,
+          requireExactWorkspace,
+        );
       prepared = reclaim
         ? await prepareRetainedCandidateSession({
             client: reclaim.client,
@@ -1029,6 +1048,9 @@ export function useOctosSession(): OctosSessionRuntime {
         pendingHandoff?.lease === lease ? pendingHandoff.handoff : null;
       const queueState = turnController.snapshot();
       const ownership = turnController.activeTurnOwnership();
+      if (turnController.turnRecovery) {
+        throw new Error(TURN_RECOVERY_NAVIGATION_MESSAGE);
+      }
       if (queueState.pending.length || ownership === "dispatching") {
         throw new Error(
           "The previous session started work while the new session was opening.",
@@ -1129,6 +1151,7 @@ export function useOctosSession(): OctosSessionRuntime {
     if (!target || !cwd || !currentAuthority() || transitioningRef.current) {
       return Promise.resolve("failed");
     }
+    if (navigationBlockedByTurnRecovery()) return Promise.resolve("failed");
     if (turnController.snapshot().pending.length) {
       workspaceController.setError(
         "Queued prompts belong to this Session. Let them run or stop queuing before switching.",
@@ -1153,6 +1176,14 @@ export function useOctosSession(): OctosSessionRuntime {
       });
     });
   };
+
+  function navigationBlockedByTurnRecovery(): boolean {
+    // The unresolved turn is browser-held evidence, not discoverable history.
+    // Switching would reset its only record and later permit an unsafe resend.
+    if (!turnController.turnRecovery) return false;
+    workspaceController.setError(TURN_RECOVERY_NAVIGATION_MESSAGE);
+    return true;
+  }
 
   async function performWorkspaceSessionOpen(
     input: WorkspaceSessionOpenInput,
@@ -1192,7 +1223,11 @@ export function useOctosSession(): OctosSessionRuntime {
       // resolution is for creating a Session and may resolve another default
       // profile; reopen with the server-confirmed id and profile tuple.
       setLaunch({ phase: "opening", cwd, decision: null });
-      return openCandidateSession(candidateConfig, lease);
+      return openCandidateSession(
+        candidateConfig,
+        lease,
+        input.requireExactWorkspace,
+      );
     }
     setLaunch({ phase: "resolving", cwd, decision: null });
     try {
@@ -1203,7 +1238,7 @@ export function useOctosSession(): OctosSessionRuntime {
       );
       if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
       if (!resolved) return "awaiting_choice";
-      return openCandidateSession(resolved, lease);
+      return openCandidateSession(resolved, lease, input.requireExactWorkspace);
     } catch (reason) {
       if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
       failLaunchTransition(lease, reason);
@@ -1331,9 +1366,12 @@ export function useOctosSession(): OctosSessionRuntime {
       setTimeline,
       queue: turnController.queue,
       dispatchingTurnId: turnController.dispatchingTurnId,
+      turnRecovery: turnController.turnRecovery,
+      retryTurnRecovery: turnController.retryTurnRecovery,
       interruptible: turnController.interruptible,
       interruptingTurnId: turnController.interruptingTurnId,
       enqueuePrompt: turnController.enqueuePrompt,
+      cancelQueuedPrompt: turnController.cancelQueuedPrompt,
       interrupt: turnController.interrupt,
     },
     interactions: {
@@ -1445,6 +1483,7 @@ function validateCandidateOpened(
   config: SessionConnectionInput,
   opened: SessionOpened,
   reclaim: PreparedBackgroundTurnReclaim<OctosUiClient> | null,
+  requireExactWorkspace = false,
 ): void {
   assertCompatibleProtocol(opened.capabilities);
   assertCodingSessionContract(opened.capabilities);
@@ -1454,6 +1493,7 @@ function validateCandidateOpened(
   if (config.profileId && opened.active_profile_id !== config.profileId) {
     throw new Error("session/open returned another Profile");
   }
+  validateCandidateWorkspace(config, opened, requireExactWorkspace);
   if (
     reclaim &&
     (opened.workspace_root !== reclaim.workspaceRoot ||

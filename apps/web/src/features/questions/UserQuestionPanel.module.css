@@ -1,0 +1,26 @@
+.card {
+  min-width: 0;
+  max-height: min(620px, calc(100dvh - 120px));
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+}
+
+.card :global(.question-options) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.card :global(.question-option) > span {
+  min-width: 0;
+}
+
+.card > :global(.takeover-error) {
+  padding: 0 16px 10px;
+  color: var(--dsw-alias-state-error-text);
+}
+
+@media (max-width: 760px) {
+  .card :global(.question-other input) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

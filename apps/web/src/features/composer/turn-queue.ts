@@ -46,6 +46,13 @@ export class PromptTurnQueue {
     return { settled: true, next: this.#active };
   }
 
+  removePending(turnId: string): boolean {
+    const index = this.#pending.findIndex((turn) => turn.turnId === turnId);
+    if (index === -1) return false;
+    this.#pending.splice(index, 1);
+    return true;
+  }
+
   clear(): void {
     this.#active = null;
     this.#pending.length = 0;

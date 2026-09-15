@@ -5,6 +5,46 @@
   gap: 2px;
 }
 
+.conversationContent {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.conversationContent > :global(.empty-state),
+.conversationContent > .newSessionHero {
+  flex: 1;
+}
+
+.navigationTrigger {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.navigationTrigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.recoveryLink {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 .sidebarFallback {
   display: grid;
   flex: none;
@@ -43,12 +83,6 @@
   border-radius: 2px 2px 0 0;
   background: var(--dsw-alias-state-business-primary);
   content: "";
-}
-
-.contextUsage {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
 }
 
 .pendingNavigation {
@@ -151,6 +185,23 @@
   cursor: pointer;
 }
 
+.compactReview {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-base);
+  cursor: pointer;
+}
+
+.compactReview:hover {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
 @media (max-width: 760px) {
   .sidebarFallback {
     width: 100%;
@@ -225,27 +276,43 @@
   transform: translateX(-50%) scale(0.98);
 }
 
-/* Composer autogrow: field-sizing where the platform supports it
-   (Baseline Newly Available); fixed min-height stays the fallback. */
-.composerField {
-  @supports (field-sizing: content) {
-    field-sizing: content;
-    min-height: 68px;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-}
-
 /* Deep-thinking indicator: pulsing placeholder between send and the first
    reasoning delta (the send→delta gap should never be silent). */
 .thinkingIndicator {
   display: flex;
   align-items: center;
   gap: var(--dsw-space-2);
-  padding: var(--dsw-space-3) 0;
+  padding: var(--dsw-space-4) 8px 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
   line-height: 20px;
+}
+
+@media (max-width: 760px) {
+  :global(.workspace-grid .conversation-header) {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  :global(.workspace-title) {
+    flex: 1;
+  }
+  :global(.header-actions):empty {
+    display: none;
+  }
+  :global(.composer-wrap) {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .conversationTabs button {
+    padding: 0 8px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinkingDot {
+    animation: none;
+  }
 }
 
 .thinkingDot {

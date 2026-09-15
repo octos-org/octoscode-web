@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { DiffPreviewLine } from "@octos-org/octoscode-client";
 import type { DiffReviewRuntimeState } from "./use-coding-safety.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import styles from "./DiffReviewDialog.module.css";
 
 interface DiffReviewDialogProps {
   state: DiffReviewRuntimeState;
@@ -34,14 +35,16 @@ export function DiffReviewDialog({
   return (
     <ModalSurface
       backdropClassName="review-backdrop"
-      dialogClassName="review-dialog"
+      dialogClassName={`review-dialog ${styles.dialog}`}
       labelledBy="review-title"
       onEscape={onClose}
     >
       <header className="review-header">
         <div>
           <span className="eyebrow">Authoritative diff preview</span>
-          <h2 id="review-title">{preview?.title ?? "Review changes"}</h2>
+          <h2 id="review-title" title={preview?.title}>
+            {preview?.title ?? "Review changes"}
+          </h2>
         </div>
         <div className="review-header-actions">
           {state.result ? (
@@ -86,7 +89,7 @@ export function DiffReviewDialog({
                 >
                   {fileStatusMark(file.status)}
                 </span>
-                <strong>{file.path}</strong>
+                <strong title={file.path}>{file.path}</strong>
                 {file.old_path ? <small>from {file.old_path}</small> : null}
                 <em>{file.status}</em>
               </summary>

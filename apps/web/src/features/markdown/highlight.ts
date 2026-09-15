@@ -105,11 +105,16 @@ function ensureLanguage(language: string): boolean {
   if (highlighter().getLoadedLanguages().includes(language)) return true;
   if (!requested.has(language)) {
     requested.add(language);
-    void load().then((module) => {
-      highlighter().loadLanguageSync(module.default);
-      loadCount += 1;
-      for (const listener of listeners) listener();
-    });
+    void load()
+      .then((module) => {
+        highlighter().loadLanguageSync(module.default);
+        loadCount += 1;
+        for (const listener of listeners) listener();
+      })
+      .catch(() => {
+        // Highlighting is optional. A missing grammar must leave readable,
+        // copyable plain code without an unhandled background rejection.
+      });
   }
   return false;
 }

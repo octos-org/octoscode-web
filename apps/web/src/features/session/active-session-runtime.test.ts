@@ -213,6 +213,73 @@ describe("ActiveSessionRuntime", () => {
     ]);
   });
 
+  it("does not authenticate from a capability response decoded after transport loss", async () => {
+    const client = new FakeActiveClient();
+    const response = deferred<ConfigCapabilitiesListResult>();
+    client.capabilitiesImplementation = () => response.promise;
+    const { runtime, events } = testRuntime(() => client);
+    const connecting = runtime.authenticate(connection);
+    const rejected = expect(connecting).rejects.toThrow(/disconnected/);
+    await flushMicrotasks();
+    client.setStatus("disconnected");
+    response.resolve({ capabilities: serverCapabilities });
+
+    await rejected;
+    expect(runtime.getSnapshot()).toMatchObject({
+      authenticated: false,
+      phase: "error",
+    });
+    expect(events.some((event) => event.type === "authenticated")).toBe(false);
+    runtime.disconnect();
+  });
+
+  it("preserves the reconnect retry when session/open finishes after its socket closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const server = new FakeActiveClient();
+      const candidate = new FakeActiveClient();
+      candidate.status = "connected";
+      const lost = new FakeActiveClient();
+      const restored = new FakeActiveClient();
+      const response = deferred<SessionOpenResult>();
+      lost.openImplementation = () => response.promise;
+      const clients = [server, lost, restored];
+      const { runtime, events } = testRuntime(() => {
+        const client = clients.shift();
+        if (!client) throw new Error("unexpected client request");
+        return client;
+      });
+      const previous = await runtime.authenticate(connection);
+      if (!previous) throw new Error("missing authority");
+      runtime.adoptCandidate({
+        expected: previous,
+        config: sessionConfig,
+        candidate: candidateSnapshot(candidate),
+      });
+      events.length = 0;
+      candidate.setStatus("disconnected");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(lost.calls).toContain("open");
+      lost.setStatus("disconnected");
+      response.resolve({ opened });
+      await flushMicrotasks();
+
+      expect(lost.calls).not.toContain("hydrate");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(restored.calls).toEqual(["connect", "open", "hydrate"]);
+      expect(runtime.getSnapshot()).toMatchObject({
+        phase: "ready",
+        status: "connected",
+      });
+      expect(
+        events.filter((event) => event.type === "session-ready"),
+      ).toHaveLength(1);
+      runtime.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("adopts a prepared candidate atomically and orders raw events before hydrate, safe events, and ready", async () => {
     const server = new FakeActiveClient();
     const candidate = new FakeActiveClient();
@@ -418,77 +485,104 @@ describe("ActiveSessionRuntime", () => {
     });
   });
 
-  it("reconnects a committed Session with its durable cursor", async () => {
+  it.each(["disconnected", "error"] as const)(
+    "reconnects a committed Session after %s with its durable cursor",
+    async (status) => {
+      vi.useFakeTimers();
+      try {
+        const server = new FakeActiveClient();
+        const candidate = new FakeActiveClient();
+        candidate.status = "connected";
+        const reconnect = new FakeActiveClient();
+        const clients = [server, reconnect];
+        const { runtime, events } = testRuntime(() => {
+          const client = clients.shift();
+          if (!client) throw new Error("unexpected client request");
+          return client;
+        });
+        const previous = await runtime.authenticate(connection);
+        if (!previous) throw new Error("missing authority");
+        runtime.adoptCandidate({
+          expected: previous,
+          config: sessionConfig,
+          candidate: candidateSnapshot(candidate),
+        });
+        events.length = 0;
+
+        candidate.setStatus(status);
+        expect(runtime.getSnapshot()).toMatchObject({
+          phase: "reconnect_wait",
+          authenticated: true,
+          session: { sessionId: "session-one" },
+          recovery: { phase: "reconnecting", reconnectAttempt: 1 },
+        });
+        await vi.runAllTimersAsync();
+
+        expect(reconnect.openParams).toEqual([
+          {
+            session_id: "session-one",
+            profile_id: "coding",
+            cwd: "/srv/project",
+            after: { stream: "session-one", seq: 12 },
+          },
+        ]);
+        expect(reconnect.calls).toEqual(["connect", "open", "hydrate"]);
+        expect(runtime.getSnapshot()).toMatchObject({
+          phase: "ready",
+          status: "connected",
+          authenticated: true,
+          recovery: { phase: "healthy" },
+        });
+        expect(events.map((event) => event.type)).toEqual([
+          "session-hydrate",
+          "session-ready",
+        ]);
+        expect(
+          events.find((event) => event.type === "session-hydrate"),
+        ).toMatchObject({ reason: "reconnect" });
+
+        events.length = 0;
+        reconnect.emit({
+          jsonrpc: "2.0",
+          method: CORE_UI_METHODS.REPLAY_LOSSY,
+          params: { session_id: "session-one", dropped_count: 1 },
+        });
+        await vi.waitFor(() => {
+          expect(reconnect.hydrateParams).toHaveLength(2);
+        });
+        expect(events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "session-hydrate",
+              reason: "recovery",
+            }),
+          ]),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("does not retry an initial connection error before authentication", async () => {
     vi.useFakeTimers();
     try {
       const server = new FakeActiveClient();
-      const candidate = new FakeActiveClient();
-      candidate.status = "connected";
-      const reconnect = new FakeActiveClient();
-      const clients = [server, reconnect];
-      const { runtime, events } = testRuntime(() => {
-        const client = clients.shift();
-        if (!client) throw new Error("unexpected client request");
-        return client;
-      });
-      const previous = await runtime.authenticate(connection);
-      if (!previous) throw new Error("missing authority");
-      runtime.adoptCandidate({
-        expected: previous,
-        config: sessionConfig,
-        candidate: candidateSnapshot(candidate),
-      });
-      events.length = 0;
+      server.connectImplementation = async () => {
+        server.setStatus("error");
+        throw new Error("connection failed");
+      };
+      const createClient = vi.fn(() => server);
+      const { runtime } = testRuntime(createClient);
 
-      candidate.setStatus("disconnected");
-      expect(runtime.getSnapshot()).toMatchObject({
-        phase: "reconnect_wait",
-        authenticated: true,
-        session: { sessionId: "session-one" },
-        recovery: { phase: "reconnecting", reconnectAttempt: 1 },
-      });
-      await vi.runAllTimersAsync();
-
-      expect(reconnect.openParams).toEqual([
-        {
-          session_id: "session-one",
-          profile_id: "coding",
-          cwd: "/srv/project",
-          after: { stream: "session-one", seq: 12 },
-        },
-      ]);
-      expect(reconnect.calls).toEqual(["connect", "open", "hydrate"]);
-      expect(runtime.getSnapshot()).toMatchObject({
-        phase: "ready",
-        status: "connected",
-        authenticated: true,
-        recovery: { phase: "healthy" },
-      });
-      expect(events.map((event) => event.type)).toEqual([
-        "session-hydrate",
-        "session-ready",
-      ]);
-      expect(
-        events.find((event) => event.type === "session-hydrate"),
-      ).toMatchObject({ reason: "reconnect" });
-
-      events.length = 0;
-      reconnect.emit({
-        jsonrpc: "2.0",
-        method: CORE_UI_METHODS.REPLAY_LOSSY,
-        params: { session_id: "session-one", dropped_count: 1 },
-      });
-      await vi.waitFor(() => {
-        expect(reconnect.hydrateParams).toHaveLength(2);
-      });
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: "session-hydrate",
-            reason: "recovery",
-          }),
-        ]),
+      await expect(runtime.authenticate(connection)).rejects.toThrow(
+        "connection failed",
       );
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(createClient).toHaveBeenCalledTimes(1);
+      expect(runtime.getSnapshot().authenticated).toBe(false);
+      runtime.disconnect();
     } finally {
       vi.useRealTimers();
     }

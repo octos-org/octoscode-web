@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Preserve active work, drafts and queued messages when an optional view fails
+  to load; make modal loading cancellable and keep recovery actions available.
+- Resolve uncertain turns through the advertised status query without automatic
+  resends; retain their records across reconnect and block unsafe navigation.
+- Correct late-response/socket ownership and queue settlement ordering, and
+  preserve canonical transcript text and terminal states.
+- Improve direct workspace entry, mobile navigation and control reachability,
+  IME editing, nested modal focus, queued-message removal and reader-controlled
+  transcript scrolling and disclosures.
+- Keep received conversation history available through incremental expansion,
+  support confirmed cross-browser conversation links, and report clipboard
+  results truthfully without writing late feedback into another session.
+- Run the complete interaction and visual browser suite in pull-request CI;
+  retain the existing JavaScript, CSS and long-frame budgets.
+
 - Restore a successful runtime/workspace/session connection across refresh with
   tab-scoped credential retention, explicit forgetting, and canonical
   server-returned identity.
@@ -12,8 +27,8 @@
 - Fail closed on Core rc.9's unscoped `session/list` rows: show only the
   successfully opened or restored Session until Core returns an authoritative
   Workspace/Profile-scoped SessionRef catalog.
-- Add an opt-in GLM 5.2 live gate that authenticates, creates and verifies a
-  bounded workspace file through real Core tools using the production static
+- Add an opt-in GLM-5.3-Flash live gate that authenticates, creates and verifies
+  a bounded workspace file through real Core tools using the production static
   build, then proves refresh recovery.
 - Replace the diagnostic shell with DSH-aligned Workspace/Session navigation,
   composer permission/runtime controls, and General/Models settings; defer

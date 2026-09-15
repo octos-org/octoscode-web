@@ -602,40 +602,6 @@
   gap: 2px;
 }
 
-/* Entrance stagger: each row fades in 25ms after the previous one
-   (tasteskill list rule); delay caps from the seventh row on. */
-.sessionRun > *,
-.flatSessionList > *,
-.searchResults > * {
-  animation: rows-in 150ms var(--dsw-ease-in-out) both;
-}
-
-:is(.sessionRun, .flatSessionList, .searchResults) > :nth-child(2) {
-  animation-delay: 25ms;
-}
-
-:is(.sessionRun, .flatSessionList, .searchResults) > :nth-child(3) {
-  animation-delay: 50ms;
-}
-
-:is(.sessionRun, .flatSessionList, .searchResults) > :nth-child(4) {
-  animation-delay: 75ms;
-}
-
-:is(.sessionRun, .flatSessionList, .searchResults) > :nth-child(5) {
-  animation-delay: 100ms;
-}
-
-:is(.sessionRun, .flatSessionList, .searchResults) > :nth-child(n + 6) {
-  animation-delay: 125ms;
-}
-
-@keyframes rows-in {
-  from {
-    opacity: 0;
-  }
-}
-
 /* Keyboard-active row (tree aria-activedescendant target). Uses the hover
    token so it matches pointer-hover affordance. */
 .treeActive {

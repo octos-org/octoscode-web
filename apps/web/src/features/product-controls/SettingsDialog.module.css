@@ -58,7 +58,7 @@
   position: relative;
   display: flex;
   width: min(800px, calc(100vw - 48px));
-  height: min(800px, calc(100vh - 48px));
+  height: min(800px, calc(100dvh - 48px));
   overflow: hidden;
   border-radius: 24px;
   outline: none;
@@ -131,6 +131,7 @@
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -177,6 +178,7 @@
   min-height: 0;
   padding: 0 24px 24px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 640px) {
@@ -188,7 +190,7 @@
   .panel {
     flex-direction: column;
     width: calc(100vw - 24px);
-    height: calc(100vh - 24px);
+    height: calc(100dvh - 24px);
     border-radius: 18px;
   }
 

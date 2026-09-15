@@ -21,16 +21,22 @@ async function connectToWorkspaceChooser(
     page.getByRole("complementary", { name: "Product navigation" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
 }
 
 async function addWorkspace(page: Page, cwd: string): Promise<void> {
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(cwd);
-  await add.getByRole("button", { name: "Add & Start" }).click();
+  await add.getByRole("button", { name: "Start session" }).click();
 }
 
 test("rejects invalid auth before the product shell is ever mounted", async ({
@@ -67,7 +73,7 @@ test("rejects invalid auth before the product shell is ever mounted", async ({
     page.getByRole("complementary", { name: "Product navigation" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toHaveCount(0);
   const shellWasSeen = await page.evaluate(
     () =>

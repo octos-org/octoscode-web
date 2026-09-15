@@ -317,21 +317,7 @@ export class BackgroundTurnManager<
         // surface; without an observed terminal event the honest state is
         // "failed" — Core terminates the turn when its owner connection
         // closes.
-        if (!isTerminalState(owner.state)) owner.state = "failed";
-        this.#owners.set(owner.key, owner);
-        // Records are terminal and detached, so the oldest can be evicted
-        // once the history itself would drown the live list.
-        let records = 0;
-        for (const candidate of this.#owners.values()) {
-          if (candidate.phase === "disposed") records += 1;
-        }
-        if (records > MAX_LOST_TURN_RECORDS) {
-          for (const [key, candidate] of this.#owners) {
-            if (candidate.phase !== "disposed") continue;
-            this.#owners.delete(key);
-            break;
-          }
-        }
+        this.#recordLostTransport(owner);
         this.#publish();
       }
       return "transport-ended";
@@ -447,7 +433,24 @@ export class BackgroundTurnManager<
     owner.phase = "disposed";
     detach(owner);
     if (disconnect) safeDisconnect(owner.client);
+    // Losing an owner before its terminal is observed must remain visible.
+    // This applies equally during candidate handoff, parked execution, and
+    // reclaim; otherwise an interrupted background task silently disappears.
+    if (!isTerminalState(owner.state)) this.#recordLostTransport(owner);
     this.#publish();
+  }
+
+  #recordLostTransport(owner: BackgroundTurnOwner<Client>): void {
+    if (!isTerminalState(owner.state)) owner.state = "failed";
+    this.#owners.set(owner.key, owner);
+    // Detached records retain outcome visibility without consuming a live
+    // transport slot. Bound them separately so a flapping network is finite.
+    const records = [...this.#owners.values()].filter(
+      (candidate) => candidate.phase === "disposed",
+    );
+    for (const record of records.slice(0, -MAX_LOST_TURN_RECORDS)) {
+      this.#owners.delete(record.key);
+    }
   }
 
   #releaseReservation(owner: BackgroundTurnOwner<Client>): void {

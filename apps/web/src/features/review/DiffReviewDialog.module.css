@@ -1,0 +1,23 @@
+.dialog:global(.review-dialog) {
+  min-height: 0;
+  max-height: 100dvh;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dialog :global(.review-header) > div:first-child {
+  min-width: 0;
+}
+
+.dialog :global(.review-header) h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog :global(.review-header-actions) {
+  flex: none;
+}
+
+.dialog :global(.diff-hunk) {
+  min-width: 0;
+}

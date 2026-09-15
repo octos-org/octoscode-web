@@ -20,12 +20,10 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
 
   const navigation = productNavigation(page);
   await expect(navigation).toBeVisible({ timeout: 30_000 });
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await expect(chooser).toBeVisible();
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
+  await expect(addWorkspace).toBeVisible();
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await addWorkspace.getByRole("button", { name: "Start session" }).click();
 
   const permission = page.getByRole("button", { name: /^Permission:/ });
   const onboarding = page.getByRole("dialog", {
@@ -106,6 +104,14 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
     await page.waitForTimeout(2_000);
   }
   await expect(result.last()).toBeVisible();
+  // A marker may arrive before the terminal event. Wait for the foreground
+  // lifecycle to settle before refreshing an owner connection.
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true }),
+  ).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator('.timeline details[data-live="true"]')).toHaveCount(
+    0,
+  );
 
   await page.reload();
 
@@ -215,11 +221,10 @@ async function openLiveWorkspace(page: Page): Promise<{
 
   const navigation = productNavigation(page);
   await expect(navigation).toBeVisible({ timeout: 30_000 });
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
+  await expect(addWorkspace).toBeVisible();
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: "Add & Start" }).click();
+  await addWorkspace.getByRole("button", { name: "Start session" }).click();
 
   const permission = page.getByRole("button", { name: /^Permission:/ });
   const onboarding = page.getByRole("dialog", {
