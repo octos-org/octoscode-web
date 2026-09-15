@@ -948,6 +948,14 @@ const catalog: Readonly<Record<string, string>> = {
   "I understand that this session can make unrestricted changes.":
     "我了解此会话可以进行不受限制的更改。",
   "Enable full access": "启用完全访问权限",
+  "Tick the box above to enable this button.":
+    "请先勾选上方的复选框，才能启用此按钮。",
+  "Network allowed": "允许联网",
+  "Network blocked": "禁止联网",
+  "Thinking appears in this Session's transcript, collapsed by default.":
+    "思考内容会显示在此会话的记录中，默认折叠。",
+  "Describe a change, investigate a bug, or ask how the code works.":
+    "描述一项更改、排查一个缺陷，或询问代码的工作方式。",
   "Settings sections": "设置分类",
   General: "通用",
   Models: "模型",

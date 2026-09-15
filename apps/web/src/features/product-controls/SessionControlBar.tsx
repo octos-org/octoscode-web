@@ -153,6 +153,7 @@ const PERMISSION_RISK_COPY = {
   networkLabel: "Network access",
   acknowledgement:
     "I understand that this session can make unrestricted changes.",
+  hint: "Tick the box above to enable this button.",
   cancel: "Cancel",
   confirm: "Enable full access",
 } as const;
@@ -406,6 +407,9 @@ export function PermissionRiskDialog({
         />
         <span>{copy.acknowledgement}</span>
       </label>
+      {!acknowledged && copy.hint ? (
+        <p className={styles.dialogHint}>{copy.hint}</p>
+      ) : null}
       <div className={styles.dialogActions}>
         <button
           type="button"

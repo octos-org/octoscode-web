@@ -397,8 +397,18 @@
 }
 
 .dangerAction:disabled {
-  opacity: 0.4;
+  /* An inert danger action must not read as armed: drop the danger fill while
+     the acknowledgement is unticked (the hint above says why). */
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-secondary);
+  opacity: 0.7;
   cursor: default;
+}
+
+.dialogHint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* Read-only external-driver disclosure seat. Native details/summary keeps
