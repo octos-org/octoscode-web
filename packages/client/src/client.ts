@@ -65,6 +65,12 @@ import type {
   LocalProfileCreateParams,
   LocalProfileCreateResult,
 } from "./onboarding.ts";
+import type {
+  WorkspaceCreateParams,
+  WorkspaceCreateResult,
+  WorkspaceListParams,
+  WorkspaceListResult,
+} from "./workspace-browse.ts";
 
 // Reuse each loader so production builds emit one preload closure per family.
 const loadCodingResponses = () => import("./coding.ts");
@@ -72,6 +78,7 @@ const loadTaskResults = () => import("./task-results.ts");
 const loadSessionStatus = () => import("./session-status-result.ts");
 const loadOnboardingResponses = () => import("./onboarding.ts");
 const loadWorkspaceResponses = () => import("./workspace.ts");
+const loadWorkspaceBrowseResponses = () => import("./workspace-browse.ts");
 const loadWorkspaceResults = () => import("./workspace-results.ts");
 const loadInteractionResponses = () => import("./interaction-responses.ts");
 
@@ -762,6 +769,38 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadOnboardingResponses()).parseLlmUpsertResult(value),
+    );
+  }
+
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §1. `path: null` (or an empty path)
+   * asks about the server's own working directory.
+   */
+  async listWorkspaceFolders(
+    params: WorkspaceListParams,
+  ): Promise<WorkspaceListResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.WORKSPACE_LIST,
+      params,
+      async (value) =>
+        (await loadWorkspaceBrowseResponses()).parseWorkspaceListResult(value),
+    );
+  }
+
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §2. `created: false` is an idempotent
+   * success — a directory of that name already existed.
+   */
+  async createWorkspaceFolder(
+    params: WorkspaceCreateParams,
+  ): Promise<WorkspaceCreateResult> {
+    return this.validatedRequest(
+      APPUI_ONBOARDING_METHODS.WORKSPACE_CREATE,
+      params,
+      async (value) =>
+        (await loadWorkspaceBrowseResponses()).parseWorkspaceCreateResult(
+          value,
+        ),
     );
   }
 

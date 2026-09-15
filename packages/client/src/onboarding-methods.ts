@@ -10,4 +10,13 @@ export const APPUI_ONBOARDING_METHODS = {
   PROFILE_LLM_SELECT: "profile/llm/select",
   PROFILE_LLM_TEST: "profile/llm/test",
   PROFILE_LLM_UPSERT: "profile/llm/upsert",
+  /** WEB-WORKSPACE-BROWSER-CONTRACT-5000 §1. */
+  WORKSPACE_LIST: "onboarding/workspace_list",
+  /** WEB-WORKSPACE-BROWSER-CONTRACT-5000 §2. */
+  WORKSPACE_CREATE: "onboarding/workspace_create",
+} as const;
+
+/** Onboarding features advertised in `config/capabilities/list`. */
+export const APPUI_ONBOARDING_FEATURES = {
+  WORKSPACE_BROWSE_V1: "onboarding.workspace_browse.v1",
 } as const;

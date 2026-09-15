@@ -1193,6 +1193,78 @@ const catalog: Readonly<Record<string, string>> = {
   "Open a project first": "请先打开一个项目",
   "Peers run inside a session. Choose a workspace to continue.":
     "智能体在会话中运行。请选择一个工作区以继续。",
+
+  // WEB-WORKSPACE-BROWSER-CONTRACT-5000 — server-folder browsing. Product
+  // copy only: a server's own prose is never translated, because it is never
+  // rendered.
+  "Browse…": "浏览…",
+  "Browse server folders": "浏览服务器文件夹",
+  "Pick a folder on the Octos server.": "请选择 Octos 服务器上的文件夹。",
+  "Back to the workspace path": "返回工作区路径",
+  "Back to the path": "返回路径",
+  "Go to the parent folder": "转到上一级文件夹",
+  "Current folder": "当前文件夹",
+  "Loading folders…": "正在加载文件夹…",
+  Subfolders: "子文件夹",
+  "No subfolders here.": "此处没有子文件夹。",
+  "Open folder {value0}": "打开文件夹 {value0}",
+  "Use folder {value0}": "使用文件夹 {value0}",
+  "Use this folder": "使用此文件夹",
+  Use: "使用",
+  "New folder": "新建文件夹",
+  "New folder name": "新文件夹名称",
+  "Create folder": "创建文件夹",
+  "Creating…": "正在创建…",
+  "Only the first {value0} folders are shown.": "仅显示前 {value0} 个文件夹。",
+  "{value0} hidden folders aren't shown.": "有 {value0} 个隐藏文件夹未显示。",
+  "Enter a name for the new folder.": "请输入新文件夹的名称。",
+  "A folder name can't contain a slash. Enter one name only.":
+    "文件夹名称不能包含斜杠，请只输入一个名称。",
+  "Enter a folder name other than . or ..": "请输入 . 和 .. 以外的文件夹名称。",
+  "A folder name can't contain control characters. Use plain text.":
+    "文件夹名称不能包含控制字符，请使用纯文本。",
+  "A folder name can't start or end with a space. Trim it.":
+    "文件夹名称不能以空格开头或结尾，请删除首尾空格。",
+  "That folder name is too long. Use up to 255 bytes.":
+    "该文件夹名称过长，最多 255 字节。",
+  "That path can't be browsed.": "无法浏览该路径。",
+  "Browse from the server's working directory instead.":
+    "请改为从服务器的工作目录开始浏览。",
+  "That folder is no longer on the server.": "服务器上已不存在该文件夹。",
+  "Go up one level and pick a folder that still exists.":
+    "请返回上一级，选择仍然存在的文件夹。",
+  "That path is a file, not a folder.": "该路径是文件，不是文件夹。",
+  "Go up one level and pick a folder.": "请返回上一级并选择一个文件夹。",
+  "Octos can't open that folder.": "Octos 无法打开该文件夹。",
+  "Pick a folder the Octos server is allowed to read.":
+    "请选择 Octos 服务器有权读取的文件夹。",
+  "That folder is outside the area Octos may browse.":
+    "该文件夹不在 Octos 允许浏览的范围内。",
+  "Pick a folder inside your own projects instead.":
+    "请改为选择你自己项目目录下的文件夹。",
+  "The server rejected that folder name.": "服务器拒绝了该文件夹名称。",
+  "Use a single name without slashes, up to 255 bytes.":
+    "请使用不含斜杠的单个名称，最多 255 字节。",
+  "The folder you're creating in is no longer on the server.":
+    "用于创建的上级文件夹已不在服务器上。",
+  "Go up one level and try again.": "请返回上一级后重试。",
+  "The place you're creating in is a file, not a folder.":
+    "用于创建的位置是文件，不是文件夹。",
+  "Octos can't create a folder here.": "Octos 无法在此处创建文件夹。",
+  "Pick a folder the Octos server is allowed to write to.":
+    "请选择 Octos 服务器有权写入的文件夹。",
+  "That location is outside the area Octos may write to.":
+    "该位置不在 Octos 允许写入的范围内。",
+  "Create the folder inside your own projects instead.":
+    "请改为在你自己的项目目录下创建文件夹。",
+  "A file of that name is already here.": "此处已存在同名文件。",
+  "Choose a different folder name.": "请换一个文件夹名称。",
+  "This server doesn't offer folder browsing.":
+    "此服务器不提供文件夹浏览功能。",
+  "Type the workspace path instead.": "请改为直接输入工作区路径。",
+  "Couldn't reach the server's folders.": "无法访问服务器上的文件夹。",
+  "Try again, or type the workspace path instead.":
+    "请重试，或改为直接输入工作区路径。",
 };
 
 // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).

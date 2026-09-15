@@ -43,6 +43,116 @@ const historyRefreshArmed = new Set();
 const heldHistoryHydrates = new Map();
 const gatherRepliesArmed = new Set();
 const heldGatherReplies = new Map();
+// WEB-WORKSPACE-BROWSER-CONTRACT-5000 — server-folder browsing. The feature is
+// advertised ONLY to a connection presenting the browsing fixture token, so the
+// same fixture exercises both halves of the gate: browse with this token, and
+// the untouched typed-path form (no Browse affordance at all) with every other.
+const workspaceBrowseAuthToken = "workspace-browse-e2e-token";
+const workspaceBrowseSockets = new WeakSet();
+const WORKSPACE_BROWSE_METHODS = [
+  "onboarding/workspace_list",
+  "onboarding/workspace_create",
+];
+const WORKSPACE_BROWSE_FEATURE = "onboarding.workspace_browse.v1";
+// The server's own working directory: `path: null` resolves here.
+const workspaceBrowseWorkingDirectory = "/srv/fixture";
+const workspaceBrowseHome = "/srv/fixture";
+const workspaceBrowseBannedRoots = ["/etc", "/root", "/var/db"];
+// A non-directory: listing it is not_a_directory, creating over it is
+// exists_not_directory.
+const workspaceBrowseFiles = new Set(["/srv/fixture/projects/README.md"]);
+// A directory the fixture refuses to read, so the permission copy is reachable.
+const workspaceBrowseUnreadable = new Set(["/srv/fixture/restricted"]);
+
+function freshWorkspaceBrowseTree() {
+  return new Map([
+    ["/", { writable: false, dirs: ["srv"], hidden: 4, truncated: false }],
+    [
+      "/srv",
+      { writable: false, dirs: ["fixture"], hidden: 1, truncated: false },
+    ],
+    [
+      "/srv/fixture",
+      {
+        writable: true,
+        dirs: ["Projects", "archive", "readonly", "restricted"],
+        hidden: 2,
+        truncated: false,
+      },
+    ],
+    [
+      "/srv/fixture/Projects",
+      {
+        writable: true,
+        dirs: ["octoscode-web", "notes"],
+        hidden: 0,
+        truncated: false,
+      },
+    ],
+    [
+      "/srv/fixture/Projects/octoscode-web",
+      { writable: true, dirs: [], hidden: 1, truncated: false },
+    ],
+    [
+      "/srv/fixture/Projects/notes",
+      { writable: true, dirs: [], hidden: 0, truncated: false },
+    ],
+    [
+      "/srv/fixture/archive",
+      { writable: false, dirs: ["2025"], hidden: 0, truncated: true },
+    ],
+    [
+      "/srv/fixture/archive/2025",
+      { writable: false, dirs: [], hidden: 0, truncated: false },
+    ],
+    [
+      "/srv/fixture/readonly",
+      { writable: false, dirs: [], hidden: 0, truncated: false },
+    ],
+    [
+      "/srv/fixture/restricted",
+      { writable: false, dirs: [], hidden: 0, truncated: false },
+    ],
+  ]);
+}
+
+let workspaceBrowseTree = freshWorkspaceBrowseTree();
+
+function workspaceBrowseResolve(path) {
+  if (path === null || path === undefined || path === "") {
+    return { ok: true, path: workspaceBrowseWorkingDirectory };
+  }
+  if (typeof path !== "string") return { ok: false, kind: "invalid_path" };
+  let candidate = path.trim();
+  if (!candidate) return { ok: true, path: workspaceBrowseWorkingDirectory };
+  if (candidate === "~") candidate = workspaceBrowseHome;
+  else if (candidate.startsWith("~/")) {
+    candidate = `${workspaceBrowseHome}/${candidate.slice(2)}`;
+  }
+  if (!candidate.startsWith("/")) return { ok: false, kind: "invalid_path" };
+  if (candidate.includes("\u0000")) return { ok: false, kind: "invalid_path" };
+  const normalized = candidate.replace(/\/+$/, "") || "/";
+  const banned = workspaceBrowseBannedRoots.find(
+    (root) => normalized === root || normalized.startsWith(`${root}/`),
+  );
+  if (banned) return { ok: false, kind: "root_escape", bannedRoot: banned };
+  return { ok: true, path: normalized };
+}
+
+function workspaceBrowseParent(path) {
+  if (path === "/") return null;
+  const cut = path.lastIndexOf("/");
+  const parent = cut === 0 ? "/" : path.slice(0, cut);
+  const banned = workspaceBrowseBannedRoots.some(
+    (root) => parent === root || parent.startsWith(`${root}/`),
+  );
+  return banned ? null : parent;
+}
+
+function workspaceBrowseJoin(parent, name) {
+  return parent === "/" ? `/${name}` : `${parent}/${name}`;
+}
+
 // Native-workflow coverage is opt-in, keeping older capability-off tests intact.
 // These controls only touch synthetic Sessions in the dedicated fixture path.
 const nativeWorkspacePrefix = "/srv/work/native-workflows-";
@@ -1890,7 +2000,7 @@ function isDurableSessionId(sessionId) {
   );
 }
 
-const capabilities = {
+const baseCapabilities = {
   version: {
     protocol: "octos-ui/v1alpha1",
     schema_version: 1,
@@ -1956,6 +2066,19 @@ const capabilities = {
 };
 
 function capabilitiesFor(socket, state) {
+  const capabilities = workspaceBrowseSockets.has(socket)
+    ? {
+        ...baseCapabilities,
+        supported_methods: [
+          ...baseCapabilities.supported_methods,
+          ...WORKSPACE_BROWSE_METHODS,
+        ],
+        supported_features: [
+          ...baseCapabilities.supported_features,
+          WORKSPACE_BROWSE_FEATURE,
+        ],
+      }
+    : baseCapabilities;
   const workspaceRoot = state
     ? state.workspaceRoot
     : openedWorkspaceBySocket.get(socket);
@@ -2408,9 +2531,11 @@ function handleNativeRequest(socket, request, state) {
 }
 
 sockets.on("connection", (socket, request) => {
-  const connectionProfileId = authenticatedProfileForToken(
-    authTokenFromUpgradeRequest(request),
-  );
+  const connectionAuthToken = authTokenFromUpgradeRequest(request);
+  if (connectionAuthToken === workspaceBrowseAuthToken) {
+    workspaceBrowseSockets.add(socket);
+  }
+  const connectionProfileId = authenticatedProfileForToken(connectionAuthToken);
   if (connectionProfileId) {
     authenticatedProfileBySocket.set(socket, connectionProfileId);
   }
@@ -2575,6 +2700,26 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "config/capabilities/list") {
       reply(socket, request.id, { capabilities: capabilitiesFor(socket) });
+      return;
+    }
+    if (WORKSPACE_BROWSE_METHODS.includes(request.method)) {
+      // A connection that was never advertised the feature must not be able
+      // to reach it by guessing the method name.
+      if (!workspaceBrowseSockets.has(socket)) {
+        replyError(
+          socket,
+          request.id,
+          -32_601,
+          `unknown method: ${request.method}`,
+          { kind: "profile_local_unsupported" },
+        );
+        return;
+      }
+      if (request.method === "onboarding/workspace_list") {
+        handleWorkspaceList(socket, request);
+      } else {
+        handleWorkspaceCreate(socket, request);
+      }
       return;
     }
     if (typeof sessionId !== "string" || !sessionId) {
@@ -4830,6 +4975,133 @@ function runtimePolicyStamp(profileId, runtimeModel, permission) {
 
 function reply(socket, id, result) {
   socket.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
+}
+
+function workspaceBrowseListing(path) {
+  const folder = workspaceBrowseTree.get(path);
+  const entries = [...folder.dirs]
+    .sort((left, right) =>
+      left.toLowerCase().localeCompare(right.toLowerCase()),
+    )
+    .map((name) => {
+      const child = workspaceBrowseJoin(path, name);
+      return {
+        name,
+        path: child,
+        writable: workspaceBrowseTree.get(child)?.writable === true,
+      };
+    });
+  return {
+    canonical_path: path,
+    parent_path: workspaceBrowseParent(path),
+    writable: folder.writable,
+    entries,
+    truncated: folder.truncated === true,
+    hidden_skipped: folder.hidden,
+  };
+}
+
+function handleWorkspaceList(socket, request) {
+  const refuse = (kind, data = {}) =>
+    replyError(socket, request.id, -32_010, "workspace_list refused", {
+      kind,
+      ...data,
+    });
+  const raw = request.params?.path;
+  if (raw !== null && raw !== undefined && typeof raw !== "string") {
+    refuse("workspace_list_invalid_path");
+    return;
+  }
+  const resolved = workspaceBrowseResolve(raw);
+  if (!resolved.ok) {
+    refuse(
+      `workspace_list_${resolved.kind}`,
+      resolved.bannedRoot ? { banned_root: resolved.bannedRoot } : undefined,
+    );
+    return;
+  }
+  const path = resolved.path;
+  if (workspaceBrowseFiles.has(path)) {
+    refuse("workspace_list_not_a_directory");
+    return;
+  }
+  if (workspaceBrowseUnreadable.has(path)) {
+    refuse("workspace_list_permission_denied");
+    return;
+  }
+  if (!workspaceBrowseTree.has(path)) {
+    refuse("workspace_list_not_found");
+    return;
+  }
+  reply(socket, request.id, workspaceBrowseListing(path));
+}
+
+/** Exactly the §2 name rules the real server enforces. */
+function workspaceBrowseNameIsValid(name) {
+  if (typeof name !== "string" || name.length === 0) return false;
+  if (name.includes("/") || name.includes("\\")) return false;
+  if (name === "." || name === "..") return false;
+  if (name !== name.trim()) return false;
+  if (Buffer.byteLength(name, "utf8") > 255) return false;
+  return ![...name].some((character) => {
+    const code = character.codePointAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
+}
+
+function handleWorkspaceCreate(socket, request) {
+  const refuse = (kind, data = {}) =>
+    replyError(socket, request.id, -32_010, "workspace_create refused", {
+      kind,
+      ...data,
+    });
+  const name = request.params?.name;
+  if (!workspaceBrowseNameIsValid(name)) {
+    refuse("workspace_create_invalid_name");
+    return;
+  }
+  const resolved = workspaceBrowseResolve(request.params?.parent);
+  if (!resolved.ok) {
+    refuse(
+      resolved.kind === "root_escape"
+        ? "workspace_create_root_escape"
+        : "workspace_create_parent_not_found",
+      resolved.bannedRoot ? { banned_root: resolved.bannedRoot } : undefined,
+    );
+    return;
+  }
+  const parent = resolved.path;
+  if (workspaceBrowseFiles.has(parent)) {
+    refuse("workspace_create_parent_not_a_directory");
+    return;
+  }
+  const folder = workspaceBrowseTree.get(parent);
+  if (!folder) {
+    refuse("workspace_create_parent_not_found");
+    return;
+  }
+  if (!folder.writable) {
+    refuse("workspace_create_permission_denied");
+    return;
+  }
+  const created = workspaceBrowseJoin(parent, name);
+  if (workspaceBrowseFiles.has(created)) {
+    refuse("workspace_create_exists_not_directory");
+    return;
+  }
+  if (workspaceBrowseTree.has(created)) {
+    // Idempotent success, not an error.
+    reply(socket, request.id, { canonical_path: created, created: false });
+    return;
+  }
+  folder.dirs = [...folder.dirs, name];
+  workspaceBrowseTree.set(created, {
+    writable: true,
+    dirs: [],
+    hidden: 0,
+    truncated: false,
+  });
+  reply(socket, request.id, { canonical_path: created, created: true });
 }
 
 function replyError(socket, id, code, message, data) {

@@ -14,6 +14,9 @@ import { SkeletonRows } from "../../ui/Skeleton.tsx";
 import { ArrowLeftIcon, FolderIcon, PlusIcon } from "../../ui/Icon.tsx";
 import styles from "./NewSessionWorkspacePicker.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { WorkspaceFolderBrowser } from "./WorkspaceFolderBrowser.tsx";
+import { workspaceBrowseOpenPath } from "./workspace-browse.ts";
+import type { WorkspaceBrowseAdapter } from "./workspace-browse.ts";
 
 export interface RecentWorkspacePath {
   id: string;
@@ -32,13 +35,12 @@ export interface ServerWorkingDirectoryEntry {
   path: string | null;
 }
 
-
 export interface WorkspaceCreateRequest {
   workspacePath: string;
 }
 
 export type WorkspacePickerPresentation = "dialog" | "hero";
-export type WorkspacePickerView = "choose" | "add";
+export type WorkspacePickerView = "choose" | "add" | "browse";
 
 export interface NewSessionWorkspacePickerProps {
   open?: boolean;
@@ -55,6 +57,13 @@ export interface NewSessionWorkspacePickerProps {
   cancelLabel?: string;
   /** The server's verbatim path rejection ("not a directory", …). */
   serverPathError?: string | null;
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate. Present ONLY when the server
+   * advertises `onboarding.workspace_browse.v1`. Absent means no browsing
+   * affordance exists at all and this form behaves exactly as it did before
+   * the feature — fail closed, structurally.
+   */
+  browse?: WorkspaceBrowseAdapter | null;
   onRetry?: () => void;
   onCancel: () => void;
   onCreate: (request: WorkspaceCreateRequest) => void;
@@ -80,6 +89,7 @@ interface PickerBodyProps extends NewSessionWorkspacePickerProps {
   onViewChange: (view: WorkspacePickerView) => void;
   onServerPathChange: (path: string) => void;
   onServerPathSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onBrowseChoose: (path: string) => void;
 }
 
 function PickerBody({
@@ -95,6 +105,7 @@ function PickerBody({
   creating = false,
   cancelLabel = "Cancel",
   serverPathError = null,
+  browse = null,
   serverPath,
   validationError,
   cancelRef,
@@ -106,6 +117,7 @@ function PickerBody({
   onViewChange,
   onServerPathChange,
   onServerPathSubmit,
+  onBrowseChoose,
 }: PickerBodyProps) {
   const t = useUiText();
   const hasWorkspaces = workspaces.length > 0;
@@ -113,13 +125,17 @@ function PickerBody({
   return (
     <>
       <header className={styles.header}>
-        {view === "add" && hasWorkspaces ? (
+        {view === "browse" || (view === "add" && hasWorkspaces) ? (
           <button
             type="button"
             className={styles.back}
-            aria-label={t("Back to workspaces")}
+            aria-label={
+              view === "browse"
+                ? t("Back to the workspace path")
+                : t("Back to workspaces")
+            }
             disabled={creating}
-            onClick={() => onViewChange("choose")}
+            onClick={() => onViewChange(view === "browse" ? "add" : "choose")}
           >
             <ArrowLeftIcon />
           </button>
@@ -130,12 +146,18 @@ function PickerBody({
         <div className={styles.heading}>
           <div className={styles.eyebrow}>{t("New Session")}</div>
           <h2 id={titleId} className={styles.title}>
-            {view === "choose" ? t("Choose a workspace") : t("Add workspace")}
+            {view === "choose"
+              ? t("Choose a workspace")
+              : view === "browse"
+                ? t("Browse server folders")
+                : t("Add workspace")}
           </h2>
           <p id={descriptionId} className={styles.description}>
             {view === "choose"
               ? t("Choose where this coding session will run.")
-              : t("Choose a project folder to start your coding session.")}
+              : view === "browse"
+                ? t("Pick a folder on the Octos server.")
+                : t("Choose a project folder to start your coding session.")}
           </p>
         </div>
       </header>
@@ -280,6 +302,15 @@ function PickerBody({
             </p>
           ) : null}
         </div>
+      ) : view === "browse" && browse ? (
+        <WorkspaceFolderBrowser
+          adapter={browse}
+          initialPath={workspaceBrowseOpenPath(serverPath)}
+          titleId={titleId}
+          disabled={creating}
+          onChoose={onBrowseChoose}
+          onBack={() => onViewChange("add")}
+        />
       ) : (
         <form
           className={styles.body}
@@ -316,6 +347,19 @@ function PickerBody({
               "Enter a path on the Octos server, for example /home/you/projects/my-app.",
             )}
           </p>
+          {browse ? (
+            <button
+              type="button"
+              className={styles.addButton}
+              data-workspace-browse="true"
+              aria-label={t("Browse server folders")}
+              disabled={creating}
+              onClick={() => onViewChange("browse")}
+            >
+              <FolderIcon />
+              <span>{t("Browse…")}</span>
+            </button>
+          ) : null}
           {validationError || serverPathError ? (
             <p
               id={`${titleId}-path-error`}
@@ -416,12 +460,16 @@ export function NewSessionWorkspacePicker({
   // (including its disabled "(path not reported)" variant, which must stay
   // visible so the user sees why an explicit path is needed).
   const activeView =
-    view === "choose" &&
-    !props.workspaces.length &&
-    !props.serverWorkingDirectory &&
-    !props.loading
+    // Fail closed: a browse view can only stand while the adapter the feature
+    // gate handed us is still there.
+    view === "browse" && !props.browse
       ? "add"
-      : view;
+      : view === "choose" &&
+          !props.workspaces.length &&
+          !props.serverWorkingDirectory &&
+          !props.loading
+        ? "add"
+        : view;
 
   useEffect(() => {
     if (!open) return;
@@ -446,6 +494,13 @@ export function NewSessionWorkspacePicker({
   const changeServerPath = (path: string) => {
     setServerPath(path);
     if (validationError) setValidationError(null);
+  };
+
+  /** §Client behaviour: "Choosing a folder fills the path box." */
+  const chooseBrowsedFolder = (path: string) => {
+    setServerPath(path);
+    setValidationError(null);
+    setView("add");
   };
 
   const submitServerPath = (event: FormEvent<HTMLFormElement>) => {
@@ -476,6 +531,7 @@ export function NewSessionWorkspacePicker({
       onViewChange={changeView}
       onServerPathChange={changeServerPath}
       onServerPathSubmit={submitServerPath}
+      onBrowseChoose={chooseBrowsedFolder}
     />
   );
 

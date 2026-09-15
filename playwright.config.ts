@@ -7,6 +7,10 @@ const webOrigin = `http://127.0.0.1:${webPort}`;
 const fixtureProfileAuthToken = "profile-scoped-e2e-token";
 const fixtureAuthTokens = [
   "tab-scoped-e2e-token",
+  // WEB-WORKSPACE-BROWSER-CONTRACT-5000: the fixture advertises
+  // `onboarding.workspace_browse.v1` only to this token, so the same server
+  // also serves the feature-absent (no Browse affordance) case.
+  "workspace-browse-e2e-token",
   "remember-this-tab-token",
   "forget-me-token",
   fixtureProfileAuthToken,

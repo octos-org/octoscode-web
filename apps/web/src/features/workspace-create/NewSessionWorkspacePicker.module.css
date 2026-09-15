@@ -474,3 +474,55 @@
     transition: none;
   }
 }
+
+.browseBar {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.browsePathText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.browsePathText .fieldLabel {
+  margin: 0 0 2px;
+}
+
+.browsePath {
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.browseRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.browseRow .workspace {
+  min-height: 44px;
+}
+
+.browseRow .secondaryButton {
+  flex: none;
+}
+
+.newFolder {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  padding-top: 8px;
+}
+
+.newFolder .footer {
+  border-top: none;
+}

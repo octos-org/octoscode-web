@@ -133,6 +133,7 @@ import {
 } from "../features/fleet/fleet-facts.ts";
 import type { FleetRosterPeer } from "../features/fleet/fleet-model.ts";
 import { serverWorkingDirectoryEntry } from "../features/workspace-create/server-working-directory.ts";
+import { workspaceBrowseAdapter } from "../features/workspace-create/workspace-browse-adapter.ts";
 import type {
   ModelSelection,
   SettingsSectionId,
@@ -673,6 +674,13 @@ export function App() {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
+  // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
+  // advertises `onboarding.workspace_browse.v1`, and the picker shows no
+  // browsing affordance at all without an adapter.
+  const workspaceBrowse = useMemo(
+    () => workspaceBrowseAdapter(protocol.client, session.capabilities),
+    [protocol.client, session.capabilities],
+  );
   const autonomyAvailable = commandSuggestions(
     "/",
     session.opened?.capabilities,
@@ -2340,6 +2348,9 @@ export function App() {
                         {...(recentWorkspaces[0]
                           ? { recentWorkspaceId: recentWorkspaces[0].id }
                           : {})}
+                        {...(workspaceBrowse
+                          ? { browse: workspaceBrowse }
+                          : {})}
                         error={workspaceProduct.state.error}
                         creating={
                           session.status === "connecting" ||
@@ -3236,6 +3247,7 @@ export function App() {
             {...(recentWorkspaces[0]
               ? { recentWorkspaceId: recentWorkspaces[0].id }
               : {})}
+            {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
             error={workspaceProduct.state.error}
             creating={
               session.status === "connecting" || workspaceProduct.transitioning

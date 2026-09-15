@@ -20,7 +20,8 @@
     "./autonomy": "./src/autonomy.ts",
     "./external-driver": "./src/external-driver.ts",
     "./external-driver-meta": "./src/external-driver-meta.ts",
-    "./onboarding": "./src/onboarding.ts"
+    "./onboarding": "./src/onboarding.ts",
+    "./workspace-browse": "./src/workspace-browse.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

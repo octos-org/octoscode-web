@@ -80,7 +80,31 @@ export {
   parseTokenCostUpdate,
   parseUiProtocolCapabilities,
 } from "./workspace.ts";
-export { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
+export {
+  APPUI_ONBOARDING_FEATURES,
+  APPUI_ONBOARDING_METHODS,
+} from "./onboarding-methods.ts";
+export {
+  parseWorkspaceCreateResult,
+  parseWorkspaceListResult,
+  supportsWorkspaceBrowse,
+  workspaceBrowseRefusal,
+  WORKSPACE_BROWSE_MAX_ENTRIES,
+  WORKSPACE_CREATE_REFUSAL_KINDS,
+  WORKSPACE_FOLDER_NAME_MAX_BYTES,
+  WORKSPACE_LIST_REFUSAL_KINDS,
+} from "./workspace-browse.ts";
+export type {
+  WorkspaceBrowseRefusal,
+  WorkspaceBrowseRefusalKind,
+  WorkspaceCreateParams,
+  WorkspaceCreateRefusalKind,
+  WorkspaceCreateResult,
+  WorkspaceFolderEntry,
+  WorkspaceListParams,
+  WorkspaceListRefusalKind,
+  WorkspaceListResult,
+} from "./workspace-browse.ts";
 export {
   parseLlmCatalogResult,
   parseLlmFetchModelsResult,
