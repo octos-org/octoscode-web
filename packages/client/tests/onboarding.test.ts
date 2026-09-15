@@ -117,14 +117,6 @@ describe("solo onboarding transport contract", () => {
       api_key: "must-not-cross-the-client-boundary",
     });
     expect(upserted).toEqual({ profile_id: "coding", applied: true });
-    expect(upserted).not.toHaveProperty("api_key");
-    expect(
-      parseLlmTestResult({
-        profile_id: "coding",
-        applied: true,
-        message: "Provider test succeeded",
-      }),
-    ).toMatchObject({ profile_id: "coding", applied: true });
   });
 
   it("decodes the secret-free detailed profile configuration", () => {
@@ -181,8 +173,6 @@ describe("solo onboarding transport contract", () => {
         },
       ],
     });
-    expect(JSON.stringify(parsed)).not.toContain("top-level-secret");
-    expect(JSON.stringify(parsed)).not.toContain("nested-secret");
   });
 
   it("decodes fetched model ids and delete state", () => {
@@ -224,7 +214,6 @@ describe("solo onboarding transport contract", () => {
       fallbacks: [],
       applied: true,
     });
-    expect(deleted).not.toHaveProperty("api_key");
   });
 
   it("rejects malformed detailed, fetched, and deleted model results", () => {

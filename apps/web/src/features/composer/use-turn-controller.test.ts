@@ -108,6 +108,9 @@ describe("useTurnController async authority", () => {
     expect(harness.controller.snapshot().active).not.toBeNull();
     expect(harness.controller.backgroundHandoffTurn()).toBeNull();
     expect(harness.controller.activeTurnOwnership()).toBe("dispatching");
+    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+    ]);
 
     start.resolve(undefined);
     await vi.waitFor(() => {
@@ -116,25 +119,10 @@ describe("useTurnController async authority", () => {
       );
       expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
     });
-  });
-
-  it("publishes dispatching and accepted only around the exact start ACK", async () => {
-    const start = deferred<void>();
-    const client = fakeClient({ start: () => start.promise });
-    const harness = renderController(client);
-
-    harness.controller.enqueuePrompt("ship it");
     expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
       "dispatching",
+      "accepted",
     ]);
-
-    start.resolve(undefined);
-    await vi.waitFor(() => {
-      expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
-        "dispatching",
-        "accepted",
-      ]);
-    });
   });
 
   it("rejects or locally cancels a dispatch without publishing acceptance", async () => {
@@ -812,7 +800,7 @@ describe("useTurnController async authority", () => {
     expect(harness.controller.activeTurnOwnership()).toBe("observed");
   });
 
-  it("restores exact transport ownership when a parked owner is reclaimed", () => {
+  it("replaces a reclaimed terminal lease when the same client starts another turn", async () => {
     const owner = fakeClient();
     const harness = renderController(owner);
 
@@ -822,22 +810,11 @@ describe("useTurnController async authority", () => {
         state: "completed",
       }),
     ).toBe(true);
-
     expect(harness.controller.backgroundHandoffTurn()).toEqual({
       turnId: "terminal-tail",
       state: "completed",
     });
     expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
-  });
-
-  it("replaces a reclaimed terminal lease when the same client starts another turn", async () => {
-    const owner = fakeClient();
-    const harness = renderController(owner);
-
-    harness.controller.restoreTransportOwnership({
-      turnId: "terminal-tail",
-      state: "completed",
-    });
     harness.controller.enqueuePrompt("continue on the reclaimed transport");
 
     await vi.waitFor(() => {

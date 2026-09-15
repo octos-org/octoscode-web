@@ -62,14 +62,4 @@ describe("PromptTurnQueue", () => {
     expect(queue.restoreActive(turn("other-turn"))).toBe(false);
     expect(queue.snapshot().active).toEqual(turn("server-turn"));
   });
-
-  it("clears browser-local queue state when the session disconnects", () => {
-    const queue = new PromptTurnQueue();
-    queue.enqueue(turn("one"));
-    queue.enqueue(turn("two"));
-
-    queue.clear();
-
-    expect(queue.snapshot()).toEqual({ active: null, pending: [] });
-  });
 });

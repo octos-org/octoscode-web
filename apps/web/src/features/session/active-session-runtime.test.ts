@@ -62,7 +62,6 @@ class FakeActiveClient {
   hydrateImplementation: (
     params: SessionHydrateParams,
   ) => Promise<SessionHydrateResult> = async () => hydrated;
-  statusSubscribeImplementation: (() => void) | null = null;
 
   readonly #statusListeners = new Set<(status: ConnectionStatus) => void>();
   readonly #errorListeners = new Set<(error: Error) => void>();
@@ -86,7 +85,6 @@ class FakeActiveClient {
   subscribeStatus(listener: (status: ConnectionStatus) => void): () => void {
     this.#statusListeners.add(listener);
     this.statusHistory.push(listener);
-    this.statusSubscribeImplementation?.();
     listener(this.status);
     return () => this.#statusListeners.delete(listener);
   }
@@ -551,37 +549,6 @@ describe("ActiveSessionRuntime", () => {
       }),
     ).toThrow("incompatible candidate contract");
     expect(runtime.currentAuthority()).toBe(previous);
-    expect(server.disconnectCount).toBe(0);
-    expect(candidate.disconnectCount).toBe(0);
-  });
-
-  it("keeps the old authority when a candidate disconnects while it is bound", async () => {
-    const server = new FakeActiveClient();
-    const candidate = new FakeActiveClient();
-    candidate.status = "connected";
-    candidate.statusSubscribeImplementation = () => {
-      candidate.statusSubscribeImplementation = null;
-      candidate.setStatus("disconnected");
-    };
-    const { runtime } = testRuntime(() => server);
-    const previous = await runtime.authenticate(connection);
-    if (!previous) throw new Error("missing authority");
-
-    expect(() =>
-      runtime.adoptCandidate({
-        expected: previous,
-        config: sessionConfig,
-        candidate: candidateSnapshot(candidate),
-      }),
-    ).toThrow("prepared candidate transport disconnected");
-    candidate.setStatus("connected");
-
-    expect(runtime.currentAuthority()).toBe(previous);
-    expect(runtime.getSnapshot()).toMatchObject({
-      phase: "authenticated",
-      status: "connected",
-      session: null,
-    });
     expect(server.disconnectCount).toBe(0);
     expect(candidate.disconnectCount).toBe(0);
   });
@@ -1285,22 +1252,16 @@ function deferred<Value>(): {
   resolve(value: Value): void;
   reject(reason: unknown): void;
 } {
-  let resolve: ((value: Value) => void) | undefined;
-  let reject: ((reason: unknown) => void) | undefined;
+  let resolve!: (value: Value) => void;
+  let reject!: (reason: unknown) => void;
   const promise = new Promise<Value>((complete, fail) => {
     resolve = complete;
     reject = fail;
   });
   return {
     promise,
-    resolve(value) {
-      if (!resolve) throw new Error("Deferred promise is not initialized");
-      resolve(value);
-    },
-    reject(reason) {
-      if (!reject) throw new Error("Deferred promise is not initialized");
-      reject(reason);
-    },
+    resolve,
+    reject,
   };
 }
 

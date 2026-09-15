@@ -33,13 +33,23 @@ or plugin execution. Those remain in `octos serve`.
   WebSocket query token because browsers cannot attach an Authorization header;
   avoid printing or retaining the resulting URL.
 
+## Keep changes small
+
+Trace the current callers before adding a guard, fallback, configuration option,
+or abstraction. Validate external input at its boundary; trust the resulting
+types and internal contracts. Do not hide programming errors behind successful
+defaults, or defend against states that only an invented mock can produce.
+Remove obsolete implementation and its tests together.
+
+For simplicity audits, apply [deslop](https://github.com/cursor/plugins/blob/main/cursor-team-kit/skills/deslop/SKILL.md)
+and [karpathy-guidelines](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md).
+Their testing examples do not require a new test for every change.
+
 ## Required checks
 
-Keep test additions proportionate:
-
-- Name the regression or invariant and check existing coverage before adding a
-  test. Prefer extending the owning test or fixture over another overlapping
-  suite.
+- A change need not add a test. Use existing checks when they already establish
+  the result. Before adding one, identify the observable failure it catches
+  and why existing coverage misses it.
 - Unit tests own protocol inputs, identity boundaries, algorithms and races.
   Browser tests own user flows, focus and rendering. Cover a behavior in both
   only when each catches a different failure.

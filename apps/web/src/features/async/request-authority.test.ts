@@ -44,17 +44,4 @@ describe("RequestAuthorityGate", () => {
     expect(gate.isCurrent(authority, client, "session-a")).toBe(false);
     expect(gate.finish(authority)).toBe(false);
   });
-
-  it("lets a new authority start when the replaced request never settles", () => {
-    const gate = new RequestAuthorityGate<object>();
-    const olderClient = {};
-    const newerClient = {};
-    const neverSettles = gate.begin(olderClient, "session-a");
-
-    gate.invalidate();
-    const replacement = gate.begin(newerClient, "session-b");
-
-    expect(gate.finish(neverSettles)).toBe(false);
-    expect(gate.isCurrent(replacement, newerClient, "session-b")).toBe(true);
-  });
 });

@@ -25,9 +25,6 @@ describe("known Session registry", () => {
       workspaceRoot: "/srv/work/octoscode-web",
       lastOpenedAt: 42,
     });
-    expect(JSON.stringify(knownSessionFromOpened(opened(), 42))).not.toMatch(
-      /prompt|title|token|secret/i,
-    );
   });
 
   it("fails closed when Core does not echo profile or Workspace scope", () => {

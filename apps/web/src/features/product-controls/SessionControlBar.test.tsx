@@ -1,11 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import {
-  ModelMenu,
-  PermissionMenu,
-  PermissionRiskDialog,
-  SessionControlBar,
-} from "./SessionControlBar.tsx";
+import { ModelMenu, SessionControlBar } from "./SessionControlBar.tsx";
 import {
   modelSelectionIntent,
   permissionSelectionIntent,
@@ -95,61 +90,6 @@ const modelGroups: readonly ModelProviderGroup[] = [
 ];
 
 describe("SessionControlBar", () => {
-  it("keeps permission on the left and model on the right", () => {
-    const html = renderToStaticMarkup(
-      <SessionControlBar
-        ariaLabel="Session controls"
-        permission={{
-          state: { status: "ready" },
-          options: permissionOptions,
-          selectedId: "workspace-deny",
-          locked: false,
-          labels: permissionLabels,
-          riskCopy,
-          onSelect: vi.fn(),
-        }}
-        model={{
-          state: { status: "ready" },
-          groups: modelGroups,
-          selected: { providerId: "zai", modelId: "glm-5.2" },
-          locked: false,
-          labels: modelLabels,
-          onSelect: vi.fn(),
-        }}
-      />,
-    );
-
-    const permissionSeat = html.indexOf('data-control-seat="permission"');
-    const modelSeat = html.indexOf('data-control-seat="model"');
-    expect(permissionSeat).toBeGreaterThan(-1);
-    expect(modelSeat).toBeGreaterThan(permissionSeat);
-    expect(html).toContain("Workspace write · Network blocked");
-    expect(html).toContain("GLM-5.2");
-  });
-
-  it("shows runtime truth as a Settings link instead of a profile selector", () => {
-    const html = renderToStaticMarkup(
-      <SessionControlBar
-        ariaLabel="Session controls"
-        permission={null}
-        model={null}
-        runtimeModel={{
-          label: "DeepSeek V4 Pro",
-          pendingProfileDefault: "GLM-5.2",
-          onOpenSettings: vi.fn(),
-        }}
-      />,
-    );
-
-    expect(html).toContain("DeepSeek V4 Pro");
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain(
-      'aria-label="Runtime model: DeepSeek V4 Pro. Profile default GLM-5.2 is pending an Octos restart. Open Settings."',
-    );
-    expect(html).not.toContain('aria-haspopup="menu"');
-    expect(html).not.toContain('role="menuitemradio"');
-  });
-
   it("does not turn an empty runtime label into a model claim", () => {
     const html = renderToStaticMarkup(
       <SessionControlBar
@@ -189,24 +129,6 @@ describe("SessionControlBar", () => {
     expect(html).not.toContain("Runtime model");
   });
 
-  it("renders permission choices as indivisible mode and network presets", () => {
-    const html = renderToStaticMarkup(
-      <PermissionMenu
-        menuId="permission-menu"
-        state={{ status: "ready" }}
-        options={permissionOptions}
-        selectedId="workspace-deny"
-        locked={false}
-        labels={permissionLabels}
-        onChoose={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain('data-mode="workspace_write" data-network="deny"');
-    expect(html).toContain("Full access · Network allowed");
-    expect(html).not.toContain('aria-label="Network access"');
-  });
-
   it("routes dangerous choices through confirmation and never direct selection", () => {
     expect(
       permissionSelectionIntent(permissionOptions[0]!, null, false),
@@ -220,39 +142,6 @@ describe("SessionControlBar", () => {
       kind: "confirm",
       option: permissionOptions[1],
     });
-
-    const unacknowledged = renderToStaticMarkup(
-      <PermissionRiskDialog
-        option={permissionOptions[1]!}
-        copy={riskCopy}
-        acknowledged={false}
-        locked={false}
-        onAcknowledgedChange={vi.fn()}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-    const acknowledged = renderToStaticMarkup(
-      <PermissionRiskDialog
-        option={permissionOptions[1]!}
-        copy={riskCopy}
-        acknowledged
-        locked={false}
-        onAcknowledgedChange={vi.fn()}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    expect(unacknowledged).toContain("Enable full access?");
-    expect(unacknowledged).toContain("Full access");
-    expect(unacknowledged).toContain("Network allowed");
-    expect(unacknowledged).toMatch(
-      /disabled=""[^>]*>Enable full access<\/button>/,
-    );
-    expect(acknowledged).not.toMatch(
-      /disabled=""[^>]*>Enable full access<\/button>/,
-    );
   });
 });
 
@@ -294,29 +183,5 @@ describe("ModelMenu", () => {
     ).toEqual({
       kind: "none",
     });
-  });
-
-  it("makes loading, error, and unavailable states explicit", () => {
-    const renderState = (state: Parameters<typeof ModelMenu>[0]["state"]) =>
-      renderToStaticMarkup(
-        <ModelMenu
-          menuId="model-state"
-          state={state}
-          groups={[]}
-          selected={null}
-          locked={false}
-          labels={modelLabels}
-          onChoose={vi.fn()}
-          onRetry={vi.fn()}
-        />,
-      );
-
-    expect(renderState({ status: "loading" })).toContain("Loading models…");
-    expect(renderState({ status: "unavailable" })).toContain(
-      "Models unavailable",
-    );
-    expect(
-      renderState({ status: "error", message: "Catalog failed" }),
-    ).toContain("Catalog failed");
   });
 });

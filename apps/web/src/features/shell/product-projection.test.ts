@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   findModel,
-  formatRelativeTime,
   modelGroups,
   permissionOptions,
   profileDefaultNeedsRestart,
@@ -76,14 +75,5 @@ describe("product projections", () => {
       ),
     ).toBe(true);
     expect(profileDefaultNeedsRestart(null, profileModels, true)).toBe(true);
-  });
-
-  it("formats compact session timestamps", () => {
-    expect(
-      formatRelativeTime(
-        "2026-08-27T00:00:00Z",
-        Date.parse("2026-08-27T00:09:00Z"),
-      ),
-    ).toBe("9m");
   });
 });

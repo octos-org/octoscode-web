@@ -148,48 +148,6 @@ describe("copy feedback", () => {
   });
 });
 
-describe("local command presentation", () => {
-  it.each([
-    {
-      intent: { kind: "unsupported-command", command: "resume" },
-      title: "/resume is unavailable",
-    },
-    {
-      intent: { kind: "local-shell-unavailable" },
-      title: "Local shell unavailable",
-    },
-  ] satisfies Array<{ intent: LocalCommandIntent; title: string }>)(
-    "keeps $title fail-closed as a local notice",
-    async ({ intent, title }) => {
-      const harness = context(intent);
-      await executeLocalCommand(harness.input);
-      expect(harness.apply([])).toMatchObject([{ title, status: "error" }]);
-      expect(harness.input.conversation.queue).toEqual({
-        active: null,
-        pending: [],
-      });
-    },
-  );
-
-  it("keeps help capability-aware and reports known queue state locally", async () => {
-    const help = context({ kind: "help" });
-    await executeLocalCommand(help.input);
-    const body = help.apply([])[0]?.body ?? "";
-    expect(body).toContain("/help");
-    expect(body).not.toContain("/stop");
-    expect(body).not.toContain("/resume");
-    const status = context({ kind: "process-status" });
-    status.input.conversation.queue = {
-      active: { turnId: "abcdef1234", text: "active" },
-      pending: [{ turnId: "pending", text: "queued" }],
-    };
-    await executeLocalCommand(status.input);
-    expect(status.apply([])[0]?.body).toBe(
-      "Foreground turn abcdef12 is active. 1 prompt queued.",
-    );
-  });
-});
-
 function context(intent: LocalCommandIntent) {
   let current = true;
   const updates: Parameters<

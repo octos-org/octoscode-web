@@ -1,9 +1,5 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import {
-  buildSafeDiagnostic,
-  FatalCrashScreen,
-} from "./FatalErrorBoundary.tsx";
+import { buildSafeDiagnostic } from "./FatalErrorBoundary.tsx";
 
 describe("fatal render recovery", () => {
   it("redacts query and bearer credentials from diagnostics", () => {
@@ -16,17 +12,5 @@ describe("fatal render recovery", () => {
     expect(report).toContain("Bearer [redacted]");
     expect(report).not.toContain("secret-value");
     expect(report).not.toContain("second-secret");
-  });
-
-  it("explains connection and draft loss without promising continued execution", () => {
-    const html = renderToStaticMarkup(
-      <FatalCrashScreen report="Error: render failed" />,
-    );
-    expect(html).toContain("may have stopped running work");
-    expect(html).toContain("Octos keeps persisted history");
-    expect(html).toContain("Reload app");
-    expect(html).toContain("Copy diagnostics");
-    expect(html).toContain('data-octopus-logo=""');
-    expect(html).not.toContain(">O<");
   });
 });

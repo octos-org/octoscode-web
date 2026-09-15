@@ -151,7 +151,6 @@ export function App() {
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
-        50,
         loadComposerDrafts(browserStorage("sessionStorage"), connection),
       ),
   );

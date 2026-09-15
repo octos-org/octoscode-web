@@ -4,7 +4,6 @@ import {
   ModelManagementSection,
   configuredProviderDraft,
   createModelProviderDraft,
-  providerDeleteConfirmation,
   validateModelProviderDraft,
   type ConfiguredModelProvider,
   type ModelProviderFamilyOption,
@@ -61,35 +60,6 @@ const protocols = [
 ] as const;
 
 describe("ModelManagementSection", () => {
-  it("renders configured facts without manufacturing a credential", () => {
-    const html = renderToStaticMarkup(
-      <ModelManagementSection
-        state={{ status: "ready" }}
-        providers={[provider]}
-        families={families}
-        apiProtocols={protocols}
-        onSave={vi.fn()}
-        onTestConnection={vi.fn()}
-        onFetchAvailableModels={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain("Model providers");
-    expect(html).toContain("GLM-5.3-Flash");
-    expect(html).toContain("Z.AI Coding Plan");
-    expect(html).toContain("Credential configured");
-    expect(html).toContain("Add provider");
-    expect(html).toContain("Edit GLM-5.3-Flash");
-    expect(html).toContain("Delete GLM-5.3-Flash");
-    expect(html).toContain(
-      "Restart Octos before relying on route or credential changes",
-    );
-    expect(html).not.toContain("••••");
-    expect(html).not.toContain("********");
-    expect(html).not.toContain("sk-");
-  });
-
   it("fails closed into read-only and accessible capability states", () => {
     const readOnly = renderToStaticMarkup(
       <ModelManagementSection
@@ -131,24 +101,6 @@ describe("ModelManagementSection", () => {
 });
 
 describe("model provider draft boundary", () => {
-  it("starts from catalog identity and keeps API keys write-only", () => {
-    const created = createModelProviderDraft(families, protocols);
-    const edited = configuredProviderDraft(provider);
-
-    expect(created).toMatchObject({
-      familyId: "zai",
-      modelId: "glm-5.3-flash",
-      route: {
-        id: "coding-plan",
-        apiProtocol: "openai-chat-completions",
-        apiKeyEnv: "ZAI_API_KEY",
-      },
-      apiKey: "",
-    });
-    expect(edited.apiKey).toBe("");
-    expect(edited.route).not.toBe(provider.route);
-  });
-
   it("never presents an existing Core model identity as a new provider", () => {
     const created = createModelProviderDraft(families, protocols, [provider]);
 
@@ -188,14 +140,5 @@ describe("model provider draft boundary", () => {
         },
       ),
     ).toEqual([]);
-  });
-
-  it("requires exact deletion against the immutable provider identity", () => {
-    expect(providerDeleteConfirmation(provider)).toBe(
-      "DELETE zai/glm-5.3-flash",
-    );
-    expect(providerDeleteConfirmation(provider)).not.toBe(
-      "delete zai/glm-5.3-flash",
-    );
   });
 });

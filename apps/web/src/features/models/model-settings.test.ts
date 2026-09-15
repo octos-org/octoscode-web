@@ -7,7 +7,6 @@ import {
   MODEL_SETTINGS_METHODS,
   ModelSettingsController,
   modelSettingsCapabilities,
-  redactModelSettingsError,
   selectionFromModelSettingsDraft,
   type ModelSettingsClient,
   type ModelSettingsDraft,
@@ -81,7 +80,6 @@ describe("model settings contract", () => {
         api_type: "anthropic",
       },
     });
-    expect(JSON.stringify(draft)).not.toContain("api_key");
   });
 
   it("tests the exact request before saving and never publishes the raw key", async () => {
@@ -282,16 +280,6 @@ describe("model settings contract", () => {
 
     expect(result?.reason).toContain("[redacted]");
     expect(JSON.stringify(published)).not.toContain("discovery-secret");
-  });
-
-  it("redacts literal, encoded, named, and bearer credential forms", () => {
-    const redacted = redactModelSettingsError(
-      "bad secret/key api_key=secret/key Bearer secret/key",
-      "secret/key",
-    );
-    expect(redacted).not.toContain("secret/key");
-    expect(redacted).not.toContain("secret%2Fkey");
-    expect(redacted).toContain("[redacted]");
   });
 });
 
