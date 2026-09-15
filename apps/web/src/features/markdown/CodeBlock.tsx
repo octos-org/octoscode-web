@@ -13,7 +13,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  grammarLoadCount,
+  isGrammarLoaded,
   highlightToHtml,
   subscribeGrammarLoaded,
 } from "./highlight.ts";
@@ -24,15 +24,31 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ code, language }: CodeBlockProps) {
+  const blockRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const block = blockRef.current!;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { root: block.closest(".conversation-scroll"), rootMargin: "200px 0px" },
+    );
+    observer.observe(block);
+    return () => observer.disconnect();
+  }, []);
   const trimmed = code.endsWith("\n") ? code.slice(0, -1) : code;
   const loaded = useSyncExternalStore(
     subscribeGrammarLoaded,
-    grammarLoadCount,
-    grammarLoadCount,
+    () => isGrammarLoaded(language),
+    () => false,
   );
   const html = useMemo(
-    () => highlightToHtml(trimmed, language),
-    [trimmed, language, loaded],
+    () => (visible ? highlightToHtml(trimmed, language) : undefined),
+    [trimmed, language, loaded, visible],
   );
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -70,7 +86,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   };
 
   return (
-    <div className="md-code-block">
+    <div ref={blockRef} className="md-code-block">
       <div className="md-code-banner">
         <span>{language ?? "text"}</span>
         <button
@@ -87,13 +103,18 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           Could not copy. Select the code to copy it, or try again.
         </div>
       ) : null}
-      {html ? (
-        <div dangerouslySetInnerHTML={{ __html: html }} />
-      ) : (
-        <pre className="md-code-plain">
+      <pre
+        className={
+          html ? "shiki shiki-bg shiki-color-foreground" : "md-code-plain"
+        }
+        tabIndex={0}
+      >
+        {html ? (
+          <code dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
           <code>{trimmed}</code>
-        </pre>
-      )}
+        )}
+      </pre>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { SessionOpened } from "@octos-org/octoscode-client";
 import type { KnownSessionRef } from "../session/known-session-registry.ts";
+import type { TimelineEntry } from "../timeline/model.ts";
 import {
   workspaceName,
   type RecentWorkspace,
@@ -29,6 +30,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   recoveryPhase: string | null;
   activeTurnId: string | null;
   turnStarting: boolean;
+  timeline: readonly TimelineEntry[];
 }
 
 /** Session rows are presentation of server-confirmed references in this tab. */
@@ -43,10 +45,44 @@ export function SessionSidebar({
   recoveryPhase,
   activeTurnId,
   turnStarting,
+  timeline,
   selectedSessionId,
   ...sidebarProps
 }: SessionSidebarProps) {
+  const terminal = useMemo(
+    () => timeline.findLast((entry) => entry.latestTurnOutcome),
+    [timeline],
+  );
   const workspaces = useMemo(() => {
+    let activeStatus: Pick<ProductSidebarSession, "status" | "statusLabel"> =
+      {};
+    if (hasPendingInteraction) {
+      activeStatus = { status: "waiting", statusLabel: "Waiting for input" };
+    } else if (recoveryPhase) {
+      activeStatus = {
+        status: "waiting",
+        statusLabel:
+          recoveryPhase === "checking"
+            ? "Checking response status"
+            : "Response status uncertain",
+      };
+    } else if (activeTurnId) {
+      activeStatus = {
+        status: "running",
+        statusLabel: turnStarting ? "Starting" : "Working",
+      };
+    } else if (terminal) {
+      activeStatus = {
+        status:
+          terminal.latestTurnOutcome === "completed" ? "completed" : "failed",
+        statusLabel:
+          terminal.latestTurnOutcome === "completed"
+            ? "Completed"
+            : terminal.latestTurnOutcome === "interrupted"
+              ? "Stopped"
+              : "Failed",
+      };
+    }
     const backgroundBySession = new Map(
       backgroundTurns.map((turn) => [
         workspaceSessionKey(turn.workspaceRoot, turn.profileId, turn.sessionId),
@@ -107,27 +143,11 @@ export function SessionSidebar({
             title: item.title,
             ...(updatedLabel ? { updatedLabel } : {}),
             ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
-            ...(active && hasPendingInteraction
-              ? {
-                  status: "waiting" as const,
-                  statusLabel: "Waiting for input",
-                }
-              : active && recoveryPhase
-                ? {
-                    status: "waiting" as const,
-                    statusLabel:
-                      recoveryPhase === "checking"
-                        ? "Checking response status"
-                        : "Response status uncertain",
-                  }
-                : active && activeTurnId
-                  ? {
-                      status: "running" as const,
-                      statusLabel: turnStarting ? "Starting" : "Working",
-                    }
-                  : background
-                    ? backgroundSessionStatus(background.state)
-                    : {}),
+            ...(active
+              ? activeStatus
+              : background
+                ? backgroundSessionStatus(background.state)
+                : {}),
           };
         }),
       };
@@ -145,6 +165,7 @@ export function SessionSidebar({
     turnStarting,
     backgroundTurns,
     opened,
+    terminal,
   ]);
 
   return (
@@ -174,13 +195,7 @@ function knownSessionWorkspaces(
   );
   for (const session of sessions) {
     const current = projected.get(session.workspaceRoot);
-    if (current) {
-      current.lastOpenedAt = Math.max(
-        current.lastOpenedAt,
-        session.lastOpenedAt,
-      );
-      continue;
-    }
+    if (current) continue;
     projected.set(session.workspaceRoot, {
       id: session.workspaceRoot,
       name: workspaceName(session.workspaceRoot),
@@ -196,9 +211,7 @@ function knownSessionWorkspaces(
       lastOpenedAt: Date.now(),
     });
   }
-  return [...projected.values()].sort(
-    (left, right) => right.lastOpenedAt - left.lastOpenedAt,
-  );
+  return [...projected.values()];
 }
 
 function knownSessionTitle(sessionId: string): string {

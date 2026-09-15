@@ -1,4 +1,5 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
+import { SkeletonRows } from "../../ui/Skeleton.tsx";
 import type { AttentionSettings } from "../attention/desktop-notifications.ts";
 import { SettingsDialog } from "../product-controls/SettingsDialog.tsx";
 import type {
@@ -73,6 +74,12 @@ export function SettingsView({
     await models.select(target);
     await onModelsChanged();
   };
+  const loading = (
+    <div role="status">
+      <SkeletonRows rows={6} />
+      <span className="sr-only">Loading settings…</span>
+    </div>
+  );
   return (
     <SettingsDialog
       open
@@ -80,62 +87,66 @@ export function SettingsView({
       labels={SETTINGS_LABELS}
       slots={{
         general: (
-          <GeneralSettingsContent
-            {...(session.opened?.active_profile_id &&
-            session.opened.workspace_root
-              ? {
-                  sessionReference: {
-                    workspaceRoot: session.opened.workspace_root,
-                    profileId: session.opened.active_profile_id,
-                    sessionId: session.opened.session_id,
+          <Suspense fallback={loading}>
+            <GeneralSettingsContent
+              {...(session.opened?.active_profile_id &&
+              session.opened.workspace_root
+                ? {
+                    sessionReference: {
+                      workspaceRoot: session.opened.workspace_root,
+                      profileId: session.opened.active_profile_id,
+                      sessionId: session.opened.session_id,
+                    },
+                  }
+                : {})}
+              {...(attentionSettings ? { attentionSettings } : {})}
+              serverOrigin={serverOrigin}
+              connectionStatus={session.status}
+              workspaceLabel={
+                workspacePath ? workspaceName(workspacePath) : null
+              }
+              workspacePath={workspacePath || null}
+              displayProfile={session.opened?.active_profile_id ?? null}
+              locked={locked}
+              onDisconnect={onDisconnect}
+              onForgetConnection={onForgetConnection}
+              onCopyDiagnostics={() => {
+                // Redacted by construction: origin only (never the
+                // token, never the WS query string), plus state the
+                // settings screen already displays.
+                const snapshot = {
+                  generated_at: new Date().toISOString(),
+                  user_agent: navigator.userAgent,
+                  connection: {
+                    endpoint: serverOrigin,
+                    status: session.status,
+                    error: session.error ?? null,
+                    recovery: session.recovery,
                   },
-                }
-              : {})}
-            {...(attentionSettings ? { attentionSettings } : {})}
-            serverOrigin={serverOrigin}
-            connectionStatus={session.status}
-            workspaceLabel={workspacePath ? workspaceName(workspacePath) : null}
-            workspacePath={workspacePath || null}
-            displayProfile={session.opened?.active_profile_id ?? null}
-            locked={locked}
-            onDisconnect={onDisconnect}
-            onForgetConnection={onForgetConnection}
-            onCopyDiagnostics={() => {
-              // Redacted by construction: origin only (never the
-              // token, never the WS query string), plus state the
-              // settings screen already displays.
-              const snapshot = {
-                generated_at: new Date().toISOString(),
-                user_agent: navigator.userAgent,
-                connection: {
-                  endpoint: serverOrigin,
-                  status: session.status,
-                  error: session.error ?? null,
-                  recovery: session.recovery,
-                },
-                // Runtime lifecycle ring — newest-last entries of
-                // {at, kind, detail?}: method names and recovery
-                // phases only, never task output or params.
-                diagnostics: session.diagnostics,
-                session: session.opened
-                  ? {
-                      session_id: session.opened.session_id,
-                      active_profile_id:
-                        session.opened.active_profile_id ?? null,
-                      capabilities: session.opened.capabilities ?? null,
-                    }
-                  : null,
-              };
-              return navigator.clipboard.writeText(
-                JSON.stringify(snapshot, null, 2),
-              );
-            }}
-          />
+                  // Runtime lifecycle ring — newest-last entries of
+                  // {at, kind, detail?}: method names and recovery
+                  // phases only, never task output or params.
+                  diagnostics: session.diagnostics,
+                  session: session.opened
+                    ? {
+                        session_id: session.opened.session_id,
+                        active_profile_id:
+                          session.opened.active_profile_id ?? null,
+                        capabilities: session.opened.capabilities ?? null,
+                      }
+                    : null,
+                };
+                return navigator.clipboard.writeText(
+                  JSON.stringify(snapshot, null, 2),
+                );
+              }}
+            />
+          </Suspense>
         ),
         ...(showModelsSettings
           ? {
               models: (
-                <>
+                <Suspense fallback={loading}>
                   {models.state.available ? (
                     <ModelsSettingsContent
                       state={modelControlState(models.state)}
@@ -158,7 +169,7 @@ export function SettingsView({
                     locked={modelChangesLocked}
                     onConfiguredModelsChange={models.refresh}
                   />
-                </>
+                </Suspense>
               ),
             }
           : {}),

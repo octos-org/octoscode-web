@@ -1021,7 +1021,7 @@ export function ProductSidebarViewOptionsMenu(
         Sort by
       </div>
       <div role="group" aria-label="Sort sessions by">
-        {(["updated", "oldest"] as const).map((order) => (
+        {(["manual", "updated", "oldest"] as const).map((order) => (
           <button
             key={order}
             type="button"
@@ -1034,7 +1034,11 @@ export function ProductSidebarViewOptionsMenu(
             }}
           >
             <span>
-              {order === "updated" ? "Last opened" : "Least recently opened"}
+              {order === "manual"
+                ? "Fixed order"
+                : order === "updated"
+                  ? "Last opened"
+                  : "Least recently opened"}
             </span>
             {orderMode === order ? <CheckIcon /> : null}
           </button>

@@ -7,13 +7,17 @@ import {
 import {
   foldNotification,
   timelineFromHydrate,
+  withHydratedTurnOutcome,
   type TimelineEntry,
 } from "./model.ts";
 
 export function timelineFromCanonicalHydrate(
   result: SessionHydrateResult,
 ): TimelineEntry[] {
-  return restoreCanonicalHydrate(result, timelineFromHydrate(result));
+  return withHydratedTurnOutcome(
+    restoreCanonicalHydrate(result, timelineFromHydrate(result)),
+    result,
+  );
 }
 
 /**

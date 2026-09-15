@@ -52,7 +52,7 @@ export function parseKnownSessionRegistry(value: unknown): KnownSessionRef[] {
   return canonicalize(parsed as KnownSessionRef[]);
 }
 
-/** Upsert only a server-confirmed Session and retain a bounded LRU projection. */
+/** Refresh recency without moving an existing Session's navigation position. */
 export function rememberKnownSession(
   current: readonly KnownSessionRef[],
   opened: SessionOpened,
@@ -61,10 +61,14 @@ export function rememberKnownSession(
   const next = knownSessionFromOpened(opened, now);
   if (!next) return canonicalize(current);
   const nextKey = knownSessionKey(next);
-  return canonicalize([
-    next,
-    ...current.filter((entry) => knownSessionKey(entry) !== nextKey),
-  ]);
+  const existing = current.some((entry) => knownSessionKey(entry) === nextKey);
+  return canonicalize(
+    existing
+      ? current.map((entry) =>
+          knownSessionKey(entry) === nextKey ? next : entry,
+        )
+      : [next, ...current],
+  );
 }
 
 /** The compatibility identity is a tuple until Core provides an opaque SessionRef. */
@@ -80,12 +84,18 @@ export function knownSessionKey(
 
 function canonicalize(entries: readonly KnownSessionRef[]): KnownSessionRef[] {
   const byKey = new Map<string, KnownSessionRef>();
-  for (const entry of [...entries].sort(compareRecency)) {
-    const parsed = parseKnownSession(entry);
-    if (!parsed) continue;
-    const key = knownSessionKey(parsed);
-    if (!byKey.has(key)) byKey.set(key, parsed);
-    if (byKey.size >= MAX_KNOWN_SESSIONS) break;
+  for (const entry of entries) {
+    const key = knownSessionKey(entry);
+    const previous = byKey.get(key);
+    if (!previous || entry.lastOpenedAt > previous.lastOpenedAt) {
+      byKey.set(key, entry);
+    }
+  }
+  const expired = [...byKey.values()]
+    .sort(compareRecency)
+    .slice(MAX_KNOWN_SESSIONS);
+  for (const entry of expired) {
+    byKey.delete(knownSessionKey(entry));
   }
   return [...byKey.values()];
 }
