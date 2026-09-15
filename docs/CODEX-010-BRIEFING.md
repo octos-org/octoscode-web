@@ -1,63 +1,83 @@
-# Codex 0.10 发布协作 Briefing
+# octoscode-web — Codex 0.10 审计邀请
 
-> 2026-09-15
-> · 给 Codex 的 0.10 发布冲刺任务书你的任务：高强度验证 + 测试 + 修复细节问题我们的分工：你修 bug，我跑审计 subagent 并提交发现
+> 2026-09-15 · 你的角色：**零上下文审计 + 验证我们的解决方案**
+> 我们不需要你修 bug。我们需要你确认我们的修复是正确的，并从全新视角找出我们遗漏的问题。
 
 ---
 
-## 当前状态
+## 这是什么
 
-- main = `949d521` + PR #89（theme toggle）待合
-- 466 单元 + 97 e2e，全绿
-- JS 预算 353KB（余量 ~2.2KB）
-- 21 open issues（含 #78 P1 刷新丢 turn、#83 P1 新浏览器无 session）
+octoscode-web 是 Octos coding UI
+Protocol 的浏览器客户端。浏览器不拥有 agent 真相——一切由本地 `octos serve`
+通过 WebSocket UI Protocol 提供。
 
-## 你的任务
+- pnpm workspace：`apps/web`（React 19 + Vite + CSS Module）+
+  `packages/client`（无 React 协议库）
+- 部署：nginx 静态 + `/api/` 反代；CSP
+  `connect-src 'self'`（安全边界，不要放松）
+- `pnpm check` = 格式 + 策略(2877 行 CSS 预算) + 许可 + lint + 类型 +
+  **466 单元测试** + 构建 + 部署产物
+- `pnpm test:e2e` = 97 项（含 axe a11y、视觉基线、LoAF <200ms 帧预算、键盘导航）
 
-### 1. CLS / Layout shift 修复
+## 我们最近解决了什么（请验证）
 
-用户反馈"各种界面加载时大小和实际大小不一样很难受"。具体来源：
+### Timeline 体验重建（#71-#77）
 
-- `DeferredSurface` fallback 无尺寸预留
-- `contain-intrinsic-size: auto 120px` 可能不匹配实际条目高度
-- `<details>` 展开/收起时周围元素跳动
-- lazy-loaded chunk 到达时 DOM 结构变化
+**解决了**：发送消息后到首个内容之间的视觉真空、reasoning/tool/assistant 无时序关系、tool 输出占满全屏。
 
-修法方向：给 Suspense fallback 加正确的 `min-height`；用
-`content-visibility: auto` 的 `contain-intrinsic-size` 调到实测值；`<details>`
-用 CSS `interpolate-size` 平滑过渡。
+方案：reasoning 按 tool 边界分段（`reasoning:{turnId}:{toolCount}`）；`<details>`
+折叠块（流式 open、完成 collapse）；tool 输出 500 char cap；`turn_terminal`
+sweep 全匹配分段 ID；CSS 动效层（`interpolate-size` + `::details-content`
+transition，`cubic-bezier(0.16,1,0.3,1)` 全覆盖）。
 
-### 2. 细节问题清单
+**请验证**：折叠/展开动画是否在所有浏览器正常；`::details-content`
+fallback 是否可接受；分段 reasoning 的 ID 生成是否有边界 case。
 
-我们的审计 subagent 正在跑，产出会追加到本文件下方。已知问题：
+### 深度思考指示器（#74 + 修复）
 
-- origin 预填硬编码 `:50080`（应默认空或用 `window.location.origin`）
-- assistant 行宽 ~100ch（应限制在 65-75ch）
-- 空 assistant 条目渲染 "No output yet"
-- "Turn complete" + "completed" 语义重复
-- Stop + 禁用箭头双 affordance
-- 空态文案泄露 "durable projection events" 实现词汇
+**解决了**：发送后无反馈。从 turn controller 的 `activeTurnId`
+派生——活跃 turn 且时间线无 reasoning/tool 条目时显示脉动 "Deep diving…"。
 
-### 3. 发布阻塞标准
+**请验证**：指示器在所有场景下正确出现/消失——特别是不该出现的时机（tool 已在跑时、turn 已完成时）。
 
-以下必须全绿才能发 0.10：
+### 暗色模式手动切换（#89）
 
-- `pnpm check` 全过
-- `pnpm test:e2e` 全过
-- CLS < 0.1（用 PerformanceObserver layout-shift 测量）
-- 暗色/亮色/系统三种模式无布局破损
-- 320px 手机宽度无水平溢出
-- 键盘 Tab 全可达
+**解决了**：只有 `prefers-color-scheme` 无法手动切换。加了 sidebar
+footer 循环按钮（System→Dark→Light），`data-theme`
+属性覆盖 OS 媒体查询，persisted to localStorage。
 
-### 4. 注意事项
+**请验证**：三种模式切换后所有界面无布局破损；`data-theme` 与
+`prefers-color-scheme` 交互无冲突。
 
-- `pnpm check` 里的 styles.css 行数预算是 2877，新样式放 CSS Module
-- JS 预算 353KB，不要上调——用 lazy loading 解决
-- 不要动 `packages/client`（除非协议变更）
-- 不要改 `deploy/nginx.conf`（CSP 是安全边界）
-- 视觉基线重生成走 CI dispatch（`workflow_dispatch` +
-  `update_visual_snapshots=true`）
+### 可靠性大修（#87，由前一轮 agent 完成）
 
-## 审计发现（追加区）
+**解决了**：Settings chunk
+503 卸载整个 app（SurfaceBoundary 隔离）；断线重连竞态；transcript
+200 条截断（"Show earlier
+messages" 展开已收数据）；IME/radio 焦点逃逸；跨会话晚到剪贴板结果。
 
-（审计 subagent 产出后追加到这里）
+**请验证**：`SurfaceBoundary` 是否正确隔离所有 lazy-loaded feature；history
+expansion 是否保持滚动位置；`/copy` 的异步结果是否锁定到原会话。
+
+### 行宽 + 复制清理（#90）
+
+**解决了**：assistant 正文 65ch 上限；tool 空条目移除 "No output
+yet"；空态文案去实现词汇。
+
+## 已知边界（我们无法修的）
+
+这些是 Core rc.9 限制，**不是前端 bug**——审计者不应视为 octoscode-web 缺陷：
+
+1. 刷新杀死运行中 turn（Core 无 detached execution）
+2. 无 post-turn release signal（owner socket 无法安全释放）
+3. `session/list({cwd})` 可能误路由（octos#2146）
+4. 新浏览器看不到已有 session（依赖 sessionStorage per-tab）
+
+## 请你做的事
+
+1. **零上下文使用 30 分钟**：连接 → 发消息 → 观察 timeline 全流程 → 切暗色/亮色 → 刷新恢复 → 手机宽度。记录任何你觉得不对的地方。
+2. **代码审计**：重点看 `model.ts` 的 fold/sweep 函数（事件→条目的纯函数转换）和
+   `SurfaceBoundary` 的错误隔离。
+3. **协议审计**：`packages/client/src/wire-decoders.ts` +
+   `projection.ts`——是否有输入空间未被覆盖。
+4. **回答一个问题**：如果你要在 0.10 发布前再加一个修复，你会加什么？（只要一个）
