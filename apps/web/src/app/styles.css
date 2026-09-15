@@ -1087,6 +1087,10 @@ label > span {
   color: var(--dsw-alias-label-tertiary);
 }
 
+.entry-assistant .entry-content {
+  max-width: 65ch;
+}
+
 .entry-system .entry-content {
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
