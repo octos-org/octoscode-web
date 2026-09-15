@@ -96,8 +96,10 @@ test("holds twelve browser turns and three browser-started native peers on one p
   try {
     await connectAndStartWorkspace(page, cwd);
     const sidebar = productNavigation(page);
+    // v0.10.0 renders the workspace tree item as a <div role="treeitem">
+    // (it was a <section> before). Match the ARIA role, not the tag.
     const workspace = sidebar.locator(
-      'section[role="treeitem"][aria-label="twelve-plus-peers"]',
+      '[role="treeitem"][aria-label="twelve-plus-peers"]',
     );
     const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
     const sessionByMarker = new Map<string, string>();

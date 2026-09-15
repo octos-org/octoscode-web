@@ -29,6 +29,10 @@ import {
   timelineFromHydrate,
   type TimelineEntry,
 } from "../timeline/model.ts";
+import {
+  canonicalHydrate,
+  prepareCanonicalHydrate,
+} from "../timeline/canonical-hydrate-loader.ts";
 import type { SessionConnectionInput } from "./connection-lifecycle.ts";
 import {
   SessionInteractionLedger,
@@ -280,6 +284,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       },
       validateServerCapabilities: this.#options.validateServerCapabilities,
       validateSessionCapabilities: this.#options.validateSessionCapabilities,
+      // Core #2296: a hydrate that retains canonical replay must have the
+      // restorer resolved BEFORE the (synchronous) transcript reducer runs.
+      prepareHydrate: prepareCanonicalHydrate,
       ...(this.#options.isFatalSessionError
         ? { isFatalSessionError: this.#options.isFatalSessionError }
         : {}),
@@ -514,6 +521,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
           throw new Error("session/open returned another workspace root");
         }
       },
+      // Core #2296: resolve the canonical restorer while the candidate is
+      // still staging, so the first transcript this record builds is complete.
+      prepareHydrate: prepareCanonicalHydrate,
     });
     // Verify the pool and epoch again after the async prepare, before commit.
     let candidate;
@@ -1056,7 +1066,10 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       ]) {
         if (turn) ownThread(turn.turnId, turn.turnId);
       }
-      record.timeline = timelineFromHydrate(
+      // Canonical replay rebuilds the complete thread (the original prompt
+      // included); a compacted/legacy hydrate keeps the durable projection.
+      const buildTimeline = canonicalHydrate() ?? timelineFromHydrate;
+      record.timeline = buildTimeline(
         {
           ...event.hydrated,
           messages: (event.hydrated.messages ?? []).map((message) => {
