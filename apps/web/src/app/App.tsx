@@ -1339,7 +1339,7 @@ export function App() {
         <SurfaceBoundary
           name="Settings"
           onDismiss={() => setSettingsOpen(false)}
-          fallback={<DeferredSurface label="Loading settings…" />}
+          fallback={<DeferredSurface label="Loading settings…" wide />}
         >
           <SettingsDialog
             open
@@ -1502,10 +1502,14 @@ export function App() {
   );
 }
 
-function DeferredSurface({ label }: { label: string }) {
+function DeferredSurface({ label, wide }: { label: string; wide?: boolean }) {
   return (
-    <div className={productStyles.deferredSurface} role="status">
-      <SkeletonRows rows={3} />
+    <div
+      className={productStyles.deferredSurface}
+      role="status"
+      style={wide ? { minHeight: "min(60vh, 480px)" } : undefined}
+    >
+      <SkeletonRows rows={wide ? 12 : 3} />
       <span className="sr-only">{label}</span>
     </div>
   );
