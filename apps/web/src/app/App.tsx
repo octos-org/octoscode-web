@@ -472,6 +472,14 @@ export function App() {
         session.opened.session_id,
       )
     : null;
+  const openingSession = workspaceProduct.openingSession;
+  const openingSessionKey = openingSession
+    ? workspaceSessionKey(
+        openingSession.cwd,
+        openingSession.profileId,
+        openingSession.sessionId,
+      )
+    : null;
   const attentionSession = useMemo(
     () =>
       session.opened
@@ -552,12 +560,15 @@ export function App() {
           item.sessionId,
         ) === productSessionId,
     );
+    if (!target || productSessionId === openingSessionKey) return;
+    if (productSessionId === activeSessionKey) {
+      workspaceProduct.cancelPendingNavigation();
+      if (workspaceProduct.transitioning) workspaceProduct.cancelLaunch();
+      return;
+    }
     if (
-      !target ||
-      productSessionId === activeSessionKey ||
-      workspaceProduct.transitioning ||
-      (draftCapacityBlocked &&
-        productSessionId !== previousActiveSessionKeyRef.current)
+      draftCapacityBlocked &&
+      productSessionId !== previousActiveSessionKeyRef.current
     )
       return;
     const outcome = await workspaceProduct.openSession({
@@ -896,6 +907,7 @@ export function App() {
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
               selectedSessionId={activeSessionKey}
+              openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
               error={workspaceProduct.state.error}
               settingsActive={settingsOpen}
@@ -1006,6 +1018,7 @@ export function App() {
             className="conversation-scroll"
             role="region"
             aria-label="Conversation"
+            aria-busy={Boolean(openingSession)}
             tabIndex={0}
             onScroll={syncConversationFollow}
           >
@@ -1135,7 +1148,7 @@ export function App() {
             </div>
           </div>
           <div
-            className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending) ? " is-hidden" : ""}`}
+            className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending && !openingSession) ? " is-hidden" : ""}`}
           >
             {showJumpLatest ? (
               <button
@@ -1145,6 +1158,16 @@ export function App() {
               >
                 Back to latest ↓
               </button>
+            ) : null}
+            {session.opened && openingSession ? (
+              <div className={productStyles.pendingNavigation} role="status">
+                <span className={productStyles.pendingNavigationCopy}>
+                  <strong>Opening conversation…</strong>
+                </span>
+                <button type="button" onClick={workspaceProduct.cancelLaunch}>
+                  Cancel
+                </button>
+              </div>
             ) : null}
             {navigationPending ? (
               <div

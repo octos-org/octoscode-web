@@ -34,6 +34,7 @@ export interface ProductSidebarSession {
   id: string;
   title: string;
   blank?: boolean | undefined;
+  opening?: boolean;
   /** Last-opened time, as epoch milliseconds or an ISO timestamp. */
   updatedAt?: number | string | undefined;
   updatedLabel?: string | undefined;
@@ -1120,7 +1121,10 @@ function SessionRow({
   active?: boolean;
 }) {
   const title = session.blank ? "New session" : session.title;
-  const status = session.status ?? "idle";
+  const status = session.opening ? "running" : (session.status ?? "idle");
+  const statusLabel = session.opening
+    ? "Opening conversation"
+    : session.statusLabel;
   const showStatus = status !== "idle";
 
   return (
@@ -1132,9 +1136,10 @@ function SessionRow({
       tabIndex={-1}
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
+      aria-busy={session.opening || undefined}
       aria-label={[
         title,
-        showStatus ? session.statusLabel : null,
+        showStatus ? statusLabel : null,
         !session.blank && session.updatedLabel
           ? `updated ${session.updatedLabel}`
           : null,
@@ -1144,12 +1149,12 @@ function SessionRow({
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.statusSlot}>
-        {showStatus ? (
-          <StatusDot status={status} label={session.statusLabel} />
-        ) : null}
+        {showStatus ? <StatusDot status={status} label={statusLabel} /> : null}
       </span>
       <span className={styles.sessionTitle}>{title}</span>
-      {!session.blank && session.updatedLabel ? (
+      {session.opening ? (
+        <span className={styles.sessionTime}>Opening…</span>
+      ) : !session.blank && session.updatedLabel ? (
         <span className={styles.sessionTime}>{session.updatedLabel}</span>
       ) : null}
     </button>
@@ -1171,7 +1176,7 @@ function SearchSessionRow({
   id?: string;
   active?: boolean;
 }) {
-  const status = session.status ?? "idle";
+  const status = session.opening ? "running" : (session.status ?? "idle");
   return (
     <button
       type="button"
@@ -1181,19 +1186,27 @@ function SearchSessionRow({
       tabIndex={-1}
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
+      aria-busy={session.opening || undefined}
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.searchResultHeading}>
         <span className={styles.statusSlot}>
           {status !== "idle" ? (
-            <StatusDot status={status} label={session.statusLabel} />
+            <StatusDot
+              status={status}
+              label={
+                session.opening ? "Opening conversation" : session.statusLabel
+              }
+            />
           ) : null}
         </span>
         <span className={styles.searchResultTitle}>
           {session.blank ? "New session" : session.title}
         </span>
       </span>
-      <span className={styles.searchResultMeta}>{workspace.label}</span>
+      <span className={styles.searchResultMeta}>
+        {session.opening ? "Opening…" : workspace.label}
+      </span>
     </button>
   );
 }
