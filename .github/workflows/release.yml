@@ -107,7 +107,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           artifact="octoscode-web-${RELEASE_TAG:?}.tar.gz"
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          if gh release view "$RELEASE_TAG" --repo octos-org/octoscode-web >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; refusing to replace its assets" >&2
             exit 1
           fi
@@ -115,5 +115,5 @@ jobs:
           if [[ "$RELEASE_TAG" == *-* ]]; then
             release_args+=(--prerelease)
           fi
-          gh release create "$RELEASE_TAG" "$artifact" "$artifact.sha256" "${release_args[@]}"
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release create "$RELEASE_TAG" "$artifact" "$artifact.sha256" "${release_args[@]}" --repo octos-org/octoscode-web
+          gh release edit "$RELEASE_TAG" --draft=false --repo octos-org/octoscode-web
