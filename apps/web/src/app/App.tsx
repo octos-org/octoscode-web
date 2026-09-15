@@ -195,6 +195,28 @@ export function App() {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(window.sessionStorage, connection),
   );
+  const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
+    const saved = window.localStorage.getItem("dsw-theme");
+    return saved === "light" || saved === "dark" ? saved : "system";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") {
+      root.removeAttribute("data-theme");
+      window.localStorage.removeItem("dsw-theme");
+    } else {
+      root.setAttribute("data-theme", theme);
+      window.localStorage.setItem("dsw-theme", theme);
+    }
+  }, [theme]);
+
+  const cycleTheme = () => {
+    setTheme((prev) =>
+      prev === "system" ? "dark" : prev === "dark" ? "light" : "system",
+    );
+  };
+
   const [savedLink, setSavedLink] = useState(() => {
     const key = new URLSearchParams(window.location.search).get("s");
     return key ? { key, reference: parseSavedSessionReference(key) } : null;
@@ -861,6 +883,8 @@ export function App() {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);
               }}
+              theme={theme}
+              onThemeToggle={cycleTheme}
               onRetry={() => {
                 void workspaceProduct.refresh();
               }}
