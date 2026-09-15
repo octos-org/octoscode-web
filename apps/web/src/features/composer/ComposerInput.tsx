@@ -113,6 +113,7 @@ export function ComposerInput(props: ComposerInputProps) {
         value={props.value}
         disabled={props.disabled || readOnlyPeerSlug !== null}
         placeholder={props.placeholder}
+        aria-label="Message Octos"
         data-vim-mode={vimMode ? mode.current.mode : "off"}
         onChange={(event) => props.onChange(event.currentTarget.value)}
         onFocus={() => {
@@ -226,7 +227,7 @@ export function ComposerInput(props: ComposerInputProps) {
             props.onInterrupt();
           }
         }}
-        role="combobox"
+        role={props.commandCount > 0 ? "combobox" : undefined}
         aria-autocomplete="list"
         aria-haspopup="listbox"
         aria-expanded={props.commandCount > 0}

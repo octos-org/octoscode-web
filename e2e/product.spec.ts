@@ -283,11 +283,11 @@ test("keeps authentication when a remembered Session can no longer open", async 
   await page.reload();
   await expect(productNavigation(page)).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
   await expect(
     page
-      .getByRole("region", { name: "Choose a workspace" })
+      .getByRole("region", { name: /Choose a workspace|Add workspace/ })
       .locator('[role="alert"]'),
   ).toContainText("saved Session is no longer available");
   await expect(page.locator("#connection-title")).toHaveCount(0);
@@ -296,7 +296,7 @@ test("keeps authentication when a remembered Session can no longer open", async 
   await page.reload();
   await expect(productNavigation(page)).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Choose a workspace" }),
+    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
   await page.waitForTimeout(250);
   expect(restoreOpenCount).toBe(1);

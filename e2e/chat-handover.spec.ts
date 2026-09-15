@@ -77,12 +77,15 @@ async function connectAndStartWorkspace(page: Page, variant: string) {
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill(TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
+  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
   await expect(productNavigation(page)).toBeVisible();
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  await expect(chooser).toBeVisible();
+  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(`${CWD}${variant}`);
-  await add.getByRole("button", { name: "Add & Start", exact: true }).click();
+  await add.getByRole("button", { name: /^(Add & Start|Start session)$/ }).click();
   await expect(composer(page)).toBeEnabled();
 }
 

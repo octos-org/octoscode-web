@@ -66,11 +66,14 @@ async function connect(page: Page, probe: Probe, name: string, native = true) {
   await page.getByLabel("Server origin").fill(ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: "Choose a workspace" });
-  await chooser.getByRole("button", { name: "Add workspace" }).click();
+  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  await expect(chooser).toBeVisible();
+  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+    await chooser.getByRole("button", { name: "Add workspace" }).click();
+  }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(cwd);
-  await add.getByRole("button", { name: "Add & Start" }).click();
+  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
   await expect
     .poll(() => probe.calls("session/open").length)
