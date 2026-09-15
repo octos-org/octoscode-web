@@ -53,16 +53,28 @@ export function rememberWorkspace(
     workspace,
     ...current.filter((candidate) => candidate.path !== canonicalPath),
   ].slice(0, MAX_WORKSPACES);
-  storage.setItem(storageKey(endpoint), JSON.stringify(next));
+  try {
+    storage.setItem(storageKey(endpoint), JSON.stringify(next));
+  } catch {
+    // Workspace navigation remains usable when this tab cannot save recents.
+  }
   return next;
 }
 
 export function clearRecentWorkspaces(
-  storage: Pick<Storage, "removeItem">,
+  storage: Pick<Storage, "getItem" | "removeItem">,
   endpoint: string,
-): void {
-  storage.removeItem(storageKey(endpoint));
-  storage.removeItem(legacyStorageKey(endpoint));
+): boolean {
+  let cleared = true;
+  for (const key of [storageKey(endpoint), legacyStorageKey(endpoint)]) {
+    try {
+      storage.removeItem(key);
+      if (storage.getItem(key) !== null) cleared = false;
+    } catch {
+      cleared = false;
+    }
+  }
+  return cleared;
 }
 
 export function workspaceName(path: string): string {

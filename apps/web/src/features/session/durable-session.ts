@@ -38,6 +38,7 @@ export type ProjectionDecision =
 export class DurableSessionProjection {
   #sessionId = "";
   #cursor: UiCursor | undefined;
+  #canonicalSnapshotCursor: UiCursor | undefined;
   #threadSeq = new Map<string, number>();
   #phase: SessionRecoveryPhase = "idle";
   #detail: string | undefined;
@@ -47,6 +48,7 @@ export class DurableSessionProjection {
   reset(sessionId: string): void {
     this.#sessionId = sessionId;
     this.#cursor = undefined;
+    this.#canonicalSnapshotCursor = undefined;
     this.#threadSeq.clear();
     this.#phase = "idle";
     this.#detail = undefined;
@@ -79,13 +81,36 @@ export class DurableSessionProjection {
         `Hydrate returned session ${result.session_id}, expected ${this.#sessionId}`,
       );
     }
+    const checkpoints = new Map<string, number>();
+    if (result.projection_thread_sequences !== undefined) {
+      if (!result.replayed_projection_envelopes) {
+        throw new Error(
+          "Canonical hydrate checkpoints require their replay snapshot",
+        );
+      }
+      for (const [thread, seq] of Object.entries(
+        result.projection_thread_sequences,
+      )) {
+        if (!thread.trim() || !Number.isSafeInteger(seq) || seq < 0) {
+          throw new Error("Invalid canonical hydrate checkpoint");
+        }
+        checkpoints.set(thread, seq);
+      }
+    }
     this.#cursor = { ...result.cursor };
+    this.#canonicalSnapshotCursor =
+      result.projection_thread_sequences === undefined
+        ? undefined
+        : { ...result.cursor };
     // Hydrate returns only selected replay lanes (currently tool/background),
     // not a complete envelope log. Seeding per-thread seq from those partial
     // lanes would make an earlier buffered assistant delta look stale. Start a
     // fresh live ordering window; the authoritative transcript already covers
     // committed history and the recovery buffer establishes the next sequence.
-    this.#threadSeq.clear();
+    // Newer Core's atomic full projection snapshot supplies continuation
+    // checkpoints even for compacted threads. Never infer these from rc.9's
+    // partial tool/background lanes.
+    this.#threadSeq = checkpoints;
     this.#phase = "healthy";
     this.#detail = undefined;
     this.#failureDetail = undefined;
@@ -142,10 +167,19 @@ export class DurableSessionProjection {
     // without it those envelopes would be re-applied and duplicate
     // assistant text. Live envelopes keep the old semantics: the transcript
     // does not authoritatively cover deltas that were never received.
+    // A complete canonical snapshot covers every event through its atomic
+    // head, including compacted and absent threads. Late live delivery before
+    // that checkpoint must not recreate old text after the buffer is drained.
+    // rc.9's partial hydrate lanes cannot make this stronger assertion.
+    const beforeCheckpoint =
+      this.#canonicalSnapshotCursor &&
+      envelope.cursor.stream === this.#canonicalSnapshotCursor.stream &&
+      envelope.cursor.seq <= this.#canonicalSnapshotCursor.seq;
     if (
-      options.fromRecoveryBuffer &&
-      this.#cursor &&
-      envelope.cursor.seq <= this.#cursor.seq
+      beforeCheckpoint ||
+      (options.fromRecoveryBuffer &&
+        this.#cursor &&
+        envelope.cursor.seq <= this.#cursor.seq)
     ) {
       return { kind: "ignore", reason: "stale" };
     }

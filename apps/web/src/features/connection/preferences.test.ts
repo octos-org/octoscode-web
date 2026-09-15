@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import {
   clearConnectionPreferences,
+  browserStorage,
   clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
+  loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
   saveConnectionPreferences,
+  saveComposerDrafts,
   setAutoConnect,
   type StorageLike,
 } from "./preferences.ts";
@@ -21,6 +24,104 @@ const defaults: ConnectionDraft = {
 };
 
 describe("connection preferences", () => {
+  it("reports a read-only Forget failure instead of claiming saved identity was removed", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    saveConnectionPreferences(defaults, durable, tab);
+    setAutoConnect(tab, true);
+    saveComposerDrafts(tab, defaults, [["session", "Unsent text"]]);
+    const blocked = {
+      getItem: (key: string) => tab.getItem(key),
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(clearConnectionPreferences(durable, blocked)).toBe(false);
+    expect(loadAutoConnect(blocked)).toBe(true);
+    expect(loadComposerDrafts(blocked, defaults)).toEqual([
+      ["session", "Unsent text"],
+    ]);
+    expect(clearConnectionPreferences(durable, tab)).toBe(true);
+    expect(loadComposerDrafts(tab, defaults)).toEqual([]);
+    expect(loadAutoConnect(tab)).toBe(false);
+  });
+
+  it("cannot certify removal when storage reads or the whole storage getter are denied", () => {
+    expect(
+      clearConnectionPreferences(new MemoryStorage(), new ThrowingStorage()),
+    ).toBe(false);
+    // In the Node test environment browserStorage catches the missing window,
+    // just as it catches a browser SecurityError from the storage getter.
+    expect(
+      clearConnectionPreferences(
+        browserStorage("localStorage"),
+        browserStorage("sessionStorage"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps unsent drafts only in the matching tab identity and clears them on token change or Forget", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = { ...defaults, token: "first-secret" };
+    const drafts: [string, string][] = [
+      ["scoped-session", "  私有草稿\n保留空白  "],
+    ];
+    saveConnectionPreferences(identity, durable, tab);
+    expect(saveComposerDrafts(tab, identity, drafts)).toBe(true);
+    saveConnectionPreferences({ ...identity, cwd: "/another" }, durable, tab);
+    expect(loadComposerDrafts(tab, identity)).toEqual(drafts);
+    expect([...durable.values.values()].join("")).not.toContain("私有草稿");
+    expect(
+      loadComposerDrafts(tab, { ...identity, token: "another-secret" }),
+    ).toEqual([]);
+    expect(
+      loadComposerDrafts(tab, {
+        ...identity,
+        endpoint: "https://other.example",
+      }),
+    ).toEqual([]);
+    expect(
+      saveComposerDrafts(tab, { ...identity, token: "another-secret" }, drafts),
+    ).toBe(false);
+    saveConnectionPreferences(
+      { ...identity, token: "another-secret" },
+      durable,
+      tab,
+    );
+    expect(
+      loadComposerDrafts(tab, { ...identity, token: "another-secret" }),
+    ).toEqual([]);
+    clearConnectionPreferences(durable, tab);
+    expect(loadComposerDrafts(tab, identity)).toEqual([]);
+  });
+
+  it("reports failed draft writes and leaves oversized input untruncated", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    saveConnectionPreferences(defaults, durable, tab);
+    expect(
+      saveComposerDrafts(tab, defaults, [["session", "x".repeat(524_288)]]),
+    ).toBe(false);
+    const blocked = {
+      getItem: (key: string) => tab.getItem(key),
+      setItem: () => {
+        throw new Error("quota");
+      },
+      removeItem: () => {},
+    };
+    expect(saveComposerDrafts(blocked, defaults, [["session", "draft"]])).toBe(
+      false,
+    );
+    expect(
+      saveComposerDrafts(new ThrowingStorage(), defaults, [
+        ["session", "draft"],
+      ]),
+    ).toBe(false);
+  });
   it("keeps only origin durably and scopes credentials plus session to the tab", () => {
     const durable = new MemoryStorage();
     const tab = new MemoryStorage();

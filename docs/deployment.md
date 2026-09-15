@@ -84,16 +84,25 @@ also lose the target Profile on an unscoped/admin known-path list and scan
 catalog, regardless of `appui.sessions_in_cwd`; the authoritative replacement is
 tracked in [octos#2146](https://github.com/octos-org/octos/issues/2146).
 
-The browser writes only the server endpoint to `localStorage`. It binds the auth
-token, auto-connect marker, active Session/Workspace/Profile restore hints, and
-recent Workspace paths to that endpoint in the current tab's `sessionStorage`.
-The same endpoint-and-token-bound envelope also keeps the minimal
+Connection storage writes only the server endpoint to `localStorage`. Display
+preferences, including theme and notification opt-in, also use local storage.
+The connection envelope binds the auth token, auto-connect marker, active
+Session/Workspace/Profile restore hints, and recent Workspace paths to that
+endpoint in the current tab's `sessionStorage`. The same
+endpoint-and-token-bound envelope also keeps the minimal
 Workspace/Profile/Session tuples that this tab has successfully opened. Those
 refs are incomplete navigation memory, not a catalog, and contain no titles,
 prompts, transcript, or model output. Refresh can restore the selected Session;
 closing the tab leaves only the endpoint. Disconnect preserves tab navigation
 refs but closes live transports; Forget or an endpoint/token change clears the
 refs. Provider API keys are never persisted in browser storage.
+
+The same tab envelope now keeps bounded unsent composer drafts, isolated by the
+exact Session and credential identity. Closing the tab ends this editing cache;
+it is not cross-device storage or a transcript database. Drafts are not
+submitted on reload. The client reports rejected saves and deletions, including
+failed Forget operations, so a browser storage restriction cannot masquerade as
+success.
 
 A reverse proxy must also preserve long-lived WebSocket connections when the
 product switches Sessions. Core rc.9 binds a server-acknowledged turn to its

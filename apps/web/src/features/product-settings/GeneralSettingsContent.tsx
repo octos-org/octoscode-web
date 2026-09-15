@@ -4,6 +4,7 @@
  * Copyright (c) 2026 DeepSeek. MIT License; see THIRD_PARTY_NOTICES.md.
  */
 import { useState } from "react";
+import type { AttentionSettings } from "../attention/desktop-notifications.ts";
 import { CopySessionLink } from "../session-links/CopySessionLink.tsx";
 import type { SavedSessionReference } from "../session-links/saved-session-link.ts";
 import { knownSessionKey } from "../session/known-session-registry.ts";
@@ -14,6 +15,7 @@ export type ProductConnectionStatus =
 
 export interface GeneralSettingsContentProps {
   serverOrigin: string;
+  attentionSettings?: AttentionSettings;
   connectionStatus: ProductConnectionStatus;
   workspaceLabel?: string | null;
   workspacePath?: string | null;
@@ -89,6 +91,7 @@ function SettingRow({
  */
 export function GeneralSettingsContent({
   serverOrigin,
+  attentionSettings,
   connectionStatus,
   workspaceLabel,
   workspacePath,
@@ -168,6 +171,41 @@ export function GeneralSettingsContent({
             reference={sessionReference}
             disabled={locked}
           />
+        </div>
+      ) : null}
+
+      {attentionSettings ? (
+        <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
+          <div className={styles.settingCopy}>
+            <div
+              className={styles.settingTitle}
+              id="desktop-notifications-title"
+            >
+              Desktop notifications
+            </div>
+            <div
+              className={styles.settingDescription}
+              id="desktop-notifications-description"
+              role={attentionSettings.error ? "alert" : "status"}
+            >
+              {attentionSettings.message}
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            aria-labelledby="desktop-notifications-title"
+            aria-describedby="desktop-notifications-description"
+            aria-pressed={attentionSettings.enabled}
+            disabled={attentionSettings.pending || !attentionSettings.available}
+            onClick={attentionSettings.onToggle}
+          >
+            {attentionSettings.pending
+              ? "Enabling…"
+              : attentionSettings.enabled
+                ? "On"
+                : "Enable"}
+          </button>
         </div>
       ) : null}
 

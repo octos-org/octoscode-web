@@ -64,4 +64,74 @@ describe("session hydrate contract", () => {
       last_durable_cursor: { stream: "session", seq: 22 },
     });
   });
+
+  it("accepts complete and compacted canonical replay with atomic checkpoints", () => {
+    expect(parseSessionHydrateResult(canonicalHydrate())).toMatchObject({
+      replayed_projection_envelopes: [{ session_id: "s", seq: 5 }],
+      projection_thread_sequences: { t: 5, compacted: 12 },
+    });
+    const legacy = canonicalHydrate();
+    delete legacy.replayed_projection_envelopes;
+    delete legacy.projection_thread_sequences;
+    expect(parseSessionHydrateResult(legacy)).not.toBeNull();
+  });
+
+  it("rejects malformed, foreign, duplicate, or future replay before accepting its cursor", () => {
+    for (const change of [
+      { projection_thread_sequences: null },
+      { projection_thread_sequences: { t: -1 } },
+      { projection_thread_sequences: { t: Number.MAX_SAFE_INTEGER + 1 } },
+      { projection_thread_sequences: { t: 4 } },
+      { projection_thread_sequences: { "": 5 } },
+      { projection_thread_sequences: {} },
+      { replayed_projection_envelopes: undefined },
+      { projection_thread_sequences: undefined },
+      { replayed_projection_envelopes: [canonicalEvent(), canonicalEvent()] },
+      {
+        replayed_projection_envelopes: [
+          { ...canonicalEvent(), session_id: "foreign" },
+        ],
+      },
+      {
+        replayed_projection_envelopes: [
+          { ...canonicalEvent(), cursor: { stream: "s", seq: 11 } },
+        ],
+      },
+      {
+        replayed_projection_envelopes: [
+          { ...canonicalEvent(), cursor: { stream: "foreign", seq: 1 } },
+        ],
+      },
+      {
+        replayed_projection_envelopes: [
+          {
+            ...canonicalEvent(),
+            payload: { type: "turn_terminal", data: { outcome: "invented" } },
+          },
+        ],
+      },
+    ]) {
+      expect(
+        parseSessionHydrateResult({ ...canonicalHydrate(), ...change }),
+      ).toBeNull();
+    }
+  });
 });
+
+function canonicalEvent() {
+  return {
+    thread_id: "t",
+    turn_id: "turn",
+    seq: 5,
+    payload: { type: "turn_terminal", data: { outcome: "interrupted" } },
+  };
+}
+
+function canonicalHydrate(): Record<string, unknown> {
+  return {
+    session_id: "s",
+    cursor: { stream: "s", seq: 10 },
+    replayed_projection_envelopes: [canonicalEvent()],
+    projection_thread_sequences: { t: 5, compacted: 12 },
+  };
+}

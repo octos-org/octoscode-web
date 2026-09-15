@@ -152,6 +152,46 @@ export function highlightToHtml(
   );
 }
 
+export interface HighlightToken {
+  content: string;
+  className: string;
+}
+
+/** Text tokens for surfaces that combine syntax with their own annotations. */
+export function highlightToTokens(
+  code: string,
+  language: string | undefined,
+): HighlightToken[][] | undefined {
+  const resolved = language ? aliases.get(language.toLowerCase()) : undefined;
+  if (!resolved || !ensureLanguage(resolved)) return undefined;
+  try {
+    const { tokens } = highlighter().codeToTokens(code, {
+      lang: resolved,
+      theme: "css-variables",
+    });
+    return tokens.map((line) =>
+      line.map((token) => {
+        // Neither source text nor grammar attributes can become HTML, CSS, or
+        // attributes. Only this existing, closed vocabulary reaches the DOM.
+        const classes = [
+          shikiStyleClasses.get(`color:${token.color}`) ??
+            "shiki-color-foreground",
+        ];
+        const fontStyle = token.fontStyle ?? 0;
+        if (fontStyle > 0) {
+          if (fontStyle & 1) classes.push("shiki-italic");
+          if (fontStyle & 2) classes.push("shiki-bold");
+          if (fontStyle & 4) classes.push("shiki-underline");
+        }
+        return { content: token.content, className: classes.join(" ") };
+      }),
+    );
+  } catch {
+    // A grammar failure must never hide an authoritative code preview.
+    return undefined;
+  }
+}
+
 const shikiStyleClasses = new Map([
   ["background-color:var(--shiki-background)", "shiki-bg"],
   ["color:var(--shiki-foreground)", "shiki-color-foreground"],

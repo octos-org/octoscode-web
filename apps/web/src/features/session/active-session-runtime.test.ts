@@ -135,6 +135,131 @@ class FakeActiveClient {
 }
 
 describe("ActiveSessionRuntime", () => {
+  it("keeps recovery events buffered until hydrate preparation is ready", async () => {
+    const client = new FakeActiveClient();
+    client.status = "connected";
+    const ready = deferred<void>();
+    const prepare = vi.fn(() => ready.promise);
+    const { runtime, events } = testRuntime(
+      () => new FakeActiveClient(),
+      prepare,
+    );
+    const authority = await runtime.authenticate(connection);
+    if (!authority) throw new Error("missing authority");
+    runtime.adoptCandidate({
+      expected: authority,
+      config: sessionConfig,
+      candidate: candidateSnapshot(client),
+    });
+    client.emit(envelope(1, 13));
+    client.emit(envelope(3, 15));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    events.length = 0;
+    client.emit(scopedNotification("during-prepare"));
+    expect(events.some((event) => event.type === "notification")).toBe(false);
+    expect(runtime.getSnapshot().phase).toBe("recovering");
+    ready.resolve();
+    await vi.waitFor(() => expect(runtime.getSnapshot().phase).toBe("ready"));
+    const projected = events.filter(
+      (event) => event.type !== "raw-notification",
+    );
+    expect(projected[0]?.type).toBe("session-hydrate");
+    expect(
+      projected.some(
+        (event) =>
+          event.type === "notification" &&
+          event.notification.method === "test/during-prepare",
+      ),
+    ).toBe(true);
+    runtime.disconnect();
+  });
+
+  it("does not publish a prepared snapshot after changing servers", async () => {
+    const first = new FakeActiveClient();
+    const second = new FakeActiveClient();
+    first.status = "connected";
+    const clients = [new FakeActiveClient(), second];
+    const ready = deferred<void>();
+    const prepare = vi.fn(() => ready.promise);
+    const { runtime, events } = testRuntime(() => clients.shift()!, prepare);
+    const authority = await runtime.authenticate(connection);
+    if (!authority) throw new Error("missing authority");
+    runtime.adoptCandidate({
+      expected: authority,
+      config: sessionConfig,
+      candidate: candidateSnapshot(first),
+    });
+    first.emit(envelope(1, 13));
+    first.emit(envelope(3, 15));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    await runtime.authenticate({
+      ...connection,
+      endpoint: "https://other.example.test",
+    });
+    events.length = 0;
+    ready.resolve();
+    await flushMicrotasks();
+    expect(events).toEqual([]);
+    expect(runtime.getSnapshot().phase).toBe("authenticated");
+    expect(runtime.getSnapshot().session).toBeNull();
+    runtime.disconnect();
+  });
+
+  it("fails recovery preparation before committing the hydrate cursor", async () => {
+    const client = new FakeActiveClient();
+    client.status = "connected";
+    const ready = deferred<void>();
+    const prepare = vi.fn(() => ready.promise);
+    const { runtime, events } = testRuntime(
+      () => new FakeActiveClient(),
+      prepare,
+    );
+    const authority = await runtime.authenticate(connection);
+    if (!authority) throw new Error("missing authority");
+    runtime.adoptCandidate({
+      expected: authority,
+      config: sessionConfig,
+      candidate: candidateSnapshot(client),
+    });
+    client.emit(envelope(1, 13));
+    client.emit(envelope(3, 15));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    events.length = 0;
+    ready.reject(new Error("Recovery module unavailable"));
+    await flushMicrotasks();
+    expect(events.some((event) => event.type === "session-hydrate")).toBe(
+      false,
+    );
+    expect(runtime.getSnapshot().recovery.cursor?.seq).toBe(13);
+    expect(runtime.getSnapshot().error).toContain(
+      "Recovery module unavailable",
+    );
+    runtime.disconnect();
+  });
+
+  it("cancels retained hydrate preparation without closing the owner socket", async () => {
+    const owner = new FakeActiveClient();
+    owner.status = "connected";
+    const controller = new AbortController();
+    const ready = deferred<void>();
+    const prepare = vi.fn(() => ready.promise);
+    const pending = prepareRetainedCandidateSession({
+      client: owner,
+      config: sessionConfig,
+      signal: controller.signal,
+      validateOpened: () => undefined,
+      prepareHydrate: prepare,
+    });
+    const rejected = expect(pending).rejects.toThrow(
+      "Retained candidate opening was cancelled",
+    );
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    controller.abort();
+    await rejected;
+    ready.resolve();
+    expect(owner.disconnectCount).toBe(0);
+  });
+
   it("stages an already-connected retained owner without reconnecting or taking cleanup authority", async () => {
     const owner = new FakeActiveClient();
     owner.status = "connected";
@@ -1087,6 +1212,7 @@ describe("ActiveSessionRuntime", () => {
 
 function testRuntime(
   createClient: (config: SessionConnectionInput) => FakeActiveClient,
+  prepareHydrate?: (hydrated: SessionHydrateResult) => Promise<void>,
 ): {
   runtime: ActiveSessionRuntime<FakeActiveClient>;
   events: ActiveSessionRuntimeEvent<FakeActiveClient>[];
@@ -1100,6 +1226,7 @@ function testRuntime(
       if (!value) throw new Error("missing Session capabilities");
     },
     random: () => 0.5,
+    ...(prepareHydrate ? { prepareHydrate } : {}),
   });
   const events: ActiveSessionRuntimeEvent<FakeActiveClient>[] = [];
   runtime.subscribeEvents((event) => events.push(event));

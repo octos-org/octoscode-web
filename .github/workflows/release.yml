@@ -38,8 +38,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - run: pnpm test:e2e
+      - run: pnpm test:e2e:cross-browser
       - name: Download and verify pinned Core
         run: node scripts/fetch-pinned-core.mjs "$RUNNER_TEMP/octos-core"
       - name: Exercise real octos serve

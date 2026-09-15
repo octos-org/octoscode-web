@@ -67,7 +67,7 @@ export default defineConfig({
           // importing a notification guard or method name cannot preload
           // task, workspace or hydration decoders.
           if (
-            /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
+            /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|turn-state-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
               id,
             )
           ) {

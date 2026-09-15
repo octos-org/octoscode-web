@@ -31,7 +31,10 @@ export function timelineFromHydrate(
   // rc.9 transcript rows carry a thread_id but usually no turn_id. Only a
   // unique server-provided mapping can supply the missing turn identity.
   const turnByThread = new Map<string, string | null>();
-  for (const turn of result.turns ?? []) {
+  for (const turn of [
+    ...(result.turns ?? []),
+    ...(result.replayed_projection_envelopes ?? []),
+  ]) {
     if (!turn.thread_id || !turn.turn_id) continue;
     const existing = turnByThread.get(turn.thread_id);
     turnByThread.set(
@@ -100,8 +103,20 @@ export function timelineFromHydrate(
   }
 
   const replayed = [
-    ...(result.replayed_tool_envelopes ?? []),
-    ...(result.replayed_envelopes ?? []),
+    ...new Map(
+      [
+        ...(result.replayed_projection_envelopes ?? []).filter((event) =>
+          [
+            "tool_start",
+            "tool_progress",
+            "tool_end",
+            "background/spawn_complete",
+          ].includes(event.payload.type),
+        ),
+        ...(result.replayed_tool_envelopes ?? []),
+        ...(result.replayed_envelopes ?? []),
+      ].map((event) => [JSON.stringify([event.thread_id, event.seq]), event]),
+    ).values(),
   ].sort(
     (left, right) =>
       (left.cursor?.seq ?? left.seq) - (right.cursor?.seq ?? right.seq),
@@ -132,11 +147,30 @@ export function timelineFromHydrate(
       entries = sweepTurnStreamtails(entries, turnId, outcome);
     }
   }
-  return entries.map((entry) =>
+  // A cold rc.9 reload can contain a terminal turn with no persisted message.
+  // Render that server truth instead of returning an empty, apparently unused
+  // conversation. This does not claim that attached execution survived reload.
+  for (const [turnId, outcome] of terminalTurns) {
+    if (
+      outcome !== "completed" &&
+      !entries.some((entry) => entry.id === `terminal:${turnId}`)
+    ) {
+      entries = settleTimelineTurn(
+        entries,
+        turnId,
+        outcome,
+        outcome === "interrupted"
+          ? "This turn was stopped before it completed."
+          : "This turn failed before it completed.",
+      );
+    }
+  }
+  entries = entries.map((entry) =>
     entry.turnId && terminalTurns.has(entry.turnId)
       ? { ...entry, turnSettled: true }
       : entry,
   );
+  return entries;
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */

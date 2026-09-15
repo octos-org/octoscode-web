@@ -45,6 +45,8 @@ second agent loop, plugin host, sandbox, or session store.
   workspace, tab-confirmed Session navigation, and Settings.
 - Same-tab background continuation for server-acknowledged turns while another
   Session is selected or created.
+- Unread tab counts and opt-in desktop notifications when hidden or background
+  responses finish or need attention.
 - Session-local Chat and Trajectory views, safe Markdown/code rendering,
   approvals, questions, plans, tasks, output, artifacts, and diff review.
 - Server-advertised permission control and effective runtime-model status in the
@@ -76,11 +78,13 @@ later conversations, **New Session** offers recent Workspaces and **Add
 workspace**. The sidebar remembers the Sessions this tab successfully opens, so
 multiple conversations in the same Workspace remain distinct and can be selected
 again. The selected Session is restored on refresh in the same tab; only the
-server origin survives after that tab closes. These confirmed references are
-navigation memory, not a complete Session catalog: Core rc.9 can misroute
-`session/list({cwd})` for unscoped/admin connections, so the Web client cannot
-promise a complete or correctly grouped catalog until the server-owned
-SessionRef contract in
+server origin and display preferences survive after that tab closes. Unsent
+composer drafts survive refresh in the same tab and stay scoped to its server,
+sign-in and Session; they are never sent automatically after restoration. These
+confirmed references are navigation memory, not a complete Session catalog: Core
+rc.9 can misroute `session/list({cwd})` for unscoped/admin connections, so the
+Web client cannot promise a complete or correctly grouped catalog until the
+server-owned SessionRef contract in
 [octos#2146](https://github.com/octos-org/octos/issues/2146) lands. The browser
 cannot start or provision the Octos binary.
 

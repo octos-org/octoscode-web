@@ -36,7 +36,7 @@ semantics. Octos Core remains the runtime and source of durable truth.
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
 | Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
-| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and safe crash recovery.                      |
+| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.  |
 
 Transcript rows are a bounded browser rendering projection, not the durable
 history store. When older rows fall outside that window the first visible row
@@ -63,10 +63,10 @@ without replacing each other.
 Those rows remain incomplete navigation memory. Core rc.9 can silently ignore
 the requested cwd and loses the target Profile for some unscoped/admin
 `session/list({cwd})` calls; its response does not echo either effective scope.
-The Web therefore does not project that list as a catalog. A new tab cannot
-discover older server Sessions until the authoritative object model and scoped
-SessionRef tracked in
-[octos#2146](https://github.com/octos-org/octos/issues/2146) land.
+The Web therefore does not project that list as a catalog. A new tab can reopen
+an exact saved conversation link after authenticating, but cannot browse a
+complete server Session directory until the scoped catalog tracked in
+[octos#2146](https://github.com/octos-org/octos/issues/2146) lands.
 
 ## Session navigation and running turns
 
@@ -100,8 +100,25 @@ WebSocket and terminate a still-running turn; even a terminal owner may still be
 finishing Core tail cleanup. Disconnect keeps the current tab's confirmed
 Session references for a later reconnect. **Forget server** or changing
 endpoint/token identity clears those references, recent Workspace paths, and
-in-memory drafts. Durable execution across transport loss requires a future
+tab-scoped drafts. Durable execution across transport loss requires a future
 server-owned turn lease.
+
+Unsent composer drafts survive ordinary refresh in the current tab, bound to the
+same server, sign-in and exact Session. They are browser editing state, not
+server transcript history, and are never automatically submitted on restore.
+Pending queued messages are still tab-runtime state and are not restored after a
+full reload. Storage failures preserve in-memory editing and show a warning; an
+older persisted draft can remain when the browser refuses an update or deletion.
+Forgetting reports failure if the browser refuses to clear saved data. The tab
+retains at most 50 nonempty drafts. At capacity it keeps the current input and
+existing drafts, and asks the user to send or clear the input before switching;
+it never silently evicts an earlier draft.
+
+The tab title counts unseen background responses that complete or need input.
+General Settings offers an explicit desktop-notification opt-in. Notifications
+contain generic status text, not prompts, file paths or output; replaying
+history does not notify again. A hidden current Session uses explicit turn
+terminal events, never the disappearance of a local queue, to detect completion.
 
 Settings opens from the bottom of the sidebar. General shows the active server
 and Workspace and provides Disconnect and Forget server. Models distinguishes
@@ -140,8 +157,8 @@ navigation.
 
 ## Forward work
 
-The current product slice is release-gated and usable. Broader parity depends on
-explicit Core contracts rather than more client-side inference:
+The current self-hosted slice has bounded recovery and execution guarantees.
+Broader parity depends on explicit Core contracts:
 
 - Generate request, result, and event payload types from a machine-readable Core
   schema

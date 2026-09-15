@@ -1,4 +1,5 @@
 import { lazy } from "react";
+import type { AttentionSettings } from "../attention/desktop-notifications.ts";
 import { SettingsDialog } from "../product-controls/SettingsDialog.tsx";
 import type {
   ModelSelection,
@@ -26,6 +27,7 @@ const ModelManagementSettings = lazy(async () => ({
 }));
 
 interface SettingsViewProps {
+  attentionSettings?: AttentionSettings;
   session: OctosSessionRuntime["connection"];
   models: OctosSessionRuntime["models"];
   activeSection: SettingsSectionId;
@@ -44,6 +46,7 @@ interface SettingsViewProps {
 
 /** Settings composition loads only when opened; session state stays in App. */
 export function SettingsView({
+  attentionSettings,
   session,
   models,
   activeSection,
@@ -88,6 +91,7 @@ export function SettingsView({
                   },
                 }
               : {})}
+            {...(attentionSettings ? { attentionSettings } : {})}
             serverOrigin={serverOrigin}
             connectionStatus={session.status}
             workspaceLabel={workspacePath ? workspaceName(workspacePath) : null}

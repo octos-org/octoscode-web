@@ -1,4 +1,5 @@
-import { lazy, useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useMemo, useRef, useState } from "react";
+import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
 import { useTheme } from "./use-theme.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import { timelineActivity } from "../features/timeline/model.ts";
@@ -21,20 +22,17 @@ import {
   clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
+  loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
   saveConnectionPreferences,
+  saveComposerDrafts,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
 import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
-import {
-  permissionControlState,
-  permissionOptionId,
-  permissionOptions,
-  profileDefaultNeedsRestart,
-} from "../features/shell/product-projection.ts";
+import { profileDefaultNeedsRestart } from "../features/shell/product-projection.ts";
 import type { SettingsSectionId } from "../features/product-controls/types.ts";
 import type { WorkspacePickerView } from "../features/workspace-create/NewSessionWorkspacePicker.tsx";
 import {
@@ -46,11 +44,16 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
-import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/Icon.tsx";
+import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
 
 const LeaveConnectionDialog = lazy(async () => ({
   default: (await import("../features/connection/LeaveConnectionDialog.tsx"))
     .LeaveConnectionDialog,
+}));
+
+const AttentionBridge = lazy(async () => ({
+  default: (await import("../features/attention/AttentionBridge.tsx"))
+    .AttentionBridge,
 }));
 
 const TurnRecoveryNotice = lazy(async () => ({
@@ -76,7 +79,7 @@ const SessionSidebar = lazy(async () => ({
 }));
 const SessionControlBar = lazy(async () => ({
   default: (await import("../features/product-controls/SessionControlBar.tsx"))
-    .SessionControlBar,
+    .RuntimeSessionControlBar,
 }));
 const LaunchDecisionPanel = lazy(async () => ({
   default: (await import("../features/workspace/LaunchDecisionPanel.tsx"))
@@ -133,7 +136,6 @@ export function App() {
   const commandSessionRef = useRef(session.opened);
   commandSessionRef.current = session.opened;
   const draftRef = useRef("");
-  const sessionDraftsRef = useRef(new SessionDraftCache());
   const previousActiveSessionKeyRef = useRef<string | null>(null);
   const restoreConnectionRef = useRef(
     loadAutoConnect(browserStorage("sessionStorage")),
@@ -146,7 +148,38 @@ export function App() {
       browserStorage("sessionStorage"),
     ),
   );
-  const [draft, setDraft] = useState("");
+  const [sessionDrafts] = useState(
+    () =>
+      new SessionDraftCache(
+        50,
+        loadComposerDrafts(browserStorage("sessionStorage"), connection),
+      ),
+  );
+  const [draft, updateDraft] = useState("");
+  const [draftSaved, setDraftSaved] = useState(true);
+  const [draftRetained, setDraftRetained] = useState(true);
+  const [cleanupFailed, setCleanupFailed] = useState(false);
+  const [attentionSettings, setAttentionSettings] =
+    useState<AttentionSettings | null>(null);
+  const attentionIdentity = useMemo(
+    () => (session.authenticated ? {} : null),
+    [session.authenticated, connection.endpoint, connection.token],
+  );
+  const persistDrafts = () =>
+    saveComposerDrafts(
+      browserStorage("sessionStorage"),
+      connection,
+      sessionDrafts.snapshot(),
+    );
+  const setDraft = (text: string) => {
+    updateDraft(text);
+    const key = previousActiveSessionKeyRef.current;
+    if (key) {
+      const retained = sessionDrafts.set(key, text);
+      setDraftRetained(retained);
+      setDraftSaved(retained && persistDrafts());
+    }
+  };
   const [commandError, setCommandError] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const compact = useCompactLayout();
@@ -403,19 +436,21 @@ export function App() {
     ),
   );
   useEffect(() => {
-    if (!hasUnfinishedWork) return;
+    if (!hasUnfinishedWork && draftSaved && !cleanupFailed) return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnBeforeLeaving);
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [hasUnfinishedWork]);
+  }, [hasUnfinishedWork, draftSaved, cleanupFailed]);
   const navigationPending = workspaceProduct.pendingNavigation;
   // A server-accepted turn may keep running on its owner socket while this
   // tab focuses another Session. Browser-local queued prompts cannot: they
   // still belong to the current controller and therefore block navigation.
-  const navigationBlocked = workspaceProduct.transitioning;
+  const draftCapacityBlocked = !draftRetained && draft.length > 0;
+  const navigationBlocked =
+    workspaceProduct.transitioning || draftCapacityBlocked;
   const runtimeMutationBlocked = Boolean(
     conversation.queue.active ||
     conversation.queue.pending.length ||
@@ -433,17 +468,38 @@ export function App() {
         session.opened.session_id,
       )
     : null;
+  const attentionSession = useMemo(
+    () =>
+      session.opened
+        ? {
+            workspaceRoot: activeWorkspacePath,
+            profileId: session.opened.active_profile_id ?? "",
+            sessionId: session.opened.session_id,
+          }
+        : null,
+    [session.opened, activeWorkspacePath],
+  );
   useEffect(() => {
     const previous = previousActiveSessionKeyRef.current;
     if (previous === activeSessionKey) return;
-    if (previous) {
-      sessionDraftsRef.current.set(previous, draftRef.current);
+    if (
+      previous &&
+      !sessionDrafts.set(previous, draftRef.current) &&
+      !activeSessionKey
+    ) {
+      // Keep the current uncached text through a transport/session loss. Only
+      // an explicit identity change/Forget clears it; reconnecting the same
+      // Session restores this exact input without borrowing another scope.
+      return;
     }
     const restored = activeSessionKey
-      ? (sessionDraftsRef.current.get(activeSessionKey) ?? "")
+      ? (sessionDrafts.get(activeSessionKey) ?? "")
       : "";
     draftRef.current = restored;
-    setDraft(restored);
+    updateDraft(restored);
+    setDraftRetained(true);
+    if (persistDrafts()) setDraftSaved(true);
+    else if (sessionDrafts.size > 0) setDraftSaved(false);
 
     setCommandError(null);
     previousActiveSessionKeyRef.current = activeSessionKey;
@@ -492,7 +548,13 @@ export function App() {
           item.sessionId,
         ) === productSessionId,
     );
-    if (!target || navigationBlocked || productSessionId === activeSessionKey)
+    if (
+      !target ||
+      productSessionId === activeSessionKey ||
+      workspaceProduct.transitioning ||
+      (draftCapacityBlocked &&
+        productSessionId !== previousActiveSessionKeyRef.current)
+    )
       return;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
@@ -520,7 +582,9 @@ export function App() {
       conversation.queue.pending.length
     ) {
       setSavedLinkError(
-        "Finish the current response and remove queued messages before opening this conversation.",
+        draftCapacityBlocked
+          ? "Send or clear this input before opening another conversation. Copy it first if you want to keep it."
+          : "Finish the current response and remove queued messages before opening this conversation.",
       );
       return;
     }
@@ -628,7 +692,8 @@ export function App() {
     setWorkspacePicker((current) => ({ ...current, open: false }));
   };
   const requestNewSession = (workspaceId?: string) => {
-    if (!codingCapabilities.sessionCreationAvailable) return;
+    if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
+      return;
     if (compact) setSidebarCollapsed(true);
     const workspace = workspaceId
       ? recentWorkspaces.find((candidate) => candidate.id === workspaceId)
@@ -650,7 +715,7 @@ export function App() {
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
       clearKnownSessions(browserStorage("sessionStorage"), connection);
-      clearConnectionPreferences(
+      let cleared = clearConnectionPreferences(
         browserStorage("localStorage"),
         browserStorage("sessionStorage"),
       );
@@ -659,12 +724,17 @@ export function App() {
         next.endpoint.trim(),
       ])) {
         if (!endpoint) continue;
-        clearRecentWorkspaces(browserStorage("sessionStorage"), endpoint);
-        clearRecentWorkspaces(browserStorage("localStorage"), endpoint);
+        if (!clearRecentWorkspaces(browserStorage("sessionStorage"), endpoint))
+          cleared = false;
+        if (!clearRecentWorkspaces(browserStorage("localStorage"), endpoint))
+          cleared = false;
       }
+      setCleanupFailed(!cleared);
       setRecentWorkspaces([]);
       setKnownSessions([]);
-      sessionDraftsRef.current.clear();
+      sessionDrafts.clear();
+      setDraftRetained(true);
+      setDraftSaved(true);
       previousActiveSessionKeyRef.current = null;
       draftRef.current = "";
       setDraft("");
@@ -689,61 +759,36 @@ export function App() {
   };
   const forgetConnection = () => {
     clearKnownSessions(browserStorage("sessionStorage"), connection);
-    clearRecentWorkspaces(
+    const tabRecentsCleared = clearRecentWorkspaces(
       browserStorage("sessionStorage"),
       connection.endpoint,
     );
-    clearRecentWorkspaces(browserStorage("localStorage"), connection.endpoint);
+    const durableRecentsCleared = clearRecentWorkspaces(
+      browserStorage("localStorage"),
+      connection.endpoint,
+    );
     setRecentWorkspaces([]);
     setKnownSessions([]);
-    sessionDraftsRef.current.clear();
+    sessionDrafts.clear();
+    setDraftRetained(true);
+    setDraftSaved(true);
     previousActiveSessionKeyRef.current = null;
     draftRef.current = "";
     setDraft("");
     disconnect();
-    clearConnectionPreferences(
-      browserStorage("localStorage"),
-      browserStorage("sessionStorage"),
+    setCleanupFailed(
+      !clearConnectionPreferences(
+        browserStorage("localStorage"),
+        browserStorage("sessionStorage"),
+      ) ||
+        !tabRecentsCleared ||
+        !durableRecentsCleared,
     );
     setConnection(initialConnection);
   };
 
-  const projectedPermissionOptions = permissionOptions(
-    safety.permission.result,
-  );
-  const currentPermission = safety.permission.result?.current;
   const runtimeModel = work.supervision.runtimeStatus?.model;
   const runtimeModelLabel = runtimeModel?.title ?? runtimeModel?.model ?? null;
-  const permissionControl = safety.permission.available
-    ? {
-        state: permissionControlState(safety.permission),
-        options: projectedPermissionOptions,
-        selectedId: currentPermission
-          ? permissionOptionId(
-              currentPermission.mode,
-              currentPermission.network,
-            )
-          : null,
-        locked:
-          runtimeMutationBlocked ||
-          safety.permission.busy ||
-          !safety.permission.editable,
-        labels: PERMISSION_LABELS,
-        riskCopy: PERMISSION_RISK_COPY,
-        onSelect: (option: (typeof projectedPermissionOptions)[number]) => {
-          const selection = [
-            safety.permission.result?.current,
-            ...(safety.permission.result?.profiles ?? []),
-          ].find(
-            (candidate) =>
-              candidate?.mode === option.mode &&
-              candidate.network === option.network,
-          );
-          if (selection) void safety.updatePermission(selection);
-        },
-        onRetry: () => void safety.refreshPermission(),
-      }
-    : null;
   const showModelsSettings = Boolean(
     session.opened && (models.state.available || models.management.available),
   );
@@ -782,6 +827,7 @@ export function App() {
         value={connection}
         status={gateStatus}
         error={session.error}
+        {...(cleanupFailed ? { storageWarning: STORAGE_CLEAR_WARNING } : {})}
         onChange={changeConnection}
         onConnect={() => session.connect(connection)}
         onDisconnect={disconnect}
@@ -792,6 +838,23 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {session.authenticated ? (
+        <SurfaceBoundary name="Notifications" fallback={null}>
+          <AttentionBridge
+            identity={attentionIdentity}
+            turns={workspaceProduct.backgroundTurns}
+            selectedSession={attentionSession}
+            activeTurnId={activeTurnId}
+            waitingTurnId={
+              interactions.approval?.turnId ??
+              interactions.question?.turnId ??
+              null
+            }
+            timeline={conversation.timeline}
+            onSettingsChange={setAttentionSettings}
+          />
+        </SurfaceBoundary>
+      ) : null}
       <a className={productStyles.skipLink} href="#workspace-main">
         Skip to content
       </a>
@@ -928,6 +991,11 @@ export function App() {
               ) : null}
             </div>
           </header>
+          {cleanupFailed ? (
+            <p className="recovery-banner recovery-error" role="alert">
+              {STORAGE_CLEAR_WARNING}
+            </p>
+          ) : null}
           <div
             ref={conversationScrollRef}
             className="conversation-scroll"
@@ -1170,6 +1238,18 @@ export function App() {
             ) : conversationTab === "trajectory" ? null : (
               <>
                 {commandError ? <p role="alert">{commandError}</p> : null}
+                {draftCapacityBlocked ? (
+                  <p role="status">
+                    This tab already keeps 50 unsent drafts. Send or clear this
+                    input before switching conversations. Copy it first if you
+                    want to keep it elsewhere.
+                  </p>
+                ) : !draftSaved ? (
+                  <p role="status">
+                    Draft changes could not be saved in this tab. Copy your text
+                    before reloading; an older draft may be restored.
+                  </p>
+                ) : null}
                 <QueuedPrompts
                   prompts={conversation.queue.pending}
                   onRemove={(turnId) => conversation.cancelQueuedPrompt(turnId)}
@@ -1242,8 +1322,23 @@ export function App() {
                           >
                             <SessionControlBar
                               ariaLabel="Session controls"
-                              permission={permissionControl}
-                              model={null}
+                              permissionState={safety.permission}
+                              permissionLocked={runtimeMutationBlocked}
+                              onPermissionSelect={(option) => {
+                                const selection = [
+                                  safety.permission.result?.current,
+                                  ...(safety.permission.result?.profiles ?? []),
+                                ].find(
+                                  (candidate) =>
+                                    candidate?.mode === option.mode &&
+                                    candidate.network === option.network,
+                                );
+                                if (selection)
+                                  void safety.updatePermission(selection);
+                              }}
+                              onPermissionRetry={() =>
+                                void safety.refreshPermission()
+                              }
                               runtimeModel={
                                 codingCapabilities.runtimeStatusAvailable &&
                                 work.supervision.statusAvailable
@@ -1318,6 +1413,7 @@ export function App() {
           fallback={<DeferredSurface label="Loading settings…" wide />}
         >
           <SettingsView
+            {...(attentionSettings ? { attentionSettings } : {})}
             session={session}
             models={models}
             activeSection={settingsSection}
@@ -1330,12 +1426,12 @@ export function App() {
             runtimeModelLabel={runtimeModelLabel}
             restartPending={restartPending}
             onDisconnect={() =>
-              hasUnfinishedWork
+              hasUnfinishedWork || draftCapacityBlocked
                 ? setLeaveConnectionAction("disconnect")
                 : disconnect()
             }
             onForgetConnection={() =>
-              hasUnfinishedWork
+              hasUnfinishedWork || draftCapacityBlocked
                 ? setLeaveConnectionAction("forget")
                 : forgetConnection()
             }
@@ -1355,6 +1451,7 @@ export function App() {
         >
           <LeaveConnectionDialog
             action={leaveConnectionAction}
+            unsavedDraft={draftCapacityBlocked}
             onCancel={() => setLeaveConnectionAction(null)}
             onConfirm={() => {
               const action = leaveConnectionAction;
@@ -1414,27 +1511,6 @@ function DeferredSurface({ label, wide }: { label: string; wide?: boolean }) {
   );
 }
 
-const PERMISSION_LABELS = {
-  menu: "Permission",
-  loading: "Loading access…",
-  unavailable: "Permission unavailable",
-  select: "Permission",
-  empty: "No permission presets are available.",
-  retry: "Retry",
-} as const;
-
-const PERMISSION_RISK_COPY = {
-  title: "Enable full access?",
-  description:
-    "Octos can read and modify files outside the workspace and use the network without the normal sandbox boundary.",
-  accessLabel: "Filesystem access",
-  networkLabel: "Network access",
-  acknowledgement:
-    "I understand that this session can make unrestricted changes.",
-  cancel: "Cancel",
-  confirm: "Enable full access",
-} as const;
-
 function defaultEndpoint(): string {
   const configured = import.meta.env.VITE_OCTOS_DEFAULT_ENDPOINT?.trim();
   if (configured) return configured;
@@ -1465,3 +1541,6 @@ function sessionContextPercent(
     Math.max(0, Math.round((inputTokens / contextWindow) * 100)),
   );
 }
+
+const STORAGE_CLEAR_WARNING =
+  "Saved data could not be cleared. Old sign-in details or drafts may return after reload. Clear this site’s stored data in browser settings, or retry Forget saved connection.";

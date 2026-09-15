@@ -53,7 +53,7 @@ describe("DiffReviewDialog", () => {
     expect(html).toContain("src/lib.ts");
     expect(html).toContain("+1");
     expect(html).toContain("−1");
-    expect(html).toContain("const ready = true;");
+    expect(html.replace(/<[^>]+>/g, "")).toContain("const ready = true;");
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).not.toContain("<script>");
   });

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  createSavedSessionUrl,
-  type SavedSessionReference,
-} from "./saved-session-link.ts";
+import { createSavedSessionUrl } from "./create-saved-session-url.ts";
+import type { SavedSessionReference } from "./saved-session-link.ts";
 import styles from "./CopySessionLink.module.css";
 
 type CopyState =

@@ -59,6 +59,32 @@ describe("GeneralSettingsContent", () => {
     expect(html).not.toContain("<input");
   });
 
+  it("offers an explicit notification toggle and readable permission failures", () => {
+    const onToggle = vi.fn();
+    const html = renderToStaticMarkup(
+      <GeneralSettingsContent
+        serverOrigin="https://octos.example.test"
+        connectionStatus="connected"
+        attentionSettings={{
+          enabled: false,
+          pending: false,
+          available: true,
+          message: "Notifications are blocked. Tab counts still work.",
+          error: true,
+          onToggle,
+        }}
+        onDisconnect={vi.fn()}
+        onForgetConnection={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Desktop notifications");
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Notifications are blocked. Tab counts still work.");
+    expect(html).toContain(">Enable</button>");
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it("keeps disconnect unavailable when there is no active connection", () => {
     const html = renderToStaticMarkup(
       <GeneralSettingsContent

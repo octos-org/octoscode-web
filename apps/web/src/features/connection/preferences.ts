@@ -2,6 +2,10 @@ import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import type { SessionOpened } from "@octos-org/octoscode-client";
 import { connectionEndpointError } from "./validation.ts";
 import {
+  parseSessionDrafts,
+  type SessionDraftRecord,
+} from "../session/session-draft-cache.ts";
+import {
   parseKnownSessionRegistry,
   rememberKnownSession as rememberRegistrySession,
   type KnownSessionRef,
@@ -60,6 +64,7 @@ interface TabConnectionPreferences {
   cwd: string;
   autoConnect: boolean;
   knownSessions: KnownSessionRef[];
+  composerDrafts: SessionDraftRecord[];
 }
 
 type ConnectionIdentity = Pick<ConnectionDraft, "endpoint" | "token">;
@@ -124,6 +129,7 @@ export function saveConnectionPreferences(
     // One envelope write changes the credential identity and invalidates its
     // tab-known Session projection together. No token is copied into an entry.
     knownSessions: sameIdentity ? previous.knownSessions : [],
+    composerDrafts: sameIdentity ? previous.composerDrafts : [],
   };
   safely(() => durableStorage.setItem(DURABLE_KEY, JSON.stringify(durable)));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
@@ -134,12 +140,32 @@ export function saveConnectionPreferences(
 export function clearConnectionPreferences(
   durableStorage: StorageLike,
   tabStorage: StorageLike,
-): void {
-  safely(() => durableStorage.removeItem(DURABLE_KEY));
-  safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
-  safely(() => tabStorage.removeItem(TAB_STATE_KEY));
-  safely(() => tabStorage.removeItem(LEGACY_TAB_STATE_KEY));
-  clearLegacyTabState(tabStorage);
+): boolean {
+  const durableCleared = removeStoredKeys(durableStorage, [
+    DURABLE_KEY,
+    LEGACY_DURABLE_KEY,
+  ]);
+  const tabCleared = removeStoredKeys(tabStorage, [
+    TAB_STATE_KEY,
+    LEGACY_TAB_STATE_KEY,
+    LEGACY_TAB_TOKEN_KEY,
+    LEGACY_TAB_AUTO_CONNECT_KEY,
+    LEGACY_TAB_SESSION_KEY,
+  ]);
+  return durableCleared && tabCleared;
+}
+
+/** A swallowed removal error is not evidence that credentials were forgotten. */
+function removeStoredKeys(
+  storage: StorageLike,
+  keys: readonly string[],
+): boolean {
+  let cleared = storage !== UNAVAILABLE_STORAGE;
+  for (const key of keys) {
+    safely(() => storage.removeItem(key));
+    if (safely(() => storage.getItem(key)) !== null) cleared = false;
+  }
+  return cleared;
 }
 
 /**
@@ -189,6 +215,33 @@ export function clearKnownSessions(
 
 export function loadAutoConnect(tabStorage: StorageLike): boolean {
   return readTabConnection(tabStorage)?.autoConnect === true;
+}
+
+export function loadComposerDrafts(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+): SessionDraftRecord[] {
+  const current = readTabConnection(tabStorage);
+  return current && matchesIdentity(current, identity)
+    ? current.composerDrafts
+    : [];
+}
+
+/** Unsent text only; never restore or dispatch a server-owned turn. */
+export function saveComposerDrafts(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+  drafts: SessionDraftRecord[],
+): boolean {
+  const current = readTabConnection(tabStorage);
+  if (!current || !matchesIdentity(current, identity)) return false;
+  const parsed = parseSessionDrafts(drafts);
+  if (parsed.length !== drafts.length) return false;
+  const value = { ...current, composerDrafts: parsed };
+  writeTabConnection(tabStorage, value);
+  return (
+    safely(() => tabStorage.getItem(TAB_STATE_KEY)) === JSON.stringify(value)
+  );
 }
 
 export function setAutoConnect(
@@ -259,6 +312,7 @@ function readTabConnection(
         value.version === 3
           ? parseKnownSessionRegistry(value.knownSessions)
           : [],
+      composerDrafts: parseSessionDrafts(value.composerDrafts),
     };
   } catch {
     return null;

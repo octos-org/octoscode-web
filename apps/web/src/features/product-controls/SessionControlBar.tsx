@@ -28,6 +28,12 @@ import type {
 } from "./types.ts";
 import styles from "./SessionControlBar.module.css";
 import { CheckIcon, ChevronDownIcon, ShieldIcon } from "../../ui/Icon.tsx";
+import type { PermissionRuntimeState } from "../review/use-coding-safety.ts";
+import {
+  permissionControlState,
+  permissionOptionId,
+  permissionOptions,
+} from "../shell/permission-projection.ts";
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -61,6 +67,74 @@ export interface RuntimeModelControlProps {
   pendingProfileDefault?: string | undefined;
   onOpenSettings: () => void;
 }
+
+interface RuntimeSessionControlBarProps {
+  ariaLabel: string;
+  permissionState: PermissionRuntimeState;
+  permissionLocked: boolean;
+  onPermissionSelect: PermissionControlProps["onSelect"];
+  onPermissionRetry: () => void;
+  runtimeModel: RuntimeModelControlProps | null;
+}
+
+/** Pure display mapping lives with the already deferred composer controls. */
+export function RuntimeSessionControlBar({
+  ariaLabel,
+  permissionState,
+  permissionLocked,
+  onPermissionSelect,
+  onPermissionRetry,
+  runtimeModel,
+}: RuntimeSessionControlBarProps) {
+  const currentPermission = permissionState.result?.current;
+  const permission = permissionState.available
+    ? {
+        state: permissionControlState(permissionState),
+        options: permissionOptions(permissionState.result),
+        selectedId: currentPermission
+          ? permissionOptionId(
+              currentPermission.mode,
+              currentPermission.network,
+            )
+          : null,
+        locked:
+          permissionLocked || permissionState.busy || !permissionState.editable,
+        labels: PERMISSION_LABELS,
+        riskCopy: PERMISSION_RISK_COPY,
+        onSelect: onPermissionSelect,
+        onRetry: onPermissionRetry,
+      }
+    : null;
+  return (
+    <SessionControlBar
+      ariaLabel={ariaLabel}
+      permission={permission}
+      model={null}
+      runtimeModel={runtimeModel}
+    />
+  );
+}
+
+const PERMISSION_LABELS = {
+  menu: "Permission",
+  loading: "Loading access…",
+  unavailable: "Permission unavailable",
+  select: "Permission",
+  empty: "No permission presets are available.",
+  retry: "Retry",
+} as const;
+
+const PERMISSION_RISK_COPY = {
+  title: "Enable full access?",
+  description:
+    "Octos can read and modify files outside the workspace and use the network without the normal sandbox boundary.",
+  accessLabel: "Filesystem access",
+  networkLabel: "Network access",
+  acknowledgement:
+    "I understand that this session can make unrestricted changes.",
+  cancel: "Cancel",
+  confirm: "Enable full access",
+} as const;
 
 interface SessionControlBarBaseProps {
   ariaLabel: string;

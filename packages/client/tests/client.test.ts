@@ -71,6 +71,64 @@ describe("OctosUiClient", () => {
     expect(client.status).toBe("error");
   });
 
+  it("bounds a silent handshake and ignores its late callbacks after retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const oldSocket = createSocket();
+      const socket = createSocket();
+      const sockets = [oldSocket, socket];
+      const client = new OctosUiClient({
+        endpoint: "http://127.0.0.1:50080",
+        connectTimeoutMs: 100,
+        webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+      });
+      const errors = vi.fn();
+      client.subscribeErrors(errors);
+      const first = expect(client.connect()).rejects.toThrow(
+        "Connection timed out",
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      await first;
+      expect(client.status).toBe("error");
+      expect(oldSocket.close).toHaveBeenCalledOnce();
+      const retry = client.connect();
+      socket.readyState = 1;
+      socket.onopen?.({} as Event);
+      await retry;
+      oldSocket.onopen?.({} as Event);
+      oldSocket.onerror?.({} as Event);
+      oldSocket.onclose?.({} as CloseEvent);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(client.status).toBe("connected");
+      expect(errors).toHaveBeenCalledOnce();
+      client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the handshake deadline after the socket opens", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createSocket();
+      const client = new OctosUiClient({
+        endpoint: "http://127.0.0.1:50080",
+        connectTimeoutMs: 100,
+        webSocketFactory: () => socket as unknown as WebSocket,
+      });
+      const connecting = client.connect();
+      socket.readyState = 1;
+      socket.onopen?.({} as Event);
+      await connecting;
+      await vi.advanceTimersByTimeAsync(200);
+      expect(client.status).toBe("connected");
+      expect(socket.close).not.toHaveBeenCalled();
+      client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["open", "close", "error", "message"] as const)(
     "ignores a replaced socket's late %s callback on the same client",
     async (event) => {
