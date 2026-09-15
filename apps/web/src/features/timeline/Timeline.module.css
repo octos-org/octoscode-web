@@ -51,6 +51,69 @@
   );
 }
 
+/* While reasoning streams, the block breathes and its label rides the same
+   crest the status line uses, so "still thinking" is legible at a glance
+   without a second spinner. */
+.reasoningBlockLive {
+  animation: thinking-breathe 2.4s ease-in-out infinite;
+}
+
+.reasoningBlockLive .reasoningHeader strong {
+  color: var(--dsw-alias-label-secondary);
+  background-image: linear-gradient(
+    100deg,
+    var(--dsw-alias-label-secondary) 0%,
+    var(--dsw-alias-state-business-primary) 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, white) 50%,
+    var(--dsw-alias-state-business-primary) 65%,
+    var(--dsw-alias-label-secondary) 100%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: thinking-wave 2.1s linear infinite;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .reasoningBlockLive .reasoningHeader strong {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes thinking-wave {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+
+@keyframes thinking-breathe {
+  0%, 100% {
+    border-color: color-mix(
+      in srgb,
+      var(--dsw-alias-state-business-primary) 28%,
+      var(--dsw-alias-border-l1)
+    );
+  }
+  50% {
+    border-color: color-mix(
+      in srgb,
+      var(--dsw-alias-state-business-primary) 62%,
+      var(--dsw-alias-border-l1)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoningBlockLive,
+  .reasoningBlockLive .reasoningHeader strong {
+    animation: none;
+  }
+  .reasoningBlockLive .reasoningHeader strong {
+    background-image: none;
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
 .reasoningHeader,
 .toolHeader {
   display: flex;

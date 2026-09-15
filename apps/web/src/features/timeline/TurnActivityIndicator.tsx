@@ -23,10 +23,12 @@ export function TurnActivityIndicator({
     : t(activity.label);
   return (
     <p className="turn-activity" role="status">
-      <span className={styles.thinkingSpinner} aria-hidden="true">
-        ◠
-      </span>{" "}
-      {word}
+      <span className={styles.activityWave}>
+        <span className={styles.thinkingSpinner} aria-hidden="true">
+          ◠
+        </span>{" "}
+        {word}
+      </span>
     </p>
   );
 }

@@ -68,24 +68,58 @@
   display: inline-block;
   width: 1em;
   text-align: center;
-  animation: galaxy-swirl 0.96s linear infinite;
+  /* The glyph turns instead of being swapped: `content` keyframes only apply
+     to pseudo-elements and are not animatable in every engine, so the previous
+     rule rendered a permanently static arc. steps(8) keeps the terminal's
+     eight-frame cadence. */
+  animation: galaxy-swirl 0.96s steps(8, end) infinite;
 }
 
 @keyframes galaxy-swirl {
-  0% { content: "◜"; }
-  12.5% { content: "◠"; }
-  25% { content: "◝"; }
-  37.5% { content: "◞"; }
-  50% { content: "◡"; }
-  62.5% { content: "◟"; }
-  75% { content: "✦"; }
-  87.5% { content: "✧"; }
-  100% { content: "◜"; }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
+
+/* TUI parity: a bright crest ripples across "glyph + status word" while a turn
+   runs (octoscode's water-wave gradient, ~2.1s period). Gradient text falls
+   back to the plain label color where background-clip: text is unsupported. */
+.activityWave {
+  color: var(--dsw-alias-label-secondary);
+  background-image: linear-gradient(
+    100deg,
+    var(--dsw-alias-label-secondary) 0%,
+    var(--dsw-alias-state-business-primary) 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, white) 50%,
+    var(--dsw-alias-state-business-primary) 65%,
+    var(--dsw-alias-label-secondary) 100%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: activity-wave 2.1s linear infinite;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .activityWave {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes activity-wave {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   .thinkingSpinner {
     animation: none;
+  }
+  .activityWave {
+    animation: none;
+    background-image: none;
+    color: var(--dsw-alias-label-secondary);
   }
   .foldChevron {
     transition: none;
