@@ -29,4 +29,25 @@ describe("Timeline", () => {
     expect(html).not.toContain("No output yet");
     expect(html).toContain("Turn complete");
   });
+
+  it("announces the timeline via a log landmark (a11y finding 4)", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        entries={[
+          {
+            id: "user-1",
+            kind: "user",
+            title: "You",
+            body: "hello",
+            status: "complete",
+            turnId: "turn-1",
+          },
+        ]}
+        connected
+      />,
+    );
+
+    expect(html).toContain('role="log"');
+    expect(html).toContain('aria-label="Conversation timeline"');
+  });
 });
