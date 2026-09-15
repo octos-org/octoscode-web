@@ -432,19 +432,31 @@ describe("canonical hydrate recovery", () => {
   });
 
   it("keeps old Core interrupted/error state visible without inventing the lost prompt", () => {
-    const entries = timelineFromHydrate({
+    const hydrated = {
       session_id: "s",
       cursor: { stream: "s", seq: 1 },
       messages: [],
       turns: [{ turn_id: "turn", state: "interrupted" }],
-    });
+    };
+    const entries = timelineFromHydrate(hydrated);
     expect(entries).toMatchObject([
       {
         id: "terminal:turn",
         title: "Turn stopped",
         body: "This turn was stopped before it completed.",
+        latestTurnOutcome: "interrupted",
       },
     ]);
     expect(entries.some((entry) => entry.kind === "user")).toBe(false);
+    const later = timelineFromHydrate({
+      ...hydrated,
+      messages: [message(2, "assistant", "Done", { turn_id: "next" })],
+      turns: [...hydrated.turns, { turn_id: "next", state: "completed" }],
+    });
+    expect(later.findLast((entry) => entry.latestTurnOutcome)).toMatchObject({
+      turnId: "next",
+      latestTurnOutcome: "completed",
+    });
+    expect(later[0]?.id).toBe("terminal:turn");
   });
 });

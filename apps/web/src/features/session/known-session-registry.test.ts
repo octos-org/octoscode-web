@@ -42,7 +42,7 @@ describe("known Session registry", () => {
     ).toBeNull();
   });
 
-  it("retains multiple Sessions in one Workspace and refreshes one tuple", () => {
+  it("refreshes a Session's recency without moving its position", () => {
     let sessions = rememberKnownSession([], opened(), 10);
     sessions = rememberKnownSession(
       sessions,
@@ -52,10 +52,11 @@ describe("known Session registry", () => {
     sessions = rememberKnownSession(sessions, opened(), 30);
 
     expect(sessions.map((session) => session.sessionId)).toEqual([
-      "coding:api:web-one",
       "coding:api:web-two",
+      "coding:api:web-one",
     ]);
-    expect(sessions[0]?.lastOpenedAt).toBe(30);
+    expect(sessions[1]?.lastOpenedAt).toBe(30);
+    expect(parseKnownSessionRegistry(sessions)).toEqual(sessions);
   });
 
   it("uses Workspace, profile, and id as the compatibility identity", () => {
@@ -94,5 +95,21 @@ describe("known Session registry", () => {
     expect(sessions).toHaveLength(100);
     expect(sessions[0]?.sessionId).toBe("coding:api:web-109");
     expect(sessions.at(-1)?.sessionId).toBe("coding:api:web-10");
+
+    sessions = rememberKnownSession(
+      sessions,
+      opened({ session_id: "coding:api:web-10" }),
+      110,
+    );
+    sessions = rememberKnownSession(
+      sessions,
+      opened({ session_id: "coding:api:web-110" }),
+      111,
+    );
+    expect(sessions).toHaveLength(100);
+    expect(sessions.at(-1)?.sessionId).toBe("coding:api:web-10");
+    expect(
+      sessions.some((session) => session.sessionId === "coding:api:web-11"),
+    ).toBe(false);
   });
 });

@@ -62,6 +62,7 @@ describe("timeline projection", () => {
     const result = timelineFromHydrate({
       session_id: "coding:local:main",
       cursor: { stream: "coding:local:main", seq: 8 },
+      turns: [{ turn_id: "turn-1", state: "completed" }],
       messages: [
         {
           seq: 1,
@@ -92,6 +93,7 @@ describe("timeline projection", () => {
     expect(result[2]).toMatchObject({
       messageId: "message-1",
       body: "Done\n\nAttachment: report.md",
+      latestTurnOutcome: "completed",
     });
   });
 

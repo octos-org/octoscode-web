@@ -137,9 +137,12 @@ export function App() {
   commandSessionRef.current = session.opened;
   const draftRef = useRef("");
   const previousActiveSessionKeyRef = useRef<string | null>(null);
-  const restoreConnectionRef = useRef(
-    loadAutoConnect(browserStorage("sessionStorage")),
-  );
+  const restoreConnectionRef = useRef<boolean | null>(null);
+  if (restoreConnectionRef.current === null) {
+    restoreConnectionRef.current = loadAutoConnect(
+      browserStorage("sessionStorage"),
+    );
+  }
   const restoreAttemptedRef = useRef(false);
   const [connection, setConnection] = useState(() =>
     loadConnectionPreferences(
@@ -185,7 +188,7 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(compact);
   useEffect(() => setSidebarCollapsed(compact), [compact]);
   const [sidebarOrder, setSidebarOrder] =
-    useState<ProductSidebarOrderMode>("updated");
+    useState<ProductSidebarOrderMode>("manual");
   const [sidebarView, setSidebarView] = useState<"grouped" | "flat">("grouped");
   const [collapsedWorkspaceIds, setCollapsedWorkspaceIds] = useState<
     ReadonlySet<string>
@@ -345,12 +348,14 @@ export function App() {
     const opened = session.opened;
     const path = opened?.workspace_root?.trim();
     if (!session.connected || !opened || !path) return;
-    setRecentWorkspaces(
-      rememberWorkspace(
-        browserStorage("sessionStorage"),
-        connection.endpoint,
-        path,
-      ),
+    setRecentWorkspaces((current) =>
+      current.some((workspace) => workspace.path === path)
+        ? current
+        : rememberWorkspace(
+            browserStorage("sessionStorage"),
+            connection.endpoint,
+            path,
+          ),
     );
     setKnownSessions(
       rememberKnownSession(
@@ -883,6 +888,7 @@ export function App() {
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}
               backgroundTurns={workspaceProduct.backgroundTurns}
+              timeline={conversation.timeline}
               hasPendingInteraction={Boolean(
                 interactions.approval || interactions.question,
               )}

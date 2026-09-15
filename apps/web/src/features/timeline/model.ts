@@ -22,6 +22,7 @@ export interface TimelineEntry {
   streamId?: string;
   turnSettled?: true;
   toolSettled?: true;
+  latestTurnOutcome?: string;
 }
 
 export function timelineFromHydrate(
@@ -150,11 +151,17 @@ export function timelineFromHydrate(
   // A cold rc.9 reload can contain a terminal turn with no persisted message.
   // Render that server truth instead of returning an empty, apparently unused
   // conversation. This does not claim that attached execution survived reload.
+  const turnOrder = new Map(
+    (result.turns ?? []).map((turn, index) => [turn.turn_id, index]),
+  );
   for (const [turnId, outcome] of terminalTurns) {
     if (
       outcome !== "completed" &&
       !entries.some((entry) => entry.id === `terminal:${turnId}`)
     ) {
+      const lastTurnIndex = entries.findLastIndex(
+        (entry) => entry.turnId === turnId,
+      );
       entries = settleTimelineTurn(
         entries,
         turnId,
@@ -163,6 +170,15 @@ export function timelineFromHydrate(
           ? "This turn was stopped before it completed."
           : "This turn failed before it completed.",
       );
+      const nextTurnIndex = entries.findIndex(
+        (entry, index) =>
+          index > lastTurnIndex &&
+          entry.turnId &&
+          (turnOrder.get(entry.turnId) ?? -1) > turnOrder.get(turnId)!,
+      );
+      if (nextTurnIndex >= 0) {
+        entries.splice(nextTurnIndex, 0, entries.pop()!);
+      }
     }
   }
   entries = entries.map((entry) =>
@@ -170,7 +186,25 @@ export function timelineFromHydrate(
       ? { ...entry, turnSettled: true }
       : entry,
   );
-  return entries;
+  return withHydratedTurnOutcome(entries, result);
+}
+
+export function withHydratedTurnOutcome(
+  entries: TimelineEntry[],
+  hydrated: SessionHydrateResult,
+): TimelineEntry[] {
+  // Core returns turns in lifecycle order; message sequence alone is not enough.
+  const latest = hydrated.turns?.at(-1);
+  if (!latest) return entries;
+  const terminal = ["completed", "errored", "interrupted"].includes(
+    latest.state,
+  );
+  return entries.map(({ latestTurnOutcome: _previous, ...entry }) => ({
+    ...entry,
+    ...(terminal && entry.turnId === latest.turn_id
+      ? { latestTurnOutcome: latest.state }
+      : {}),
+  }));
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
@@ -672,6 +706,7 @@ export function settleTimelineTurn(
           ? "info"
           : "error",
     turnId,
+    latestTurnOutcome: outcome,
   });
 }
 

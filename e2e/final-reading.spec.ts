@@ -226,7 +226,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
     });
   });
   await start(page);
-  await expect(page.locator(".timeline-entry")).toHaveCount(200);
+  await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await page
     .getByRole("button", { name: "Show 100 earlier messages" })
     .scrollIntoViewIfNeeded();
@@ -238,9 +238,17 @@ test("360-message history stays readable while new output streams and unsafe Mar
   const anchor = page.getByText(anchorText!, { exact: true });
   const anchorTop = (await anchor.boundingBox())!.y;
   await page.getByRole("button", { name: "Show 100 earlier messages" }).click();
-  await expect(page.locator(".timeline-entry")).toHaveCount(300);
+  await expect(page.locator(".timeline-entry")).toHaveCount(140);
   expect(Math.abs((await anchor.boundingBox())!.y - anchorTop)).toBeLessThan(4);
-  await page.getByRole("button", { name: "Show 60 earlier messages" }).click();
+  while (
+    await page
+      .getByRole("button", { name: /^Show \d+ earlier messages$/ })
+      .count()
+  ) {
+    await page
+      .getByRole("button", { name: /^Show \d+ earlier messages$/ })
+      .click();
+  }
   await expect(page.locator(".timeline-entry")).toHaveCount(360);
   await expect(page.locator(".timeline-entry").first()).toContainText(
     "History 1:",
@@ -321,7 +329,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
     .click();
   // Both sessions deliberately reuse hydrate fallback IDs. The session key,
   // rather than a message ID coincidence, resets the initial rendering window.
-  await expect(page.locator(".timeline-entry")).toHaveCount(200);
+  await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await expect(
     page.getByRole("button", { name: "Show 100 earlier messages" }),
   ).toBeAttached();

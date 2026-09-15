@@ -18,11 +18,7 @@ import type {
 
 type LanguageModule = { default: MaybeArray<LanguageRegistration> };
 
-// Every grammar loads on demand so that no single language — or set of boot
-// languages — bloats the CodeBlock chunk. TypeScript, shell, and json used to
-// be bundled here, which made the chunk 376 kB; they are warmed at idle by
-// the warmup timer below so the common first-code-block path still highlights
-// promptly.
+// Load only the grammars requested by a visible code block or diff.
 const lazyLanguages = new Map<string, () => Promise<LanguageModule>>([
   ["typescript", () => import("@shikijs/langs/typescript")],
   ["shellscript", () => import("@shikijs/langs/shellscript")],
@@ -119,16 +115,6 @@ function ensureLanguage(language: string): boolean {
   return false;
 }
 
-const warmup = setTimeout(() => {
-  highlighter();
-  // Warm the highest-traffic grammars so their chunks start loading at idle
-  // instead of on the first code block render.
-  for (const language of ["typescript", "shellscript", "json"]) {
-    ensureLanguage(language);
-  }
-}, 0);
-(warmup as { unref?: () => void }).unref?.();
-
 export function subscribeGrammarLoaded(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -136,6 +122,13 @@ export function subscribeGrammarLoaded(listener: () => void): () => void {
 
 export function grammarLoadCount(): number {
   return loadCount;
+}
+
+export function isGrammarLoaded(language: string | undefined): boolean {
+  const resolved = language ? aliases.get(language.toLowerCase()) : undefined;
+  return Boolean(
+    resolved && singleton?.getLoadedLanguages().includes(resolved),
+  );
 }
 
 export function highlightToHtml(
@@ -148,6 +141,7 @@ export function highlightToHtml(
     highlighter().codeToHtml(code, {
       lang: resolved,
       theme: "css-variables",
+      structure: "inline",
     }),
   );
 }

@@ -15,7 +15,10 @@ interface TimelineProps {
   connected: boolean;
 }
 
-export function Timeline({ entries, connected }: TimelineProps) {
+export const Timeline = memo(function Timeline({
+  entries,
+  connected,
+}: TimelineProps) {
   const visibleEntries = entries.filter(
     (entry) => entry.kind !== "assistant" || entry.body.trim(),
   );
@@ -26,7 +29,7 @@ export function Timeline({ entries, connected }: TimelineProps) {
     (entry) => entry.id === firstVisibleId,
   );
   const startIndex =
-    knownIndex < 0 ? Math.max(0, visibleEntries.length - 200) : knownIndex;
+    knownIndex < 0 ? Math.max(0, visibleEntries.length - 40) : knownIndex;
   const timelineRef = useRef<HTMLDivElement>(null);
   const revealAnchor = useRef<{ element: Element; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -93,7 +96,7 @@ export function Timeline({ entries, connected }: TimelineProps) {
       ))}
     </div>
   );
-}
+});
 
 /**
  * Memo boundary: folding produces new objects only for entries that changed,

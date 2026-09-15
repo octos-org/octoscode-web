@@ -1,6 +1,9 @@
 # octoscode-web 全量审计 Handoff
 
 > 最新：2026-09-15
+>
+> 用户反馈后的[交互性能实测与修复](docs/reviews/2026-09-15-interaction-performance.md)：长代码历史同步高亮导致秒级阻塞，旧小会话验证不足以证明交互流畅；本轮同时修复会话排序与完成状态归属。
+>
 > Codex 当前个人／可信团队自托管范围、完整工作流程准入、bug 与体验改进及开放项时效性见[产品发布复核](docs/reviews/2026-09-15-product-release-gate.md)。0.10 的[完整独立验证](docs/reviews/2026-09-15-codex010-verification.md)及[bug / 体验分类、修复与发布复核](docs/reviews/2026-09-15-codex010-release-readiness.md)。原交接内容作为历史记录保留。
 
 > 复核说明：本文保留为历史交接记录。2026-09-14 的实测修复、交接事实更正和剩余风险见
