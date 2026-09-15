@@ -566,7 +566,11 @@ export function App() {
       if (workspaceProduct.transitioning) workspaceProduct.cancelLaunch();
       return;
     }
-    if (draftCapacityBlocked) return;
+    if (
+      draftCapacityBlocked &&
+      productSessionId !== previousActiveSessionKeyRef.current
+    )
+      return;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
       cwd: target.workspaceRoot,
