@@ -220,6 +220,10 @@ export interface OctosSessionRuntime {
     state: WorkspaceProductState;
     launch: LaunchRuntimeState;
     transitioning: boolean;
+    openingSession: Pick<
+      SessionConnectionInput,
+      "cwd" | "profileId" | "sessionId"
+    > | null;
     pendingNavigation: PendingWorkspaceNavigation | null;
     backgroundTurns: readonly BackgroundTurnSnapshot[];
     onboarding: OnboardingRuntimeState;
@@ -1167,7 +1171,7 @@ export function useOctosSession(): OctosSessionRuntime {
   ): Promise<WorkspaceOpenOutcome> => {
     const target = input.sessionId.trim();
     const cwd = input.cwd.trim();
-    if (!target || !cwd || !currentAuthority() || transitioningRef.current) {
+    if (!target || !cwd || !currentAuthority()) {
       return Promise.resolve("failed");
     }
     if (navigationBlockedByTurnRecovery()) return Promise.resolve("failed");
@@ -1225,13 +1229,11 @@ export function useOctosSession(): OctosSessionRuntime {
     try {
       prepareBackgroundReclaim(candidateConfig, lease);
     } catch (reason) {
-      workspaceController.setError(errorMessage(reason));
-      launchTransitionRef.current.discard(lease);
+      failLaunchTransition(lease, reason);
       return "failed";
     }
     if (!prepareBackgroundHandoff(authority, lease)) {
-      rollbackBackgroundReclaim(lease);
-      launchTransitionRef.current.discard(lease);
+      failLaunchTransition(lease);
       return "failed";
     }
     onboardingController.reset();
@@ -1360,6 +1362,10 @@ export function useOctosSession(): OctosSessionRuntime {
     }
   }
 
+  const openingConfig = transitioning
+    ? launchTransitionRef.current.current()?.config
+    : null;
+
   return {
     connection: {
       status: connectionSnapshot.status,
@@ -1443,6 +1449,13 @@ export function useOctosSession(): OctosSessionRuntime {
       state: workspace,
       launch,
       transitioning,
+      openingSession: openingConfig
+        ? {
+            cwd: openingConfig.cwd,
+            profileId: openingConfig.profileId,
+            sessionId: openingConfig.sessionId,
+          }
+        : null,
       pendingNavigation,
       backgroundTurns,
       onboarding: onboardingController.state,

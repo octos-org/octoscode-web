@@ -31,6 +31,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   activeTurnId: string | null;
   turnStarting: boolean;
   timeline: readonly TimelineEntry[];
+  openingSessionId: string | null;
 }
 
 /** Session rows are presentation of server-confirmed references in this tab. */
@@ -46,6 +47,7 @@ export function SessionSidebar({
   activeTurnId,
   turnStarting,
   timeline,
+  openingSessionId,
   selectedSessionId,
   ...sidebarProps
 }: SessionSidebarProps) {
@@ -141,6 +143,7 @@ export function SessionSidebar({
           return {
             id: productId,
             title: item.title,
+            opening: productId === openingSessionId,
             ...(updatedLabel ? { updatedLabel } : {}),
             ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
             ...(active
@@ -166,6 +169,7 @@ export function SessionSidebar({
     backgroundTurns,
     opened,
     terminal,
+    openingSessionId,
   ]);
 
   return (
