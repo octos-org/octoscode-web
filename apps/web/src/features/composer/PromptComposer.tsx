@@ -146,10 +146,8 @@ export function PromptComposer({
           placeholder={placeholder}
           disabled={disabled}
           className={styles.field}
-          role="combobox"
           aria-autocomplete="list"
           aria-haspopup="listbox"
-          aria-expanded={commands.length > 0}
           aria-controls={commands.length ? paletteId : undefined}
           aria-activedescendant={
             selected ? `${paletteId}-${selected.name}` : undefined

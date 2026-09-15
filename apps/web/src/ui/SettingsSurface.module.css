@@ -1,0 +1,33 @@
+/* Shared geometry keeps the deferred and loaded Settings dialog identical.
+ * Adapted from DeepSeek Harness SettingsRoot; see THIRD_PARTY_NOTICES.md. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--dsw-alias-bg-mask-1);
+}
+.frame {
+  box-sizing: border-box;
+  width: min(800px, calc(100vw - 48px));
+  height: min(800px, calc(100dvh - 48px));
+  border-radius: 24px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+}
+@media (max-width: 640px) {
+  .overlay {
+    align-items: stretch;
+    padding: 12px;
+  }
+  .frame {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+}

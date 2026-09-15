@@ -85,7 +85,7 @@ test("session reply matches baseline", async ({ page }) => {
   await expect(page.getByText("Completed with")).toBeVisible();
   // Include the entire workspace, including the composer, so layout and
   // input placement remain part of the visual regression surface.
-  await expect(page.locator("main")).toHaveScreenshot(
+  await expect(page.locator(".workspace-grid")).toHaveScreenshot(
     "session-reply.png",
     SNAPSHOT,
   );

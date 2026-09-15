@@ -111,7 +111,7 @@ test("a different saved link takes precedence over the tab's remembered conversa
     .getByRole("button", { name: "Open conversation", exact: true })
     .click();
   await expect(
-    page.getByRole("combobox", { name: "Message Octos", exact: true }),
+    page.getByRole("textbox", { name: "Message Octos", exact: true }),
   ).toBeVisible();
   const opens = requests.filter((request) => request.method === "session/open");
   expect(opens).toHaveLength(1);
@@ -252,7 +252,7 @@ test("refuses a saved-link candidate with a different workspace before requestin
     .click();
   await expect(panel.getByRole("alert")).toBeVisible();
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveCount(0);
   expect(
     requests.filter((request) => request.method === "session/open"),

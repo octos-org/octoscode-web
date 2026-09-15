@@ -55,3 +55,19 @@
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
 }
+
+.settingsPanel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px;
+  overflow: auto;
+}
+.settingsPanel h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+.settingsPanel > [role="status"] {
+  flex: 1;
+}

@@ -139,6 +139,8 @@ describe("BackgroundTurnManager", () => {
     expect(manager.getSnapshot()[0]?.state).toBe("running");
 
     client.emit(projectionTerminal("session-a", "turn-a", "cancelled"));
+    expect(manager.getSnapshot()[0]?.state).toBe("running");
+    client.emit(projectionTerminal("session-a", "turn-a", "interrupted"));
     expect(manager.getSnapshot()[0]?.state).toBe("failed");
     expect(client.disconnectCount).toBe(0);
   });

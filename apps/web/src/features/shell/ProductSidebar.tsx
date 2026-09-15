@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
+import { ThemeIcon } from "../../ui/ThemeIcon.tsx";
 import styles from "./ProductSidebar.module.css";
 
 export type ProductSessionStatus =
@@ -831,21 +832,28 @@ export function ProductSidebar({
               </div>
 
               {!error && !loading && normalizedQuery ? (
-                searchResults.length > 0 ? (
+                <>
+                  {searchResults.length === 0 ? (
+                    <div className={styles.emptyState}>
+                      <p>No sessions match “{query.trim()}”.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                          searchInput.current?.focus();
+                        }}
+                      >
+                        Clear search
+                      </button>
+                    </div>
+                  ) : null}
                   <CatalogProgress
                     {...catalogProgress}
-                    hasResults
+                    hasResults={searchResults.length > 0}
+                    searching
                     onRetry={onRetry}
                   />
-                ) : catalogsIncomplete ? (
-                  <CatalogProgress
-                    {...catalogProgress}
-                    hasResults={false}
-                    onRetry={onRetry}
-                  />
-                ) : (
-                  <p className={styles.emptyState}>No sessions found.</p>
-                )
+                </>
               ) : null}
 
               {!normalizedQuery &&
@@ -894,7 +902,7 @@ export function ProductSidebar({
             title={collapsed ? `Theme: ${theme}` : undefined}
             onClick={onThemeToggle}
           >
-            {theme === "dark" ? "◐" : theme === "light" ? "○" : "◑"}
+            <ThemeIcon mode={theme} />
             {!collapsed ? (
               <span>
                 {theme === "dark"
@@ -927,12 +935,14 @@ function CatalogProgress({
   failed,
   limited,
   hasResults,
+  searching = false,
   onRetry,
 }: {
   pending: number;
   failed: number;
   limited: number;
   hasResults: boolean;
+  searching?: boolean;
   onRetry?: (() => void) | undefined;
 }) {
   if (pending === 0 && failed === 0 && limited === 0) return null;
@@ -947,7 +957,9 @@ function CatalogProgress({
         {limited > 0
           ? hasResults
             ? "Showing sessions confirmed in this tab."
-            : "Start a session to open a workspace."
+            : searching
+              ? "Search includes sessions confirmed in this tab. The server cannot list older sessions."
+              : "Start a session to open a workspace."
           : hasResults
             ? "Results are incomplete."
             : "Sessions are still loading."}

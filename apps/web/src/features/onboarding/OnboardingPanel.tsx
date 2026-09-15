@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  OFFICIAL_ROUTE,
   type OnboardingRuntimeState,
   type OnboardingSubmission,
 } from "./use-onboarding.ts";
+import { OFFICIAL_ROUTE } from "./onboarding-submission.ts";
 import styles from "./OnboardingPanel.module.css";
 
 interface OnboardingPanelProps {

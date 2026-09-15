@@ -25,7 +25,7 @@
 }
 
 .assistantEntry :global(.entry-content) {
-  max-width: 68ch;
+  max-width: 65ch;
 }
 
 .reasoningBlock,

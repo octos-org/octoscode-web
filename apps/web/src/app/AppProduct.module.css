@@ -334,3 +334,23 @@
     transform: scale(0.8);
   }
 }
+
+.settingsLoading {
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: start;
+  gap: 36px;
+  min-height: 0;
+  padding: 28px 0;
+}
+.settingsLoadingNav {
+  width: 100%;
+}
+@media (max-width: 640px) {
+  .settingsLoading {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .settingsLoadingNav {
+    display: none;
+  }
+}

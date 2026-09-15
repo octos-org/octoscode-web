@@ -1,4 +1,5 @@
 import { isRecord } from "./rpc.ts";
+import { isProjectionPayloadData } from "./projection-payload.ts";
 import type {
   ProjectionEnvelopeV2,
   ProjectionPayload,
@@ -18,7 +19,8 @@ export function parseProjectionEnvelope(
     value.seq < 0 ||
     typeof value.turn_id !== "string" ||
     typeof value.payload.type !== "string" ||
-    !("data" in value.payload)
+    !("data" in value.payload) ||
+    !isProjectionPayloadData(value.payload.type, value.payload.data)
   ) {
     return null;
   }

@@ -1,4 +1,5 @@
 import { lazy, useEffect, useRef, useState } from "react";
+import { useTheme } from "./use-theme.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import { timelineActivity } from "../features/timeline/model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
@@ -15,6 +16,7 @@ import { useOctosSession } from "../features/session/use-octos-session.ts";
 import { codingProductCapabilities } from "../features/session/coding-capabilities.ts";
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 import {
+  browserStorage,
   clearConnectionPreferences,
   clearKnownSessions,
   loadAutoConnect,
@@ -28,19 +30,12 @@ import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
 import {
-  findModel,
-  modelControlState,
-  modelGroups,
   permissionControlState,
   permissionOptionId,
   permissionOptions,
   profileDefaultNeedsRestart,
-  selectedModel,
 } from "../features/shell/product-projection.ts";
-import type {
-  ModelSelection,
-  SettingsSectionId,
-} from "../features/product-controls/types.ts";
+import type { SettingsSectionId } from "../features/product-controls/types.ts";
 import type { WorkspacePickerView } from "../features/workspace-create/NewSessionWorkspacePicker.tsx";
 import {
   clearRecentWorkspaces,
@@ -104,24 +99,9 @@ const SessionTrajectory = lazy(async () => ({
   default: (await import("../features/supervision/SessionTrajectory.tsx"))
     .SessionTrajectory,
 }));
-const SettingsDialog = lazy(async () => ({
-  default: (await import("../features/product-controls/SettingsDialog.tsx"))
-    .SettingsDialog,
-}));
-const GeneralSettingsContent = lazy(async () => ({
-  default: (
-    await import("../features/product-settings/GeneralSettingsContent.tsx")
-  ).GeneralSettingsContent,
-}));
-const ModelsSettingsContent = lazy(async () => ({
-  default: (
-    await import("../features/product-settings/ModelsSettingsContent.tsx")
-  ).ModelsSettingsContent,
-}));
-const ModelManagementSettings = lazy(async () => ({
-  default: (
-    await import("../features/product-settings/ModelManagementSettings.tsx")
-  ).ModelManagementSettings,
+const SettingsView = lazy(async () => ({
+  default: (await import("../features/product-settings/SettingsView.tsx"))
+    .SettingsView,
 }));
 const DiffReviewDialog = lazy(async () => ({
   default: (await import("../features/review/DiffReviewDialog.tsx"))
@@ -155,13 +135,15 @@ export function App() {
   const draftRef = useRef("");
   const sessionDraftsRef = useRef(new SessionDraftCache());
   const previousActiveSessionKeyRef = useRef<string | null>(null);
-  const restoreConnectionRef = useRef(loadAutoConnect(window.sessionStorage));
+  const restoreConnectionRef = useRef(
+    loadAutoConnect(browserStorage("sessionStorage")),
+  );
   const restoreAttemptedRef = useRef(false);
   const [connection, setConnection] = useState(() =>
     loadConnectionPreferences(
       initialConnection,
-      window.localStorage,
-      window.sessionStorage,
+      browserStorage("localStorage"),
+      browserStorage("sessionStorage"),
     ),
   );
   const [draft, setDraft] = useState("");
@@ -190,32 +172,16 @@ export function App() {
     view: WorkspacePickerView;
   }>({ open: false, view: "choose" });
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>(
-    () => loadRecentWorkspaces(window.sessionStorage, connection.endpoint),
+    () =>
+      loadRecentWorkspaces(
+        browserStorage("sessionStorage"),
+        connection.endpoint,
+      ),
   );
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
-    loadKnownSessions(window.sessionStorage, connection),
+    loadKnownSessions(browserStorage("sessionStorage"), connection),
   );
-  const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
-    const saved = window.localStorage.getItem("dsw-theme");
-    return saved === "light" || saved === "dark" ? saved : "system";
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "system") {
-      root.removeAttribute("data-theme");
-      window.localStorage.removeItem("dsw-theme");
-    } else {
-      root.setAttribute("data-theme", theme);
-      window.localStorage.setItem("dsw-theme", theme);
-    }
-  }, [theme]);
-
-  const cycleTheme = () => {
-    setTheme((prev) =>
-      prev === "system" ? "dark" : prev === "dark" ? "light" : "system",
-    );
-  };
+  const { theme, cycleTheme } = useTheme();
 
   const [savedLink, setSavedLink] = useState(() => {
     const key = new URLSearchParams(window.location.search).get("s");
@@ -229,8 +195,8 @@ export function App() {
   useEffect(() => {
     saveConnectionPreferences(
       connection,
-      window.localStorage,
-      window.sessionStorage,
+      browserStorage("localStorage"),
+      browserStorage("sessionStorage"),
     );
   }, [connection]);
 
@@ -262,7 +228,7 @@ export function App() {
 
   useEffect(() => {
     if (session.authenticated) {
-      setAutoConnect(window.sessionStorage, true);
+      setAutoConnect(browserStorage("sessionStorage"), true);
     }
   }, [session.authenticated]);
 
@@ -340,7 +306,7 @@ export function App() {
   useEffect(() => {
     // v1 persisted session ids/titles in localStorage. Remove that data rather
     // than migrating it into the product: Core is the session authority.
-    clearRecentWorkspaces(window.localStorage, connection.endpoint);
+    clearRecentWorkspaces(browserStorage("localStorage"), connection.endpoint);
   }, [connection.endpoint]);
 
   useEffect(() => {
@@ -348,10 +314,18 @@ export function App() {
     const path = opened?.workspace_root?.trim();
     if (!session.connected || !opened || !path) return;
     setRecentWorkspaces(
-      rememberWorkspace(window.sessionStorage, connection.endpoint, path),
+      rememberWorkspace(
+        browserStorage("sessionStorage"),
+        connection.endpoint,
+        path,
+      ),
     );
     setKnownSessions(
-      rememberKnownSession(window.sessionStorage, connection, opened),
+      rememberKnownSession(
+        browserStorage("sessionStorage"),
+        connection,
+        opened,
+      ),
     );
   }, [
     connection.endpoint,
@@ -671,19 +645,22 @@ export function App() {
   };
   const changeConnection = (next: ConnectionDraft) => {
     restoreConnectionRef.current = false;
-    setAutoConnect(window.sessionStorage, false);
+    setAutoConnect(browserStorage("sessionStorage"), false);
     const identityChanged =
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
-      clearKnownSessions(window.sessionStorage, connection);
-      clearConnectionPreferences(window.localStorage, window.sessionStorage);
+      clearKnownSessions(browserStorage("sessionStorage"), connection);
+      clearConnectionPreferences(
+        browserStorage("localStorage"),
+        browserStorage("sessionStorage"),
+      );
       for (const endpoint of new Set([
         connection.endpoint.trim(),
         next.endpoint.trim(),
       ])) {
         if (!endpoint) continue;
-        clearRecentWorkspaces(window.sessionStorage, endpoint);
-        clearRecentWorkspaces(window.localStorage, endpoint);
+        clearRecentWorkspaces(browserStorage("sessionStorage"), endpoint);
+        clearRecentWorkspaces(browserStorage("localStorage"), endpoint);
       }
       setRecentWorkspaces([]);
       setKnownSessions([]);
@@ -705,15 +682,18 @@ export function App() {
   };
   const disconnect = () => {
     restoreConnectionRef.current = false;
-    setAutoConnect(window.sessionStorage, false);
+    setAutoConnect(browserStorage("sessionStorage"), false);
     setSettingsOpen(false);
     setWorkspacePicker((current) => ({ ...current, open: false }));
     session.disconnect();
   };
   const forgetConnection = () => {
-    clearKnownSessions(window.sessionStorage, connection);
-    clearRecentWorkspaces(window.sessionStorage, connection.endpoint);
-    clearRecentWorkspaces(window.localStorage, connection.endpoint);
+    clearKnownSessions(browserStorage("sessionStorage"), connection);
+    clearRecentWorkspaces(
+      browserStorage("sessionStorage"),
+      connection.endpoint,
+    );
+    clearRecentWorkspaces(browserStorage("localStorage"), connection.endpoint);
     setRecentWorkspaces([]);
     setKnownSessions([]);
     sessionDraftsRef.current.clear();
@@ -721,7 +701,10 @@ export function App() {
     draftRef.current = "";
     setDraft("");
     disconnect();
-    clearConnectionPreferences(window.localStorage, window.sessionStorage);
+    clearConnectionPreferences(
+      browserStorage("localStorage"),
+      browserStorage("sessionStorage"),
+    );
     setConnection(initialConnection);
   };
 
@@ -729,16 +712,8 @@ export function App() {
     safety.permission.result,
   );
   const currentPermission = safety.permission.result?.current;
-  const projectedModelGroups = modelGroups(models.state.models);
-  const currentProfileModel = selectedModel(models.state.models);
   const runtimeModel = work.supervision.runtimeStatus?.model;
   const runtimeModelLabel = runtimeModel?.title ?? runtimeModel?.model ?? null;
-  const selectModel = async (selection: ModelSelection) => {
-    const target = findModel(models.state.models, selection);
-    if (!target) return;
-    await models.select(target);
-    await work.refresh();
-  };
   const permissionControl = safety.permission.available
     ? {
         state: permissionControlState(safety.permission),
@@ -777,13 +752,13 @@ export function App() {
     models.state.models,
     models.state.restartHint,
   );
+  const selectedProfileModel = models.state.models.find(
+    (model) => model.selected,
+  );
   const pendingProfileDefault = restartPending
-    ? currentProfileModel
-      ? (projectedModelGroups
-          .find((group) => group.id === currentProfileModel.providerId)
-          ?.models.find((model) => model.id === currentProfileModel.modelId)
-          ?.name ?? currentProfileModel.modelId)
-      : "saved model"
+    ? selectedProfileModel?.title ||
+      selectedProfileModel?.model ||
+      "saved model"
     : undefined;
   const contextPercent = sessionContextPercent(
     workspaceProduct.state.tokenCost?.inputTokens,
@@ -820,8 +795,7 @@ export function App() {
       <a className={productStyles.skipLink} href="#workspace-main">
         Skip to content
       </a>
-      <main className="workspace-grid" id="workspace-main" tabIndex={-1}>
-        <h1 className="sr-only">Octoscode coding workspace</h1>
+      <div className="workspace-grid">
         <NavigationSurface
           compact={compact}
           open={!sidebarCollapsed}
@@ -892,7 +866,8 @@ export function App() {
           </SurfaceBoundary>
         </NavigationSurface>
 
-        <section className="conversation">
+        <main className="conversation" id="workspace-main" tabIndex={-1}>
+          <h1 className="sr-only">Octoscode coding workspace</h1>
           <header className="conversation-header">
             {compact ? (
               <button
@@ -1298,8 +1273,8 @@ export function App() {
               </>
             )}
           </div>
-        </section>
-      </main>
+        </main>
+      </div>
       {codingCapabilities.sessionCreationAvailable && workspacePicker.open ? (
         <SurfaceBoundary
           name="Workspaces"
@@ -1338,113 +1313,33 @@ export function App() {
       {settingsOpen ? (
         <SurfaceBoundary
           name="Settings"
+          loadingSize="settings"
           onDismiss={() => setSettingsOpen(false)}
           fallback={<DeferredSurface label="Loading settings…" wide />}
         >
-          <SettingsDialog
-            open
+          <SettingsView
+            session={session}
+            models={models}
             activeSection={settingsSection}
-            labels={SETTINGS_LABELS}
-            slots={{
-              general: (
-                <GeneralSettingsContent
-                  {...(session.opened?.active_profile_id &&
-                  session.opened.workspace_root
-                    ? {
-                        sessionReference: {
-                          workspaceRoot: session.opened.workspace_root,
-                          profileId: session.opened.active_profile_id,
-                          sessionId: session.opened.session_id,
-                        },
-                      }
-                    : {})}
-                  serverOrigin={connection.endpoint}
-                  connectionStatus={session.status}
-                  workspaceLabel={
-                    activeWorkspacePath
-                      ? workspaceName(activeWorkspacePath)
-                      : null
-                  }
-                  workspacePath={activeWorkspacePath || null}
-                  displayProfile={session.opened?.active_profile_id ?? null}
-                  locked={
-                    workspaceProduct.transitioning || Boolean(navigationPending)
-                  }
-                  onDisconnect={() =>
-                    hasUnfinishedWork
-                      ? setLeaveConnectionAction("disconnect")
-                      : disconnect()
-                  }
-                  onForgetConnection={() =>
-                    hasUnfinishedWork
-                      ? setLeaveConnectionAction("forget")
-                      : forgetConnection()
-                  }
-                  onCopyDiagnostics={() => {
-                    // Redacted by construction: origin only (never the
-                    // token, never the WS query string), plus state the
-                    // settings screen already displays.
-                    const snapshot = {
-                      generated_at: new Date().toISOString(),
-                      user_agent: navigator.userAgent,
-                      connection: {
-                        endpoint: connection.endpoint,
-                        status: session.status,
-                        error: session.error ?? null,
-                        recovery: session.recovery,
-                      },
-                      // Runtime lifecycle ring — newest-last entries of
-                      // {at, kind, detail?}: method names and recovery
-                      // phases only, never task output or params.
-                      diagnostics: session.diagnostics,
-                      session: session.opened
-                        ? {
-                            session_id: session.opened.session_id,
-                            active_profile_id:
-                              session.opened.active_profile_id ?? null,
-                            capabilities: session.opened.capabilities ?? null,
-                          }
-                        : null,
-                    };
-                    return navigator.clipboard.writeText(
-                      JSON.stringify(snapshot, null, 2),
-                    );
-                  }}
-                />
-              ),
-              ...(showModelsSettings
-                ? {
-                    models: (
-                      <>
-                        {models.state.available ? (
-                          <ModelsSettingsContent
-                            state={modelControlState(models.state)}
-                            groups={projectedModelGroups}
-                            selected={currentProfileModel}
-                            runtimeModel={runtimeModelLabel}
-                            restartRequired={restartPending}
-                            selectionEnabled={models.state.editable}
-                            locked={runtimeMutationBlocked || models.state.busy}
-                            onRefresh={() => void models.refresh()}
-                            onSelect={(selection) =>
-                              void selectModel(selection)
-                            }
-                          />
-                        ) : null}
-                        <ModelManagementSettings
-                          key={models.management.authorityKey}
-                          client={models.management.client}
-                          profileId={models.management.profileId}
-                          capabilities={models.management.capabilities}
-                          profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
-                          locked={runtimeMutationBlocked}
-                          onConfiguredModelsChange={models.refresh}
-                        />
-                      </>
-                    ),
-                  }
-                : {}),
-            }}
+            serverOrigin={connection.endpoint}
+            workspacePath={activeWorkspacePath || null}
+            locked={
+              workspaceProduct.transitioning || Boolean(navigationPending)
+            }
+            modelChangesLocked={runtimeMutationBlocked}
+            runtimeModelLabel={runtimeModelLabel}
+            restartPending={restartPending}
+            onDisconnect={() =>
+              hasUnfinishedWork
+                ? setLeaveConnectionAction("disconnect")
+                : disconnect()
+            }
+            onForgetConnection={() =>
+              hasUnfinishedWork
+                ? setLeaveConnectionAction("forget")
+                : forgetConnection()
+            }
+            onModelsChanged={work.refresh}
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
           />
@@ -1505,11 +1400,15 @@ export function App() {
 function DeferredSurface({ label, wide }: { label: string; wide?: boolean }) {
   return (
     <div
-      className={productStyles.deferredSurface}
+      className={`${productStyles.deferredSurface} ${wide ? productStyles.settingsLoading : ""}`}
       role="status"
-      style={wide ? { minHeight: "min(60vh, 480px)" } : undefined}
     >
-      <SkeletonRows rows={wide ? 12 : 3} />
+      {wide ? (
+        <div className={productStyles.settingsLoadingNav}>
+          <SkeletonRows rows={4} />
+        </div>
+      ) : null}
+      <SkeletonRows rows={wide ? 6 : 3} />
       <span className="sr-only">{label}</span>
     </div>
   );
@@ -1534,14 +1433,6 @@ const PERMISSION_RISK_COPY = {
     "I understand that this session can make unrestricted changes.",
   cancel: "Cancel",
   confirm: "Enable full access",
-} as const;
-
-const SETTINGS_LABELS = {
-  title: "Settings",
-  navigation: "Settings sections",
-  general: "General",
-  models: "Models",
-  close: "Close settings",
 } as const;
 
 function defaultEndpoint(): string {

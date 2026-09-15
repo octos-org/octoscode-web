@@ -1,11 +1,13 @@
 import { Component, Suspense, useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./SurfaceBoundary.module.css";
+import settingsShell from "../../ui/SettingsSurface.module.css";
 
 interface SurfaceBoundaryProps {
   children: ReactNode;
   fallback: ReactNode;
   name?: string;
+  loadingSize?: "settings";
   onDismiss?: (() => void) | undefined;
   actions?: ReactNode;
 }
@@ -45,7 +47,9 @@ function UnavailableSurface({
   actions,
   fallback,
   loading = false,
+  loadingSize,
 }: SurfaceBoundaryProps & { loading?: boolean }) {
+  const settingsLoading = loading && loadingSize === "settings";
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const content = (
@@ -86,8 +90,14 @@ function UnavailableSurface({
   );
   return onDismiss ? (
     <ModalSurface
-      backdropClassName={styles.backdrop!}
-      dialogClassName={styles.panel!}
+      backdropClassName={
+        settingsLoading ? settingsShell.overlay! : styles.backdrop!
+      }
+      dialogClassName={
+        settingsLoading
+          ? `${settingsShell.frame} ${styles.settingsPanel}`
+          : styles.panel!
+      }
       labelledBy={titleId}
       initialFocusRef={closeRef}
       onEscape={onDismiss}

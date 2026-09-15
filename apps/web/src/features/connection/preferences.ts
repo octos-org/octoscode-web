@@ -29,6 +29,23 @@ export interface StorageLike {
   removeItem(key: string): void;
 }
 
+const UNAVAILABLE_STORAGE: StorageLike = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+/** The browser can deny access to the storage property itself. */
+export function browserStorage(
+  kind: "localStorage" | "sessionStorage",
+): StorageLike {
+  try {
+    return window[kind];
+  } catch {
+    return UNAVAILABLE_STORAGE;
+  }
+}
+
 interface DurableConnectionPreferences {
   version: 2;
   endpoint: string;

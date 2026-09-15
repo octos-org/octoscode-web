@@ -45,11 +45,6 @@ import type {
   UserQuestionRespondResult,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
-import { parseTurnStateGetResult } from "./turn-state.ts";
-import {
-  parseApprovalRespondResult,
-  parseUserQuestionRespondResult,
-} from "./interaction.ts";
 import { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
 import type {
   LlmCatalogResult,
@@ -75,6 +70,7 @@ const loadCodingResponses = () => import("./coding.ts");
 const loadSupervisionResponses = () => import("./supervision.ts");
 const loadOnboardingResponses = () => import("./onboarding.ts");
 const loadWorkspaceResponses = () => import("./workspace.ts");
+const loadInteractionResponses = () => import("./interaction-responses.ts");
 
 export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
@@ -343,8 +339,10 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TURN_STATE_GET,
       params,
-      (value) => {
-        const result = parseTurnStateGetResult(value);
+      async (value) => {
+        const result = (
+          await import("./turn-state.ts")
+        ).parseTurnStateGetResult(value);
         return result?.session_id === params.session_id &&
           result.turn_id === params.turn_id
           ? result
@@ -366,7 +364,8 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.APPROVAL_RESPOND,
       params,
-      parseApprovalRespondResult,
+      async (value) =>
+        (await loadInteractionResponses()).parseApprovalRespondResult(value),
     );
   }
 
@@ -376,7 +375,10 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.USER_QUESTION_RESPOND,
       params,
-      parseUserQuestionRespondResult,
+      async (value) =>
+        (await loadInteractionResponses()).parseUserQuestionRespondResult(
+          value,
+        ),
     );
   }
 

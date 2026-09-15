@@ -3,14 +3,11 @@ import {
   APPUI_ONBOARDING_METHODS,
   supportsMethod,
   type LlmCatalogResult,
-  type LlmSelection,
   type OctosUiClient,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
 import { RequestGate } from "../async/request-gate.ts";
 
-const OFFICIAL_ROUTE = "__official__";
-const KEYLESS_CORE_PROBE = "octoscode-web-keyless-probe";
 const REQUIRED_METHODS = Object.values(APPUI_ONBOARDING_METHODS);
 
 export type OnboardingPhase =
@@ -46,7 +43,7 @@ interface UseOnboardingOptions {
   onConfigured: (profileId: string, client: OctosUiClient) => Promise<void>;
 }
 
-interface CreatedProfileBinding {
+export interface CreatedProfileBinding {
   requestedId: string;
   profileId: string;
 }
@@ -140,112 +137,22 @@ export function useOnboarding(options: UseOnboardingOptions) {
     const generation = requestsRef.current.begin();
     submissionActiveRef.current = true;
 
-    const profileId = submission.profileId.trim();
-    const profileName = submission.profileName.trim();
     const apiKey = submission.apiKey.trim();
     try {
-      const selection = selectionFromCatalog(catalog, submission);
-      const requiresApiKey = Boolean(selection.route.api_key_env);
-      if (!profileId || !profileName || (requiresApiKey && !apiKey)) {
-        throw new Error(
-          requiresApiKey
-            ? "Profile ID, profile name, and API key are required."
-            : "Profile ID and profile name are required.",
-        );
-      }
-      // v2.0.3-rc.9 asks for a non-empty test value even when its registry
-      // marks the family keyless (octos#2123). An empty key env means upsert
-      // never persists this non-secret compatibility probe.
-      const wireApiKey = apiKey || KEYLESS_CORE_PROBE;
-      let createdProfile = createdProfileRef.current;
-      if (!createdProfile) {
-        setState((current) => ({
-          ...current,
-          phase: "creating_profile",
-          error: null,
-        }));
-        const created = await client.createLocalProfile({
-          requested_id: profileId,
-          name: profileName,
-          username: "",
-          email: "",
-          make_default: submission.makeDefault,
-        });
-        if (
-          !requestsRef.current.isCurrent(generation) ||
-          options.client() !== client
-        ) {
-          return;
-        }
-        createdProfile = {
-          requestedId: profileId,
-          profileId: created.profile_id,
-        };
-        createdProfileRef.current = createdProfile;
-        setState((current) => ({
-          ...current,
-          createdProfileId: created.profile_id,
-        }));
-      } else if (createdProfile.requestedId !== profileId) {
-        throw new Error(
-          `Profile ${createdProfile.profileId} was already created. Reconnect to choose another identity.`,
-        );
-      }
-      const createdProfileId = createdProfile.profileId;
-
-      setState((current) => ({
-        ...current,
-        phase: "testing_provider",
-        error: null,
-      }));
-      const tested = await client.testLlmProfile({
-        profile_id: createdProfileId,
-        selection,
-        api_key: wireApiKey,
+      const { submitOnboarding } = await import("./onboarding-submission.ts");
+      const isCurrent = () =>
+        requestsRef.current.isCurrent(generation) &&
+        options.client() === client;
+      if (!isCurrent()) return;
+      await submitOnboarding({
+        client,
+        catalog,
+        submission,
+        binding: createdProfileRef,
+        setState,
+        isCurrent,
+        onConfigured: options.onConfigured,
       });
-      if (
-        !requestsRef.current.isCurrent(generation) ||
-        options.client() !== client
-      ) {
-        return;
-      }
-      if (
-        tested.profile_id !== createdProfileId ||
-        !tested.applied ||
-        tested.error
-      ) {
-        throw new Error(
-          tested.error || tested.message || "The provider test did not pass.",
-        );
-      }
-
-      setState((current) => ({
-        ...current,
-        phase: "saving_provider",
-        error: null,
-      }));
-      const saved = await client.upsertLlmProfile({
-        profile_id: createdProfileId,
-        selection,
-        api_key: wireApiKey,
-        set_primary: true,
-      });
-      if (
-        !requestsRef.current.isCurrent(generation) ||
-        options.client() !== client
-      ) {
-        return;
-      }
-      if (saved.profile_id !== createdProfileId || !saved.applied) {
-        throw new Error("The server did not apply the tested provider.");
-      }
-
-      setState((current) => ({
-        ...current,
-        phase: "opening_session",
-        error: null,
-      }));
-      await options.onConfigured(createdProfileId, client);
     } catch (reason) {
       if (
         !requestsRef.current.isCurrent(generation) ||
@@ -268,52 +175,6 @@ export function useOnboarding(options: UseOnboardingOptions) {
 
   return { state, prepare, reset, submit };
 }
-
-export function selectionFromCatalog(
-  catalog: LlmCatalogResult,
-  selection: Pick<OnboardingSubmission, "familyId" | "modelId" | "routeId">,
-): LlmSelection {
-  const family = catalog.families.find(
-    (candidate) => candidate.id === selection.familyId,
-  );
-  const model = family?.models.find(
-    (candidate) => candidate.id === selection.modelId,
-  );
-  if (!family || !model) {
-    throw new Error("The selected provider or model is no longer advertised.");
-  }
-  if (selection.routeId === OFFICIAL_ROUTE) {
-    return {
-      family_id: family.id,
-      model_id: model.id,
-      route: {
-        route_id: family.id,
-        label: "Official API",
-        api_key_env: family.env,
-        api_type: "openai",
-      },
-    };
-  }
-  const endpoint = model.endpoints.find(
-    (candidate) => candidate.id === selection.routeId,
-  );
-  if (!endpoint) {
-    throw new Error("The selected provider route is no longer advertised.");
-  }
-  return {
-    family_id: family.id,
-    model_id: model.id,
-    route: {
-      route_id: endpoint.id,
-      ...(endpoint.label ? { label: endpoint.label } : {}),
-      ...(endpoint.base_url ? { base_url: endpoint.base_url } : {}),
-      api_key_env: endpoint.api_key_env ?? family.env,
-      api_type: endpoint.api_type ?? "openai",
-    },
-  };
-}
-
-export { OFFICIAL_ROUTE };
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);

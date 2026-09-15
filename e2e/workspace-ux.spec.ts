@@ -13,7 +13,7 @@ async function start(page: Page) {
   await page.getByLabel("Server workspace path").fill("/workspace/ux-review");
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
-    page.getByRole("combobox", { name: "Message Octos" }),
+    page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
   await expect(page.locator(".markdown-body").first()).toBeVisible();
 }
@@ -67,7 +67,7 @@ test("IME confirmation and multiline editing never send; queued messages can be 
 }) => {
   const turns = await holdTurns(page);
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await expect(input).toBeFocused();
   await input.fill("检查中文输入");
   await input.dispatchEvent("keydown", {
@@ -112,7 +112,7 @@ test("protects a running turn from closing the tab and removes the warning on co
 }) => {
   const turns = await holdTurns(page);
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("keep this running");
   await input.press("Enter");
   await expect.poll(() => turns.sent.length).toBe(1);
@@ -140,7 +140,7 @@ test("keeps the mobile composer on screen and makes navigation an accessible dra
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("preserve my mobile draft");
   const box = await input.boundingBox();
   expect(box!.y + box!.height).toBeLessThan(844);
@@ -191,7 +191,7 @@ test("mobile review actions leave room for workspace context after a completed t
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Review the mobile workspace fixture");
   await input.press("Enter");
   await expect(page.getByText("Completed with")).toBeVisible();
@@ -222,7 +222,7 @@ test("follows arriving content but leaves a reader in history until they jump to
   const turns = await holdTurns(page);
   await page.setViewportSize({ width: 1280, height: 720 });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("show a long response");
   await input.press("Enter");
   await expect.poll(() => turns.sent.length).toBe(1);
@@ -269,7 +269,7 @@ test("opening tool output keeps its heading in view instead of following the exp
   const turns = await holdTurns(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Review details expansion");
   await input.press("Enter");
   await expect.poll(() => turns.sent.length).toBe(1);
@@ -340,7 +340,7 @@ test("sidebar sort controls reorder sessions and track which Session was last op
       .click();
     await expect(sessions).toHaveCount(count);
     await expect(
-      page.getByRole("combobox", { name: "Message Octos" }),
+      page.getByRole("textbox", { name: "Message Octos" }),
     ).toBeEnabled();
     openedTitles.push(await selectedTitle.innerText());
   }
@@ -380,7 +380,7 @@ test("long queued messages and a multiline draft keep mobile actions inside the 
   const turns = await holdTurns(page);
   await page.setViewportSize({ width: 320, height: 480 });
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Keep this response running");
   await input.press("Enter");
   await expect.poll(() => turns.sent.length).toBe(1);
@@ -423,7 +423,7 @@ test("finishing approval and question takeovers returns the keyboard to the comp
   page,
 }) => {
   await start(page);
-  const input = page.getByRole("combobox", { name: "Message Octos" });
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request approval fixture");
   await input.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -454,7 +454,7 @@ for (const action of ["Disconnect", "Forget server"] as const) {
   }) => {
     const turns = await holdTurns(page);
     await start(page);
-    const input = page.getByRole("combobox", { name: "Message Octos" });
+    const input = page.getByRole("textbox", { name: "Message Octos" });
     await input.fill("Keep working while I inspect the connection");
     await input.press("Enter");
     await expect.poll(() => turns.sent.length).toBe(1);
