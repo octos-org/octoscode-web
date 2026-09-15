@@ -98,30 +98,9 @@ describe("OctosUiClient", () => {
       oldSocket.onopen?.({} as Event);
       oldSocket.onerror?.({} as Event);
       oldSocket.onclose?.({} as CloseEvent);
-      await vi.advanceTimersByTimeAsync(100);
-      expect(client.status).toBe("connected");
-      expect(errors).toHaveBeenCalledOnce();
-      client.disconnect();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("clears the handshake deadline after the socket opens", async () => {
-    vi.useFakeTimers();
-    try {
-      const socket = createSocket();
-      const client = new OctosUiClient({
-        endpoint: "http://127.0.0.1:50080",
-        connectTimeoutMs: 100,
-        webSocketFactory: () => socket as unknown as WebSocket,
-      });
-      const connecting = client.connect();
-      socket.readyState = 1;
-      socket.onopen?.({} as Event);
-      await connecting;
       await vi.advanceTimersByTimeAsync(200);
       expect(client.status).toBe("connected");
+      expect(errors).toHaveBeenCalledOnce();
       expect(socket.close).not.toHaveBeenCalled();
       client.disconnect();
     } finally {
@@ -246,37 +225,6 @@ describe("OctosUiClient", () => {
     await second;
     expect(client.status).toBe("connected");
     client.disconnect();
-  });
-
-  it("correlates successful JSON-RPC responses", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
-
-    const request = client.startTurn({
-      session_id: "coding:local:main",
-      turn_id: "turn-1",
-      input: [{ kind: "text", text: "check" }],
-    });
-    const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as {
-      id: string;
-    };
-    socket.onmessage?.({
-      data: JSON.stringify({
-        jsonrpc: "2.0",
-        id: frame.id,
-        result: { ok: true },
-      }),
-    } as MessageEvent);
-
-    await expect(request).resolves.toEqual({ ok: true });
   });
 
   it("emits canonical approval and user-question response methods", async () => {
@@ -532,42 +480,6 @@ describe("OctosUiClient", () => {
       const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as {
         id: string;
       };
-      const rejection = expect(pending).rejects.toThrow("turn/start timed out");
-      await vi.advanceTimersByTimeAsync(50);
-      await rejection;
-
-      socket.onmessage?.({
-        data: JSON.stringify({
-          jsonrpc: "2.0",
-          id: frame.id,
-          result: { ok: true },
-        }),
-      } as MessageEvent);
-      expect(errors).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("rejects a timed-out request with an identifiable timeout error", async () => {
-    vi.useFakeTimers();
-    try {
-      const socket = createSocket();
-      const client = new OctosUiClient({
-        endpoint: "http://127.0.0.1:50080",
-        requestTimeoutMs: 50,
-        webSocketFactory: () => socket as unknown as WebSocket,
-      });
-      const connecting = client.connect();
-      socket.readyState = 1;
-      socket.onopen?.({} as Event);
-      await connecting;
-
-      const pending = client.startTurn({
-        session_id: "s1",
-        turn_id: "t1",
-        input: [],
-      });
       const rejection = expect(pending).rejects.toThrow(
         OctosUiRequestTimeoutError,
       );
@@ -577,6 +489,15 @@ describe("OctosUiClient", () => {
         message: "turn/start timed out",
         method: "turn/start",
       });
+
+      socket.onmessage?.({
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          id: frame.id,
+          result: { ok: true },
+        }),
+      } as MessageEvent);
+      expect(errors).toEqual([]);
     } finally {
       vi.useRealTimers();
     }

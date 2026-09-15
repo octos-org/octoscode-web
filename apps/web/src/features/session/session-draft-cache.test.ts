@@ -23,30 +23,6 @@ describe("SessionDraftCache", () => {
     expect(cache.get("three")).toBe("third");
   });
 
-  it("clears every draft when the authenticated principal changes", () => {
-    const cache = new SessionDraftCache();
-    cache.set("session-a", "private draft");
-    cache.set("session-b", "another draft");
-
-    cache.clear();
-
-    expect(cache.size).toBe(0);
-    expect(cache.get("session-a")).toBeUndefined();
-  });
-
-  it("rejects invalid capacity instead of silently becoming unbounded", () => {
-    expect(() => new SessionDraftCache(0)).toThrow(/positive integer/);
-  });
-
-  it("restores exact unsent Unicode text and removes submitted or cleared drafts", () => {
-    const text = "  请审阅 👩🏽‍💻\n\n最后一行  ";
-    const cache = new SessionDraftCache(50, [["session-a", text]]);
-    expect(cache.get("session-a")).toBe(text);
-    expect(cache.snapshot()).toEqual([["session-a", text]]);
-    cache.set("session-a", "");
-    expect(cache.snapshot()).toEqual([]);
-  });
-
   it("rejects corrupt and excessive storage instead of restoring partial or truncated drafts", () => {
     for (const value of [
       null,

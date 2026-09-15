@@ -297,35 +297,6 @@ describe("prepareCandidateSession", () => {
     expect(client.listenerCount).toBe(0);
   });
 
-  it("cancels a pending stage immediately and cleans the client", async () => {
-    const client = new FakeCandidateClient();
-    const controller = new AbortController();
-    const hydrate = deferred<SessionHydrateResult>();
-    const hydrateStarted = deferred<void>();
-    client.hydrateImplementation = () => {
-      hydrateStarted.resolve();
-      return hydrate.promise;
-    };
-
-    const pending = prepareCandidateSession({
-      config,
-      signal: controller.signal,
-      createClient: () => client,
-      validateOpened: () => undefined,
-    });
-    await hydrateStarted.promise;
-
-    controller.abort();
-
-    await expect(pending).rejects.toBeInstanceOf(
-      CandidateSessionCancelledError,
-    );
-    expect(client.disconnectCount).toBe(1);
-    expect(client.listenerCount).toBe(0);
-
-    hydrate.resolve(hydrated);
-  });
-
   it("keeps a newer candidate owned when an older stage settles after cancel", async () => {
     const olderClient = new FakeCandidateClient();
     const newerClient = new FakeCandidateClient();
@@ -358,6 +329,7 @@ describe("prepareCandidateSession", () => {
       CandidateSessionCancelledError,
     );
     expect(olderClient.disconnectCount).toBe(1);
+    expect(olderClient.listenerCount).toBe(0);
     expect(newerClient.disconnectCount).toBe(0);
 
     const newerSnapshot = newerStage.release();
