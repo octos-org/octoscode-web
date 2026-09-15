@@ -302,8 +302,15 @@ async function releaseHeldTerminal(
   ).toBe(204);
 }
 
+interface ActiveTurn {
+  turn_id: string;
+  owner: string;
+  profile_id?: string;
+  workspace_root?: string;
+}
+
 interface DiagnosticsState {
-  activeBySession: Record<string, { turn_id: string; owner: string } | null>;
+  activeBySession: Record<string, ActiveTurn | null>;
   socketsBySession: Record<string, number>;
 }
 
@@ -313,6 +320,28 @@ async function diagnostics(
   return (await (
     await request.get(FIXTURE_ORIGIN + "/__test__/diagnostics/state")
   ).json()) as DiagnosticsState;
+}
+
+/** The Sessions progressing a socket-owned turn inside ONE workspace, sorted.
+ *  `/__test__/diagnostics/state` is process-global and the whole e2e run shares
+ *  a single fixture, so a sweep over every `activeBySession` key also sees
+ *  Sessions other spec files opened (and left running). The fixture stamps each
+ *  Session with the `workspace_root` it was opened against
+ *  (mock-ui-server.mjs:3221), and every case here opens its own workspace, so
+ *  scoping by the case's cwd selects exactly the Sessions that case created.
+ *  Callers compare the result against the Session ids they captured from their
+ *  own turn/start frames, so the count AND the identities are pinned. */
+function activeSocketSessionsIn(
+  state: DiagnosticsState,
+  workspaceRoot: string,
+): string[] {
+  return Object.entries(state.activeBySession)
+    .filter(
+      ([, active]) =>
+        active?.owner === "socket" && active.workspace_root === workspaceRoot,
+    )
+    .map(([sessionId]) => sessionId)
+    .sort();
 }
 
 interface RuntimeErrors {
@@ -424,12 +453,17 @@ test("runs bounded repeated waves across three progressing Sessions with per-Ses
       await sendPrompt(page, queued[index]!);
       await expect(page.getByText(/\b1 queued\b/)).toBeVisible();
     }
+    // All three of THIS case's Sessions progress at once, and the fixture's
+    // socket-owned actives in this workspace are exactly those three Session
+    // ids — no fourth active Session here, and none of the three missing.
+    const waveSessions = primary.map((text) =>
+      sessionIdForPrompt(started(), text),
+    );
+    expect(new Set(waveSessions).size).toBe(3);
     const active = await diagnostics(request);
-    expect(
-      Object.values(active.activeBySession).filter(
-        (turn) => turn?.owner === "socket",
-      ),
-    ).toHaveLength(3);
+    expect(activeSocketSessionsIn(active, cwd)).toEqual(
+      [...waveSessions].sort(),
+    );
     expect(interrupts()).toBe(0);
 
     // Release each Session's held terminal in turn; only that Session's queued
@@ -498,11 +532,15 @@ test("runs bounded repeated waves across three progressing Sessions with per-Ses
   expect(new Set(started().map((turn) => turn.sessionId)).size).toBe(3);
   expect(new Set(started().map((turn) => turn.turnId)).size).toBe(WAVES * 6);
   const settled = await diagnostics(request);
-  expect(
-    Object.values(settled.activeBySession).filter(
-      (turn) => turn?.owner === "socket",
-    ),
-  ).toHaveLength(0);
+  // Nothing this case created is still progressing: no socket-owned turn left
+  // anywhere in its workspace, and each of its own three Session ids is idle.
+  expect(activeSocketSessionsIn(settled, cwd)).toEqual([]);
+  for (const sessionId of new Set(started().map((turn) => turn.sessionId))) {
+    expect(
+      settled.activeBySession[sessionId] ?? null,
+      `session ${sessionId} still active`,
+    ).toBeNull();
+  }
   expect(errors().unhandled).toEqual([]);
   expect(errors().consoleErrors).toEqual([]);
 });
@@ -792,11 +830,11 @@ test("resolves three concurrent parked background approvals out of order without
   }
   expect(new Set(parked.map((entry) => entry.turnId)).size).toBe(3);
   const active = await diagnostics(request);
-  expect(
-    Object.values(active.activeBySession).filter(
-      (turn) => turn?.owner === "socket",
-    ),
-  ).toHaveLength(3);
+  // Three parked approvals hold three concurrently active socket-owned turns,
+  // and they are exactly the three Sessions whose approvals this case parked.
+  expect(activeSocketSessionsIn(active, cwd)).toEqual(
+    parked.map((entry) => entry.sessionId).sort(),
+  );
   expect(interrupts()).toBe(0);
 
   // Resolve C, then B, then A: each response must carry that Session's own ids.
@@ -996,11 +1034,15 @@ test("keeps exactly ONE live transport while an active A and its queued A2 recov
   // No user-initiated interrupt: A1 died by connection_closed, not by Stop.
   expect(interrupts()).toBe(0);
   const settled = await diagnostics(request);
-  expect(
-    Object.values(settled.activeBySession).filter(
-      (turn) => turn?.owner === "socket",
-    ),
-  ).toHaveLength(0);
+  // A (recovered), B and C are all idle again: no socket-owned turn left in
+  // this case's workspace, and each of its own Session ids reports null.
+  expect(activeSocketSessionsIn(settled, cwd)).toEqual([]);
+  for (const sessionId of new Set(started().map((turn) => turn.sessionId))) {
+    expect(
+      settled.activeBySession[sessionId] ?? null,
+      `session ${sessionId} still active`,
+    ).toBeNull();
+  }
   expect(transports.live()).toBe(1);
   // No uncaught page errors across the reconnect (reconnect warnings are legit).
   expect(errors().unhandled).toEqual([]);

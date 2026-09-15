@@ -278,8 +278,15 @@ async function releaseHeldTerminal(
   ).toBe(204);
 }
 
+interface ActiveTurn {
+  turn_id: string;
+  owner: string;
+  profile_id?: string;
+  workspace_root?: string;
+}
+
 interface DiagnosticsState {
-  activeBySession: Record<string, { turn_id: string; owner: string } | null>;
+  activeBySession: Record<string, ActiveTurn | null>;
 }
 
 async function diagnostics(
@@ -288,6 +295,24 @@ async function diagnostics(
   return (await (
     await request.get(FIXTURE_ORIGIN + "/__test__/diagnostics/state")
   ).json()) as DiagnosticsState;
+}
+
+/** The Sessions the fixture still reports ACTIVE inside ONE workspace.
+ *  `/__test__/diagnostics/state` is process-global and the whole e2e run shares
+ *  a single fixture, so a sweep over every `activeBySession` key also sees
+ *  Sessions other spec files opened. The fixture stamps each Session with the
+ *  `workspace_root` it was opened against (mock-ui-server.mjs:3221), and a
+ *  staged peer inherits its master's root, so scoping by this case's own cwd
+ *  selects exactly the Sessions this case created — all 12 plus their 3 peers —
+ *  and nothing else. */
+function activeSessionsIn(
+  state: DiagnosticsState,
+  workspaceRoot: string,
+): string[] {
+  return Object.entries(state.activeBySession)
+    .filter(([, active]) => active?.workspace_root === workspaceRoot)
+    .map(([sessionId]) => sessionId)
+    .sort();
 }
 
 interface RuntimeErrors {
@@ -501,9 +526,20 @@ test("holds 12 Sessions + 3 native peers on one pooled socket, refuses a peer-ow
   }
 
   const state = await diagnostics(request);
-  for (const [sessionId, active] of Object.entries(state.activeBySession)) {
-    expect(active, `session ${sessionId} still active after release-all`).toBeNull();
+  // Idle-after-release-all, proven twice over THIS case's Sessions only: by id
+  // for every Session this page admitted a turn on, and by workspace for the
+  // whole scope — which also covers the 3 peer Sessions, whose turns the
+  // fixture (not this page) admitted.
+  for (const sessionId of new Set(started().map((turn) => turn.sessionId))) {
+    expect(
+      state.activeBySession[sessionId] ?? null,
+      `session ${sessionId} still active after release-all`,
+    ).toBeNull();
   }
+  expect(
+    activeSessionsIn(state, cwd),
+    "sessions in this workspace still active after release-all",
+  ).toEqual([]);
   const runtime = errs();
   expect(runtime.unhandled, "uncaught page errors").toEqual([]);
   expect(runtime.consoleErrors, "console errors").toEqual([]);
