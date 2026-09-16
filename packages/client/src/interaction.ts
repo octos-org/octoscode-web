@@ -1,5 +1,5 @@
 import { isRecord, type RpcNotification } from "./rpc.ts";
-import { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
+import { isProtocolUuid as isPreviewId } from "./protocol-id.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -191,3 +191,9 @@ function parseQuestion(value: unknown): UserQuestion | null {
     allowFreeText: value.allow_free_text === true,
   };
 }
+
+// Compatibility re-export: response decoders moved to interaction-responses.ts.
+export {
+  parseApprovalRespondResult,
+  parseUserQuestionRespondResult,
+} from "./interaction-responses.ts";

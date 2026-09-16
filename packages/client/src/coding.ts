@@ -1,5 +1,6 @@
+import { isProtocolUuid as isPreviewId } from "./protocol-id.ts";
+export { isProtocolUuid as isPreviewId } from "./protocol-id.ts";
 import { isRecord } from "./rpc.ts";
-import { isProtocolUuid as isPreviewId } from "./supervision-values.ts";
 import type {
   DiffPreview,
   DiffPreviewFile,

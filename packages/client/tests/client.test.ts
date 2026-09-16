@@ -48,6 +48,19 @@ describe("OctosUiClient", () => {
     client.disconnect();
   });
 
+  it("negotiates the implemented native review surface", () => {
+    expect(DEFAULT_UI_FEATURES).toContain("review.start.v1");
+  });
+
+  it("negotiates the external-master control feature", () => {
+    // P2d: the Core driver family is STRICT OPT-IN (contract 2800 §1). Without
+    // `external_driver_v1` in client_hello the Core never advertises
+    // session/driver/*, peer/dispatch or peer/control to the web, so a cold
+    // real Core can never reach the seat. The mock advertises regardless of
+    // this list, which is why every mock run passed.
+    expect(DEFAULT_UI_FEATURES).toContain("external_driver_v1");
+  });
+
   it("rejects connect when the socket closes before opening", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
@@ -628,6 +641,35 @@ describe("OctosUiClient", () => {
     });
   });
 
+  it("dispatches a cold-decoded mutation immediately and never replays it onto a replacement socket", async () => {
+    const oldSocket = createSocket();
+    const newSocket = createSocket();
+    const sockets = [oldSocket, newSocket];
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    oldSocket.readyState = 1;
+    oldSocket.onopen?.({} as Event);
+    await connecting;
+
+    const mutation = client.setPermissionProfile(
+      fixture.permission_profile_set.request as PermissionProfileSetParams,
+    );
+    // An import may defer receipt decoding, never the authority-sensitive send.
+    expect(oldSocket.send).toHaveBeenCalledTimes(1);
+    const rejected = expect(mutation).rejects.toThrow();
+    client.disconnect();
+    const reconnecting = client.connect();
+    newSocket.readyState = 1;
+    newSocket.onopen?.({} as Event);
+    await reconnecting;
+    await rejected;
+    expect(newSocket.send).not.toHaveBeenCalled();
+    client.disconnect();
+  });
+
   it("emits and validates authoritative product requests", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
@@ -753,6 +795,8 @@ describe("OctosUiClient", () => {
         set_primary: true,
       }),
     ];
+    // Provisioning decoders are deferred; wire identity/order remains exact.
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledTimes(5));
     const frames = socket.send.mock.calls.map(([frame]) =>
       JSON.parse(String(frame)),
     ) as Array<{ id: string; method: string; params: Record<string, unknown> }>;

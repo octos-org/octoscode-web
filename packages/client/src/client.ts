@@ -43,9 +43,13 @@ import type {
   TurnStateGetResult,
   UserQuestionRespondParams,
   UserQuestionRespondResult,
+  UiProtocolCapabilities,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
-import { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
+import {
+  APPUI_ONBOARDING_METHODS,
+  APPUI_WORKSPACE_BROWSE_METHODS,
+} from "./onboarding-methods.ts";
 import type {
   LlmCatalogResult,
   LlmFetchModelsParams,
@@ -64,13 +68,39 @@ import type {
   LocalProfileCreateParams,
   LocalProfileCreateResult,
 } from "./onboarding.ts";
+import type {
+  WorkspaceCreateParams,
+  WorkspaceCreateResult,
+  WorkspaceListParams,
+  WorkspaceListResult,
+} from "./workspace-browse.ts";
 
 // Reuse each loader so production builds emit one preload closure per family.
 const loadCodingResponses = () => import("./coding.ts");
-const loadSupervisionResponses = () => import("./supervision.ts");
+const loadTaskResults = () => import("./task-results.ts");
+const loadSessionStatus = () => import("./session-status-result.ts");
 const loadOnboardingResponses = () => import("./onboarding.ts");
 const loadWorkspaceResponses = () => import("./workspace.ts");
+const loadWorkspaceBrowseResponses = () => import("./workspace-browse.ts");
+const loadWorkspaceResults = () => import("./workspace-results.ts");
 const loadInteractionResponses = () => import("./interaction-responses.ts");
+
+/**
+ * Core feature that OPTS a connection into the whole external-driver family
+ * (`session/driver/*`, `peer/dispatch`, `peer/control`). The Core gate is a
+ * STRICT opt-in (contract 2800 §1): nothing in that family is advertised to the
+ * web until client_hello negotiates this feature, so a real Core stayed
+ * unreachable while every mock run passed (the mock advertises regardless).
+ *
+ * Narrow vertical-slice guard: the PINNED Core contract revision
+ * (`generated/core-contract.ts`) predates this feature, so it is deliberately
+ * NOT part of the generated `CORE_UI_FEATURES` index. The identical wire string
+ * is owned by `external-driver.ts` (`EXTERNAL_DRIVER_V1_FEATURE`); it is
+ * duplicated here as a literal ONLY to keep `client.ts` free of a static import
+ * cycle into that module (which imports `OctosUiProtocolError` from here).
+ * Delete this constant once `contract:update` carries the feature.
+ */
+export const EXTERNAL_DRIVER_V1_UI_FEATURE = "external_driver_v1";
 
 export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
@@ -78,12 +108,22 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
+  CORE_UI_FEATURES.THREAD_GRAPH_V1,
   CORE_UI_FEATURES.TURN_STATE_GET_V1,
+  CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
   CORE_UI_FEATURES.USER_QUESTION_V1,
   CORE_UI_FEATURES.PLAN_TODOS_V1,
   CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
   CORE_UI_FEATURES.HARNESS_TASK_CONTROL_V1,
   CORE_UI_FEATURES.HARNESS_TASK_ARTIFACTS_V1,
+  CORE_UI_FEATURES.CONTEXT_LIFECYCLE_V1,
+  CORE_UI_FEATURES.REVIEW_START_V1,
+  CORE_UI_FEATURES.CODING_AUTONOMY_V1,
+  CORE_UI_FEATURES.CODING_AGENT_CONTROL_V1,
+  CORE_UI_FEATURES.CODING_GOAL_RUNTIME_V1,
+  CORE_UI_FEATURES.CODING_LOOP_RUNTIME_V1,
+  CORE_UI_FEATURES.CODING_MONITOR_RUNTIME_V1,
+  EXTERNAL_DRIVER_V1_UI_FEATURE,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -108,18 +148,6 @@ interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
-}
-
-export class OctosUiProtocolError extends Error {
-  readonly code: number;
-  readonly data: unknown;
-
-  constructor(code: number, message: string, data?: unknown) {
-    super(message);
-    this.name = "OctosUiProtocolError";
-    this.code = code;
-    this.data = data;
-  }
 }
 
 /**
@@ -156,6 +184,16 @@ export class OctosUiClient {
   private nextRequestId = 1;
   private currentStatus: ConnectionStatus = "idle";
 
+  /**
+   * Shared command adapter. Command factories receive this ONE adapter instead
+   * of each allocating its own identical closure; it is bound to this client's
+   * live transport authority (it defers to `this.request` per call) and is
+   * never shared across clients.
+   */
+  private readonly invoke = {
+    request: (method: string, params: unknown) => this.request(method, params),
+  };
+
   constructor(options: OctosUiClientOptions) {
     this.options = { requestTimeoutMs: 30_000, ...options };
   }
@@ -164,10 +202,99 @@ export class OctosUiClient {
     return this.currentStatus;
   }
 
+  async contextCommands(
+    sessionId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createContextCommands } = await import("./context-commands.ts");
+    return createContextCommands(this.invoke, sessionId, capabilities);
+  }
+
+  async historyCommands(
+    sessionId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createHistoryCommands } = await import("./history.ts");
+    return createHistoryCommands(this.invoke, sessionId, capabilities);
+  }
+
+  async inspectionCommands(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+    authority: object = this,
+  ) {
+    const { createInspectionCommands } = await import("./inspection.ts");
+    return createInspectionCommands(
+      this.invoke,
+      { sessionId, profileId, authority },
+      capabilities,
+    );
+  }
+
+  async btwCommands(sessionId: string, capabilities: UiProtocolCapabilities) {
+    const { createBtwCommands } = await import("./btw.ts");
+    return createBtwCommands(this.invoke, sessionId, capabilities);
+  }
+
+  async steerCommands(sessionId: string, capabilities: UiProtocolCapabilities) {
+    const { createSteerCommands } = await import("./steer.ts");
+    return createSteerCommands(this.invoke, sessionId, capabilities);
+  }
+
+  async autonomyCommands(
+    sessionId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createSessionAutonomyCommands } = await import("./autonomy.ts");
+    return createSessionAutonomyCommands(this.invoke, sessionId, capabilities);
+  }
+
+  async externalDriverCommands(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+    topic?: string,
+  ) {
+    const { createExternalDriverCommands } =
+      await import("./external-driver.ts");
+    return createExternalDriverCommands(this.invoke, sessionId, capabilities, {
+      profileId,
+      ...(topic === undefined ? {} : { topic }),
+    });
+  }
+
+  async skillCommands(profileId: string, capabilities: UiProtocolCapabilities) {
+    const { createSkillCommands } = await import("./skills.ts");
+    return createSkillCommands(this.invoke, profileId, capabilities);
+  }
+
+  async researchCommands(
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createResearchCommands } = await import("./research.ts");
+    return createResearchCommands(this.invoke, profileId, capabilities);
+  }
+
   subscribeStatus(listener: (status: ConnectionStatus) => void): () => void {
     this.statusListeners.add(listener);
     listener(this.currentStatus);
     return () => this.statusListeners.delete(listener);
+  }
+
+  async inventoryCommands(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createInventoryCommands } = await import("./inventory.ts");
+    return createInventoryCommands(
+      this.invoke,
+      sessionId,
+      profileId,
+      capabilities,
+    );
   }
 
   subscribeNotifications(
@@ -376,6 +503,39 @@ export class OctosUiClient {
     );
   }
 
+  /** Narrow, captured-owner peer commands; no public raw RPC surface. */
+  async peerCommands(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+    authority: object = this,
+  ) {
+    const { createPeerCommands } = await import("./peer-commands.ts");
+    return createPeerCommands(
+      this.invoke,
+      { sessionId, profileId, authority },
+      capabilities,
+    );
+  }
+
+  /** Authenticated blob transfer stays separate from the WebSocket RPC wire. */
+  async mediaCommands(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createMediaCommands } = await import("./media.ts");
+    return createMediaCommands({
+      endpoint: this.options.endpoint,
+      ...(this.options.token === undefined
+        ? {}
+        : { token: this.options.token }),
+      sessionId,
+      profileId,
+      capabilities,
+    });
+  }
+
   interruptTurn(sessionId: string, turnId: string): Promise<unknown> {
     return this.request(CORE_UI_METHODS.TURN_INTERRUPT, {
       session_id: sessionId,
@@ -444,8 +604,7 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_LIST,
       params,
-      async (value) =>
-        (await loadSupervisionResponses()).parseTaskListResult(value),
+      async (value) => (await loadTaskResults()).parseTaskListResult(value),
     );
   }
 
@@ -453,8 +612,7 @@ export class OctosUiClient {
     return this.validatedRequest(
       CORE_UI_METHODS.TASK_CANCEL,
       params,
-      async (value) =>
-        (await loadSupervisionResponses()).parseTaskCancelResult(value),
+      async (value) => (await loadTaskResults()).parseTaskCancelResult(value),
     );
   }
 
@@ -465,7 +623,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.TASK_OUTPUT_READ,
       params,
       async (value) =>
-        (await loadSupervisionResponses()).parseTaskOutputReadResult(value),
+        (await loadTaskResults()).parseTaskOutputReadResult(value),
     );
   }
 
@@ -476,7 +634,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.TASK_ARTIFACT_LIST,
       params,
       async (value) =>
-        (await loadSupervisionResponses()).parseTaskArtifactListResult(value),
+        (await loadTaskResults()).parseTaskArtifactListResult(value),
     );
   }
 
@@ -487,7 +645,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.TASK_ARTIFACT_READ,
       params,
       async (value) =>
-        (await loadSupervisionResponses()).parseTaskArtifactReadResult(value),
+        (await loadTaskResults()).parseTaskArtifactReadResult(value),
     );
   }
 
@@ -496,7 +654,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.SESSION_STATUS_READ,
       { session_id: sessionId },
       async (value) =>
-        (await loadSupervisionResponses()).parseSessionStatusReadResult(value),
+        (await loadSessionStatus()).parseSessionStatusReadResult(value),
     );
   }
 
@@ -507,7 +665,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.SESSION_LIST,
       params,
       async (value) =>
-        (await loadWorkspaceResponses()).parseSessionListResult(value),
+        (await loadWorkspaceResults()).parseSessionListResult(value),
     );
   }
 
@@ -617,6 +775,38 @@ export class OctosUiClient {
     );
   }
 
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §1. `path: null` (or an empty path)
+   * asks about the server's own working directory.
+   */
+  async listWorkspaceFolders(
+    params: WorkspaceListParams,
+  ): Promise<WorkspaceListResult> {
+    return this.validatedRequest(
+      APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_LIST,
+      params,
+      async (value) =>
+        (await loadWorkspaceBrowseResponses()).parseWorkspaceListResult(value),
+    );
+  }
+
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §2. `created: false` is an idempotent
+   * success — a directory of that name already existed.
+   */
+  async createWorkspaceFolder(
+    params: WorkspaceCreateParams,
+  ): Promise<WorkspaceCreateResult> {
+    return this.validatedRequest(
+      APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_CREATE,
+      params,
+      async (value) =>
+        (await loadWorkspaceBrowseResponses()).parseWorkspaceCreateResult(
+          value,
+        ),
+    );
+  }
+
   async resolveLaunch(
     params: LaunchResolveParams,
   ): Promise<LaunchResolveResult> {
@@ -624,7 +814,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.LAUNCH_RESOLVE,
       params,
       async (value) =>
-        (await loadWorkspaceResponses()).parseLaunchResolveResult(value),
+        (await loadWorkspaceResults()).parseLaunchResolveResult(value),
     );
   }
 
@@ -635,7 +825,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.SESSION_DELETE,
       params,
       async (value) =>
-        (await loadWorkspaceResponses()).parseSessionDeleteResult(value),
+        (await loadWorkspaceResults()).parseSessionDeleteResult(value),
     );
   }
 
@@ -646,7 +836,7 @@ export class OctosUiClient {
       CORE_UI_METHODS.SESSION_FILES_LIST,
       params,
       async (value) =>
-        (await loadWorkspaceResponses()).parseSessionFilesListResult(value),
+        (await loadWorkspaceResults()).parseSessionFilesListResult(value),
     );
   }
 
@@ -656,6 +846,9 @@ export class OctosUiClient {
     parse: (value: unknown) => Result | null | Promise<Result | null>,
     timeoutMs?: number,
   ): Promise<Result> {
+    // Dispatch NOW, before any decoder import resolves: request() sends
+    // synchronously, so a mutation is never deferred across a module await
+    // onto a later transport authority. The decoder loads after dispatch.
     const result = await this.request(method, params, timeoutMs);
     const parsed = await parse(result);
     if (!parsed) throw new Error(`${method} returned an invalid result`);
@@ -736,3 +929,5 @@ export class OctosUiClient {
     for (const listener of this.errorListeners) listener(error);
   }
 }
+import { OctosUiProtocolError } from "./protocol-error.ts";
+export { OctosUiProtocolError } from "./protocol-error.ts";
