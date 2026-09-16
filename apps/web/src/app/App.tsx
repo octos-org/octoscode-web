@@ -1,5 +1,4 @@
 import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
-import { useTheme } from "./use-theme.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
   addSystemMessage,
@@ -56,7 +55,16 @@ import {
   SHOW_THINKING_KEY,
 } from "../features/reasoning/show-thinking.ts";
 import { resolveActiveSessionKey } from "./active-session-key.ts";
-import type { ConnectionDraft } from "../features/connection/ConnectionPanel.tsx";
+import {
+  ConnectionPanel,
+  type ConnectionDraft,
+} from "../features/connection/ConnectionPanel.tsx";
+import type { ConnectionGateApi } from "./ConnectionGate.tsx";
+import {
+  autoStartKind,
+  initialConnection,
+  STORAGE_CLEAR_WARNING,
+} from "../features/connection/connection-bootstrap.ts";
 import { resolveComposerIntent } from "../features/composer/intent.ts";
 import { peerClearAnnouncement } from "../features/peers/peer-copy.ts";
 import {
@@ -73,32 +81,12 @@ import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
 import {
   browserStorage,
-  clearConnectionPreferences,
-  clearKnownSessions,
-  loadAutoConnect,
-  loadConnectionPreferences,
   loadComposerDrafts,
-  loadDurableEndpoint,
   loadKnownSessions,
   rememberKnownSession,
-  saveConnectionPreferences,
   saveComposerDrafts,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
-import {
-  claimPairingCode,
-  consumePairingLink,
-  loopbackOrigin,
-  pairingErrorCopy,
-  probePairingInfo,
-} from "../features/connection/pairing.ts";
-import {
-  forgetRememberedToken,
-  loadRememberedToken,
-  rememberToken,
-  type TokenStorageKind,
-} from "../features/connection/remembered-token.ts";
-import { connectionEndpointError } from "../features/connection/validation.ts";
 import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
@@ -192,11 +180,6 @@ const SessionControlBar = lazyNamed(
   () => import("../features/product-controls/SessionControlBar.tsx"),
   (module) => module.SessionControlBar,
 );
-const PreferencesDialog = lazyNamed(
-  () => import("../features/preferences/PreferencesDialog.tsx"),
-  (module) => module.PreferencesDialog,
-);
-
 const ResumeDialog = lazyNamed(
   () => import("../features/resume/ResumeDialog.tsx"),
   (module) => module.ResumeDialog,
@@ -209,10 +192,6 @@ const SessionSidebar = lazyNamed(
 const Timeline = lazyNamed(
   () => import("../features/timeline/Timeline.tsx"),
   (module) => module.Timeline,
-);
-const ConnectionPanel = lazyNamed(
-  () => import("../features/connection/ConnectionPanel.tsx"),
-  (module) => module.ConnectionPanel,
 );
 const SessionStatusStrip = lazyNamed(
   () => import("../features/session-config/SessionStatusStrip.tsx"),
@@ -347,19 +326,25 @@ const PlanCard = lazyNamed(
   (module) => module.PlanCard,
 );
 
-const initialConnection: ConnectionDraft = {
-  endpoint: defaultEndpoint(),
-  token: "",
-  sessionId: "coding:local:main",
-  profileId: "",
-  cwd: "",
-};
 const COMMAND_PALETTE_ID = "composer-command-palette";
 
-export function App() {
+export function App({ gate }: { gate: ConnectionGateApi }) {
   const preferences = usePreferences();
   const t = useUiText();
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  // One source of truth: the entry read storage before this shell existed and
+  // owns every pre-connection fact below. Nothing here reads it a second time.
+  const {
+    connection,
+    setConnection,
+    pairingLink,
+    cleanupFailed,
+    restoreConnectionRef,
+    rememberedConnectRef,
+    theme,
+    cycleTheme,
+    disconnect,
+    forgetConnection,
+  } = gate;
   const {
     connection: session,
     protocol,
@@ -373,51 +358,9 @@ export function App() {
   } = useOctosSession();
   const draftRef = useRef("");
   const previousActiveSessionKeyRef = useRef<string | null>(null);
-  const restoreConnectionRef = useRef<boolean | null>(null);
-  if (restoreConnectionRef.current === null) {
-    restoreConnectionRef.current = loadAutoConnect(
-      browserStorage("sessionStorage"),
-    );
-  }
   const restoreAttemptedRef = useRef(false);
-  // WEB-PAIRING-CONTRACT-5100 §Client: main.tsx already read `octos`/`pair` and
-  // rewrote the address before this first render; this reads what it captured.
-  // The code lives in memory only, for exactly one POST.
-  const [pairingLink] = useState(() => consumePairingLink());
-  /** True when this tab woke up holding a token remembered on this device. */
-  const rememberedConnectRef = useRef(false);
-  /** True when this device ALREADY remembers a token for the loaded origin. */
-  const rememberedAtStartRef = useRef(false);
-  const [connection, setConnection] = useState(() => {
-    const loaded = loadConnectionPreferences(
-      initialConnection,
-      browserStorage("localStorage"),
-      browserStorage("sessionStorage"),
-    );
-    const remembered = loadRememberedToken(
-      browserStorage("localStorage"),
-      loaded.endpoint,
-    );
-    // The two are NOT the same question. A reload finds the token in this
-    // tab's own storage, which must not be read as "the operator unchecked
-    // Remember" and silently erase the device memory.
-    rememberedAtStartRef.current = remembered !== null;
-    // A pairing link brings its own token from /pair/claim; nothing is typed.
-    if (pairingLink) return { ...loaded, token: "" };
-    if (loaded.token || !remembered) return loaded;
-    rememberedConnectRef.current = true;
-    return { ...loaded, token: remembered };
-  });
-  const connectionRef = useRef(connection);
-  // §Remembering: ON by default for a pairing link and for an origin this
-  // device already remembers; OFF for a hand-typed token.
-  const [remember, setRemember] = useState(
-    () => Boolean(pairingLink) || rememberedAtStartRef.current,
-  );
-  const [pairingClaiming, setPairingClaiming] = useState(Boolean(pairingLink));
-  const [pairingError, setPairingError] = useState<string | null>(null);
-  const [tokenStorageBlocked, setTokenStorageBlocked] = useState(false);
-  const [discoveredOrigin, setDiscoveredOrigin] = useState<string | null>(null);
+  /** A Connect pressed while this shell was still loading is claimed once. */
+  const pendingConnectClaimedRef = useRef(false);
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
@@ -427,7 +370,6 @@ export function App() {
   const [draft, updateDraft] = useState("");
   const [draftSaved, setDraftSaved] = useState(true);
   const [draftRetained, setDraftRetained] = useState(true);
-  const [cleanupFailed, setCleanupFailed] = useState(false);
   const [attentionSettings, setAttentionSettings] =
     useState<AttentionSettings | null>(null);
   const attentionIdentity = useMemo(
@@ -708,7 +650,27 @@ export function App() {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(browserStorage("sessionStorage"), connection),
   );
-  const { theme, cycleTheme } = useTheme();
+  // The session seam the entry's connect screen drives. Published during
+  // render so every call sees this render's closures, and absent entirely
+  // while the shell is unmounted (where each of these is a no-op anyway).
+  gate.bridgeRef.current = {
+    connect: (next: ConnectionDraft) => session.connect(next),
+    disconnect: () => {
+      setSettingsOpen(false);
+      setWorkspacePicker((current) => ({ ...current, open: false }));
+      session.disconnect();
+    },
+    resetIdentity: () => {
+      setRecentWorkspaces([]);
+      setKnownSessions([]);
+      sessionDrafts.clear();
+      setDraftRetained(true);
+      setDraftSaved(true);
+      previousActiveSessionKeyRef.current = null;
+      draftRef.current = "";
+      setDraft("");
+    },
+  };
 
   const [savedLink, setSavedLink] = useState(() => {
     const key = new URLSearchParams(window.location.search).get("s");
@@ -744,105 +706,29 @@ export function App() {
         .length === 1,
   );
 
-  useEffect(() => {
-    saveConnectionPreferences(
-      connection,
-      browserStorage("localStorage"),
-      browserStorage("sessionStorage"),
-    );
-    connectionRef.current = connection;
-  }, [connection]);
-
-  // WEB-PAIRING-CONTRACT-5100 §Client steps 1-4. The code is read from the
-  // closure, posted once, and dropped: it reaches neither storage nor a log.
-  useEffect(() => {
-    if (!pairingLink) return;
-    const origin = loopbackOrigin(pairingLink.origin);
-    if (!origin) {
-      // Step 1: refused before any request is made, and the refused address is
-      // NOT prefilled into the form the operator falls back to.
-      setPairingError(pairingErrorCopy("pair_origin_not_loopback"));
-      setPairingClaiming(false);
-      setRemember(rememberedAtStartRef.current);
-      return;
-    }
-    const controller = new AbortController();
-    let live = true;
-    void claimPairingCode(pairingLink, { signal: controller.signal }).then(
-      (result) => {
-        if (!live) return;
-        if (!result.ok) {
-          // Step 4: bounded copy per kind, and the normal form with the
-          // origin prefilled so the operator can paste a token instead.
-          setPairingError(pairingErrorCopy(result.kind));
-          setPairingClaiming(false);
-          // The token will now be hand-typed, so Remember goes back to its
-          // hand-typed default unless this device already remembers one.
-          setRemember(rememberedAtStartRef.current);
-          setConnection((current) => ({ ...current, endpoint: origin }));
-          return;
-        }
-        const next = {
-          ...connectionRef.current,
-          endpoint: result.claim.serverOrigin,
-          token: result.claim.token,
-        };
-        setConnection(next);
-        session.connect(next);
-      },
-    );
-    return () => {
-      live = false;
-      controller.abort();
-    };
-  }, [pairingLink]);
-
   // The pairing card stays up until the connect it started settles, so a
   // paired operator is never shown a box asking for a token they already have.
+  const pairingClaiming = gate.panel.pairing;
+  const setPairingClaiming = gate.setPairingClaiming;
   useEffect(() => {
     if (!pairingClaiming) return;
     if (session.authenticated || session.error) setPairingClaiming(false);
-  }, [pairingClaiming, session.authenticated, session.error]);
+  }, [
+    pairingClaiming,
+    setPairingClaiming,
+    session.authenticated,
+    session.error,
+  ]);
 
-  // §Remembering: checked persists the token under the per-origin durable key;
-  // unchecked leaves it in sessionStorage exactly as before. A write that
-  // cannot be read back downgrades to in-memory WITH a visible notice.
+  // A Connect pressed on the entry's connect screen while this chunk was
+  // still in flight. The entry parked the draft rather than dropping it.
   useEffect(() => {
-    const durable = browserStorage("localStorage");
-    if (!remember) {
-      forgetRememberedToken(durable, connection.endpoint);
-      return;
-    }
-    if (
-      !connection.token.trim() ||
-      connectionEndpointError(connection.endpoint)
-    ) {
-      return;
-    }
-    setTokenStorageBlocked(
-      !rememberToken(durable, connection.endpoint, connection.token),
-    );
-  }, [remember, connection.endpoint, connection.token]);
-
-  // §Discovery: with no link and no remembered token, probe the ONE origin
-  // this browser last saw. A 404 is "pairing not supported" — no complaint —
-  // and every other failure is silent. Never a range of ports.
-  useEffect(() => {
-    if (pairingLink || rememberedConnectRef.current) return;
-    if (restoreConnectionRef.current || connection.token.trim()) return;
-    const last = loadDurableEndpoint(browserStorage("localStorage"));
-    if (!last) return;
-    const controller = new AbortController();
-    let live = true;
-    void probePairingInfo(last, { signal: controller.signal }).then((probe) => {
-      if (live && probe.kind === "available") {
-        setDiscoveredOrigin(probe.info.serverOrigin);
-      }
-    });
-    return () => {
-      live = false;
-      controller.abort();
-    };
+    if (pendingConnectClaimedRef.current) return;
+    pendingConnectClaimedRef.current = true;
+    const pending = gate.takePendingConnect();
+    if (pending) session.connect(pending);
+    // Mount only: the entry hands over at most one parked connect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -855,30 +741,36 @@ export function App() {
       restoreAttemptedRef.current = true;
       // §Remembering: a token remembered on this device is asked for once. A
       // fresh tab authenticates with it and stops at the workspace gate — it
-      // does not resurrect another tab's Session selection.
-      if (!restoreConnectionRef.current) {
-        if (connection.endpoint.trim() && connection.token.trim()) {
-          session.connect(connection);
-        }
+      // does not resurrect another tab's Session selection. The entry took
+      // this same decision to know whether to load this shell at all.
+      const start = autoStartKind({
+        pairingLink: pairingLink !== null,
+        restoreConnection: restoreConnectionRef.current,
+        rememberedConnect: rememberedConnectRef.current,
+        endpoint: connection.endpoint,
+        token: connection.token,
+        sessionId: connection.sessionId,
+      });
+      if (start === "connect") {
+        session.connect(connection);
         return;
       }
-      if (connection.endpoint.trim() && connection.sessionId.trim()) {
-        if (savedLink) {
-          const rememberedKey = workspaceSessionKey(
-            connection.cwd,
-            connection.profileId,
-            connection.sessionId,
-          );
-          // A new link takes precedence over the tab's previous selection.
-          if (savedLink.key !== rememberedKey) {
-            session.connect(connection);
-            return;
-          }
-          // The existing restore path already opens this exact reference.
-          autoLinkAttempted.current = true;
+      if (start !== "restore") return;
+      if (savedLink) {
+        const rememberedKey = workspaceSessionKey(
+          connection.cwd,
+          connection.profileId,
+          connection.sessionId,
+        );
+        // A new link takes precedence over the tab's previous selection.
+        if (savedLink.key !== rememberedKey) {
+          session.connect(connection);
+          return;
         }
-        session.restore(connection);
+        // The existing restore path already opens this exact reference.
+        autoLinkAttempted.current = true;
       }
+      session.restore(connection);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [connection, session]);
@@ -1189,7 +1081,7 @@ export function App() {
         return;
       case "theme":
       case "language":
-        setPreferencesOpen(true);
+        gate.openPreferences();
         return;
       case "set-language":
         preferences.setLanguage(intent.value);
@@ -1199,7 +1091,7 @@ export function App() {
         return;
       case "save-config":
         showLocalReport({ kind: "save-config", saved: preferences.save() });
-        setPreferencesOpen(true);
+        gate.openPreferences();
         return;
       case "set-steer":
         conversation.setSteeringEnabled(intent.value);
@@ -1850,118 +1742,6 @@ export function App() {
     }
     setWorkspacePicker({ open: true, view: "choose" });
   };
-  const changeConnection = (next: ConnectionDraft) => {
-    restoreConnectionRef.current = false;
-    setAutoConnect(browserStorage("sessionStorage"), false);
-    const identityChanged =
-      next.endpoint !== connection.endpoint || next.token !== connection.token;
-    if (identityChanged) {
-      setPairingError(null);
-      setDiscoveredOrigin(null);
-      clearKnownSessions(browserStorage("sessionStorage"), connection);
-      let cleared = clearConnectionPreferences(
-        browserStorage("localStorage"),
-        browserStorage("sessionStorage"),
-      );
-      // §Remembering: the device memory belongs to the identity being left.
-      if (
-        !forgetRememberedToken(
-          browserStorage("localStorage"),
-          connection.endpoint,
-        )
-      ) {
-        cleared = false;
-      }
-      for (const endpoint of new Set([
-        connection.endpoint.trim(),
-        next.endpoint.trim(),
-      ])) {
-        if (!endpoint) continue;
-        if (!clearRecentWorkspaces(browserStorage("sessionStorage"), endpoint))
-          cleared = false;
-        if (!clearRecentWorkspaces(browserStorage("localStorage"), endpoint))
-          cleared = false;
-      }
-      setCleanupFailed(!cleared);
-      setRecentWorkspaces([]);
-      setKnownSessions([]);
-      sessionDrafts.clear();
-      setDraftRetained(true);
-      setDraftSaved(true);
-      previousActiveSessionKeyRef.current = null;
-      draftRef.current = "";
-      setDraft("");
-    }
-    setConnection(
-      identityChanged
-        ? {
-            ...next,
-            sessionId: initialConnection.sessionId,
-            profileId: "",
-            cwd: "",
-          }
-        : next,
-    );
-  };
-  const disconnect = () => {
-    restoreConnectionRef.current = false;
-    setPairingClaiming(false);
-    setAutoConnect(browserStorage("sessionStorage"), false);
-    setSettingsOpen(false);
-    setWorkspacePicker((current) => ({ ...current, open: false }));
-    session.disconnect();
-  };
-  const forgetConnection = () => {
-    // §Remembering: Forget clears the device memory too, and the checkbox goes
-    // back to its hand-typed default.
-    const rememberedCleared = forgetRememberedToken(
-      browserStorage("localStorage"),
-      connection.endpoint,
-    );
-    rememberedConnectRef.current = false;
-    setRemember(false);
-    setTokenStorageBlocked(false);
-    setPairingError(null);
-    setDiscoveredOrigin(null);
-    clearKnownSessions(browserStorage("sessionStorage"), connection);
-    const tabRecentsCleared = clearRecentWorkspaces(
-      browserStorage("sessionStorage"),
-      connection.endpoint,
-    );
-    const durableRecentsCleared = clearRecentWorkspaces(
-      browserStorage("localStorage"),
-      connection.endpoint,
-    );
-    setRecentWorkspaces([]);
-    setKnownSessions([]);
-    sessionDrafts.clear();
-    setDraftRetained(true);
-    setDraftSaved(true);
-    previousActiveSessionKeyRef.current = null;
-    draftRef.current = "";
-    setDraft("");
-    disconnect();
-    setCleanupFailed(
-      !clearConnectionPreferences(
-        browserStorage("localStorage"),
-        browserStorage("sessionStorage"),
-      ) ||
-        !rememberedCleared ||
-        !tabRecentsCleared ||
-        !durableRecentsCleared,
-    );
-    setConnection(initialConnection);
-  };
-
-  /** §Discovery: one button, one origin — the one that answered /pair/info. */
-  const useDiscoveredOrigin = () => {
-    if (!discoveredOrigin) return;
-    const next = { ...connectionRef.current, endpoint: discoveredOrigin };
-    setDiscoveredOrigin(null);
-    setConnection(next);
-    session.connect(next);
-  };
-
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
   ).map((option) => ({
@@ -2166,13 +1946,6 @@ export function App() {
   ]);
 
   if (!showProductShell) {
-    // §Remembering: the single line the panel shows must name the storage that
-    // is ACTUALLY in effect, including the in-memory downgrade.
-    const tokenStorageKind: TokenStorageKind = tokenStorageBlocked
-      ? "memory"
-      : remember
-        ? "device"
-        : "tab";
     const gateStatus =
       session.status === "connected" ? "connecting" : session.status;
     // §5.1: a classified connect failure replaces the raw handshake error
@@ -2186,20 +1959,15 @@ export function App() {
     const failureActions = failureCopy?.actions;
     return (
       <>
-        <button type="button" onClick={() => setPreferencesOpen(true)}>
+        <button type="button" onClick={gate.openPreferences}>
           {t("Browser preferences")}
         </button>
-        {preferencesOpen ? (
-          <Suspense fallback={null}>
-            <PreferencesDialog onClose={() => setPreferencesOpen(false)} />
-          </Suspense>
-        ) : null}
         <SurfaceBoundary
           name="Connection"
           fallback={<DeferredSurface label="Loading connection…" />}
         >
           <ConnectionPanel
-            value={connection}
+            {...gate.panel}
             status={gateStatus}
             error={failureCopy ? failureCopy.message : session.error}
             focusTokenField={failureCopy?.focusTokenField === true}
@@ -2208,21 +1976,7 @@ export function App() {
             // half so an empty-token connect is not mis-diagnosed as a bad
             // address.
             handshakeAmbiguous={classified?.kind === "unreachable"}
-            pairing={pairingClaiming}
-            pairingError={pairingError}
-            tokenStorage={tokenStorageKind}
-            remember={remember}
-            onRememberChange={setRemember}
-            discoveredOrigin={discoveredOrigin}
-            onUseDiscovered={useDiscoveredOrigin}
             {...(failureActions !== undefined ? { failureActions } : {})}
-            {...(cleanupFailed
-              ? { storageWarning: STORAGE_CLEAR_WARNING }
-              : {})}
-            onChange={changeConnection}
-            onConnect={() => session.connect(connection)}
-            onDisconnect={disconnect}
-            onForget={forgetConnection}
           />
         </SurfaceBoundary>
       </>
@@ -2231,11 +1985,6 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {preferencesOpen ? (
-        <Suspense fallback={null}>
-          <PreferencesDialog onClose={() => setPreferencesOpen(false)} />
-        </Suspense>
-      ) : null}
       {session.authenticated ? (
         <SurfaceBoundary name="Notifications" fallback={null}>
           <AttentionBridge
@@ -2410,7 +2159,7 @@ export function App() {
                   type="button"
                   aria-label={t("Browser preferences")}
                   title={t("Browser preferences")}
-                  onClick={() => setPreferencesOpen(true)}
+                  onClick={gate.openPreferences}
                 >
                   {t("Browser preferences")}
                 </button>
@@ -3956,12 +3705,6 @@ function browserLocalStorage(): Storage | null {
   }
 }
 
-function defaultEndpoint(): string {
-  const configured = import.meta.env.VITE_OCTOS_DEFAULT_ENDPOINT?.trim();
-  if (configured) return configured;
-  return window.location.origin;
-}
-
 function workspaceSessionKey(
   workspacePath: string,
   profileId: string,
@@ -4011,6 +3754,3 @@ function translateLabels<T extends Record<string, string>>(
     Object.entries(labels).map(([key, value]) => [key, t(value)]),
   ) as { [K in keyof T]: string };
 }
-
-const STORAGE_CLEAR_WARNING =
-  "Saved data could not be cleared. Old sign-in details or drafts may return after reload. Clear this site’s stored data in browser settings, or retry Forget saved connection.";

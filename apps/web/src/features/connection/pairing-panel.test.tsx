@@ -13,6 +13,12 @@ import zh from "../preferences/zh.ts";
  */
 const app = readFileSync(new URL("../../app/App.tsx", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
+// The claim lives in the entry, which owns the connect screen: the product
+// shell is not loaded while a link is being exchanged.
+const gate = readFileSync(
+  new URL("../../app/ConnectionGate.tsx", import.meta.url),
+  "utf8",
+);
 
 const value: ConnectionDraft = {
   endpoint: "http://127.0.0.1:50080",
@@ -144,11 +150,13 @@ describe("the app consumes the link before it can leak", () => {
   });
 
   it("never writes the code or the raw link into storage or a log", () => {
-    expect(app).toMatch(/claimPairingCode\(pairingLink/);
+    expect(gate).toMatch(/claimPairingCode\(pairingLink/);
     // The only thing that reaches storage is the token and the origin.
-    expect(app).not.toMatch(/rememberToken\([^)]*pairingLink/);
-    expect(app).not.toMatch(/console\.[a-z]+\([^)]*pairingLink/);
-    expect(app).not.toMatch(/setItem\([^)]*pairingLink/);
+    for (const source of [gate, app]) {
+      expect(source).not.toMatch(/rememberToken\([^)]*pairingLink/);
+      expect(source).not.toMatch(/console\.[a-z]+\([^)]*pairingLink/);
+      expect(source).not.toMatch(/setItem\([^)]*pairingLink/);
+    }
     const pairing = readFileSync(
       new URL("./pairing.ts", import.meta.url),
       "utf8",

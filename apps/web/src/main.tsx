@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./app/App.tsx";
+import { ConnectionGate } from "./app/ConnectionGate.tsx";
 import { FatalErrorBoundary } from "./features/error/FatalErrorBoundary.tsx";
 import { PreferencesProvider } from "./features/preferences/preferences.tsx";
 import { consumePairingLink } from "./features/connection/pairing.ts";
@@ -19,7 +19,7 @@ createRoot(root).render(
   <StrictMode>
     <FatalErrorBoundary>
       <PreferencesProvider>
-        <App />
+        <ConnectionGate />
       </PreferencesProvider>
     </FatalErrorBoundary>
   </StrictMode>,
