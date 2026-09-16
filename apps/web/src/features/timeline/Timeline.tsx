@@ -314,6 +314,9 @@ function ToolBlock(props: FoldableBlockProps) {
             {seconds === undefined ? null : ` · ${seconds} s`}
           </span>
         )}
+        {entry.status === "complete" ? (
+          <CheckIcon size={14} className={styles.completedGlyph} />
+        ) : null}
         <ChevronDownIcon className={styles.chevron} />
       </summary>
       <div className={styles.toolBody}>
@@ -336,12 +339,18 @@ function ActivityGlyph({
   tool,
 }: {
   status: TimelineEntry["status"];
-  /** Tool family, so a row reads as shell/read/edit/search/web at a glance. */
+  /**
+   * Tool family, so a row reads as shell/read/edit/search/web at a glance.
+   * A tool row keeps its family glyph after it settles and marks completion
+   * beside the duration instead, since "which tool ran" stays useful while
+   * "it finished" is already carried by the status label.
+   */
   tool?: ToolKind | undefined;
 }) {
-  return status === "complete" ? (
-    <CheckIcon size={14} className={styles.completedGlyph} />
-  ) : (
+  if (status === "complete" && tool === undefined) {
+    return <CheckIcon size={14} className={styles.completedGlyph} />;
+  }
+  return (
     <span
       className={styles.statusGlyph}
       data-status={status}

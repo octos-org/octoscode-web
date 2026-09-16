@@ -164,6 +164,7 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
+import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
@@ -2655,7 +2656,10 @@ export function App() {
                       className={productStyles.thinkingIndicator}
                       role="status"
                     >
-                      <span className={productStyles.thinkingDot} />
+                      <OctopusLogo
+                        size={18}
+                        className={productStyles.thinkingOctopus}
+                      />
                       <span>{turnStarting ? "Starting…" : activityLabel}</span>
                     </div>
                   ) : null}
