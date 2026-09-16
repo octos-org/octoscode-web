@@ -1816,7 +1816,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             : foreignSeatHeld
               ? { kind: "external-held" }
               : conversation.queue.active
-                ? { kind: "responding" }
+                ? // The live turn is not ours: another attached client owns it.
+                  // Guarded by `selfSeatHeld` for the same reason §4.3 guards
+                  // the other-app copy — a peer THIS app started is SELF, so
+                  // its turn is never "another client".
+                  conversation.queue.active.origin === "adopted" &&
+                  !selfSeatHeld
+                  ? { kind: "busy-elsewhere" }
+                  : { kind: "responding" }
                 : peers.manager
                       ?.snapshot()
                       .peers.some((peer) =>

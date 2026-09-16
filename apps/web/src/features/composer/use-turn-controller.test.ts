@@ -1396,6 +1396,134 @@ describe("native review on the existing turn controller", () => {
   });
 });
 
+/**
+ * One `octos serve` can be shared by the octoscode terminal client and this
+ * browser client on the SAME session. The server keeps ONE turn slot per
+ * session, so whoever is second is refused. These cover the two ways this app
+ * learns that another client owns the session: the live `turn/started` it
+ * receives through the server's per-session fan-out, and the refusal of its
+ * own `turn/start`.
+ */
+describe("another attached client owns the session's turn", () => {
+  const OTHER_TURN = "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa";
+
+  function turnStarted(turnId: string, sessionId = "session-a") {
+    return {
+      jsonrpc: "2.0" as const,
+      method: "turn/started",
+      params: { session_id: sessionId, turn_id: turnId },
+    };
+  }
+
+  it("adopts a live turn it never queued and marks it as not ours", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    const active = harness.controller.snapshot().active;
+    expect(active?.turnId).toBe(OTHER_TURN);
+    expect(active?.origin).toBe("adopted");
+    // Adoption is for display only — it must never dispatch anything.
+    expect(harness.controller.snapshot().pending).toHaveLength(0);
+  });
+
+  it("does not mark this app's own turn as adopted", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.enqueuePrompt("mine");
+    const mine = harness.activeTurnId();
+    harness.controller.observeSteerDropped(turnStarted(mine));
+    expect(harness.controller.snapshot().active?.origin).toBeUndefined();
+  });
+
+  it("ignores a foreign start while this app already holds the foreground", () => {
+    // Only one turn can be active server-side, so this means our view is
+    // stale; hydrate reconciles it with the full ownership rules rather than
+    // this fast path stomping a turn we may still own.
+    const harness = renderController(fakeClient());
+    harness.controller.enqueuePrompt("mine");
+    const mine = harness.activeTurnId();
+    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    expect(harness.controller.snapshot().active?.turnId).toBe(mine);
+  });
+
+  it("ignores a start for a different session", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.observeSteerDropped(
+      turnStarted(OTHER_TURN, "session-b"),
+    );
+    expect(harness.controller.snapshot().active).toBeNull();
+  });
+
+  it("gives the prompt back and adopts the occupier when the send collides", async () => {
+    const restored: string[] = [];
+    const harness = renderController(
+      fakeClient({
+        start: async () => {
+          throw new OctosUiProtocolError(
+            -32600,
+            "a turn is already running for this session",
+            { kind: "turn_in_progress", turn_id: OTHER_TURN },
+          );
+        },
+      }),
+      { onInterruptPromptRestore: (prompt) => restored.push(prompt) },
+    );
+    harness.controller.enqueuePrompt("my message");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(restored).toEqual(["my message"]);
+    const active = harness.controller.snapshot().active;
+    expect(active?.turnId).toBe(OTHER_TURN);
+    expect(active?.origin).toBe("adopted");
+    // A busy session is not a rejected turn.
+    expect(harness.timeline.map((entry) => entry.title)).toContain(
+      "Session busy",
+    );
+    expect(harness.timeline.map((entry) => entry.title)).not.toContain(
+      "Turn rejected",
+    );
+  });
+
+  it("stays idle rather than wedging when the server names no occupying turn", async () => {
+    // An older server sends only the sentence. A synthetic id would never
+    // receive a terminal and would leave the queue stuck forever.
+    const restored: string[] = [];
+    const harness = renderController(
+      fakeClient({
+        start: async () => {
+          throw new OctosUiProtocolError(
+            -32600,
+            "turn/start: a turn is already running for this session",
+          );
+        },
+      }),
+      { onInterruptPromptRestore: (prompt) => restored.push(prompt) },
+    );
+    harness.controller.enqueuePrompt("my message");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(restored).toEqual(["my message"]);
+    expect(harness.controller.snapshot().active).toBeNull();
+    expect(harness.timeline.map((entry) => entry.title)).toContain(
+      "Session busy",
+    );
+  });
+
+  it("leaves every other rejection on the existing failure path", async () => {
+    const harness = renderController(
+      fakeClient({
+        start: async () => {
+          throw new OctosUiProtocolError(-32602, "cwd is not accessible");
+        },
+      }),
+    );
+    harness.controller.enqueuePrompt("my message");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(harness.timeline.map((entry) => entry.title)).toContain(
+      "Turn rejected",
+    );
+  });
+});
+
 function renderController(
   initialClient: FakeTurnClient,
   overrides: Partial<TurnControllerDependencies> = {},

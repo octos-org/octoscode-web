@@ -15,6 +15,15 @@ export type SessionStripState =
   | { kind: "waiting-approval" }
   | { kind: "waiting-answer" }
   | { kind: "responding" }
+  /**
+   * Another attached client (a terminal, a second tab) owns the session's live
+   * turn. Distinct from `external-held`: nothing holds the control seat and
+   * chat is not refused — the session is simply busy, and the turn is not
+   * ours to claim. The activity word is deliberately NOT substituted here
+   * (see `stripStateThinking`): whose turn it is outranks what it is doing,
+   * and the timeline still shows the steps.
+   */
+  | { kind: "busy-elsewhere" }
   | { kind: "peers-running"; count: number }
   | { kind: "external-held" }
   | { kind: "handing-back" }
@@ -45,6 +54,8 @@ export function stripStateWords(
       return t("Waiting for your answer");
     case "responding":
       return t("Responding");
+    case "busy-elsewhere":
+      return t("Another client is working in this session");
     case "peers-running":
       return t("Peers running ({count})", { count: state.count });
     case "external-held":
