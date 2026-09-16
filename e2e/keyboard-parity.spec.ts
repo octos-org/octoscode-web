@@ -84,14 +84,20 @@ async function connectAndStartWorkspace(page: Page, workspace: string) {
   await page
     .getByRole("button", { name: "Connect", exact: true })
     .press("Enter");
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
   }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
-  await add.getByRole("button", { name: /^(Add & Start|Start session)$/ }).press("Enter");
+  await add
+    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
+    .press("Enter");
   await expect(composer(page)).toBeEnabled();
 }
 
@@ -223,9 +229,9 @@ test("switches sessions by keyboard and preserves sidebar focus order", async ({
   // index flips to 0 — an index-captured locator aliases the previously
   // active sibling after Enter. Resolve both rows by session identity for the
   // whole switch (repo precedent: command-surface.spec.ts:352).
-  const openedIds = w.calls("session/open").map(
-    (call) => call.params!.session_id!,
-  );
+  const openedIds = w
+    .calls("session/open")
+    .map((call) => call.params!.session_id!);
   const previousId = openedIds.at(-1)!; // the keyboard-created sibling (active now)
   const targetId = openedIds.find((id) => id !== previousId)!;
   const target = rows.filter({ hasText: "Session " + targetId.slice(-8) });
@@ -304,9 +310,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
  * activation (focus lands in Fleet's Brief field).
  */
 const peerDock = (page: Page) =>
-  productNavigation(page).locator(
-    'section[role="region"][aria-label="Peers"]',
-  );
+  productNavigation(page).locator('section[role="region"][aria-label="Peers"]');
 const dockRowButtons = (page: Page) =>
   peerDock(page).locator("button[data-peer-slug]");
 /** The ApprovalPanel surface: ModalSurface keys the dialog by this label. */
@@ -317,11 +321,10 @@ const approvalSurface = (page: Page) =>
  *  as the active workspace view with a Back affordance, so assertions must
  *  scope to the routed surface, not "visible somewhere". Round-2 keeps the
  *  chat pane MOUNTED-but-hidden (App.tsx:1647 hidden={fleetRouteActive}), so
-  * the FleetView subtree EXISTS pre-navigation — "Fleet is closed" is no
+ * the FleetView subtree EXISTS pre-navigation — "Fleet is closed" is no
  *  longer observable as absence of the Brief field; assert the ROUTED state
  *  (wrapper visible + chat hidden) instead. */
-const fleetBrief = (page: Page) =>
-  page.locator('[data-fleet-field="brief"]');
+const fleetBrief = (page: Page) => page.locator('[data-fleet-field="brief"]');
 /** The sidebar's Fleet footer entry (ProductSidebar.tsx:780). */
 const fleetEntry = (page: Page) =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
@@ -402,9 +405,7 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
   await expect(fleetWrapper).toBeVisible();
   await expect(fleetBrief(page)).toBeFocused();
   await expect(fleetEntry(page)).toHaveAttribute("aria-current", "page");
-  await expect(
-    page.locator('[data-fleet-back="true"]'),
-  ).toBeVisible();
+  await expect(page.locator('[data-fleet-back="true"]')).toBeVisible();
 
   // §8 dialog half: an open dialog (the pane) suppresses the chord too. The
   // pane's trigger lives on the CHAT pane's status strip, which is hidden while

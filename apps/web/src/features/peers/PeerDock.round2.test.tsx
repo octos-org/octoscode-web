@@ -11,19 +11,14 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { PeerDock, type PeerDockManager } from "./PeerDock.tsx";
-import type {
-  PeerRosterEntry,
-  PeerManagerSnapshot,
-} from "./peer-manager.ts";
+import type { PeerRosterEntry, PeerManagerSnapshot } from "./peer-manager.ts";
 import type { PeerRowAttention } from "../control/peer-row-command.ts";
 
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useState: (initial: unknown) => [initial, () => undefined],
-  useSyncExternalStore: (
-    _subscribe: unknown,
-    getSnapshot: () => unknown,
-  ) => getSnapshot(),
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) =>
+    getSnapshot(),
 }));
 vi.mock("../preferences/ui-text.tsx", () => ({
   useUiText: () => (text: string, params?: Record<string, string | number>) =>
@@ -173,7 +168,13 @@ describe("PeerDock row action parity with Fleet (judge #4)", () => {
     // action's accessible name carries the peer label word "Peer".
     const labels = markup.match(/aria-label="[^"]*"/g) ?? [];
     for (const label of labels) {
-      if (label.includes("Approve") || label.includes("Deny") || label.includes("Answer") || label.includes("Steer") || label.includes("Stop"))
+      if (
+        label.includes("Approve") ||
+        label.includes("Deny") ||
+        label.includes("Answer") ||
+        label.includes("Steer") ||
+        label.includes("Stop")
+      )
         expect(label).toContain("Peer");
     }
     expect(markup).toContain("Approve Peer");
@@ -229,7 +230,9 @@ const QUESTION_DETAIL_ROW_STANDALONE = entry({
 
 describe("PeerDock request contents + consequences (judge r2 #4)", () => {
   const render = (peers: readonly PeerRosterEntry[]) =>
-    renderToStaticMarkup(<PeerDock manager={managerFor(peers)} onRowAction={() => undefined} />);
+    renderToStaticMarkup(
+      <PeerDock manager={managerFor(peers)} onRowAction={() => undefined} />,
+    );
 
   const APPROVAL_DETAIL_ROW = entry({
     identity: "p-approval-d",
@@ -289,7 +292,7 @@ describe("PeerDock request contents + consequences (judge r2 #4)", () => {
   it("keeps a detail-less approval row actionable with plain labels", () => {
     const markup = render([APPROVAL_ROW]);
     expect(markup).toContain("Approve once");
-    expect(markup).toContain("data-row-action=\"approve\"");
+    expect(markup).toContain('data-row-action="approve"');
   });
 
   it("renders Sent / Stop requested acknowledgments and outcome words", () => {
@@ -324,13 +327,15 @@ describe("PeerDock request contents + consequences (judge r2 #4)", () => {
 describe("PeerDock row answer card (stateless, §4.3)", () => {
   it("renders the question card's radio choices inline on the row", () => {
     const markup = renderToStaticMarkup(
-      <PeerDock manager={managerFor([QUESTION_DETAIL_ROW_STANDALONE])} onRowAction={() => undefined} />,
+      <PeerDock
+        manager={managerFor([QUESTION_DETAIL_ROW_STANDALONE])}
+        onRowAction={() => undefined}
+      />,
     );
     expect(markup).toContain('type="radio"');
     expect(markup).toContain('name="req-question-d:0"');
   });
 });
-
 
 describe("peerAnswerRequest — the App-side Answer card adapter (judge r2 #4)", () => {
   it("projects a question-blocked row onto the question card's request shape", async () => {
@@ -375,7 +380,9 @@ describe("peerAnswerRequest — the App-side Answer card adapter (judge r2 #4)",
 
 describe("PeerDock row body drops the raw slug (triage 4510 P2)", () => {
   const render = (peers: readonly PeerRosterEntry[]) =>
-    renderToStaticMarkup(<PeerDock manager={managerFor(peers)} onRowAction={() => undefined} />);
+    renderToStaticMarkup(
+      <PeerDock manager={managerFor(peers)} onRowAction={() => undefined} />,
+    );
 
   it("renders 'Peer N · model' as the row identity, never the raw slug text", () => {
     const markup = render([APPROVAL_ROW, BASE]);

@@ -16,9 +16,7 @@ const fleetView = readFileSync(
 
 describe("(A) one Fleet landmark", () => {
   it("the wrapper is a non-landmark div with no Fleet aria-label", () => {
-    expect(app).not.toMatch(
-      /aria-label=\{fleetNavigationEntry\.label\}/,
-    );
+    expect(app).not.toMatch(/aria-label=\{fleetNavigationEntry\.label\}/);
     // The routed pane wrapper is a div now.
     expect(app).toMatch(
       /<div\s*\n?\s*className="conversation fleet-pane"\s*\n?\s*hidden=\{!\(fleetRouteActive && session\.opened\)\}/,

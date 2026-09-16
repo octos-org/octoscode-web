@@ -49,9 +49,9 @@ describe("buildPeerDispatchParams — pure one-frame argument build", () => {
     expect(params.operationId).toBe("op-1");
   });
   it("sends the REQUESTED model lane, not a resolved model", () => {
-    expect(
-      buildPeerDispatchParams(fence, "op-1", seed, "glm-5.3").model,
-    ).toBe("glm-5.3");
+    expect(buildPeerDispatchParams(fence, "op-1", seed, "glm-5.3").model).toBe(
+      "glm-5.3",
+    );
   });
   it("builds a new_brief target from the brief, titling it with the slug", () => {
     const params = buildPeerDispatchParams(fence, "op-1", seed, "glm-5.3");

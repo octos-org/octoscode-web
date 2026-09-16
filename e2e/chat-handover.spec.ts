@@ -37,8 +37,7 @@ const RELEASE_METHOD = "session/driver/release";
 const START_METHOD = "turn/start";
 
 const productNavigation = (page: Page) => page.locator("aside");
-const composer = (page: Page) =>
-  page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+const composer = (page: Page) => page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 const strip = (page: Page) =>
   page.getByRole("button", { name: "Session settings", exact: true });
 
@@ -67,8 +66,7 @@ function wire(page: Page) {
   });
   return {
     sent,
-    calls: (method: string) =>
-      sent.filter((frame) => frame.method === method),
+    calls: (method: string) => sent.filter((frame) => frame.method === method),
   };
 }
 
@@ -77,15 +75,21 @@ async function connectAndStartWorkspace(page: Page, variant: string) {
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill(TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(productNavigation(page)).toBeVisible();
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(`${CWD}${variant}`);
-  await add.getByRole("button", { name: /^(Add & Start|Start session)$/ }).click();
+  await add
+    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
+    .click();
   await expect(composer(page)).toBeEnabled();
 }
 

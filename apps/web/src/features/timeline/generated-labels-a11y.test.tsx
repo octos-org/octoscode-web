@@ -33,12 +33,20 @@ const reasoningEntry: TimelineEntry = {
 };
 
 const zh = (node: React.ReactElement) =>
-  renderToStaticMarkup(<UiTextProvider language="zh" catalog={zhCatalog}>{node}</UiTextProvider>);
+  renderToStaticMarkup(
+    <UiTextProvider language="zh" catalog={zhCatalog}>
+      {node}
+    </UiTextProvider>,
+  );
 
 describe("generated transcript labels render localized (judge #8)", () => {
   it("ThinkingDisclosure renders the zh one-line summary", () => {
     const html = zh(
-      <ThinkingDisclosure entry={reasoningEntry} expanded={false} onToggle={() => {}} />,
+      <ThinkingDisclosure
+        entry={reasoningEntry}
+        expanded={false}
+        onToggle={() => {}}
+      />,
     );
     expect(html).toContain("思考 · 12 秒 · 6 词");
     expect(html).not.toContain("Thinking · ");
@@ -48,7 +56,11 @@ describe("generated transcript labels render localized (judge #8)", () => {
     const streaming: TimelineEntry = { ...reasoningEntry };
     delete streaming.endedAtMs;
     const html = zh(
-      <ThinkingDisclosure entry={streaming} expanded={false} onToggle={() => {}} />,
+      <ThinkingDisclosure
+        entry={streaming}
+        expanded={false}
+        onToggle={() => {}}
+      />,
     );
     expect(html).toContain("思考 · 6 词");
   });
@@ -111,8 +123,8 @@ describe("generated transcript labels render localized (judge #8)", () => {
         zhT,
       ),
     ).toBe("已保存。你的下一条消息将使用 glm-5.3");
-    expect(
-      dispositionNotice({ disposition: "unchanged" }, zhT),
-    ).toBe("已选择此模型");
+    expect(dispositionNotice({ disposition: "unchanged" }, zhT)).toBe(
+      "已选择此模型",
+    );
   });
 });

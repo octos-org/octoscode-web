@@ -21,15 +21,15 @@ describe("App routes to Settings only on settled unusable model evidence", () =>
     // Only a started-then-settled fetch is evidence; `available` alone or an
     // in-flight/never-started read must never route.
     expect(app).toContain("modelsFetchStarted");
-    expect(app).toMatch(/models\.state\.loading[\s\S]{0,120}modelsFetchStarted/);
+    expect(app).toMatch(
+      /models\.state\.loading[\s\S]{0,120}modelsFetchStarted/,
+    );
   });
 
   it("keeps the picker as the default post-connect surface", () => {
     // The routing is an effect that OPENS settings only when the gate says so;
     // it must not be an unconditional open, and must close nothing else.
-    expect(app).toMatch(
-      /shouldRouteNoModelSetup\(\{[\s\S]{0,200}\}\)/,
-    );
+    expect(app).toMatch(/shouldRouteNoModelSetup\(\{[\s\S]{0,200}\}\)/);
     // The old defective gate (length === 0 alone) is gone.
     expect(app).not.toContain(
       "if (!hasUsablePrimary && models.state.models.length === 0)",

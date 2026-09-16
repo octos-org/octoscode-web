@@ -40,10 +40,7 @@ const t = (source: string, params?: Record<string, string | number>) =>
 describe("PermissionsSection (§4.2/§7, judge #6)", () => {
   it("discloses the next-message timing including the running-response carve-out", () => {
     const html = renderToStaticMarkup(
-      <PermissionsSection
-        permission={permissionControl}
-        t={t}
-      />,
+      <PermissionsSection permission={permissionControl} t={t} />,
     );
     expect(html).toContain("Applies from your next message.");
     expect(html).toContain(

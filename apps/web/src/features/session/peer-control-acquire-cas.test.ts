@@ -95,7 +95,9 @@ describe("stablePeerDriverId — one id per browser profile, persisted", () => {
   });
 
   it("replaces a malformed stored value instead of reusing it", () => {
-    const storage = memoryStorage({ [PEER_DRIVER_ID_STORAGE_KEY]: "not-a-uuid" });
+    const storage = memoryStorage({
+      [PEER_DRIVER_ID_STORAGE_KEY]: "not-a-uuid",
+    });
     expect(stablePeerDriverId(storage, () => UUID)).toBe(WEB_ID);
     expect(storage.entries()).toEqual({ [PEER_DRIVER_ID_STORAGE_KEY]: WEB_ID });
   });
@@ -117,11 +119,13 @@ describe("stablePeerDriverId — one id per browser profile, persisted", () => {
 describe("peerControlAcquireParams — the bounded lease", () => {
   it("asks for the 120s seat lease", () => {
     expect(PEER_CONTROL_LEASE_SECONDS).toBe(120);
-    expect(peerControlAcquireParams({ driverId: WEB_ID, revision: 0 })).toEqual({
-      driverId: WEB_ID,
-      expectedRevision: 0,
-      leaseSeconds: 120,
-    });
+    expect(peerControlAcquireParams({ driverId: WEB_ID, revision: 0 })).toEqual(
+      {
+        driverId: WEB_ID,
+        expectedRevision: 0,
+        leaseSeconds: 120,
+      },
+    );
   });
 });
 
@@ -181,7 +185,10 @@ describe("peerControlRenewParams — renew WELL INSIDE the lease", () => {
 describe("peerControlFenceStaleIn — the bounded stale signal", () => {
   it("reads the typed kind off the seat's own bounded refusal state", () => {
     expect(
-      peerControlFenceStaleIn({ kind: "refused", refusalKind: "driver_fence_stale" }),
+      peerControlFenceStaleIn({
+        kind: "refused",
+        refusalKind: "driver_fence_stale",
+      }),
     ).toBe(true);
   });
 
@@ -220,10 +227,10 @@ describe("the seat wiring sends the cold acquire / renew / stale drop", () => {
   it("drops the seat and shows the bounded label on a stale fence", () => {
     expect(source).toContain("const dropControlSeat = ");
     expect(source).toContain("peerControlFenceStaleIn(");
-    expect(source).toContain("refusalKind: \"driver_fence_stale\"");
+    expect(source).toContain('refusalKind: "driver_fence_stale"');
   });
 
-  it("releases the seat with next:\"external\" and never a raw token store", () => {
+  it('releases the seat with next:"external" and never a raw token store', () => {
     expect(source).toContain('next: "external"');
     expect(source).not.toContain("localStorage.setItem(PEER_CONTROL");
   });

@@ -51,7 +51,9 @@ const CAPS_NO_FEATURE: UiProtocolCapabilities = {
   supported_features: [],
 };
 
-function admissionClient(): { readonly externalDriverCommands: () => undefined } {
+function admissionClient(): {
+  readonly externalDriverCommands: () => undefined;
+} {
   return { externalDriverCommands: () => undefined };
 }
 
@@ -66,7 +68,10 @@ function complete(snapshot: string): DriverInventoryState {
   };
 }
 
-function scope(sessionId: string, authorityEpoch: number): DriverInventorySnapshotScope {
+function scope(
+  sessionId: string,
+  authorityEpoch: number,
+): DriverInventorySnapshotScope {
   return {
     endpoint: "ws://127.0.0.1:1",
     workspaceRoot: "/srv/project",
@@ -153,7 +158,9 @@ class FakeManager implements DriverInventorySnapshotManager {
   selected(): DriverInventorySnapshotRecord | null {
     return this.selectedValue;
   }
-  get(scopeValue: DriverInventorySnapshotScope): DriverInventorySnapshotRecord | null {
+  get(
+    scopeValue: DriverInventorySnapshotScope,
+  ): DriverInventorySnapshotRecord | null {
     return this.records.get(this.#key(scopeValue)) ?? null;
   }
 }
@@ -183,7 +190,11 @@ function view(args: {
 function healthySelected(
   sessionId: string,
   snapshot: string,
-): { manager: FakeManager; record: FakeRecord; auth: DriverInventorySnapshotAuthority } {
+): {
+  manager: FakeManager;
+  record: FakeRecord;
+  auth: DriverInventorySnapshotAuthority;
+} {
   const manager = new FakeManager();
   const record = new FakeRecord(scope(sessionId, 1));
   const auth = authority({ sessionId });
@@ -222,7 +233,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("a getter captured for A never returns a later reselected B", () => {
     const a = healthySelected("s1", "snap-a");
     const getA = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(getA()).toBe(a.record.driverInventory);
 
@@ -250,13 +266,22 @@ describe("driver-inventory snapshot adapter", () => {
   it("a getter captured for A goes unavailable after the record adopts A2 authority", () => {
     const a = healthySelected("s1", "snap-a");
     const getA1 = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(getA1()).toBe(a.record.driverInventory);
 
     // Generation-only change on the SAME physical client: isolates the
     // generation fence from any transport/identity change.
-    const a2 = authority({ generation: 2, sessionId: "s1", client: a.auth.client });
+    const a2 = authority({
+      generation: 2,
+      sessionId: "s1",
+      client: a.auth.client,
+    });
     a.record.runtime.authority = a2;
 
     // EXPECTED FAIL against baseline: isCurrent(currentAuthority()) is true by
@@ -267,7 +292,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("goes unavailable when the same generation swaps the physical client", () => {
     const a = healthySelected("s1", "snap-a");
     const getA = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(getA()).toBe(a.record.driverInventory);
 
@@ -287,7 +317,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("goes unavailable when the captured record is replaced at the same scope", () => {
     const a = healthySelected("s1", "snap-a");
     const getA = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(getA()).toBe(a.record.driverInventory);
 
@@ -309,7 +344,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("goes unavailable when the selected record is removed or closed", () => {
     const a = healthySelected("s1", "snap-a");
     const getA = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
 
     a.manager.selectedValue = null;
@@ -374,7 +414,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("hides a cached complete whenever the runtime is not ready/connected/healthy", () => {
     const a = healthySelected("s1", "snap-a");
     const get = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(get()).toBe(a.record.driverInventory);
 
@@ -408,11 +453,17 @@ describe("driver-inventory snapshot adapter", () => {
         }),
       );
 
-    const noMethod = authority({ sessionId: "s1", capabilities: CAPS_NO_METHOD });
+    const noMethod = authority({
+      sessionId: "s1",
+      capabilities: CAPS_NO_METHOD,
+    });
     a.record.runtime.authority = noMethod;
     expect(getFor(noMethod)()).toBe(UNAVAILABLE_DRIVER_INVENTORY);
 
-    const noFeature = authority({ sessionId: "s1", capabilities: CAPS_NO_FEATURE });
+    const noFeature = authority({
+      sessionId: "s1",
+      capabilities: CAPS_NO_FEATURE,
+    });
     a.record.runtime.authority = noFeature;
     expect(getFor(noFeature)()).toBe(UNAVAILABLE_DRIVER_INVENTORY);
 
@@ -430,7 +481,12 @@ describe("driver-inventory snapshot adapter", () => {
   it("re-gates CURRENT capabilities on the same generation and client after capture", () => {
     const a = healthySelected("s1", "snap-a");
     const get = createDriverInventorySnapshot(
-      view({ manager: a.manager, record: a.record, authority: a.auth, epoch: 1 }),
+      view({
+        manager: a.manager,
+        record: a.record,
+        authority: a.auth,
+        epoch: 1,
+      }),
     );
     expect(get()).toBe(a.record.driverInventory);
 
@@ -494,9 +550,7 @@ describe("driver-inventory snapshot adapter", () => {
 
     // sessionId disagreement.
     expect(
-      getFor(
-        authority({ sessionId: "other", client: a.auth.client }),
-      )(),
+      getFor(authority({ sessionId: "other", client: a.auth.client }))(),
     ).toBe(UNAVAILABLE_DRIVER_INVENTORY);
 
     // profileId disagreement.
@@ -513,7 +567,11 @@ describe("driver-inventory snapshot adapter", () => {
     // cwd / workspaceRoot disagreement.
     expect(
       getFor(
-        authority({ sessionId: "s1", cwd: "/srv/other", client: a.auth.client }),
+        authority({
+          sessionId: "s1",
+          cwd: "/srv/other",
+          client: a.auth.client,
+        }),
       )(),
     ).toBe(UNAVAILABLE_DRIVER_INVENTORY);
 

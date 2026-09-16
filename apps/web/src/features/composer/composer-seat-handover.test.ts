@@ -259,9 +259,13 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
     },
   } as unknown as OctosUiClient;
 
-  const harness = (seatGate: NonNullable<
-    Parameters<typeof createQueueBackedTurnController>[0]["dependenciesRef"]["current"]["releaseSeatBeforeTurn"]
-  >) => {
+  const harness = (
+    seatGate: NonNullable<
+      Parameters<
+        typeof createQueueBackedTurnController
+      >[0]["dependenciesRef"]["current"]["releaseSeatBeforeTurn"]
+    >,
+  ) => {
     const timeline: TimelineEntry[] = [];
     const restores: Array<[string, string]> = [];
     const controller = createQueueBackedTurnController({
@@ -315,9 +319,9 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
     expect(wire).toEqual([]);
     expect(restores).toEqual([["keep me", "session-a"]]);
     expect(
-      timeline.some((entry) => JSON.stringify(entry).includes(
-        "Another app is using this session",
-      )),
+      timeline.some((entry) =>
+        JSON.stringify(entry).includes("Another app is using this session"),
+      ),
     ).toBe(true);
   });
 });

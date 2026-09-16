@@ -84,9 +84,9 @@ async function setup(
 
 /** The seeded row, or null — one helper so each case reads on one line. */
 function row(h: { manager: PeerManager }) {
-  return h.manager.getSnapshot().peers.find(
-    (candidate) => candidate.identity === identity,
-  );
+  return h.manager
+    .getSnapshot()
+    .peers.find((candidate) => candidate.identity === identity);
 }
 
 /** The row's REAL kickoff turn id (the staging seam mints it per test). */
@@ -275,10 +275,7 @@ describe("attention-requested carries the request's CONTENTS (judge r2 #4)", () 
     expect(row(h)).toMatchObject({
       requestDetail: {
         header: "Depth",
-        options: [
-          { label: "Fast" },
-          { label: "Full" },
-        ],
+        options: [{ label: "Fast" }, { label: "Full" }],
       },
     });
   });

@@ -14,7 +14,6 @@ export const EXTERNAL_DRIVER_METHODS = {
   SESSION_WAKE_ACK: "session/wake/ack",
 } as const;
 
-
 export class ExternalDriverProtocolError extends Error {
   constructor(method: string, reason: string) {
     super(`${method} failed: ${reason}`);
@@ -52,7 +51,6 @@ export class ExternalDriverRefusalError extends ExternalDriverProtocolError {
     this.refusalKind = refusalKind;
   }
 }
-
 
 export class ExternalDriverCapabilityError extends ExternalDriverProtocolError {
   constructor(method: string) {

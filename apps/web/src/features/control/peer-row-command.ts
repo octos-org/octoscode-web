@@ -27,19 +27,11 @@ type PeerUserQuestionAnswer = Extract<
 
 /** Console row actions (legacy; unchanged vocabulary). */
 export type PeerControllerRowAction =
-  | "approve"
-  | "deny"
-  | "steer"
-  | "interrupt";
+  "approve" | "deny" | "steer" | "interrupt";
 
 /** Product row actions (design §4.1/§4.3 dock + Fleet parity). */
 export type PeerRowAction =
-  | "approve"
-  | "approve_session"
-  | "deny"
-  | "answer"
-  | "steer"
-  | "stop";
+  "approve" | "approve_session" | "deny" | "answer" | "steer" | "stop";
 
 const ROW_ACTION_KIND: Readonly<
   Record<PeerControllerRowAction, PeerControlCommandKind>

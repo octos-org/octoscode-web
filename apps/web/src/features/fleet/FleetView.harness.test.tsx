@@ -167,17 +167,23 @@ function mount(
   } = {},
 ) {
   const props = {
-    peerController: input.peerController === null ? null : {
-      readiness: "ready" as const,
-      capabilities: input.capabilities ?? CAPABILITIES,
-      lanePicker: input.lanePicker ?? { kind: "ready", keys: ["glm-5.3"] },
-      seatHeld: input.seatHeld ?? true,
-      binding: null,
-      roster: [],
-      state: { kind: "idle" as const },
-      fleetPeers: input.peers ?? [],
-      ...input.peerController,
-    },
+    peerController:
+      input.peerController === null
+        ? null
+        : {
+            readiness: "ready" as const,
+            capabilities: input.capabilities ?? CAPABILITIES,
+            lanePicker: input.lanePicker ?? {
+              kind: "ready",
+              keys: ["glm-5.3"],
+            },
+            seatHeld: input.seatHeld ?? true,
+            binding: null,
+            roster: [],
+            state: { kind: "idle" as const },
+            fleetPeers: input.peers ?? [],
+            ...input.peerController,
+          },
     sessions: [],
     ...(input.onStart ? { onStart: input.onStart } : {}),
     ...(input.onRowAction ? { onRowAction: input.onRowAction } : {}),
@@ -303,8 +309,7 @@ describe("Fixes 4210 — model NAMES, styled surface, styled empty/Advanced", ()
           typeof option.props!.value === "string" && option.props!.value !== "",
       )
       .map(
-        (option) =>
-          `${option.props!.value}=${String(option.props!.children)}`,
+        (option) => `${option.props!.value}=${String(option.props!.children)}`,
       );
     expect(options).toEqual(["glm-53=glm-5.3", "kimi-k3=kimi-k3"]);
   });
@@ -321,8 +326,9 @@ describe("Fixes 4210 — model NAMES, styled surface, styled empty/Advanced", ()
 
   it("styles the empty state and the Advanced disclosure", () => {
     const html = mount().render();
-    expect(String(one(html, "data-fleet-empty", "true").props!.className).trim())
-      .not.toBe("");
+    expect(
+      String(one(html, "data-fleet-empty", "true").props!.className).trim(),
+    ).not.toBe("");
     // Round 4 C3: Advanced is a compact native details/summary disclosure.
     const advanced = collect(html, "data-fleet-advanced-summary")[0]!;
     expect(advanced).toBeDefined();
@@ -337,9 +343,7 @@ describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "Review");
     const enabled = harness.render();
-    (
-      one(enabled, "data-fleet-action", "start").props!.onClick as () => void
-    )();
+    (one(enabled, "data-fleet-action", "start").props!.onClick as () => void)();
     expect(calls).toEqual([
       {
         sessionId: "",
@@ -357,8 +361,7 @@ describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept
     );
     (
       one(requesting, "data-fleet-action", "start").props!.onClick as
-        | (() => void)
-        | undefined
+        (() => void) | undefined
     )?.();
     expect(calls).toHaveLength(1);
     expect(
@@ -370,8 +373,14 @@ describe("round 2 judge #2 — requesting/failure states, no repeat submit, kept
     const calls: StartSubmit[] = [];
     const harness = mount({ onStart: (submit) => calls.push(submit) });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
-    change(one(harness.render(), "data-fleet-field", "brief"), "Review the diff");
-    (one(harness.render(), "data-fleet-action", "start").props!.onClick as () => void)();
+    change(
+      one(harness.render(), "data-fleet-field", "brief"),
+      "Review the diff",
+    );
+    (
+      one(harness.render(), "data-fleet-action", "start").props!
+        .onClick as () => void
+    )();
     // Simulate the sink's refusal settling on the component's state slot.
     const retry = one(harness.render(), "data-fleet-field", "brief");
     expect(retry.props!.value).toBe("Review the diff");
@@ -399,7 +408,7 @@ describe("round 2 judge #2/#8 — Providers link, session selector, live region,
         { sessionId: "s2", name: "other" },
       ],
     });
-     const selector = one(html, "data-fleet-field", "session");
+    const selector = one(html, "data-fleet-field", "session");
     const options = collect(selector, "value").filter(
       (option) =>
         typeof option.props!.value === "string" && option.props!.value !== "",
@@ -469,9 +478,7 @@ describe("Fixes 4220 — lane-read triage: no session vs loading vs empty read",
       laneReadStatus: "empty",
     }).render();
     const note = collect(html, "data-fleet-lane-status")[0]!;
-    expect(textOf(note).join(" ")).toContain(
-      "No peer models are configured",
-    );
+    expect(textOf(note).join(" ")).toContain("No peer models are configured");
     expect(collect(html, "data-fleet-providers-link").length).toBe(1);
   });
 
@@ -542,9 +549,10 @@ describe("Round 4 section C — status/word/spacing/a11y polish (4200d 08.png)",
       (element) => element.type === "details",
     );
     expect(details).toHaveLength(1);
-    const summary = collect(details[0]!.props!.children, "data-fleet-advanced-summary").filter(
-      (element) => element.type === "summary",
-    );
+    const summary = collect(
+      details[0]!.props!.children,
+      "data-fleet-advanced-summary",
+    ).filter((element) => element.type === "summary");
     expect(summary).toHaveLength(1);
   });
 
@@ -564,14 +572,14 @@ describe("Round 4 section C — status/word/spacing/a11y polish (4200d 08.png)",
     const working = mount({
       peers: [fleetRow("op-1", { statusWord: "Working" })],
     }).render();
-    expect(collect(working, "data-fleet-action").filter(
-      (e) => e.props!["data-fleet-action"] === "approve",
-    )).toHaveLength(0);
+    expect(
+      collect(working, "data-fleet-action").filter(
+        (e) => e.props!["data-fleet-action"] === "approve",
+      ),
+    ).toHaveLength(0);
     // Waiting-for-approval row: both render.
     const waiting = mount({
-      peers: [
-        fleetRow("op-1", { statusWord: "Waiting for your approval" }),
-      ],
+      peers: [fleetRow("op-1", { statusWord: "Waiting for your approval" })],
     }).render();
     for (const action of ["approve", "deny"])
       expect(
@@ -589,8 +597,14 @@ describe("Round 4 J2 — Start lifecycle: submit contract + every settle state",
       onStart: (submit) => calls.push(submit as Record<string, unknown>),
     });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
-    change(one(harness.render(), "data-fleet-field", "brief"), "Review the diff");
-    (one(harness.render(), "data-fleet-action", "start").props!.onClick as () => void)();
+    change(
+      one(harness.render(), "data-fleet-field", "brief"),
+      "Review the diff",
+    );
+    (
+      one(harness.render(), "data-fleet-action", "start").props!
+        .onClick as () => void
+    )();
     expect(calls).toHaveLength(1);
     const submit = calls[0]!;
     expect(submit.model).toBe("glm-5.3");
@@ -608,15 +622,17 @@ describe("Round 4 J2 — Start lifecycle: submit contract + every settle state",
     });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "R");
-    (one(harness.render(), "data-fleet-action", "start").props!.onClick as () => void)();
+    (
+      one(harness.render(), "data-fleet-action", "start").props!
+        .onClick as () => void
+    )();
     const requesting = harness.render();
     expect(
       textOf(one(requesting, "data-fleet-action", "start")).join(""),
     ).toContain("Starting…");
     (
       one(requesting, "data-fleet-action", "start").props!.onClick as
-        | (() => void)
-        | undefined
+        (() => void) | undefined
     )?.();
     expect(calls).toHaveLength(1);
   });
@@ -628,7 +644,10 @@ describe("Round 4 J2 — Start lifecycle: submit contract + every settle state",
     });
     change(one(harness.render(), "data-fleet-field", "model"), "glm-5.3");
     change(one(harness.render(), "data-fleet-field", "brief"), "First brief");
-    (one(harness.render(), "data-fleet-action", "start").props!.onClick as () => void)();
+    (
+      one(harness.render(), "data-fleet-action", "start").props!
+        .onClick as () => void
+    )();
     const firstId = calls[0]!.operationId;
     // The sink settles accepted through startState.
     const accepted = (
@@ -686,17 +705,23 @@ describe("Round 4 J2 — Start lifecycle: submit contract + every settle state",
         operationId: "op-retry-me",
       } as never,
     };
-    const html = (FleetView as unknown as (p: typeof props) => ReactElement)(props);
-    expect(textOf(one(html, "data-fleet-start-unknown", "true")).join(" ")).toContain(
-      "Not sure it started",
+    const html = (FleetView as unknown as (p: typeof props) => ReactElement)(
+      props,
     );
+    expect(
+      textOf(one(html, "data-fleet-start-unknown", "true")).join(" "),
+    ).toContain("Not sure it started");
     // Retry resubmits with the SAME operation id.
-    (one(html, "data-fleet-start-retry", "true").props!.onClick as () => void)();
+    (
+      one(html, "data-fleet-start-retry", "true").props!.onClick as () => void
+    )();
     expect(calls).toHaveLength(1);
     expect(calls[0]!.operationId).toBe("op-retry-me");
     expect(calls[0]!.brief).toBe("Review the diff");
     // Dismiss hides the notice without sending.
-    (one(html, "data-fleet-start-dismiss", "true").props!.onClick as () => void)();
+    (
+      one(html, "data-fleet-start-dismiss", "true").props!.onClick as () => void
+    )();
   });
 });
 

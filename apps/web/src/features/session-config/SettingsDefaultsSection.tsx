@@ -59,7 +59,10 @@ export function SettingsDefaultsSection({
       {modelList ? (
         <div data-defaults-field="model">
           <h4>{t("Model")}</h4>
-          <p>{t("Saved for this profile:")}{savedModelName ?? t("(no model selected)")}</p>
+          <p>
+            {t("Saved for this profile:")}
+            {savedModelName ?? t("(no model selected)")}
+          </p>
           {modelList.control}
         </div>
       ) : null}

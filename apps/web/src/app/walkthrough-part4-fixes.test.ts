@@ -30,7 +30,9 @@ describe("(1) Fleet is a ROUTED destination that replaces the chat pane", () => 
   });
 
   it("activating Fleet closes the settings dialog (one destination at a time)", () => {
-    expect(app).toMatch(/setFleetRouteActive\(true\)[\s\S]{0,80}setSettingsOpen\(false\)/);
+    expect(app).toMatch(
+      /setFleetRouteActive\(true\)[\s\S]{0,80}setSettingsOpen\(false\)/,
+    );
   });
 });
 
@@ -52,7 +54,9 @@ describe("(2) The picker's first entry exists on a FRESH profile", () => {
 describe("(3) The pane's Advanced expander opens reliably", () => {
   it("is a native details/summary with a data hook and open passthrough", () => {
     expect(pane).toMatch(/<details[^>]*data-session-config-advanced="true"/);
-    expect(pane).toMatch(/<summary[^>]*data-session-config-advanced-summary="true"/);
+    expect(pane).toMatch(
+      /<summary[^>]*data-session-config-advanced-summary="true"/,
+    );
   });
 
   it("keeps the remembered-collapsed default closed but keyboard operable", () => {
@@ -63,7 +67,7 @@ describe("(3) The pane's Advanced expander opens reliably", () => {
 
 describe("(4) Handover copy reaches the strip and the pane", () => {
   it("the strip's third segment shows the foreign-holder words (already the external-held state)", () => {
-    expect(app).toContain("{ kind: \"external-held\" }");
+    expect(app).toContain('{ kind: "external-held" }');
   });
 
   it("the pane's Advanced renders the Resume chat control bound to the seam", () => {

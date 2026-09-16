@@ -1,9 +1,4 @@
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { usePreferences } from "../preferences/preferences.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
@@ -277,7 +272,12 @@ export function ComposerInput(props: ComposerInputProps) {
         rows={3}
       />
       {readOnlyPeerSlug !== null ? (
-        <p ref={statusRow} role="status" tabIndex={-1} className="peer-readonly-composer">
+        <p
+          ref={statusRow}
+          role="status"
+          tabIndex={-1}
+          className="peer-readonly-composer"
+        >
           {t(PEER_READONLY_HINT, { slug: readOnlyPeerSlug })}
         </p>
       ) : null}

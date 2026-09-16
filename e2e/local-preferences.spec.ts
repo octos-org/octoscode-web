@@ -79,9 +79,13 @@ async function connect(page: Page, workspace: string) {
     name: /Choose a workspace|Add workspace/,
   });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await expect(chooser).toBeVisible();
-    if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+    if (
+      await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+    ) {
       await chooser.getByRole("button", { name: "Add workspace" }).click();
     }
   }

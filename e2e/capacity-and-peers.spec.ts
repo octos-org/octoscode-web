@@ -35,15 +35,21 @@ async function connectAndStartWorkspace(
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(productNavigation(page)).toBeVisible();
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: /Add & Start|Start session/ }).click();
+  await addWorkspace
+    .getByRole("button", { name: /Add & Start|Start session/ })
+    .click();
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
 }
 
@@ -117,9 +123,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
       ).toBeVisible();
       const runningTitle = await selectedSessionTitle(sidebar);
       sessionByMarker.set(marker, runningTitle);
-      await workspace
-        .locator('button[class*="workspaceToggle"]')
-        .hover();
+      await workspace.locator('button[class*="workspaceToggle"]').hover();
       await sidebar
         .locator('button[aria-label="New session in twelve-plus-peers"]')
         .click();
@@ -311,9 +315,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
     await expect(peerRow).toHaveAttribute("aria-current", "page");
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
     await expect(page.locator(".composer textarea")).toBeDisabled();
-    await expect(
-      page.locator('h1:text-is("Connect to Octos")'),
-    ).toHaveCount(0);
+    await expect(page.locator('h1:text-is("Connect to Octos")')).toHaveCount(0);
     const opensBeforeLoss = protocol.sent.filter(
       (frame) => frame.method === "session/open",
     ).length;

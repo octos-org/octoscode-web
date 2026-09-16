@@ -11,16 +11,16 @@ const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
 describe("App consumes the fleet start sequencer (Start = acquire → dispatch)", () => {
   it("imports and holds the sequencer state", () => {
-    expect(app).toMatch(
-      /from "\.\/fleet-start-sequencer\.ts"/,
-    );
+    expect(app).toMatch(/from "\.\/fleet-start-sequencer\.ts"/);
     expect(app).toContain("fleetStartOnSubmit(");
     expect(app).toContain("fleetStartOnSeatHeld(");
   });
 
   it("onStart routes through fleetStartOnSubmit with the seat fact", () => {
     expect(app).toContain("fleetStartOnSubmit({");
-    expect(app).toMatch(/seatHeld:\s*\n?\s*session\.peerController\?\.seatHeld === true/);
+    expect(app).toMatch(
+      /seatHeld:\s*\n?\s*session\.peerController\?\.seatHeld === true/,
+    );
     expect(app).toContain("onAcquireSeat");
     expect(app).toContain("onDispatch");
   });
@@ -40,8 +40,11 @@ describe("App consumes the fleet start sequencer (Start = acquire → dispatch)"
   });
 
   it("the seat-hold effect keys on the seat fact, not the controller object", () => {
+    // Whitespace-tolerant: Prettier may wrap this dependency array across
+    // lines, and the fact under test is which deps are listed, not their
+    // formatting.
     expect(app).toMatch(
-      /\}, \[session\.peerController\?\.seatHeld, fleetStartPending, session\.peerController\]\);/,
+      /\},\s*\[\s*session\.peerController\?\.seatHeld,\s*fleetStartPending,\s*session\.peerController,?\s*\]\);/,
     );
   });
 });

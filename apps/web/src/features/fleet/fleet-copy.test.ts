@@ -14,7 +14,8 @@ describe("fleet zh copy catalog", () => {
     expect(keys.length).toBeGreaterThan(20);
     for (const key of keys)
       expect(
-        typeof FLEET_ZH_COPY[key] === "string" && FLEET_ZH_COPY[key]!.length > 0,
+        typeof FLEET_ZH_COPY[key] === "string" &&
+          FLEET_ZH_COPY[key]!.length > 0,
         key,
       ).toBe(true);
   });
@@ -23,10 +24,9 @@ describe("fleet zh copy catalog", () => {
     for (const key of fleetCopyKeys()) {
       const source = key;
       const translated = FLEET_ZH_COPY[key]!;
-      expect(
-        translated.match(/\{\w+\}/g)?.sort() ?? [],
-        source,
-      ).toEqual(source.match(/\{\w+\}/g)?.sort() ?? []);
+      expect(translated.match(/\{\w+\}/g)?.sort() ?? [], source).toEqual(
+        source.match(/\{\w+\}/g)?.sort() ?? [],
+      );
     }
   });
 

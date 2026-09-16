@@ -233,7 +233,9 @@ function setup(
     [];
   let remainingFailures = dispatchFails;
   const coordinator = new SessionPeerCoordinator<Client, Record>({
-    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.timeoutMs }),
     ...(options.bufferLimit === undefined
       ? {}
       : { bufferLimit: options.bufferLimit }),
@@ -700,45 +702,45 @@ describe("record-owned native peer coordinator", () => {
   });
 });
 
-  it("prunes only the named record's finished rows (parity 2500 §2)", async () => {
-    const h = setup();
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    const peerSessionId = h.opened[0]!.scope.sessionId;
-    h.send({
-      method: "turn/completed",
-      params: { session_id: peerSessionId, turn_id: "t1" },
-    });
-    expect(h.manager.snapshot().peers[0]?.activity).toBe("done");
-    // The named (ACTIVE) record's roster is pruned...
-    expect(h.coordinator.clearFinished(h.master)).toBe(1);
-    expect(h.manager.snapshot().peers).toHaveLength(0);
-    // ...and a re-run reports 0 with nothing left to clear.
-    expect(h.coordinator.clearFinished(h.master)).toBe(0);
+it("prunes only the named record's finished rows (parity 2500 §2)", async () => {
+  const h = setup();
+  h.master.setReadiness("ready");
+  h.send(stage());
+  await until(() =>
+    expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
+  );
+  const peerSessionId = h.opened[0]!.scope.sessionId;
+  h.send({
+    method: "turn/completed",
+    params: { session_id: peerSessionId, turn_id: "t1" },
   });
+  expect(h.manager.snapshot().peers[0]?.activity).toBe("done");
+  // The named (ACTIVE) record's roster is pruned...
+  expect(h.coordinator.clearFinished(h.master)).toBe(1);
+  expect(h.manager.snapshot().peers).toHaveLength(0);
+  // ...and a re-run reports 0 with nothing left to clear.
+  expect(h.coordinator.clearFinished(h.master)).toBe(0);
+});
 
-  it("never prunes a live row and leaves a foreign record's roster alone", async () => {
-    const h = setup();
-    const other = h.addMaster("other-master");
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    const peerSessionId = h.opened[0]!.scope.sessionId;
-    h.send({
-      method: "turn/started",
-      params: { session_id: peerSessionId, turn_id: "t1" },
-    });
-    expect(h.manager.snapshot().peers[0]?.activity).toBe("live");
-    expect(h.coordinator.clearFinished(h.master)).toBe(0);
-    expect(h.manager.snapshot().peers).toHaveLength(1);
-    // The other master owns no bound rows: fail-closed 0, never a throw.
-    expect(h.coordinator.clearFinished(other)).toBe(0);
+it("never prunes a live row and leaves a foreign record's roster alone", async () => {
+  const h = setup();
+  const other = h.addMaster("other-master");
+  h.master.setReadiness("ready");
+  h.send(stage());
+  await until(() =>
+    expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
+  );
+  const peerSessionId = h.opened[0]!.scope.sessionId;
+  h.send({
+    method: "turn/started",
+    params: { session_id: peerSessionId, turn_id: "t1" },
   });
+  expect(h.manager.snapshot().peers[0]?.activity).toBe("live");
+  expect(h.coordinator.clearFinished(h.master)).toBe(0);
+  expect(h.manager.snapshot().peers).toHaveLength(1);
+  // The other master owns no bound rows: fail-closed 0, never a throw.
+  expect(h.coordinator.clearFinished(other)).toBe(0);
+});
 
 describe("peer dispatch adoption (build 1230)", () => {
   it("stages through the dispatch leaf — and NOT session/open — when the seat is ready", async () => {
@@ -784,7 +786,9 @@ describe("peer dispatch adoption (build 1230)", () => {
   });
   it("keys the opened record by the SERVER-adopted session id", async () => {
     const h = setup({
-      dispatchReceipt: () => ({ adoptedSessionId: "dev:local:tui#peer-adopted" }),
+      dispatchReceipt: () => ({
+        adoptedSessionId: "dev:local:tui#peer-adopted",
+      }),
     });
     h.master.setReadiness("ready");
     h.send(stage());

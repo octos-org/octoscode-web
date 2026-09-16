@@ -79,15 +79,21 @@ async function connectAndStartWorkspace(
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(productNavigation(page)).toBeVisible();
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: /Add & Start|Start session/ }).click();
+  await addWorkspace
+    .getByRole("button", { name: /Add & Start|Start session/ })
+    .click();
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
 }
 
@@ -385,11 +391,18 @@ async function startPeers(page: Page, brief: string, n: number): Promise<void> {
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await composer.fill("/peer");
   await page.getByRole("button", { name: /^(Send|Queue) prompt$/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Session peers", exact: true });
+  const dialog = page.getByRole("dialog", {
+    name: "Session peers",
+    exact: true,
+  });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Peer brief", { exact: true }).fill(brief);
-  await dialog.getByRole("spinbutton", { name: "Peers", exact: true }).fill(String(n));
-  await dialog.getByRole("button", { name: "Start peers", exact: true }).click();
+  await dialog
+    .getByRole("spinbutton", { name: "Peers", exact: true })
+    .fill(String(n));
+  await dialog
+    .getByRole("button", { name: "Start peers", exact: true })
+    .click();
   await expect(
     dialog.getByRole("list", { name: "Session peers" }).getByRole("listitem"),
   ).toHaveCount(n);
@@ -397,7 +410,9 @@ async function startPeers(page: Page, brief: string, n: number): Promise<void> {
   // app container (`main.workspace-grid`) aria-hidden, so EVERY getByRole query
   // resolves to zero elements — including the sidebar. Close it before any
   // product-navigation locator is used again.
-  await dialog.getByRole("button", { name: "Close peers", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Close peers", exact: true })
+    .click();
   await expect(dialog).toBeHidden();
 }
 
@@ -472,7 +487,9 @@ test("holds 12 Sessions + 3 native peers on one pooled socket, refuses a peer-ow
 
   // 5) Deterministic fence ordering: 15 held terminals, released one at a time.
   await expect
-    .poll(() => heldSessions(request).then((h) => h.length), { timeout: 30_000 })
+    .poll(() => heldSessions(request).then((h) => h.length), {
+      timeout: 30_000,
+    })
     .toBe(TURNS);
 
   // 5b) FENCE: the peer-owned turn refuses a user interrupt. Select it, press Stop,
@@ -497,7 +514,9 @@ test("holds 12 Sessions + 3 native peers on one pooled socket, refuses a peer-ow
     ),
     "a fenced turn must NOT be cancelled — it stays held",
   ).toBe(true);
-  expect((await diagnostics(request)).activeBySession[fenceSession] ?? null).not.toBeNull();
+  expect(
+    (await diagnostics(request)).activeBySession[fenceSession] ?? null,
+  ).not.toBeNull();
 
   // 6) Release ALL held terminals; assert the runtime stays clean.
   const errs = trackRuntimeErrors(page);
@@ -505,7 +524,9 @@ test("holds 12 Sessions + 3 native peers on one pooled socket, refuses a peer-ow
     await releaseHeldTerminal(request, session_id);
   }
   await expect
-    .poll(() => heldSessions(request).then((h) => h.length), { timeout: 30_000 })
+    .poll(() => heldSessions(request).then((h) => h.length), {
+      timeout: 30_000,
+    })
     .toBe(0);
 
   // 6b) Dock roster AFTER the fence round-trip + release. The dock follows the

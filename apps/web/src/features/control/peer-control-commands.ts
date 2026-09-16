@@ -156,8 +156,7 @@ export async function sendPeerControl(
 const PEER_CONTROL_REFUSAL_LABELS: Readonly<Record<string, string>> = {
   driver_scope_mismatch: "This session can't be controlled from here",
   driver_fence_stale: "Your control of this session expired",
-  driver_revision_conflict:
-    "This session changed hands; refresh and try again",
+  driver_revision_conflict: "This session changed hands; refresh and try again",
   driver_busy_handover: "This session is changing hands right now",
   driver_operation_conflict:
     "A different request already used this id — nothing was sent",
@@ -166,7 +165,5 @@ const PEER_CONTROL_REFUSAL_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function peerControlRefusalLabel(kind: string): string {
-  return (
-    PEER_CONTROL_REFUSAL_LABELS[kind] ?? "That action was refused."
-  );
+  return PEER_CONTROL_REFUSAL_LABELS[kind] ?? "That action was refused.";
 }

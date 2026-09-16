@@ -83,9 +83,13 @@ const TARGET: PeerControlTarget = {
 };
 
 const commands = (): ExternalDriverCommands =>
-  ({ peerControl: vi.fn(async () => ({})) }) as unknown as ExternalDriverCommands;
+  ({
+    peerControl: vi.fn(async () => ({})),
+  }) as unknown as ExternalDriverCommands;
 
-const sources = (overrides: Partial<Parameters<typeof derivePeerControlSeat>[0]>) => ({
+const sources = (
+  overrides: Partial<Parameters<typeof derivePeerControlSeat>[0]>,
+) => ({
   capabilities: ADMITTING,
   driverInventory: EXTERNAL,
   acquire: ACQUIRE,
@@ -96,15 +100,21 @@ const sources = (overrides: Partial<Parameters<typeof derivePeerControlSeat>[0]>
 
 describe("derivePeerControlSeat — fail-closed seat derivation", () => {
   it("is null when the caps do not admit peer/control + external_driver_v1", () => {
-    expect(derivePeerControlSeat(sources({ capabilities: NO_FEATURE }))).toBeNull();
-    expect(derivePeerControlSeat(sources({ capabilities: undefined }))).toBeNull();
+    expect(
+      derivePeerControlSeat(sources({ capabilities: NO_FEATURE })),
+    ).toBeNull();
+    expect(
+      derivePeerControlSeat(sources({ capabilities: undefined })),
+    ).toBeNull();
   });
 
   it("is null unless the inventory is KNOWN", () => {
     // P2d: the gate is caps + a KNOWN inventory, not an already-observed
     // EXTERNAL binding — otherwise a cold `internal` session could never seat.
     expect(
-      derivePeerControlSeat(sources({ driverInventory: { kind: "unavailable" } })),
+      derivePeerControlSeat(
+        sources({ driverInventory: { kind: "unavailable" } }),
+      ),
     ).toBeNull();
     expect(
       derivePeerControlSeat(sources({ driverInventory: { kind: "loading" } })),
@@ -112,7 +122,9 @@ describe("derivePeerControlSeat — fail-closed seat derivation", () => {
   });
 
   it("seats from a COLD internal inventory once a capability is acquired", () => {
-    expect(derivePeerControlSeat(sources({ driverInventory: INTERNAL }))).not.toBeNull();
+    expect(
+      derivePeerControlSeat(sources({ driverInventory: INTERNAL })),
+    ).not.toBeNull();
   });
 
   it("is null without an acquired control capability", () => {

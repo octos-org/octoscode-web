@@ -85,9 +85,7 @@ describe("(1) no-model gate requires an OPEN session + completed fetch", () => {
 
 describe("(2) Fleet pane hidden pre-session; empty state without Start", () => {
   it("renders the Fleet pane only when routed AND a session is open", () => {
-    expect(app).toMatch(
-      /hidden=\{!\(fleetRouteActive && session\.opened\)\}/,
-    );
+    expect(app).toMatch(/hidden=\{!\(fleetRouteActive && session\.opened\)\}/);
   });
 
   it("offers the pre-session Fleet destination with an open-a-project empty state", () => {

@@ -113,7 +113,10 @@ export function aggregateFleetFacts(
     // contributes nothing — facts are never derived from `rows` alone.
     if (inventory.kind !== "complete" || inventory.operations === undefined)
       continue;
-    if (inventory.operations.length > 0 && !sessionIds.includes(session.sessionId))
+    if (
+      inventory.operations.length > 0 &&
+      !sessionIds.includes(session.sessionId)
+    )
       sessionIds.push(session.sessionId);
     for (const operation of inventory.operations) {
       operations.set(operation.operationId, factOf(operation));
@@ -122,7 +125,8 @@ export function aggregateFleetFacts(
   return Object.freeze({
     operations,
     sessionIdsWithOperations: Object.freeze(sessionIds),
-    restorations: options.restorations ?? new Map<string, FleetFactRestoration>(),
+    restorations:
+      options.restorations ?? new Map<string, FleetFactRestoration>(),
   });
 }
 
@@ -148,12 +152,7 @@ export interface FleetRosterPeerInput {
   readonly slug: string;
   /** The peer/dispatch operation id once a receipt confirmed the start. */
   readonly operationId?: string | null;
-  readonly status?:
-    | "opening"
-    | "started"
-    | "failed"
-    | "unknown"
-    | "closed";
+  readonly status?: "opening" | "started" | "failed" | "unknown" | "closed";
   readonly activity?: "idle" | "live" | "blocked" | "done";
   readonly outcome?: "finished" | "stopped" | "failed" | null;
   readonly outputTokens?: number;

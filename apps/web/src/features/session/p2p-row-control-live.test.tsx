@@ -63,7 +63,11 @@ const LIVE = {
 
 /** The HELD seat (P2i): the fence every row control must dispatch through. */
 const ACQUIRE: DriverAcquireView = {
-  capability: { driverId: "octoscode-web:881ac638", epoch: 26, reveal: () => "ctl-tok" },
+  capability: {
+    driverId: "octoscode-web:881ac638",
+    epoch: 26,
+    reveal: () => "ctl-tok",
+  },
   binding: {
     driverId: "octoscode-web:881ac638",
     epoch: 26,
@@ -248,21 +252,21 @@ describe("P2p (b) — expected_turn_id is the ADOPTED peer turn, not the master 
 
 describe("P2p (d) — the row exposes data-activity, reusing the manager's own axis", () => {
   it("reads the activity axis from observeSessionEvent's own vocabulary", () => {
-    expect(peerControllerRowActivity({ status: "opening", activity: "idle" })).toBe(
-      "staged",
-    );
-    expect(peerControllerRowActivity({ status: "started", activity: "live" })).toBe(
-      "live",
-    );
+    expect(
+      peerControllerRowActivity({ status: "opening", activity: "idle" }),
+    ).toBe("staged");
+    expect(
+      peerControllerRowActivity({ status: "started", activity: "live" }),
+    ).toBe("live");
     expect(
       peerControllerRowActivity({ status: "started", activity: "blocked" }),
     ).toBe("blocked");
-    expect(peerControllerRowActivity({ status: "started", activity: "done" })).toBe(
-      "done",
-    );
-    expect(peerControllerRowActivity({ status: "closed", activity: "done" })).toBe(
-      "reaped",
-    );
+    expect(
+      peerControllerRowActivity({ status: "started", activity: "done" }),
+    ).toBe("done");
+    expect(
+      peerControllerRowActivity({ status: "closed", activity: "done" }),
+    ).toBe("reaped");
   });
 
   it("renders the activity glyph + attribute on the row", () => {

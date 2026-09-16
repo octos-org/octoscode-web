@@ -68,9 +68,7 @@ export function SandboxSection({
         <p>{t("Read paths: {value0}", { value0: paths })}</p>
       )}
       <p>
-        {t(
-          "Set when the session opens — start a new session to change it",
-        )}
+        {t("Set when the session opens — start a new session to change it")}
       </p>
       {onNewSessionWith ? (
         <button type="button" onClick={onNewSessionWith}>

@@ -67,9 +67,10 @@ export interface ThinkingSummaryInput {
   updatedAtMs?: number;
 }
 
-export function thinkingSummaryParts(
-  input: ThinkingSummaryInput,
-): { seconds: number | undefined; words: number } {
+export function thinkingSummaryParts(input: ThinkingSummaryInput): {
+  seconds: number | undefined;
+  words: number;
+} {
   return {
     seconds: durationSeconds(
       input.startedAtMs,
@@ -125,8 +126,7 @@ export function toolTarget(argumentsJson: string): string {
   } catch {
     return "";
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    return "";
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
   const row = parsed as Record<string, unknown>;
   for (const key of TARGET_KEYS) {
     const value = row[key];

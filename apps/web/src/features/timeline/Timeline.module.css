@@ -82,12 +82,17 @@
 }
 
 @keyframes thinking-wave {
-  from { background-position: 130% 0; }
-  to { background-position: -30% 0; }
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
 }
 
 @keyframes thinking-breathe {
-  0%, 100% {
+  0%,
+  100% {
     border-color: color-mix(
       in srgb,
       var(--dsw-alias-state-business-primary) 28%,
@@ -102,7 +107,6 @@
     );
   }
 }
-
 
 /* A tool row reads as its family at a glance: the dot becomes a masked glyph
    for shell/read/edit/search/web, and an unknown tool keeps the dot. The mask
@@ -196,8 +200,12 @@
 }
 
 @keyframes tool-shine {
-  from { background-position: 130% 0; }
-  to { background-position: -30% 0; }
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

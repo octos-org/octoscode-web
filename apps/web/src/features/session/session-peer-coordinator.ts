@@ -199,9 +199,11 @@ export function peerSessionEventFor(
                     command?: { command_line?: unknown } | null;
                   } | null
                 )?.command?.command_line === "string"
-                  ? ((approval.typedDetails as {
-                      command: { command_line: string };
-                    }).command.command_line)
+                  ? (
+                      approval.typedDetails as {
+                        command: { command_line: string };
+                      }
+                    ).command.command_line
                   : null,
               scope: approval.approvalKind ?? null,
               title: approval.title,
@@ -224,12 +226,10 @@ export function peerSessionEventFor(
             question: {
               header: question.questions[0]?.header ?? null,
               question: question.questions[0]?.question ?? null,
-              options: (question.questions[0]?.options ?? []).map(
-                (option) => ({
-                  label: option.label,
-                  description: option.description ?? null,
-                }),
-              ),
+              options: (question.questions[0]?.options ?? []).map((option) => ({
+                label: option.label,
+                description: option.description ?? null,
+              })),
               multiSelect: question.questions[0]?.multiSelect ?? false,
               allowFreeText: question.questions[0]?.allowFreeText ?? false,
             },
@@ -677,15 +677,15 @@ export class SessionPeerCoordinator<
     } catch (error) {
       // A typed refusal is a clean, retryable rejection; the raw server copy is
       // never rendered (peer-dispatch-commands.ts label table).
-    if (error instanceof ExternalDriverRefusalError)
-      return {
-        status: "not-started",
-        error: peerDispatchRefusalLabel(error.refusalKind),
-        // Carry the allowlisted TYPED kind so the manager/console can render the
-        // bounded label (a typed refusal never sets `prepareError`; finding
-        // 2920 (a)).
-        refusalKind: error.refusalKind,
-      };
+      if (error instanceof ExternalDriverRefusalError)
+        return {
+          status: "not-started",
+          error: peerDispatchRefusalLabel(error.refusalKind),
+          // Carry the allowlisted TYPED kind so the manager/console can render the
+          // bounded label (a typed refusal never sets `prepareError`; finding
+          // 2920 (a)).
+          refusalKind: error.refusalKind,
+        };
       return {
         status: "unknown",
         error:

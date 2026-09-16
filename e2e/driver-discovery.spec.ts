@@ -29,7 +29,10 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { openSessionController, closeSessionController } from "./session-settings.ts";
+import {
+  openSessionController,
+  closeSessionController,
+} from "./session-settings.ts";
 
 const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPOSER = "Ask Octos to change, explain, or review code…";
@@ -48,8 +51,7 @@ const FORBIDDEN_DURING_DISCLOSURE = new Set([
 function isControlOrModel(method: string | null): boolean {
   if (method === null) return false;
   return (
-    FORBIDDEN_DURING_DISCLOSURE.has(method) ||
-    method.startsWith("profile/llm/")
+    FORBIDDEN_DURING_DISCLOSURE.has(method) || method.startsWith("profile/llm/")
   );
 }
 
@@ -198,9 +200,7 @@ function disclosure(page: Page) {
 }
 /** The rendered fact row whose <dt> is exactly `label` (Driver/Epoch/...). */
 function factRow(page: Page, label: string) {
-  return disclosure(page)
-    .locator("dl > div")
-    .filter({ hasText: label });
+  return disclosure(page).locator("dl > div").filter({ hasText: label });
 }
 
 async function selectedTitle(page: Page): Promise<string> {
@@ -238,16 +238,22 @@ async function connect(
   await page.getByLabel("Server origin").fill(ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const add = page.getByRole("region", { name: "Add workspace" });
   await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
   await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
-  await expect.poll(() => probe.calls("session/open").length).toBeGreaterThan(0);
+  await expect
+    .poll(() => probe.calls("session/open").length)
+    .toBeGreaterThan(0);
   const sessionId = probe.calls("session/open").at(-1)!.sessionId;
   if (typeof sessionId !== "string")
     throw new Error("Expected a full Session ID");
@@ -292,7 +298,9 @@ async function driverControl(
     ...(method ? { method } : {}),
   });
   expect(
-    (await request.post(`${ORIGIN}/__test__/driver/${action}?${query}`)).status(),
+    (
+      await request.post(`${ORIGIN}/__test__/driver/${action}?${query}`)
+    ).status(),
   ).toBe(204);
 }
 

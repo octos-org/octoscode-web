@@ -25,7 +25,9 @@ describe("§5.1 connect failure classification", () => {
   });
 
   it("leaves an unrelated error unclassified (no false copy)", () => {
-    expect(classifyConnectFailure("Server protocol contract is incompatible")).toBeNull();
+    expect(
+      classifyConnectFailure("Server protocol contract is incompatible"),
+    ).toBeNull();
   });
 });
 

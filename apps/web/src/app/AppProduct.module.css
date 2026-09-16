@@ -399,10 +399,19 @@
 }
 
 @keyframes octopus-swim {
-  0%, 100% { transform: translateY(0) rotate(-4deg) scaleX(1); }
-  25% { transform: translateY(-2.5px) rotate(0deg) scaleX(0.97); }
-  50% { transform: translateY(0) rotate(4deg) scaleX(1); }
-  75% { transform: translateY(-1.5px) rotate(0deg) scaleX(1.03); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg) scaleX(1);
+  }
+  25% {
+    transform: translateY(-2.5px) rotate(0deg) scaleX(0.97);
+  }
+  50% {
+    transform: translateY(0) rotate(4deg) scaleX(1);
+  }
+  75% {
+    transform: translateY(-1.5px) rotate(0deg) scaleX(1.03);
+  }
 }
 
 /* TUI parity: while a turn runs, a bright crest ripples across the status
@@ -431,8 +440,12 @@
 }
 
 @keyframes thinking-wave {
-  from { background-position: 130% 0; }
-  to { background-position: -30% 0; }
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
 }
 
 @keyframes thinking-pulse {

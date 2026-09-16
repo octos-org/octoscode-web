@@ -563,9 +563,8 @@ export function App() {
   // UX5 (transcript-04b): per-tab fold + turn-activity state, plus the
   // browser show-thinking preference that leads the session draft.
   const [timelineFolds, setTimelineFolds] = useState(initialFoldState);
-  const [turnActivityState, setTurnActivityState] = useState(
-    initialActivityState,
-  );
+  const [turnActivityState, setTurnActivityState] =
+    useState(initialActivityState);
   // Round 3 item 2 (judge #2): the Start sequencer's pending submit. Start is
   // the ONLY implicit acquisition — with no held seat the FIRST Start calls
   // acquire and defers the dispatch; the effect below fires it exactly once
@@ -573,7 +572,9 @@ export function App() {
   const [fleetStartPending, setFleetStartPending] =
     useState<FleetStartSequencerState>({ kind: "idle" });
   const [showThinkingPreference] = useState(() =>
-    parseShowThinking(browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null),
+    parseShowThinking(
+      browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null,
+    ),
   );
   // The browser default LEADS the session draft: on first mount the stored
   // preference is applied to the selected record's draft so an existing
@@ -624,7 +625,11 @@ export function App() {
     if (next === null) setFleetStartPending({ kind: "idle" });
     // Keyed on the SEAT FACT (not the controller object identity) plus the
     // pending submit itself.
-  }, [session.peerController?.seatHeld, fleetStartPending, session.peerController]);
+  }, [
+    session.peerController?.seatHeld,
+    fleetStartPending,
+    session.peerController,
+  ]);
   /**
    * Round 3 item 6 (judge #4, actions-06b H3/H7): the dock/Fleet PRODUCT row
    * sink. The command arrives PRE-BUILT with the row's REAL pending ids
@@ -637,9 +642,7 @@ export function App() {
     command: PeerControlCommand,
   ) => {
     const controller = session.peerController;
-    const target = controller?.roster.find(
-      (row) => row.slug === entry.slug,
-    );
+    const target = controller?.roster.find((row) => row.slug === entry.slug);
     if (!controller || !target) return;
     controller.onRowAction?.(target, command);
   };
@@ -651,8 +654,7 @@ export function App() {
   // Round 4 B: THIS app's stable controller identity — the same id every
   // acquire from this browser presents (stablePeerDriverId).
   const ownDriverId = useMemo(
-    () =>
-      stablePeerDriverId(browserLocalStorage()),
+    () => stablePeerDriverId(browserLocalStorage()),
     [],
   );
   // Round 4 B: classify the observed holder. A binding under OUR id (a peer
@@ -2037,32 +2039,32 @@ export function App() {
         ? conversation.seatHandover === "Resuming chat…"
           ? { kind: "resuming-chat" }
           : { kind: "handing-back" }
-      : interactions.approval
-        ? { kind: "waiting-approval" }
-        : interactions.question
-          ? { kind: "waiting-answer" }
-          : foreignSeatHeld
-            ? { kind: "external-held" }
-            : conversation.queue.active
-              ? { kind: "responding" }
-              : peers.manager
-                    ?.snapshot()
-                    .peers.some((peer) =>
-                      ["opening", "started"].includes(peer.status),
-                    )
-                ? {
-                    kind: "peers-running",
-                    count: peers.manager
+        : interactions.approval
+          ? { kind: "waiting-approval" }
+          : interactions.question
+            ? { kind: "waiting-answer" }
+            : foreignSeatHeld
+              ? { kind: "external-held" }
+              : conversation.queue.active
+                ? { kind: "responding" }
+                : peers.manager
                       ?.snapshot()
-                      .peers.filter(
-                        (peer) =>
-                          peer.status === "opening" ||
-                          peer.status === "started",
-                      ).length,
-                  }
-                : selfSeatHeld
-                  ? { kind: "peers-running", count: 1 }
-                  : { kind: "ready" };
+                      .peers.some((peer) =>
+                        ["opening", "started"].includes(peer.status),
+                      )
+                  ? {
+                      kind: "peers-running",
+                      count: peers.manager
+                        ?.snapshot()
+                        .peers.filter(
+                          (peer) =>
+                            peer.status === "opening" ||
+                            peer.status === "started",
+                        ).length,
+                    }
+                  : selfSeatHeld
+                    ? { kind: "peers-running", count: 1 }
+                    : { kind: "ready" };
   const showModelsSettings = Boolean(
     session.opened && (models.state.available || models.management.available),
   );
@@ -2280,7 +2282,9 @@ export function App() {
             discoveredOrigin={discoveredOrigin}
             onUseDiscovered={useDiscoveredOrigin}
             {...(failureActions !== undefined ? { failureActions } : {})}
-            {...(cleanupFailed ? { storageWarning: STORAGE_CLEAR_WARNING } : {})}
+            {...(cleanupFailed
+              ? { storageWarning: STORAGE_CLEAR_WARNING }
+              : {})}
             onChange={changeConnection}
             onConnect={() => session.connect(connection)}
             onDisconnect={disconnect}
@@ -2417,653 +2421,667 @@ export function App() {
           className={productStyles.workspaceMain}
           tabIndex={-1}
         >
-        <section className="conversation" hidden={fleetRouteActive}>
-          <h1 className="sr-only">Octoscode coding workspace</h1>
-          <header className="conversation-header">
-            {compact ? (
-              <button
-                type="button"
-                className={productStyles.navigationTrigger}
-                aria-label="Open sessions"
-                aria-haspopup="dialog"
-                aria-expanded={!sidebarCollapsed}
-                onClick={() => setSidebarCollapsed(false)}
-              >
-                <MenuIcon size={20} />
-              </button>
-            ) : null}
-            <div className="workspace-title">
-              <span>
-                {workspaceName(activeWorkspacePath || t("Workspace"))}
-              </span>
-              <small>{activeWorkspacePath || t("Choose a workspace")}</small>
-            </div>
-            {session.opened &&
-            (work.supervision.planAvailable ||
-              work.supervision.taskListAvailable ||
-              work.supervision.statusAvailable) ? (
-              <nav
-                className={productStyles.conversationTabs}
-                aria-label={t("Session views")}
-              >
+          <section className="conversation" hidden={fleetRouteActive}>
+            <h1 className="sr-only">Octoscode coding workspace</h1>
+            <header className="conversation-header">
+              {compact ? (
                 <button
                   type="button"
-                  aria-current={conversationTab === "chat" ? "page" : undefined}
-                  onClick={() => setConversationTab("chat")}
+                  className={productStyles.navigationTrigger}
+                  aria-label="Open sessions"
+                  aria-haspopup="dialog"
+                  aria-expanded={!sidebarCollapsed}
+                  onClick={() => setSidebarCollapsed(false)}
                 >
-                  {t("Chat")}
-                </button>
-                <button
-                  type="button"
-                  aria-current={
-                    conversationTab === "trajectory" ? "page" : undefined
-                  }
-                  onClick={() => setConversationTab("trajectory")}
-                >
-                  {t("Trajectory")}
-                </button>
-              </nav>
-            ) : null}
-            <div className="header-actions">
-              <button
-                className={productStyles.preferencesTrigger}
-                type="button"
-                aria-label={t("Browser preferences")}
-                title={t("Browser preferences")}
-                onClick={() => setPreferencesOpen(true)}
-              >
-                {t("Browser preferences")}
-              </button>
-              {safety.diffReview.available &&
-              safety.diffReview.latestPreviewId ? (
-                <button
-                  className={
-                    compact ? productStyles.compactReview : "review-chip"
-                  }
-                  type="button"
-                  aria-label="Review changes"
-                  title="Review changes"
-                  onClick={() => void safety.openDiffReview()}
-                >
-                  {compact ? <DiffIcon size={20} /> : t("Review changes")}
+                  <MenuIcon size={20} />
                 </button>
               ) : null}
-            </div>
-          </header>
-          {cleanupFailed ? (
-            <p className="recovery-banner recovery-error" role="alert">
-              {STORAGE_CLEAR_WARNING}
-            </p>
-          ) : null}
-          <div
-            ref={conversationScrollRef}
-            className="conversation-scroll"
-            role="region"
-            aria-label={t("Conversation")}
-            aria-busy={Boolean(openingSession)}
-            tabIndex={0}
-            onScroll={syncConversationFollow}
-          >
-            <div
-              ref={conversationContentRef}
-              className={productStyles.conversationContent}
-              onClickCapture={onDisclosureInteraction}
-              onKeyDownCapture={onDisclosureInteraction}
-            >
-              {workspaceProduct.launch.decision ? (
-                <SurfaceBoundary
-                  fallback={<DeferredSurface label="Loading launch…" />}
+              <div className="workspace-title">
+                <span>
+                  {workspaceName(activeWorkspacePath || t("Workspace"))}
+                </span>
+                <small>{activeWorkspacePath || t("Choose a workspace")}</small>
+              </div>
+              {session.opened &&
+              (work.supervision.planAvailable ||
+                work.supervision.taskListAvailable ||
+                work.supervision.statusAvailable) ? (
+                <nav
+                  className={productStyles.conversationTabs}
+                  aria-label={t("Session views")}
                 >
-                  <LaunchDecisionPanel
-                    state={workspaceProduct.launch}
-                    onboarding={workspaceProduct.onboarding}
-                    error={workspaceProduct.state.error}
-                    onSubmitOnboarding={(submission) =>
-                      void workspaceProduct.submitOnboarding(submission)
+                  <button
+                    type="button"
+                    aria-current={
+                      conversationTab === "chat" ? "page" : undefined
                     }
-                    onRetryOnboarding={() =>
-                      void workspaceProduct.retryOnboarding()
-                    }
-                    onChooseProfile={(profileId) =>
-                      void workspaceProduct.chooseLaunchProfile(profileId)
-                    }
-                    onCancel={workspaceProduct.cancelLaunch}
-                  />
-                </SurfaceBoundary>
-              ) : !session.opened && savedLink ? (
-                savedLinkPanel
-              ) : !session.opened ? (
-                <div className={productStyles.newSessionHero}>
-                  {codingCapabilities.sessionCreationAvailable ? (
-                    <SurfaceBoundary
-                      fallback={<DeferredSurface label="Loading workspaces…" />}
-                    >
-                      <NewSessionWorkspacePicker
-                        presentation="hero"
-                        cancelLabel={t("Change server")}
-                        workspaces={recentWorkspaces.map((workspace) => ({
-                          id: workspace.id,
-                          name: workspace.name,
-                          path: workspace.path,
-                        }))}
-                        {...(serverWorkingDirectory
-                          ? { serverWorkingDirectory }
-                          : {})}
-                        {...(recentWorkspaces[0]
-                          ? { recentWorkspaceId: recentWorkspaces[0].id }
-                          : {})}
-                        {...(workspaceBrowse
-                          ? { browse: workspaceBrowse }
-                          : {})}
-                        error={workspaceProduct.state.error}
-                        creating={
-                          session.status === "connecting" ||
-                          workspaceProduct.transitioning
-                        }
-                        onCancel={disconnect}
-                        onCreate={({ workspacePath }) =>
-                          createSessionInWorkspace(workspacePath)
-                        }
-                      />
-                    </SurfaceBoundary>
-                  ) : (
-                    <section
-                      className={productStyles.sessionUnavailable}
-                      role="status"
-                    >
-                      <strong>{t("Coding sessions unavailable")}</strong>
-                      <p>
-                        {t(
-                          "This Octos server does not support starting coding sessions in this Web app.",
-                        )}
-                      </p>
-                      <button type="button" onClick={disconnect}>
-                        {t("Change server")}
-                      </button>
-                    </section>
-                  )}
-                </div>
-              ) : conversationTab === "trajectory" ? (
-                <SurfaceBoundary
-                  fallback={<DeferredSurface label="Loading trajectory…" />}
-                >
-                  <SessionTrajectory
-                    state={work.supervision}
-                    onRefresh={() => void work.refresh()}
-                    onOpenTask={(taskId) => void work.openTask(taskId)}
-                    onCancelTask={(taskId) => void work.cancelTask(taskId)}
-                  />
-                </SurfaceBoundary>
-              ) : (
-                <>
-                  {savedLinkPanel}
-                  <SurfaceBoundary
-                    key={activeSessionKey ?? undefined}
-                    name="Conversation"
-                    fallback={<DeferredSurface label="Loading conversation…" />}
+                    onClick={() => setConversationTab("chat")}
                   >
-                    <Timeline
-                      key={activeSessionKey ?? undefined}
-                      entries={
-                        conversation.showReasoning
-                          ? conversation.timeline
-                          : conversation.timeline.filter(
-                              (entry) => entry.kind !== "reasoning",
-                            )
+                    {t("Chat")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={
+                      conversationTab === "trajectory" ? "page" : undefined
+                    }
+                    onClick={() => setConversationTab("trajectory")}
+                  >
+                    {t("Trajectory")}
+                  </button>
+                </nav>
+              ) : null}
+              <div className="header-actions">
+                <button
+                  className={productStyles.preferencesTrigger}
+                  type="button"
+                  aria-label={t("Browser preferences")}
+                  title={t("Browser preferences")}
+                  onClick={() => setPreferencesOpen(true)}
+                >
+                  {t("Browser preferences")}
+                </button>
+                {safety.diffReview.available &&
+                safety.diffReview.latestPreviewId ? (
+                  <button
+                    className={
+                      compact ? productStyles.compactReview : "review-chip"
+                    }
+                    type="button"
+                    aria-label="Review changes"
+                    title="Review changes"
+                    onClick={() => void safety.openDiffReview()}
+                  >
+                    {compact ? <DiffIcon size={20} /> : t("Review changes")}
+                  </button>
+                ) : null}
+              </div>
+            </header>
+            {cleanupFailed ? (
+              <p className="recovery-banner recovery-error" role="alert">
+                {STORAGE_CLEAR_WARNING}
+              </p>
+            ) : null}
+            <div
+              ref={conversationScrollRef}
+              className="conversation-scroll"
+              role="region"
+              aria-label={t("Conversation")}
+              aria-busy={Boolean(openingSession)}
+              tabIndex={0}
+              onScroll={syncConversationFollow}
+            >
+              <div
+                ref={conversationContentRef}
+                className={productStyles.conversationContent}
+                onClickCapture={onDisclosureInteraction}
+                onKeyDownCapture={onDisclosureInteraction}
+              >
+                {workspaceProduct.launch.decision ? (
+                  <SurfaceBoundary
+                    fallback={<DeferredSurface label="Loading launch…" />}
+                  >
+                    <LaunchDecisionPanel
+                      state={workspaceProduct.launch}
+                      onboarding={workspaceProduct.onboarding}
+                      error={workspaceProduct.state.error}
+                      onSubmitOnboarding={(submission) =>
+                        void workspaceProduct.submitOnboarding(submission)
                       }
-                      connected={session.connected}
-                      showThinking={conversation.showReasoning}
-                      folds={timelineFolds}
-                      onToggleFold={(id) =>
-                        setTimelineFolds(toggleFold(timelineFolds, id))
+                      onRetryOnboarding={() =>
+                        void workspaceProduct.retryOnboarding()
                       }
-                      onExpandAll={() =>
-                        setTimelineFolds(
-                          expandAll(
-                            timelineFolds,
-                            conversation.timeline
-                              .filter(
-                                (entry) =>
-                                  entry.kind === "reasoning" ||
-                                  entry.kind === "tool",
-                              )
-                              .map((entry) => entry.id),
-                          ),
-                        )
+                      onChooseProfile={(profileId) =>
+                        void workspaceProduct.chooseLaunchProfile(profileId)
                       }
-                      onCollapseAll={() =>
-                        setTimelineFolds(collapseAll(timelineFolds))
-                      }
+                      onCancel={workspaceProduct.cancelLaunch}
                     />
                   </SurfaceBoundary>
-                  {conversation.turnRecovery ? (
+                ) : !session.opened && savedLink ? (
+                  savedLinkPanel
+                ) : !session.opened ? (
+                  <div className={productStyles.newSessionHero}>
+                    {codingCapabilities.sessionCreationAvailable ? (
+                      <SurfaceBoundary
+                        fallback={
+                          <DeferredSurface label="Loading workspaces…" />
+                        }
+                      >
+                        <NewSessionWorkspacePicker
+                          presentation="hero"
+                          cancelLabel={t("Change server")}
+                          workspaces={recentWorkspaces.map((workspace) => ({
+                            id: workspace.id,
+                            name: workspace.name,
+                            path: workspace.path,
+                          }))}
+                          {...(serverWorkingDirectory
+                            ? { serverWorkingDirectory }
+                            : {})}
+                          {...(recentWorkspaces[0]
+                            ? { recentWorkspaceId: recentWorkspaces[0].id }
+                            : {})}
+                          {...(workspaceBrowse
+                            ? { browse: workspaceBrowse }
+                            : {})}
+                          error={workspaceProduct.state.error}
+                          creating={
+                            session.status === "connecting" ||
+                            workspaceProduct.transitioning
+                          }
+                          onCancel={disconnect}
+                          onCreate={({ workspacePath }) =>
+                            createSessionInWorkspace(workspacePath)
+                          }
+                        />
+                      </SurfaceBoundary>
+                    ) : (
+                      <section
+                        className={productStyles.sessionUnavailable}
+                        role="status"
+                      >
+                        <strong>{t("Coding sessions unavailable")}</strong>
+                        <p>
+                          {t(
+                            "This Octos server does not support starting coding sessions in this Web app.",
+                          )}
+                        </p>
+                        <button type="button" onClick={disconnect}>
+                          {t("Change server")}
+                        </button>
+                      </section>
+                    )}
+                  </div>
+                ) : conversationTab === "trajectory" ? (
+                  <SurfaceBoundary
+                    fallback={<DeferredSurface label="Loading trajectory…" />}
+                  >
+                    <SessionTrajectory
+                      state={work.supervision}
+                      onRefresh={() => void work.refresh()}
+                      onOpenTask={(taskId) => void work.openTask(taskId)}
+                      onCancelTask={(taskId) => void work.cancelTask(taskId)}
+                    />
+                  </SurfaceBoundary>
+                ) : (
+                  <>
+                    {savedLinkPanel}
                     <SurfaceBoundary
+                      key={activeSessionKey ?? undefined}
+                      name="Conversation"
                       fallback={
-                        <DeferredSurface label="Checking response status…" />
+                        <DeferredSurface label="Loading conversation…" />
                       }
                     >
-                      <TurnRecoveryNotice
-                        recovery={conversation.turnRecovery}
-                        onRetry={() => void conversation.retryTurnRecovery()}
+                      <Timeline
+                        key={activeSessionKey ?? undefined}
+                        entries={
+                          conversation.showReasoning
+                            ? conversation.timeline
+                            : conversation.timeline.filter(
+                                (entry) => entry.kind !== "reasoning",
+                              )
+                        }
+                        connected={session.connected}
+                        showThinking={conversation.showReasoning}
+                        folds={timelineFolds}
+                        onToggleFold={(id) =>
+                          setTimelineFolds(toggleFold(timelineFolds, id))
+                        }
+                        onExpandAll={() =>
+                          setTimelineFolds(
+                            expandAll(
+                              timelineFolds,
+                              conversation.timeline
+                                .filter(
+                                  (entry) =>
+                                    entry.kind === "reasoning" ||
+                                    entry.kind === "tool",
+                                )
+                                .map((entry) => entry.id),
+                            ),
+                          )
+                        }
+                        onCollapseAll={() =>
+                          setTimelineFolds(collapseAll(timelineFolds))
+                        }
                       />
                     </SurfaceBoundary>
+                    {conversation.turnRecovery ? (
+                      <SurfaceBoundary
+                        fallback={
+                          <DeferredSurface label="Checking response status…" />
+                        }
+                      >
+                        <TurnRecoveryNotice
+                          recovery={conversation.turnRecovery}
+                          onRetry={() => void conversation.retryTurnRecovery()}
+                        />
+                      </SurfaceBoundary>
+                    ) : null}
+                    {activityLabel &&
+                    !conversation.turnRecovery &&
+                    !interactions.approval &&
+                    !interactions.question ? (
+                      <div
+                        className={productStyles.thinkingIndicator}
+                        role="status"
+                      >
+                        <OctopusLogo
+                          size={18}
+                          className={productStyles.thinkingOctopus}
+                        />
+                        <span>
+                          {turnStarting ? "Starting…" : activityLabel}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>
+            <div
+              className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending && !openingSession) ? " is-hidden" : ""}`}
+            >
+              {showJumpLatest ? (
+                <button
+                  type="button"
+                  className={productStyles.jumpLatest}
+                  onClick={jumpToLatest}
+                >
+                  Back to latest ↓
+                </button>
+              ) : null}
+              {/* The agent's checklist rides the sticky composer rather than the
+                transcript, so a plan that grows never shifts the messages the
+                operator is reading. Hidden during a blocking interaction, like
+                the thinking indicator. */}
+              {planCardVisible(
+                work.supervision.plan,
+                work.supervision.planAvailable,
+              ) &&
+              !interactions.approval &&
+              !interactions.question ? (
+                <Suspense fallback={null}>
+                  <PlanCard plan={work.supervision.plan} />
+                </Suspense>
+              ) : null}
+              {session.opened && openingSession ? (
+                <div className={productStyles.pendingNavigation} role="status">
+                  <span className={productStyles.pendingNavigationCopy}>
+                    <strong>Opening conversation…</strong>
+                  </span>
+                  <button type="button" onClick={workspaceProduct.cancelLaunch}>
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              {navigationPending ? (
+                <div
+                  className={productStyles.pendingNavigation}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className={productStyles.pendingNavigationCopy}>
+                    <strong>
+                      {navigationPending.phase === "restoring"
+                        ? "Finishing recovery before navigation"
+                        : navigationPending.kind === "new-session"
+                          ? "New Session opens next"
+                          : "Session switch runs next"}
+                    </strong>
+                    <small title={navigationPending.cwd}>
+                      {navigationPending.phase === "restoring"
+                        ? "Octos accepted the turn. Durable state is syncing before this action continues in "
+                        : "Octos is accepting the current turn. This action will continue automatically in "}
+                      {workspaceName(navigationPending.cwd)}.
+                    </small>
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Cancel pending Session navigation"
+                    onClick={workspaceProduct.cancelPendingNavigation}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              {conversation.btw ? (
+                <Suspense fallback={<DeferredSurface label="Loading aside…" />}>
+                  <BtwAsidePanel controller={conversation.btw} />
+                </Suspense>
+              ) : null}
+              <p className="sr-only" role="status" aria-live="polite">
+                {approvalShortcutHint ?? ""}
+              </p>
+              <p className="sr-only" role="status" aria-live="polite">
+                {peerClearHint ?? ""}
+              </p>
+              {session.closed ? (
+                <p role="status">
+                  {t(
+                    "This peer Session is closed. Its transcript is retained; choose another Session to continue.",
+                  )}
+                </p>
+              ) : null}
+              {session.opened &&
+              !session.closed &&
+              session.recovery.phase !== "healthy" ? (
+                <div
+                  className={`recovery-banner recovery-${session.recovery.phase}`}
+                  role="status"
+                >
+                  <span className="recovery-banner-mark">
+                    <RefreshIcon size={16} />
+                  </span>
+                  <span>
+                    <strong>
+                      {t(
+                        session.recovery.phase === "reconnecting"
+                          ? "Reconnecting to Octos"
+                          : session.recovery.phase === "hydrating"
+                            ? "Restoring session state"
+                            : "Session recovery required",
+                      )}
+                    </strong>
+                    <small>
+                      {session.recovery.detail ??
+                        t(
+                          "Your session is reconnecting. Queued messages will wait until it is ready.",
+                        )}
+                    </small>
+                  </span>
+                </div>
+              ) : interactions.approval ? (
+                <SurfaceBoundary
+                  key={`approval:${interactions.approval.approvalId}`}
+                  name="Approval"
+                  actions={recoveryStop}
+                  fallback={<DeferredSurface label="Loading approval…" />}
+                >
+                  <ApprovalPanel
+                    approval={interactions.approval}
+                    busy={interactions.busy}
+                    error={interactions.error}
+                    onDecide={(decision, scope) =>
+                      void interactions.respondApproval(decision, scope)
+                    }
+                    {...(conversation.interruptible
+                      ? { onInterrupt: () => void conversation.interrupt() }
+                      : {})}
+                    onReviewDiff={(previewId) =>
+                      void safety.openDiffReview(previewId)
+                    }
+                  />
+                </SurfaceBoundary>
+              ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
+                <SurfaceBoundary
+                  name="Question"
+                  fallback={<DeferredSurface label="Loading question…" />}
+                >
+                  <UserQuestionPanel
+                    key={peerAnswerRequest(peerAnswerRow)!.questionId}
+                    request={peerAnswerWireRequest(peerAnswerRow)}
+                    busy={false}
+                    error={null}
+                    onSubmit={(answers) => {
+                      const entry = peerAnswerRow;
+                      setPeerAnswerRow(null);
+                      if (!entry) return;
+                      const command = buildRowControlCommand(
+                        "answer",
+                        "",
+                        peerRowAttention(entry),
+                        toControlAnswers(
+                          answers.map((answer) => ({
+                            selectedLabels: answer.selected_labels ?? [],
+                            freeText: answer.free_text ?? "",
+                          })),
+                        ),
+                      );
+                      if (command !== null)
+                        sendProductRowAction(entry, command);
+                    }}
+                    onInterrupt={() => setPeerAnswerRow(null)}
+                  />
+                </SurfaceBoundary>
+              ) : interactions.question ? (
+                <SurfaceBoundary
+                  key={`question:${interactions.question.questionId}`}
+                  name="Question"
+                  actions={recoveryStop}
+                  fallback={<DeferredSurface label="Loading question…" />}
+                >
+                  <UserQuestionPanel
+                    key={interactions.question.questionId}
+                    request={interactions.question}
+                    busy={interactions.busy}
+                    error={interactions.error}
+                    onSubmit={(answers) =>
+                      void interactions.respondQuestion(answers)
+                    }
+                    {...(conversation.interruptible
+                      ? { onInterrupt: () => void conversation.interrupt() }
+                      : {})}
+                  />
+                </SurfaceBoundary>
+              ) : conversationTab === "trajectory" ? null : (
+                <>
+                  {commandError ? <p role="alert">{commandError}</p> : null}
+                  {draftCapacityBlocked ? (
+                    <p role="status">
+                      This tab already keeps 50 unsent drafts. Send or clear
+                      this input before switching conversations. Copy it first
+                      if you want to keep it elsewhere.
+                    </p>
+                  ) : !draftSaved ? (
+                    <p role="status">
+                      Draft changes could not be saved in this tab. Copy your
+                      text before reloading; an older draft may be restored.
+                    </p>
                   ) : null}
-                  {activityLabel &&
-                  !conversation.turnRecovery &&
-                  !interactions.approval &&
-                  !interactions.question ? (
-                    <div
-                      className={productStyles.thinkingIndicator}
-                      role="status"
+                  <QueuedPrompts
+                    prompts={conversation.queue.pending}
+                    onRemove={(turnId) =>
+                      conversation.cancelQueuedPrompt(turnId)
+                    }
+                  />
+                  <div className="composer">
+                    {conversation.steeringEnabled ? (
+                      <p className="field-note" role="status">
+                        {session.capabilities &&
+                        supportsMethod(session.capabilities, "turn/steer") &&
+                        session.capabilities.supported_features?.includes(
+                          CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
+                        )
+                          ? t(
+                              "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
+                            )
+                          : t(
+                              "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
+                            )}
+                      </p>
+                    ) : null}
+                    {conversation.inputError ? (
+                      <p role="alert">{conversation.inputError}</p>
+                    ) : null}
+                    {conversation.attachments?.getSnapshot().entries.length ? (
+                      <button type="button" onClick={() => setImagesOpen(true)}>
+                        {t("{count} image(s) attached · inspect", {
+                          count:
+                            conversation.attachments.getSnapshot().entries
+                              .length,
+                        })}
+                      </button>
+                    ) : null}
+                    {suggestedCommands.length > 0 ? (
+                      <Suspense fallback={null}>
+                        <CommandPalette
+                          id={COMMAND_PALETTE_ID}
+                          commands={suggestedCommands}
+                          selectedIndex={Math.min(
+                            selectedCommandIndex,
+                            Math.max(0, suggestedCommands.length - 1),
+                          )}
+                          onSelect={chooseCommand}
+                        />
+                      </Suspense>
+                    ) : null}
+                    <SurfaceBoundary
+                      key={activeSessionKey ?? undefined}
+                      name="Message input"
+                      actions={recoveryStop}
+                      fallback={<DeferredSurface label="Loading composer…" />}
                     >
-                      <OctopusLogo
-                        size={18}
-                        className={productStyles.thinkingOctopus}
+                      <ComposerInput
+                        recordKey={protocol.authorityKey}
+                        inputRef={composerRef}
+                        focusOnMount={
+                          !compact && !settingsOpen && !workspacePicker.open
+                        }
+                        peerRoster={peers.manager?.snapshot().peers ?? []}
+                        peerSessionId={session.opened?.session_id ?? null}
+                        value={draft}
+                        onChange={(value) => {
+                          draftRef.current = value;
+                          setDraft(value);
+                          setSelectedCommandIndex(0);
+                          setCommandPaletteDismissed(false);
+                        }}
+                        onCommandMove={(delta) =>
+                          setSelectedCommandIndex(
+                            (current) =>
+                              (current + delta + suggestedCommands.length) %
+                              suggestedCommands.length,
+                          )
+                        }
+                        onCommandDismiss={() => {
+                          setCommandPaletteDismissed(true);
+                          setSelectedCommandIndex(0);
+                        }}
+                        onSubmit={() => {
+                          // Sending pauses while a turn's outcome is uncertain.
+                          if (conversation.turnRecovery) return;
+                          const selected =
+                            suggestedCommands[selectedCommandIndex];
+                          if (selected) chooseCommand(selected);
+                          else submit();
+                        }}
+                        onInterrupt={() => {
+                          if (conversation.interruptible)
+                            void conversation.interrupt();
+                        }}
+                        placeholder={
+                          session.connected &&
+                          codingCapabilities.turnStartAvailable
+                            ? t("Ask Octos to change, explain, or review code…")
+                            : session.connected
+                              ? t("This server cannot start coding turns")
+                              : t("Connect a workspace to begin")
+                        }
+                        disabled={
+                          profileMutationBusy ||
+                          !session.connected ||
+                          workspaceProduct.transitioning ||
+                          Boolean(navigationPending)
+                        }
+                        paletteId={COMMAND_PALETTE_ID}
+                        commandCount={suggestedCommands.length}
+                        selectedCommandId={
+                          suggestedCommands[selectedCommandIndex]
+                            ? `${COMMAND_PALETTE_ID}-${suggestedCommands[selectedCommandIndex].name}`
+                            : undefined
+                        }
                       />
-                      <span>{turnStarting ? "Starting…" : activityLabel}</span>
+                    </SurfaceBoundary>
+                    <div className="composer-footer">
+                      {session.opened ? (
+                        <SurfaceBoundary
+                          fallback={
+                            <div
+                              className={productStyles.sessionControlsFallback}
+                              role="status"
+                              aria-label={t("Loading session status")}
+                            />
+                          }
+                        >
+                          <SessionStatusStrip
+                            model={runtimeModelLabel}
+                            permissionMode={permissionModeLabel}
+                            state={sessionStripState}
+                            activity={turnActivityState}
+                            onOpenPane={() => setSessionConfigOpen(true)}
+                          />
+                        </SurfaceBoundary>
+                      ) : null}
+                      <div className="composer-actions">
+                        {contextPercent !== null ? (
+                          <span
+                            className={productStyles.contextUsage}
+                            title={t(
+                              "{percent}% of the model context window used",
+                              { percent: contextPercent },
+                            )}
+                          >
+                            {contextPercent}%
+                          </span>
+                        ) : null}
+                        <TurnStopButton
+                          activeTurnId={activeTurnId}
+                          starting={turnStarting}
+                          interruptingTurnId={conversation.interruptingTurnId}
+                          available={conversation.interruptible}
+                          onInterrupt={() => void conversation.interrupt()}
+                        />
+                        {/* While a turn runs the arrow means "queue this
+                          draft" — with nothing to queue it is not an
+                          affordance at all, so Stop stands alone instead of
+                          beside a dead Queue prompt button. */}
+                        {!activeTurnId || draft.trim() ? (
+                          <button
+                            className="send-button"
+                            type="button"
+                            onClick={() => {
+                              submit();
+                              composerRef.current?.focus();
+                            }}
+                            disabled={
+                              profileMutationBusy ||
+                              !session.connected ||
+                              workspaceProduct.transitioning ||
+                              Boolean(navigationPending) ||
+                              Boolean(conversation.turnRecovery) ||
+                              !draft.trim()
+                            }
+                            aria-label={t(
+                              activeTurnId ? "Queue prompt" : "Send prompt",
+                            )}
+                            title={t(
+                              activeTurnId ? "Queue prompt" : "Send prompt",
+                            )}
+                          >
+                            ↑
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
+                  </div>
+                  {conversation.turnRecovery ? (
+                    <button
+                      className={productStyles.recoveryLink}
+                      type="button"
+                      onClick={jumpToLatest}
+                    >
+                      Sending paused · View response status
+                    </button>
                   ) : null}
                 </>
               )}
             </div>
-          </div>
+          </section>
           <div
-            className={`composer-wrap${!session.opened || workspaceProduct.launch.decision || (conversationTab === "trajectory" && !navigationPending && !openingSession) ? " is-hidden" : ""}`}
+            className="conversation fleet-pane"
+            hidden={!(fleetRouteActive && session.opened)}
           >
-            {showJumpLatest ? (
-              <button
-                type="button"
-                className={productStyles.jumpLatest}
-                onClick={jumpToLatest}
-              >
-                Back to latest ↓
-              </button>
-            ) : null}
-            {/* The agent's checklist rides the sticky composer rather than the
-                transcript, so a plan that grows never shifts the messages the
-                operator is reading. Hidden during a blocking interaction, like
-                the thinking indicator. */}
-            {planCardVisible(
-              work.supervision.plan,
-              work.supervision.planAvailable,
-            ) &&
-            !interactions.approval &&
-            !interactions.question ? (
-              <Suspense fallback={null}>
-                <PlanCard plan={work.supervision.plan} />
-              </Suspense>
-            ) : null}
-            {session.opened && openingSession ? (
-              <div className={productStyles.pendingNavigation} role="status">
-                <span className={productStyles.pendingNavigationCopy}>
-                  <strong>Opening conversation…</strong>
-                </span>
-                <button type="button" onClick={workspaceProduct.cancelLaunch}>
-                  Cancel
-                </button>
-              </div>
-            ) : null}
-            {navigationPending ? (
-              <div
-                className={productStyles.pendingNavigation}
-                role="status"
-                aria-live="polite"
-              >
-                <span className={productStyles.pendingNavigationCopy}>
-                  <strong>
-                    {navigationPending.phase === "restoring"
-                      ? "Finishing recovery before navigation"
-                      : navigationPending.kind === "new-session"
-                        ? "New Session opens next"
-                        : "Session switch runs next"}
-                  </strong>
-                  <small title={navigationPending.cwd}>
-                    {navigationPending.phase === "restoring"
-                      ? "Octos accepted the turn. Durable state is syncing before this action continues in "
-                      : "Octos is accepting the current turn. This action will continue automatically in "}
-                    {workspaceName(navigationPending.cwd)}.
-                  </small>
-                </span>
-                <button
-                  type="button"
-                  aria-label="Cancel pending Session navigation"
-                  onClick={workspaceProduct.cancelPendingNavigation}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : null}
-            {conversation.btw ? (
-              <Suspense fallback={<DeferredSurface label="Loading aside…" />}>
-                <BtwAsidePanel controller={conversation.btw} />
-              </Suspense>
-            ) : null}
-            <p className="sr-only" role="status" aria-live="polite">
-              {approvalShortcutHint ?? ""}
-            </p>
-            <p className="sr-only" role="status" aria-live="polite">
-              {peerClearHint ?? ""}
-            </p>
-            {session.closed ? (
-              <p role="status">
-                {t(
-                  "This peer Session is closed. Its transcript is retained; choose another Session to continue.",
-                )}
-              </p>
-            ) : null}
-            {session.opened &&
-            !session.closed &&
-            session.recovery.phase !== "healthy" ? (
-              <div
-                className={`recovery-banner recovery-${session.recovery.phase}`}
-                role="status"
-              >
-                <span className="recovery-banner-mark">
-                  <RefreshIcon size={16} />
-                </span>
-                <span>
-                  <strong>
-                    {t(
-                      session.recovery.phase === "reconnecting"
-                        ? "Reconnecting to Octos"
-                        : session.recovery.phase === "hydrating"
-                          ? "Restoring session state"
-                          : "Session recovery required",
-                    )}
-                  </strong>
-                  <small>
-                    {session.recovery.detail ??
-                      t(
-                        "Your session is reconnecting. Queued messages will wait until it is ready.",
-                      )}
-                  </small>
-                </span>
-              </div>
-            ) : interactions.approval ? (
-              <SurfaceBoundary
-                key={`approval:${interactions.approval.approvalId}`}
-                name="Approval"
-                actions={recoveryStop}
-                fallback={<DeferredSurface label="Loading approval…" />}
-              >
-                <ApprovalPanel
-                  approval={interactions.approval}
-                  busy={interactions.busy}
-                  error={interactions.error}
-                  onDecide={(decision, scope) =>
-                    void interactions.respondApproval(decision, scope)
-                  }
-                  {...(conversation.interruptible
-                    ? { onInterrupt: () => void conversation.interrupt() }
-                    : {})}
-                  onReviewDiff={(previewId) =>
-                    void safety.openDiffReview(previewId)
-                  }
-                />
-              </SurfaceBoundary>
-            ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
-              <SurfaceBoundary
-                name="Question"
-                fallback={<DeferredSurface label="Loading question…" />}
-              >
-                <UserQuestionPanel
-                  key={peerAnswerRequest(peerAnswerRow)!.questionId}
-                  request={peerAnswerWireRequest(peerAnswerRow)}
-                  busy={false}
-                  error={null}
-                  onSubmit={(answers) => {
-                    const entry = peerAnswerRow;
-                    setPeerAnswerRow(null);
-                    if (!entry) return;
-                    const command = buildRowControlCommand(
-                      "answer",
-                      "",
-                      peerRowAttention(entry),
-                      toControlAnswers(
-                        answers.map((answer) => ({
-                          selectedLabels: answer.selected_labels ?? [],
-                          freeText: answer.free_text ?? "",
-                        })),
-                      ),
-                    );
-                    if (command !== null) sendProductRowAction(entry, command);
-                  }}
-                  onInterrupt={() => setPeerAnswerRow(null)}
-                />
-              </SurfaceBoundary>
-            ) : interactions.question ? (
-              <SurfaceBoundary
-                key={`question:${interactions.question.questionId}`}
-                name="Question"
-                actions={recoveryStop}
-                fallback={<DeferredSurface label="Loading question…" />}
-              >
-                <UserQuestionPanel
-                  key={interactions.question.questionId}
-                  request={interactions.question}
-                  busy={interactions.busy}
-                  error={interactions.error}
-                  onSubmit={(answers) =>
-                    void interactions.respondQuestion(answers)
-                  }
-                  {...(conversation.interruptible
-                    ? { onInterrupt: () => void conversation.interrupt() }
-                    : {})}
-                />
-              </SurfaceBoundary>
-            ) : conversationTab === "trajectory" ? null : (
-              <>
-                {commandError ? <p role="alert">{commandError}</p> : null}
-                {draftCapacityBlocked ? (
-                  <p role="status">
-                    This tab already keeps 50 unsent drafts. Send or clear this
-                    input before switching conversations. Copy it first if you
-                    want to keep it elsewhere.
-                  </p>
-                ) : !draftSaved ? (
-                  <p role="status">
-                    Draft changes could not be saved in this tab. Copy your text
-                    before reloading; an older draft may be restored.
-                  </p>
-                ) : null}
-                <QueuedPrompts
-                  prompts={conversation.queue.pending}
-                  onRemove={(turnId) => conversation.cancelQueuedPrompt(turnId)}
-                />
-                <div className="composer">
-                  {conversation.steeringEnabled ? (
-                    <p className="field-note" role="status">
-                      {session.capabilities &&
-                      supportsMethod(session.capabilities, "turn/steer") &&
-                      session.capabilities.supported_features?.includes(
-                        CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
-                      )
-                        ? t(
-                            "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
-                          )
-                        : t(
-                            "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
-                          )}
-                    </p>
-                  ) : null}
-                  {conversation.inputError ? (
-                    <p role="alert">{conversation.inputError}</p>
-                  ) : null}
-                  {conversation.attachments?.getSnapshot().entries.length ? (
-                    <button type="button" onClick={() => setImagesOpen(true)}>
-                      {t("{count} image(s) attached · inspect", {
-                        count:
-                          conversation.attachments.getSnapshot().entries.length,
-                      })}
-                    </button>
-                  ) : null}
-                  {suggestedCommands.length > 0 ? (
-                    <Suspense fallback={null}>
-                      <CommandPalette
-                        id={COMMAND_PALETTE_ID}
-                        commands={suggestedCommands}
-                        selectedIndex={Math.min(
-                          selectedCommandIndex,
-                          Math.max(0, suggestedCommands.length - 1),
-                        )}
-                        onSelect={chooseCommand}
-                      />
-                    </Suspense>
-                  ) : null}
-                  <SurfaceBoundary
-                    key={activeSessionKey ?? undefined}
-                    name="Message input"
-                    actions={recoveryStop}
-                    fallback={<DeferredSurface label="Loading composer…" />}
-                  >
-                    <ComposerInput
-                      recordKey={protocol.authorityKey}
-                      inputRef={composerRef}
-                      focusOnMount={
-                        !compact && !settingsOpen && !workspacePicker.open
-                      }
-                      peerRoster={peers.manager?.snapshot().peers ?? []}
-                      peerSessionId={session.opened?.session_id ?? null}
-                      value={draft}
-                      onChange={(value) => {
-                        draftRef.current = value;
-                        setDraft(value);
-                        setSelectedCommandIndex(0);
-                        setCommandPaletteDismissed(false);
-                      }}
-                      onCommandMove={(delta) =>
-                        setSelectedCommandIndex(
-                          (current) =>
-                            (current + delta + suggestedCommands.length) %
-                            suggestedCommands.length,
-                        )
-                      }
-                      onCommandDismiss={() => {
-                        setCommandPaletteDismissed(true);
-                        setSelectedCommandIndex(0);
-                      }}
-                      onSubmit={() => {
-                        // Sending pauses while a turn's outcome is uncertain.
-                        if (conversation.turnRecovery) return;
-                        const selected = suggestedCommands[selectedCommandIndex];
-                        if (selected) chooseCommand(selected);
-                        else submit();
-                      }}
-                      onInterrupt={() => {
-                        if (conversation.interruptible)
-                          void conversation.interrupt();
-                      }}
-                      placeholder={
-                        session.connected && codingCapabilities.turnStartAvailable
-                          ? t("Ask Octos to change, explain, or review code…")
-                          : session.connected
-                            ? t("This server cannot start coding turns")
-                            : t("Connect a workspace to begin")
-                      }
-                      disabled={
-                        profileMutationBusy ||
-                        !session.connected ||
-                        workspaceProduct.transitioning ||
-                        Boolean(navigationPending)
-                      }
-                      paletteId={COMMAND_PALETTE_ID}
-                      commandCount={suggestedCommands.length}
-                      selectedCommandId={
-                        suggestedCommands[selectedCommandIndex]
-                          ? `${COMMAND_PALETTE_ID}-${suggestedCommands[selectedCommandIndex].name}`
-                          : undefined
-                      }
-                    />
-                  </SurfaceBoundary>
-                  <div className="composer-footer">
-                    {session.opened ? (
-                      <SurfaceBoundary
-                        fallback={
-                          <div
-                            className={productStyles.sessionControlsFallback}
-                            role="status"
-                            aria-label={t("Loading session status")}
-                          />
-                        }
-                      >
-                        <SessionStatusStrip
-                          model={runtimeModelLabel}
-                          permissionMode={permissionModeLabel}
-                          state={sessionStripState}
-                          activity={turnActivityState}
-                          onOpenPane={() => setSessionConfigOpen(true)}
-                        />
-                      </SurfaceBoundary>
-                    ) : null}
-                    <div className="composer-actions">
-                      {contextPercent !== null ? (
-                        <span
-                          className={productStyles.contextUsage}
-                          title={t(
-                            "{percent}% of the model context window used",
-                            { percent: contextPercent },
-                          )}
-                        >
-                          {contextPercent}%
-                        </span>
-                      ) : null}
-                      <TurnStopButton
-                        activeTurnId={activeTurnId}
-                        starting={turnStarting}
-                        interruptingTurnId={conversation.interruptingTurnId}
-                        available={conversation.interruptible}
-                        onInterrupt={() => void conversation.interrupt()}
-                      />
-                      {/* While a turn runs the arrow means "queue this
-                          draft" — with nothing to queue it is not an
-                          affordance at all, so Stop stands alone instead of
-                          beside a dead Queue prompt button. */}
-                      {!activeTurnId || draft.trim() ? (
-                        <button
-                          className="send-button"
-                          type="button"
-                          onClick={() => {
-                            submit();
-                            composerRef.current?.focus();
-                          }}
-                          disabled={
-                            profileMutationBusy ||
-                            !session.connected ||
-                            workspaceProduct.transitioning ||
-                            Boolean(navigationPending) ||
-                            Boolean(conversation.turnRecovery) ||
-                            !draft.trim()
-                          }
-                          aria-label={t(
-                            activeTurnId ? "Queue prompt" : "Send prompt",
-                          )}
-                          title={t(
-                            activeTurnId ? "Queue prompt" : "Send prompt",
-                          )}
-                        >
-                          ↑
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-                {conversation.turnRecovery ? (
-                  <button
-                    className={productStyles.recoveryLink}
-                    type="button"
-                    onClick={jumpToLatest}
-                  >
-                    Sending paused · View response status
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </section>
-        <div
-          className="conversation fleet-pane"
-          hidden={!(fleetRouteActive && session.opened)}
-        >
             <header className="conversation-header">
               <button
                 type="button"
@@ -3076,69 +3094,73 @@ export function App() {
             </header>
             {session.opened ? (
               <Suspense fallback={<DeferredSurface label="Loading fleet…" />}>
-              <FleetView
-                peerController={
-                  session.peerController &&
-                  session.peerController.readiness === "ready"
-                    ? {
-                        ...session.peerController,
-                        readiness: "ready" as const,
-                        ...(fleetPeers !== null ? { fleetPeers } : {}),
-                      }
-                    : null
-                }
-                sessions={fleetSessions}
-                selectedSessionId={session.opened?.session_id ?? ""}
-                startState={fleetStartSettle}
-                onStart={(submit) => {
-                  // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
-                  // peer/dispatch. With no seat held, the FIRST call goes to
-                  // acquire and the dispatch is deferred to the effect below.
-                  const next = fleetStartOnSubmit({
-                    state: fleetStartPending,
-                    seatHeld:
-                      session.peerController?.seatHeld === true,
-                    submit: {
-                      laneKey: submit.laneKey ?? submit.model,
-                      brief: submit.brief,
-                      title: submit.brief.split("\n", 1)[0]!.slice(0, 60),
-                    },
-                    sink: {
-                      onAcquireSeat: () =>
-                        session.peerController?.onAcquireSeat?.(),
-                      onDispatch: (dispatch) => {
-                        setFleetStartPending({ kind: "idle" });
-                        session.peerController?.onDispatch?.(dispatch);
-                      },
-                    },
-                  });
-                  if (next !== null) setFleetStartPending(next);
-                }}
-                {...(session.peerController?.onRowAction
-                  ? {
-                      onRowAction: (row, action, steerText) => {
-                        // Judge r2 #4 (H4): bind the row's REAL pending ids —
-                        // never the console's synthetic placeholders.
-                        const entry = peers.manager
-                          ?.snapshot()
-                          .peers.find((candidate) => candidate.slug === row.slug);
-                        if (!entry) return;
-                        if (entry.activity === "blocked" && entry.requestKind === "question") {
-                          const request = peerAnswerRequest(entry);
-                          if (request) setPeerAnswerRow(entry);
-                          return;
+                <FleetView
+                  peerController={
+                    session.peerController &&
+                    session.peerController.readiness === "ready"
+                      ? {
+                          ...session.peerController,
+                          readiness: "ready" as const,
+                          ...(fleetPeers !== null ? { fleetPeers } : {}),
                         }
-                        const command = buildRowControlCommand(
-                          action,
-                          steerText ?? "",
-                          peerRowAttention(entry),
-                        );
-                        if (command === null) return;
-                        sendProductRowAction(entry, command);
+                      : null
+                  }
+                  sessions={fleetSessions}
+                  selectedSessionId={session.opened?.session_id ?? ""}
+                  startState={fleetStartSettle}
+                  onStart={(submit) => {
+                    // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
+                    // peer/dispatch. With no seat held, the FIRST call goes to
+                    // acquire and the dispatch is deferred to the effect below.
+                    const next = fleetStartOnSubmit({
+                      state: fleetStartPending,
+                      seatHeld: session.peerController?.seatHeld === true,
+                      submit: {
+                        laneKey: submit.laneKey ?? submit.model,
+                        brief: submit.brief,
+                        title: submit.brief.split("\n", 1)[0]!.slice(0, 60),
                       },
-                    }
-                  : {})}
-              />
+                      sink: {
+                        onAcquireSeat: () =>
+                          session.peerController?.onAcquireSeat?.(),
+                        onDispatch: (dispatch) => {
+                          setFleetStartPending({ kind: "idle" });
+                          session.peerController?.onDispatch?.(dispatch);
+                        },
+                      },
+                    });
+                    if (next !== null) setFleetStartPending(next);
+                  }}
+                  {...(session.peerController?.onRowAction
+                    ? {
+                        onRowAction: (row, action, steerText) => {
+                          // Judge r2 #4 (H4): bind the row's REAL pending ids —
+                          // never the console's synthetic placeholders.
+                          const entry = peers.manager
+                            ?.snapshot()
+                            .peers.find(
+                              (candidate) => candidate.slug === row.slug,
+                            );
+                          if (!entry) return;
+                          if (
+                            entry.activity === "blocked" &&
+                            entry.requestKind === "question"
+                          ) {
+                            const request = peerAnswerRequest(entry);
+                            if (request) setPeerAnswerRow(entry);
+                            return;
+                          }
+                          const command = buildRowControlCommand(
+                            action,
+                            steerText ?? "",
+                            peerRowAttention(entry),
+                          );
+                          if (command === null) return;
+                          sendProductRowAction(entry, command);
+                        },
+                      }
+                    : {})}
+                />
               </Suspense>
             ) : (
               // §3/4200b: pre-session Fleet destination — the entry stays
@@ -3153,7 +3175,7 @@ export function App() {
                 </p>
               </div>
             )}
-        </div>
+          </div>
         </main>
       </div>
       {session.opened && sessionConfigOpen ? (
@@ -3231,8 +3253,7 @@ export function App() {
                     )
                     ?.models.find(
                       (model) => model.id === currentProfileModel.modelId,
-                    )
-                    ?.name ?? currentProfileModel.modelId)
+                    )?.name ?? currentProfileModel.modelId)
                 : null,
               // Round 4 §D / spec 1188: the Model region must separate the
               // SESSION RUNTIME (what this Octos process is actually serving)
@@ -3273,8 +3294,7 @@ export function App() {
                     )
                   : null,
               saving: models.state.noticeBoard.saving === true,
-              externalChange:
-                models.state.noticeBoard.externalChange === true,
+              externalChange: models.state.noticeBoard.externalChange === true,
             }}
             permissionsSection={{
               permission: permissionControl,
@@ -3293,9 +3313,9 @@ export function App() {
                 enabled: true,
                 networkAccess: null,
                 readAllowPaths:
-                  work.supervision.runtimeStatus?.sandbox ??
+                  (work.supervision.runtimeStatus?.sandbox ??
                   work.supervision.runtimeStatus?.sandbox_mode ??
-                  null
+                  null)
                     ? [
                         work.supervision.runtimeStatus?.sandbox ??
                           work.supervision.runtimeStatus?.sandbox_mode ??
@@ -3518,7 +3538,8 @@ export function App() {
                     workspacePath={activeWorkspacePath || null}
                     displayProfile={session.opened?.active_profile_id ?? null}
                     locked={
-                      workspaceProduct.transitioning || Boolean(navigationPending)
+                      workspaceProduct.transitioning ||
+                      Boolean(navigationPending)
                     }
                     onDisconnect={() =>
                       hasUnfinishedWork || draftCapacityBlocked
@@ -4075,8 +4096,7 @@ function fleetRosterFromUnion(
 function unionStatusWord(
   row: FleetUnionRow,
 ): import("../features/fleet/fleet-model.ts").FleetStatusWord {
-  if (row.activity === "blocked")
-    return "Waiting for your approval" as const;
+  if (row.activity === "blocked") return "Waiting for your approval" as const;
   if (row.status === null) return "Requested" as const;
   switch (row.status) {
     case "opening":

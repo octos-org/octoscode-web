@@ -39,7 +39,5 @@ export function shouldRouteNoModelSetup(input: NoModelSetupInput): boolean {
   if (!input.available) return false;
   if (input.loading) return false;
   if (input.fetched !== true) return false;
-  return !input.models.some(
-    (model) => model.available && model.selected,
-  );
+  return !input.models.some((model) => model.available && model.selected);
 }

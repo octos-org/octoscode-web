@@ -26,9 +26,7 @@ describe("peer read-only composer predicate (audit row 7)", () => {
 
   it("never matches a merely peer-prefixed identity outside the exact roster", () => {
     // Identity-set membership, not a `topic().startsWith("peer-")` string check.
-    expect(
-      peerReadonlySlug(rows, "dev:local:tui#peer-review-evil"),
-    ).toBeNull();
+    expect(peerReadonlySlug(rows, "dev:local:tui#peer-review-evil")).toBeNull();
   });
 
   it("interpolates the slug into the read-only hint", () => {

@@ -75,9 +75,13 @@ async function connectAndStartWorkspace(page: Page, workspace: string) {
   await page
     .getByRole("button", { name: "Connect", exact: true })
     .press("Enter");
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
   }
   const add = page.getByRole("region", { name: "Add workspace" });
@@ -179,7 +183,9 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await expect(hint(page)).toContainText(slug.slice(-8));
   // 3. Keyboard focus is not lost to <body>: the activated row keeps it.
   await expect(peerRow).toBeFocused();
-  expect(peerId).toBe(String(staged.profile_id) + ":local:tui#" + String(staged.topic));
+  expect(peerId).toBe(
+    String(staged.profile_id) + ":local:tui#" + String(staged.topic),
+  );
 
   // 4a. Peer surface is interrupt-inert: Esc sends NO turn/interrupt
   //     (a11y review 0800 §1 — the disabled composer's Esc path never fires;

@@ -25,6 +25,12 @@ test("a workspace sends a prompt, reopens durable history and restores an unsent
   page.on("pageerror", (error) => errors.push(error.message));
   await connect(page);
   const input = page.getByRole("textbox", { name: "Message Octos" });
+  // A browser-minted Session starts genuinely empty: the fixture serves its
+  // canned Markdown only to the demo Session. Earn the transcript by running
+  // the turn that produces it, so the reload below proves durable history
+  // rather than a constant every socket receives.
+  await input.fill("Show the Markdown transcript surface");
+  await input.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Durable coding transcript" }),
   ).toBeVisible();
@@ -39,8 +45,8 @@ test("a workspace sends a prompt, reopens durable history and restores an unsent
   await input.fill("尚未发送\n保留我的草稿");
   await page.reload();
   await expect(input).toHaveValue("尚未发送\n保留我的草稿");
-  // This deterministic fixture hydrates a fixed durable transcript; the real
-  // Core integration/acceptance checks verify persistence of new responses.
+  // The transcript above was produced by this Session, so finding it after a
+  // reload proves the durable round-trip rather than a fixture constant.
   await expect(
     page.getByRole("heading", { name: "Durable coding transcript" }),
   ).toBeVisible();

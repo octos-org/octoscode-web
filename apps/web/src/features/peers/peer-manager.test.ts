@@ -680,9 +680,9 @@ describe("peer activity axis (audit row 5)", () => {
       { sessionId: identity, kind: "turn-terminal" },
       h.commands,
     );
-    expect(h.manager.getSnapshot().peers[0]!.finishedAt!).toBeGreaterThanOrEqual(
-      first,
-    );
+    expect(
+      h.manager.getSnapshot().peers[0]!.finishedAt!,
+    ).toBeGreaterThanOrEqual(first);
   });
   it("stamps only the peer Session the terminal belongs to", async () => {
     const h = setup();
@@ -920,7 +920,11 @@ describe("peer output token accumulation (audit row 4)", () => {
     await stagePeer(h);
     expect(
       h.manager.observeSessionEvent(
-        { sessionId: "dev:local:tui#peer-absent", kind: "usage", outputTokens: 9 },
+        {
+          sessionId: "dev:local:tui#peer-absent",
+          kind: "usage",
+          outputTokens: 9,
+        },
         h.commands,
       ),
     ).toBe(false);

@@ -26,9 +26,7 @@ import {
   type FleetRosterPeer,
 } from "./fleet-model.ts";
 
-function peer(
-  overrides: Partial<FleetRosterPeer> = {},
-): FleetRosterPeer {
+function peer(overrides: Partial<FleetRosterPeer> = {}): FleetRosterPeer {
   return {
     slug: "peer-1",
     label: "Peer 1 · glm-5.3",
@@ -58,10 +56,7 @@ describe("§3 grouping — goal groups when a goal id is known, else one flat gr
   });
 
   it("uses one flat 'Peers' group when no goal id is known", () => {
-    const groups = fleetGroupPeers([
-      peer({ slug: "a" }),
-      peer({ slug: "b" }),
-    ]);
+    const groups = fleetGroupPeers([peer({ slug: "a" }), peer({ slug: "b" })]);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.goalId).toBeNull();
     expect(groups[0]!.peers.map((p) => p.slug)).toEqual(["a", "b"]);
@@ -101,7 +96,9 @@ describe("§3 ordering — waiting for you first, then working, then starting, t
     ]);
     // The design's full ordering reads across the active rows then the
     // collapsed Finished bucket (finished last).
-    expect([...groups[0]!.peers, ...groups[0]!.finished].map((p) => p.slug)).toEqual([
+    expect(
+      [...groups[0]!.peers, ...groups[0]!.finished].map((p) => p.slug),
+    ).toEqual([
       "waiting",
       "waiting2",
       "working",
@@ -161,9 +158,9 @@ describe("§4.3 status words and their producing events", () => {
     expect(fleetStatusWord({ phase: "starting", startedMs: 0 }, 20_000)).toBe(
       "Still starting…",
     );
-    expect(fleetStatusWord({ phase: "starting", startedMs: 10_000 }, 20_000)).toBe(
-      "Starting",
-    );
+    expect(
+      fleetStatusWord({ phase: "starting", startedMs: 10_000 }, 20_000),
+    ).toBe("Starting");
   });
 });
 
@@ -234,10 +231,10 @@ describe("§4.3 model NAMES, not lane keys (Fixes 4210)", () => {
 
   it("adds the lane key suffix ONLY when two lanes share a model name", () => {
     expect(
-      fleetModelOptions(
-        ["lane-a", "lane-b"],
-        { "lane-a": "glm-5.3", "lane-b": "glm-5.3" },
-      ).map((option) => option.label),
+      fleetModelOptions(["lane-a", "lane-b"], {
+        "lane-a": "glm-5.3",
+        "lane-b": "glm-5.3",
+      }).map((option) => option.label),
     ).toEqual(["glm-5.3 (lane-a)", "glm-5.3 (lane-b)"]);
     expect(
       fleetModelOptions(["glm-53"], { "glm-53": "glm-5.3" }).map(
@@ -368,9 +365,7 @@ describe("§4.3 roster projection — the controller roster becomes fleet rows",
 
   it("drops control for a reaped row (no accepted operation id)", () => {
     const [row] = fleetRosterFromController({
-      roster: [
-        { slug: "z", operationId: "", turnId: "", activity: "reaped" },
-      ],
+      roster: [{ slug: "z", operationId: "", turnId: "", activity: "reaped" }],
     });
     expect(row!.controlSupported).toBe(false);
   });
@@ -381,9 +376,10 @@ describe("§8 live region announcements", () => {
 
   it("announces a peer that starts waiting for your approval", () => {
     expect(
-      fleetAnnouncement([base], [
-        { ...base, statusWord: "Waiting for your approval" },
-      ]),
+      fleetAnnouncement(
+        [base],
+        [{ ...base, statusWord: "Waiting for your approval" }],
+      ),
     ).toBe("Peer 1 · glm-5.3 is waiting for your approval");
   });
 

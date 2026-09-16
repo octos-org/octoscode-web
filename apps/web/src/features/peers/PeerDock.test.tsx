@@ -38,10 +38,8 @@ vi.mock("react", async (original) => ({
   // Round 2: the dock holds per-row Answer/Steer drafts; stub useState so the
   // no-jsdom direct-call harness can still invoke the component as a function.
   useState: (initial: unknown) => [initial, () => undefined],
-  useSyncExternalStore: (
-    _subscribe: unknown,
-    getSnapshot: () => unknown,
-  ) => getSnapshot(),
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) =>
+    getSnapshot(),
 }));
 vi.mock("../preferences/ui-text.tsx", () => ({
   useUiText: () => (text: string, params?: Record<string, string | number>) =>
@@ -178,15 +176,17 @@ describe("peerElapsed", () => {
   });
 
   it("renders no elapsed before a row has opened", () => {
-    expect(peerElapsed(entry({ activity: "idle", openedAt: null }), 1_041_000)).toBeNull();
+    expect(
+      peerElapsed(entry({ activity: "idle", openedAt: null }), 1_041_000),
+    ).toBeNull();
   });
 });
 
 describe("formatPeerDockPill", () => {
   it("joins total · live · landed with the blocked/done segments", () => {
-    expect(formatPeerDockPill(summarizeRoster(ROSTER), fleetLanded(ROSTER))).toBe(
-      "4 · 1 live · 1/4 landed · 1 blocked · 1 done",
-    );
+    expect(
+      formatPeerDockPill(summarizeRoster(ROSTER), fleetLanded(ROSTER)),
+    ).toBe("4 · 1 live · 1/4 landed · 1 blocked · 1 done");
   });
 
   it("omits the blocked segment when nothing waits", () => {
@@ -204,12 +204,16 @@ describe("PeerDock empty state", () => {
   });
 
   it("renders nothing when the roster is empty", () => {
-    expect(renderToStaticMarkup(<PeerDock manager={managerFor([])} />)).toBe("");
+    expect(renderToStaticMarkup(<PeerDock manager={managerFor([])} />)).toBe(
+      "",
+    );
   });
 });
 
 describe("PeerDock expanded dock", () => {
-  const markup = renderToStaticMarkup(<PeerDock manager={managerFor(ROSTER)} />);
+  const markup = renderToStaticMarkup(
+    <PeerDock manager={managerFor(ROSTER)} />,
+  );
 
   it("is a labelled region and renders one button row per peer", () => {
     expect(markup).toContain('role="region"');
@@ -345,7 +349,10 @@ interface DockNodeProps {
   "data-peer-slug"?: string;
 }
 
-function keyEvent(key: string, modifiers: Partial<DockKeyEvent> = {}): DockKeyEvent {
+function keyEvent(
+  key: string,
+  modifiers: Partial<DockKeyEvent> = {},
+): DockKeyEvent {
   return {
     key,
     altKey: false,
@@ -371,7 +378,13 @@ function rowClick() {
   const querySelector = vi.fn(() => rowButton);
   const li = { querySelector };
   const closest = vi.fn(() => li);
-  return { focus, li, querySelector, closest, event: { currentTarget: { closest } } };
+  return {
+    focus,
+    li,
+    querySelector,
+    closest,
+    event: { currentTarget: { closest } },
+  };
 }
 
 /** Depth-first walk of the returned tree, collecting every interactive node. */
@@ -382,11 +395,18 @@ function interactive(
   if (!node || typeof node !== "object" || !("props" in node)) return found;
   const element = node as ReactElement<DockNodeProps>;
   const props = (element.props ?? {}) as DockNodeProps;
-  if (typeof props.onClick === "function" || typeof props.onKeyDown === "function") {
+  if (
+    typeof props.onClick === "function" ||
+    typeof props.onKeyDown === "function"
+  ) {
     found.push(element);
   }
   const children = props.children;
-  for (const child of Array.isArray(children) ? children : children == null ? [] : [children]) {
+  for (const child of Array.isArray(children)
+    ? children
+    : children == null
+      ? []
+      : [children]) {
     interactive(child, found);
   }
   return found;
@@ -417,15 +437,22 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
 
   it("clicking Approve calls the prop once with that peer and 'approve'", () => {
     const dock = mount(ROSTERED);
-    const approve = dock.actions.find((n) => n.props["data-row-action"] === "approve");
+    const approve = dock.actions.find(
+      (n) => n.props["data-row-action"] === "approve",
+    );
     approve?.props.onClick?.(rowClick().event);
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
-    expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "approve");
+    expect(dock.onApprovalRespond).toHaveBeenCalledWith(
+      APPROVAL_ROW,
+      "approve",
+    );
   });
 
   it("clicking Deny calls the prop once with that peer and 'deny'", () => {
     const dock = mount(ROSTERED);
-    const deny = dock.actions.find((n) => n.props["data-row-action"] === "deny");
+    const deny = dock.actions.find(
+      (n) => n.props["data-row-action"] === "deny",
+    );
     deny?.props.onClick?.(rowClick().event);
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
     expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "deny");
@@ -436,18 +463,25 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
     // unmounts => focus would fall to document.body. The row button itself
     // stays mounted, so it is the focus anchor.
     const dock = mount(ROSTERED);
-    const approve = dock.actions.find((n) => n.props["data-row-action"] === "approve");
+    const approve = dock.actions.find(
+      (n) => n.props["data-row-action"] === "approve",
+    );
     const click = rowClick();
     approve?.props.onClick?.(click.event);
     expect(click.closest).toHaveBeenCalledWith("li");
     expect(click.querySelector).toHaveBeenCalledWith("[data-peer-slug]");
     expect(click.focus).toHaveBeenCalledTimes(1);
-    expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "approve");
+    expect(dock.onApprovalRespond).toHaveBeenCalledWith(
+      APPROVAL_ROW,
+      "approve",
+    );
   });
 
   it("clicking Deny refocuses the row button too", () => {
     const dock = mount(ROSTERED);
-    const deny = dock.actions.find((n) => n.props["data-row-action"] === "deny");
+    const deny = dock.actions.find(
+      (n) => n.props["data-row-action"] === "deny",
+    );
     const click = rowClick();
     deny?.props.onClick?.(click.event);
     expect(click.focus).toHaveBeenCalledTimes(1);
@@ -458,14 +492,21 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
     const dock = mount(ROSTERED);
     // No focus in a pure harness: the handler is the one React attaches to the
     // row button, invoked the way the browser would for a focused row.
-    dock.row("fence-approve")?.props.onKeyDown?.(keyEvent("y", { altKey: true }));
+    dock
+      .row("fence-approve")
+      ?.props.onKeyDown?.(keyEvent("y", { altKey: true }));
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
-    expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "approve");
+    expect(dock.onApprovalRespond).toHaveBeenCalledWith(
+      APPROVAL_ROW,
+      "approve",
+    );
   });
 
   it("Alt+N on the focused approval row responds deny once", () => {
     const dock = mount(ROSTERED);
-    dock.row("fence-approve")?.props.onKeyDown?.(keyEvent("n", { altKey: true }));
+    dock
+      .row("fence-approve")
+      ?.props.onKeyDown?.(keyEvent("n", { altKey: true }));
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
     expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "deny");
   });
@@ -475,18 +516,21 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
     // on the product's host OS. The physical `code` is the stable signal; the
     // legacy `key` match stays as a fallback for Windows/Linux.
     const dock = mount(ROSTERED);
-    dock.row("fence-approve")?.props.onKeyDown?.(
-      keyEvent("¥", { altKey: true, code: "KeyY" }),
-    );
+    dock
+      .row("fence-approve")
+      ?.props.onKeyDown?.(keyEvent("¥", { altKey: true, code: "KeyY" }));
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
-    expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "approve");
+    expect(dock.onApprovalRespond).toHaveBeenCalledWith(
+      APPROVAL_ROW,
+      "approve",
+    );
   });
 
   it("Alt+physical KeyN denies even when macOS Option makes key a dead ´", () => {
     const dock = mount(ROSTERED);
-    dock.row("fence-approve")?.props.onKeyDown?.(
-      keyEvent("´", { altKey: true, code: "KeyN" }),
-    );
+    dock
+      .row("fence-approve")
+      ?.props.onKeyDown?.(keyEvent("´", { altKey: true, code: "KeyN" }));
     expect(dock.onApprovalRespond).toHaveBeenCalledTimes(1);
     expect(dock.onApprovalRespond).toHaveBeenCalledWith(APPROVAL_ROW, "deny");
   });

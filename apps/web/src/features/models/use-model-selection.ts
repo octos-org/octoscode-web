@@ -217,7 +217,9 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
         ...("runtimeError" in parsed && parsed.runtimeError
           ? { runtimeError: parsed.runtimeError }
           : {}),
-        ...("reason" in parsed && parsed.reason ? { reason: parsed.reason } : {}),
+        ...("reason" in parsed && parsed.reason
+          ? { reason: parsed.reason }
+          : {}),
         atMs: Date.now(),
       },
       { t: (source) => source },
@@ -232,7 +234,7 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
       noticeBoard: noticeBoardRef.current,
       // A refused save reverts the selection: restartHint never lights.
       restartHint:
-      parsed.disposition === "restart_required"
+        parsed.disposition === "restart_required"
           ? true
           : parsed.disposition === "refused"
             ? false

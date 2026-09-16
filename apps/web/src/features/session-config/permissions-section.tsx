@@ -11,9 +11,7 @@ import {
 } from "../product-controls/SessionControlBar.tsx";
 
 export type PermissionSaveState =
-  | { kind: "saving" }
-  | { kind: "saved" }
-  | { kind: "failed"; message: string };
+  { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
 export type ApprovalPolicyValue = "on-request" | "never";
 
@@ -83,9 +81,7 @@ export function PermissionsSection({
       {saveState?.kind === "saving" ? (
         <p role="status">{t("Saving…")}</p>
       ) : null}
-      {saveState?.kind === "saved" ? (
-        <p role="status">{t("Saved")}</p>
-      ) : null}
+      {saveState?.kind === "saved" ? <p role="status">{t("Saved")}</p> : null}
       {saveState?.kind === "failed" ? (
         <p role="alert">
           {t("Failed: {value0}", { value0: saveState.message })}{" "}

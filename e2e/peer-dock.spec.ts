@@ -61,16 +61,23 @@ function observe(page: Page): Observed {
 }
 
 /** Keyboard-only connect: fill fields, activate every control with Enter. */
-async function connectAndStartWorkspace(page: Page, cwd: string): Promise<void> {
+async function connectAndStartWorkspace(
+  page: Page,
+  cwd: string,
+): Promise<void> {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill(TOKEN);
   await page
     .getByRole("button", { name: "Connect", exact: true })
     .press("Enter");
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
   }
   const add = page.getByRole("region", { name: "Add workspace" });

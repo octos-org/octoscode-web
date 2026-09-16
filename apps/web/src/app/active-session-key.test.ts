@@ -15,7 +15,9 @@ describe("resolveActiveSessionKey (fork receipt selection pin, 0555)", () => {
   ]);
 
   it("derives the session key from session.opened when present", () => {
-    expect(resolveActiveSessionKey(opened, opened.workspace_root, null, false)).toBe(key);
+    expect(
+      resolveActiveSessionKey(opened, opened.workspace_root, null, false),
+    ).toBe(key);
     // activeWorkspacePath (not opened.workspace_root) is canonical, and the
     // historyMutating flag never overrides a PRESENT opened record.
     expect(resolveActiveSessionKey(opened, "", null, false)).not.toBe(key);

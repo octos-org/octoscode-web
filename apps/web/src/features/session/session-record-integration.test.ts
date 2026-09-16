@@ -1598,7 +1598,9 @@ describe("SessionRecordManager read-only driver discovery", () => {
     // the MOMENT it collapsed to `loading` the console unmounted (run 15).
     expect(a.driverInventory).toEqual(settled);
     release();
-    expect(await refresh).toEqual(expect.objectContaining({ kind: "complete" }));
+    expect(await refresh).toEqual(
+      expect.objectContaining({ kind: "complete" }),
+    );
     expect(a.driverInventory.kind).toBe("complete");
   });
 

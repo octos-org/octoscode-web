@@ -6,9 +6,7 @@
  */
 
 export type ConnectFailureKind =
-  | "unreachable"
-  | "rejected-token"
-  | "origin-not-allowed";
+  "unreachable" | "rejected-token" | "origin-not-allowed";
 
 export interface ConnectFailure {
   readonly kind: ConnectFailureKind;

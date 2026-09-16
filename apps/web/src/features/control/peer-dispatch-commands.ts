@@ -27,7 +27,9 @@ export type { PeerControlFence };
 export type PeerDispatchLeaf = Pick<ExternalDriverCommands, "peerDispatch">;
 
 /** The leaf's own parameter view (camelCase; wire casing is the leaf's job). */
-export type PeerDispatchParams = Parameters<PeerDispatchLeaf["peerDispatch"]>[0];
+export type PeerDispatchParams = Parameters<
+  PeerDispatchLeaf["peerDispatch"]
+>[0];
 
 /**
  * Fail-closed capability gate: `peer/dispatch` must be in `supported_methods`
@@ -56,8 +58,7 @@ export function peerDispatchAdmitted(
 const PEER_DISPATCH_REFUSAL_LABELS: Readonly<Record<string, string>> = {
   driver_scope_mismatch: "This session can't be controlled from here",
   driver_fence_stale: "Your control of this session expired",
-  driver_revision_conflict:
-    "This session changed hands; refresh and try again",
+  driver_revision_conflict: "This session changed hands; refresh and try again",
   driver_busy_handover: "This session is changing hands right now",
   driver_operation_conflict:
     "A different request already used this id — nothing was sent",
@@ -65,9 +66,7 @@ const PEER_DISPATCH_REFUSAL_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function peerDispatchRefusalLabel(kind: string): string {
-  return (
-    PEER_DISPATCH_REFUSAL_LABELS[kind] ?? "Couldn't start that peer."
-  );
+  return PEER_DISPATCH_REFUSAL_LABELS[kind] ?? "Couldn't start that peer.";
 }
 
 /** The pre-dispatch facts ONE `peer/dispatch` frame is built from. */
@@ -101,6 +100,8 @@ export function buildPeerDispatchParams(
       brief: seed.brief,
       title: seed.slug,
     },
-    ...(seed.prompt ? { kickoffInput: [{ kind: "text", text: seed.prompt }] } : {}),
+    ...(seed.prompt
+      ? { kickoffInput: [{ kind: "text", text: seed.prompt }] }
+      : {}),
   };
 }

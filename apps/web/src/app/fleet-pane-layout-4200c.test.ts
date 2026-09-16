@@ -15,8 +15,10 @@ describe("(a) Fleet pane occupies the MAIN content slot, never the sidebar", () 
   it("moves the pane after the chat section inside the same grid area", () => {
     // Both .conversation sections must sit as grid children of .workspace-grid
     // in order (chat first, fleet second) — the pane replaces the main slot.
-    const chat = app.indexOf('<section className="conversation" hidden={fleetRouteActive}>');
-    const fleet = app.indexOf('hidden={!(fleetRouteActive && session.opened)}');
+    const chat = app.indexOf(
+      '<section className="conversation" hidden={fleetRouteActive}>',
+    );
+    const fleet = app.indexOf("hidden={!(fleetRouteActive && session.opened)}");
     expect(chat).toBeGreaterThan(-1);
     expect(fleet).toBeGreaterThan(chat);
   });
@@ -34,7 +36,9 @@ describe("(a) Fleet pane occupies the MAIN content slot, never the sidebar", () 
 
   it("keeps the sidebar free of the fleet pane", () => {
     const sidebarEnd = app.indexOf("</aside>");
-    expect(app.slice(0, sidebarEnd)).not.toContain('aria-label={fleetNavigationEntry.label}');
+    expect(app.slice(0, sidebarEnd)).not.toContain(
+      "aria-label={fleetNavigationEntry.label}",
+    );
   });
 });
 

@@ -40,7 +40,9 @@ describe("parseRuntimeDisposition (judge #6 / §5.3)", () => {
       parseRuntimeDisposition({ runtime_disposition: "restart_required" }),
     ).toMatchObject({ disposition: "restart_required" });
     expect(
-      parseRuntimeDisposition({ runtime_disposition: "persisted_but_not_live" }),
+      parseRuntimeDisposition({
+        runtime_disposition: "persisted_but_not_live",
+      }),
     ).toMatchObject({ disposition: "persisted_but_not_live" });
     expect(
       parseRuntimeDisposition({ runtime_disposition: "unchanged" }),
@@ -78,10 +80,7 @@ describe("parseRuntimeDisposition (judge #6 / §5.3)", () => {
 describe("noticeMessage — the five §4.2 messages, exactly", () => {
   it("reloaded names the model of the NEXT message", () => {
     expect(
-      noticeMessage(
-        { disposition: "reloaded", savedModel: glm },
-        translate,
-      ),
+      noticeMessage({ disposition: "reloaded", savedModel: glm }, translate),
     ).toBe("Saved. Your next message uses glm-5.3");
   });
 
@@ -97,14 +96,21 @@ describe("noticeMessage — the five §4.2 messages, exactly", () => {
       ),
     ).toBe("Saved. The model is not active yet (profile disabled)");
     expect(
-      noticeMessage({ disposition: "deferred", savedModel: glm }, { t: (s) => s }),
+      noticeMessage(
+        { disposition: "deferred", savedModel: glm },
+        { t: (s) => s },
+      ),
     ).toBe("Saved. The model is not active yet");
   });
 
   it("restart_required keeps naming the model the server still runs", () => {
     expect(
       noticeMessage(
-        { disposition: "restart_required", savedModel: glm, runningModel: "glm-4.7" },
+        {
+          disposition: "restart_required",
+          savedModel: glm,
+          runningModel: "glm-4.7",
+        },
         translate,
       ),
     ).toBe("Saved. The server keeps running glm-4.7 until it restarts");
@@ -124,9 +130,9 @@ describe("noticeMessage — the five §4.2 messages, exactly", () => {
   });
 
   it("unchanged is Already selected and never says Saved", () => {
-    expect(
-      noticeMessage({ disposition: "unchanged" }, { t: (s) => s }),
-    ).toBe("Already selected");
+    expect(noticeMessage({ disposition: "unchanged" }, { t: (s) => s })).toBe(
+      "Already selected",
+    );
   });
 
   it("a refused save is Couldn't save, never Saved", () => {
@@ -173,12 +179,17 @@ describe("nextModelNoticeBoard — sticky rules (§4.2 / case 23b)", () => {
         },
       ],
     };
-    board = nextModelNoticeBoard(board, {
-      disposition: "reloaded",
-      savedModel: glm,
-      atMs: 3,
-    }, translate);
-    expect(board.notices.filter((notice) => notice.kind !== "reloaded"),
+    board = nextModelNoticeBoard(
+      board,
+      {
+        disposition: "reloaded",
+        savedModel: glm,
+        atMs: 3,
+      },
+      translate,
+    );
+    expect(
+      board.notices.filter((notice) => notice.kind !== "reloaded"),
     ).toHaveLength(0);
   });
 
@@ -193,8 +204,13 @@ describe("nextModelNoticeBoard — sticky rules (§4.2 / case 23b)", () => {
         },
       ],
     };
-    board = nextModelNoticeBoard(board, { turnStampModel: glm, atMs: 5 }, translate);
-    expect(board.notices.filter((notice) => notice.kind !== "reloaded"),
+    board = nextModelNoticeBoard(
+      board,
+      { turnStampModel: glm, atMs: 5 },
+      translate,
+    );
+    expect(
+      board.notices.filter((notice) => notice.kind !== "reloaded"),
     ).toHaveLength(0);
   });
 
@@ -224,19 +240,31 @@ describe("nextModelNoticeBoard — sticky rules (§4.2 / case 23b)", () => {
         },
       ],
     };
-    board = nextModelNoticeBoard(board, { listRefreshed: [glm], atMs: 2 }, translate);
+    board = nextModelNoticeBoard(
+      board,
+      { listRefreshed: [glm], atMs: 2 },
+      translate,
+    );
     expect(board.notices).toHaveLength(1);
-    board = nextModelNoticeBoard(board, {
-      disposition: "unchanged",
-      savedModel: glm,
-      atMs: 3,
-    }, translate);
+    board = nextModelNoticeBoard(
+      board,
+      {
+        disposition: "unchanged",
+        savedModel: glm,
+        atMs: 3,
+      },
+      translate,
+    );
     expect(board.notices).toHaveLength(1);
-    board = nextModelNoticeBoard(board, {
-      disposition: "reloaded",
-      savedModel: glm,
-      atMs: 4,
-    }, translate);
+    board = nextModelNoticeBoard(
+      board,
+      {
+        disposition: "reloaded",
+        savedModel: glm,
+        atMs: 4,
+      },
+      translate,
+    );
     expect(
       board.notices.filter((notice) => notice.kind !== "reloaded"),
     ).toHaveLength(0);
@@ -259,17 +287,25 @@ describe("nextModelNoticeBoard — sticky rules (§4.2 / case 23b)", () => {
   });
 
   it("a refused save records the failure and the selection reverts (no saved model change)", () => {
-    const board = nextModelNoticeBoard(EMPTY_BOARD, {
-      disposition: "refused",
-      reason: "read-only profile",
-      atMs: 1,
-    }, translate);
+    const board = nextModelNoticeBoard(
+      EMPTY_BOARD,
+      {
+        disposition: "refused",
+        reason: "read-only profile",
+        atMs: 1,
+      },
+      translate,
+    );
     expect(board.notices[0]?.kind).toBe("refused");
     expect(board.selectionReverted).toBe(true);
   });
 
   it("a save in flight does not disturb existing notices (Saving… is transient state)", () => {
-    const board = nextModelNoticeBoard(EMPTY_BOARD, { saving: true }, translate);
+    const board = nextModelNoticeBoard(
+      EMPTY_BOARD,
+      { saving: true },
+      translate,
+    );
     expect(board.notices).toHaveLength(0);
     expect(board.saving).toBe(true);
   });
@@ -277,17 +313,33 @@ describe("nextModelNoticeBoard — sticky rules (§4.2 / case 23b)", () => {
 
 describe("external selection change (case 23)", () => {
   it("flags the selection changed in another tab when the saved identity differs after refresh", () => {
-    const board = nextModelNoticeBoard(EMPTY_BOARD, {
-      listRefreshed: [glm],
-      lastSeenSelection: { model: "glm-5.3", provider: "zai", route: "official" },
-      atMs: 1,
-    }, translate);
+    const board = nextModelNoticeBoard(
+      EMPTY_BOARD,
+      {
+        listRefreshed: [glm],
+        lastSeenSelection: {
+          model: "glm-5.3",
+          provider: "zai",
+          route: "official",
+        },
+        atMs: 1,
+      },
+      translate,
+    );
     expect(board.externalChange).toBeFalsy();
-    const board2 = nextModelNoticeBoard(EMPTY_BOARD, {
-      listRefreshed: [other],
-      lastSeenSelection: { model: "glm-5.3", provider: "zai", route: "official" },
-      atMs: 2,
-    }, translate);
+    const board2 = nextModelNoticeBoard(
+      EMPTY_BOARD,
+      {
+        listRefreshed: [other],
+        lastSeenSelection: {
+          model: "glm-5.3",
+          provider: "zai",
+          route: "official",
+        },
+        atMs: 2,
+      },
+      translate,
+    );
     expect(board2.externalChange).toBe(true);
   });
 });

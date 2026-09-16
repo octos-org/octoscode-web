@@ -121,9 +121,9 @@ describe("buildPeerControlCommand — encoder-valid command per kind", () => {
 
 describe("peerControlRefusalKindOf — bounded refusal narrowing", () => {
   it("reads the typed kind off a refusal-shaped error", () => {
-    expect(peerControlRefusalKindOf({ refusalKind: "driver_fence_stale" })).toBe(
-      "driver_fence_stale",
-    );
+    expect(
+      peerControlRefusalKindOf({ refusalKind: "driver_fence_stale" }),
+    ).toBe("driver_fence_stale");
     expect(
       peerControlRefusalKindOf({ refusalKind: "peer_control_refused" }),
     ).toBe("peer_control_refused");

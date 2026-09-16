@@ -1,5 +1,8 @@
 import type { UiProtocolCapabilities } from "@octos-org/octoscode-client/protocol";
-import { EXTERNAL_DRIVER_METHODS, EXTERNAL_DRIVER_V1_FEATURE } from "@octos-org/octoscode-client/external-driver-meta";
+import {
+  EXTERNAL_DRIVER_METHODS,
+  EXTERNAL_DRIVER_V1_FEATURE,
+} from "@octos-org/octoscode-client/external-driver-meta";
 import type { DriverInventoryState } from "./driver-discovery.ts";
 
 export type SessionControlReadiness = "unavailable" | "ready";

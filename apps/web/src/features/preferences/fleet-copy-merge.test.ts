@@ -31,18 +31,14 @@ describe("zh catalog loads the Fleet translations", () => {
 
   it("preserves placeholder parity across the merged catalog", () => {
     for (const [source, translated] of Object.entries(zh)) {
-      expect(
-        translated.match(/\{\w+\}/g)?.sort() ?? [],
-        source,
-      ).toEqual(source.match(/\{\w+\}/g)?.sort() ?? []);
+      expect(translated.match(/\{\w+\}/g)?.sort() ?? [], source).toEqual(
+        source.match(/\{\w+\}/g)?.sort() ?? [],
+      );
     }
   });
 
   it("the import line exists in source (wiring pin)", () => {
-    const source = readFileSync(
-      new URL("./zh.ts", import.meta.url),
-      "utf8",
-    );
+    const source = readFileSync(new URL("./zh.ts", import.meta.url), "utf8");
     expect(source).toContain("fleet/fleet-copy.ts");
   });
 });

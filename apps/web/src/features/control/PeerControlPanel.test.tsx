@@ -46,9 +46,15 @@ const TARGET: PeerControlTarget = {
   expectedTurnId: TURN,
 };
 
-function caps(over: Partial<UiProtocolCapabilities> = {}): UiProtocolCapabilities {
+function caps(
+  over: Partial<UiProtocolCapabilities> = {},
+): UiProtocolCapabilities {
   return {
-    version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
+    version: {
+      protocol: "octos-ui/v1alpha1",
+      schema_version: 1,
+      jsonrpc: "2.0",
+    },
     capabilities_schema_version: 1,
     supported_methods: [],
     supported_notifications: [],
@@ -231,7 +237,9 @@ describe("PeerControlPanel — typed refusal and receipt rendering", () => {
       />,
     );
     expect(html).toContain('data-refusal-kind="driver_operation_conflict"');
-    expect(html).toContain(peerControlRefusalLabel("driver_operation_conflict"));
+    expect(html).toContain(
+      peerControlRefusalLabel("driver_operation_conflict"),
+    );
     expect(html).not.toContain(CANARY);
   });
 

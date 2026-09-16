@@ -17,9 +17,7 @@ async function start(page: Page) {
     .getByLabel("Server workspace path")
     .fill("/workspace/surface-recovery");
   await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    composerInput(page),
-  ).toBeVisible();
+  await expect(composerInput(page)).toBeVisible();
 }
 
 /**

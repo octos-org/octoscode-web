@@ -59,8 +59,12 @@ test("streaming turn stays under the long-frame budget", async ({ page }) => {
   const frames =
     (await page.evaluate(
       () =>
-        (window as unknown as Record<string, { duration: number }[] | undefined>)
-          .__loaf,
+        (
+          window as unknown as Record<
+            string,
+            { duration: number }[] | undefined
+          >
+        ).__loaf,
     )) ?? [];
   const worst = frames.reduce((max, f) => Math.max(max, f.duration), 0);
   console.log(`[loaf] frames=${frames.length} worst=${worst.toFixed(1)}ms`);

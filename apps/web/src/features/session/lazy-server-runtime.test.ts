@@ -60,7 +60,16 @@ function setup() {
   const module = deferred<typeof factory>();
   const loader = vi.fn(() => module.promise);
   const runtime = new LazyServerRuntime(options, loader);
-  return { runtime, module, loader, factory, createClient, clients, engines, options };
+  return {
+    runtime,
+    module,
+    loader,
+    factory,
+    createClient,
+    clients,
+    engines,
+    options,
+  };
 }
 
 describe("explicit connection runtime loading", () => {

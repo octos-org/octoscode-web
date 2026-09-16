@@ -80,7 +80,11 @@ describe("buildPeerApprovalActivation — roster-derived target + command", () =
         decision: "deny",
         newOperationId: () => "ctl-op-2",
       })?.command,
-    ).toEqual({ kind: "approval_respond", approvalId: "req-1", decision: "deny" });
+    ).toEqual({
+      kind: "approval_respond",
+      approvalId: "req-1",
+      decision: "deny",
+    });
   });
 
   it("is null when the accepted dispatch operation id is missing", () => {
@@ -167,7 +171,9 @@ describe("performPeerApproval — exactly ONE frame, fail-closed", () => {
 
   it("maps a typed refusal to the bounded refused state, still ONE frame", async () => {
     const leaf = leafOf(async () => {
-      throw Object.assign(new Error("stale"), { refusalKind: "driver_fence_stale" });
+      throw Object.assign(new Error("stale"), {
+        refusalKind: "driver_fence_stale",
+      });
     });
     const state = await performPeerApproval({
       leaf,
@@ -177,6 +183,9 @@ describe("performPeerApproval — exactly ONE frame, fail-closed", () => {
       newOperationId: () => "ctl-op-1",
     });
     expect(leaf.peerControl).toHaveBeenCalledTimes(1);
-    expect(state).toEqual({ kind: "refused", refusalKind: "driver_fence_stale" });
+    expect(state).toEqual({
+      kind: "refused",
+      refusalKind: "driver_fence_stale",
+    });
   });
 });

@@ -131,9 +131,13 @@ async function connect(page: Page) {
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const add = page.getByRole("region", { name: "Add workspace" });

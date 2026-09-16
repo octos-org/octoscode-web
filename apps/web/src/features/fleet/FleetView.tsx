@@ -39,9 +39,7 @@ import {
 import { formatElapsed, formatPeerTokens } from "../peers/PeerDock.tsx";
 import { PeerControllerPanel } from "../control/PeerControllerPanel.tsx";
 import type { PeerControllerPanelProps } from "../control/PeerControllerPanel.tsx";
-import {
-  peerControlAdmitted,
-} from "../control/peer-control-commands.ts";
+import { peerControlAdmitted } from "../control/peer-control-commands.ts";
 import {
   peerDispatchAdmitted,
   peerDispatchRefusalLabel,
@@ -232,7 +230,9 @@ export function FleetView({
   const [advanced, setAdvanced] = useState(false);
   const [finishedOpen, setFinishedOpen] = useState<Record<string, boolean>>({});
 
-  const lanePicker = peerController?.lanePicker ?? { kind: "disabled" as const };
+  const lanePicker = peerController?.lanePicker ?? {
+    kind: "disabled" as const,
+  };
   const seatHeld = peerController?.seatHeld ?? false;
   void seatHeld; // (Advanced's console still renders it; Start no longer gates on it)
   // Fail-closed (§4.3): no advertised control methods ⇒ no actions, and the
@@ -270,16 +270,15 @@ export function FleetView({
   //   completed EMPTY read  -> the ONE case for 'not configured' + Providers link
   const sessionOpen =
     (selectedSessionId ?? "").trim() !== "" || peerController !== null;
-  const laneStatus: "no-session" | "loading" | "empty" | "ready" =
-    !sessionOpen
-      ? "no-session"
-      : lanePicker.kind === "ready"
-        ? "ready"
-        : laneReadStatus === "loading"
-          ? "loading"
-          : laneReadStatus === "ready"
-            ? "ready"
-            : "empty";
+  const laneStatus: "no-session" | "loading" | "empty" | "ready" = !sessionOpen
+    ? "no-session"
+    : lanePicker.kind === "ready"
+      ? "ready"
+      : laneReadStatus === "loading"
+        ? "loading"
+        : laneReadStatus === "ready"
+          ? "ready"
+          : "empty";
 
   return (
     <section className={styles.fleet} aria-label={t("Fleet")}>
@@ -295,167 +294,168 @@ export function FleetView({
           {t("Open a project first")}
         </p>
       ) : (
-      <form className={styles.form} data-fleet-form="start">
-        <h3 className={styles.heading}>{t("Start a peer")}</h3>
-        {laneStatus === "loading" ? (
-          <p className={styles.formNote} data-fleet-lane-status="loading">
-            {t("Loading models…")}
-          </p>
-        ) : laneStatus === "empty" ? (
-          <p className={styles.formNote} data-fleet-lane-status="empty">
-            {t(
-              "No peer models are configured — add one under Settings › Providers",
-            )}
-            {" "}
-            <button
-              type="button"
-              className={styles.disclosure}
-              data-fleet-providers-link="true"
-              onClick={() => onOpenProviders?.()}
-            >
-              {t("Settings › Providers")}
-            </button>
-          </p>
-        ) : null}
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>{t("Model")}</span>
-          <select
-            className={styles.select}
-            data-fleet-field="model"
-            aria-label={t("Model")}
-            value={model}
-            onChange={(event) => {
-              setModel(event.target.value);
-              releaseSettledStart();
-            }}
-            disabled={lanePicker.kind === "disabled"}
-          >
-            <option value="" hidden />
-            {lanePicker.kind === "ready"
-              ? // Fixes 4210 (§4.3): model NAMES, with the lane key only as a
-                // muted-suffix disambiguator when two lanes share a name.
-                fleetModelOptions(lanePicker.keys, modelNames).map((option) => (
-                  <option key={option.laneKey} value={option.laneKey}>
-                    {option.label}
-                  </option>
-                ))
-              : null}
-          </select>
-        </label>
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>{t("Brief")}</span>
-          <textarea
-            className={styles.textarea}
-            data-fleet-field="brief"
-            aria-label={t("Brief")}
-            value={briefValue}
-            onChange={(event) => {
-              setBrief(event.target.value);
-              releaseSettledStart();
-            }}
-          />
-        </label>
-        {sessions.length > 0 ? (
+        <form className={styles.form} data-fleet-form="start">
+          <h3 className={styles.heading}>{t("Start a peer")}</h3>
+          {laneStatus === "loading" ? (
+            <p className={styles.formNote} data-fleet-lane-status="loading">
+              {t("Loading models…")}
+            </p>
+          ) : laneStatus === "empty" ? (
+            <p className={styles.formNote} data-fleet-lane-status="empty">
+              {t(
+                "No peer models are configured — add one under Settings › Providers",
+              )}{" "}
+              <button
+                type="button"
+                className={styles.disclosure}
+                data-fleet-providers-link="true"
+                onClick={() => onOpenProviders?.()}
+              >
+                {t("Settings › Providers")}
+              </button>
+            </p>
+          ) : null}
           <label className={styles.field}>
-            <span className={styles.fieldLabel}>{t("Session")}</span>
+            <span className={styles.fieldLabel}>{t("Model")}</span>
             <select
               className={styles.select}
-              data-fleet-field="session"
-              aria-label={t("Session")}
-              value={sessionChoice}
-              onChange={(event) => setSessionChoice(event.target.value)}
+              data-fleet-field="model"
+              aria-label={t("Model")}
+              value={model}
+              onChange={(event) => {
+                setModel(event.target.value);
+                releaseSettledStart();
+              }}
+              disabled={lanePicker.kind === "disabled"}
             >
               <option value="" hidden />
-              {sessions.map((session) => (
-                <option key={session.sessionId} value={session.sessionId}>
-                  {session.name}
-                </option>
-              ))}
+              {lanePicker.kind === "ready"
+                ? // Fixes 4210 (§4.3): model NAMES, with the lane key only as a
+                  // muted-suffix disambiguator when two lanes share a name.
+                  fleetModelOptions(lanePicker.keys, modelNames).map(
+                    (option) => (
+                      <option key={option.laneKey} value={option.laneKey}>
+                        {option.label}
+                      </option>
+                    ),
+                  )
+                : null}
             </select>
           </label>
-        ) : null}
-        <button
-          type="button"
-          className={styles.action}
-          data-fleet-action="start"
-          aria-label={t("Start a peer")}
-          disabled={
-            !startAdmitted ||
-            startMachine.kind === "requesting" ||
-            // §4.3 "one Start = one dispatch": a local request still in flight
-            // closes the gate even while a STALE settle from the previous
-            // dispatch still stands.
-            start.kind === "requesting"
-          }
-          onClick={() => {
-            if (!startAdmitted) return;
-            const next = fleetStartBegin(startMachine, model, brief);
-            if (next === startMachine) return;
-            setStart(next);
-            if (next.kind === "requesting")
-              // Round 4 J2: the submit carries the WHOLE Start identity —
-              // the selected session, the ONE minted operation id, the model
-              // (lane key) and the brief — so the App side can acquire and
-              // dispatch against exactly what the form minted.
-              onStart?.({
-                sessionId: sessionChoice,
-                operationId: next.operationId,
-                model: next.laneKey,
-                brief: next.brief,
-              });
-          }}
-        >
-          {startMachine.kind === "requesting" ? t("Starting…") : t("Start")}
-        </button>
-        {startMachine.kind === "failed" ? (
-          // §6: the BOUNDED recovery label for the typed refusal kind — task
-          // words, never the kind token and never raw server copy. The kind
-          // itself rides as a data hook for diagnostics only.
-          <p
-            className={styles.formNote}
-            data-fleet-start-failed="true"
-            data-refusal-kind={startMachine.refusalKind}
-          >
-            {t("Couldn't start: {value0}", {
-              value0: t(peerDispatchRefusalLabel(startMachine.refusalKind)),
-            })}
-          </p>
-        ) : null}
-        {startMachine.kind === "unknown" && !startDismissed ? (
-          <p className={styles.formNote} data-fleet-start-unknown="true">
-            {t("Not sure it started — Retry resends the same request.")}{" "}
-            <button
-              type="button"
-              className={styles.disclosure}
-              data-fleet-start-retry="true"
-              onClick={() => {
-                // Retry re-enters requesting with the SAME operation id (the
-                // server replays the duplicate or reports the conflict).
-                const retry = fleetStartRetryFromUncertain(startMachine);
-                setStart(retry);
-                setStartDismissed(false);
-                if (retry.kind === "requesting")
-                  onStart?.({
-                    sessionId: sessionChoice,
-                    operationId: retry.operationId,
-                    model: retry.laneKey,
-                    brief: retry.brief,
-                  });
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>{t("Brief")}</span>
+            <textarea
+              className={styles.textarea}
+              data-fleet-field="brief"
+              aria-label={t("Brief")}
+              value={briefValue}
+              onChange={(event) => {
+                setBrief(event.target.value);
+                releaseSettledStart();
               }}
+            />
+          </label>
+          {sessions.length > 0 ? (
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>{t("Session")}</span>
+              <select
+                className={styles.select}
+                data-fleet-field="session"
+                aria-label={t("Session")}
+                value={sessionChoice}
+                onChange={(event) => setSessionChoice(event.target.value)}
+              >
+                <option value="" hidden />
+                {sessions.map((session) => (
+                  <option key={session.sessionId} value={session.sessionId}>
+                    {session.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className={styles.action}
+            data-fleet-action="start"
+            aria-label={t("Start a peer")}
+            disabled={
+              !startAdmitted ||
+              startMachine.kind === "requesting" ||
+              // §4.3 "one Start = one dispatch": a local request still in flight
+              // closes the gate even while a STALE settle from the previous
+              // dispatch still stands.
+              start.kind === "requesting"
+            }
+            onClick={() => {
+              if (!startAdmitted) return;
+              const next = fleetStartBegin(startMachine, model, brief);
+              if (next === startMachine) return;
+              setStart(next);
+              if (next.kind === "requesting")
+                // Round 4 J2: the submit carries the WHOLE Start identity —
+                // the selected session, the ONE minted operation id, the model
+                // (lane key) and the brief — so the App side can acquire and
+                // dispatch against exactly what the form minted.
+                onStart?.({
+                  sessionId: sessionChoice,
+                  operationId: next.operationId,
+                  model: next.laneKey,
+                  brief: next.brief,
+                });
+            }}
+          >
+            {startMachine.kind === "requesting" ? t("Starting…") : t("Start")}
+          </button>
+          {startMachine.kind === "failed" ? (
+            // §6: the BOUNDED recovery label for the typed refusal kind — task
+            // words, never the kind token and never raw server copy. The kind
+            // itself rides as a data hook for diagnostics only.
+            <p
+              className={styles.formNote}
+              data-fleet-start-failed="true"
+              data-refusal-kind={startMachine.refusalKind}
             >
-              {t("Retry")}
-            </button>{" "}
-            <button
-              type="button"
-              className={styles.disclosure}
-              data-fleet-start-dismiss="true"
-              onClick={() => setStartDismissed(true)}
-            >
-              {t("Dismiss")}
-            </button>
-          </p>
-        ) : null}
-      </form>
+              {t("Couldn't start: {value0}", {
+                value0: t(peerDispatchRefusalLabel(startMachine.refusalKind)),
+              })}
+            </p>
+          ) : null}
+          {startMachine.kind === "unknown" && !startDismissed ? (
+            <p className={styles.formNote} data-fleet-start-unknown="true">
+              {t("Not sure it started — Retry resends the same request.")}{" "}
+              <button
+                type="button"
+                className={styles.disclosure}
+                data-fleet-start-retry="true"
+                onClick={() => {
+                  // Retry re-enters requesting with the SAME operation id (the
+                  // server replays the duplicate or reports the conflict).
+                  const retry = fleetStartRetryFromUncertain(startMachine);
+                  setStart(retry);
+                  setStartDismissed(false);
+                  if (retry.kind === "requesting")
+                    onStart?.({
+                      sessionId: sessionChoice,
+                      operationId: retry.operationId,
+                      model: retry.laneKey,
+                      brief: retry.brief,
+                    });
+                }}
+              >
+                {t("Retry")}
+              </button>{" "}
+              <button
+                type="button"
+                className={styles.disclosure}
+                data-fleet-start-dismiss="true"
+                onClick={() => setStartDismissed(true)}
+              >
+                {t("Dismiss")}
+              </button>
+            </p>
+          ) : null}
+        </form>
       )}
 
       {peers.length === 0 && laneStatus !== "no-session" ? (
@@ -469,18 +469,23 @@ export function FleetView({
             <section
               key={groupKey}
               className={styles.group}
-              aria-label={group.goalId ? t("Goal {value0}", { value0: group.goalId }) : t("Peers")}
+              aria-label={
+                group.goalId
+                  ? t("Goal {value0}", { value0: group.goalId })
+                  : t("Peers")
+              }
             >
               <h3 className={styles.groupHeading}>
-                {group.goalId ? t("Goal {value0}", { value0: group.goalId }) : t("Peers")}
+                {group.goalId
+                  ? t("Goal {value0}", { value0: group.goalId })
+                  : t("Peers")}
               </h3>
               <div className={styles.rows} aria-label={t("Session peers")}>
                 {group.peers.map((peer) =>
                   renderFleetRow({
                     peer,
                     sessionName: sessionNameFor(sessions, peer),
-                    controlSupported:
-                      controlSupported && peer.controlSupported,
+                    controlSupported: controlSupported && peer.controlSupported,
                     steerText: steerDrafts[peer.slug] ?? "",
                     onSteerText: (value) =>
                       setSteerDrafts((current) => ({
@@ -558,9 +563,7 @@ export function FleetView({
               {...(peerController.onReleaseSeat
                 ? { onReleaseSeat: peerController.onReleaseSeat }
                 : {})}
-              {...(peerController.seatReleased
-                ? { seatReleased: true }
-                : {})}
+              {...(peerController.seatReleased ? { seatReleased: true } : {})}
               {...(peerController.onAcquireSeat
                 ? { onAcquireSeat: peerController.onAcquireSeat }
                 : {})}
@@ -599,7 +602,10 @@ function renderFleetRow({
     steerText?: string,
   ) => void;
   /** The caller's translation function (the row builder is a plain function). */
-  readonly t: (source: string, params?: Record<string, string | number>) => string;
+  readonly t: (
+    source: string,
+    params?: Record<string, string | number>,
+  ) => string;
 }): ReactNode {
   const availability = fleetActionAvailability({
     statusWord: peer.statusWord,
@@ -637,11 +643,7 @@ function renderFleetRow({
         {sessionName !== "" ? <span> · {sessionName}</span> : null}
       </div>
       {controlSupported && !terminal ? (
-        <div
-          className={styles.actions}
-          role="group"
-          aria-label={peer.label}
-        >
+        <div className={styles.actions} role="group" aria-label={peer.label}>
           {(["approve", "deny", "stop"] as const).map((action) => {
             // Round 4 C5: Approve/Deny render ONLY while an approval is
             // pending (design §4.4) — no clutter of permanently-disabled
@@ -691,7 +693,9 @@ function renderFleetRow({
                   placeholder={t("Enter steering text")}
                   value={steerText}
                   onChange={(event) => onSteerText(event.target.value)}
-                  disabled={!availability.steer && peer.statusWord !== "Working"}
+                  disabled={
+                    !availability.steer && peer.statusWord !== "Working"
+                  }
                 />
                 <button
                   type="button"

@@ -121,9 +121,7 @@ export function PeerControlPanel({
         <dl className={styles.receipt} data-control-state="receipt">
           <div className={styles.receiptRow}>
             <dt>{t("Worker")}</dt>
-            <dd data-receipt-slug={state.receipt.slug}>
-              {state.receipt.slug}
-            </dd>
+            <dd data-receipt-slug={state.receipt.slug}>{state.receipt.slug}</dd>
           </div>
           <div className={styles.receiptRow}>
             <dt>{t("Duplicate")}</dt>

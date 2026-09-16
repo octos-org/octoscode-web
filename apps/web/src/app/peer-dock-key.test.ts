@@ -15,7 +15,9 @@ const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
 describe("Alt+P toggles the PeerDock fold", () => {
   it("routes the window keydown through the registry parity matcher", () => {
-    expect(app).toContain('matchKeyboardParityShortcut(event)?.id === "toggle-peer-dock"');
+    expect(app).toContain(
+      'matchKeyboardParityShortcut(event)?.id === "toggle-peer-dock"',
+    );
   });
 
   it("flips the controlled dock fold in shell state", () => {

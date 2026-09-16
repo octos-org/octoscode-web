@@ -29,10 +29,8 @@ function inventoryOperation(over: {
       model: over.model ?? "glm-5.3",
       modelLane: over.modelLane ?? "external-master",
       workspaceRoot: over.workspaceRoot ?? "/srv/project",
-      scopedGoal:
-        over.goalId === undefined ? null : { goalId: over.goalId },
-      adoptedSessionId:
-        over.adoptedSessionId ?? `${BASE}#peer-${over.slug}`,
+      scopedGoal: over.goalId === undefined ? null : { goalId: over.goalId },
+      adoptedSessionId: over.adoptedSessionId ?? `${BASE}#peer-${over.slug}`,
       adoptedTurnId: "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d01",
       slug: over.slug,
       acceptedAtMs: over.acceptedAtMs ?? 1_000,
@@ -207,9 +205,7 @@ describe("fleetFactsForOperation — the typed seam fleet-02 renders", () => {
         },
       ],
       {
-        restorations: new Map([
-          ["op-a", { state: "restoring" as const }],
-        ]),
+        restorations: new Map([["op-a", { state: "restoring" as const }]]),
       },
     );
     expect(restored.restorations.get("op-a")).toEqual({
@@ -225,9 +221,7 @@ describe("fleetFactsForOperation — the typed seam fleet-02 renders", () => {
         },
       ],
       {
-        restorations: new Map([
-          ["op-a", { state: "failed" as const }],
-        ]),
+        restorations: new Map([["op-a", { state: "failed" as const }]]),
       },
     );
     expect(failed.restorations.get("op-a")).toEqual({

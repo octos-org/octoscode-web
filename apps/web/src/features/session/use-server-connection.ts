@@ -7,8 +7,13 @@ import type {
 } from "./active-session-runtime.ts";
 import { LazyServerRuntime } from "./lazy-server-runtime.ts";
 
-interface UseServerConnectionOptions extends Omit<ActiveSessionRuntimeOptions<OctosUiClient>, "createClient"> {
-  loadClientFactory(): Promise<ActiveSessionRuntimeOptions<OctosUiClient>["createClient"]>;
+interface UseServerConnectionOptions extends Omit<
+  ActiveSessionRuntimeOptions<OctosUiClient>,
+  "createClient"
+> {
+  loadClientFactory(): Promise<
+    ActiveSessionRuntimeOptions<OctosUiClient>["createClient"]
+  >;
   onEvent(event: ActiveSessionRuntimeEvent<OctosUiClient>): void;
 }
 

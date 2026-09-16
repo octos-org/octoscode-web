@@ -355,8 +355,13 @@ describe("read-only peer composer surface (audit row 7)", () => {
   });
 
   it("stays editable with no roster or no focus", () => {
-    expect(surface({ peerSessionId: "dev:local:tui#peer-review" }).textarea.disabled).toBe(false);
-    expect(surface({ peerRoster: PEER_ROSTER, peerSessionId: null }).textarea.disabled).toBe(false);
+    expect(
+      surface({ peerSessionId: "dev:local:tui#peer-review" }).textarea.disabled,
+    ).toBe(false);
+    expect(
+      surface({ peerRoster: PEER_ROSTER, peerSessionId: null }).textarea
+        .disabled,
+    ).toBe(false);
   });
 });
 

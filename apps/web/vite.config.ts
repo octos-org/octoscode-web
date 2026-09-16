@@ -39,36 +39,38 @@ export default defineConfig({
           // Receipts load only after their explicit typed RPC. Narrow tests
           // keep live-event/capability helpers out of these cold chunks and
           // leave unrelated app/vendor modules to normal chunk optimization.
-          groups: ["hydrate", "session", "client"].map((name) => ({
-            name: `receipt-${name}`,
-            test: (id: string) =>
-              id
-                .replaceAll("\\", "/")
-                .endsWith(`packages/client/src/${name}.ts`),
-            includeDependenciesRecursively: false,
-          })).concat([
-            {
-              // v0.10.0: guards and contract constants shared by synchronous
-              // notifications and lazy response decoders stay isolated so a
-              // notification guard cannot preload task/workspace/hydrate
-              // decoders.
-              name: "protocol-values",
+          groups: ["hydrate", "session", "client"]
+            .map((name) => ({
+              name: `receipt-${name}`,
               test: (id: string) =>
-                /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|turn-state-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
-                  id,
-                ),
+                id
+                  .replaceAll("\\", "/")
+                  .endsWith(`packages/client/src/${name}.ts`),
               includeDependenciesRecursively: false,
-            },
-            {
-              // v0.10.0: stable React vendor chunk for returning users.
-              name: "vendor-react",
-              test: (id: string) =>
-                /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(
-                  id,
-                ),
-              includeDependenciesRecursively: true,
-            },
-          ]),
+            }))
+            .concat([
+              {
+                // v0.10.0: guards and contract constants shared by synchronous
+                // notifications and lazy response decoders stay isolated so a
+                // notification guard cannot preload task/workspace/hydrate
+                // decoders.
+                name: "protocol-values",
+                test: (id: string) =>
+                  /[\\/]packages[\\/]client[\\/]src[\\/](supervision-values|turn-state-values|projection|workspace-events|generated[\\/]core-contract)\.ts$/.test(
+                    id,
+                  ),
+                includeDependenciesRecursively: false,
+              },
+              {
+                // v0.10.0: stable React vendor chunk for returning users.
+                name: "vendor-react",
+                test: (id: string) =>
+                  /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(
+                    id,
+                  ),
+                includeDependenciesRecursively: true,
+              },
+            ]),
         },
       },
     },

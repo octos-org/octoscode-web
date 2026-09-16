@@ -44,7 +44,9 @@ describe("Section D — pane styling (CSS module)", () => {
     expect(css).toMatch(
       /\.session-config-button\s*\{[^}]*--dsw-alias-button-elevated-fill/s,
     );
-    expect(css).toMatch(/\.session-config-button\s*\{[^}]*border-radius:\s*12px/s);
+    expect(css).toMatch(
+      /\.session-config-button\s*\{[^}]*border-radius:\s*12px/s,
+    );
   });
 
   it("lays out label+control rows on the 8px grid", () => {

@@ -19,7 +19,11 @@ import {
 
 describe("judge #2 — Start = acquire → await proof → dispatch once", () => {
   it("begins REQUESTING from idle with model+brief, briefly holding the draft", () => {
-    const state = fleetStartBegin(FLEET_START_IDLE, "glm-5.3", "Review the diff");
+    const state = fleetStartBegin(
+      FLEET_START_IDLE,
+      "glm-5.3",
+      "Review the diff",
+    );
     expect(state.kind).toBe("requesting");
     if (state.kind !== "requesting") return;
     expect(state.laneKey).toBe("glm-5.3");
@@ -28,7 +32,9 @@ describe("judge #2 — Start = acquire → await proof → dispatch once", () =>
   });
 
   it("refuses to begin without a model or a blank brief (no acquire at all)", () => {
-    expect(fleetStartBegin(FLEET_START_IDLE, "", "Review")).toBe(FLEET_START_IDLE);
+    expect(fleetStartBegin(FLEET_START_IDLE, "", "Review")).toBe(
+      FLEET_START_IDLE,
+    );
     expect(fleetStartBegin(FLEET_START_IDLE, "glm-5.3", "   ")).toBe(
       FLEET_START_IDLE,
     );
@@ -44,7 +50,8 @@ describe("judge #2 — Start = acquire → await proof → dispatch once", () =>
     const state = fleetStartSettle(requesting, {
       kind: "accepted",
       slug: "op-d32a",
-      operationId: requesting.kind === "requesting" ? requesting.operationId : "",
+      operationId:
+        requesting.kind === "requesting" ? requesting.operationId : "",
     });
     expect(state.kind).toBe("accepted");
     if (state.kind !== "accepted") return;
@@ -52,7 +59,11 @@ describe("judge #2 — Start = acquire → await proof → dispatch once", () =>
   });
 
   it("settles failure with bounded copy and KEEPS the brief (draft retained)", () => {
-    const requesting = fleetStartBegin(FLEET_START_IDLE, "glm-5.3", "Review the diff");
+    const requesting = fleetStartBegin(
+      FLEET_START_IDLE,
+      "glm-5.3",
+      "Review the diff",
+    );
     const state = fleetStartFailure(requesting, "driver_model_unavailable");
     expect(state.kind).toBe("failed");
     if (state.kind !== "failed") return;

@@ -36,7 +36,9 @@ describe("§5.1 Server's working directory entry", () => {
         onCreate={vi.fn()}
       />,
     );
-    const firstPos = html.indexOf('data-workspace-entry="server-working-directory"');
+    const firstPos = html.indexOf(
+      'data-workspace-entry="server-working-directory"',
+    );
     const rememberedPos = html.indexOf("proj-a");
     expect(firstPos).toBeGreaterThan(-1);
     expect(firstPos).toBeLessThan(rememberedPos);

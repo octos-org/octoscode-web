@@ -46,8 +46,9 @@ const DRIVER_INVENTORY_FEATURE = "external_driver_v1";
  * Stable non-owner snapshot: shared identity, so React never sees a new object.
  * Exported so the hook's SSR/server getter hands back the exact same value.
  */
-export const UNAVAILABLE_DRIVER_INVENTORY: DriverInventoryState =
-  Object.freeze({ kind: "unavailable" });
+export const UNAVAILABLE_DRIVER_INVENTORY: DriverInventoryState = Object.freeze(
+  { kind: "unavailable" },
+);
 
 /**
  * Structural read surfaces the adapter depends on. These are the SMALLEST
@@ -95,7 +96,9 @@ export interface DriverInventorySnapshotRecord {
 /** Read-only slice of the selected-record manager the adapter depends on. */
 export interface DriverInventorySnapshotManager {
   selected(): DriverInventorySnapshotRecord | null;
-  get(scope: DriverInventorySnapshotScope): DriverInventorySnapshotRecord | null;
+  get(
+    scope: DriverInventorySnapshotScope,
+  ): DriverInventorySnapshotRecord | null;
 }
 
 /**
@@ -170,7 +173,8 @@ function readCapturedDriverInventory(
   // Same CURRENT selection AND the retained record at its own scope. A later
   // reselection or a same-scope replacement both fail here, so a getter captured
   // for A can never hand back B's inventory.
-  if (sources.manager.selected() !== record) return UNAVAILABLE_DRIVER_INVENTORY;
+  if (sources.manager.selected() !== record)
+    return UNAVAILABLE_DRIVER_INVENTORY;
   if (sources.manager.get(record.scope) !== record)
     return UNAVAILABLE_DRIVER_INVENTORY;
   if (!capturedAuthority) return UNAVAILABLE_DRIVER_INVENTORY;

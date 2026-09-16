@@ -73,9 +73,13 @@ async function connect(page: Page, probe: Probe, name: string, native = true) {
   await page.getByLabel("Server origin").fill(ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const add = page.getByRole("region", { name: "Add workspace" });
@@ -1199,7 +1203,9 @@ test("native fixed-loop fire now sends one typed manual receipt without changing
   expect(fireResult?.fire?.reason).toBe("LoopFire");
   // The fire is visible in the panel's status region.
   await expect(
-    autonomy(page).getByRole("status").filter({ hasText: `${loopId} fired` }),
+    autonomy(page)
+      .getByRole("status")
+      .filter({ hasText: `${loopId} fired` }),
   ).toContainText(`${loopId} fired`);
   // Firing is not pausing: the loop stays active and pause remains available.
   await expect(row.getByRole("button", { name: /^Pause loop / })).toBeEnabled();

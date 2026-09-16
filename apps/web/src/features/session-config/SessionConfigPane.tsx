@@ -142,7 +142,10 @@ export interface SessionConfigPaneProps {
   /** Reuses use-model-selection's projected control. */
   model: ModelControlProps;
   /** Round 3 item 4: config-07's sections, mounted in place of the inline ones. */
-  modelSection?: Omit<ModelSectionProps, "headingId" | "headingRef" | "t"> | null;
+  modelSection?: Omit<
+    ModelSectionProps,
+    "headingId" | "headingRef" | "t"
+  > | null;
   permissionsSection?: Omit<PermissionsSectionProps, "t"> | null;
   sandboxSection?: Omit<SandboxSectionProps, "t"> | null;
   /** Saved primary from `profile/llm/list`. */
@@ -290,7 +293,8 @@ export function SessionConfigPane({
                 approvalPolicyReadback:
                   permissionsSection.approvalPolicyReadback,
               }
-            : approvalPolicyReadback !== null && approvalPolicyReadback !== undefined
+            : approvalPolicyReadback !== null &&
+                approvalPolicyReadback !== undefined
               ? { approvalPolicyReadback }
               : {})}
           {...(permissionsSection?.approvalPolicyUnverified !== undefined

@@ -17,9 +17,7 @@ describe("UX5 App wiring (transcript-04b gap hunks)", () => {
   it("holds fold + turn-activity state and imports the pure machines", () => {
     expect(app).toContain("initialFoldState");
     expect(app).toContain("initialActivityState");
-    expect(app).toMatch(
-      /from "\.\.\/features\/timeline\/folds\.ts"/,
-    );
+    expect(app).toMatch(/from "\.\.\/features\/timeline\/folds\.ts"/);
     expect(app).toMatch(/from "\.\.\/features\/timeline\/turn-activity\.ts"/);
   });
 
@@ -38,7 +36,9 @@ describe("UX5 App wiring (transcript-04b gap hunks)", () => {
     expect(app).toContain("tool-start");
     expect(app).toContain("assistant-delta");
     // The pure machine is driven through the functional state update.
-    expect(app).toMatch(/setTurnActivityState\(\s*\(current\) => turnActivity\(/);
+    expect(app).toMatch(
+      /setTurnActivityState\(\s*\(current\) => turnActivity\(/,
+    );
   });
 
   it("passes activity to the status strip", () => {

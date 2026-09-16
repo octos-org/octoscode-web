@@ -1629,9 +1629,7 @@ const http = createServer((request, response) => {
         !["turn", "approval", "resolve", "complete"].includes(kind) ||
         !emitPeerActivityFrame(owner, kind, slug)
       ) {
-        response
-          .writeHead(409)
-          .end("No staged peer for this fixture Session");
+        response.writeHead(409).end("No staged peer for this fixture Session");
         return;
       }
     } else if (url.pathname === "/__test__/peer-control/reset") {

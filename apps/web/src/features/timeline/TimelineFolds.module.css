@@ -76,8 +76,12 @@
 }
 
 @keyframes galaxy-swirl {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* TUI parity: a bright crest ripples across "glyph + status word" while a turn
@@ -107,10 +111,13 @@
 }
 
 @keyframes activity-wave {
-  from { background-position: 130% 0; }
-  to { background-position: -30% 0; }
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
 }
-
 
 @media (prefers-reduced-motion: reduce) {
   .thinkingSpinner {

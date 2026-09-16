@@ -354,9 +354,10 @@ describe("P2N — a local prepare rejection is NOT a load/authority mismatch", (
   /** The REAL stack the hook builds: LazyPeerManager -> PeerManager -> encoder. */
   function stack() {
     // Typed invocation so the assertion below can read the encoded PARAMS.
-    const request = vi.fn(
-      async (_method: string, _params: unknown) => ({ ...PEER, peers: [PEER] }),
-    );
+    const request = vi.fn(async (_method: string, _params: unknown) => ({
+      ...PEER,
+      peers: [PEER],
+    }));
     const commands = createPeerCommands(
       { request },
       { sessionId: "dev:local:tui", profileId: "dev", authority: {} },
@@ -408,7 +409,8 @@ describe("P2N — a local prepare rejection is NOT a load/authority mismatch", (
       manager: {
         kickoff,
         getSnapshot: () => ({
-          prepareError: "Check the peer brief and fleet settings before retrying.",
+          prepareError:
+            "Check the peer brief and fleet settings before retrying.",
         }),
       },
       laneKey: "lane-review",
@@ -421,7 +423,10 @@ describe("P2N — a local prepare rejection is NOT a load/authority mismatch", (
 
   it("KEEPS `kickoff-mismatch` for a genuine null with NO local error", async () => {
     const outcome = await performStagedDispatch({
-      manager: { kickoff: async () => null, getSnapshot: () => ({ prepareError: null }) },
+      manager: {
+        kickoff: async () => null,
+        getSnapshot: () => ({ prepareError: null }),
+      },
       laneKey: "lane-review",
       brief: "Review this",
       title: "review",

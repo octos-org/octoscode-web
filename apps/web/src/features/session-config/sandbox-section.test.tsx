@@ -70,7 +70,11 @@ describe("SandboxSection (§4.2/§7, judge #6)", () => {
     const html = renderToStaticMarkup(
       <SandboxSection
         supported
-        effective={{ enabled: false, networkAccess: null, readAllowPaths: null }}
+        effective={{
+          enabled: false,
+          networkAccess: null,
+          readAllowPaths: null,
+        }}
         t={t}
       />,
     );

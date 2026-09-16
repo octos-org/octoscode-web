@@ -268,8 +268,9 @@ describe("the seat wiring holds the acquire and refreshes the inventory", () => 
       source.indexOf("const [controlState, setControlState]"),
     );
     expect(effect).toContain("controlReleasedRef.current === record");
-    expect(effect.slice(0, effect.indexOf("controlReleasedRef.current === record")))
-      .not.toContain("driverAcquire(");
+    expect(
+      effect.slice(0, effect.indexOf("controlReleasedRef.current === record")),
+    ).not.toContain("driverAcquire(");
     expect(effect).toContain("controlAcquireEpoch,");
   });
 

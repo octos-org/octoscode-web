@@ -6,13 +6,7 @@
  * than guessing. Matching is on whole words inside the name so `read_file` and
  * `fs.readFile` land together while `thread` does not.
  */
-export type ToolKind =
-  | "shell"
-  | "read"
-  | "edit"
-  | "search"
-  | "web"
-  | "generic";
+export type ToolKind = "shell" | "read" | "edit" | "search" | "web" | "generic";
 
 const PATTERNS: readonly (readonly [ToolKind, RegExp])[] = [
   ["shell", /\b(shell|bash|sh|zsh|exec|run|command|terminal)\b/i],

@@ -170,9 +170,13 @@ async function connect(
   await page.getByLabel("Server origin").fill(ORIGIN);
   await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const add = page.getByRole("region", { name: "Add workspace" });
@@ -225,9 +229,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     for (const kind of COMMAND_KINDS) {
       const before = w.calls(CONTROL_METHOD).length;
       await command(page, kind).click();
-      await expect
-        .poll(() => w.calls(CONTROL_METHOD).length)
-        .toBe(before + 1);
+      await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     }
     expect(w.calls(CONTROL_METHOD)).toHaveLength(COMMAND_KINDS.length);
   });
@@ -321,9 +323,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     await expect(steer).toBeFocused();
     const before = w.calls(CONTROL_METHOD).length;
     await page.keyboard.press("Enter");
-    await expect
-      .poll(() => w.calls(CONTROL_METHOD).length)
-      .toBe(before + 1);
+    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
   });
 });

@@ -85,7 +85,9 @@ function commands(pages: unknown[]): ExternalDriverReadCommands {
     i += 1;
     if (next instanceof Error) throw next;
     if (next === undefined) throw new Error("no more pages");
-    return structuredClone(next) as unknown as SessionDriverGetWithOperationsView;
+    return structuredClone(
+      next,
+    ) as unknown as SessionDriverGetWithOperationsView;
   };
   return { driverGet, nextExpectedRevision: () => 0 };
 }
@@ -102,15 +104,23 @@ function retainingCommands(
   };
   return { driverGet, nextExpectedRevision: () => 0 };
 }
-const walk = (...pages: unknown[]): Promise<DriverInventoryState> => walkDriverInventoryChain(commands(pages));
-const asComplete = (state: unknown): CompleteWithDisclosure => state as unknown as CompleteWithDisclosure;
+const walk = (...pages: unknown[]): Promise<DriverInventoryState> =>
+  walkDriverInventoryChain(commands(pages));
+const asComplete = (state: unknown): CompleteWithDisclosure =>
+  state as unknown as CompleteWithDisclosure;
 
 describe("driver disclosure regression (1803)", () => {
   it("retains EXACT mode/recovery/public binding on a complete external chain", async () => {
     const state = await walk(
       page(
         [row("op-1", "a")],
-        { binding: binding({ epoch: 3, revision: 9, leaseExpiresAtMs: 1_700_000_000_000 }) },
+        {
+          binding: binding({
+            epoch: 3,
+            revision: 9,
+            leaseExpiresAtMs: 1_700_000_000_000,
+          }),
+        },
         { complete: true, nextCursor: null },
       ),
     );
@@ -131,7 +141,11 @@ describe("driver disclosure regression (1803)", () => {
 
   it("distinguishes internal, nonzero-lease external and parked external truthfully", async () => {
     const internal = await walk(
-      page([], { mode: "internal", binding: null }, { complete: true, nextCursor: null }),
+      page(
+        [],
+        { mode: "internal", binding: null },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(internal.kind).toBe("complete"); // assert BEFORE any cast/access
     const i = asComplete(internal);
@@ -144,7 +158,11 @@ describe("driver disclosure regression (1803)", () => {
     // A NONZERO lease is a historical fixture value — not claimed live now,
     // only that a nonzero lease is retained verbatim.
     const nonzeroLease = await walk(
-      page([], { binding: binding({ leaseExpiresAtMs: 1_700_000_000_000 }) }, { complete: true, nextCursor: null }),
+      page(
+        [],
+        { binding: binding({ leaseExpiresAtMs: 1_700_000_000_000 }) },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(nonzeroLease.kind).toBe("complete");
     const n = asComplete(nonzeroLease);
@@ -152,7 +170,11 @@ describe("driver disclosure regression (1803)", () => {
     expect(n.disclosure.binding?.leaseExpiresAtMs).toBe(1_700_000_000_000);
 
     const parked = await walk(
-      page([], { binding: binding({ leaseExpiresAtMs: 0 }) }, { complete: true, nextCursor: null }),
+      page(
+        [],
+        { binding: binding({ leaseExpiresAtMs: 0 }) },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(parked.kind).toBe("complete");
     const p = asComplete(parked);
@@ -164,7 +186,11 @@ describe("driver disclosure regression (1803)", () => {
   it("retains interrupted and recovery_required recovery (none alone cannot prove it)", async () => {
     for (const recovery of ["interrupted", "recovery_required"] as const) {
       const state = await walk(
-        page([row("op-1", "a")], { recovery }, { complete: true, nextCursor: null }),
+        page(
+          [row("op-1", "a")],
+          { recovery },
+          { complete: true, nextCursor: null },
+        ),
       );
       expect(state.kind).toBe("complete");
       expect(asComplete(state).disclosure).toEqual({
@@ -185,7 +211,11 @@ describe("driver disclosure regression (1803)", () => {
       rpc: { secret: "SECRET-RPC" },
     });
     const view = asView(
-      page([row("op-1", "a")], { binding: raw }, { complete: true, nextCursor: null }),
+      page(
+        [row("op-1", "a")],
+        { binding: raw },
+        { complete: true, nextCursor: null },
+      ),
     );
     const state = await walkDriverInventoryChain(retainingCommands(view));
     expect(state.kind).toBe("complete");
@@ -201,7 +231,14 @@ describe("driver disclosure regression (1803)", () => {
     expect(complete.disclosure.binding).not.toBe(view.binding);
     // No token/proof/raw map/workspace/accepted-work leaks into the encoding.
     const encoded = JSON.stringify(complete.disclosure ?? null);
-    for (const forbidden of ["SECRET", "controlToken", "proof", "rpc", "workspaceRoot", "acceptedWork"]) {
+    for (const forbidden of [
+      "SECRET",
+      "controlToken",
+      "proof",
+      "rpc",
+      "workspaceRoot",
+      "acceptedWork",
+    ]) {
       expect(encoded).not.toContain(forbidden);
     }
     // Deep-frozen returned disclosure.
@@ -209,7 +246,11 @@ describe("driver disclosure regression (1803)", () => {
     expect(Object.isFrozen(complete.disclosure.binding)).toBe(true);
     // Mutating the SOURCE view AFTER the await must not change the output.
     // Synthetic fixture only; no real retained state is touched.
-    const mutable = raw as { driverId: string; epoch: number; leaseExpiresAtMs: number };
+    const mutable = raw as {
+      driverId: string;
+      epoch: number;
+      leaseExpiresAtMs: number;
+    };
     mutable.driverId = "MUTATED";
     mutable.epoch = 42;
     mutable.leaseExpiresAtMs = 999;
@@ -223,8 +264,16 @@ describe("driver disclosure regression (1803)", () => {
 
   it("keeps cross-page inconsistent mode/binding an error, never a partial complete", async () => {
     const state = await walk(
-      page([row("op-1", "a")], { mode: "external" }, { complete: false, nextCursor: "c-1" }),
-      page([], { mode: "internal", binding: null }, { complete: true, nextCursor: null }),
+      page(
+        [row("op-1", "a")],
+        { mode: "external" },
+        { complete: false, nextCursor: "c-1" },
+      ),
+      page(
+        [],
+        { mode: "internal", binding: null },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(state).toEqual({ kind: "error", reason: "unknown" });
     expect(state).not.toHaveProperty("disclosure");
@@ -232,16 +281,32 @@ describe("driver disclosure regression (1803)", () => {
 
   it("keeps a binding-header change mid-chain an error, not a last-page win", async () => {
     const state = await walk(
-      page([row("op-1", "a")], { binding: binding({ driverId: "d1" }) }, { complete: false, nextCursor: "c-1" }),
-      page([], { binding: binding({ driverId: "d2", epoch: 2, revision: 9 }) }, { complete: true, nextCursor: null }),
+      page(
+        [row("op-1", "a")],
+        { binding: binding({ driverId: "d1" }) },
+        { complete: false, nextCursor: "c-1" },
+      ),
+      page(
+        [],
+        { binding: binding({ driverId: "d2", epoch: 2, revision: 9 }) },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(state).toEqual({ kind: "error", reason: "unknown" });
   });
 
   it("keeps a recovery-only mismatch mid-chain an error", async () => {
     const state = await walk(
-      page([row("op-1", "a")], { recovery: "none" }, { complete: false, nextCursor: "c-1" }),
-      page([], { recovery: "interrupted" }, { complete: true, nextCursor: null }),
+      page(
+        [row("op-1", "a")],
+        { recovery: "none" },
+        { complete: false, nextCursor: "c-1" },
+      ),
+      page(
+        [],
+        { recovery: "interrupted" },
+        { complete: true, nextCursor: null },
+      ),
     );
     expect(state).toEqual({ kind: "error", reason: "unknown" });
   });

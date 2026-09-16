@@ -301,12 +301,12 @@ describe("gap 3 — capability gate is offline and exact", () => {
       ),
       featureAdvertised: true,
     });
-    expect(() =>
-      requireExternalDriverControlCapability(context, GET),
-    ).toThrow(ExternalDriverCapabilityError);
-    expect(() =>
-      requireExternalDriverControlCapability(context, GET),
-    ).toThrow(`${GET} failed: capability not advertised`);
+    expect(() => requireExternalDriverControlCapability(context, GET)).toThrow(
+      ExternalDriverCapabilityError,
+    );
+    expect(() => requireExternalDriverControlCapability(context, GET)).toThrow(
+      `${GET} failed: capability not advertised`,
+    );
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -315,9 +315,9 @@ describe("gap 3 — capability gate is offline and exact", () => {
       methods: [GET],
       featureAdvertised: false,
     });
-    expect(() =>
-      requireExternalDriverControlCapability(context, GET),
-    ).toThrow(ExternalDriverCapabilityError);
+    expect(() => requireExternalDriverControlCapability(context, GET)).toThrow(
+      ExternalDriverCapabilityError,
+    );
     expect(request).not.toHaveBeenCalled();
   });
 

@@ -72,11 +72,7 @@ export type {
  * so its control affordances are gone).
  */
 export type PeerControllerRowActivity =
-  | "staged"
-  | "live"
-  | "blocked"
-  | "done"
-  | "reaped";
+  "staged" | "live" | "blocked" | "done" | "reaped";
 
 /**
  * P2p (task 3530 §1c): the row's OWN control outcome. Root's P4C capture
@@ -117,20 +113,22 @@ export interface PeerControllerRosterRow {
  * semantics (bleak/blocked > streaming > done) with the two row-only states,
  * so an operator can see at a glance whether the peer is running.
  */
-const ROW_ACTIVITY_GLYPH: Readonly<Record<PeerControllerRowActivity, string>> = {
-  staged: "○",
-  live: "✻",
-  blocked: "⚠",
-  done: "✓",
-  reaped: "✕",
-};
-const ROW_ACTIVITY_LABEL: Readonly<Record<PeerControllerRowActivity, string>> = {
-  staged: "staged",
-  live: "streaming",
-  blocked: "needs you",
-  done: "done",
-  reaped: "reaped",
-};
+const ROW_ACTIVITY_GLYPH: Readonly<Record<PeerControllerRowActivity, string>> =
+  {
+    staged: "○",
+    live: "✻",
+    blocked: "⚠",
+    done: "✓",
+    reaped: "✕",
+  };
+const ROW_ACTIVITY_LABEL: Readonly<Record<PeerControllerRowActivity, string>> =
+  {
+    staged: "staged",
+    live: "streaming",
+    blocked: "needs you",
+    done: "done",
+    reaped: "reaped",
+  };
 
 /** Which half of the console an outcome came from (drives the label table). */
 export type PeerControllerSource = "dispatch" | "control";
@@ -490,7 +488,9 @@ export function PeerControllerPanel({
                 >
                   {ROW_ACTIVITY_GLYPH[row.activity]}
                 </span>
-                <span className="sr-only">{t(ROW_ACTIVITY_LABEL[row.activity])}</span>
+                <span className="sr-only">
+                  {t(ROW_ACTIVITY_LABEL[row.activity])}
+                </span>
                 <span className={styles.slug}>{row.slug}</span>
                 {reaped ? null : (
                   <div

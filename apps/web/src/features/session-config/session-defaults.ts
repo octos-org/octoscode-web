@@ -14,9 +14,7 @@ const MAX_READ_ALLOW_PATHS = 16;
 const MAX_PATH_LENGTH = 4_096;
 
 export type DefaultsPermissionMode =
-  | "read_only"
-  | "workspace_write"
-  | "danger_full_access";
+  "read_only" | "workspace_write" | "danger_full_access";
 
 export type DefaultsNetworkPolicy = "deny" | "allow";
 
@@ -53,7 +51,9 @@ const NETWORKS: readonly DefaultsNetworkPolicy[] = ["deny", "allow"];
 
 function scopedKey(endpoint?: string): string {
   const origin = endpoint?.trim();
-  return origin ? `${DEFAULTS_PREFERENCES_KEY}:${origin}` : DEFAULTS_PREFERENCES_KEY;
+  return origin
+    ? `${DEFAULTS_PREFERENCES_KEY}:${origin}`
+    : DEFAULTS_PREFERENCES_KEY;
 }
 
 function sanitizePath(value: unknown): string | null {

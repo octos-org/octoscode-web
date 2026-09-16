@@ -45,7 +45,10 @@ describe("peerSessionEventFor — terminal codes survive (J3)", () => {
       }),
       OPENED,
     );
-    expect(event).toMatchObject({ kind: "turn-terminal", outcome: "interrupted" });
+    expect(event).toMatchObject({
+      kind: "turn-terminal",
+      outcome: "interrupted",
+    });
   });
 
   it("a turn/error with any other code maps to outcome failed and keeps the message", () => {

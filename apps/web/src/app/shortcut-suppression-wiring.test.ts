@@ -37,7 +37,9 @@ describe("App suppresses parity shortcuts inside text entry and dialogs (§8)", 
     // only for the approval surface itself, which is this chord's own target
     // (re-revealing it is not "stealing" a chord another dialog owns).
     const body = handlerBody(/id !== "show-approval"/);
-    expect(body).toMatch(/shortcutTargetIsTextInput\(event\.target\)\) return;/);
+    expect(body).toMatch(
+      /shortcutTargetIsTextInput\(event\.target\)\) return;/,
+    );
     expect(body).toMatch(/shortcutTargetSuppressed\(event\.target\)\) return;/);
     expect(body).toMatch(/insideApproval/);
   });

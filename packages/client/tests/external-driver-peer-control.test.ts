@@ -479,7 +479,9 @@ describe("dispatch fences the requested LANE, not the resolved model", () => {
  */
 describe("0550 audit — peer/control receipt decode", () => {
   it("accepts a live-shaped state:'accepted' receipt", async () => {
-    const { commands, calls } = leafContext(() => structuredClone(CONTROL_REPLY));
+    const { commands, calls } = leafContext(() =>
+      structuredClone(CONTROL_REPLY),
+    );
     await expect(commands.peerControl(CONTROL_PARAMS)).resolves.toMatchObject({
       operationId: "op-control-1",
       state: "accepted",
@@ -575,7 +577,9 @@ const REFUSED_REPLY = {
 
 describe("0830 — refused peer/control receipt decodes as a typed refusal", () => {
   it("maps state:'refused' to ExternalDriverRefusalError('peer_control_refused')", async () => {
-    const { commands, calls } = leafContext(() => structuredClone(REFUSED_REPLY));
+    const { commands, calls } = leafContext(() =>
+      structuredClone(REFUSED_REPLY),
+    );
     const error = await capture(commands.peerControl(CONTROL_PARAMS));
     expect(error).toBeInstanceOf(ExternalDriverRefusalError);
     expect((error as ExternalDriverRefusalError).refusalKind).toBe(

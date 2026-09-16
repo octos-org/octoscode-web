@@ -232,14 +232,19 @@ export interface ModelNoticeBoard {
 export type ModelNoticeEvent =
   | {
       disposition: ModelRuntimeDisposition;
-      savedModel?: { model: string; provider: string; route?: string } | undefined;
+      savedModel?:
+        { model: string; provider: string; route?: string } | undefined;
       condition?: string | undefined;
       runningModel?: string | undefined;
       runtimeError?: string | undefined;
       reason?: string | undefined;
       atMs: number;
     }
-  | { turnStampModel: { model: string; provider: string; route?: string } | undefined; atMs: number }
+  | {
+      turnStampModel:
+        { model: string; provider: string; route?: string } | undefined;
+      atMs: number;
+    }
   | {
       listRefreshed: readonly {
         model: string;
@@ -305,7 +310,7 @@ export function nextModelNoticeBoard(
         }
       : undefined;
     // A successful refresh never clears persisted_but_not_live (§4.2: the
- // list carries no runtime-error field, so its absence proves nothing).
+    // list carries no runtime-error field, so its absence proves nothing).
     return {
       ...board,
       externalChange:

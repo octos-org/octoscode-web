@@ -1,9 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SessionConfigPane } from "./SessionConfigPane.tsx";
-import type {
-  PermissionControlProps,
-} from "../product-controls/SessionControlBar.tsx";
+import type { PermissionControlProps } from "../product-controls/SessionControlBar.tsx";
 import type { ControlState } from "../product-controls/types.ts";
 
 const permissionProps: PermissionControlProps = {

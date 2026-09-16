@@ -68,7 +68,8 @@ export type PeerControlAcknowledgment =
 export type PeerTurnOutcome = "finished" | "stopped" | "failed";
 
 /** The control action that produced a `control-ack` event. */
-export type PeerControlAckAction = "steer" | "interrupt" | "answer" | "approval";
+export type PeerControlAckAction =
+  "steer" | "interrupt" | "answer" | "approval";
 
 /**
  * The CONTENTS of a pending approval (judge r2 #4: "approvals/questions bound
@@ -183,9 +184,7 @@ export interface PeerRosterEntry {
    * scope or the question's header/choices, or null. Cleared with the request.
    */
   readonly requestDetail?:
-    | Readonly<PeerApprovalDetail>
-    | Readonly<PeerQuestionDetail>
-    | null;
+    Readonly<PeerApprovalDetail> | Readonly<PeerQuestionDetail> | null;
   /**
    * The accepted dispatch's resolved MODEL (triage 4510 P2: the dock row reads
    * "Peer N · model" — Fleet §4.3 parity; never the raw slug). Optional in the
@@ -819,11 +818,11 @@ export class PeerManager {
         outputTokens: 0,
         requestId: null,
         requestKind: null,
-            operationId: null,
-            error: null,
-            canRetry: false,
-          }),
-        );
+        operationId: null,
+        error: null,
+        canRetry: false,
+      }),
+    );
     // A fresh staging attempt supersedes any prior refusal marker.
     this.#publish({ dispatchRefusalKind: null });
     return this.#open(pending);
@@ -1020,9 +1019,10 @@ export function summarizeRoster(
  * whole roster size. `landed` counts `done` rows only, so an interrupted or
  * still-live peer never inflates the completed fraction.
  */
-export function fleetLanded(
-  entries: readonly PeerRosterEntry[],
-): { readonly landed: number; readonly total: number } {
+export function fleetLanded(entries: readonly PeerRosterEntry[]): {
+  readonly landed: number;
+  readonly total: number;
+} {
   let landed = 0;
   for (const entry of entries) if (entry.activity === "done") landed += 1;
   return Object.freeze({ landed, total: entries.length });

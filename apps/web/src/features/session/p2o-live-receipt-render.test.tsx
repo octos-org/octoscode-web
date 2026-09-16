@@ -151,7 +151,11 @@ const PEER = {
 };
 
 function hydrate(sessionId: string): SessionHydrateResult {
-  return { session_id: sessionId, cursor: { stream: sessionId, seq: 1 }, turns: [] };
+  return {
+    session_id: sessionId,
+    cursor: { stream: sessionId, seq: 1 },
+    turns: [],
+  };
 }
 
 /** Minimal pooled transport, mirroring peer-dispatch-adopt-integration.test.ts. */
@@ -320,7 +324,11 @@ function harness() {
         laneKeys: [LIVE.modelLane],
         laneKey: LIVE.modelLane,
         operationId: LIVE.operationId,
-        seed: { brief: request.brief, slug: request.slug, prompt: request.prompt },
+        seed: {
+          brief: request.brief,
+          slug: request.slug,
+          prompt: request.prompt,
+        },
         adopt: peerAdoptSeam<SessionRecord<PooledClient>>(manager),
         scope: (adoptedSessionId, workspaceRoot) => ({
           endpoint: master.scope.endpoint,
@@ -354,7 +362,9 @@ async function flush() {
 
 describe("P2o — a confirmed staging carries the ADOPTED receipt slug", () => {
   it("settles `dispatched` with the row's receipt slug + accepted operation id", async () => {
-    const kickoff = vi.fn(async (_params: PeerPrepareParams) => ({ peers: [] }));
+    const kickoff = vi.fn(async (_params: PeerPrepareParams) => ({
+      peers: [],
+    }));
     const selectLane = vi.fn();
     const outcome = await performStagedDispatch({
       manager: {
@@ -365,7 +375,11 @@ describe("P2o — a confirmed staging carries the ADOPTED receipt slug", () => {
         getSnapshot: () => ({
           prepareError: null,
           peers: [
-            { slug: LIVE.slug, status: "started", operationId: LIVE.operationId },
+            {
+              slug: LIVE.slug,
+              status: "started",
+              operationId: LIVE.operationId,
+            },
           ],
         }),
       },

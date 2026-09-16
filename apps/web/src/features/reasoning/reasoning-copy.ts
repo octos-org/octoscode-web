@@ -43,7 +43,8 @@ export const REASONING_ZH_COPY: Readonly<Record<string, string>> =
     "Thinking…": "思考中…",
     "Writing…": "正在撰写…",
     "Running {value0}…": "正在运行 {value0}…",
-    "Thinking · {seconds} s · {words} words": "思考 · {seconds} 秒 · {words} 词",
+    "Thinking · {seconds} s · {words} words":
+      "思考 · {seconds} 秒 · {words} 词",
     "Thinking · {words} words": "思考 · {words} 词",
   });
 
@@ -51,10 +52,7 @@ export type ReasoningCopyKey = keyof (typeof REASONING_COPY)["en"];
 
 export function reasoningCopyFor(
   language: UiLanguage,
-): (
-  key: ReasoningCopyKey,
-  params?: Record<string, string | number>,
-) => string {
+): (key: ReasoningCopyKey, params?: Record<string, string | number>) => string {
   return (key, params) => {
     const table = language === "zh" ? REASONING_COPY.zh : REASONING_COPY.en;
     const text = table[key];

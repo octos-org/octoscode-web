@@ -5,9 +5,7 @@ import {
   SessionConfigPane,
   type SessionModelResult,
 } from "./SessionConfigPane.tsx";
-import type {
-  PermissionControlProps,
-} from "../product-controls/SessionControlBar.tsx";
+import type { PermissionControlProps } from "../product-controls/SessionControlBar.tsx";
 import type { ControlState } from "../product-controls/types.ts";
 
 const permissionProps: PermissionControlProps = {
@@ -58,7 +56,10 @@ describe("SessionConfigPane (§4.2)", () => {
         }}
         savedProfileModel="glm-5.3"
         permission={permissionProps}
-        sandbox={{ supported: true, summary: "Workspace write · network blocked" }}
+        sandbox={{
+          supported: true,
+          summary: "Workspace write · network blocked",
+        }}
         advanced={{ present: false }}
       />,
     );
@@ -90,7 +91,10 @@ describe("SessionConfigPane (§4.2)", () => {
         }}
         savedProfileModel="glm-5.3"
         permission={permissionProps}
-        sandbox={{ supported: true, summary: "Workspace write · network blocked" }}
+        sandbox={{
+          supported: true,
+          summary: "Workspace write · network blocked",
+        }}
         advanced={{ present: false }}
       />,
     );
@@ -188,7 +192,10 @@ describe("SessionConfigPane (§4.2)", () => {
         }}
         savedProfileModel="glm-5.3"
         permission={permissionProps}
-        sandbox={{ supported: true, summary: "Workspace write · read /workspace" }}
+        sandbox={{
+          supported: true,
+          summary: "Workspace write · read /workspace",
+        }}
         advanced={{ present: false }}
       />,
     );
@@ -272,10 +279,18 @@ describe("SessionConfigPane (§4.2)", () => {
       "Saved. Your next message uses glm-5.3",
     );
     expect(
-      dispositionNotice({ disposition: "deferred", saved, condition: "profile disabled" }),
+      dispositionNotice({
+        disposition: "deferred",
+        saved,
+        condition: "profile disabled",
+      }),
     ).toBe("Saved. The model is not active yet (profile disabled)");
     expect(
-      dispositionNotice({ disposition: "restart_required", saved, running: "glm-4.7" }),
+      dispositionNotice({
+        disposition: "restart_required",
+        saved,
+        running: "glm-4.7",
+      }),
     ).toBe("Saved. The server keeps running glm-4.7 until it restarts");
     expect(
       dispositionNotice({

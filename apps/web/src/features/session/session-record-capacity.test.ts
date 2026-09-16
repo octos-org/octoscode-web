@@ -282,9 +282,11 @@ async function complete(
         client.startEntered.push(() => resolve());
       })
     : null;
-  client.emit(envelope(sessionId, turnId, seq + 1, "turn_terminal", {
-    outcome: "completed",
-  }));
+  client.emit(
+    envelope(sessionId, turnId, seq + 1, "turn_terminal", {
+      outcome: "completed",
+    }),
+  );
   // The terminal must settle exactly this turn and start its own next FIFO head.
   if (entered) await entered;
   await flush();
@@ -311,7 +313,8 @@ describe("SessionRecordManager capacity: 12 Sessions + 3 peers on one transport"
 
     // Scripted selection across all 15 while work is live.
     const order = [7, 0, 11, 3, 14, 5, 1, 9, 2, 12, 6, 4, 13, 8, 10];
-    for (const index of order) h.manager.select(records.get(IDS[index]!)!.scope);
+    for (const index of order)
+      h.manager.select(records.get(IDS[index]!)!.scope);
     // Selection never reset a queue nor re-dispatched a start.
     expect(h.client.starts).toHaveLength(15);
     expect(h.manager.selected()!.scope.sessionId).toBe(IDS[order.at(-1)!]);

@@ -494,9 +494,9 @@ for (const action of ["Disconnect", "Forget server"] as const) {
     // deliberately outside the accessibility tree — read the region from the
     // DOM rather than by role, and keep asserting the same fact: exactly one
     // prompt is still waiting.
-    await expect(
-      page.locator('[aria-label="Queued prompts"] li'),
-    ).toHaveCount(1);
+    await expect(page.locator('[aria-label="Queued prompts"] li')).toHaveCount(
+      1,
+    );
     expect(turns.sent).toHaveLength(1);
     await settings.getByRole("button", { name: action, exact: true }).click();
     await confirm.getByRole("button", { name: action, exact: true }).click();

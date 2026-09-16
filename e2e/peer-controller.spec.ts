@@ -171,17 +171,24 @@ function wire(page: Page) {
  * composer does not exist until a Session is open ("Choose a workspace"
  * region), so Add workspace -> Add & Start must run first.
  */
-async function connectAndStartWorkspace(page: Page, cwd: string): Promise<void> {
+async function connectAndStartWorkspace(
+  page: Page,
+  cwd: string,
+): Promise<void> {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill(TOKEN);
   await page
     .getByRole("button", { name: "Connect", exact: true })
     .press("Enter");
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(productNavigation(page)).toBeVisible();
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
   }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
@@ -242,7 +249,9 @@ test.describe("Fleet view (migrated console semantics)", () => {
       .allTextContents();
     expect(options).toEqual([...LANE_KEYS]);
     // Empty state renders before any dispatch; no frames were sent.
-    await expect(fleet(page).locator('[data-fleet-empty="true"]')).toBeVisible();
+    await expect(
+      fleet(page).locator('[data-fleet-empty="true"]'),
+    ).toBeVisible();
     expect(w.calls(DISPATCH_METHOD)).toHaveLength(0);
     expect(w.calls(ACQUIRE_METHOD)).toHaveLength(0);
   });
@@ -275,9 +284,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await expect
       .poll(() => w.calls(ACQUIRE_METHOD).length)
       .toBeGreaterThanOrEqual(1);
-    await expect
-      .poll(() => w.calls(DISPATCH_METHOD).length)
-      .toBe(1);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
     const acquireIndex = w.sent.findIndex(
       (frame) => frame.method === ACQUIRE_METHOD,
     );
@@ -303,15 +310,11 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await connectAndStartWorkspace(page, cwd(""));
     await openFleet(page);
     await startPeer(page);
-    await expect
-      .poll(() => w.calls(DISPATCH_METHOD).length)
-      .toBe(1);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
     const first = w.calls(DISPATCH_METHOD)[0]?.operationId;
     expect(first).toBeTruthy();
     await startPeer(page);
-    await expect
-      .poll(() => w.calls(DISPATCH_METHOD).length)
-      .toBe(2);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(2);
     const second = w.calls(DISPATCH_METHOD)[1]?.operationId;
     expect(second).toBeTruthy();
     expect(second).not.toBe(first);
@@ -334,9 +337,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await fleetSteerInput(page, slug).fill("octopus");
     await expect(steer).toBeEnabled();
     await steer.press("Enter");
-    await expect
-      .poll(() => w.calls(CONTROL_METHOD).length)
-      .toBe(before + 1);
+    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     const frame = w.calls(CONTROL_METHOD)[before];
     expect(frame?.detail).toBe("steer");
     // The frame carries the OPERATOR's text and targets the ADOPTED turn.
@@ -391,9 +392,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
 
     const before = w.calls(CONTROL_METHOD).length;
     await fleetAction(page, slug, "approve").press("Enter");
-    await expect
-      .poll(() => w.calls(CONTROL_METHOD).length)
-      .toBe(before + 1);
+    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)[before]?.detail).toBe("approval_respond");
   });
 
@@ -408,9 +407,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
 
     const before = w.calls(CONTROL_METHOD).length;
     await fleetAction(page, slug, "stop").press("Enter");
-    await expect
-      .poll(() => w.calls(CONTROL_METHOD).length)
-      .toBe(before + 1);
+    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)[before]?.detail).toBe("interrupt");
   });
 
@@ -422,9 +419,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await connectAndStartWorkspace(page, cwd("stale"));
     await openFleet(page);
     await startPeer(page);
-    await expect
-      .poll(() => w.calls(DISPATCH_METHOD).length)
-      .toBe(1);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
     // §6 copy renders inline on the ROW (a refused receipt shows the recovery
     // copy on the row, §4.3); the raw server detail never leaks.
     await expect(fleet(page)).toContainText(FENCE_STALE);
@@ -439,9 +434,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await connectAndStartWorkspace(page, cwd("refused"));
     await openFleet(page);
     await startPeer(page);
-    await expect
-      .poll(() => w.calls(DISPATCH_METHOD).length)
-      .toBe(1);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
     await expect(fleet(page)).toContainText(DISPATCH_MODEL_UNAVAILABLE);
     await expect(fleet(page)).not.toContainText(RAW_DISPATCH_COPY);
     await expect(fleet(page)).not.toContainText("-32602");
@@ -469,8 +462,9 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await openFleet(page);
     // Lane keys arrive asynchronously; wait for the picker to list them.
     await expect
-      .poll(async () =>
-        (await fleetModel(page).locator("option:not([hidden])").count()),
+      .poll(
+        async () =>
+          await fleetModel(page).locator("option:not([hidden])").count(),
       )
       .toBeGreaterThan(0);
     const options = await fleetModel(page)

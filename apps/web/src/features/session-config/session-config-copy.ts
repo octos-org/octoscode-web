@@ -24,5 +24,6 @@ export const SESSION_CONFIG_ZH_COPY: Readonly<Record<string, string>> =
     "the previous model": "之前的模型",
     "the runtime could not start": "运行时无法启动",
     "the server refused the change": "服务器拒绝了此更改",
-    "The selection changed in another tab or app": "选择已在其他标签页或应用中更改",
+    "The selection changed in another tab or app":
+      "选择已在其他标签页或应用中更改",
   });

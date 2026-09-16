@@ -73,7 +73,9 @@ export class LazyServerRuntime<Client extends ActiveSessionClient> {
         const factory = await this.#load();
         if (intent !== this.#intent) return null;
         const options =
-          typeof this.#options === "function" ? await this.#options() : this.#options;
+          typeof this.#options === "function"
+            ? await this.#options()
+            : this.#options;
         if (intent !== this.#intent) return null;
         if (!this.#runtime) {
           const runtime = factory(options);

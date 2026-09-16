@@ -134,9 +134,7 @@ describe("tool call header line", () => {
   });
 
   it("extracts the most useful argument as the target", () => {
-    expect(toolTarget('{"path": "/src/main.rs", "q": 1}')).toBe(
-      "/src/main.rs",
-    );
+    expect(toolTarget('{"path": "/src/main.rs", "q": 1}')).toBe("/src/main.rs");
     expect(toolTarget('{"file_path": "/a/b.rs"}')).toBe("/a/b.rs");
     expect(toolTarget('{"query": "spinner"}')).toBe("spinner");
     expect(toolTarget("not json")).toBe("");

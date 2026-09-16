@@ -40,7 +40,11 @@ export interface FleetStartDispatchFrame {
   readonly controlToken: string;
   readonly operationId: string;
   readonly model: string;
-  readonly dispatch: { readonly kind: "new_brief"; readonly brief: string; readonly title: string };
+  readonly dispatch: {
+    readonly kind: "new_brief";
+    readonly brief: string;
+    readonly title: string;
+  };
 }
 
 /**
@@ -237,9 +241,7 @@ export function fleetStartRetryKeepsOperationId(
  * Round 4 J2: settle a REQUESTING Start as UNCERTAIN (15 s, no receipt).
  * Retry keeps the operation id; Dismiss (not modeled here) only hides copy.
  */
-export function fleetStartUncertain(
-  state: FleetStartState,
-): FleetStartState {
+export function fleetStartUncertain(state: FleetStartState): FleetStartState {
   if (state.kind !== "requesting") return state;
   return {
     kind: "unknown",

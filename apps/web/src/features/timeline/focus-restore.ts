@@ -16,9 +16,7 @@ export interface FocusRestoreInput {
 }
 
 /** Returns true when focus was moved. */
-export function restoreFocusAfterRemoval(
-  input: FocusRestoreInput,
-): boolean {
+export function restoreFocusAfterRemoval(input: FocusRestoreInput): boolean {
   const { activeElement, removed, fallback } = input;
   if (!activeElement) return false;
   // Still mounted: the "removal" hasn't happened; leave focus alone.

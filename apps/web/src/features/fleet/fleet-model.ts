@@ -48,7 +48,10 @@ export const FLEET_STATUS_ORDER: readonly FleetStatusWord[] = Object.freeze([
 
 /** Rank aliases for the derived (non-canonical) status words. */
 const RANK_ALIAS: Readonly<
-  Record<Exclude<FleetStatusWord, (typeof FLEET_STATUS_ORDER)[number]>, FleetStatusWord>
+  Record<
+    Exclude<FleetStatusWord, (typeof FLEET_STATUS_ORDER)[number]>,
+    FleetStatusWord
+  >
 > = Object.freeze({
   "Still starting…": "Starting",
   Requested: "Starting",
@@ -117,11 +120,7 @@ export type FleetAwaitKind = "approval" | "question";
 
 /** The row ACTIVITY vocabulary the existing controller roster carries. */
 export type FleetControllerActivity =
-  | "staged"
-  | "live"
-  | "blocked"
-  | "done"
-  | "reaped";
+  "staged" | "live" | "blocked" | "done" | "reaped";
 
 /** One controller roster row (PeerControllerRosterRow), re-typed locally. */
 export interface FleetControllerRow {
@@ -146,10 +145,10 @@ export function fleetStatusWord(
     case "requested":
       return "Requested";
     case "starting":
-      return (
-        input.startedMs !== undefined &&
+      return input.startedMs !== undefined &&
         now - input.startedMs > FLEET_SLOW_START_MS
-      ) ? "Still starting…" : "Starting";
+        ? "Still starting…"
+        : "Starting";
     case "working":
       return "Working";
     case "awaiting":
@@ -369,7 +368,10 @@ export function fleetActionAvailability(input: {
   const awaitingApproval = input.statusWord === "Waiting for your approval";
   const awaitingAnswer = input.statusWord === "Waiting for your answer";
   const working = input.statusWord === "Working";
-  const starting = input.statusWord === "Starting" || input.statusWord === "Still starting…" || input.statusWord === "Requested";
+  const starting =
+    input.statusWord === "Starting" ||
+    input.statusWord === "Still starting…" ||
+    input.statusWord === "Requested";
   const stop = starting || working || awaitingApproval || awaitingAnswer;
   return {
     approve: awaitingApproval,
@@ -389,15 +391,18 @@ export function fleetActionAvailability(input: {
 export function fleetRosterFromController(input: {
   readonly roster: readonly FleetControllerRow[];
   readonly facts?: Readonly<
-    Record<string, {
-      readonly number: number;
-      readonly model: string | null;
-      readonly title: string;
-      readonly sessionName: string;
-      readonly goalId: string | null;
-      readonly elapsedMs: number;
-      readonly tokens: number;
-    }>
+    Record<
+      string,
+      {
+        readonly number: number;
+        readonly model: string | null;
+        readonly title: string;
+        readonly sessionName: string;
+        readonly goalId: string | null;
+        readonly elapsedMs: number;
+        readonly tokens: number;
+      }
+    >
   >;
   /** The master session id rows link back to (defaults shown in tests). */
   readonly masterSessionId?: string;
@@ -468,8 +473,7 @@ export function fleetAltDActivates(event: {
   } | null;
 }): boolean {
   if (!event.altKey) return false;
-  const isD =
-    event.code === "KeyD" || event.key === "d" || event.key === "D";
+  const isD = event.code === "KeyD" || event.key === "d" || event.key === "D";
   if (!isD) return false;
   const tag = event.target?.tagName ?? "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return false;

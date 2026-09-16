@@ -38,7 +38,11 @@ describe("focus restore after a request disappears (judge #8)", () => {
 
   it("does nothing when nothing had focus", () => {
     expect(
-      restoreFocusAfterRemoval({ activeElement: null, removed: el(false), fallback: el(true) }),
+      restoreFocusAfterRemoval({
+        activeElement: null,
+        removed: el(false),
+        fallback: el(true),
+      }),
     ).toBe(false);
   });
 

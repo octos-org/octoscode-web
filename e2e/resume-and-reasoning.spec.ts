@@ -3,8 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const composer = (page: Page) =>
   page.getByPlaceholder("Ask Octos to change, explain, or review code…");
-const sidebar = (page: Page) =>
-  page.locator("aside");
+const sidebar = (page: Page) => page.locator("aside");
 const selectedRow = (page: Page) =>
   sidebar(page).locator('button[role="treeitem"][aria-current="page"]');
 const historyDialog = (page: Page) =>
@@ -18,11 +17,9 @@ const historyDialog = (page: Page) =>
  * name that would make every `toHaveCount(0)` below vacuously true.
  */
 const reasoningEntries = (page: Page) =>
-  page
-    .locator("details")
-    .filter({
-      has: page.locator("summary", { hasText: /Thought process|Thinking…/ }),
-    });
+  page.locator("details").filter({
+    has: page.locator("summary", { hasText: /Thought process|Thinking…/ }),
+  });
 /** The reasoning entry's own disclosure control (the collapsed default). */
 const reasoningFold = (page: Page) => reasoningEntries(page).locator("summary");
 type Rpc = {
@@ -54,9 +51,13 @@ async function connect(page: Page, cwd: string) {
     name: /Choose a workspace|Add workspace/,
   });
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await expect(chooser).toBeVisible();
-    if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+    if (
+      await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+    ) {
       await chooser.getByRole("button", { name: "Add workspace" }).click();
     }
   }
@@ -376,9 +377,11 @@ test("reasoning visibility is retained per Session and does not change captured 
   // away behind the same disclosure.
   const foldA = reasoningFold(page);
   await expect(reasoningEntries(page)).toHaveCount(1);
-  if (!(await reasoningEntries(page).first().evaluate(
-    (node) => (node as HTMLDetailsElement).open,
-  )))
+  if (
+    !(await reasoningEntries(page)
+      .first()
+      .evaluate((node) => (node as HTMLDetailsElement).open))
+  )
     await foldA.click();
   await expect(reasoningEntries(page)).toContainText(
     "Native workflow reasoning for",

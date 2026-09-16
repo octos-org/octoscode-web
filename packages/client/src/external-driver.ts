@@ -38,7 +38,6 @@ import type { ExternalDriverWakeCommands } from "./external-driver-wake-control.
  * Web ID. TurnIds are protocol UUIDs (protocol-id.ts isProtocolUuid).
  */
 
-
 const DRIVER_GET = EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_GET;
 const DISPATCH = EXTERNAL_DRIVER_METHODS.PEER_DISPATCH;
 const ACQUIRE = EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_ACQUIRE;
@@ -66,7 +65,6 @@ export interface SessionDriverGetView {
   readonly recovery: DriverRecoveryState;
 }
 
-
 /** Whitelist ONE typed kind from a server protocol error's data.kind. */
 function typedRefusalKind(
   serverError: unknown,
@@ -83,7 +81,6 @@ function typedRefusalKind(
     ? (kind as ExternalDriverRefusalKind)
     : null;
 }
-
 
 function isDriverMode(value: unknown): value is DriverMode {
   return value === "internal" || value === "external";
@@ -1368,5 +1365,21 @@ export function checkDispatchRetryIdentity(
   }
   return { ok: true };
 }
-import { EXTERNAL_DRIVER_V1_FEATURE, EXTERNAL_DRIVER_METHODS, ExternalDriverProtocolError, EXTERNAL_DRIVER_REFUSAL_KINDS, ExternalDriverRefusalError, ExternalDriverCapabilityError, type ExternalDriverRefusalKind } from "./external-driver-meta.ts";
-export { EXTERNAL_DRIVER_V1_FEATURE, EXTERNAL_DRIVER_METHODS, ExternalDriverProtocolError, EXTERNAL_DRIVER_REFUSAL_KINDS, ExternalDriverRefusalError, ExternalDriverCapabilityError, type ExternalDriverRefusalKind } from "./external-driver-meta.ts";
+import {
+  EXTERNAL_DRIVER_V1_FEATURE,
+  EXTERNAL_DRIVER_METHODS,
+  ExternalDriverProtocolError,
+  EXTERNAL_DRIVER_REFUSAL_KINDS,
+  ExternalDriverRefusalError,
+  ExternalDriverCapabilityError,
+  type ExternalDriverRefusalKind,
+} from "./external-driver-meta.ts";
+export {
+  EXTERNAL_DRIVER_V1_FEATURE,
+  EXTERNAL_DRIVER_METHODS,
+  ExternalDriverProtocolError,
+  EXTERNAL_DRIVER_REFUSAL_KINDS,
+  ExternalDriverRefusalError,
+  ExternalDriverCapabilityError,
+  type ExternalDriverRefusalKind,
+} from "./external-driver-meta.ts";

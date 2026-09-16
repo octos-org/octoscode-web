@@ -59,7 +59,8 @@ const dockRow = (page: Page, slug: string): Locator =>
 /** The row's activity lives on the aria-hidden glyph span (PeerDock.tsx:252). */
 const dockActivity = (page: Page, slug: string): Locator =>
   dockRow(page, slug).locator("[data-activity]");
-const composer = (page: Page): Locator => page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+const composer = (page: Page): Locator =>
+  page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 
 interface Observed {
   staged: Record<string, unknown>[];
@@ -74,7 +75,8 @@ function observe(page: Page): Observed {
         method?: string;
         params?: Record<string, unknown>;
       };
-      if (frame.method === "peer/staged" && frame.params) observed.staged.push(frame.params);
+      if (frame.method === "peer/staged" && frame.params)
+        observed.staged.push(frame.params);
     });
     socket.on("framesent", ({ payload }) => {
       const frame = JSON.parse(String(payload)) as { method?: string };
@@ -92,20 +94,29 @@ function observe(page: Page): Observed {
  * region, so `Add workspace` -> `Add & Start` must run before the prompt
  * composer is reachable. Skipping it is what killed all four cases in 2355.
  */
-async function connectAndStartWorkspace(page: Page, cwd: string): Promise<void> {
+async function connectAndStartWorkspace(
+  page: Page,
+  cwd: string,
+): Promise<void> {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token").fill(TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", { name: /Choose a workspace|Add workspace/ });
+  const chooser = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
   await expect(productNavigation(page)).toBeVisible();
   await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible()) {
+  if (
+    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
+  ) {
     await chooser.getByRole("button", { name: "Add workspace" }).click();
   }
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace.getByRole("button", { name: /Add & Start|Start session/ }).click();
+  await addWorkspace
+    .getByRole("button", { name: /Add & Start|Start session/ })
+    .click();
   // The started workspace path is rendered and the composer is now enabled.
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
   await expect(composer(page)).toBeEnabled();
@@ -115,7 +126,10 @@ async function connectAndStartWorkspace(page: Page, cwd: string): Promise<void> 
 async function stagePeers(page: Page, observed: Observed): Promise<string[]> {
   await composer(page).fill("/peer");
   await page.getByRole("button", { name: "Send prompt", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Session peers", exact: true });
+  const dialog = page.getByRole("dialog", {
+    name: "Session peers",
+    exact: true,
+  });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Peer brief", { exact: true }).fill(PEER_BRIEF);
   await dialog
@@ -163,11 +177,16 @@ async function sendPrompt(page: Page, text: string): Promise<void> {
 /** Drive one peer row to `live` through the fixture's `turn/started` producer. */
 async function startPeerTurn(page: Page, slug: string): Promise<void> {
   await sendPrompt(page, `Peer turn fixture ${slug}`);
-  await expect(dockActivity(page, slug)).toHaveAttribute("data-activity", "live");
+  await expect(dockActivity(page, slug)).toHaveAttribute(
+    "data-activity",
+    "live",
+  );
 }
 
 test.describe("peer activity glyphs from real peer events", () => {
-  test("staging renders idle, then a peer turn flips the row to live", async ({ page }) => {
+  test("staging renders idle, then a peer turn flips the row to live", async ({
+    page,
+  }) => {
     test.setTimeout(60_000);
     const observed = observe(page);
     await connectAndStartWorkspace(page, CWD);
@@ -178,7 +197,10 @@ test.describe("peer activity glyphs from real peer events", () => {
     // glyph. Round-2 (judge #4 "no raw slugs"): the accessible name is now
     // "Peer N — {activity word}" (PeerDock.tsx:94 peerRowLabel), with the slug
     // kept ONLY as the data-peer-slug identity hook.
-    await expect(dockActivity(page, slug)).toHaveAttribute("data-activity", "idle");
+    await expect(dockActivity(page, slug)).toHaveAttribute(
+      "data-activity",
+      "idle",
+    );
     await expect(row.locator("[data-activity]")).toHaveCount(1);
     await expect(row).toHaveAttribute(
       "aria-label",
@@ -208,7 +230,10 @@ test.describe("peer activity glyphs from real peer events", () => {
     // `approval/requested` on the peer's OWN Session -> blocked + `⚠ needs you`.
     await sendPrompt(page, `Peer approval fixture ${slug}`);
     const row = dockRow(page, slug);
-    await expect(dockActivity(page, slug)).toHaveAttribute("data-activity", "blocked");
+    await expect(dockActivity(page, slug)).toHaveAttribute(
+      "data-activity",
+      "blocked",
+    );
     await expect(row).toHaveAttribute("aria-label", /needs you$/);
 
     // UX4-4020: App DOES thread `onApprovalRespond` now (App.tsx:1491 ->
@@ -222,14 +247,20 @@ test.describe("peer activity glyphs from real peer events", () => {
     await row.focus();
     await expect(row).toBeFocused();
     await row.press("Alt+KeyY");
-    await expect(dockActivity(page, slug)).toHaveAttribute("data-activity", "blocked");
+    await expect(dockActivity(page, slug)).toHaveAttribute(
+      "data-activity",
+      "blocked",
+    );
     await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
     expect(observed.sentMethods).not.toContain("peer/control");
 
     // The block clears on the peer's OWN resolution frame (`approval/decided`),
     // which the coordinator folds as `attention-resolved` -> back to live.
     await sendPrompt(page, `Peer resolve fixture ${slug}`);
-    await expect(dockActivity(page, slug)).toHaveAttribute("data-activity", "live");
+    await expect(dockActivity(page, slug)).toHaveAttribute(
+      "data-activity",
+      "live",
+    );
   });
 
   test("a peer turn terminal lands the row as done while its sibling stays unlanded", async ({
@@ -245,26 +276,38 @@ test.describe("peer activity glyphs from real peer events", () => {
 
     // `turn/completed` on the peer's OWN Session -> that row lands `done`...
     await sendPrompt(page, `Peer complete fixture ${primary}`);
-    await expect(dockActivity(page, primary)).toHaveAttribute("data-activity", "done");
+    await expect(dockActivity(page, primary)).toHaveAttribute(
+      "data-activity",
+      "done",
+    );
     await expect(dockRow(page, primary)).toHaveAttribute(
       "aria-label",
       new RegExp("^Peer \\d+ — done$"),
     );
 
     // ...and the fleet count is real: the sibling never landed.
-    await expect(dockActivity(page, sibling)).not.toHaveAttribute("data-activity", "done");
+    await expect(dockActivity(page, sibling)).not.toHaveAttribute(
+      "data-activity",
+      "done",
+    );
 
     // Landed-count SURFACE limit: the "N/N landed" pill renders only in the
     // dock's collapsed branch, and App threads the toggle but not `collapsed`
     // (ProductSidebar.tsx:744) — so the pill stays unreachable here and the
     // expanded fold control is the only count-bearing control present.
-    await expect(peerDock(page).locator('button[aria-expanded="true"]')).toHaveCount(1);
-    await expect(peerDock(page).locator('button[aria-expanded="false"]')).toHaveCount(0);
+    await expect(
+      peerDock(page).locator('button[aria-expanded="true"]'),
+    ).toHaveCount(1);
+    await expect(
+      peerDock(page).locator('button[aria-expanded="false"]'),
+    ).toHaveCount(0);
   });
 });
 
 test.describe("per-session interrupt-prompt restore", () => {
-  test("a draft is restored only in the session that owned the interrupted turn", async ({ page }) => {
+  test("a draft is restored only in the session that owned the interrupted turn", async ({
+    page,
+  }) => {
     test.setTimeout(60_000);
     await connectAndStartWorkspace(page, CWD);
     const draft = "keep-me-draft";
@@ -272,12 +315,16 @@ test.describe("per-session interrupt-prompt restore", () => {
     // Session A: send a draft, then interrupt A's live turn via the product's
     // own stop control (TurnStopButton; accessible name Interrupt|Stop).
     const navigation = productNavigation(page);
-    const sessionTitle = navigation
-      .locator('button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]');
+    const sessionTitle = navigation.locator(
+      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    );
     const sessionAName = (await sessionTitle.textContent())?.trim() ?? "";
-    if (sessionAName === "") throw new Error("workspace start opened no Session");
+    if (sessionAName === "")
+      throw new Error("workspace start opened no Session");
     await composer(page).fill(draft);
-    await page.getByRole("button", { name: "Send prompt", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Send prompt", exact: true })
+      .click();
     await page.getByRole("button", { name: /^(Interrupt|Stop)$/ }).click();
 
     // The interrupted prompt is parked back on A's OWNING record.
@@ -290,7 +337,9 @@ test.describe("per-session interrupt-prompt restore", () => {
       name: WORKSPACE,
       exact: true,
     });
-    await workspaceRow.getByRole("button", { name: WORKSPACE, exact: true }).hover();
+    await workspaceRow
+      .getByRole("button", { name: WORKSPACE, exact: true })
+      .hover();
     await navigation
       .getByRole("button", { name: `New session in ${WORKSPACE}` })
       .click();
@@ -331,7 +380,10 @@ test.describe("/peer clear prunes finished peers from the active session", () =>
       const observed = observe(page);
       await connectAndStartWorkspace(page, CWD);
       const slugs = await stagePeers(page, observed);
-      const [primary, sibling] = [firstSlug(slugs), slugs[1] ?? firstSlug(slugs)];
+      const [primary, sibling] = [
+        firstSlug(slugs),
+        slugs[1] ?? firstSlug(slugs),
+      ];
 
       // Two live peers: the one to land AND the one that must survive the prune.
       await startPeerTurn(page, primary);

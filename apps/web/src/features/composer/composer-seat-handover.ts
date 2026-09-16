@@ -29,8 +29,7 @@ import type {
 } from "@octos-org/octoscode-client/external-driver-meta";
 
 /** §6 row 1: the ExternalMasterHeld refusal rendered as task words. */
-export const FOREIGN_SEAT_HOLDER_MESSAGE =
-  "Another app is using this session";
+export const FOREIGN_SEAT_HOLDER_MESSAGE = "Another app is using this session";
 /** §5.2 case 3: the affordance that runs acquire → release(internal) → send. */
 export const RESUME_CHAT_LABEL = "Resume chat";
 /** §5.2 case 2 strip status while the release is in flight. */

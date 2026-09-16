@@ -47,10 +47,12 @@ describe("Fixes 4230 — Start = acquire (CAS) -> await proof -> dispatch once",
     expect(acquire!.expectedRevision).toBe(OBSERVED_REVISION);
     // TWO builds from the SAME machine return the SAME acquire (idempotent
     // planning — the caller sends one frame, not one per render).
-    expect(buildFleetStartAcquire(machine, {
-      driverId: "octoscode-web:uuid-1",
-      observedRevision: OBSERVED_REVISION,
-    })).toEqual(acquire);
+    expect(
+      buildFleetStartAcquire(machine, {
+        driverId: "octoscode-web:uuid-1",
+        observedRevision: OBSERVED_REVISION,
+      }),
+    ).toEqual(acquire);
   });
 
   it("refuses the acquire when the observed revision is unknown (no CAS basis)", () => {
@@ -85,16 +87,18 @@ describe("Fixes 4230 — Start = acquire (CAS) -> await proof -> dispatch once",
       title: "Review the diff",
     });
     // No proof => no dispatch AT ALL (fail-closed; the old bug's class).
-    expect(
-      buildFleetStartDispatch(machine, null),
-    ).toBeNull();
+    expect(buildFleetStartDispatch(machine, null)).toBeNull();
   });
 
   it("the same machine NEVER yields a second acquire or dispatch (repeat blocked)", () => {
     const first = fleetStartBegin(FLEET_START_IDLE, "glm-5.3", "R");
     const again = fleetStartBegin(first, "glm-5.3", "R");
     expect(again).toBe(first);
-    const settled: FleetStartState = fleetStartBegin(FLEET_START_IDLE, "x", "y");
+    const settled: FleetStartState = fleetStartBegin(
+      FLEET_START_IDLE,
+      "x",
+      "y",
+    );
     void settled;
   });
 });

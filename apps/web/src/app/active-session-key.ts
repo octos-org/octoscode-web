@@ -20,13 +20,11 @@ export function workspaceSessionKey(
 }
 
 export function resolveActiveSessionKey(
-  opened:
-    | {
-        workspace_root?: string | undefined;
-        active_profile_id?: string | undefined;
-        session_id: string;
-      }
-    | null,
+  opened: {
+    workspace_root?: string | undefined;
+    active_profile_id?: string | undefined;
+    session_id: string;
+  } | null,
   activeWorkspacePath: string,
   previousKey: string | null,
   historyMutating: boolean,

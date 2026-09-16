@@ -77,7 +77,10 @@ const LEGACY_PROJECTION_METHODS = new Set<string>([
  */
 export { deriveControlReadiness } from "./control-readiness.ts";
 export type { SessionControlReadiness } from "./control-readiness.ts";
-import { deriveControlReadiness, type SessionControlReadiness } from "./control-readiness.ts";
+import {
+  deriveControlReadiness,
+  type SessionControlReadiness,
+} from "./control-readiness.ts";
 
 /**
  * The binding the server OBSERVED for this record, or null when there is none

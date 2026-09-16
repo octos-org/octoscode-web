@@ -54,8 +54,7 @@ export interface PeerDockProps {
    * `peer/control` is a later grant.
    */
   onApprovalRespond?:
-    | ((entry: PeerRosterEntry, decision: ApprovalDecision) => void)
-    | undefined;
+    ((entry: PeerRosterEntry, decision: ApprovalDecision) => void) | undefined;
   /**
    * Round 2 (judge #4, design §4.1/§4.3): the dock rows carry Approve / Deny
    * / Approve for this session / Answer / Steer / Stop EXACTLY like Fleet
@@ -108,14 +107,14 @@ export function peerRowLabel(index: number, model?: string | null): string {
  * without an accepted dispatch operation id is terminal/unaddressable — the
  * dock renders its status but no affordance.
  */
-export function peerRowActions(peer: PeerRosterEntry): readonly PeerRowAction[] {
+export function peerRowActions(
+  peer: PeerRosterEntry,
+): readonly PeerRowAction[] {
   const addressable =
     typeof peer.operationId === "string" && peer.operationId !== "";
   if (peer.activity === "blocked") {
     if (peer.requestKind === "approval")
-      return addressable
-        ? ["approve", "approve_session", "deny", "stop"]
-        : [];
+      return addressable ? ["approve", "approve_session", "deny", "stop"] : [];
     if (peer.requestKind === "question")
       return addressable ? ["answer", "stop"] : [];
     return addressable ? ["stop"] : [];
@@ -166,8 +165,7 @@ export function peerAnswerRequest(
 ): PeerAnswerRequest | null {
   if (peer.activity !== "blocked" || peer.requestKind !== "question")
     return null;
-  if (typeof peer.requestId !== "string" || peer.requestId === "")
-    return null;
+  if (typeof peer.requestId !== "string" || peer.requestId === "") return null;
   const detail = peer.requestDetail;
   if (!detail || !("options" in detail)) return null;
   const question = detail as PeerQuestionDetail;
@@ -223,7 +221,8 @@ const ROW_ACTION_ARIA: Readonly<Record<PeerRowAction, string>> = {
 export function formatElapsed(ms: number): string {
   const secs = Math.max(0, Math.trunc(ms / 1000));
   if (secs < 60) return `${secs}s`;
-  if (secs < 3600) return `${Math.trunc(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
+  if (secs < 3600)
+    return `${Math.trunc(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
   return `${Math.trunc(secs / 3600)}h${String(Math.trunc((secs % 3600) / 60)).padStart(2, "0")}m`;
 }
 
@@ -248,10 +247,7 @@ function trimTokens(value: number): string {
  * `finishedAt - openedAt` once the row landed, else `now - openedAt`. Null
  * before the row has ever opened, so nothing is invented for an idle row.
  */
-export function peerElapsed(
-  peer: PeerRosterEntry,
-  now: number,
-): string | null {
+export function peerElapsed(peer: PeerRosterEntry, now: number): string | null {
   if (peer.openedAt === null) return null;
   const end = peer.finishedAt ?? now;
   return formatElapsed(end - peer.openedAt);
@@ -267,7 +263,11 @@ export function formatPeerDockPill(
   counts: PeerRosterCounts,
   landed: ReturnType<typeof fleetLanded>,
 ): string {
-  const parts = [`${counts.total}`, `${counts.live} live`, `${landed.landed}/${landed.total} landed`];
+  const parts = [
+    `${counts.total}`,
+    `${counts.live} live`,
+    `${landed.landed}/${landed.total} landed`,
+  ];
   if (counts.blocked > 0) parts.push(`${counts.blocked} blocked`);
   if (counts.done > 0) parts.push(`${counts.done} done`);
   return parts.join(" · ");
@@ -295,7 +295,8 @@ function peerAcceptsApproval(peer: PeerRosterEntry): boolean {
 function rowDecision(
   event: KeyboardEvent<HTMLButtonElement>,
 ): ApprovalDecision | null {
-  if (event.code === "KeyY" || event.key.toLowerCase() === "y") return "approve";
+  if (event.code === "KeyY" || event.key.toLowerCase() === "y")
+    return "approve";
   if (event.code === "KeyN" || event.key.toLowerCase() === "n") return "deny";
   return null;
 }
@@ -398,100 +399,102 @@ export function PeerDock({
               const draft = rowDrafts[peer.identity] ?? "";
               return (
                 <>
-            <button
-              type="button"
-              className={styles.rowButton}
-              aria-label={t("{value0} — {value1}", {
-                value0: label,
-                value1: t(ACTIVITY_LABEL[peer.activity]),
-              })}
-              data-peer-slug={peer.slug}
-              onKeyDown={(event) =>
-                respondToRowKey(peer, event, onApprovalRespond)
-              }
-            >
-              <span
-                className={styles.glyph}
-                aria-hidden="true"
-                data-activity={peer.activity}
-              >
-                {ACTIVITY_GLYPH[peer.activity]}
-              </span>
-              <span className={styles.slug}>{label}</span>
-              <span className={styles.status}>{peer.status}</span>
-              {(() => {
-                const elapsed = peerElapsed(peer, now);
-                return elapsed === null ? null : (
-                  <span className={styles.status} data-peer-elapsed>
-                    {`· ${elapsed}`}
-                  </span>
-                );
-              })()}
-              {peer.outputTokens === undefined ? null : (
-                <span className={styles.status} data-peer-tokens>
-                  {formatPeerTokens(peer.outputTokens)}
-                </span>
-              )}
-                  {/* §4.3 outcome words: Finished / Stopped / Failed ride the
+                  <button
+                    type="button"
+                    className={styles.rowButton}
+                    aria-label={t("{value0} — {value1}", {
+                      value0: label,
+                      value1: t(ACTIVITY_LABEL[peer.activity]),
+                    })}
+                    data-peer-slug={peer.slug}
+                    onKeyDown={(event) =>
+                      respondToRowKey(peer, event, onApprovalRespond)
+                    }
+                  >
+                    <span
+                      className={styles.glyph}
+                      aria-hidden="true"
+                      data-activity={peer.activity}
+                    >
+                      {ACTIVITY_GLYPH[peer.activity]}
+                    </span>
+                    <span className={styles.slug}>{label}</span>
+                    <span className={styles.status}>{peer.status}</span>
+                    {(() => {
+                      const elapsed = peerElapsed(peer, now);
+                      return elapsed === null ? null : (
+                        <span className={styles.status} data-peer-elapsed>
+                          {`· ${elapsed}`}
+                        </span>
+                      );
+                    })()}
+                    {peer.outputTokens === undefined ? null : (
+                      <span className={styles.status} data-peer-tokens>
+                        {formatPeerTokens(peer.outputTokens)}
+                      </span>
+                    )}
+                    {/* §4.3 outcome words: Finished / Stopped / Failed ride the
                       row once its turn terminates; they are OUTCOMES, never
                       acknowledgments. */}
-                  {peer.activity === "done" && peer.outcome ? (
-                    <span className={styles.status} data-peer-outcome>
-                      {` · ${t(
-                        peer.outcome === "finished"
-                          ? "Finished"
-                          : peer.outcome === "stopped"
-                            ? "Stopped"
-                            : "Failed",
-                      )}`}
-                    </span>
-                  ) : null}
-                  {/* §4.3 acknowledgments: "Sent" / "Stop requested" — an
+                    {peer.activity === "done" && peer.outcome ? (
+                      <span className={styles.status} data-peer-outcome>
+                        {` · ${t(
+                          peer.outcome === "finished"
+                            ? "Finished"
+                            : peer.outcome === "stopped"
+                              ? "Stopped"
+                              : "Failed",
+                        )}`}
+                      </span>
+                    ) : null}
+                    {/* §4.3 acknowledgments: "Sent" / "Stop requested" — an
                       accepted frame, promising nothing further. Superseded by
                       a renewed intent ("Peer started a new turn"). */}
-                  {ack !== null && !renewed ? (
-                    <span className={styles.status} data-peer-ack>
-                      {` · ${t(
-                        ack.kind === "stop-requested"
-                          ? "Stop requested"
-                          : "Sent",
-                      )}`}
+                    {ack !== null && !renewed ? (
+                      <span className={styles.status} data-peer-ack>
+                        {` · ${t(
+                          ack.kind === "stop-requested"
+                            ? "Stop requested"
+                            : "Sent",
+                        )}`}
+                      </span>
+                    ) : null}
+                    {renewed ? (
+                      <span className={styles.status} data-peer-turn-changed>
+                        {` · ${t("Peer started a new turn")}`}
+                      </span>
+                    ) : null}
+                  </button>
+                  {onApprovalRespond && peerAcceptsApproval(peer) ? (
+                    <span className={styles.actions}>
+                      <button
+                        type="button"
+                        className={styles.action}
+                        data-row-action="approve"
+                        aria-label={t("Approve {value0}", {
+                          value0: peer.slug,
+                        })}
+                        onClick={(event) => {
+                          refocusRowButton(event);
+                          onApprovalRespond(peer, "approve");
+                        }}
+                      >
+                        {t("Approve")}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.action}
+                        data-row-action="deny"
+                        aria-label={t("Deny {value0}", { value0: peer.slug })}
+                        onClick={(event) => {
+                          refocusRowButton(event);
+                          onApprovalRespond(peer, "deny");
+                        }}
+                      >
+                        {t("Deny")}
+                      </button>
                     </span>
                   ) : null}
-                  {renewed ? (
-                    <span className={styles.status} data-peer-turn-changed>
-                      {` · ${t("Peer started a new turn")}`}
-                    </span>
-                  ) : null}
-            </button>
-            {onApprovalRespond && peerAcceptsApproval(peer) ? (
-              <span className={styles.actions}>
-                <button
-                  type="button"
-                  className={styles.action}
-                  data-row-action="approve"
-                  aria-label={t("Approve {value0}", { value0: peer.slug })}
-                  onClick={(event) => {
-                    refocusRowButton(event);
-                    onApprovalRespond(peer, "approve");
-                  }}
-                >
-                  {t("Approve")}
-                </button>
-                <button
-                  type="button"
-                  className={styles.action}
-                  data-row-action="deny"
-                  aria-label={t("Deny {value0}", { value0: peer.slug })}
-                  onClick={(event) => {
-                    refocusRowButton(event);
-                    onApprovalRespond(peer, "deny");
-                  }}
-                >
-                  {t("Deny")}
-                </button>
-              </span>
-            ) : null}
                   {/* Judge r2 #4: the request's CONTENTS — the approval's
                       tool + target, or the question card (choices + free
                       text) — so every decision is informed, never blind. */}
@@ -506,47 +509,61 @@ export function PeerDock({
                           </span>
                           {(peer.requestDetail as PeerApprovalDetail).target ? (
                             <code className={styles.status}>
-                              {(peer.requestDetail as PeerApprovalDetail).target}
+                              {
+                                (peer.requestDetail as PeerApprovalDetail)
+                                  .target
+                              }
                             </code>
                           ) : null}
                         </>
                       ) : peer.requestKind === "question" ? (
-                        <div className={styles.answerCard} data-peer-answer-card>
+                        <div
+                          className={styles.answerCard}
+                          data-peer-answer-card
+                        >
                           <span className={styles.status}>
-                            {(peer.requestDetail as PeerQuestionDetail).question ??
-                              (peer.requestDetail as PeerQuestionDetail).header ??
+                            {(peer.requestDetail as PeerQuestionDetail)
+                              .question ??
+                              (peer.requestDetail as PeerQuestionDetail)
+                                .header ??
                               t("needs your answer")}
                           </span>
-                          {(peer.requestDetail as PeerQuestionDetail).options.map(
-                            (option, optionIndex) => (
-                              <label key={option.label} className={styles.status}>
-                                <input
-                                  type={
-                                    (peer.requestDetail as PeerQuestionDetail).multiSelect
-                                      ? "checkbox"
-                                      : "radio"
-                                  }
-                                  name={`${peer.requestId}:${optionIndex}`}
-                                  value={option.label}
-                                  defaultChecked={optionIndex === 0}
-                                />
-                                {option.label}
-                              </label>
-                            ),
-                          )}
+                          {(
+                            peer.requestDetail as PeerQuestionDetail
+                          ).options.map((option, optionIndex) => (
+                            <label key={option.label} className={styles.status}>
+                              <input
+                                type={
+                                  (peer.requestDetail as PeerQuestionDetail)
+                                    .multiSelect
+                                    ? "checkbox"
+                                    : "radio"
+                                }
+                                name={`${peer.requestId}:${optionIndex}`}
+                                value={option.label}
+                                defaultChecked={optionIndex === 0}
+                              />
+                              {option.label}
+                            </label>
+                          ))}
                         </div>
                       ) : null}
                     </div>
                   ) : null}
                   {actions.length > 0 ? (
                     <span className={styles.actions}>
-                      {(actions.includes("answer") || actions.includes("steer")) && (
+                      {(actions.includes("answer") ||
+                        actions.includes("steer")) && (
                         <input
                           className={styles.draft}
                           type="text"
                           value={draft}
-                          data-row-draft={actions.includes("answer") ? "answer" : "steer"}
-                          aria-label={t("Enter steering text", { value0: label })}
+                          data-row-draft={
+                            actions.includes("answer") ? "answer" : "steer"
+                          }
+                          aria-label={t("Enter steering text", {
+                            value0: label,
+                          })}
                           onChange={(event) =>
                             setDraft(peer.identity, event.target.value)
                           }
@@ -563,17 +580,14 @@ export function PeerDock({
                           })}
                           onClick={(event) => {
                             refocusRowButton(event);
-                            const answers = [
-                              { freeText: draft.trim() },
-                            ];
+                            const answers = [{ freeText: draft.trim() }];
                             const command = buildRowControlCommand(
                               action,
                               draft,
                               attention,
                               answers,
                             );
-                            if (command !== null)
-                              onRowAction?.(peer, command);
+                            if (command !== null) onRowAction?.(peer, command);
                           }}
                         >
                           {t(ROW_ACTION_LABEL[action])}

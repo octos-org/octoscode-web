@@ -1220,11 +1220,13 @@ export function useOctosSession(): OctosSessionRuntime {
   >(() => undefined);
   const serverConnection = useServerConnection({
     loadClientFactory: async () => {
-      const { OctosUiClient } = await import("@octos-org/octoscode-client/transport");
-      return (config) => new OctosUiClient({
-        endpoint: config.endpoint,
-        token: config.token,
-      });
+      const { OctosUiClient } =
+        await import("@octos-org/octoscode-client/transport");
+      return (config) =>
+        new OctosUiClient({
+          endpoint: config.endpoint,
+          token: config.token,
+        });
     },
     validateServerCapabilities: assertCompatibleProtocol,
     validateSessionCapabilities: (capabilities) => {
