@@ -332,3 +332,62 @@
     transition: none;
   }
 }
+
+/* WEB-PAIRING-CONTRACT-5100 §Remembering: the per-device choice sits with the
+   token it governs, and its effect is stated in the note below the form. */
+/* `.fields > label` sets `display: grid` at equal specificity, so this row
+   qualifies its own tag to win on source order instead of !important. */
+label.remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.remember input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.remember input:disabled,
+.remember:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* §Discovery: one offer for one origin — never a scanned range. */
+.discovered {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.discovered button {
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font-size: var(--dsw-font-size-micro);
+}
+
+.discovered button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
