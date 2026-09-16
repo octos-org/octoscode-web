@@ -2,7 +2,7 @@ import { isRecord } from "./rpc.ts";
 import { OctosUiProtocolError } from "./protocol-error.ts";
 import {
   APPUI_ONBOARDING_FEATURES,
-  APPUI_ONBOARDING_METHODS,
+  APPUI_WORKSPACE_BROWSE_METHODS,
 } from "./onboarding-methods.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
 
@@ -208,6 +208,6 @@ function isCount(value: unknown): value is number {
 }
 
 export const WORKSPACE_BROWSE_METHODS = {
-  WORKSPACE_LIST: APPUI_ONBOARDING_METHODS.WORKSPACE_LIST,
-  WORKSPACE_CREATE: APPUI_ONBOARDING_METHODS.WORKSPACE_CREATE,
+  WORKSPACE_LIST: APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_LIST,
+  WORKSPACE_CREATE: APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_CREATE,
 } as const;

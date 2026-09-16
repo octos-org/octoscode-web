@@ -2,7 +2,7 @@ import {
   parseSessionHydrateResult,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import parallelToolFixture from "./fixtures/rc9-parallel-tools.json";
 import {
   addOptimisticUser,
@@ -1078,6 +1078,14 @@ describe("hydrated tool presentation", () => {
   });
 
   it("restores rc.9 tools without message turn IDs in their original transcript order", () => {
+    // This case builds the same hydrate twice and compares; entries carry
+    // wall-clock start/end stamps, so a millisecond boundary between the two
+    // builds made it fail under full-suite load. Pin the clock for this case.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_700_000_000_000);
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const hydrate = freeze(toolHistory());
     const before = structuredClone(hydrate);
     const result = timelineFromHydrate(hydrate);

@@ -46,7 +46,10 @@ import type {
   UiProtocolCapabilities,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
-import { APPUI_ONBOARDING_METHODS } from "./onboarding-methods.ts";
+import {
+  APPUI_ONBOARDING_METHODS,
+  APPUI_WORKSPACE_BROWSE_METHODS,
+} from "./onboarding-methods.ts";
 import type {
   LlmCatalogResult,
   LlmFetchModelsParams,
@@ -780,7 +783,7 @@ export class OctosUiClient {
     params: WorkspaceListParams,
   ): Promise<WorkspaceListResult> {
     return this.validatedRequest(
-      APPUI_ONBOARDING_METHODS.WORKSPACE_LIST,
+      APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_LIST,
       params,
       async (value) =>
         (await loadWorkspaceBrowseResponses()).parseWorkspaceListResult(value),
@@ -795,7 +798,7 @@ export class OctosUiClient {
     params: WorkspaceCreateParams,
   ): Promise<WorkspaceCreateResult> {
     return this.validatedRequest(
-      APPUI_ONBOARDING_METHODS.WORKSPACE_CREATE,
+      APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_CREATE,
       params,
       async (value) =>
         (await loadWorkspaceBrowseResponses()).parseWorkspaceCreateResult(

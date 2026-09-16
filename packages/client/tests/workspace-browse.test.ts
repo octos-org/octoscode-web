@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   APPUI_ONBOARDING_FEATURES,
-  APPUI_ONBOARDING_METHODS,
+  APPUI_WORKSPACE_BROWSE_METHODS,
   parseWorkspaceCreateResult,
   parseWorkspaceListResult,
   supportsWorkspaceBrowse,
@@ -35,8 +35,8 @@ const CAPABILITIES: UiProtocolCapabilities = {
   version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
   capabilities_schema_version: 2,
   supported_methods: [
-    APPUI_ONBOARDING_METHODS.WORKSPACE_LIST,
-    APPUI_ONBOARDING_METHODS.WORKSPACE_CREATE,
+    APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_LIST,
+    APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_CREATE,
   ],
   supported_notifications: [],
   supported_features: [APPUI_ONBOARDING_FEATURES.WORKSPACE_BROWSE_V1],

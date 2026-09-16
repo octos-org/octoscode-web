@@ -10,6 +10,15 @@ export const APPUI_ONBOARDING_METHODS = {
   PROFILE_LLM_SELECT: "profile/llm/select",
   PROFILE_LLM_TEST: "profile/llm/test",
   PROFILE_LLM_UPSERT: "profile/llm/upsert",
+} as const;
+
+/**
+ * Folder browsing is a separate, optional capability. It must stay OUT of
+ * APPUI_ONBOARDING_METHODS: the onboarding panel requires EVERY method in that
+ * map, so listing these there made a server without browsing report that it
+ * cannot onboard from the Web at all.
+ */
+export const APPUI_WORKSPACE_BROWSE_METHODS = {
   /** WEB-WORKSPACE-BROWSER-CONTRACT-5000 §1. */
   WORKSPACE_LIST: "onboarding/workspace_list",
   /** WEB-WORKSPACE-BROWSER-CONTRACT-5000 §2. */

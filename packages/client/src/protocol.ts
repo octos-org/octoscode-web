@@ -83,6 +83,7 @@ export {
 export {
   APPUI_ONBOARDING_FEATURES,
   APPUI_ONBOARDING_METHODS,
+  APPUI_WORKSPACE_BROWSE_METHODS,
 } from "./onboarding-methods.ts";
 export {
   parseWorkspaceCreateResult,
