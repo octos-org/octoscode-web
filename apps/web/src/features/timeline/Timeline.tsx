@@ -12,6 +12,7 @@ import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import { CheckIcon, ChevronDownIcon } from "../../ui/Icon.tsx";
 import styles from "./Timeline.module.css";
 import type { TimelineEntry } from "./model.ts";
+import { toolKind, type ToolKind } from "./tool-kind.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { thinkingSummaryParts, toolTarget, type FoldState } from "./folds.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
@@ -296,7 +297,7 @@ function ToolBlock(props: FoldableBlockProps) {
       {...disclosureProps(props)}
     >
       <summary className={styles.toolHeader}>
-        <ActivityGlyph status={entry.status} />
+        <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
         <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
         {running ? (
           <span className={styles.runningLabel}>{t("Running")}</span>
@@ -330,13 +331,21 @@ function ToolBlock(props: FoldableBlockProps) {
   );
 }
 
-function ActivityGlyph({ status }: { status: TimelineEntry["status"] }) {
+function ActivityGlyph({
+  status,
+  tool,
+}: {
+  status: TimelineEntry["status"];
+  /** Tool family, so a row reads as shell/read/edit/search/web at a glance. */
+  tool?: ToolKind | undefined;
+}) {
   return status === "complete" ? (
     <CheckIcon size={14} className={styles.completedGlyph} />
   ) : (
     <span
       className={styles.statusGlyph}
       data-status={status}
+      {...(tool && tool !== "generic" ? { "data-tool": tool } : {})}
       aria-hidden="true"
     />
   );

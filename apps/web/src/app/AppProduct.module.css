@@ -383,6 +383,9 @@
   .thinkingDot {
     animation: none;
   }
+  .thinkingOctopus {
+    animation: none;
+  }
   .thinkingIndicator > span:last-child {
     animation: none;
     background-image: none;
@@ -406,6 +409,15 @@
   mask-position: center;
   -webkit-mask-size: contain;
   mask-size: contain;
+  animation: octopus-swim 2.4s ease-in-out infinite;
+}
+
+/* The mark carries its own animation: the OctopusLogo component renders the
+   one octopus shape, and this class only moves it. Kept beside the legacy
+   .thinkingDot rules until the indicator's markup is switched over. */
+.thinkingOctopus {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
   animation: octopus-swim 2.4s ease-in-out infinite;
 }
 
