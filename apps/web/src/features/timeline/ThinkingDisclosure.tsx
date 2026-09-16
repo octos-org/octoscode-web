@@ -47,11 +47,7 @@ export function ThinkingDisclosure({
         <span className={styles.foldSummary}>{summary}</span>
       </button>
       {expanded ? (
-        <pre
-          id={bodyId}
-          className={styles.foldBody}
-          style={{ whiteSpace: "pre-wrap" }}
-        >
+        <pre id={bodyId} className={styles.foldBody}>
           {entry.body}
         </pre>
       ) : null}

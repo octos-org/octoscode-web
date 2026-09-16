@@ -27,7 +27,7 @@ describe("App mounts the Fleet view (goal 3)", () => {
   });
 
   it("routes a Fleet surface with the same peerController value", () => {
-    expect(app).toContain("<FleetView");
+    expect(app).toContain("<FleetPane");
     expect(app).toMatch(/peerController=\{[^}]*session\.peerController/s);
   });
 

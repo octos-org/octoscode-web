@@ -5,32 +5,28 @@ import {
   type RpcNotification,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client/protocol";
+import {
+  addSystemMessage,
+  hasTerminal,
+  nextNoticeId,
+  upsert,
+  type TimelineEntry,
+  type TimelineKind,
+  type TimelineStatus,
+} from "./entry-model.ts";
 
-export type TimelineKind =
-  "user" | "assistant" | "reasoning" | "tool" | "system";
-export type TimelineStatus = "running" | "complete" | "error" | "info";
-
-export interface TimelineEntry {
-  id: string;
-  kind: TimelineKind;
-  title: string;
-  body: string;
-  status: TimelineStatus;
-  statusLabel?: string;
-  turnId?: string;
-  messageId?: string;
-  streamId?: string;
-  turnSettled?: true;
-  toolSettled?: true;
-  latestTurnOutcome?: string;
-  /** Explicit terminal state from this owner's hydrate/live lifecycle. */
-  textTerminal?: "completed" | "errored" | "interrupted";
-  omittedCount?: number;
-  /** First-seen wall-clock for a streamed block (duration in fold headers). */
-  startedAtMs?: number;
-  /** Latest stream time while running; final time once settled. */
-  endedAtMs?: number;
-}
+// The entry shape and the shell-side reducers live in `entry-model.ts` so the
+// app shell can write a system notice without loading the transcript fold.
+export {
+  addSystemMessage,
+  terminalTurnId,
+  timelineActivity,
+} from "./entry-model.ts";
+export type {
+  TimelineEntry,
+  TimelineKind,
+  TimelineStatus,
+} from "./entry-model.ts";
 
 export interface HydratedAssistantIdentity {
   messageId: string;
@@ -306,27 +302,6 @@ export function withHydratedTurnOutcome(
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
-export function timelineActivity(
-  entries: readonly TimelineEntry[],
-  activeTurnId: string | null,
-): string | null {
-  if (!activeTurnId || hasTerminal(entries, activeTurnId)) return null;
-  const turn = entries.filter((entry) => entry.turnId === activeTurnId);
-  const tool = turn.findLast(
-    (entry) => entry.kind === "tool" && entry.status === "running",
-  );
-  if (tool) return `Running ${tool.title}…`;
-  const current = turn.findLast(
-    (entry) => entry.kind === "assistant" || entry.kind === "reasoning",
-  );
-  if (current?.status === "running") {
-    return current.kind === "reasoning" ? "Thinking…" : "Writing response…";
-  }
-  return turn.some((entry) => entry.kind === "tool")
-    ? "Preparing next step…"
-    : "Working…";
-}
-
 export function addOptimisticUser(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -340,16 +315,6 @@ export function addOptimisticUser(
     status: "complete",
     turnId,
   });
-}
-
-export function addSystemMessage(
-  entries: readonly TimelineEntry[],
-  id: string,
-  title: string,
-  body: string,
-  status: TimelineStatus = "info",
-): TimelineEntry[] {
-  return upsert(entries, { id, kind: "system", title, body, status });
 }
 
 export function foldNotification(
@@ -471,21 +436,6 @@ export function foldNotification(
     default:
       return entries.slice();
   }
-}
-
-export function terminalTurnId(notification: RpcNotification): string | null {
-  if (
-    notification.method === CORE_UI_METHODS.TURN_COMPLETED ||
-    notification.method === CORE_UI_METHODS.TURN_ERROR
-  ) {
-    return isRecord(notification.params) &&
-      typeof notification.params.turn_id === "string"
-      ? notification.params.turn_id
-      : null;
-  }
-  if (notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE) return null;
-  const envelope = parseProjectionEnvelope(notification.params);
-  return envelope?.payload.type === "turn_terminal" ? envelope.turn_id : null;
 }
 
 /** The turn a notification carries activity for, regardless of method. */
@@ -768,18 +718,6 @@ function sweepTurnStreamtails(
     next.push(entry);
   }
   return changed ? next : entries.slice();
-}
-
-function hasTerminal(
-  entries: readonly TimelineEntry[],
-  turnId: string,
-): boolean {
-  return entries.some(
-    (entry) =>
-      entry.id === `terminal:${turnId}` ||
-      (entry.turnId === turnId &&
-        (entry.turnSettled || entry.textTerminal !== undefined)),
-  );
 }
 
 function settleReasoning(
@@ -1073,34 +1011,6 @@ function upsertUser(
   const next = entries.filter((entry) => entry.id !== user.id);
   next.splice(firstReply, 0, user);
   return next;
-}
-
-function nextNoticeId(
-  entries: readonly TimelineEntry[],
-  prefix: string,
-): string {
-  let ordinal = entries.length;
-  while (entries.some((entry) => entry.id === `${prefix}:${ordinal}`)) {
-    ordinal += 1;
-  }
-  return `${prefix}:${ordinal}`;
-}
-
-function upsert(
-  entries: readonly TimelineEntry[],
-  next: TimelineEntry,
-): TimelineEntry[] {
-  const index = entries.findIndex((entry) => entry.id === next.id);
-  if (index < 0) return [...entries, next];
-  const previous = entries[index];
-  // A hydrated terminal fence survives later canonical refinement of the row.
-  if (
-    previous?.textTerminal &&
-    previous.turnId === next.turnId &&
-    next.textTerminal === undefined
-  )
-    next = { ...next, textTerminal: previous.textTerminal };
-  return entries.map((entry, current) => (current === index ? next : entry));
 }
 
 function patchEntry(

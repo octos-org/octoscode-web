@@ -4,7 +4,7 @@ import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
   addSystemMessage,
   timelineActivity,
-} from "../features/timeline/model.ts";
+} from "../features/timeline/entry-model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
 import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
@@ -21,7 +21,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import {
   CORE_UI_FEATURES,
@@ -32,12 +31,9 @@ import { buildRowControlCommand } from "../features/control/peer-row-command.ts"
 import {
   peerAnswerRequest,
   peerRowAttention,
-} from "../features/peers/PeerDock.tsx";
+} from "../features/peers/peer-row-view.ts";
 import { toControlAnswers } from "../features/questions/answers.ts";
-import {
-  EMPTY_PEER_SNAPSHOT,
-  type PeerRosterEntry,
-} from "../features/peers/peer-manager.ts";
+import type { PeerRosterEntry } from "../features/peers/peer-roster.ts";
 import type { PeerControlCommand } from "../features/control/peer-control-commands.ts";
 import {
   shortcutTargetIsTextInput,
@@ -141,13 +137,7 @@ import {
   type FleetStartSequencerState,
 } from "./fleet-start-sequencer.ts";
 import type { FleetStartState } from "../features/control/fleet-actions.ts";
-import { noticeMessage } from "../features/models/model-settings.ts";
-import {
-  aggregateFleetFacts,
-  unionFleetFacts,
-  type FleetUnionRow,
-} from "../features/fleet/fleet-facts.ts";
-import type { FleetRosterPeer } from "../features/fleet/fleet-model.ts";
+import { noticeMessage } from "../features/models/model-notices.ts";
 import { serverWorkingDirectoryEntry } from "../features/workspace-create/server-working-directory.ts";
 import { workspaceBrowseAdapter } from "../features/workspace-create/workspace-browse-adapter.ts";
 import type {
@@ -232,9 +222,9 @@ const SessionConfigPane = lazyNamed(
   () => import("../features/session-config/SessionConfigPane.tsx"),
   (module) => module.SessionConfigPane,
 );
-const FleetView = lazyNamed(
-  () => import("../features/fleet/FleetView.tsx"),
-  (module) => module.FleetView,
+const FleetPane = lazyNamed(
+  () => import("../features/fleet/FleetPane.tsx"),
+  (module) => module.FleetPane,
 );
 const SettingsDefaultsSection = lazyNamed(
   () => import("../features/session-config/SettingsDefaultsSection.tsx"),
@@ -2079,62 +2069,6 @@ export function App() {
         session.opened.workspace_root !== undefined,
       )
     : null;
-  // Fleet rows: the SAME roster the controller value carries, projected
-  // through ux-fleet-02's fleetRosterFromController (goal 3 mount).
-  // Round 3 item 5 (judge #3): rows come from data-05's FleetFacts UNION —
-  // inventory acceptance facts (model, elapsed from accepted_at_ms, goal)
-  // ∪ the manager's live roster axis — keyed by the EXACT adopted session
-  // id, never a slug-derived identity.
-  const fleetFacts = useMemo(
-    () =>
-      aggregateFleetFacts(
-        navigableSessions.map((ref) => ({
-          sessionId: ref.sessionId,
-          inventory: session.driverInventory,
-        })),
-      ),
-    // The walked inventory + the session list; the facts are pure.
-    [session.driverInventory, navigableSessions],
-  );
-  // The Fleet roster must follow the peer manager's OWN publishes. `peers.manager`
-  // is a STABLE reference, so a memo keyed on it alone froze the roster: a row's
-  // activity change (a pending approval, say) reached the dock — which subscribes
-  // — but never Fleet, whose rows only moved when some unrelated dependency
-  // happened to change. Subscribing here is the same seam the dock uses.
-  const peerRosterSnapshot = useSyncExternalStore(
-    peers.manager?.subscribe ?? subscribeNoPeerRoster,
-    peers.manager?.getSnapshot ?? emptyPeerRosterSnapshot,
-    peers.manager?.getSnapshot ?? emptyPeerRosterSnapshot,
-  );
-  const fleetRosterPeers = useMemo(() => {
-    const managerPeers = peerRosterSnapshot.peers;
-    return unionFleetFacts(fleetFacts, {
-      rosters: [
-        {
-          sessionId: session.opened?.session_id ?? "",
-          peers: managerPeers.map((peer) => ({
-            identity: peer.identity,
-            slug: peer.slug,
-            ...(peer.operationId !== undefined && peer.operationId !== null
-              ? { operationId: peer.operationId }
-              : {}),
-            status: peer.status,
-            activity: peer.activity,
-            ...(peer.outcome !== undefined && peer.outcome !== null
-              ? { outcome: peer.outcome }
-              : {}),
-            ...(peer.outputTokens !== undefined
-              ? { outputTokens: peer.outputTokens }
-              : {}),
-          })),
-        },
-      ],
-    });
-  }, [fleetFacts, peerRosterSnapshot, session.opened?.session_id]);
-  const fleetPeers: readonly FleetRosterPeer[] = useMemo(
-    () => fleetRosterFromUnion(fleetRosterPeers, activeWorkspacePath),
-    [fleetRosterPeers, activeWorkspacePath],
-  );
   const fleetSessions = navigableSessions.map((ref) => ({
     sessionId: ref.sessionId,
     name: knownSessionTitle(ref.sessionId, t),
@@ -3094,17 +3028,11 @@ export function App() {
             </header>
             {session.opened ? (
               <Suspense fallback={<DeferredSurface label="Loading fleet…" />}>
-                <FleetView
-                  peerController={
-                    session.peerController &&
-                    session.peerController.readiness === "ready"
-                      ? {
-                          ...session.peerController,
-                          readiness: "ready" as const,
-                          ...(fleetPeers !== null ? { fleetPeers } : {}),
-                        }
-                      : null
-                  }
+                <FleetPane
+                  driverInventory={session.driverInventory}
+                  rosterSource={peers.manager}
+                  workspacePath={activeWorkspacePath}
+                  peerController={session.peerController}
                   sessions={fleetSessions}
                   selectedSessionId={session.opened?.session_id ?? ""}
                   startState={fleetStartSettle}
@@ -4020,9 +3948,6 @@ const SETTINGS_LABELS = {
  * app is not.
  */
 /** Stable no-peer-manager fallbacks for the roster store subscription. */
-const subscribeNoPeerRoster = () => () => undefined;
-const emptyPeerRosterSnapshot = () => EMPTY_PEER_SNAPSHOT;
-
 function browserLocalStorage(): Storage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
@@ -4067,53 +3992,6 @@ function peerAnswerWireRequest(
       allowFreeText: question.allowFreeText,
     })),
   };
-}
-
-/** Round 3 item 5: union rows → the FleetView roster shape (pure adapter). */
-function fleetRosterFromUnion(
-  union: ReturnType<typeof unionFleetFacts>,
-  workspacePath: string,
-): import("../features/fleet/fleet-model.ts").FleetRosterPeer[] {
-  const now = Date.now();
-  return union.rows.map((row) => {
-    const statusWord = unionStatusWord(row);
-    return {
-      slug: row.slug,
-      label: row.label,
-      title: row.fact ? "Peer started" : "Peer started",
-      statusWord,
-      sessionId: row.adoptedSessionId,
-      sessionName: workspaceName(row.fact?.workspaceRoot ?? workspacePath),
-      goalId: row.goalId,
-      elapsedMs:
-        row.acceptedAtMs !== null ? Math.max(0, now - row.acceptedAtMs) : 0,
-      tokens: row.tokens ?? 0,
-      controlSupported: row.operationId !== null,
-    } satisfies import("../features/fleet/fleet-model.ts").FleetRosterPeer;
-  });
-}
-
-function unionStatusWord(
-  row: FleetUnionRow,
-): import("../features/fleet/fleet-model.ts").FleetStatusWord {
-  if (row.activity === "blocked") return "Waiting for your approval" as const;
-  if (row.status === null) return "Requested" as const;
-  switch (row.status) {
-    case "opening":
-      return "Starting" as const;
-    case "started":
-      return "Working" as const;
-    case "closed":
-      return "Finished" as const;
-    case "finished":
-      return "Finished" as const;
-    case "stopped":
-      return "Stopped" as const;
-    case "failed":
-      return "Failed" as const;
-    default:
-      return "Outcome unknown" as const;
-  }
 }
 
 function knownSessionTitle(

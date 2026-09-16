@@ -44,7 +44,7 @@ describe("(a) Fleet pane occupies the MAIN content slot, never the sidebar", () 
 
 describe("(b) Start form's Session selector defaults to the selected session", () => {
   it("passes the RAW session id, not the workspace-prefixed product key", () => {
-    const mount = app.indexOf("<FleetView");
+    const mount = app.indexOf("<FleetPane");
     const region = app.slice(mount, mount + 1600);
     expect(region).toMatch(/selectedSessionId=\{/);
     expect(region).not.toMatch(/selectedSessionId=\{activeSessionKey\}/);

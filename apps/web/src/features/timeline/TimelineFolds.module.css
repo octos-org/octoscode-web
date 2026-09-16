@@ -28,7 +28,8 @@
 
 .foldChevron {
   flex: none;
-  font-size: 10px;
+  /* 11px is the repository's floor for rendered text (policy:verify). */
+  font-size: 11px;
   color: var(--dsw-alias-label-caption, inherit);
   transition: transform 120ms ease-in-out;
 }
@@ -38,6 +39,8 @@
 }
 
 .foldBody {
+  /* Was an inline JSX style; policy:verify keeps styling in the module. */
+  white-space: pre-wrap;
   margin: 4px 0 8px;
 }
 

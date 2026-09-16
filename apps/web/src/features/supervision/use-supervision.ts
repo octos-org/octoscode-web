@@ -24,7 +24,7 @@ import {
 } from "./model.ts";
 import { applyPlanUpdated, clearPlanForTurn } from "./plan.ts";
 import { RequestGate } from "../async/request-gate.ts";
-import { terminalTurnId } from "../timeline/model.ts";
+import { terminalTurnId } from "../timeline/entry-model.ts";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
 
 interface SupervisionDependencies {

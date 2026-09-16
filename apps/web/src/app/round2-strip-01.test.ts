@@ -23,10 +23,10 @@ describe("#1 Fleet view keeps state across navigation", () => {
   });
 
   it("keeps FleetView mounted regardless of route", () => {
-    const fleetMounts = (app.match(/<FleetView/g) ?? []).length;
+    const fleetMounts = (app.match(/<FleetPane/g) ?? []).length;
     expect(fleetMounts).toBe(1);
     // And it is rendered unconditionally (not behind a route ternary).
-    expect(app).not.toMatch(/\{fleetRouteActive \? \([\s\S]{0,400}<FleetView/);
+    expect(app).not.toMatch(/\{fleetRouteActive \? \([\s\S]{0,400}<FleetPane/);
   });
 });
 

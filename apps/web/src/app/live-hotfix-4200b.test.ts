@@ -97,6 +97,6 @@ describe("(2) Fleet pane hidden pre-session; empty state without Start", () => {
     );
     const emptyStateRegion = app.slice(fleetPaneStart, fleetPaneStart + 2200);
     expect(emptyStateRegion).toMatch(/session\.opened \?/);
-    expect(emptyStateRegion).toMatch(/<FleetView/);
+    expect(emptyStateRegion).toMatch(/<FleetPane/);
   });
 });

@@ -12,7 +12,7 @@ import {
   parseRuntimeDisposition,
   type ModelNoticeBoard,
   type ModelRuntimeDisposition,
-} from "./model-settings.ts";
+} from "./model-notices.ts";
 
 export interface ModelSelectionRuntimeState {
   available: boolean;
