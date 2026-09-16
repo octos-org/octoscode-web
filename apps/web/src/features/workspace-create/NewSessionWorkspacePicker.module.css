@@ -107,6 +107,29 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Browsing keeps a steady frame: the card is centred, so letting its height
+   follow the folder count made the whole dialog jump on every step in or out.
+   The browse view holds one height and scrolls its list instead. */
+.body[data-workspace-browser="true"] {
+  /* `flex: none` matters: as a flex child the body otherwise grows to its
+     content and the height below is ignored, which is what made the card jump. */
+  flex: none;
+  height: 520px;
+  max-height: calc(100vh - 220px);
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.body[data-workspace-browser="true"] .workspaceList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.body[data-workspace-browser="true"] .footer {
+  margin-top: auto;
+}
+
 .body {
   display: flex;
   flex: 1;

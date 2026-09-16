@@ -173,51 +173,6 @@ export function WorkspaceFolderBrowser({
         </p>
       ) : null}
 
-      {state.loading && !listing ? (
-        <div className={styles.state} role="status" aria-live="polite">
-          <SkeletonRows rows={3} />
-          <span>{t("Loading folders…")}</span>
-        </div>
-      ) : null}
-
-      {listing ? (
-        listing.entries.length ? (
-          <ul className={styles.workspaceList} aria-label={t("Subfolders")}>
-            {listing.entries.map((entry) => (
-              <li key={entry.path} className={styles.browseRow}>
-                <button
-                  type="button"
-                  className={styles.workspace}
-                  aria-label={t("Open folder {value0}", { value0: entry.name })}
-                  disabled={busy}
-                  onClick={() => void load(entry.path)}
-                >
-                  <span className={styles.folder} aria-hidden="true">
-                    <FolderIcon />
-                  </span>
-                  <span className={styles.workspaceText}>
-                    <span className={styles.workspaceName}>{entry.name}</span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  aria-label={t("Use folder {value0}", { value0: entry.name })}
-                  disabled={busy}
-                  onClick={() => onChoose(entry.path)}
-                >
-                  {t("Use")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={styles.pathHelp} data-browse-empty="true">
-            {t("No subfolders here.")}
-          </p>
-        )
-      ) : null}
-
       {canCreateWorkspaceFolder(listing) ? (
         state.newFolderOpen ? (
           <form className={styles.newFolder} onSubmit={submitNewFolder}>
@@ -276,6 +231,51 @@ export function WorkspaceFolderBrowser({
             <PlusIcon />
             <span>{t("New folder")}</span>
           </button>
+        )
+      ) : null}
+
+      {state.loading && !listing ? (
+        <div className={styles.state} role="status" aria-live="polite">
+          <SkeletonRows rows={3} />
+          <span>{t("Loading folders…")}</span>
+        </div>
+      ) : null}
+
+      {listing ? (
+        listing.entries.length ? (
+          <ul className={styles.workspaceList} aria-label={t("Subfolders")}>
+            {listing.entries.map((entry) => (
+              <li key={entry.path} className={styles.browseRow}>
+                <button
+                  type="button"
+                  className={styles.workspace}
+                  aria-label={t("Open folder {value0}", { value0: entry.name })}
+                  disabled={busy}
+                  onClick={() => void load(entry.path)}
+                >
+                  <span className={styles.folder} aria-hidden="true">
+                    <FolderIcon />
+                  </span>
+                  <span className={styles.workspaceText}>
+                    <span className={styles.workspaceName}>{entry.name}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  aria-label={t("Use folder {value0}", { value0: entry.name })}
+                  disabled={busy}
+                  onClick={() => onChoose(entry.path)}
+                >
+                  {t("Use")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.pathHelp} data-browse-empty="true">
+            {t("No subfolders here.")}
+          </p>
         )
       ) : null}
 
