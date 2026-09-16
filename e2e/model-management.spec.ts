@@ -142,7 +142,10 @@ test("manages a provider through the DSH-style Models settings flow", async ({
 
   added = configuredProvider(settings, "deepseek-chat");
   await added.getByRole("button", { name: "Delete Deepseek Chat" }).click();
-  const confirmation = settings.getByRole("dialog", {
+  // Modal surfaces render at the page root (they must not be trapped in an
+  // opener's stacking or scrolling context — see ModalSurface), so this
+  // confirmation is a sibling of Settings rather than a descendant.
+  const confirmation = page.getByRole("dialog", {
     name: "Delete model provider?",
   });
   const deleteButton = confirmation.getByRole("button", {

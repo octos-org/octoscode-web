@@ -94,6 +94,16 @@ export function ModalSurface({
         ? document.activeElement
         : null;
     modalStack.push(dialog);
+    // Surfaces render at the page root, so nesting no longer decides which one
+    // is on top: a confirmation opened from inside another dialog is its
+    // sibling, and the opener's own z-index could sit above it and swallow the
+    // clicks. Layer by open order instead, above whatever the callers' modules
+    // declare. Restored on close so a reopened surface starts clean.
+    const backdropElement = backdropRef.current;
+    const previousZIndex = backdropElement?.style.zIndex ?? "";
+    if (backdropElement) {
+      backdropElement.style.zIndex = String(1000 + modalStack.length * 10);
+    }
     const frame = requestAnimationFrame(() => {
       if (modalStack.at(-1) === dialog) {
         (initialFocusRef?.current ?? dialog).focus();
@@ -176,6 +186,7 @@ export function ModalSurface({
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("keydown", handleEscape);
+      if (backdropElement) backdropElement.style.zIndex = previousZIndex;
       const wasTop = modalStack.at(-1) === dialog;
       const index = modalStack.indexOf(dialog);
       if (index !== -1) modalStack.splice(index, 1);
