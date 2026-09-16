@@ -213,6 +213,17 @@ export function clearKnownSessions(
   writeTabConnection(tabStorage, { ...current, knownSessions: [] });
 }
 
+/**
+ * The last origin this browser actually saved, or null when this is a first
+ * visit. WEB-PAIRING-CONTRACT-5100 §Discovery probes exactly this address and
+ * nothing else — never the configured default, and never a range of ports.
+ */
+export function loadDurableEndpoint(
+  durableStorage: StorageLike,
+): string | null {
+  return readDurable(durableStorage)?.endpoint ?? null;
+}
+
 export function loadAutoConnect(tabStorage: StorageLike): boolean {
   return readTabConnection(tabStorage)?.autoConnect === true;
 }

@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
@@ -982,6 +983,74 @@ if (mockAuthMode === "required" && mockAuthTokens.size === 0) {
     "OCTOSCODE_MOCK_AUTH_TOKENS must contain a fixture token when auth is required",
   );
 }
+// WEB-PAIRING-CONTRACT-5100 — the pairing half of the fixture. One code per
+// process start, single use, 5 minutes, at most 10 failed claims. The code is
+// FIXED here (a real server mints it) so a spec can build the link it needs;
+// /__test__/pair/reset re-mints it and stages each refusal kind.
+const PAIR_CODE = (process.env.OCTOSCODE_MOCK_PAIR_CODE ?? "R7K2QPX9")
+  .trim()
+  .toUpperCase();
+const PAIR_TOKEN = (
+  process.env.OCTOSCODE_MOCK_PAIR_TOKEN ?? "paired-e2e-token"
+).trim();
+const PAIR_CODE_SHAPE = /^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{8}$/;
+const PAIR_TTL_MS = 5 * 60_000;
+const MAX_PAIR_ATTEMPTS = 10;
+if (!PAIR_CODE_SHAPE.test(PAIR_CODE)) {
+  throw new Error("OCTOSCODE_MOCK_PAIR_CODE must be 8 Crockford base32 chars");
+}
+// The claimed token must authenticate the socket that follows it.
+mockAuthTokens.add(PAIR_TOKEN);
+const PAIR_MODES = new Set([
+  "fresh",
+  "burned",
+  "expired",
+  "locked",
+  "unsupported",
+]);
+let pairState = freshPairState();
+
+function freshPairState(mode = "fresh") {
+  return {
+    mode,
+    mintedAt:
+      mode === "expired" ? Date.now() - PAIR_TTL_MS - 1_000 : Date.now(),
+    burned: mode === "burned",
+    locked: mode === "locked",
+    failures: mode === "locked" ? MAX_PAIR_ATTEMPTS : 0,
+    supported: mode !== "unsupported",
+  };
+}
+
+/** Case-insensitive against the printed alphabet, and constant-time. */
+function pairCodeMatches(candidate) {
+  const left = Buffer.from(candidate, "utf8");
+  const right = Buffer.from(PAIR_CODE, "utf8");
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/** Loopback only — a wider peer is told nothing, not told "no". */
+function isLoopbackPeer(request) {
+  const address = request.socket.remoteAddress ?? "";
+  const bare = address.startsWith("::ffff:") ? address.slice(7) : address;
+  return bare === "::1" || bare === "127.0.0.1" || bare.startsWith("127.");
+}
+
+function pairErrorKind(candidate) {
+  // A malformed body is not a guess: it never touches the attempt budget.
+  if (!PAIR_CODE_SHAPE.test(candidate)) return "pair_code_invalid";
+  if (pairState.locked) return "pair_code_locked";
+  if (Date.now() - pairState.mintedAt > PAIR_TTL_MS) return "pair_code_expired";
+  if (pairState.burned) return "pair_code_unknown";
+  if (pairCodeMatches(candidate)) return null;
+  pairState.failures += 1;
+  if (pairState.failures >= MAX_PAIR_ATTEMPTS) {
+    pairState.locked = true;
+    pairState.burned = true;
+    return "pair_code_locked";
+  }
+  return "pair_code_unknown";
+}
 const defaultProfileId = "coding";
 const sessionChannels = new Set([
   "api",
@@ -1103,11 +1172,121 @@ function modelTitle(modelId) {
   return modelId;
 }
 
+/** Bounded body read: a fixture never buffers an unbounded claim. */
+function readJsonBody(request, limit = 4_096) {
+  return new Promise((resolve) => {
+    let raw = "";
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      resolve(value);
+    };
+    request.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > limit) finish(null);
+    });
+    request.on("end", () => {
+      try {
+        finish(JSON.parse(raw));
+      } catch {
+        finish(null);
+      }
+    });
+    request.on("error", () => finish(null));
+  });
+}
+
 const http = createServer((request, response) => {
   if (request.url === "/health") {
     response
       .writeHead(200, { "content-type": "application/json" })
       .end('{"ok":true}');
+    return;
+  }
+  // WEB-PAIRING-CONTRACT-5100 §Server — /pair/info and /pair/claim, first so a
+  // CORS preflight from the web client's own origin is answered before any
+  // other route can 404 it.
+  const pairPath = new URL(request.url, "http://fixture").pathname;
+  if (pairPath === "/pair/info" || pairPath === "/pair/claim") {
+    response.setHeader(
+      "access-control-allow-origin",
+      request.headers.origin ?? "*",
+    );
+    response.setHeader("vary", "origin");
+    if (request.method === "OPTIONS") {
+      response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+      response.setHeader("access-control-allow-headers", "content-type");
+      response.setHeader("access-control-max-age", "600");
+      response.writeHead(204).end();
+      return;
+    }
+    // A non-loopback peer, and a server with pairing switched off, both answer
+    // 404: the endpoint never confirms it exists to the wider network.
+    if (!isLoopbackPeer(request) || !pairState.supported) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (pairPath === "/pair/info") {
+      if (request.method !== "GET") {
+        response.writeHead(405).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          product: "octos",
+          version: "2.0.3-fixture",
+          pairing_required: !pairState.burned && !pairState.locked,
+          server_origin: `http://127.0.0.1:${port}`,
+        }),
+      );
+      return;
+    }
+    if (request.method !== "POST") {
+      response.writeHead(405).end();
+      return;
+    }
+    void readJsonBody(request).then((body) => {
+      const candidate =
+        body && typeof body.code === "string"
+          ? body.code.trim().toUpperCase()
+          : "";
+      const kind = pairErrorKind(candidate);
+      if (kind) {
+        response
+          .writeHead(400, { "content-type": "application/json" })
+          .end(JSON.stringify({ error: { kind } }));
+        return;
+      }
+      // Single use: the first success burns the code.
+      pairState.burned = true;
+      response.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          token: PAIR_TOKEN,
+          server_origin: `http://127.0.0.1:${port}`,
+        }),
+      );
+    });
+    return;
+  }
+  if (pairPath === "/__test__/pair/reset" && request.method === "POST") {
+    const mode =
+      new URL(request.url, "http://fixture").searchParams.get("mode") ??
+      "fresh";
+    if (!PAIR_MODES.has(mode)) {
+      response.writeHead(400).end("Unknown pairing fixture mode");
+      return;
+    }
+    pairState = freshPairState(mode);
+    response.writeHead(204).end();
+    return;
+  }
+  if (pairPath === "/__test__/pair/state" && request.method === "GET") {
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(
+        JSON.stringify({ code: PAIR_CODE, token: PAIR_TOKEN, ...pairState }),
+      );
     return;
   }
   if (

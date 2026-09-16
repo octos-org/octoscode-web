@@ -82,12 +82,27 @@ import {
   loadAutoConnect,
   loadConnectionPreferences,
   loadComposerDrafts,
+  loadDurableEndpoint,
   loadKnownSessions,
   rememberKnownSession,
   saveConnectionPreferences,
   saveComposerDrafts,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
+import {
+  claimPairingCode,
+  consumePairingLink,
+  loopbackOrigin,
+  pairingErrorCopy,
+  probePairingInfo,
+} from "../features/connection/pairing.ts";
+import {
+  forgetRememberedToken,
+  loadRememberedToken,
+  rememberToken,
+  type TokenStorageKind,
+} from "../features/connection/remembered-token.ts";
+import { connectionEndpointError } from "../features/connection/validation.ts";
 import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
@@ -374,13 +389,44 @@ export function App() {
     );
   }
   const restoreAttemptedRef = useRef(false);
-  const [connection, setConnection] = useState(() =>
-    loadConnectionPreferences(
+  // WEB-PAIRING-CONTRACT-5100 §Client: main.tsx already read `octos`/`pair` and
+  // rewrote the address before this first render; this reads what it captured.
+  // The code lives in memory only, for exactly one POST.
+  const [pairingLink] = useState(() => consumePairingLink());
+  /** True when this tab woke up holding a token remembered on this device. */
+  const rememberedConnectRef = useRef(false);
+  /** True when this device ALREADY remembers a token for the loaded origin. */
+  const rememberedAtStartRef = useRef(false);
+  const [connection, setConnection] = useState(() => {
+    const loaded = loadConnectionPreferences(
       initialConnection,
       browserStorage("localStorage"),
       browserStorage("sessionStorage"),
-    ),
+    );
+    const remembered = loadRememberedToken(
+      browserStorage("localStorage"),
+      loaded.endpoint,
+    );
+    // The two are NOT the same question. A reload finds the token in this
+    // tab's own storage, which must not be read as "the operator unchecked
+    // Remember" and silently erase the device memory.
+    rememberedAtStartRef.current = remembered !== null;
+    // A pairing link brings its own token from /pair/claim; nothing is typed.
+    if (pairingLink) return { ...loaded, token: "" };
+    if (loaded.token || !remembered) return loaded;
+    rememberedConnectRef.current = true;
+    return { ...loaded, token: remembered };
+  });
+  const connectionRef = useRef(connection);
+  // §Remembering: ON by default for a pairing link and for an origin this
+  // device already remembers; OFF for a hand-typed token.
+  const [remember, setRemember] = useState(
+    () => Boolean(pairingLink) || rememberedAtStartRef.current,
   );
+  const [pairingClaiming, setPairingClaiming] = useState(Boolean(pairingLink));
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [tokenStorageBlocked, setTokenStorageBlocked] = useState(false);
+  const [discoveredOrigin, setDiscoveredOrigin] = useState<string | null>(null);
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
@@ -711,13 +757,118 @@ export function App() {
       browserStorage("localStorage"),
       browserStorage("sessionStorage"),
     );
+    connectionRef.current = connection;
   }, [connection]);
 
+  // WEB-PAIRING-CONTRACT-5100 §Client steps 1-4. The code is read from the
+  // closure, posted once, and dropped: it reaches neither storage nor a log.
   useEffect(() => {
-    if (restoreAttemptedRef.current || !restoreConnectionRef.current) return;
+    if (!pairingLink) return;
+    const origin = loopbackOrigin(pairingLink.origin);
+    if (!origin) {
+      // Step 1: refused before any request is made, and the refused address is
+      // NOT prefilled into the form the operator falls back to.
+      setPairingError(pairingErrorCopy("pair_origin_not_loopback"));
+      setPairingClaiming(false);
+      setRemember(rememberedAtStartRef.current);
+      return;
+    }
+    const controller = new AbortController();
+    let live = true;
+    void claimPairingCode(pairingLink, { signal: controller.signal }).then(
+      (result) => {
+        if (!live) return;
+        if (!result.ok) {
+          // Step 4: bounded copy per kind, and the normal form with the
+          // origin prefilled so the operator can paste a token instead.
+          setPairingError(pairingErrorCopy(result.kind));
+          setPairingClaiming(false);
+          // The token will now be hand-typed, so Remember goes back to its
+          // hand-typed default unless this device already remembers one.
+          setRemember(rememberedAtStartRef.current);
+          setConnection((current) => ({ ...current, endpoint: origin }));
+          return;
+        }
+        const next = {
+          ...connectionRef.current,
+          endpoint: result.claim.serverOrigin,
+          token: result.claim.token,
+        };
+        setConnection(next);
+        session.connect(next);
+      },
+    );
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, [pairingLink]);
+
+  // The pairing card stays up until the connect it started settles, so a
+  // paired operator is never shown a box asking for a token they already have.
+  useEffect(() => {
+    if (!pairingClaiming) return;
+    if (session.authenticated || session.error) setPairingClaiming(false);
+  }, [pairingClaiming, session.authenticated, session.error]);
+
+  // §Remembering: checked persists the token under the per-origin durable key;
+  // unchecked leaves it in sessionStorage exactly as before. A write that
+  // cannot be read back downgrades to in-memory WITH a visible notice.
+  useEffect(() => {
+    const durable = browserStorage("localStorage");
+    if (!remember) {
+      forgetRememberedToken(durable, connection.endpoint);
+      return;
+    }
+    if (
+      !connection.token.trim() ||
+      connectionEndpointError(connection.endpoint)
+    ) {
+      return;
+    }
+    setTokenStorageBlocked(
+      !rememberToken(durable, connection.endpoint, connection.token),
+    );
+  }, [remember, connection.endpoint, connection.token]);
+
+  // §Discovery: with no link and no remembered token, probe the ONE origin
+  // this browser last saw. A 404 is "pairing not supported" — no complaint —
+  // and every other failure is silent. Never a range of ports.
+  useEffect(() => {
+    if (pairingLink || rememberedConnectRef.current) return;
+    if (restoreConnectionRef.current || connection.token.trim()) return;
+    const last = loadDurableEndpoint(browserStorage("localStorage"));
+    if (!last) return;
+    const controller = new AbortController();
+    let live = true;
+    void probePairingInfo(last, { signal: controller.signal }).then((probe) => {
+      if (live && probe.kind === "available") {
+        setDiscoveredOrigin(probe.info.serverOrigin);
+      }
+    });
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (restoreAttemptedRef.current) return;
+    // A pairing link drives its own connect; nothing else may race it.
+    if (pairingLink) return;
+    if (!restoreConnectionRef.current && !rememberedConnectRef.current) return;
     const timer = window.setTimeout(() => {
       if (restoreAttemptedRef.current) return;
       restoreAttemptedRef.current = true;
+      // §Remembering: a token remembered on this device is asked for once. A
+      // fresh tab authenticates with it and stops at the workspace gate — it
+      // does not resurrect another tab's Session selection.
+      if (!restoreConnectionRef.current) {
+        if (connection.endpoint.trim() && connection.token.trim()) {
+          session.connect(connection);
+        }
+        return;
+      }
       if (connection.endpoint.trim() && connection.sessionId.trim()) {
         if (savedLink) {
           const rememberedKey = workspaceSessionKey(
@@ -1712,11 +1863,22 @@ export function App() {
     const identityChanged =
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
+      setPairingError(null);
+      setDiscoveredOrigin(null);
       clearKnownSessions(browserStorage("sessionStorage"), connection);
       let cleared = clearConnectionPreferences(
         browserStorage("localStorage"),
         browserStorage("sessionStorage"),
       );
+      // §Remembering: the device memory belongs to the identity being left.
+      if (
+        !forgetRememberedToken(
+          browserStorage("localStorage"),
+          connection.endpoint,
+        )
+      ) {
+        cleared = false;
+      }
       for (const endpoint of new Set([
         connection.endpoint.trim(),
         next.endpoint.trim(),
@@ -1750,12 +1912,24 @@ export function App() {
   };
   const disconnect = () => {
     restoreConnectionRef.current = false;
+    setPairingClaiming(false);
     setAutoConnect(browserStorage("sessionStorage"), false);
     setSettingsOpen(false);
     setWorkspacePicker((current) => ({ ...current, open: false }));
     session.disconnect();
   };
   const forgetConnection = () => {
+    // §Remembering: Forget clears the device memory too, and the checkbox goes
+    // back to its hand-typed default.
+    const rememberedCleared = forgetRememberedToken(
+      browserStorage("localStorage"),
+      connection.endpoint,
+    );
+    rememberedConnectRef.current = false;
+    setRemember(false);
+    setTokenStorageBlocked(false);
+    setPairingError(null);
+    setDiscoveredOrigin(null);
     clearKnownSessions(browserStorage("sessionStorage"), connection);
     const tabRecentsCleared = clearRecentWorkspaces(
       browserStorage("sessionStorage"),
@@ -1779,10 +1953,20 @@ export function App() {
         browserStorage("localStorage"),
         browserStorage("sessionStorage"),
       ) ||
+        !rememberedCleared ||
         !tabRecentsCleared ||
         !durableRecentsCleared,
     );
     setConnection(initialConnection);
+  };
+
+  /** §Discovery: one button, one origin — the one that answered /pair/info. */
+  const useDiscoveredOrigin = () => {
+    if (!discoveredOrigin) return;
+    const next = { ...connectionRef.current, endpoint: discoveredOrigin };
+    setDiscoveredOrigin(null);
+    setConnection(next);
+    session.connect(next);
   };
 
   const projectedPermissionOptions = permissionOptions(
@@ -2045,6 +2229,13 @@ export function App() {
   ]);
 
   if (!showProductShell) {
+    // §Remembering: the single line the panel shows must name the storage that
+    // is ACTUALLY in effect, including the in-memory downgrade.
+    const tokenStorageKind: TokenStorageKind = tokenStorageBlocked
+      ? "memory"
+      : remember
+        ? "device"
+        : "tab";
     const gateStatus =
       session.status === "connected" ? "connecting" : session.status;
     // §5.1: a classified connect failure replaces the raw handshake error
@@ -2080,6 +2271,13 @@ export function App() {
             // half so an empty-token connect is not mis-diagnosed as a bad
             // address.
             handshakeAmbiguous={classified?.kind === "unreachable"}
+            pairing={pairingClaiming}
+            pairingError={pairingError}
+            tokenStorage={tokenStorageKind}
+            remember={remember}
+            onRememberChange={setRemember}
+            discoveredOrigin={discoveredOrigin}
+            onUseDiscovered={useDiscoveredOrigin}
             {...(failureActions !== undefined ? { failureActions } : {})}
             {...(cleanupFailed ? { storageWarning: STORAGE_CLEAR_WARNING } : {})}
             onChange={changeConnection}
