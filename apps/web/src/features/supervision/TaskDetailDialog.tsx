@@ -1,7 +1,8 @@
-import type { TaskArtifactRecord } from "@octos-org/octoscode-client";
+import type { TaskArtifactRecord } from "@octos-org/octoscode-client/protocol";
 import type { SupervisionRuntimeState } from "./model.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./TaskDetailDialog.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface TaskDetailDialogProps {
   state: SupervisionRuntimeState;
@@ -18,6 +19,7 @@ export function TaskDetailDialog({
   onReadArtifact,
   onLoadMoreArtifact,
 }: TaskDetailDialogProps) {
+  const t = useUiText();
   if (!state.detail.active) return null;
   const task = state.tasks.find(
     (candidate) => candidate.id === state.detail.taskId,
@@ -33,21 +35,21 @@ export function TaskDetailDialog({
     >
       <header className="review-header">
         <div>
-          <span className="eyebrow">Supervised task</span>
+          <span className="eyebrow">{t("Supervised task")}</span>
           <h2 id="task-detail-title" title={task?.title}>
-            {task?.title ?? "Task output"}
+            {task?.title ?? t("Task output")}
           </h2>
         </div>
         <div className="review-header-actions">
           <span
             className={`task-status-pill state-${task?.state ?? "unknown"}`}
           >
-            {task?.state ?? "loading"}
+            {task?.state ?? t("loading")}
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close task output"
+            aria-label={t("Close task output")}
           >
             ×
           </button>
@@ -63,18 +65,20 @@ export function TaskDetailDialog({
         {state.taskOutputAvailable ? (
           <section className="task-output-pane">
             <div className="task-pane-heading">
-              <span>Output</span>
+              <span>{t("Output")}</span>
               {state.detail.output ? (
                 <small>
-                  {state.detail.output.total_bytes.toLocaleString()} bytes ·{" "}
-                  {state.detail.output.source}
+                  {state.detail.output.total_bytes.toLocaleString()}
+                  {" " + t("bytes ·")} {state.detail.output.source}
                 </small>
               ) : null}
             </div>
             {state.detail.loading ? (
-              <div className="review-empty">Reading task output…</div>
+              <div className="review-empty">{t("Reading task output…")}</div>
             ) : (
-              <pre>{state.detail.text || "No output has been captured."}</pre>
+              <pre>
+                {state.detail.text || t("No output has been captured.")}
+              </pre>
             )}
             {state.detail.output && !state.detail.output.complete ? (
               <button
@@ -83,7 +87,9 @@ export function TaskDetailDialog({
                 disabled={state.detail.loadingMore}
                 onClick={onLoadMore}
               >
-                {state.detail.loadingMore ? "Loading…" : "Load more output"}
+                {state.detail.loadingMore
+                  ? t("Loading…")
+                  : t("Load more output")}
               </button>
             ) : null}
           </section>
@@ -93,7 +99,7 @@ export function TaskDetailDialog({
             className={`artifact-pane ${selected ? styles.artifactSelected : ""}`}
           >
             <div className="task-pane-heading">
-              <span>Artifacts</span>
+              <span>{t("Artifacts")}</span>
               <small>{state.detail.artifacts?.artifacts.length ?? 0}</small>
             </div>
             <div className="artifact-list">
@@ -111,18 +117,18 @@ export function TaskDetailDialog({
                 </button>
               ))}
               {!state.detail.artifacts?.artifacts.length ? (
-                <p>No artifacts were reported.</p>
+                <p>{t("No artifacts were reported.")}</p>
               ) : null}
             </div>
             {state.detail.artifactLoading ? (
-              <div className="artifact-content">Reading artifact…</div>
+              <div className="artifact-content">{t("Reading artifact…")}</div>
             ) : selected ? (
               <div className="artifact-content">
                 <strong>{selected.artifact.title}</strong>
                 <pre>
                   {selected.content ??
                     selected.artifact.content ??
-                    "No text content."}
+                    t("No text content.")}
                 </pre>
                 {selected.has_more ? (
                   <button
@@ -132,8 +138,8 @@ export function TaskDetailDialog({
                     onClick={onLoadMoreArtifact}
                   >
                     {state.detail.artifactLoading
-                      ? "Loading…"
-                      : "Load more artifact"}
+                      ? t("Loading…")
+                      : t("Load more artifact")}
                   </button>
                 ) : null}
               </div>

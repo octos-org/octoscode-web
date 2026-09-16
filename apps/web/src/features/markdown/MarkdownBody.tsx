@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { hasMath } from "./math.ts";
 import ReactMarkdown, {
   type Components,
   type UrlTransform,
@@ -15,7 +16,7 @@ interface MarkdownBodyProps {
   streaming?: boolean;
 }
 
-const safeUrlTransform: UrlTransform = (url, key) => {
+export const safeUrlTransform: UrlTransform = (url, key) => {
   try {
     const protocol = new URL(url).protocol;
     if (key === "src") {
@@ -34,7 +35,7 @@ const safeUrlTransform: UrlTransform = (url, key) => {
   }
 };
 
-const components: Components = {
+export const markdownComponents: Components = {
   a({ href, children }) {
     if (!href) return <>{children}</>;
     return (
@@ -88,17 +89,38 @@ const components: Components = {
   },
 };
 
+/** KaTeX and its fonts load only for a message that actually carries math. */
+const MathMarkdown = lazy(() =>
+  import("./MathMarkdown.tsx").then((module) => ({
+    default: module.MathMarkdown,
+  })),
+);
+
+function PlainMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={markdownComponents}
+      urlTransform={safeUrlTransform}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 export function MarkdownBody({ text, streaming = false }: MarkdownBodyProps) {
   if (streaming) return <pre className="md-streaming">{text}</pre>;
   return (
     <div className="markdown-body">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-        urlTransform={safeUrlTransform}
-      >
-        {text}
-      </ReactMarkdown>
+      {hasMath(text) ? (
+        // Until the math chunk resolves the same text renders unformatted
+        // rather than blank, so a reply is never briefly missing.
+        <Suspense fallback={<PlainMarkdown text={text} />}>
+          <MathMarkdown text={text} />
+        </Suspense>
+      ) : (
+        <PlainMarkdown text={text} />
+      )}
     </div>
   );
 }

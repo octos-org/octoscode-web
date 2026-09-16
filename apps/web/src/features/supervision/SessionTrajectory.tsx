@@ -1,5 +1,6 @@
 import { taskIsCancellable, type SupervisionRuntimeState } from "./model.ts";
 import styles from "./SessionTrajectory.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface SessionTrajectoryProps {
   state: SupervisionRuntimeState;
@@ -15,16 +16,17 @@ export function SessionTrajectory({
   onOpenTask,
   onCancelTask,
 }: SessionTrajectoryProps) {
+  const t = useUiText();
   return (
     <div className={styles.root}>
       <header className={styles.header}>
         <div>
-          <h2>Trajectory</h2>
-          <p>Plan and background work for this session.</p>
+          <h2>{t("Trajectory")}</h2>
+          <p>{t("Plan and background work for this session.")}</p>
         </div>
         {state.taskListAvailable || state.statusAvailable ? (
           <button type="button" onClick={onRefresh} disabled={state.loading}>
-            {state.loading ? "Refreshing…" : "Refresh"}
+            {state.loading ? t("Refreshing…") : t("Refresh")}
           </button>
         ) : null}
       </header>
@@ -38,31 +40,35 @@ export function SessionTrajectory({
       {state.statusAvailable ? (
         <section className={styles.section} aria-labelledby="trajectory-status">
           <div className={styles.sectionTitle}>
-            <h3 id="trajectory-status">Session status</h3>
+            <h3 id="trajectory-status">{t("Session status")}</h3>
           </div>
           {state.runtimeStatus ? (
             <dl className={styles.statusList}>
               <div>
-                <dt>Model</dt>
+                <dt>{t("Model")}</dt>
                 <dd>
                   {state.runtimeStatus.model?.title ??
                     state.runtimeStatus.model?.model ??
-                    "Not reported"}
+                    t("Not reported")}
                 </dd>
               </div>
               <div>
-                <dt>Permission</dt>
+                <dt>{t("Permission")}</dt>
                 <dd>
-                  {state.runtimeStatus.permission_profile ?? "Not reported"}
+                  {state.runtimeStatus.permission_profile ?? t("Not reported")}
                 </dd>
               </div>
               <div>
-                <dt>Health</dt>
-                <dd>{state.runtimeStatus.health?.status ?? "Not reported"}</dd>
+                <dt>{t("Health")}</dt>
+                <dd>
+                  {state.runtimeStatus.health?.status ?? t("Not reported")}
+                </dd>
               </div>
             </dl>
           ) : (
-            <p className={styles.empty}>Session status has not loaded yet.</p>
+            <p className={styles.empty}>
+              {t("Session status has not loaded yet.")}
+            </p>
           )}
         </section>
       ) : null}
@@ -70,7 +76,7 @@ export function SessionTrajectory({
       {state.planAvailable ? (
         <section className={styles.section} aria-labelledby="trajectory-plan">
           <div className={styles.sectionTitle}>
-            <h3 id="trajectory-plan">Plan</h3>
+            <h3 id="trajectory-plan">{t("Plan")}</h3>
             <span>{state.plan?.items.length ?? 0}</span>
           </div>
           {state.plan?.items.length ? (
@@ -84,7 +90,7 @@ export function SessionTrajectory({
               ))}
             </ol>
           ) : (
-            <p className={styles.empty}>No plan is active.</p>
+            <p className={styles.empty}>{t("No plan is active.")}</p>
           )}
         </section>
       ) : null}
@@ -92,7 +98,7 @@ export function SessionTrajectory({
       {state.taskListAvailable ? (
         <section className={styles.section} aria-labelledby="trajectory-tasks">
           <div className={styles.sectionTitle}>
-            <h3 id="trajectory-tasks">Background tasks</h3>
+            <h3 id="trajectory-tasks">{t("Background tasks")}</h3>
             <span>{state.tasks.length}</span>
           </div>
           {state.tasks.length ? (
@@ -116,17 +122,21 @@ export function SessionTrajectory({
                     <button
                       type="button"
                       className={styles.cancel}
-                      aria-label={`Cancel ${task.title}`}
+                      aria-label={t("Cancel {value0}", {
+                        value0: String(task.title),
+                      })}
                       onClick={() => onCancelTask(task.id)}
                     >
-                      Cancel
+                      {t("Cancel")}
                     </button>
                   ) : null}
                 </article>
               ))}
             </div>
           ) : (
-            <p className={styles.empty}>No background tasks in this session.</p>
+            <p className={styles.empty}>
+              {t("No background tasks in this session.")}
+            </p>
           )}
         </section>
       ) : null}

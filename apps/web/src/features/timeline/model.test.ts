@@ -2,7 +2,7 @@ import {
   parseSessionHydrateResult,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import parallelToolFixture from "./fixtures/rc9-parallel-tools.json";
 import {
   addOptimisticUser,
@@ -15,6 +15,309 @@ import {
 } from "./model.ts";
 
 describe("timeline projection", () => {
+  const projection = (
+    type: string,
+    data: Record<string, unknown>,
+    seq: number,
+  ) => ({
+    jsonrpc: "2.0" as const,
+    method: "projection/envelope",
+    params: {
+      session_id: "coding:local:main",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      seq,
+      payload: { type, data },
+    },
+  });
+
+  it.each(["completed", "errored", "interrupted"])(
+    "keeps a Core-shaped hydrated %s turn settled without replayed terminal envelopes",
+    (state) => {
+      const hydrated = timelineFromHydrate({
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 72 },
+        turns: [{ turn_id: "turn-1", state }],
+        messages: [
+          {
+            seq: 1,
+            role: "assistant",
+            content: "canonical",
+            turn_id: "turn-1",
+            message_id: "message-1",
+            persisted_at: "",
+            media: [],
+          },
+        ],
+      });
+      const entries = foldNotification(
+        hydrated,
+        projection(
+          "assistant_delta",
+          { text: "late suffix", assistant_segment_id: "unknown-segment" },
+          73,
+        ),
+      );
+      expect(
+        entries
+          .filter((entry) => entry.kind === "assistant")
+          .map((entry) => entry.body),
+      ).toEqual(["canonical"]);
+      expect(entries.some((entry) => entry.status === "running")).toBe(false);
+    },
+  );
+
+  it.each(["conflicting-segment", "foreign-turn", "duplicate-hydrated-id"])(
+    "does not bind a %s identity claim to canonical hydrate prose",
+    (kind) => {
+      const message = {
+        seq: 1,
+        role: "assistant",
+        content: "canonical",
+        turn_id: "turn-1",
+        message_id: "message-1",
+        persisted_at: "",
+        media: [],
+      };
+      const identities = [
+        { messageId: "message-1", turnId: "turn-1", segmentId: "segment-1" },
+      ];
+      if (kind === "conflicting-segment")
+        identities.push({ ...identities[0]!, segmentId: "segment-2" });
+      if (kind === "foreign-turn") identities[0]!.turnId = "turn-other";
+      const entries = timelineFromHydrate(
+        {
+          session_id: "coding:local:main",
+          cursor: { stream: "coding:local:main", seq: 10 },
+          messages:
+            kind === "duplicate-hydrated-id"
+              ? [message, { ...message, seq: 2 }]
+              : [message],
+        },
+        { assistantIdentities: identities },
+      );
+      expect(entries[0]).toMatchObject({
+        body: "canonical",
+        status: "complete",
+      });
+      expect(entries[0]?.streamId).toBeUndefined();
+    },
+  );
+
+  it("allows identical identity replay and preserves terminal authority through later canonical refinement", () => {
+    const identity = {
+      messageId: "message-1",
+      turnId: "turn-1",
+      segmentId: "segment-1",
+    };
+    let entries = timelineFromHydrate(
+      {
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 10 },
+        turns: [{ turn_id: "turn-1", state: "interrupted" }],
+        messages: [
+          {
+            seq: 1,
+            role: "assistant",
+            content: "canonical",
+            turn_id: "turn-1",
+            message_id: "message-1",
+            persisted_at: "",
+            media: [],
+          },
+        ],
+      },
+      { assistantIdentities: [identity, identity] },
+    );
+    expect(entries[0]?.streamId).toBe("assistant:turn-1:segment-1");
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_persisted",
+        {
+          text: "refined canonical",
+          assistant_segment_id: "segment-1",
+          meta: { message_id: "message-1" },
+        },
+        11,
+      ),
+    );
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_delta",
+        { text: "ghost", assistant_segment_id: "unseen" },
+        12,
+      ),
+    );
+    // Upstream v0.10.0 renders server truth for an interrupted hydrated turn
+    // as a "Turn stopped" row; the ghost delta still never reopens the turn.
+    expect(entries.map((entry) => [entry.id, entry.body])).toEqual([
+      ["hydrated:message-1", "refined canonical"],
+      ["terminal:turn-1", "This turn was stopped before it completed."],
+    ]);
+    expect(entries.some((entry) => entry.status === "running")).toBe(false);
+  });
+
+  it("keeps the real Core persisted answer final when later-sequenced deltas arrive", () => {
+    let entries: TimelineEntry[] = [];
+    let seq = 1;
+    const segment = "turn-1:assistant:iteration:2";
+    for (const text of ["ST", "REAM", "_", "ORDER"])
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_delta",
+          { text, assistant_segment_id: segment },
+          seq++,
+        ),
+      );
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_persisted",
+        {
+          text: "STREAM_ORDER_FIRST_COMPLETE",
+          assistant_segment_id: segment,
+          meta: { message_id: "message-1" },
+        },
+        seq++,
+      ),
+    );
+    for (const text of ["_F", "IR", "ST", "_COMP", "L", "ETE"])
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_delta",
+          { text, assistant_segment_id: segment },
+          seq++,
+        ),
+      );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      body: "STREAM_ORDER_FIRST_COMPLETE",
+      status: "complete",
+    });
+    // Another segment in the same still-active turn is independent.
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_delta",
+        { text: "Next segment", assistant_segment_id: "next" },
+        seq++,
+      ),
+    );
+    expect(entries.at(-1)).toMatchObject({
+      body: "Next segment",
+      status: "running",
+    });
+  });
+
+  it("retains the persisted segment fence when hydrate used a durable message id", () => {
+    let entries = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      messages: [
+        {
+          seq: 1,
+          role: "assistant",
+          content: "canonical",
+          turn_id: "turn-1",
+          persisted_at: "2026-09-06T00:00:00Z",
+          message_id: "message-1",
+          media: [],
+        },
+      ],
+    });
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_persisted",
+        {
+          text: "canonical",
+          assistant_segment_id: "segment-1",
+          meta: { message_id: "message-1" },
+        },
+        2,
+      ),
+    );
+    entries = foldNotification(
+      entries,
+      projection(
+        "assistant_delta",
+        {
+          text: "late suffix",
+          assistant_segment_id: "segment-1",
+        },
+        3,
+      ),
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ body: "canonical", status: "complete" });
+  });
+
+  // "errored" is Core's failure outcome; the pinned protocol rejects "failed"
+  // as a malformed turn_terminal frame.
+  it.each(["completed", "errored"])(
+    "settles live text at a %s terminal without reopening it on late deltas",
+    (outcome) => {
+      let entries = foldNotification(
+        [],
+        projection("reasoning_delta", { text: "Considering" }, 1),
+      );
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_delta",
+          { text: "Partial", assistant_segment_id: "segment-1" },
+          2,
+        ),
+      );
+      entries = foldNotification(
+        entries,
+        projection("turn_terminal", { outcome }, 3),
+      );
+      entries = foldNotification(
+        entries,
+        projection("reasoning_delta", { text: " late" }, 4),
+      );
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_delta",
+          { text: " late", assistant_segment_id: "segment-1" },
+          5,
+        ),
+      );
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_delta",
+          { text: "ghost", assistant_segment_id: "unseen" },
+          6,
+        ),
+      );
+      expect(
+        entries
+          .filter((entry) => entry.kind !== "system")
+          .map((entry) => entry.body),
+      ).toEqual(["Considering", "Partial"]);
+      expect(entries.some((entry) => entry.status === "running")).toBe(false);
+      // A delayed authoritative full receipt may still refine the partial text.
+      entries = foldNotification(
+        entries,
+        projection(
+          "assistant_persisted",
+          { text: "Canonical", assistant_segment_id: "segment-1" },
+          7,
+        ),
+      );
+      expect(entries.find((entry) => entry.kind === "assistant")?.body).toBe(
+        "Canonical",
+      );
+    },
+  );
+
   it("folds canonical assistant deltas by segment", () => {
     const first = foldNotification([], {
       jsonrpc: "2.0",
@@ -775,6 +1078,14 @@ describe("hydrated tool presentation", () => {
   });
 
   it("restores rc.9 tools without message turn IDs in their original transcript order", () => {
+    // This case builds the same hydrate twice and compares; entries carry
+    // wall-clock start/end stamps, so a millisecond boundary between the two
+    // builds made it fail under full-suite load. Pin the clock for this case.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_700_000_000_000);
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const hydrate = freeze(toolHistory());
     const before = structuredClone(hydrate);
     const result = timelineFromHydrate(hydrate);

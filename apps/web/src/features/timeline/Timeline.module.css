@@ -51,6 +51,183 @@
   );
 }
 
+/* While reasoning streams, the block breathes and its label rides the same
+   crest the status line uses, so "still thinking" is legible at a glance
+   without a second spinner. */
+.reasoningBlockLive {
+  animation: thinking-breathe 2.4s ease-in-out infinite;
+}
+
+.reasoningBlockLive .reasoningHeader strong {
+  color: var(--dsw-alias-label-secondary);
+  background-image: linear-gradient(
+    100deg,
+    var(--dsw-alias-label-secondary) 0%,
+    var(--dsw-alias-state-business-primary) 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, white) 50%,
+    var(--dsw-alias-state-business-primary) 65%,
+    var(--dsw-alias-label-secondary) 100%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: thinking-wave 2.1s linear infinite;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .reasoningBlockLive .reasoningHeader strong {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes thinking-wave {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
+}
+
+@keyframes thinking-breathe {
+  0%,
+  100% {
+    border-color: color-mix(
+      in srgb,
+      var(--dsw-alias-state-business-primary) 28%,
+      var(--dsw-alias-border-l1)
+    );
+  }
+  50% {
+    border-color: color-mix(
+      in srgb,
+      var(--dsw-alias-state-business-primary) 62%,
+      var(--dsw-alias-border-l1)
+    );
+  }
+}
+
+/* A tool row reads as its family at a glance: the dot becomes a masked glyph
+   for shell/read/edit/search/web, and an unknown tool keeps the dot. The mask
+   is painted in the row's own status colour, so running/error tinting still
+   comes from the rules above. */
+.statusGlyph[data-tool] {
+  width: 13px;
+  height: 13px;
+  border-radius: 0;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.statusGlyph[data-tool="shell"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 8l-3 3.5'/%3E%3Cpath d='M8.5 12h4.5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 8l-3 3.5'/%3E%3Cpath d='M8.5 12h4.5'/%3E%3C/svg%3E");
+}
+.statusGlyph[data-tool="read"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 2.5h5l3 3V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z'/%3E%3Cpath d='M9 2.5V6h3.5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 2.5h5l3 3V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z'/%3E%3Cpath d='M9 2.5V6h3.5'/%3E%3C/svg%3E");
+}
+.statusGlyph[data-tool="edit"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.5 2.8 13.2 4.5 6 11.7l-2.4.7.7-2.4z'/%3E%3Cpath d='M3 14h10'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.5 2.8 13.2 4.5 6 11.7l-2.4.7.7-2.4z'/%3E%3Cpath d='M3 14h10'/%3E%3C/svg%3E");
+}
+.statusGlyph[data-tool="search"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='7' cy='7' r='4'/%3E%3Cpath d='m10 10 3.2 3.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='7' cy='7' r='4'/%3E%3Cpath d='m10 10 3.2 3.2'/%3E%3C/svg%3E");
+}
+.statusGlyph[data-tool="web"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.5'/%3E%3Cpath d='M2.6 8h10.8M8 2.5c1.6 1.8 1.6 9.2 0 11M8 2.5c-1.6 1.8-1.6 9.2 0 11'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.5'/%3E%3Cpath d='M2.6 8h10.8M8 2.5c1.6 1.8 1.6 9.2 0 11M8 2.5c-1.6 1.8-1.6 9.2 0 11'/%3E%3C/svg%3E");
+}
+
+/* Running tool: a light sweeps the card's border and the title rides the same
+   crest as the status line, so "this one is still going" needs no spinner. */
+.toolBlockLive {
+  position: relative;
+}
+
+.toolBlockLive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, white) 50%,
+    transparent 65%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  -webkit-mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: tool-shine 2.4s linear infinite;
+}
+
+.toolBlockLive .toolHeader strong {
+  color: var(--dsw-alias-label-secondary);
+  background-image: linear-gradient(
+    100deg,
+    var(--dsw-alias-label-secondary) 0%,
+    var(--dsw-alias-state-business-primary) 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, white) 50%,
+    var(--dsw-alias-state-business-primary) 65%,
+    var(--dsw-alias-label-secondary) 100%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: thinking-wave 2.1s linear infinite;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .toolBlockLive .toolHeader strong {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes tool-shine {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoningBlockLive,
+  .reasoningBlockLive .reasoningHeader strong,
+  .toolBlockLive::after,
+  .toolBlockLive .toolHeader strong {
+    animation: none;
+  }
+  .toolBlockLive::after {
+    background: none;
+  }
+  .toolBlockLive .toolHeader strong {
+    background-image: none;
+    color: var(--dsw-alias-label-secondary);
+  }
+  .reasoningBlockLive .reasoningHeader strong {
+    background-image: none;
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
 .reasoningHeader,
 .toolHeader {
   display: flex;

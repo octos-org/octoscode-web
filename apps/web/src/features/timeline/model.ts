@@ -4,29 +4,44 @@ import {
   parseProjectionEnvelope,
   type RpcNotification,
   type SessionHydrateResult,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
+import {
+  addSystemMessage,
+  hasTerminal,
+  nextNoticeId,
+  upsert,
+  type TimelineEntry,
+  type TimelineKind,
+  type TimelineStatus,
+} from "./entry-model.ts";
 
-export type TimelineKind =
-  "user" | "assistant" | "reasoning" | "tool" | "system";
-export type TimelineStatus = "running" | "complete" | "error" | "info";
+// The entry shape and the shell-side reducers live in `entry-model.ts` so the
+// app shell can write a system notice without loading the transcript fold.
+export {
+  addSystemMessage,
+  terminalTurnId,
+  timelineActivity,
+} from "./entry-model.ts";
+export type {
+  TimelineEntry,
+  TimelineKind,
+  TimelineStatus,
+} from "./entry-model.ts";
 
-export interface TimelineEntry {
-  id: string;
-  kind: TimelineKind;
-  title: string;
-  body: string;
-  status: TimelineStatus;
-  statusLabel?: string;
-  turnId?: string;
-  messageId?: string;
-  streamId?: string;
-  turnSettled?: true;
-  toolSettled?: true;
-  latestTurnOutcome?: string;
+export interface HydratedAssistantIdentity {
+  messageId: string;
+  turnId: string;
+  segmentId: string;
+}
+
+export interface HydratedTimelineIdentityOptions {
+  previous?: readonly TimelineEntry[];
+  assistantIdentities?: readonly HydratedAssistantIdentity[];
 }
 
 export function timelineFromHydrate(
   result: SessionHydrateResult,
+  identities: HydratedTimelineIdentityOptions = {},
 ): TimelineEntry[] {
   let entries: TimelineEntry[] = [];
   // rc.9 transcript rows carry a thread_id but usually no turn_id. Only a
@@ -51,14 +66,24 @@ export function timelineFromHydrate(
       entries.push(entry);
     } else entries[index] = entry;
   };
+  const messageTurnId = (message: {
+    turn_id?: string | undefined;
+    thread_id?: string | undefined;
+  }): string | undefined =>
+    message.turn_id ??
+    (message.thread_id
+      ? (turnByThread.get(message.thread_id) ?? undefined)
+      : undefined);
+  const userInputsByTurn = new Map<string, number>();
+  for (const message of result.messages ?? []) {
+    const turnId = messageTurnId(message);
+    if (message.role.toLowerCase() === "user" && turnId !== undefined)
+      userInputsByTurn.set(turnId, (userInputsByTurn.get(turnId) ?? 0) + 1);
+  }
   for (const message of [...(result.messages ?? [])].sort(
     (left, right) => left.seq - right.seq,
   )) {
-    const turnId =
-      message.turn_id ??
-      (message.thread_id
-        ? (turnByThread.get(message.thread_id) ?? undefined)
-        : undefined);
+    const turnId = messageTurnId(message);
     const stableId =
       message.message_id ??
       message.client_message_id ??
@@ -74,10 +99,18 @@ export function timelineFromHydrate(
       });
     }
     const role = message.role.toLowerCase();
+    // A turn can contain several persisted user inputs (turn/steer). Turn
+    // identity associates their activity; it is not a unique message key.
+    // Only a turn's SOLE persisted prompt is unambiguous: it takes the
+    // canonical `user:<turn>` key so its optimistic row and replayed
+    // user_message echo reconcile onto it exactly once. Several inputs for
+    // one turn keep their own message identity and are never collapsed.
+    const soleUserOfTurn =
+      role === "user" &&
+      turnId !== undefined &&
+      userInputsByTurn.get(turnId) === 1;
     hydrateEntry({
-      // A turn can contain several persisted user inputs (turn/steer). Turn
-      // identity associates their activity; it is not a unique message key.
-      id: `hydrated:${stableId}`,
+      id: soleUserOfTurn ? `user:${turnId}` : `hydrated:${stableId}`,
       kind:
         role === "user"
           ? "user"
@@ -101,6 +134,62 @@ export function timelineFromHydrate(
       ...(turnId ? { turnId } : {}),
       ...(message.message_id ? { messageId: message.message_id } : {}),
     });
+  }
+
+  // Hydrate prose is authoritative. Retain only a one-to-one, explicitly
+  // witnessed message/turn/segment relationship; never correlate by text.
+  const claims = [
+    ...(identities.previous ?? []).flatMap((entry) =>
+      entry.kind === "assistant" &&
+      entry.messageId &&
+      entry.turnId &&
+      entry.streamId?.startsWith(`assistant:${entry.turnId}:`)
+        ? [
+            {
+              messageId: entry.messageId,
+              turnId: entry.turnId,
+              streamId: entry.streamId,
+            },
+          ]
+        : [],
+    ),
+    ...(identities.assistantIdentities ?? []).map((identity) => ({
+      ...identity,
+      streamId: `assistant:${identity.turnId}:${identity.segmentId}`,
+    })),
+  ];
+  const messageCounts = new Map<string, number>();
+  for (const message of result.messages ?? []) {
+    if (message.message_id)
+      messageCounts.set(
+        message.message_id,
+        (messageCounts.get(message.message_id) ?? 0) + 1,
+      );
+  }
+  const byMessage = new Map<string, Set<string>>();
+  const byStream = new Map<string, Set<string>>();
+  for (const claim of claims) {
+    const messages = byMessage.get(claim.messageId) ?? new Set<string>();
+    messages.add(JSON.stringify([claim.turnId, claim.streamId]));
+    byMessage.set(claim.messageId, messages);
+    const streams = byStream.get(claim.streamId) ?? new Set<string>();
+    streams.add(claim.messageId);
+    byStream.set(claim.streamId, streams);
+  }
+  for (const claim of claims) {
+    if (
+      messageCounts.get(claim.messageId) !== 1 ||
+      byMessage.get(claim.messageId)?.size !== 1 ||
+      byStream.get(claim.streamId)?.size !== 1
+    )
+      continue;
+    entries = entries.map((entry) =>
+      entry.kind === "assistant" &&
+      entry.messageId === claim.messageId &&
+      entry.turnId === claim.turnId
+        ? { ...entry, streamId: claim.streamId }
+        : entry,
+    );
   }
 
   const replayed = [
@@ -181,11 +270,16 @@ export function timelineFromHydrate(
       }
     }
   }
-  entries = entries.map((entry) =>
-    entry.turnId && terminalTurns.has(entry.turnId)
-      ? { ...entry, turnSettled: true }
-      : entry,
-  );
+  entries = entries.map((entry) => {
+    const outcome = entry.turnId ? terminalTurns.get(entry.turnId) : undefined;
+    return outcome
+      ? {
+          ...entry,
+          turnSettled: true,
+          textTerminal: outcome as NonNullable<TimelineEntry["textTerminal"]>,
+        }
+      : entry;
+  });
   return withHydratedTurnOutcome(entries, result);
 }
 
@@ -208,27 +302,6 @@ export function withHydratedTurnOutcome(
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
-export function timelineActivity(
-  entries: readonly TimelineEntry[],
-  activeTurnId: string | null,
-): string | null {
-  if (!activeTurnId || hasTerminal(entries, activeTurnId)) return null;
-  const turn = entries.filter((entry) => entry.turnId === activeTurnId);
-  const tool = turn.findLast(
-    (entry) => entry.kind === "tool" && entry.status === "running",
-  );
-  if (tool) return `Running ${tool.title}…`;
-  const current = turn.findLast(
-    (entry) => entry.kind === "assistant" || entry.kind === "reasoning",
-  );
-  if (current?.status === "running") {
-    return current.kind === "reasoning" ? "Thinking…" : "Writing response…";
-  }
-  return turn.some((entry) => entry.kind === "tool")
-    ? "Preparing next step…"
-    : "Working…";
-}
-
 export function addOptimisticUser(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -242,16 +315,6 @@ export function addOptimisticUser(
     status: "complete",
     turnId,
   });
-}
-
-export function addSystemMessage(
-  entries: readonly TimelineEntry[],
-  id: string,
-  title: string,
-  body: string,
-  status: TimelineStatus = "info",
-): TimelineEntry[] {
-  return upsert(entries, { id, kind: "system", title, body, status });
 }
 
 export function foldNotification(
@@ -330,6 +393,7 @@ export function foldNotification(
         body: pretty(params.arguments),
         status: "running",
         turnId,
+        startedAtMs: Date.now(),
       });
     case CORE_UI_METHODS.TOOL_PROGRESS:
       return progressTool(
@@ -372,21 +436,6 @@ export function foldNotification(
     default:
       return entries.slice();
   }
-}
-
-export function terminalTurnId(notification: RpcNotification): string | null {
-  if (
-    notification.method === CORE_UI_METHODS.TURN_COMPLETED ||
-    notification.method === CORE_UI_METHODS.TURN_ERROR
-  ) {
-    return isRecord(notification.params) &&
-      typeof notification.params.turn_id === "string"
-      ? notification.params.turn_id
-      : null;
-  }
-  if (notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE) return null;
-  const envelope = parseProjectionEnvelope(notification.params);
-  return envelope?.payload.type === "turn_terminal" ? envelope.turn_id : null;
 }
 
 /** The turn a notification carries activity for, regardless of method. */
@@ -487,6 +536,7 @@ function foldProjection(
         body: stringOf(data.arguments_preview),
         status: "running",
         turnId,
+        startedAtMs: Date.now(),
       });
     }
     case "tool_progress":
@@ -588,7 +638,13 @@ function appendText(
   const existing = entries.find(
     (entry) => entry.id === id || entry.streamId === id,
   );
-  if (!value || (kind === "assistant" && existing?.status === "complete")) {
+  // rc11 can emit its canonical full persisted segment before queued streaming
+  // deltas with larger cursors. Receipt finality wins over delivery order.
+  if (
+    !value ||
+    (kind === "assistant" &&
+      (existing?.status === "complete" || existing?.status === "error"))
+  ) {
     return entries.slice();
   }
   return upsert(entries, {
@@ -598,6 +654,8 @@ function appendText(
     body: `${existing?.body ?? ""}${value}`,
     status: "running",
     turnId,
+    startedAtMs: existing?.startedAtMs ?? Date.now(),
+    endedAtMs: Date.now(),
   });
 }
 
@@ -642,6 +700,9 @@ function sweepTurnStreamtails(
       }
       next.push({
         ...entry,
+        ...(entry.startedAtMs !== undefined
+          ? { endedAtMs: entry.endedAtMs ?? Date.now() }
+          : {}),
         status:
           entry.kind === "tool"
             ? outcome === "completed" || outcome === "interrupted"
@@ -659,17 +720,6 @@ function sweepTurnStreamtails(
   return changed ? next : entries.slice();
 }
 
-function hasTerminal(
-  entries: readonly TimelineEntry[],
-  turnId: string,
-): boolean {
-  return entries.some(
-    (entry) =>
-      entry.id === `terminal:${turnId}` ||
-      (entry.turnId === turnId && entry.turnSettled),
-  );
-}
-
 function settleReasoning(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -678,7 +728,13 @@ function settleReasoning(
     entry.turnId === turnId &&
     entry.kind === "reasoning" &&
     entry.status === "running"
-      ? { ...entry, status: "complete" }
+      ? {
+          ...entry,
+          status: "complete",
+          ...(entry.startedAtMs !== undefined
+            ? { endedAtMs: entry.endedAtMs ?? Date.now() }
+            : {}),
+        }
       : entry,
   );
 }
@@ -774,6 +830,7 @@ function completeTool(
       turnId,
     }),
     ...result,
+    ...(existing?.startedAtMs !== undefined ? { endedAtMs: Date.now() } : {}),
     toolSettled: true,
     ...(hasTerminal(entries, turnId) ? { turnSettled: true } : {}),
   });
@@ -956,26 +1013,6 @@ function upsertUser(
   return next;
 }
 
-function nextNoticeId(
-  entries: readonly TimelineEntry[],
-  prefix: string,
-): string {
-  let ordinal = entries.length;
-  while (entries.some((entry) => entry.id === `${prefix}:${ordinal}`)) {
-    ordinal += 1;
-  }
-  return `${prefix}:${ordinal}`;
-}
-
-function upsert(
-  entries: readonly TimelineEntry[],
-  next: TimelineEntry,
-): TimelineEntry[] {
-  const index = entries.findIndex((entry) => entry.id === next.id);
-  if (index < 0) return [...entries, next];
-  return entries.map((entry, current) => (current === index ? next : entry));
-}
-
 function patchEntry(
   entries: readonly TimelineEntry[],
   id: string,
@@ -983,6 +1020,7 @@ function patchEntry(
     body?: string | undefined;
     status?: TimelineStatus;
     statusLabel?: string;
+    endedAtMs?: number;
   },
 ): TimelineEntry[] {
   return entries.map((entry) =>
@@ -994,6 +1032,9 @@ function patchEntry(
           ...(patch.statusLabel === undefined
             ? {}
             : { statusLabel: patch.statusLabel }),
+          ...(patch.endedAtMs === undefined
+            ? {}
+            : { endedAtMs: patch.endedAtMs }),
         }
       : entry,
   );
