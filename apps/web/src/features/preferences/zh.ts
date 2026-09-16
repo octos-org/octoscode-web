@@ -1265,6 +1265,30 @@ const catalog: Readonly<Record<string, string>> = {
   "Couldn't reach the server's folders.": "无法访问服务器上的文件夹。",
   "Try again, or type the workspace path instead.":
     "请重试，或改为直接输入工作区路径。",
+
+  // The agent's plan/todo checklist above the composer. Item titles and the
+  // plan's own heading come from the model and stay in their own language.
+  "In progress": "进行中",
+  Pending: "待办",
+  "{done} of {total} done": "已完成 {done} / {total}",
+  "Plan: {summary}": "计划：{summary}",
+  "Updated just now": "刚刚更新",
+  "Updated {count}m ago": "{count} 分钟前更新",
+  "Updated {count}h ago": "{count} 小时前更新",
+  "Updated {count}d ago": "{count} 天前更新",
+
+  // The question card. Titles, bodies and option labels are Core prose and
+  // stay canonical; only the card's own chrome is translated here.
+  "Choose one": "请选择一项",
+  "Choose one, or write your own": "请选择一项，或自行填写",
+  "Choose any that apply": "可多选",
+  "Choose any that apply, or write your own": "可多选，或自行填写",
+  "Choose an option to continue": "请选择一项后继续",
+  "Answer every question to continue": "请回答全部问题后继续",
+  "Sending your answer…": "正在发送你的回答…",
+  // Owned by features/peers/peer-copy.ts, which nothing merges into the
+  // loaded catalog; carry it here so the consequence line is translated.
+  "Sends this answer and resumes the peer": "发送此回答并让同侪继续",
 };
 
 // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).

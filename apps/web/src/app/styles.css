@@ -313,8 +313,7 @@ label > span {
   font-weight: 500;
 }
 
-.connection-card input,
-.question-other input {
+.connection-card input {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -328,13 +327,11 @@ label > span {
   font-size: 11px;
 }
 
-.connection-card input:focus,
-.question-other input:focus {
+.connection-card input:focus {
   border-color: var(--dsw-alias-state-business-primary);
 }
 
-.connection-card input:disabled,
-.question-other input:disabled {
+.connection-card input:disabled {
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -1399,8 +1396,7 @@ label > span {
   justify-content: center;
 }
 
-.approval-card,
-.question-card {
+.approval-card {
   overflow: hidden;
   width: 100%;
   max-width: 736px;
@@ -1471,8 +1467,7 @@ label > span {
   font-size: 11px;
 }
 
-.approval-actions,
-.question-actions {
+.approval-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1529,123 +1524,6 @@ kbd {
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
   line-height: 18px;
-}
-
-.question-card {
-  max-height: min(620px, calc(100vh - 120px));
-  overflow-y: auto;
-  border: 1px solid var(--dsw-alias-border-l2);
-}
-
-.question-heading {
-  display: grid;
-  gap: var(--dsw-space-1);
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-}
-
-.question-heading > span {
-  color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.question-heading strong {
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.question-heading p {
-  margin: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-}
-
-.question-list {
-  display: grid;
-  gap: var(--dsw-space-4);
-  padding: var(--dsw-space-4);
-}
-
-.question-list fieldset {
-  min-width: 0;
-  margin: 0;
-  border: 0;
-  padding: 0;
-}
-
-.question-list legend {
-  display: grid;
-  gap: var(--dsw-space-1);
-  margin-bottom: var(--dsw-space-2);
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.question-list legend span {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--dsw-font-size-micro);
-  text-transform: uppercase;
-}
-
-.question-options {
-  display: grid;
-  gap: var(--dsw-space-2);
-}
-
-.question-option {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--dsw-space-2);
-  margin: 0;
-  padding: var(--dsw-space-2) var(--dsw-space-3);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
-  background: var(--dsw-specific-tip);
-  cursor: pointer;
-}
-
-.question-option:hover {
-  border-color: var(--dsw-alias-border-l2);
-}
-
-.question-option input {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  margin: 2px 0 0;
-  accent-color: var(--dsw-alias-state-business-primary);
-}
-
-.question-option > span {
-  display: grid;
-  gap: 2px;
-}
-
-.question-option strong {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.question-option small {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.question-other {
-  margin: 2px 0 0;
-}
-
-.question-actions {
-  border-top: 1px solid var(--dsw-alias-border-l1);
-}
-
-.question-actions > span {
-  margin-right: auto;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
 }
 
 .inspector {

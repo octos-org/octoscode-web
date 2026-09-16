@@ -22,7 +22,10 @@ import {
   tasksFromList,
   type SupervisionRuntimeState,
 } from "./model.ts";
+import { applyPlanUpdated, clearPlanForTurn } from "./plan.ts";
 import { RequestGate } from "../async/request-gate.ts";
+import { terminalTurnId } from "../timeline/model.ts";
+import { notificationMatchesSessionScope } from "../session/scope.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
@@ -480,7 +483,30 @@ export function useSupervision(
     }
     const planUpdate = parsePlanUpdated(notification);
     if (planUpdate && planUpdate.sessionId === sessionId) {
-      setState((current) => ({ ...current, plan: planUpdate }));
+      // Wholesale replacement, gated on `plan.todos.v1`: an unadvertised
+      // feature leaves the state empty rather than rendering wire data.
+      // Read the gate from the live capability envelope, not from state: the
+      // session-open replay can land before configureCapabilities commits.
+      const available = supportsFeature(
+        dependenciesRef.current.capabilities(),
+        CORE_UI_FEATURES.PLAN_TODOS_V1,
+      );
+      setState((current) => ({
+        ...current,
+        plan: applyPlanUpdated(current.plan, planUpdate, available),
+      }));
+    }
+    // A plan is per-turn working state: its authoring turn's terminal drops it
+    // (turn-matched, so a replayed terminal cannot clear a newer plan).
+    const terminalTurn = terminalTurnId(notification);
+    if (
+      terminalTurn &&
+      notificationMatchesSessionScope(notification, sessionId)
+    ) {
+      setState((current) => ({
+        ...current,
+        plan: clearPlanForTurn(current.plan, terminalTurn),
+      }));
     }
     const outputDelta = parseTaskOutputDelta(notification);
     if (outputDelta && outputDelta.sessionId === sessionId) {

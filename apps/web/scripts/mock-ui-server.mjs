@@ -49,6 +49,69 @@ const heldGatherReplies = new Map();
 // the untouched typed-path form (no Browse affordance at all) with every other.
 const workspaceBrowseAuthToken = "workspace-browse-e2e-token";
 const workspaceBrowseSockets = new WeakSet();
+// plan.todos.v1 — the agent's live checklist. `plan/updated` replaces the plan
+// wholesale and its authoring turn's terminal clears it, so the plan fixture
+// streams a SEQUENCE of replacements across one deliberately slow turn. A
+// second token drops the feature (and the notification) from the envelope so
+// the same server also serves the feature-absent case: no card at all.
+const planFixtureAuthToken = "plan-fixture-e2e-token";
+const planFixtureSockets = new WeakSet();
+const planAbsentAuthToken = "plan-absent-e2e-token";
+const planAbsentSockets = new WeakSet();
+const PLAN_FEATURE = "plan.todos.v1";
+const PLAN_NOTIFICATION = "plan/updated";
+const PLAN_FIXTURE_PROMPT = "Plan fixture";
+/** One ordered checklist per step; each step REPLACES the previous plan.
+ *  Step 0 rides the turn; later steps are driven by /__test__/plan/advance so
+ *  a spec observes each replacement instead of racing a timer. */
+const PLAN_FIXTURE_STEPS = [
+  {
+    title: "Shipping the coding surface",
+    items: [
+      { id: "inspect", title: "Inspect the workspace", status: "in_progress" },
+      { id: "change", title: "Implement the change", status: "pending" },
+      {
+        id: "verify",
+        title: "Run product checks",
+        status: "pending",
+        priority: "P2",
+      },
+    ],
+  },
+  {
+    // A wholesale replacement: one item drops out and a new one appears, so a
+    // client that merged instead of replacing would show four rows here.
+    title: "Shipping the coding surface",
+    items: [
+      { id: "inspect", title: "Inspect the workspace", status: "completed" },
+      { id: "change", title: "Implement the change", status: "in_progress" },
+      { id: "docs", title: "Update the changelog", status: "pending" },
+    ],
+  },
+];
+/** The most recent plan-fixture turn, and how far through the sequence it is. */
+let planFixtureTurn = null;
+
+function sendPlanStep(step) {
+  const turn = planFixtureTurn;
+  if (!turn || turn.socket.readyState !== WebSocket.OPEN) return false;
+  turn.socket.send(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "plan/updated",
+      params: {
+        session_id: turn.sessionId,
+        turn_id: turn.turnId,
+        plan: {
+          title: step.title,
+          updated_at_ms: Date.now(),
+          items: step.items,
+        },
+      },
+    }),
+  );
+  return true;
+}
 const WORKSPACE_BROWSE_METHODS = [
   "onboarding/workspace_list",
   "onboarding/workspace_create",
@@ -1724,6 +1787,21 @@ const http = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  // plan.todos.v1: emit the NEXT wholesale plan replacement for the live plan
+  // fixture turn. Driving it explicitly keeps "the plan changed" observable
+  // instead of racing a timer against the client's render.
+  if (request.method === "POST" && request.url === "/__test__/plan/advance") {
+    const step = PLAN_FIXTURE_STEPS[planFixtureTurn?.step ?? -1];
+    if (!step || !sendPlanStep(step)) {
+      response
+        .writeHead(409)
+        .end("There is no live plan fixture turn to advance");
+      return;
+    }
+    planFixtureTurn.step += 1;
+    response.writeHead(204).end();
+    return;
+  }
   if (
     request.method === "POST" &&
     new URL(request.url, "http://fixture").pathname ===
@@ -2066,19 +2144,31 @@ const baseCapabilities = {
 };
 
 function capabilitiesFor(socket, state) {
-  const capabilities = workspaceBrowseSockets.has(socket)
+  const base = planAbsentSockets.has(socket)
     ? {
         ...baseCapabilities,
+        supported_features: baseCapabilities.supported_features.filter(
+          (feature) => feature !== PLAN_FEATURE,
+        ),
+        supported_notifications:
+          baseCapabilities.supported_notifications.filter(
+            (notification) => notification !== PLAN_NOTIFICATION,
+          ),
+      }
+    : baseCapabilities;
+  const capabilities = workspaceBrowseSockets.has(socket)
+    ? {
+        ...base,
         supported_methods: [
-          ...baseCapabilities.supported_methods,
+          ...base.supported_methods,
           ...WORKSPACE_BROWSE_METHODS,
         ],
         supported_features: [
-          ...baseCapabilities.supported_features,
+          ...base.supported_features,
           WORKSPACE_BROWSE_FEATURE,
         ],
       }
-    : baseCapabilities;
+    : base;
   const workspaceRoot = state
     ? state.workspaceRoot
     : openedWorkspaceBySocket.get(socket);
@@ -2534,6 +2624,12 @@ sockets.on("connection", (socket, request) => {
   const connectionAuthToken = authTokenFromUpgradeRequest(request);
   if (connectionAuthToken === workspaceBrowseAuthToken) {
     workspaceBrowseSockets.add(socket);
+  }
+  if (connectionAuthToken === planFixtureAuthToken) {
+    planFixtureSockets.add(socket);
+  }
+  if (connectionAuthToken === planAbsentAuthToken) {
+    planAbsentSockets.add(socket);
   }
   const connectionProfileId = authenticatedProfileForToken(connectionAuthToken);
   if (connectionProfileId) {
@@ -4343,33 +4439,13 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
-  socket.send(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "plan/updated",
-      params: {
-        session_id: sessionId,
-        turn_id: turnId,
-        plan: {
-          title: "Shipping the coding surface",
-          updated_at_ms: Date.now(),
-          items: [
-            {
-              id: "inspect",
-              title: "Inspect the workspace",
-              status: "completed",
-            },
-            {
-              id: "change",
-              title: "Implement the change",
-              status: "in_progress",
-            },
-            { id: "verify", title: "Run product checks", status: "pending" },
-          ],
-        },
-      },
-    }),
-  );
+  // plan.todos.v1: only the plan fixture streams a checklist, so every other
+  // spec keeps a composer with nothing pinned above it.
+  if (planFixtureSockets.has(socket) && text.startsWith(PLAN_FIXTURE_PROMPT)) {
+    planFixtureTurn = { socket, sessionId, turnId, step: 0 };
+    sendPlanStep(PLAN_FIXTURE_STEPS[0]);
+    planFixtureTurn.step = 1;
+  }
   if (text === "Request approval fixture") {
     socket.send(
       JSON.stringify({

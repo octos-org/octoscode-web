@@ -10,6 +10,7 @@ import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { planCardVisible } from "../features/supervision/plan.ts";
 import {
   type ComponentType,
   lazy,
@@ -334,6 +335,10 @@ const TurnRecoveryNotice = lazyNamed(
 const SavedSessionLinkPanel = lazyNamed(
   () => import("../features/session-links/SavedSessionLinkPanel.tsx"),
   (module) => module.SavedSessionLinkPanel,
+);
+const PlanCard = lazyNamed(
+  () => import("../features/supervision/PlanCard.tsx"),
+  (module) => module.PlanCard,
 );
 
 const initialConnection: ConnectionDraft = {
@@ -2471,6 +2476,20 @@ export function App() {
               >
                 Back to latest ↓
               </button>
+            ) : null}
+            {/* The agent's checklist rides the sticky composer rather than the
+                transcript, so a plan that grows never shifts the messages the
+                operator is reading. Hidden during a blocking interaction, like
+                the thinking indicator. */}
+            {planCardVisible(
+              work.supervision.plan,
+              work.supervision.planAvailable,
+            ) &&
+            !interactions.approval &&
+            !interactions.question ? (
+              <Suspense fallback={null}>
+                <PlanCard plan={work.supervision.plan} />
+              </Suspense>
             ) : null}
             {session.opened && openingSession ? (
               <div className={productStyles.pendingNavigation} role="status">

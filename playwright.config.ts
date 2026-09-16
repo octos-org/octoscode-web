@@ -11,6 +11,11 @@ const fixtureAuthTokens = [
   // `onboarding.workspace_browse.v1` only to this token, so the same server
   // also serves the feature-absent (no Browse affordance) case.
   "workspace-browse-e2e-token",
+  // plan.todos.v1: the fixture streams a plan sequence only to the first
+  // token, and drops the feature entirely for the second, so one server
+  // serves both the plan card and the feature-absent (no card) case.
+  "plan-fixture-e2e-token",
+  "plan-absent-e2e-token",
   "remember-this-tab-token",
   "forget-me-token",
   fixtureProfileAuthToken,
