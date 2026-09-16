@@ -15,6 +15,17 @@ interface ModalSurfaceProps {
   busy?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   closeOnBackdrop?: boolean;
+  /**
+   * Whether this surface hides the app behind it from assistive tech.
+   *
+   * True for a surface that owns the whole window. False for a takeover that
+   * belongs to ONE session — an approval or a question — because the operator
+   * is expected to keep working in other sessions while it waits. Before
+   * surfaces moved to the page root this distinction was accidental: a surface
+   * rendered inside the shell skipped the hiding because the shell contained
+   * it, and only a surface outside it ever hid anything.
+   */
+  hidesBackground?: boolean;
   onEscape?: () => void;
   onKeyDown?: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   children: ReactNode;
@@ -44,6 +55,7 @@ export function ModalSurface({
   busy,
   initialFocusRef,
   closeOnBackdrop = false,
+  hidesBackground = true,
   onEscape,
   onKeyDown,
   children,
@@ -57,6 +69,7 @@ export function ModalSurface({
   // the only announced content. The exact prior state is restored on close or
   // unmount, including an unmount while the surface is still open.
   useEffect(() => {
+    if (!hidesBackground) return;
     const backdrop = backdropRef.current;
     if (!backdrop) return;
     const background =
@@ -84,7 +97,7 @@ export function ModalSurface({
         background.setAttribute("aria-hidden", previousAriaHidden);
       }
     };
-  }, []);
+  }, [hidesBackground]);
 
   useEffect(() => {
     const dialog = dialogRef.current;

@@ -69,6 +69,8 @@ export function UserQuestionPanel({
 
   return (
     <ModalSurface
+      // Session-scoped takeover: other sessions stay reachable while it waits.
+      hidesBackground={false}
       backdropClassName="takeover-wrap"
       dialogClassName={styles.card!}
       labelledBy="question-title"

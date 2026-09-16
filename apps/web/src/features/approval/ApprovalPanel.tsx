@@ -57,6 +57,8 @@ export function ApprovalPanel({
 
   return (
     <ModalSurface
+      // Session-scoped takeover: other sessions stay reachable while it waits.
+      hidesBackground={false}
       backdropClassName="takeover-wrap"
       dialogClassName="approval-card"
       labelledBy="approval-title"
