@@ -1,4 +1,4 @@
-import type { LaunchResolveResult } from "@octos-org/octoscode-client";
+import type { LaunchResolveResult } from "@octos-org/octoscode-client/protocol";
 
 export interface LaunchRuntimeState {
   phase: "idle" | "resolving" | "awaiting_choice" | "opening";

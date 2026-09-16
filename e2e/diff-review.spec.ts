@@ -191,10 +191,16 @@ test("a missing optional diff grammar retains original text and word marks", asy
   const errors: string[] = [];
   let rejected = false;
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(/shikijs_langs_typescript.*\.js/, async (route) => {
-    rejected = true;
-    await route.abort();
-  });
+  // The optional TypeScript grammar chunk. A dev server serves it as
+  // @shikijs_langs_typescript.js; this repo's e2e runs `vite preview`, which
+  // serves the built /assets/typescript-<hash>.js instead.
+  await page.route(
+    /\/(?:@shikijs_langs_)?typescript(?:\.js|-[A-Za-z0-9_-]+\.js)(\?|$)/,
+    async (route) => {
+      rejected = true;
+      await route.abort();
+    },
+  );
   const dialog = await openReview(page, replacement);
   expect(rejected).toBe(true);
   expect(await dialog.locator(".diff-line > code").allTextContents()).toEqual(

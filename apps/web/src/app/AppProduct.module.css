@@ -139,6 +139,39 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.contextUsage {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+}
+
+.preferencesTrigger {
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preferencesTrigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Skip-link target that hosts both routed panes (chat + Fleet) in the
+   workspace grid's content column; only one pane is unhidden at a time. */
+.workspaceMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sessionControlsFallback {
   flex: 1;
   min-width: 0;
@@ -203,6 +236,17 @@
 }
 
 @media (max-width: 760px) {
+  .preferencesTrigger {
+    width: 32px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .preferencesTrigger::before {
+    content: "⚙︎";
+    font-size: 18px;
+  }
+
   .sidebarFallback {
     width: 100%;
     min-height: 220px;
@@ -300,27 +344,108 @@
   :global(.header-actions):empty {
     display: none;
   }
+  /* Our compact header carries one control more than upstream's (the browser
+     preferences trigger) beside the review chip. Tighten the action gap so the
+     extra affordance is not paid for out of the workspace name's width. */
+  :global(.header-actions) {
+    gap: var(--dsw-space-2);
+  }
   :global(.composer-wrap) {
     padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
   .conversationTabs button {
-    padding: 0 8px;
+    padding: 0 6px;
     min-height: 44px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .thinkingDot {
-    animation: none;
+/* Phone widths. The conversation header carries one control more than
+   upstream's (the browser preferences trigger), so at 320-400px the padding,
+   the gaps and the tab padding give way first — the workspace name never does,
+   because it is the only thing on screen that says which repository you are
+   about to change. */
+@media (max-width: 400px) {
+  :global(.workspace-grid .conversation-header) {
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  :global(.header-actions) {
+    gap: 6px;
+  }
+
+  .conversationTabs button {
+    padding: 0 4px;
   }
 }
 
-.thinkingDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--dsw-alias-state-business-primary);
-  animation: thinking-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+@media (prefers-reduced-motion: reduce) {
+  .thinkingOctopus {
+    animation: none;
+  }
+  .thinkingIndicator > span:last-child {
+    animation: none;
+    background-image: none;
+    color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+/* The octopus mark itself lives in the OctopusLogo component; this file only
+   moves it. One shape, one component, and the mark carries its own class. */
+.thinkingOctopus {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
+  animation: octopus-swim 2.4s ease-in-out infinite;
+}
+
+@keyframes octopus-swim {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg) scaleX(1);
+  }
+  25% {
+    transform: translateY(-2.5px) rotate(0deg) scaleX(0.97);
+  }
+  50% {
+    transform: translateY(0) rotate(4deg) scaleX(1);
+  }
+  75% {
+    transform: translateY(-1.5px) rotate(0deg) scaleX(1.03);
+  }
+}
+
+/* TUI parity: while a turn runs, a bright crest ripples across the status
+   word the way octoscode's terminal status line does (~2.1s period). The
+   label is the indicator's second span; the pulsing dot keeps its own rhythm. */
+.thinkingIndicator > span:last-child {
+  background-image: linear-gradient(
+    100deg,
+    var(--dsw-alias-label-tertiary) 0%,
+    var(--dsw-alias-state-business-primary) 35%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, white) 50%,
+    var(--dsw-alias-state-business-primary) 65%,
+    var(--dsw-alias-label-tertiary) 100%
+  );
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  animation: thinking-wave 2.1s linear infinite;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .thinkingIndicator > span:last-child {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes thinking-wave {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
+  }
 }
 
 @keyframes thinking-pulse {

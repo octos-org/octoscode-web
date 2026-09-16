@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
+import type { UiProtocolCapabilities } from "@octos-org/octoscode-client/protocol";
 import {
   emptyModelSettingsState,
   ModelSettingsController,

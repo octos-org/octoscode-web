@@ -5,6 +5,7 @@ import {
 } from "./use-onboarding.ts";
 import { OFFICIAL_ROUTE } from "./onboarding-submission.ts";
 import styles from "./OnboardingPanel.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface OnboardingPanelProps {
   state: OnboardingRuntimeState;
@@ -19,6 +20,7 @@ export function OnboardingPanel({
   onRetry,
   onCancel,
 }: OnboardingPanelProps) {
+  const t = useUiText();
   const initialFamily = state.catalog?.families[0];
   const [profileId, setProfileId] = useState("coding");
   const [profileName, setProfileName] = useState("Coding");
@@ -95,32 +97,35 @@ export function OnboardingPanel({
       role="dialog"
       aria-labelledby="launch-decision-title"
     >
-      <span className="eyebrow">Octoscode setup</span>
-      <h2 id="launch-decision-title">Create your local coding profile</h2>
+      <span className="eyebrow">{t("Octoscode setup")}</span>
+      <h2 id="launch-decision-title">
+        {t("Create your local coding profile")}
+      </h2>
       <p>
-        This follows Octoscode’s solo onboarding: create a named profile, test a
-        server-advertised model route, save it, then open the canonical coding
-        session.
+        {t(
+          "This follows Octoscode’s solo onboarding: create a named profile, test a server-advertised model route, save it, then open the canonical coding session.",
+        )}
       </p>
 
       {!state.supported ? (
         <OnboardingFallback onCancel={onCancel} />
       ) : state.phase === "loading_catalog" ? (
         <div className={styles.progress} role="status">
-          <span /> Loading providers from Octos…
+          <span />
+          {" " + t("Loading providers from Octos…")}
         </div>
       ) : !state.catalog ? (
         <div className={styles.failure} role="alert">
-          <strong>Provider catalog unavailable</strong>
+          <strong>{t("Provider catalog unavailable")}</strong>
           <span>
-            {state.error ?? "The server returned an invalid catalog."}
+            {state.error ?? t("The server returned an invalid catalog.")}
           </span>
           <div className={`launch-actions ${styles.actions}`}>
             <button type="button" onClick={onRetry}>
-              Retry
+              {t("Retry")}
             </button>
             <button type="button" onClick={onCancel}>
-              Disconnect
+              {t("Disconnect")}
             </button>
           </div>
         </div>
@@ -128,7 +133,7 @@ export function OnboardingPanel({
         <form className={styles.form} onSubmit={submit}>
           <div className={`${styles.fields} ${styles.profileFields}`}>
             <label>
-              <span>Profile ID</span>
+              <span>{t("Profile ID")}</span>
               <input
                 name="profile-id"
                 value={profileId}
@@ -138,7 +143,7 @@ export function OnboardingPanel({
               />
             </label>
             <label>
-              <span>Profile name</span>
+              <span>{t("Profile name")}</span>
               <input
                 name="profile-name"
                 value={profileName}
@@ -155,11 +160,11 @@ export function OnboardingPanel({
               disabled={busy || Boolean(state.createdProfileId)}
               onChange={(event) => setMakeDefault(event.target.checked)}
             />
-            <span>Use as the default local profile</span>
+            <span>{t("Use as the default local profile")}</span>
           </label>
           <div className={styles.fields}>
             <label>
-              <span>Provider</span>
+              <span>{t("Provider")}</span>
               <select
                 name="provider"
                 value={familyId}
@@ -182,7 +187,7 @@ export function OnboardingPanel({
               </select>
             </label>
             <label>
-              <span>Model</span>
+              <span>{t("Model")}</span>
               <select
                 name="model"
                 value={modelId}
@@ -200,7 +205,7 @@ export function OnboardingPanel({
               </select>
             </label>
             <label>
-              <span>Route</span>
+              <span>{t("Route")}</span>
               <select
                 name="route"
                 value={routeId}
@@ -217,7 +222,7 @@ export function OnboardingPanel({
           </div>
           {requiresApiKey ? (
             <label className={styles.secret}>
-              <span>API key</span>
+              <span>{t("API key")}</span>
               <input
                 name="api-key"
                 type="password"
@@ -228,20 +233,25 @@ export function OnboardingPanel({
                 onChange={(event) => setApiKey(event.target.value)}
               />
               <small>
-                Sent only to your Octos server for test and save; never stored
-                by this browser client.
+                {t(
+                  "Sent only to your Octos server for test and save; never stored by this browser client.",
+                )}
               </small>
             </label>
           ) : (
             <div className={styles.keyless} role="status">
-              <strong>No API key required</strong>
-              <span>{familyId} is marked keyless by the Core catalog.</span>
+              <strong>{t("No API key required")}</strong>
+              <span>
+                {familyId}
+                {" " + t("is marked keyless by the Core catalog.")}
+              </span>
             </div>
           )}
           {state.createdProfileId ? (
             <div className={styles.recovery} role="status">
-              Profile <code>{state.createdProfileId}</code> exists. A retry only
-              repeats provider test and save.
+              {t("Profile") + " "}
+              <code>{state.createdProfileId}</code>
+              {" " + t("exists. A retry only repeats provider test and save.")}
             </div>
           ) : null}
           {state.error ? (
@@ -253,7 +263,7 @@ export function OnboardingPanel({
             <span>{onboardingStatus(state.phase)}</span>
             <div>
               <button type="button" disabled={busy} onClick={onCancel}>
-                Disconnect
+                {t("Disconnect")}
               </button>
               <button
                 className={styles.submit}
@@ -265,7 +275,7 @@ export function OnboardingPanel({
                   (requiresApiKey && !apiKey.trim())
                 }
               >
-                {busy ? "Working…" : "Test, save & open"}
+                {busy ? t("Working…") : t("Test, save & open")}
               </button>
             </div>
           </div>
@@ -276,16 +286,19 @@ export function OnboardingPanel({
 }
 
 function OnboardingFallback({ onCancel }: { onCancel: () => void }) {
+  const t = useUiText();
   return (
     <div className={styles.failure} role="alert">
-      <strong>This server cannot onboard from the Web</strong>
+      <strong>{t("This server cannot onboard from the Web")}</strong>
       <span>
-        Run the canonical setup on the server, then reconnect this workspace.
+        {t(
+          "Run the canonical setup on the server, then reconnect this workspace.",
+        )}
       </span>
       <code>octoscode onboard</code>
       <div className={`launch-actions ${styles.actions}`}>
         <button type="button" autoFocus onClick={onCancel}>
-          Disconnect
+          {t("Disconnect")}
         </button>
       </div>
     </div>

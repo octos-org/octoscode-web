@@ -1,4 +1,5 @@
 import styles from "./TurnStopButton.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export interface TurnStopButtonProps {
   activeTurnId: string | null;
@@ -20,6 +21,7 @@ export function TurnStopButton({
   starting,
   onInterrupt,
 }: TurnStopButtonProps) {
+  const t = useUiText();
   if (!activeTurnId) return null;
   if (starting) {
     return (
@@ -30,7 +32,7 @@ export function TurnStopButton({
         aria-busy="true"
         aria-live="polite"
       >
-        Starting…
+        {t("Starting…")}
       </button>
     );
   }
@@ -44,7 +46,7 @@ export function TurnStopButton({
       disabled={stopping}
       aria-busy={stopping || undefined}
     >
-      {stopping ? "Stopping…" : "Stop"}
+      {stopping ? t("Stopping…") : t("Stop")}
     </button>
   );
 }

@@ -5,7 +5,7 @@ import {
   type LlmCatalogResult,
   type OctosUiClient,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import { RequestGate } from "../async/request-gate.ts";
 
 const REQUIRED_METHODS = Object.values(APPUI_ONBOARDING_METHODS);

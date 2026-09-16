@@ -18,6 +18,61 @@ async function start(page: Page) {
   ).toBeVisible();
 }
 
+/**
+ * Serve `assistantMarkdown` as the hydrated transcript of the next Session.
+ *
+ * A freshly launched Session no longer inherits the fixture's static demo
+ * transcript — "A newly created Session must not inherit the static demo
+ * transcript" in e2e/product.spec.ts pins that deliberately — so a test that
+ * reads rendered transcript content now supplies that content itself instead
+ * of assuming the fixture ships one.
+ */
+async function hydrateWith(page: Page, assistantMarkdown: string) {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    const requests = new Map<string | number, string>();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      requests.set(request.id, request.method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const response = JSON.parse(String(message));
+      if (requests.get(response.id) === "session/hydrate") {
+        response.result.messages = [
+          {
+            seq: 1,
+            role: "user",
+            content: "Show the Markdown transcript surface",
+            turn_id: "fixture-turn",
+            persisted_at: "2026-08-26T00:00:00Z",
+            media: [],
+          },
+          {
+            seq: 2,
+            role: "assistant",
+            content: assistantMarkdown,
+            turn_id: "fixture-turn",
+            thread_id: "fixture-thread",
+            message_id: "fixture-message",
+            persisted_at: "2026-08-26T00:00:01Z",
+            media: [],
+          },
+        ];
+      }
+      socket.send(JSON.stringify(response));
+    });
+  });
+}
+
+const TS_CODE_BLOCK = [
+  "```ts",
+  "export function answer(value: number): number {",
+  "  return value * 2;",
+  "}",
+  "```",
+].join("\n");
+
 test("code copy reports rejected and missing clipboard APIs without losing the code", async ({
   page,
 }) => {
@@ -33,6 +88,7 @@ test("code copy reports rejected and missing clipboard APIs without losing the c
       },
     });
   });
+  await hydrateWith(page, TS_CODE_BLOCK);
   await start(page);
   const copy = page.getByRole("button", { name: "Copy code block" });
   await copy.click();
@@ -280,7 +336,22 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await expect(
     page.getByRole("button", { name: "Back to latest" }),
   ).toBeVisible();
-  const before = await region.evaluate((el) => el.scrollTop);
+  // The wheel scroll settles asynchronously: content above the viewport
+  // (markdown and code blocks) finishes measuring a frame or two later and
+  // nudges the offset — 43041 then 42496 in this fixture. Take the baseline
+  // only once it has stopped moving, so this measures what the test is about,
+  // that streaming output never moves a detached reader, rather than the tail
+  // of the test's own scroll.
+  let settledTop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = await region.evaluate((el) => el.scrollTop);
+      const settled = top === settledTop;
+      settledTop = top;
+      return settled;
+    })
+    .toBe(true);
+  const before = settledTop;
   for (let index = 0; index < 25; index++)
     emit!("assistant_delta", { text: `Stream chunk ${index}. ` });
   emit!("turn_terminal", { outcome: "completed" });
@@ -400,27 +471,17 @@ test("a missing optional syntax grammar leaves readable and copyable plain code"
   const errors: string[] = [];
   let rejected = false;
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(/shikijs_langs_python.*\.js/, async (route) => {
-    rejected = true;
-    await route.abort("failed");
-  });
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    const requests = new Map<string | number, string>();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      requests.set(request.id, request.method);
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const response = JSON.parse(String(message));
-      if (requests.get(response.id) === "session/hydrate") {
-        response.result.messages[1].content =
-          "```python\nprint('still readable')\n```";
-      }
-      socket.send(JSON.stringify(response));
-    });
-  });
+  // The optional Python grammar chunk. A dev server serves it as
+  // @shikijs_langs_python.js; this repo's e2e runs `vite preview`, which
+  // serves the built /assets/python-<hash>.js instead.
+  await page.route(
+    /\/(?:@shikijs_langs_)?python(?:\.js|-[A-Za-z0-9_-]+\.js)(\?|$)/,
+    async (route) => {
+      rejected = true;
+      await route.abort("failed");
+    },
+  );
+  await hydrateWith(page, "```python\nprint('still readable')\n```");
   await start(page);
   await expect.poll(() => rejected).toBe(true);
   await expect(page.locator(".md-code-plain")).toContainText(

@@ -65,17 +65,24 @@ for (const viewport of [
     await wheelToBottom(page, content);
     await insideViewport(page, settings);
     await insideViewport(page, close);
-    await insideViewport(
-      page,
-      settings.getByRole("button", { name: "Disconnect", exact: true }),
-    );
-    await insideViewport(
-      page,
-      settings.getByRole("button", { name: "Forget server" }),
-    );
+    // General no longer ends with the connection controls: this shell adds the
+    // new-session defaults block below them, so scrolling to the bottom leaves
+    // Disconnect/Forget/diagnostics above the fold. Bring each into view first
+    // — the same idiom this test already uses for "Add provider" — and keep
+    // asserting that each one lands fully inside the viewport at this size.
+    const disconnect = settings.getByRole("button", {
+      name: "Disconnect",
+      exact: true,
+    });
+    await disconnect.scrollIntoViewIfNeeded();
+    await insideViewport(page, disconnect);
+    const forget = settings.getByRole("button", { name: "Forget server" });
+    await forget.scrollIntoViewIfNeeded();
+    await insideViewport(page, forget);
     const diagnostics = settings.getByRole("button", {
       name: "Copy diagnostics",
     });
+    await diagnostics.scrollIntoViewIfNeeded();
     await insideViewport(page, diagnostics);
     await diagnostics.click();
     await expect(
@@ -108,12 +115,22 @@ for (const viewport of [
     await expect(settings).toBeHidden();
     await expect(navigationTrigger).toBeFocused();
 
-    const modelTrigger = page.getByRole("button", { name: /^Runtime model:/ });
+    // Retargeted after the v0.10.0 rebase: the composer-level entry point into
+    // a settings surface is now our Session status strip, which replaced
+    // upstream's "Runtime model:" chip and opens the Session settings pane.
+    // The guarantee under test is unchanged — at this viewport the trigger is
+    // reachable, opens its pane from the keyboard, and Escape closes the pane
+    // and returns focus to the trigger.
+    const modelTrigger = page.getByRole("button", { name: "Session settings" });
+    await insideViewport(page, modelTrigger);
+    const sessionSettings = page.getByRole("dialog", {
+      name: "Session settings",
+    });
     await modelTrigger.focus();
     await modelTrigger.press("Enter");
-    await expect(settings).toBeVisible();
+    await expect(sessionSettings).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(settings).toBeHidden();
+    await expect(sessionSettings).toBeHidden();
     await expect(modelTrigger).toBeFocused();
   });
 }

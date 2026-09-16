@@ -80,8 +80,18 @@ test("manual light preserves readable conversation and settings colors on a dark
     .getByLabel("Server workspace path")
     .fill("/workspace/theme-review");
   await page.getByRole("button", { name: "Start session" }).click();
+  // Retargeted after the v0.10.0 rebase: a freshly launched Session no longer
+  // inherits the fixture's static demo transcript (that is pinned deliberately
+  // by "A newly created Session must not inherit the static demo transcript"
+  // in e2e/product.spec.ts), so the rendered conversation this test audits has
+  // to come from a real turn. The fixture reply is Markdown prose with bold
+  // and inline code, which is the conversation text the audit below reads.
+  const conversation = page.getByRole("textbox", { name: "Message Octos" });
+  await conversation.fill("Stream a reply fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByText("Completed with")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "external links" }),
+    page.getByText("all tests passing", { exact: true }),
   ).toBeVisible();
   expect(
     (await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze())
@@ -175,8 +185,15 @@ for (const storageKind of ["localStorage", "sessionStorage"] as const) {
     await page.getByRole("button", { name: "Start session" }).click();
     const composer = page.getByRole("textbox", { name: "Message Octos" });
     await expect(composer).toBeVisible();
+    // Retargeted after the v0.10.0 rebase: this gate proves the launched
+    // Session rendered its conversation surface. A fresh Session no longer
+    // inherits the fixture's static demo transcript (pinned by
+    // e2e/product.spec.ts), so the surface it renders is the conversation
+    // empty state instead of that transcript's "external links" prose.
     await expect(
-      page.getByRole("link", { name: "external links" }),
+      page.getByRole("heading", {
+        name: "Ask Octos to work on this repository",
+      }),
     ).toBeVisible();
     await composer.fill("Keep this draft while changing the theme.");
 

@@ -1,4 +1,4 @@
-import type { ProfileLlmModel } from "@octos-org/octoscode-client";
+import type { ProfileLlmModel } from "@octos-org/octoscode-client/protocol";
 
 export function profileDefaultNeedsRestart(
   runtimeModel: { model: string; provider: string } | null | undefined,

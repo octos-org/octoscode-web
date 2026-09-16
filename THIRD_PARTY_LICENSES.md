@@ -21,6 +21,7 @@ DeepSeek Harness UI reference.
 - `@types/estree-jsx@1.0.5` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree-jsx
 - `@types/estree@1.0.9` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree
 - `@types/hast@3.0.5` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/hast
+- `@types/katex@0.16.8` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/katex
 - `@types/mdast@4.0.4` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/mdast
 - `@types/ms@2.1.0` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ms
 - `@types/react@19.2.18` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
@@ -34,17 +35,28 @@ DeepSeek Harness UI reference.
 - `character-entities@2.0.2` — MIT — https://github.com/wooorm/character-entities
 - `character-reference-invalid@2.0.1` — MIT — https://github.com/wooorm/character-reference-invalid
 - `comma-separated-tokens@2.0.3` — MIT — https://github.com/wooorm/comma-separated-tokens
+- `commander@15.0.0` — MIT — https://github.com/tj/commander.js
+- `commander@8.3.0` — MIT — https://github.com/tj/commander.js
 - `csstype@3.2.3` — MIT — https://github.com/frenic/csstype
 - `debug@4.4.3` — MIT — https://github.com/debug-js/debug
 - `decode-named-character-reference@1.3.0` — MIT — https://github.com/wooorm/decode-named-character-reference
 - `dequal@2.0.3` — MIT — https://github.com/lukeed/dequal
 - `devlop@1.1.0` — MIT — https://github.com/wooorm/devlop
+- `entities@6.0.1` — BSD-2-Clause — https://github.com/fb55/entities
 - `escape-string-regexp@5.0.0` — MIT — https://github.com/sindresorhus/escape-string-regexp
 - `estree-util-is-identifier-name@3.0.0` — MIT — https://github.com/syntax-tree/estree-util-is-identifier-name
 - `extend@3.0.2` — MIT — https://github.com/justmoon/node-extend
+- `hast-util-from-dom@5.0.1` — ISC — https://github.com/syntax-tree/hast-util-from-dom
+- `hast-util-from-html-isomorphic@2.0.0` — MIT — https://github.com/syntax-tree/hast-util-from-html-isomorphic
+- `hast-util-from-html@2.0.3` — MIT — https://github.com/syntax-tree/hast-util-from-html
+- `hast-util-from-parse5@8.0.3` — MIT — https://github.com/syntax-tree/hast-util-from-parse5
+- `hast-util-is-element@3.0.0` — MIT — https://github.com/syntax-tree/hast-util-is-element
+- `hast-util-parse-selector@4.0.0` — MIT — https://github.com/syntax-tree/hast-util-parse-selector
 - `hast-util-to-html@9.0.5` — MIT — https://github.com/syntax-tree/hast-util-to-html
 - `hast-util-to-jsx-runtime@2.3.6` — MIT — https://github.com/syntax-tree/hast-util-to-jsx-runtime
+- `hast-util-to-text@4.0.2` — MIT — https://github.com/syntax-tree/hast-util-to-text
 - `hast-util-whitespace@3.0.0` — MIT — https://github.com/syntax-tree/hast-util-whitespace
+- `hastscript@9.0.1` — MIT — https://github.com/syntax-tree/hastscript
 - `html-url-attributes@3.0.1` — MIT — https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes
 - `html-void-elements@3.0.0` — MIT — https://github.com/wooorm/html-void-elements
 - `inline-style-parser@0.2.7` — MIT — https://github.com/remarkablemark/inline-style-parser
@@ -53,6 +65,8 @@ DeepSeek Harness UI reference.
 - `is-decimal@2.0.1` — MIT — https://github.com/wooorm/is-decimal
 - `is-hexadecimal@2.0.1` — MIT — https://github.com/wooorm/is-hexadecimal
 - `is-plain-obj@4.1.0` — MIT — https://github.com/sindresorhus/is-plain-obj
+- `katex@0.16.47` — MIT — https://katex.org
+- `katex@0.18.7` — MIT — https://katex.org
 - `longest-streak@3.1.0` — MIT — https://github.com/wooorm/longest-streak
 - `markdown-table@3.0.4` — MIT — https://github.com/wooorm/markdown-table
 - `mdast-util-find-and-replace@3.0.2` — MIT — https://github.com/syntax-tree/mdast-util-find-and-replace
@@ -63,6 +77,7 @@ DeepSeek Harness UI reference.
 - `mdast-util-gfm-table@2.0.0` — MIT — https://github.com/syntax-tree/mdast-util-gfm-table
 - `mdast-util-gfm-task-list-item@2.0.0` — MIT — https://github.com/syntax-tree/mdast-util-gfm-task-list-item
 - `mdast-util-gfm@3.1.0` — MIT — https://github.com/syntax-tree/mdast-util-gfm
+- `mdast-util-math@3.0.0` — MIT — https://github.com/syntax-tree/mdast-util-math
 - `mdast-util-mdx-expression@2.0.1` — MIT — https://github.com/syntax-tree/mdast-util-mdx-expression
 - `mdast-util-mdx-jsx@3.2.0` — MIT — https://github.com/syntax-tree/mdast-util-mdx-jsx
 - `mdast-util-mdxjs-esm@2.0.1` — MIT — https://github.com/syntax-tree/mdast-util-mdxjs-esm
@@ -78,6 +93,7 @@ DeepSeek Harness UI reference.
 - `micromark-extension-gfm-tagfilter@2.0.0` — MIT — https://github.com/micromark/micromark-extension-gfm-tagfilter
 - `micromark-extension-gfm-task-list-item@2.1.0` — MIT — https://github.com/micromark/micromark-extension-gfm-task-list-item
 - `micromark-extension-gfm@3.0.0` — MIT — https://github.com/micromark/micromark-extension-gfm
+- `micromark-extension-math@3.1.0` — MIT — https://github.com/micromark/micromark-extension-math
 - `micromark-factory-destination@2.0.1` — MIT — https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination
 - `micromark-factory-label@2.0.1` — MIT — https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label
 - `micromark-factory-space@2.0.1` — MIT — https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space
@@ -102,6 +118,7 @@ DeepSeek Harness UI reference.
 - `oniguruma-parser@0.12.2` — MIT — https://github.com/slevithan/oniguruma-parser
 - `oniguruma-to-es@4.3.6` — MIT — https://github.com/slevithan/oniguruma-to-es
 - `parse-entities@4.0.2` — MIT — https://github.com/wooorm/parse-entities
+- `parse5@7.3.0` — MIT — https://parse5.js.org
 - `property-information@7.2.0` — MIT — https://github.com/wooorm/property-information
 - `react-dom@19.2.8` — MIT — https://react.dev/
 - `react-markdown@10.1.0` — MIT — https://github.com/remarkjs/react-markdown
@@ -109,7 +126,9 @@ DeepSeek Harness UI reference.
 - `regex-recursion@6.0.2` — MIT — https://github.com/slevithan/regex-recursion
 - `regex-utilities@2.3.0` — MIT — https://github.com/slevithan/regex-utilities
 - `regex@6.1.0` — MIT — https://github.com/slevithan/regex
+- `rehype-katex@7.0.1` — MIT — https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex
 - `remark-gfm@4.0.1` — MIT — https://github.com/remarkjs/remark-gfm
+- `remark-math@6.0.0` — MIT — https://github.com/remarkjs/remark-math/tree/main/packages/remark-math
 - `remark-parse@11.0.0` — MIT — https://remark.js.org
 - `remark-rehype@11.1.2` — MIT — https://github.com/remarkjs/remark-rehype
 - `remark-stringify@11.0.0` — MIT — https://remark.js.org
@@ -122,13 +141,17 @@ DeepSeek Harness UI reference.
 - `trim-lines@3.0.1` — MIT — https://github.com/wooorm/trim-lines
 - `trough@2.2.0` — MIT — https://github.com/wooorm/trough
 - `unified@11.0.5` — MIT — https://unifiedjs.com
+- `unist-util-find-after@5.0.0` — MIT — https://github.com/syntax-tree/unist-util-find-after
 - `unist-util-is@6.0.1` — MIT — https://github.com/syntax-tree/unist-util-is
 - `unist-util-position@5.0.0` — MIT — https://github.com/syntax-tree/unist-util-position
+- `unist-util-remove-position@5.0.0` — MIT — https://github.com/syntax-tree/unist-util-remove-position
 - `unist-util-stringify-position@4.0.0` — MIT — https://github.com/syntax-tree/unist-util-stringify-position
 - `unist-util-visit-parents@6.0.2` — MIT — https://github.com/syntax-tree/unist-util-visit-parents
 - `unist-util-visit@5.1.0` — MIT — https://github.com/syntax-tree/unist-util-visit
+- `vfile-location@5.0.3` — MIT — https://github.com/vfile/vfile-location
 - `vfile-message@4.0.3` — MIT — https://github.com/vfile/vfile-message
 - `vfile@6.0.3` — MIT — https://github.com/vfile/vfile
+- `web-namespaces@2.0.1` — MIT — https://github.com/wooorm/web-namespaces
 - `zwitch@2.0.4` — MIT — https://github.com/wooorm/zwitch
 
 ## License and notice texts
@@ -207,6 +230,7 @@ Applies to:
 - `@types/estree-jsx@1.0.5`
 - `@types/estree@1.0.9`
 - `@types/hast@3.0.5`
+- `@types/katex@0.16.8`
 - `@types/mdast@4.0.4`
 - `@types/ms@2.1.0`
 - `@types/react@19.2.18`
@@ -270,6 +294,7 @@ Applies to:
 - `character-entities@2.0.2`
 - `character-reference-invalid@2.0.1`
 - `mdast-util-to-string@4.0.0`
+- `unist-util-find-after@5.0.0`
 - `unist-util-position@5.0.0`
 - `unist-util-visit@5.1.0`
 
@@ -302,6 +327,8 @@ Applies to:
 Applies to:
 
 - `comma-separated-tokens@2.0.3`
+- `hast-util-is-element@3.0.0`
+- `hast-util-parse-selector@4.0.0`
 - `hast-util-whitespace@3.0.0`
 - `html-void-elements@3.0.0`
 - `is-alphabetical@2.0.1`
@@ -310,8 +337,11 @@ Applies to:
 - `is-hexadecimal@2.0.1`
 - `mdast-util-to-hast@13.2.1`
 - `space-separated-tokens@2.0.2`
+- `unist-util-remove-position@5.0.0`
 - `unist-util-stringify-position@4.0.0`
 - `unist-util-visit-parents@6.0.2`
+- `vfile-location@5.0.3`
+- `web-namespaces@2.0.1`
 - `zwitch@2.0.4`
 
     ===== license =====
@@ -342,6 +372,37 @@ Applies to:
 
 Applies to:
 
+- `commander@15.0.0`
+- `commander@8.3.0`
+
+    ===== LICENSE =====
+    (The MIT License)
+
+    Copyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    'Software'), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Notice group 8
+
+Applies to:
+
 - `csstype@3.2.3`
 
     ===== LICENSE =====
@@ -365,7 +426,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 8
+### Notice group 9
 
 Applies to:
 
@@ -392,13 +453,15 @@ Applies to:
     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 9
+### Notice group 10
 
 Applies to:
 
 - `decode-named-character-reference@1.3.0`
+- `hast-util-from-parse5@8.0.3`
 - `hast-util-to-html@9.0.5`
 - `hast-util-to-jsx-runtime@2.3.6`
+- `hastscript@9.0.1`
 - `markdown-table@3.0.4`
 - `mdast-util-find-and-replace@3.0.2`
 - `mdast-util-from-markdown@2.0.3`
@@ -455,7 +518,7 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 10
+### Notice group 11
 
 Applies to:
 
@@ -484,7 +547,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-### Notice group 11
+### Notice group 12
 
 Applies to:
 
@@ -514,7 +577,26 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 12
+### Notice group 13
+
+Applies to:
+
+- `entities@6.0.1`
+
+    ===== LICENSE =====
+    Copyright (c) Felix Böhm
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+    Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+    Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+    THIS IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS,
+    EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+### Notice group 14
 
 Applies to:
 
@@ -532,7 +614,7 @@ Applies to:
 
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 13
+### Notice group 15
 
 Applies to:
 
@@ -541,6 +623,7 @@ Applies to:
 - `mdast-util-gfm-strikethrough@2.0.0`
 - `mdast-util-gfm-table@2.0.0`
 - `mdast-util-gfm-task-list-item@2.0.0`
+- `mdast-util-math@3.0.0`
 - `mdast-util-mdx-expression@2.0.1`
 - `mdast-util-mdx-jsx@3.2.0`
 - `mdast-util-mdxjs-esm@2.0.1`
@@ -549,6 +632,7 @@ Applies to:
 - `micromark-extension-gfm-tagfilter@2.0.0`
 - `micromark-extension-gfm-task-list-item@2.1.0`
 - `micromark-extension-gfm@3.0.0`
+- `micromark-extension-math@3.1.0`
 
     ===== license =====
     (The MIT License)
@@ -574,7 +658,7 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 14
+### Notice group 16
 
 Applies to:
 
@@ -604,7 +688,120 @@ Applies to:
     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
     WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 15
+### Notice group 17
+
+Applies to:
+
+- `hast-util-from-dom@5.0.1`
+
+    ===== license =====
+    (ISC License)
+
+    Copyright (c) Keith McKnight <keith@mcknig.ht>
+
+    Permission to use, copy, modify, and/or distribute this software for any purpose
+    with or without fee is hereby granted, provided that the above copyright notice
+    and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+    REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+    FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+    INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+    OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+    TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+    THIS SOFTWARE.
+
+### Notice group 18
+
+Applies to:
+
+- `hast-util-from-html-isomorphic@2.0.0`
+
+    ===== license =====
+    (The MIT License)
+
+    Copyright (c) 2023 Remco Haszing <remcohaszing@gmail.com>
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    'Software'), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Notice group 19
+
+Applies to:
+
+- `hast-util-from-html@2.0.3`
+
+    ===== license =====
+    (The MIT License)
+
+    Copyright (c) 2022 Titus Wormer <tituswormer@gmail.com>
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    'Software'), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Notice group 20
+
+Applies to:
+
+- `hast-util-to-text@4.0.2`
+
+    ===== license =====
+    (The MIT License)
+
+    Copyright (c) 2019 Titus Wormer <tituswormer@gmail.com>
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    'Software'), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Notice group 21
 
 Applies to:
 
@@ -633,7 +830,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-### Notice group 16
+### Notice group 22
 
 Applies to:
 
@@ -650,7 +847,37 @@ Applies to:
 
     THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 17
+### Notice group 23
+
+Applies to:
+
+- `katex@0.16.47`
+- `katex@0.18.7`
+
+    ===== LICENSE =====
+    The MIT License (MIT)
+
+    Copyright (c) 2013-2020 Khan Academy and other contributors
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+### Notice group 24
 
 Applies to:
 
@@ -682,7 +909,7 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 18
+### Notice group 25
 
 Applies to:
 
@@ -713,7 +940,7 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 19
+### Notice group 26
 
 Applies to:
 
@@ -743,7 +970,7 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 20
+### Notice group 27
 
 Applies to:
 
@@ -772,7 +999,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 21
+### Notice group 28
 
 Applies to:
 
@@ -801,7 +1028,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 22
+### Notice group 29
 
 Applies to:
 
@@ -830,7 +1057,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 23
+### Notice group 30
 
 Applies to:
 
@@ -861,7 +1088,34 @@ Applies to:
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 24
+### Notice group 31
+
+Applies to:
+
+- `parse5@7.3.0`
+
+    ===== LICENSE =====
+    Copyright (c) 2013-2019 Ivan Nikulin (ifaaan@gmail.com, https://github.com/inikulin)
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+
+### Notice group 32
 
 Applies to:
 
@@ -892,7 +1146,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 25
+### Notice group 33
 
 Applies to:
 
@@ -921,7 +1175,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 26
+### Notice group 34
 
 Applies to:
 
@@ -951,7 +1205,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 27
+### Notice group 35
 
 Applies to:
 
@@ -980,7 +1234,37 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-### Notice group 28
+### Notice group 36
+
+Applies to:
+
+- `rehype-katex@7.0.1`
+- `remark-math@6.0.0`
+
+    ===== license (from the package's repository) =====
+    (The MIT License)
+
+    Copyright (c) Junyoung Choi <fluke8259@gmail.com>
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+### Notice group 37
 
 Applies to:
 
@@ -1010,7 +1294,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-### Notice group 29
+### Notice group 38
 
 Applies to:
 
@@ -1040,7 +1324,7 @@ Applies to:
     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
     WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 30
+### Notice group 39
 
 Applies to:
 
@@ -1070,7 +1354,7 @@ Applies to:
     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
     WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-### Notice group 31
+### Notice group 40
 
 Applies to:
 
@@ -1099,7 +1383,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-### Notice group 32
+### Notice group 41
 
 Applies to:
 
@@ -1129,7 +1413,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-### Notice group 33
+### Notice group 42
 
 Applies to:
 

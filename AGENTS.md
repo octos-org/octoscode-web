@@ -27,8 +27,10 @@ or plugin execution. Those remain in `octos serve`.
   semantic `--dsw-*` aliases rather than literal palette values.
 - Preserve the DeepSeek MIT notice and audited source revision when copying or
   substantially adapting DSH UI code. See `THIRD_PARTY_NOTICES.md`.
-- Browser-only state is limited to drafts, focus, selection, expansion, and
-  connection preferences. Durable task/session state belongs to the server.
+- Browser-only state is limited to drafts, focus, selection, expansion,
+  connection preferences, and local display/editing preferences (language,
+  theme, Vim mode). Explicit display-preference saves must contain no credential,
+  draft or Session data. Durable task/session state belongs to the server.
 - Never persist an auth token to `localStorage`. The current server accepts a
   WebSocket query token because browsers cannot attach an Authorization header;
   avoid printing or retaining the resulting URL.

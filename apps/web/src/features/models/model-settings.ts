@@ -9,7 +9,11 @@ import {
   type ProfileLlmConfigResult,
   type ProfileLlmDeleteResult,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
+import {
+  parseLlmInferenceOverrides,
+  type LlmInferenceOverrides,
+} from "@octos-org/octoscode-client/onboarding";
 import {
   RequestAuthorityGate,
   type RequestAuthority,
@@ -54,6 +58,9 @@ export interface ModelSettingsDraft {
   modelId: string;
   route: ModelRouteDraft;
   setPrimary: boolean;
+  /** Hidden configured values are preserved, not offered as new inference controls. */
+  inference?: LlmInferenceOverrides;
+  editBlocked?: true;
 }
 
 export interface ModelSettingsTestResult {
@@ -80,8 +87,23 @@ export interface ModelSettingsSaveResult {
   mutation: ModelSettingsMutationResult;
 }
 
-export type ModelSettingsPhase =
-  "idle" | "loading" | "testing" | "fetching_models" | "saving" | "deleting";
+export type {
+  DispositionMessageInput,
+  DispositionNoticeOutcome,
+  ModelNoticeBoard,
+  ModelNoticeEvent,
+  ModelRuntimeDisposition,
+  ModelSelectionIdentity,
+  ModelSettingsPhase,
+  NoticeTranslator,
+  RuntimeDispositionResult,
+} from "./model-notices.ts";
+export {
+  noticeMessage,
+  nextModelNoticeBoard,
+  parseRuntimeDisposition,
+} from "./model-notices.ts";
+import type { ModelSettingsPhase } from "./model-notices.ts";
 
 export interface ModelSettingsState {
   capabilities: ModelSettingsCapabilities;
@@ -245,8 +267,8 @@ export class ModelSettingsController {
     if (!operation) return null;
     const { client, profileId, authority } = operation;
     const secret = normalizedSecret(apiKey);
-    const provision = provisionParams(profileId, draft, secret);
     try {
+      const provision = provisionParams(profileId, draft, secret);
       const result = await client.testLlmProfile(provision);
       if (!this.#isCurrent(authority)) return null;
       assertProfile(result.profile_id, profileId);
@@ -333,8 +355,9 @@ export class ModelSettingsController {
     const secret = normalizedSecret(apiKey);
     // Construct this ONCE. Test and save therefore cannot drift by rebuilding
     // the route/model from mutable UI state between the two awaited calls.
-    const provision = provisionParams(profileId, draft, secret);
     try {
+      const provision = provisionParams(profileId, draft, secret);
+      const setPrimary = draft.setPrimary;
       const testedWire = await client.testLlmProfile(provision);
       if (!this.#isCurrent(authority)) return null;
       assertProfile(testedWire.profile_id, profileId);
@@ -349,7 +372,7 @@ export class ModelSettingsController {
       this.#update({ phase: "saving", error: null });
       const savedWire = await client.upsertLlmProfile({
         ...provision,
-        set_primary: draft.setPrimary,
+        set_primary: setPrimary,
       });
       if (!this.#isCurrent(authority)) return null;
       assertProfile(savedWire.profile_id, profileId);
@@ -480,7 +503,17 @@ export class ModelSettingsController {
 export function selectionFromModelSettingsDraft(
   draft: ModelSettingsDraft,
 ): LlmSelection {
+  if (draft.editBlocked)
+    throw new Error(
+      "This configured model contains settings this editor cannot preserve. Edit it through Core configuration instead.",
+    );
+  const inference = parseLlmInferenceOverrides(draft.inference ?? {});
+  if (!inference)
+    throw new Error(
+      "The configured model inference settings cannot be safely preserved.",
+    );
   return {
+    ...inference,
     family_id: requiredText(draft.familyId, "Provider family"),
     model_id: requiredText(draft.modelId, "Model"),
     route: routeSelection(draft.route),

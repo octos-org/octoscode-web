@@ -3,6 +3,12 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const endpoint = `http://127.0.0.1:${process.env.OCTOSCODE_LIVE_WEB_PORT ?? "4174"}`;
 const token = required("OCTOSCODE_LIVE_TOKEN");
 const cwd = required("OCTOSCODE_LIVE_WORKSPACE");
+// The live gate must not assume a specific provider model. Supply the exact
+// runtime model id Core is configured to serve; the gate verifies the Session
+// runtime label matches it before any turn starts.
+const expectedModel =
+  process.env.OCTOSCODE_LIVE_EXPECTED_MODEL ?? "glm-5.3-flash";
+const expectedModelLabel = modelLabel(expectedModel);
 const MARKER = "GLM_E2E_OK";
 const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 
@@ -10,7 +16,27 @@ function productNavigation(page: Page): Locator {
   return page.getByRole("complementary", { name: "Product navigation" });
 }
 
-test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
+function modelLabel(modelId: string): string {
+  return modelId
+    .replace(/([a-z])([0-9])/gi, "$1 $2")
+    .replace(/[-_.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function runtimeModelPattern(modelId: string): RegExp {
+  // The runtime control may render the label as "GLM 5.3 Flash" with or
+  // without punctuation; match the normalized id case-insensitively.
+  const normalized = modelId
+    .split(/[-_.]/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[- .]?");
+  // Anchor the runtime itself: a matching Profile default later in this
+  // accessible label must never satisfy the effective-runtime requirement.
+  return new RegExp(`^Runtime model: ${normalized}(?:\\. |$)`, "i");
+}
+
+test("runs a coding turn with the expected runtime model and restores it after refresh", async ({
   page,
 }) => {
   await page.goto("/");
@@ -70,14 +96,14 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
   }
 
   const runtimeModel = page.getByRole("button", {
-    name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
+    name: runtimeModelPattern(expectedModel),
   });
   await expect(runtimeModel).toBeVisible({ timeout: 30_000 });
 
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
   await composer.fill(
-    `Create GLM_E2E.md in this workspace with exactly one line: GLM-5.3-Flash web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker ${MARKER}.`,
+    `Create MODEL_E2E.md in this workspace with exactly one line: ${expectedModelLabel} web end-to-end verified. Read the file back with a tool. Do not modify anything else. After verification, reply with the exact marker ${MARKER}.`,
   );
   await page.getByRole("button", { name: "Send prompt" }).click();
 
@@ -123,7 +149,7 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
+      name: runtimeModelPattern(expectedModel),
     }),
   ).toBeVisible({ timeout: 30_000 });
 
@@ -146,7 +172,7 @@ test("runs a GLM-5.3-Flash coding turn and restores it after refresh", async ({
   ).toBeVisible();
 });
 
-test("keeps a GLM turn alive while a sibling Session is focused", async ({
+test("keeps a background turn alive while a sibling Session is focused", async ({
   page,
 }) => {
   const { navigation, composer } = await openLiveWorkspace(page);
@@ -251,7 +277,7 @@ async function openLiveWorkspace(page: Page): Promise<{
 
   await expect(
     page.getByRole("button", {
-      name: /^Runtime model: .*glm[- .]?5\.3[- .]?flash/i,
+      name: runtimeModelPattern(expectedModel),
     }),
   ).toBeVisible({ timeout: 30_000 });
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
