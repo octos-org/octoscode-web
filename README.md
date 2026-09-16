@@ -54,6 +54,11 @@ second agent loop, plugin host, sandbox, or session store.
   discovery, save/delete, and Profile-default management in Settings.
 - Browser onboarding for an empty solo server, with transient credentials and a
   truthful TUI fallback on older Core versions.
+- Single-use pairing links, so connecting needs no pasted token, with the token
+  optionally remembered per device and a Forget action.
+- Server folder browsing when creating a workspace, including New folder, behind
+  `onboarding.workspace_browse.v1`.
+- Math in chat output through KaTeX, loaded only for messages that carry math.
 - A responsive coding workspace informed by
   [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), with its
   MIT attribution preserved.
@@ -72,21 +77,52 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run `octos serve` separately, then enter its origin and optional auth token. The
+Run `octos serve` separately. There are two ways to connect it.
+
+**From a pairing link, when the server offers one.** Start the server with the
+address this app is served from:
+
+```sh
+octos serve --web-url http://127.0.0.1:5173
+```
+
+It prints one line:
+
+```
+Open the web client: http://127.0.0.1:5173/?octos=http://127.0.0.1:53124&pair=EMX3MBRB
+```
+
+Open that link and the app connects on its own. The code works once, expires
+five minutes after the server starts, and is only accepted over loopback. The
+link's parameters are removed from the address bar before the first render, so
+they do not reach history or a screenshot. **Remember on this device** is ticked
+for a pairing link, so later restarts do not ask again even though the port
+changes; a line under the form says whether the token lives on this device, in
+this tab, or only in memory when the browser blocks saved data, and **Forget**
+clears it. Without `--web-url` the server prints its origin and the code as two
+labelled lines instead.
+
+**By hand, which always works.** Enter the server's origin and auth token. The
 connection form defaults to this page's origin; **Use this page** restores that
-address after a custom server was saved. After connecting for the first time,
-enter a workspace path on the Octos server and select **Start session**. For
-later conversations, **New Session** offers recent Workspaces and **Add
-workspace**. The sidebar remembers the Sessions this tab successfully opens, so
-multiple conversations in the same Workspace remain distinct and can be selected
-again. The selected Session is restored on refresh in the same tab; only the
-server origin and display preferences survive after that tab closes. Unsent
-composer drafts survive refresh in the same tab and stay scoped to its server,
-sign-in and Session; they are never sent automatically after restoration. These
-confirmed references are navigation memory, not a complete Session catalog: Core
-rc.9 can misroute `session/list({cwd})` for unscoped/admin connections, so the
-Web client cannot promise a complete or correctly grouped catalog until the
-server-owned SessionRef contract in
+address after a custom server was saved. A server that does not offer pairing
+shows this form with no extra step.
+
+Then choose where the session runs: type a path on the Octos server, or select
+**Browse…** to walk the server's folders, which appears when the server
+advertises `onboarding.workspace_browse.v1`. The browser lists subfolders only,
+goes up and down, and **New folder** creates one and moves into it. Select
+**Start session** to open the conversation. For later conversations, **New
+Session** offers recent Workspaces and **Add workspace**. The sidebar remembers
+the Sessions this tab successfully opens, so multiple conversations in the same
+Workspace remain distinct and can be selected again. The selected Session is
+restored on refresh in the same tab; only the server origin and display
+preferences survive after that tab closes. Unsent composer drafts survive
+refresh in the same tab and stay scoped to its server, sign-in and Session; they
+are never sent automatically after restoration. These confirmed references are
+navigation memory, not a complete Session catalog: Core rc.9 can misroute
+`session/list({cwd})` for unscoped/admin connections, so the Web client cannot
+promise a complete or correctly grouped catalog until the server-owned
+SessionRef contract in
 [octos#2146](https://github.com/octos-org/octos/issues/2146) lands. The browser
 cannot start or provision the Octos binary.
 
