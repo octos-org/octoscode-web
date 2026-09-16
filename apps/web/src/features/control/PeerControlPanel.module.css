@@ -1,0 +1,70 @@
+/* PeerControlPanel — external-master control seat (plan 0630 §1-4).
+   Mirrors the SessionControlBar disclosure surface so the seat reads as a
+   sibling of the read-only controller disclosure. */
+.panel {
+  display: grid;
+  gap: var(--dsw-space-2, 0.5rem);
+  padding-block-start: var(--dsw-space-3, 0.75rem);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.command {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.command:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.command:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status,
+.refusal,
+.receipt {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.refusal {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.receipt {
+  display: grid;
+  gap: var(--dsw-space-1, 0.25rem);
+}
+
+.receiptRow {
+  display: flex;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.receiptRow dt {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
