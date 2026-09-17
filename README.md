@@ -77,6 +77,35 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+### The server must be listening on a port
+
+A browser can only reach Octos over HTTP, so `octos serve` has to be bound to a
+host and port:
+
+```sh
+octos serve --host 127.0.0.1 --port 50080
+```
+
+**Not `--stdio`.** That mode runs the UI Protocol over the process's stdin and
+stdout _instead of_ binding HTTP, so it serves exactly one client — the one that
+spawned it — and no browser can attach. It is what the
+[Octoscode TUI](https://github.com/octos-org/octoscode) uses by default when you
+run it on its own.
+
+Pick the mode by what you want in front of you:
+
+| You want                              | Run                                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Just a terminal, nothing to configure | `octoscode` on its own — it provisions a server and speaks stdio to it                                     |
+| A browser                             | `octos serve --host … --port …`, then this app                                                             |
+| Both at once                          | the same `octos serve`, then this app **and** `octoscode --endpoint ws://<host>:<port>/api/ui-protocol/ws` |
+
+The third row is a real configuration, not a workaround: the terminal and the
+browser are peers on one server. See
+[Share a session with the terminal](#share-a-session-with-the-terminal).
+
+### Connecting
+
 Run `octos serve` separately. There are two ways to connect it.
 
 **From a pairing link, when the server offers one.** Start the server with the
@@ -144,6 +173,35 @@ server** or an endpoint/token change clears those refs. The rc11 candidate does
 not replace the repository's separately pinned rc9 runtime baseline. Durable
 detached execution remains a Core boundary, tracked in
 [octos#2167](https://github.com/octos-org/octos/issues/2167).
+
+### Share a session with the terminal
+
+One `octos serve` accepts many clients. Point the
+[Octoscode TUI](https://github.com/octos-org/octoscode) at the same server, with
+the same token, and both are live against the same agent, sessions and
+workspace:
+
+```sh
+octoscode \
+  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws \
+  --auth-token "$OCTOS_AUTH_TOKEN"
+```
+
+Add `--session <id>` to open one specific conversation in both places. Each
+client's `session/open` is an _attach_, not a claim, and the server fans every
+event for that session out to every connection that opened it — so a turn
+started in the terminal streams into the browser as it happens, and the reverse.
+
+Two rules follow from that, and they are the server's, not this app's:
+
+- **One turn at a time per session.** The server keeps a single active-turn slot
+  per session. While one client's turn is running, the other's `turn/start` is
+  refused rather than queued server-side.
+- **Nothing decides who "owns" a session.** Both clients may start turns
+  whenever the slot is free, and any attached client can interrupt the running
+  turn — `turn/interrupt` is not scoped to the connection that started it. If
+  you want one side to watch only, start the TUI with `--readonly`, which
+  disables its sends.
 
 For UI work without a local Octos installation, start the deterministic AppUI
 fixture in another terminal:
