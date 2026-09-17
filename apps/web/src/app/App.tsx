@@ -1013,6 +1013,7 @@ export function App() {
               {STORAGE_CLEAR_WARNING}
             </p>
           ) : null}
+          <div className={productStyles.progressTrack} aria-hidden="true" />
           <div
             ref={conversationScrollRef}
             className="conversation-scroll"
