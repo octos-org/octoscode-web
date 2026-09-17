@@ -15,7 +15,6 @@ import {
 } from "../features/connection/ConnectionPanel.tsx";
 import {
   autoStartKind,
-  defaultEndpoint,
   initialConnection,
   STORAGE_CLEAR_WARNING,
 } from "../features/connection/connection-bootstrap.ts";
@@ -291,13 +290,7 @@ export function ConnectionGate() {
     if (pairingLink || rememberedConnectRef.current) return;
     if (restoreConnectionRef.current || connection.token.trim()) return;
     const last = loadDurableEndpoint(browserStorage("localStorage"));
-    // The draft is saved as it is edited, so a first visit "saves" the address
-    // this page was served from before anyone has seen a server there. Probing
-    // that asks our own static host for /pair/info and logs a 404 the operator
-    // can do nothing about, so only an address that differs from the default
-    // counts as an origin this browser actually saw. When the client is served
-    // BY the server the default already works, so nothing is lost.
-    if (!last || last === defaultEndpoint()) return;
+    if (!last) return;
     const controller = new AbortController();
     let live = true;
     void probePairingInfo(last, { signal: controller.signal }).then((probe) => {
