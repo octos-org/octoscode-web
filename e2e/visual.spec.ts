@@ -49,17 +49,7 @@ async function startDefaultWorkspace(page: Page): Promise<void> {
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 }
 
-test("connect gate matches baseline", async ({ page, request }) => {
-  // The gate probes /pair/info for the origin this browser saw and offers
-  // "Found Octos on …" when the server answers. The fixture's pairing state is
-  // process-wide, so without this reset the baseline captures whatever an
-  // earlier spec in the same shard happened to leave staged — which is exactly
-  // how the committed baseline came to contain an offer that only some shard
-  // orderings reproduce. Pin the unpaired gate.
-  const reset = await request.post(
-    `${FIXTURE_ORIGIN}/__test__/pair/reset?mode=unsupported`,
-  );
-  expect(reset.status()).toBe(204);
+test("connect gate matches baseline", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
