@@ -169,6 +169,24 @@ describe("resume binding on the real persistent engine", () => {
     expect(h.manager.selected()).toBe(h.source);
     expect(h.start).not.toHaveBeenCalled();
   });
+  it("carries a candidate's live-turn flag, and omits it when the server is silent", async () => {
+    // How this client sees that ANOTHER client attached to the same server is
+    // mid-turn in a session it has not opened. Silence from an older server
+    // must stay distinguishable from a reported "idle".
+    const h = await fixture();
+    h.list.mockResolvedValue({
+      sessions: [
+        { id: "busy", message_count: 1, active_turn: true },
+        { id: "idle", message_count: 1, active_turn: false },
+        { id: "quiet", message_count: 1 },
+      ],
+    });
+    const rows = await h.binding.list(h.abort.signal);
+    expect(rows[0]?.activeTurn).toBe(true);
+    expect(rows[1]?.activeTurn).toBe(false);
+    expect(rows[2]).not.toHaveProperty("activeTurn");
+  });
+
   it("requires exact confirmation and rejects forged or ambiguous bare rows without opening", async () => {
     const h = await fixture();
     h.list.mockResolvedValue({ sessions: [{ id: "bare", message_count: 2 }] });

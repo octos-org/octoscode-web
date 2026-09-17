@@ -1060,6 +1060,8 @@ const catalog: Readonly<Record<string, string>> = {
   Responding: "正在回复",
   "Peers running ({count})": "正在运行的同侪（{count} 个）",
   "Another app is using this session": "另一个应用正在使用此会话",
+  "Busy — another client is working in this session":
+    "忙碌 — 另一个客户端正在此会话中工作",
   "Another client is working in this session": "另一个客户端正在此会话中工作",
   Reconnecting: "正在重新连接",
   "Model, permissions, sandbox": "模型、权限、沙箱",
