@@ -423,6 +423,62 @@ describe("queue-backed turn controller async authority", () => {
     expect(client.startTurn).toHaveBeenCalledTimes(2);
   });
 
+  it("lets the user continue past a turn whose status stays unknown, without resending it", async () => {
+    // A server restart loses the turn: every lookup answers "unknown", so the
+    // hold would never lift on its own. Continuing settles the lost turn
+    // locally as interrupted and resumes the FIFO; the lost prompt is never
+    // sent again.
+    const client = fakeClient();
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("lost to a restart");
+    const lostTurnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("queued behind it");
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery?.phase).toBe("unknown"),
+    );
+
+    harness.controller.continueWithoutTurn();
+
+    expect(harness.controller.turnRecovery).toBeNull();
+    await vi.waitFor(() => expect(client.startTurn).toHaveBeenCalledTimes(2));
+    const startedIds = client.startTurn.mock.calls.map(
+      ([params]) => (params as { turn_id: string }).turn_id,
+    );
+    expect(startedIds.filter((id) => id === lostTurnId)).toHaveLength(1);
+    expect(harness.activeTurnId()).not.toBe(lostTurnId);
+  });
+
+  it("ignores continue while a status check is still in flight", async () => {
+    const lookup = deferred<void>();
+    const client = fakeClient({
+      state: async (params) => {
+        await lookup.promise;
+        return { ...params, state: "completed", committed_seqs: [] };
+      },
+    });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("first");
+    const turnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+    await vi.waitFor(() =>
+      expect(harness.controller.turnRecovery?.phase).toBe("checking"),
+    );
+
+    harness.controller.continueWithoutTurn();
+
+    expect(harness.controller.turnRecovery?.phase).toBe("checking");
+    expect(harness.activeTurnId()).toBe(turnId);
+    lookup.resolve();
+    await vi.waitFor(() => expect(harness.controller.turnRecovery).toBeNull());
+  });
+
   it("holds a missing turn when the server does not advertise lifecycle lookup", async () => {
     const client = fakeClient();
     const harness = renderController(client);

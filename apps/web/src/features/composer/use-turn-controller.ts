@@ -127,6 +127,13 @@ export interface QueueBackedTurnController {
   readonly turnRecovery: TurnRecoveryState | null;
   turnRecoveryNow: () => TurnRecoveryState | null;
   retryTurnRecovery: () => Promise<void>;
+  /**
+   * The user's way out when no lookup can settle the held turn (the server
+   * lost it, e.g. across a restart): settle it locally as interrupted and
+   * resume the FIFO. The held turn is never resent. Ignored while a lookup is
+   * in flight.
+   */
+  continueWithoutTurn: () => void;
   dispatchingTurnIdNow: () => string | null;
   interruptingTurnIdNow: () => string | null;
   interruptibleNow: () => boolean;
@@ -952,6 +959,13 @@ export function createQueueBackedTurnController(options: {
     }
   };
 
+  const continueWithoutTurn = () => {
+    const turnId = queueOf().snapshot().active?.turnId;
+    if (!recovery || recovery.phase === "checking") return;
+    if (!turnId || recovery.turnId !== turnId) return;
+    applyRecoveredState(turnId, "interrupted");
+  };
+
   function applyRecoveredState(
     turnId: string,
     state: Exclude<TurnLifecycleState, "unknown">,
@@ -1137,6 +1151,7 @@ export function createQueueBackedTurnController(options: {
     },
     turnRecoveryNow: () => recovery,
     retryTurnRecovery,
+    continueWithoutTurn,
     dispatchingTurnIdNow: () => dispatchingTurnId,
     interruptingTurnIdNow: () => interruptingTurnId,
     interruptibleNow: () =>

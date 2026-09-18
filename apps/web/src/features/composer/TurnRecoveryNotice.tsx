@@ -5,9 +5,12 @@ import styles from "./TurnRecoveryNotice.module.css";
 export function TurnRecoveryNotice({
   recovery,
   onRetry,
+  onContinue,
 }: {
   recovery: TurnRecoveryState;
   onRetry: () => void;
+  /** Settle the held turn as lost and resume sending; never resends it. */
+  onContinue?: () => void;
 }) {
   const titleId = useId();
   const checking = recovery.phase === "checking";
@@ -37,12 +40,26 @@ export function TurnRecoveryNotice({
         {recovery.phase === "error" ? (
           <p>The status check failed. You can try again.</p>
         ) : null}
+        {!checking && onContinue ? (
+          <p>
+            If the response was lost, for example because the server restarted,
+            continue without it. Nothing is sent again; queued messages send
+            next.
+          </p>
+        ) : null}
       </div>
-      {recovery.phase !== "unavailable" ? (
-        <button type="button" onClick={onRetry} disabled={checking}>
-          {checking ? "Checking status…" : "Check status"}
-        </button>
-      ) : null}
+      <div className={styles.actions}>
+        {recovery.phase !== "unavailable" ? (
+          <button type="button" onClick={onRetry} disabled={checking}>
+            {checking ? "Checking status…" : "Check status"}
+          </button>
+        ) : null}
+        {!checking && onContinue ? (
+          <button type="button" onClick={onContinue}>
+            Continue without it
+          </button>
+        ) : null}
+      </div>
       <small>Queued messages remain here. You can remove them below.</small>
     </section>
   );

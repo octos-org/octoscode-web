@@ -301,6 +301,7 @@ export interface OctosSessionRuntime {
     dispatchingTurnId: string | null;
     turnRecovery: TurnRecoveryState | null;
     retryTurnRecovery: () => Promise<void>;
+    continueWithoutTurn: () => void;
     interruptible: boolean;
     interruptingTurnId: string | null;
     enqueuePrompt: (text: string) => boolean;
@@ -2617,6 +2618,7 @@ export function useOctosSession(): OctosSessionRuntime {
     turnRecovery: selectedRecovery,
     retryTurnRecovery: () =>
       viewRecord?.controller.retryTurnRecovery() ?? Promise.resolve(),
+    continueWithoutTurn: () => viewRecord?.controller.continueWithoutTurn(),
     cancelQueuedPrompt: (turnId: string) =>
       viewRecord?.controller.cancelQueuedPrompt(turnId) ?? false,
     interruptible: Boolean(
@@ -3524,6 +3526,7 @@ export function useOctosSession(): OctosSessionRuntime {
       dispatchingTurnId: turnController.dispatchingTurnId,
       turnRecovery: turnController.turnRecovery,
       retryTurnRecovery: turnController.retryTurnRecovery,
+      continueWithoutTurn: turnController.continueWithoutTurn,
       interruptible: turnController.interruptible,
       interruptingTurnId: turnController.interruptingTurnId,
       enqueuePrompt: turnController.enqueuePrompt,

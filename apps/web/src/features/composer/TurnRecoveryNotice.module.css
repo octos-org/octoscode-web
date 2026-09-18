@@ -22,6 +22,11 @@
 .notice small {
   color: var(--dsw-alias-label-tertiary);
 }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .notice button {
   width: fit-content;
   min-height: 40px;
