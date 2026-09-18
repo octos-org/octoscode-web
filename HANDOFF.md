@@ -1,5 +1,9 @@
 # octoscode-web 全量审计 Handoff
 
+> 2026-09-18 起的持续执行以 [维护工作流](docs/maintenance-workflow.md) 与
+> [0.20 发布验收台账](docs/release-readiness-020.md)
+> 为准；下文继续保留历史审计依据。
+
 > 最新：2026-09-15
 >
 > 用户反馈后的[交互性能实测与修复](docs/reviews/2026-09-15-interaction-performance.md)：长代码历史同步高亮导致秒级阻塞，旧小会话验证不足以证明交互流畅；本轮同时修复会话排序与完成状态归属。

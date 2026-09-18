@@ -649,7 +649,7 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
   }
 });
 
-test("only explicit save persists versioned display preferences; reload restores them without persisting a draft or credentials", async ({
+test("only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials", async ({
   page,
 }) => {
   const wire = observe(page);
@@ -680,11 +680,9 @@ test("only explicit save persists versioned display preferences; reload restores
       Object.entries(saved).filter(([key]) => key !== storageKey),
     ),
   ).toEqual(before);
-  await input(page).fill("PRIVATE_LOCAL_DRAFT_NOT_SAVED");
-  expect(JSON.stringify(await storage(page))).not.toContain(
-    "PRIVATE_LOCAL_DRAFT_NOT_SAVED",
-  );
-  expect(JSON.stringify(saved)).not.toContain(token);
+  await input(page).fill("PRIVATE_COMPOSER_DRAFT");
+  expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
+  expect(JSON.stringify(await storage(page))).not.toContain(token);
   expect(wire.calls("turn/start")).toHaveLength(0);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh");
@@ -693,15 +691,10 @@ test("only explicit save persists versioned display preferences; reload restores
     "claude",
   );
   await expect(input(page)).toBeEnabled();
-  // v0.10.0 ships tab-scoped draft recovery: an unsent draft is written to
-  // sessionStorage and restored verbatim after a reload (draft-recovery.spec.ts
-  // :21-52, App.tsx:370-390). The subject of THIS row is what localStorage may
-  // hold, so the draft must come back in the composer while still never
-  // appearing in localStorage — asserted immediately below, not weakened.
-  await expect(input(page)).toHaveValue("PRIVATE_LOCAL_DRAFT_NOT_SAVED");
-  expect(JSON.stringify(await storage(page))).not.toContain(
-    "PRIVATE_LOCAL_DRAFT_NOT_SAVED",
-  );
+  // Draft recovery is separate from the explicitly saved display preferences.
+  await expect(input(page)).toHaveValue("PRIVATE_COMPOSER_DRAFT");
+  expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
+  expect(JSON.stringify(await storage(page))).not.toContain(token);
   await input(page).fill("");
   await expect(input(page)).toHaveAttribute("data-vim-mode", "insert");
   await command(page, "/theme");

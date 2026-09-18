@@ -214,11 +214,11 @@ goes up and down, and **New folder** creates one and moves into it. Select
 Session** offers recent Workspaces and **Add workspace**. The sidebar remembers
 the Sessions this tab successfully opens, so multiple conversations in the same
 Workspace remain distinct and can be selected again. The selected Session is
-restored on refresh in the same tab; only the server origin and display
-preferences survive after that tab closes. Unsent composer drafts survive
-refresh in the same tab and stay scoped to its server, sign-in and Session; they
-are never sent automatically after restoration. These confirmed references are
-navigation memory, not a complete Session catalog: Core rc.9 can misroute
+restored on refresh in the same tab. Unsent composer drafts also survive closing
+the tab: sign in again and open the same Session to restore its text. Drafts
+stay scoped to the server, authenticated user and Session; they are never sent
+automatically after restoration. These confirmed references are navigation
+memory, not a complete Session catalog: Core rc.9 can misroute
 `session/list({cwd})` for unscoped/admin connections, so the Web client cannot
 promise a complete or correctly grouped catalog until the server-owned
 SessionRef contract in

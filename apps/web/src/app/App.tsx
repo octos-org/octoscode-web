@@ -78,12 +78,19 @@ import {
 } from "../features/session/use-octos-session.ts";
 import { codingProductCapabilities } from "../features/session/coding-capabilities.ts";
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
+import {
+  durableDraftScope,
+  loadDurableDrafts,
+  resolveDraftPrincipal,
+  saveDurableDraft,
+} from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
 import {
   browserStorage,
   loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
+  rememberDraftPrincipal,
   saveComposerDrafts,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
@@ -338,6 +345,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setConnection,
     pairingLink,
     cleanupFailed,
+    draftPrincipalRef,
     restoreConnectionRef,
     theme,
     cycleTheme,
@@ -366,6 +374,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         loadComposerDrafts(browserStorage("sessionStorage"), connection),
       ),
   );
+  const durableDraftScopeRef = useRef<string | null>(null);
+  const principalRequestRef = useRef<AbortController | null>(null);
+  const pendingDraftEditsRef = useRef(new Set<string>());
   const [draft, updateDraft] = useState("");
   const [draftSaved, setDraftSaved] = useState(true);
   const [draftRetained, setDraftRetained] = useState(true);
@@ -375,19 +386,28 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     () => (session.authenticated ? {} : null),
     [session.authenticated, connection.endpoint, connection.token],
   );
-  const persistDrafts = () =>
+  const persistDraft = (key: string, text: string) => {
+    const scope = durableDraftScopeRef.current;
+    if (scope) {
+      if (!saveDurableDraft(scope, key, text)) return false;
+      pendingDraftEditsRef.current.delete(key);
+      return pendingDraftEditsRef.current.size === 0;
+    }
     saveComposerDrafts(
       browserStorage("sessionStorage"),
       connection,
       sessionDrafts.snapshot(),
     );
+    return false;
+  };
   const setDraft = (text: string) => {
     updateDraft(text);
     const key = previousActiveSessionKeyRef.current;
     if (key) {
+      pendingDraftEditsRef.current.add(key);
       const retained = sessionDrafts.set(key, text);
       setDraftRetained(retained);
-      setDraftSaved(retained && persistDrafts());
+      setDraftSaved(retained && persistDraft(key, text));
     }
   };
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -660,6 +680,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       session.disconnect();
     },
     resetIdentity: () => {
+      principalRequestRef.current?.abort();
+      durableDraftScopeRef.current = null;
+      pendingDraftEditsRef.current.clear();
       setRecentWorkspaces([]);
       setKnownSessions([]);
       sessionDrafts.clear();
@@ -780,6 +803,89 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       setAutoConnect(browserStorage("sessionStorage"), true);
     }
   }, [session.authenticated]);
+
+  useEffect(() => {
+    if (!session.authenticated) return;
+    const request = new AbortController();
+    principalRequestRef.current = request;
+    void resolveDraftPrincipal(
+      connection.endpoint,
+      connection.token,
+      request.signal,
+    )
+      .catch(() => null)
+      .then((principal) => {
+        if (request.signal.aborted) return;
+        if (!principal) {
+          if (sessionDrafts.size) setDraftSaved(false);
+          return;
+        }
+        const migrateTabDrafts = draftPrincipalRef.current === null;
+        draftPrincipalRef.current = principal;
+        rememberDraftPrincipal(
+          browserStorage("sessionStorage"),
+          connection,
+          principal,
+        );
+        const scope = durableDraftScope(connection.endpoint, principal);
+        durableDraftScopeRef.current = scope;
+        const stored = loadDurableDrafts(scope);
+        if (!stored) {
+          if (sessionDrafts.size) setDraftSaved(false);
+          return;
+        }
+        const edited = new Set(pendingDraftEditsRef.current);
+        const pending = sessionDrafts.snapshot();
+        const key = previousActiveSessionKeyRef.current;
+        const existing = new Map(stored);
+        sessionDrafts.clear();
+        let saved = true;
+        for (const [key, text] of pending) {
+          if (edited.has(key) || (migrateTabDrafts && !existing.has(key))) {
+            sessionDrafts.set(key, text);
+            if (saveDurableDraft(scope, key, text)) {
+              pendingDraftEditsRef.current.delete(key);
+            } else {
+              pendingDraftEditsRef.current.add(key);
+              saved = false;
+            }
+          }
+        }
+        for (const [key, text] of stored) {
+          if (!edited.has(key)) sessionDrafts.set(key, text);
+        }
+        // An input cleared while identity was loading must also stay cleared.
+        for (const editedKey of edited) {
+          if (pending.some(([pendingKey]) => pendingKey === editedKey))
+            continue;
+          if (editedKey === key && draftRef.current) {
+            saved = false;
+            continue;
+          }
+          sessionDrafts.set(editedKey, "");
+          if (saveDurableDraft(scope, editedKey, "")) {
+            pendingDraftEditsRef.current.delete(editedKey);
+          } else saved = false;
+        }
+        if (key && !edited.has(key)) {
+          const restored = sessionDrafts.get(key) ?? existing.get(key) ?? "";
+          draftRef.current = restored;
+          updateDraft(restored);
+          setDraftRetained(sessionDrafts.set(key, restored));
+        }
+        if (key && edited.has(key)) {
+          const retained =
+            sessionDrafts.get(key) === (draftRef.current || undefined);
+          setDraftRetained(retained);
+          if (!retained) saved = false;
+        }
+        setDraftSaved(saved);
+        if (saved) {
+          saveComposerDrafts(browserStorage("sessionStorage"), connection, []);
+        }
+      });
+    return () => request.abort();
+  }, [session.authenticated, connection.endpoint, connection.token]);
 
   useEffect(() => {
     if (!session.authenticated || !session.restoreRejected) return;
@@ -1235,9 +1341,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               draftRef.current = text;
               setDraft(text);
             } else {
-              if (sessionDrafts.get(key)?.trim()) return false;
+              const scope = durableDraftScopeRef.current;
+              const existing =
+                sessionDrafts.get(key) ??
+                (scope && !pendingDraftEditsRef.current.has(key)
+                  ? loadDurableDrafts(scope)?.find(
+                      ([storedKey]) => storedKey === key,
+                    )?.[1]
+                  : undefined);
+              if (existing?.trim()) return false;
               if (!sessionDrafts.set(key, text)) return false;
-              persistDrafts();
+              pendingDraftEditsRef.current.add(key);
+              setDraftSaved(persistDraft(key, text));
             }
             return true;
           })
@@ -1456,14 +1571,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       // Session restores this exact input without borrowing another scope.
       return;
     }
+    const scope = durableDraftScopeRef.current;
     const restored = activeSessionKey
-      ? (sessionDrafts.get(activeSessionKey) ?? "")
+      ? (sessionDrafts.get(activeSessionKey) ??
+        (scope && !pendingDraftEditsRef.current.has(activeSessionKey)
+          ? loadDurableDrafts(scope)?.find(
+              ([key]) => key === activeSessionKey,
+            )?.[1]
+          : undefined) ??
+        "")
       : "";
     draftRef.current = restored;
     updateDraft(restored);
-    setDraftRetained(true);
-    if (persistDrafts()) setDraftSaved(true);
-    else if (sessionDrafts.size > 0) setDraftSaved(false);
+    setDraftRetained(
+      !activeSessionKey || sessionDrafts.set(activeSessionKey, restored),
+    );
+    if (restored && !durableDraftScopeRef.current) setDraftSaved(false);
 
     setCommandError(null);
     previousActiveSessionKeyRef.current = activeSessionKey;
@@ -1539,7 +1662,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           }
         } else if (ownerKey && sessionDrafts.get(ownerKey) === prompt) {
           sessionDrafts.set(ownerKey, "");
-          persistDrafts();
+          pendingDraftEditsRef.current.add(ownerKey);
+          setDraftSaved(persistDraft(ownerKey, ""));
         }
       })
       .catch(() => {
@@ -2599,8 +2723,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     </p>
                   ) : !draftSaved ? (
                     <p role="status">
-                      Draft changes could not be saved in this tab. Copy your
-                      text before reloading; an older draft may be restored.
+                      Draft changes could not be saved on this device. Copy your
+                      text before closing this tab; an older draft may be
+                      restored.
                     </p>
                   ) : null}
                   <QueuedPrompts

@@ -25,9 +25,14 @@ import {
   loadAutoConnect,
   loadConnectionPreferences,
   loadDurableEndpoint,
+  loadDraftPrincipal,
   saveConnectionPreferences,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
+import {
+  clearDurableDrafts,
+  durableDraftScope,
+} from "../features/session/durable-session-drafts.ts";
 import {
   claimPairingCode,
   consumePairingLink,
@@ -95,6 +100,8 @@ export interface ConnectionGateApi {
   readonly pairingLink: PairingLink | null;
   readonly setPairingClaiming: Dispatch<SetStateAction<boolean>>;
   readonly cleanupFailed: boolean;
+  /** Previously confirmed user, retained only so offline Forget can clear drafts. */
+  readonly draftPrincipalRef: RefObject<string | null>;
   /** This tab was already connected; the shell restores its Session. */
   readonly restoreConnectionRef: RefObject<boolean>;
   /** The shell publishes its session seam here while it is mounted. */
@@ -143,6 +150,14 @@ export function ConnectionGate() {
     );
     return pairingLink ? { ...loaded, token: "" } : loaded;
   });
+  const draftPrincipalRef = useRef<string | null | undefined>(undefined);
+  if (draftPrincipalRef.current === undefined) {
+    draftPrincipalRef.current = loadDraftPrincipal(
+      browserStorage("sessionStorage"),
+      connection,
+    );
+  }
+  const failedDraftCleanupRef = useRef(new Set<string>());
   const pairingAbortRef = useRef<AbortController | null>(null);
   const [pairingClaiming, setPairingClaiming] = useState(Boolean(pairingLink));
   const [pairingError, setPairingError] = useState<string | null>(null);
@@ -254,6 +269,7 @@ export function ConnectionGate() {
     const identityChanged =
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
+      draftPrincipalRef.current = null;
       setPairingError(null);
       setDiscoveredOrigin(null);
       clearKnownSessions(browserStorage("sessionStorage"), connection);
@@ -275,7 +291,7 @@ export function ConnectionGate() {
         if (!clearRecentWorkspaces(browserStorage("localStorage"), endpoint))
           cleared = false;
       }
-      setCleanupFailed(!cleared);
+      setCleanupFailed(!cleared || failedDraftCleanupRef.current.size > 0);
       bridgeRef.current?.resetIdentity();
     }
     setConnection(
@@ -301,6 +317,17 @@ export function ConnectionGate() {
     bridgeRef.current?.disconnect();
   };
   const forgetConnection = () => {
+    const principal = draftPrincipalRef.current;
+    if (principal) {
+      failedDraftCleanupRef.current.add(
+        durableDraftScope(connection.endpoint, principal),
+      );
+    }
+    for (const scope of failedDraftCleanupRef.current) {
+      if (clearDurableDrafts(scope))
+        failedDraftCleanupRef.current.delete(scope);
+    }
+    draftPrincipalRef.current = null;
     const rememberedCleared = clearRememberedTokens();
     setPairingError(null);
     setDiscoveredOrigin(null);
@@ -322,7 +349,8 @@ export function ConnectionGate() {
       ) ||
         !rememberedCleared ||
         !tabRecentsCleared ||
-        !durableRecentsCleared,
+        !durableRecentsCleared ||
+        failedDraftCleanupRef.current.size > 0,
     );
     setConnection(initialConnection);
   };
@@ -356,6 +384,7 @@ export function ConnectionGate() {
     pairingLink,
     setPairingClaiming,
     cleanupFailed,
+    draftPrincipalRef: draftPrincipalRef as RefObject<string | null>,
     restoreConnectionRef: restoreConnectionRef as RefObject<boolean>,
     bridgeRef,
     takePendingConnect,

@@ -126,7 +126,10 @@ warns before refresh or close while foreground, queued, or background work is
 active; this warning does not keep work alive after leaving. Reload discards
 queued prompts and image drafts; it cannot recover them from the server.
 Disconnect keeps confirmed navigation refs, not live records. **Forget server**
-and endpoint/token changes clear the refs and drafts.
+and endpoint/token changes clear the refs and in-memory drafts. Unsent text also
+survives closing a tab: authenticate again and open the same Session to restore
+your draft. **Forget server** deletes the confirmed user's saved drafts on this
+browser; changing the token does not expose another user's drafts.
 
 The retained-Session implementation has passed local real-provider capacity,
 recovery and endurance checkpoints. New source additions still require their own

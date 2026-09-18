@@ -111,16 +111,18 @@ server** or changing endpoint/token identity clears those refs, recent Workspace
 paths, and tab-scoped drafts. The rc9 pinned runtime baseline is unchanged; the
 rc11 parity candidate needs its own acceptance evidence.
 
-Unsent composer drafts survive ordinary refresh in the current tab, bound to the
-same server, sign-in and exact Session. They are browser editing state, not
-server transcript history, and are never automatically submitted on restore.
-Pending queued messages are still tab-runtime state and are not restored after a
-full reload. Storage failures preserve in-memory editing and show a warning; an
-older persisted draft can remain when the browser refuses an update or deletion.
-Forgetting reports failure if the browser refuses to clear saved data. The tab
-retains at most 50 nonempty drafts. At capacity it keeps the current input and
-existing drafts, and asks the user to send or clear the input before switching;
-it never silently evicts an earlier draft.
+Unsent composer drafts survive refresh and tab close. After authenticating
+again, opening the same Session restores its text for the server-confirmed user.
+Drafts are browser editing state, not server transcript history, and are never
+automatically submitted on restore. Forget clears that user's saved drafts;
+changing credentials clears the current editing view without deleting another
+user's saved text. Pending queued messages are still tab-runtime state and are
+not restored after a full reload. Storage failures preserve in-memory editing
+and show a warning; an older persisted draft can remain when the browser refuses
+an update or deletion. Forgetting reports failure if the browser refuses to
+clear saved data. The tab retains at most 50 nonempty drafts. At capacity it
+keeps the current input and existing drafts, and asks the user to send or clear
+the input before switching; it never silently evicts an earlier draft.
 
 The tab title counts unseen background responses that complete or need input.
 General Settings offers an explicit desktop-notification opt-in. Notifications
