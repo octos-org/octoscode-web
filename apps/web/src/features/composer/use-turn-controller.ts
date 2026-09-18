@@ -489,6 +489,8 @@ export function createQueueBackedTurnController(options: {
         return;
       }
       retireLocalDispatch(turn.turnId, "rejected");
+      if (turn.kind !== "review")
+        dependenciesRef.current.onTurnNotSentRestore?.(turn, sessionId);
       dependenciesRef.current.setTimeline((current) =>
         addSystemMessage(
           current,
