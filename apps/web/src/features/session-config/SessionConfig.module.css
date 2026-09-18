@@ -3,17 +3,24 @@
 .session-status-strip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 32px;
-  padding: 4px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 8px 4px 10px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
-  color: inherit;
-  font: inherit;
+  color: var(--dsw-alias-label-secondary);
+  font: 500 13px/20px var(--dsw-font-family);
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--dsw-motion-feedback) ease;
+}
+
+.session-status-strip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .session-status-strip:focus-visible {
@@ -22,8 +29,11 @@
 }
 
 .session-status-strip-text {
-  flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-config-pane {

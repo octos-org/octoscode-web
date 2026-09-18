@@ -24,10 +24,6 @@
   outline-offset: 3px;
 }
 
-.assistantEntry :global(.entry-content) {
-  max-width: 65ch;
-}
-
 .reasoningBlock,
 .toolBlock {
   min-width: 0;
