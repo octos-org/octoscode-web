@@ -75,3 +75,15 @@
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
+
+/* Title on the left, the × close control on the right. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header h2 {
+  margin: 0;
+}
