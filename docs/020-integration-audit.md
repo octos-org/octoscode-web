@@ -70,3 +70,13 @@ for this maintenance session, not a durable release artifact. CI runs, PRs and
 this report carry the lasting conclusions; no bearer token is included in the
 recorded artifacts. Release readiness remains governed by the maintenance
 workflow and its outcome ledger on main.
+
+## Integration evidence
+
+The combined 27-case browser acceptance run passes after integrating #125. The
+full check passes with 227,968 B initial JavaScript and 65,108 B initial CSS.
+The open command list has no axe violations. The Linux and Darwin connection
+screenshot baselines are refreshed after inspecting the intentional
+credential-checkbox removal and in-card preferences placement. Darwin was
+generated and rerun on a separate macOS machine, with its full check passing. CI
+must pass on the submitted revision before merging.
