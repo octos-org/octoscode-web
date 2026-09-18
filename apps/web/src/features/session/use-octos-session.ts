@@ -90,7 +90,10 @@ import {
   type PeerDispatchReceiptView,
 } from "@octos-org/octoscode-client/external-driver-meta";
 import type { SessionInteractionSnapshot } from "./session-interaction-ledger.ts";
-import { SessionComposerDrafts } from "./session-composer-drafts.ts";
+import {
+  SessionComposerDrafts,
+  type ComposerRestore,
+} from "./session-composer-drafts.ts";
 import { peerControlRefusalLabel } from "../control/peer-control-commands.ts";
 import { EXTERNAL_DRIVER_REFUSAL_KINDS } from "@octos-org/octoscode-client/external-driver-meta";
 import {
@@ -317,8 +320,8 @@ export interface OctosSessionRuntime {
     setShowReasoning(value: boolean): void;
     attachments: AttachmentDraftStore | null;
     prepareAttachments(): Promise<AttachmentDraftStore | null>;
-    /** A stashed interrupt prompt for the selected Session (audit row 9). */
-    interruptedPrompt: string | null;
+    /** An interrupted or unsent input for the selected Session. */
+    interruptedPrompt: ComposerRestore | null;
     /** Drain it exactly once; null when nothing is pending. */
     takeInterruptedPrompt(): string | null;
     /**
@@ -332,7 +335,7 @@ export interface OctosSessionRuntime {
      * §5.2 Resume chat: acquire → release(internal) → confirm → send the
      * parked prompt once. Wired to the strip's "Resume chat" button.
      */
-    resumeChatSend(): Promise<{
+    resumeChatSend(prompt: string): Promise<{
       readonly sent: boolean;
       readonly message: string | null;
       readonly prompt: string | null;
@@ -1397,14 +1400,11 @@ export function useOctosSession(): OctosSessionRuntime {
         // §5.2 (brief 4010 clause b): the composer's handover gate. Only the
         // record whose seat THIS tab actually holds crosses the driver seam;
         // every other record sends directly (no seat ⇒ no frame).
-        releaseSeatBeforeTurn: () => releaseControlSeatForUserTurn(),
+        releaseSeatBeforeTurn: () => releaseControlSeatForUserTurn(scope),
         // §6 kept-column: park a gate-refused prompt back on the OWNING record.
-        onTurnNotSentRestore: (prompt, sessionId) => {
-          const owner = recordManagerRef.current
-            ?.records()
-            .find((entry) => entry.scope.sessionId === sessionId);
-          if (owner)
-            composerDraftsRef.current?.restoreInterruptPrompt(owner, prompt);
+        onTurnNotSentRestore: (turn) => {
+          const owner = recordManagerRef.current?.get(scope);
+          if (owner) composerDraftsRef.current?.restoreUnsentTurn(owner, turn);
         },
         // Gate on the RECORD's own runtime snapshot, never the pool's: the pool
         // only authenticates (idle) while the record owns opened/healthy.
@@ -1466,10 +1466,8 @@ export function useOctosSession(): OctosSessionRuntime {
         // Gap 9: the controller reports an interrupted turn's stashed prompt
         // back when ITS terminal lands. Park it on the OWNING record (resolved
         // by session id, not by current selection) for the composer to pick up.
-        onInterruptPromptRestore: (prompt, sessionId) => {
-          const owner = recordManagerRef.current
-            ?.records()
-            .find((entry) => entry.scope.sessionId === sessionId);
+        onInterruptPromptRestore: (prompt) => {
+          const owner = recordManagerRef.current?.get(scope);
           if (owner)
             composerDraftsRef.current?.restoreInterruptPrompt(owner, prompt);
         },
@@ -2092,38 +2090,26 @@ export function useOctosSession(): OctosSessionRuntime {
     setControlAcquireEpoch((epoch) => epoch + 1);
   };
 
-  // §5.2 (brief 4010 clause b): the composer handover seam. When THIS tab
-  // holds the driver seat, a user turn must FIRST hand control back to Core
-  // (`next:"internal"` — NOT "external", which parks the binding and leaves
-  // chat refused) and only then send. The turn controller awaits this gate
-  // before writing any `turn/start` frame.
-  //
-  // Ordering guarantees:
-  //  - ONE release frame per send; the params come from the LIVE acquire view
-  //    (the single proof source), so a stale proof can never ride the wire.
-  //  - A refused/lost release sends NOTHING (`sent:false`) — the draft is
-  //    kept upstream and §6 row 8 copy renders.
-  //  - A LOST release reply (20b/20c) is reconciled from `session/driver/get`:
-  //    observed `internal` ⇒ the hand-back actually happened ⇒ send once; still
-  //    ours ⇒ ONE retry release with the still-held proof, then send.
-  //  - A foreign/parked holder never releases with an unproven binding: the
-  //    plan is `resume-chat`, whose acquire→release→confirm→send sequence runs
-  //    only behind the operator's explicit Resume-chat click (the console's
-  //    own seam); the plain send resolves `sent:false` with the §6 row-1 copy.
-  const releaseControlSeatForUserTurn = async (): Promise<
+  // Queued background turns use their owning record, never the selected UI.
+  // A confirmed handback must precede the turn/start frame.
+  const releaseControlSeatForUserTurn = async (
+    scope: SessionRuntimeScope,
+  ): Promise<
     { readonly sent: true } | { readonly sent: false; readonly message: string }
   > => {
+    const record = recordManagerRef.current?.get(scope);
+    if (!record || record.closed)
+      return { sent: false, message: RELEASE_FAILED_MESSAGE };
+    const inventory = record.driverInventory;
     const acquired = controlAcquireRef.current;
     const holdRecord = controlHoldRef.current?.record ?? null;
     const thisTabHoldsSeat =
       acquired !== null &&
       holdRecord !== null &&
-      holdRecord === viewRecord &&
+      holdRecord === record &&
       acquired.view.capability.driverId === controlDriverId;
     const disclosure =
-      driverInventorySnapshot.kind === "complete"
-        ? driverInventorySnapshot.disclosure
-        : null;
+      inventory.kind === "complete" ? inventory.disclosure : null;
     const foreignLease =
       disclosure?.mode === "external" &&
       disclosure.binding !== null &&
@@ -2146,8 +2132,8 @@ export function useOctosSession(): OctosSessionRuntime {
       thisTabHoldsSeat,
       acquireView: thisTabHoldsSeat ? acquired!.view : null,
       observedRevision:
-        driverInventorySnapshot.kind === "complete"
-          ? driverInventorySnapshot.observedRevision
+        inventory.kind === "complete" && disclosure?.mode === "external"
+          ? inventory.observedRevision
           : null,
       observedForeignLeaseExpiresAtMs: foreignLease,
       observedOwnLeaseExpiresAtMs: ownUnprovenLease,
@@ -2165,17 +2151,21 @@ export function useOctosSession(): OctosSessionRuntime {
         } catch (reason) {
           // 20b/20c: a timeout may mean the release LANDED. Reconcile from
           // the OBSERVED disclosure — never infer success from a kept id.
-          const observed = await reconcileReleaseForUserTurn();
-          if (observed === "internal") return { sent: true };
-          parkControlSeat(holdRecord);
-          setSeatHandoverStatus(null);
+          const observed = await reconcileReleaseForUserTurn(record);
+          if (observed === "internal") {
+            if (controlHoldRef.current?.record === record)
+              parkControlSeat(record);
+            return { sent: true };
+          }
           return {
             sent: false,
             message: releaseRefusalMessage(reason, RELEASE_FAILED_MESSAGE),
           };
+        } finally {
+          setSeatHandoverStatus(null);
         }
-        parkControlSeat(holdRecord);
-        setSeatHandoverStatus(null);
+        if (controlHoldRef.current?.record === record) parkControlSeat(record);
+        await recordManager.engineFor(record)?.refreshDriverInventory(scope);
         return { sent: true };
       }
       case "wait-for-expiry":
@@ -2203,19 +2193,15 @@ export function useOctosSession(): OctosSessionRuntime {
     }
   };
 
-  // 20b/20c reconcile: re-walk the driver inventory ONCE and classify the
-  // OBSERVED mode. `internal` ⇒ the hand-back happened; `external` with our
-  // binding ⇒ the release never landed (caller may retry once); anything else
-  // is a foreign outcome the caller must not touch.
-  const reconcileReleaseForUserTurn = async (): Promise<
-    "internal" | "ours" | "foreign"
-  > => {
-    const engine =
-      viewRecord === null ? null : recordManager.engineFor(viewRecord);
-    if (engine === null || viewRecord === null) return "foreign";
+  // A lost release reply can be resolved by the owning record's disclosure.
+  const reconcileReleaseForUserTurn = async (
+    record: SessionRecord<OctosUiClient>,
+  ): Promise<"internal" | "ours" | "foreign"> => {
+    const engine = recordManager.engineFor(record);
+    if (engine === null) return "foreign";
     let state: Awaited<ReturnType<typeof engine.refreshDriverInventory>>;
     try {
-      state = await engine.refreshDriverInventory(viewRecord.scope);
+      state = await engine.refreshDriverInventory(record.scope);
     } catch {
       return "foreign";
     }
@@ -2248,7 +2234,9 @@ export function useOctosSession(): OctosSessionRuntime {
   const [seatHandoverStatus, setSeatHandoverStatus] = useState<string | null>(
     null,
   );
-  const resumeChatSend = async (): Promise<{
+  const resumeChatSend = async (
+    prompt: string,
+  ): Promise<{
     readonly sent: boolean;
     readonly message: string | null;
     readonly prompt: string | null;
@@ -2259,6 +2247,16 @@ export function useOctosSession(): OctosSessionRuntime {
     const sessionId = authority?.sessionId ?? null;
     const profileId = authority?.profileId ?? null;
     const capabilities = authority?.capabilities ?? null;
+    const isCurrent = () =>
+      Boolean(
+        record &&
+        authority &&
+        !record.closed &&
+        recordManager.get(record.scope) === record &&
+        record.runtime.isCurrent(authority) &&
+        record.scope.authorityEpoch === authEpochRef.current &&
+        activeRuntime.currentAuthority()?.client === client,
+      );
     if (
       record === null ||
       client === null ||
@@ -2291,6 +2289,10 @@ export function useOctosSession(): OctosSessionRuntime {
       setSeatHandoverStatus(null);
       return { sent: false, message: null, prompt: null };
     }
+    if (!isCurrent()) {
+      setSeatHandoverStatus(null);
+      return { sent: false, message: null, prompt: null };
+    }
     let view: DriverAcquireView | null = null;
     try {
       view = await commands.driverAcquire({
@@ -2306,7 +2308,7 @@ export function useOctosSession(): OctosSessionRuntime {
         prompt: null,
       };
     }
-    if (view.capability.driverId !== controlDriverId) {
+    if (!isCurrent() || view.capability.driverId !== controlDriverId) {
       setSeatHandoverStatus(null);
       return { sent: false, message: null, prompt: null };
     }
@@ -2322,7 +2324,7 @@ export function useOctosSession(): OctosSessionRuntime {
     } catch (reason) {
       // The unproven-binding rule (§5.2 lost acquire): the token traveled in
       // the acquire reply we DID observe, so reconciliation is allowed here.
-      const observed = await reconcileReleaseForUserTurn();
+      const observed = await reconcileReleaseForUserTurn(record);
       setSeatHandoverStatus(null);
       if (observed !== "internal") {
         return {
@@ -2333,18 +2335,12 @@ export function useOctosSession(): OctosSessionRuntime {
       }
     }
     setSeatHandoverStatus(null);
-    // Hand-back confirmed: the parked prompt (the §6 kept draft) sends ONCE.
-    const prompt = composerDrafts.peekRestore(record);
-    if (prompt !== null) {
-      composerDrafts.consumeRestore(record);
-      const controller = record.controller;
-      const accepted = controller.submitTurn({
-        turnId: crypto.randomUUID(),
-        text: prompt,
-      });
-      return { sent: accepted, message: null, prompt };
-    }
-    return { sent: true, message: null, prompt: null };
+    if (!isCurrent()) return { sent: false, message: null, prompt: null };
+    await recordManager.engineFor(record)?.refreshDriverInventory(record.scope);
+    if (!isCurrent()) return { sent: false, message: null, prompt: null };
+    if (!prompt.trim()) return { sent: true, message: null, prompt: null };
+    const accepted = composerDrafts.enqueue(record, prompt);
+    return { sent: accepted, message: null, prompt };
   };
 
   // P2e (grant 2930): hold the lease for as long as THIS seat owns it. The

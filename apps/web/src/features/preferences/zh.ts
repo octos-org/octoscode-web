@@ -249,6 +249,14 @@ const catalog: Readonly<Record<string, string>> = {
   "Fixed interval": "固定间隔",
   "Forget saved connection": "忘记已保存的连接",
   "Forget server": "忘记服务器",
+  "Stop server": "停止服务器",
+  "Stops octos serve on this computer, like Ctrl+C in its terminal. Every connected client is disconnected and running turns are cancelled. Start it again from a terminal.":
+    "停止本机上的 octos serve，效果等同于在其终端按 Ctrl+C。所有已连接的客户端都会断开，正在运行的回合会被取消。需要时请在终端中重新启动。",
+  "Stop the Octos server?": "停止 Octos 服务器？",
+  "Every client connected to this server — this tab, other tabs, the terminal — is disconnected, and any running turn is cancelled. Conversations are kept on disk. To use Octos again, start octos serve from a terminal.":
+    "连接到此服务器的所有客户端（本标签页、其他标签页、终端）都会断开，正在运行的回合会被取消。会话保存在磁盘上，不会丢失。要再次使用 Octos，请在终端中启动 octos serve。",
+  "Shutdown was not confirmed. Check the server before trying again.":
+    "未能确认服务器是否已停止。请先检查服务器状态，再决定是否重试。",
   "Fork:": "分支：",
   "GLM-5.3-Flash guidance": "GLM-5.3-Flash 使用指南",
   "GLM-5.3-Flash recommended settings": "GLM-5.3-Flash 建议设置",
@@ -1060,6 +1068,12 @@ const catalog: Readonly<Record<string, string>> = {
   Responding: "正在回复",
   "Peers running ({count})": "正在运行的同侪（{count} 个）",
   "Another app is using this session": "另一个应用正在使用此会话",
+  "Busy — another client is working in this session":
+    "忙碌 — 另一个客户端正在此会话中工作",
+  "Another client is working in this session": "另一个客户端正在此会话中工作",
+  "Session busy": "会话忙碌",
+  "Another client was working in this session, so this message was not sent. It was kept for retry and will return when the composer is empty. Send it again when the running turn finishes, or Stop that turn to take over.":
+    "另一个客户端当时正在此会话中工作，因此此消息未发送。消息已保留待重试，将在输入框的文字和图片都清空后恢复。当前回复结束后可再次发送，也可点击“停止”结束该回复后接手。",
   Reconnecting: "正在重新连接",
   "Model, permissions, sandbox": "模型、权限、沙箱",
   "Model not reported": "模型未报告",
@@ -1290,19 +1304,14 @@ const catalog: Readonly<Record<string, string>> = {
   // loaded catalog; carry it here so the consequence line is translated.
   "Sends this answer and resumes the peer": "发送此回答并让同侪继续",
 
-  // WEB-PAIRING-CONTRACT-5100 — the pairing link, the per-device memory, and
+  // WEB-PAIRING-CONTRACT-5100 — the pairing link and
   // the bounded copy for every refusal kind.
   "Opening your pairing link…": "正在打开配对链接…",
   "That pairing link did not work": "配对链接无法使用",
-  "Remember on this device": "在此设备上记住",
   "Found Octos on {value0}.": "在 {value0} 发现了 Octos。",
   "Connect to {value0}": "连接到 {value0}",
-  "Your token is remembered on this device. Your server address is remembered.":
-    "令牌已记在此设备上，服务器地址也会被记住。",
   "Your token stays in this browser tab. Your server address is remembered.":
     "令牌仅保存在此浏览器标签页中，服务器地址会被记住。",
-  "This browser blocked saved data, so your token is kept in memory only and is gone when you close this tab.":
-    "此浏览器阻止了站点数据存储，令牌仅保存在内存中，关闭此标签页后即失效。",
   "That link was already used. Start the server again for a fresh link.":
     "该链接已被使用。请重新启动服务器以获取新链接。",
   "That link expired. Start the server again for a fresh link.":

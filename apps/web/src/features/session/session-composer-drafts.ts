@@ -8,6 +8,9 @@ import { reasoningEffort, type ReasoningEffort } from "../reasoning/model.ts";
 import type { AttachmentDraftStore } from "../media/attachment-drafts.ts";
 import type { SessionRecord } from "./session-record-manager.ts";
 import { sessionRuntimeScopeKey } from "./session-scope.ts";
+import type { PromptTurn } from "../composer/turn-queue.ts";
+
+export type ComposerRestore = { text: string } | PromptTurn;
 
 type Record = SessionRecord<OctosUiClient>;
 interface Draft {
@@ -21,8 +24,8 @@ interface Draft {
 /** Browser-only input state. Queued prompts capture it; selection never moves it. */
 export class SessionComposerDrafts {
   readonly #drafts = new Map<Record, Draft>();
-  /** Pending interrupt restores, one per owning record (audit row 9). */
-  readonly #restores = new Map<Record, string>();
+  /** Returned inputs stay in order on their owning authenticated record. */
+  readonly #restores = new Map<Record, ComposerRestore[]>();
   constructor(
     private readonly options: {
       isRetained(record: Record): boolean;
@@ -121,19 +124,45 @@ export class SessionComposerDrafts {
    */
   restoreInterruptPrompt(record: Record, prompt: string): void {
     if (!this.options.isRetained(record) || !prompt) return;
-    this.#restores.set(record, prompt);
+    this.#parkRestore(record, { text: prompt });
+  }
+  restoreUnsentTurn(record: Record, turn: PromptTurn): void {
+    if (!this.options.isRetained(record)) return;
+    this.#parkRestore(record, {
+      ...turn,
+      ...(turn.media
+        ? { media: turn.media.map((media) => ({ ...media })) }
+        : {}),
+    });
+  }
+  #parkRestore(record: Record, restore: ComposerRestore): void {
+    const pending = this.#restores.get(record) ?? [];
+    pending.push(restore);
+    this.#restores.set(record, pending);
     this.options.changed();
   }
   /** The pending restore for a record without draining it. */
-  peekRestore(record: Record): string | null {
-    return this.#restores.get(record) ?? null;
+  peekRestore(record: Record): ComposerRestore | null {
+    return this.#restores.get(record)?.[0] ?? null;
   }
-  /** One-shot drain: a consumed restore never re-injects on a later terminal. */
+  /** Caller has checked that this record's text is empty; never replace new images. */
   consumeRestore(record: Record): string | null {
-    const prompt = this.#restores.get(record);
-    if (prompt === undefined) return null;
-    this.#restores.delete(record);
-    return prompt;
+    if (!this.options.isRetained(record)) return null;
+    const pending = this.#restores.get(record);
+    const restore = pending?.[0];
+    if (!restore) return null;
+    const draft = this.get(record);
+    if (draft.images?.getSnapshot().entries.length) return null;
+    if ("turnId" in restore) {
+      // A media-bearing composer submission already owns an image store. Its
+      // handles were consumed at local admission, not at the later wire send.
+      if (restore.media?.length) draft.images!.restoreUploaded(restore.media);
+      draft.effort = reasoningEffort(restore.reasoningEffort);
+    }
+    pending!.shift();
+    if (!pending!.length) this.#restores.delete(record);
+    this.options.changed();
+    return restore.text;
   }
   enqueue(record: Record, text: string): boolean {
     if (!this.options.isRetained(record)) return false;
@@ -172,5 +201,6 @@ export class SessionComposerDrafts {
   }
   clear(): void {
     for (const record of this.#drafts.keys()) this.retire(record);
+    this.#restores.clear();
   }
 }

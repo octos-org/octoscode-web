@@ -18,7 +18,20 @@ pnpm install --frozen-lockfile
 
 ## Connect to Octos
 
-1. Start a compatible `octos serve` on the machine that owns the workspace.
+1. Start a compatible `octos serve` on the machine that owns the workspace,
+   **bound to a port** so a browser can reach it:
+
+   ```sh
+   octos serve --host 127.0.0.1 --port 50080
+   ```
+
+   `--stdio` will not work here: it runs the protocol over the process's stdin
+   and stdout instead of binding HTTP, which serves only the process that
+   spawned it. That is the mode the
+   [Octoscode TUI](https://github.com/octos-org/octoscode) uses when you run it
+   on its own. A port-bound server accepts both, at the same time — see
+   [Share a session with the terminal](#share-a-session-with-the-terminal).
+
 2. Start the Web development server:
 
    ```sh
@@ -67,6 +80,28 @@ point for a new Session. Recents and confirmed refs have no individual
 edit/remove action and never become a second database. The missing Core object
 contract is tracked in
 [octos#2146](https://github.com/octos-org/octos/issues/2146).
+
+## Share a session with the terminal
+
+The terminal client and this app are peers on one server, not alternatives.
+Point the TUI at the same origin with the same token:
+
+```sh
+octoscode \
+  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws \
+  --auth-token "$OCTOS_AUTH_TOKEN" \
+  --session <session id>
+```
+
+`session/open` attaches; it does not claim. The server replays what you missed
+from your cursor and then pushes every later event to every attached connection,
+so a turn started in one client streams into the other while it runs.
+
+The server allows one active turn per session, so while one client is working
+the other's send is refused rather than queued on the server. Nothing arbitrates
+who may start a turn: either side can, whenever the slot is free, and any
+attached client can interrupt a running turn regardless of who started it. Start
+the TUI with `--readonly` when you want it to watch without sending.
 
 ## Switch Sessions while a turn is running
 

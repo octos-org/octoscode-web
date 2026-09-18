@@ -120,9 +120,9 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   const options = palette(page).locator('[role="option"]');
   await expect(options).not.toHaveCount(0);
 
-  // ARIA combobox wiring (ComposerInput.tsx:185-191).
+  // The textbox exposes its suggestions without surrendering editing focus.
   await expect(input).toHaveAttribute("aria-haspopup", "listbox");
-  await expect(input).toHaveAttribute("aria-expanded", "true");
+  await expect(input).toBeFocused();
   await expect(input).toHaveAttribute("aria-controls", PALETTE_ID);
   const firstId = (await options.first().getAttribute("id"))!;
   await expect(input).toHaveAttribute("aria-activedescendant", firstId);
@@ -142,6 +142,15 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   await input.press("ArrowUp");
   const lastId = (await options.last().getAttribute("id"))!;
   await expect(input).toHaveAttribute("aria-activedescendant", lastId);
+  await expect(options.last()).toBeInViewport({ ratio: 1 });
+  await input.press("Shift+Tab");
+  await expect(options.last()).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(options.first()).toBeFocused();
+  await expect(options.first()).toBeInViewport({ ratio: 1 });
+  await page.keyboard.press("Escape");
+  await expect(input).toBeFocused();
+  await expect(palette(page)).toHaveCount(0);
 
   // Execute: filter to a known local command and dispatch it with Enter
   // (ComposerInput.tsx:167-174 onSubmit → App.tsx chooseCommand = submit("/x")).
@@ -269,7 +278,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   await expect(palette(page)).toBeVisible();
   await input.press("Escape");
   await expect(palette(page)).toHaveCount(0);
-  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await expect(input).not.toHaveAttribute("aria-controls");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
   // Bare Esc with no live turn is inert (TUI close/focus ladder never
@@ -307,7 +316,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
  * §8 (design 4000): none of the three fire while focus is inside a text input
  * or dialog (`shortcutTargetSuppressed`, App.tsx:520/:546/:566) — the Alt+D row
  * below pins both halves: the suppression (focus stays in the composer) and the
- * activation (focus lands in Fleet's Brief field).
+ * activation (focus lands on Fleet's actual capability notice).
  */
 const peerDock = (page: Page) =>
   productNavigation(page).locator('section[role="region"][aria-label="Peers"]');
@@ -316,15 +325,9 @@ const dockRowButtons = (page: Page) =>
 /** The ApprovalPanel surface: ModalSurface keys the dialog by this label. */
 const approvalSurface = (page: Page) =>
   page.locator('[aria-labelledby="approval-title"]');
-/** §8 Alt+D target: Fleet's Start-form Brief field (FleetView.tsx:199). Fleet
- *  is a ROUTED view (round 2, judge #1): activating it replaces the chat pane
- *  as the active workspace view with a Back affordance, so assertions must
- *  scope to the routed surface, not "visible somewhere". Round-2 keeps the
- *  chat pane MOUNTED-but-hidden (App.tsx:1647 hidden={fleetRouteActive}), so
- * the FleetView subtree EXISTS pre-navigation — "Fleet is closed" is no
- *  longer observable as absence of the Brief field; assert the ROUTED state
- *  (wrapper visible + chat hidden) instead. */
-const fleetBrief = (page: Page) => page.locator('[data-fleet-field="brief"]');
+/** This fixture does not advertise peer control, so Alt+D targets its notice. */
+const fleetUnavailable = (page: Page) =>
+  page.locator('[data-fleet-start-unavailable="true"]');
 /** The sidebar's Fleet footer entry (ProductSidebar.tsx:780). */
 const fleetEntry = (page: Page) =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
@@ -373,7 +376,7 @@ test("Alt+A focuses the pending approval panel and announces when none waits", a
   await expect(approvalSurface(page)).toBeFocused();
 });
 
-test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside inputs", async ({
+test("Alt+D focuses Fleet's capability notice; suppressed inside inputs", async ({
   page,
 }) => {
   await connectAndStartWorkspace(page, "keyboard-fleet");
@@ -396,14 +399,16 @@ test("Alt+D navigates to Fleet and focuses the Brief field; suppressed inside in
   await expect(composer(page)).toBeFocused();
   await expect(fleetWrapper).toBeHidden();
 
-  // Activation half: from a non-input target the chord ROUTES to Fleet (§3 +
-  // judge #1: Fleet replaces the chat pane as the active view) and lands
-  // focus on the Start form's Brief field. The routed surface carries the
-  // Back affordance; the composer leaves the view.
+  // This Core lacks peer-control capability. The shortcut focuses the reason
+  // starting is unavailable; it must not expose an unusable Start form.
   await focusOutsideTextEntry(page);
   await page.keyboard.press("Alt+KeyD");
   await expect(fleetWrapper).toBeVisible();
-  await expect(fleetBrief(page)).toBeFocused();
+  await expect(fleetUnavailable(page)).toHaveText(
+    "This server does not support starting peers",
+  );
+  await expect(fleetUnavailable(page)).toBeFocused();
+  await expect(page.locator('[data-fleet-form="start"]')).toHaveCount(0);
   await expect(fleetEntry(page)).toHaveAttribute("aria-current", "page");
   await expect(page.locator('[data-fleet-back="true"]')).toBeVisible();
 

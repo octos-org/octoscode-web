@@ -7,9 +7,8 @@ import { UiTextProvider } from "../preferences/ui-text.tsx";
 import zh from "../preferences/zh.ts";
 
 /**
- * WEB-PAIRING-CONTRACT-5100 §Client + §Remembering, as the panel presents
- * them: no token box while a link is being exchanged, bounded copy for a
- * refusal, and one visible line naming the storage actually in effect.
+ * Pairing presentation: no token box during an exchange and bounded copy
+ * when the server refuses the link.
  */
 const app = readFileSync(new URL("../../app/App.tsx", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
@@ -65,30 +64,6 @@ describe("the pairing card", () => {
   });
 });
 
-describe("the storage line", () => {
-  it("names the storage in effect and offers Forget", () => {
-    expect(panel({ tokenStorage: "tab" })).toContain(
-      "Your token stays in this browser tab.",
-    );
-    expect(panel({ tokenStorage: "device", remember: true })).toContain(
-      "Your token is remembered on this device.",
-    );
-    const blocked = panel({ tokenStorage: "memory" });
-    expect(blocked).toContain("This browser blocked saved data");
-    expect(blocked).toContain('data-token-storage="memory"');
-    expect(panel()).toContain("Forget saved connection");
-  });
-
-  it("renders the Remember checkbox in both states", () => {
-    const off = panel({ onRememberChange: () => {} });
-    expect(off).toContain("Remember on this device");
-    expect(off).not.toContain('name="remember" checked');
-    expect(panel({ remember: true, onRememberChange: () => {} })).toContain(
-      'name="remember" checked',
-    );
-  });
-});
-
 describe("the discovery offer", () => {
   it("names one origin and nothing else", () => {
     const html = panel({
@@ -102,19 +77,16 @@ describe("the discovery offer", () => {
 });
 
 describe("Chinese copy", () => {
-  it("translates every refusal kind and every storage line", () => {
+  it("translates every refusal kind", () => {
     for (const copy of Object.values(PAIRING_ERROR_COPY)) {
       expect(zh[copy], copy).toBeTruthy();
     }
     for (const source of [
       "Opening your pairing link…",
       "That pairing link did not work",
-      "Remember on this device",
       "Found Octos on {value0}.",
       "Connect to {value0}",
-      "Your token is remembered on this device. Your server address is remembered.",
       "Your token stays in this browser tab. Your server address is remembered.",
-      "This browser blocked saved data, so your token is kept in memory only and is gone when you close this tab.",
     ] as const) {
       expect(zh[source], source).toBeTruthy();
     }
@@ -125,9 +97,6 @@ describe("Chinese copy", () => {
           status="disconnected"
           error={null}
           pairingError={PAIRING_ERROR_COPY.pair_code_expired}
-          tokenStorage="device"
-          remember
-          onRememberChange={() => {}}
           onChange={() => {}}
           onConnect={() => {}}
           onDisconnect={() => {}}
@@ -136,8 +105,6 @@ describe("Chinese copy", () => {
       </UiTextProvider>,
     );
     expect(html).toContain("该链接已过期");
-    expect(html).toContain("在此设备上记住");
-    expect(html).toContain("令牌已记在此设备上");
   });
 });
 
@@ -153,7 +120,6 @@ describe("the app consumes the link before it can leak", () => {
     expect(gate).toMatch(/claimPairingCode\(pairingLink/);
     // The only thing that reaches storage is the token and the origin.
     for (const source of [gate, app]) {
-      expect(source).not.toMatch(/rememberToken\([^)]*pairingLink/);
       expect(source).not.toMatch(/console\.[a-z]+\([^)]*pairingLink/);
       expect(source).not.toMatch(/setItem\([^)]*pairingLink/);
     }

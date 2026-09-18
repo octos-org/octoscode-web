@@ -1,4 +1,4 @@
-import { createRequest, parseIncomingFrame } from "./rpc.ts";
+import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -46,6 +46,7 @@ import type {
   UiProtocolCapabilities,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
+import { APPUI_SERVER_METHODS } from "./server-methods.ts";
 import {
   APPUI_ONBOARDING_METHODS,
   APPUI_WORKSPACE_BROWSE_METHODS,
@@ -688,6 +689,21 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadOnboardingResponses()).parseLocalProfileCreateResult(value),
+    );
+  }
+
+  /**
+   * Stop the connected `octos serve`, exactly as Ctrl+C would — for every
+   * client connected to it, cancelling their running turns. Resolves once the
+   * server has acknowledged; the connection then closes as it shuts down.
+   * Only a local `--solo` HTTP server offers this: check
+   * `supportsMethod(capabilities, APPUI_SERVER_METHODS.SHUTDOWN)` first.
+   */
+  async stopServer(): Promise<{ stopping: true }> {
+    return this.validatedRequest(APPUI_SERVER_METHODS.SHUTDOWN, {}, (value) =>
+      isRecord(value) && value.stopping === true
+        ? { stopping: true as const }
+        : null,
     );
   }
 

@@ -95,7 +95,8 @@ function parseSessionEntry(value: unknown): SessionListEntry | null {
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
     !isNonNegativeInteger(value.message_count) ||
-    !optionalStringsValid(value, ["title", "updated_at", "last_prompt"])
+    !optionalStringsValid(value, ["title", "updated_at", "last_prompt"]) ||
+    (value.active_turn !== undefined && typeof value.active_turn !== "boolean")
   ) {
     return null;
   }
@@ -105,6 +106,11 @@ function parseSessionEntry(value: unknown): SessionListEntry | null {
     ...optionalString(value.title, "title"),
     ...optionalString(value.updated_at, "updated_at"),
     ...optionalString(value.last_prompt, "last_prompt"),
+    // Carried through only when the server actually said so: an older server
+    // omits it, and omission must stay distinguishable from "idle".
+    ...(typeof value.active_turn === "boolean"
+      ? { active_turn: value.active_turn }
+      : {}),
   };
 }
 

@@ -64,7 +64,7 @@ function fixture(
 
 describe("per-Session attachment drafts", () => {
   it("consumes attachments only after successful local queue admission", async () => {
-    const { store } = fixture();
+    const { store, upload, retire } = fixture();
     store.selectFiles([file()]);
     await store.uploadSelected();
     expect(store.submitTurn(scope, () => false)).toBe(false);
@@ -79,6 +79,22 @@ describe("per-Session attachment drafts", () => {
     expect(attached).toHaveLength(1);
     expect(store.getSnapshot().entries).toHaveLength(0);
     expect(attached[0]!.mime).toBe("image/png");
+    store.selectFiles([file("new-draft.png")]);
+    expect(store.restoreUploaded(attached)).toBe(false);
+    expect(store.getSnapshot().entries[0]?.name).toBe("new-draft.png");
+    store.remove(store.getSnapshot().entries[0]!.id);
+    expect(store.restoreUploaded(attached)).toBe(true);
+    expect(store.getSnapshot().entries[0]).toMatchObject({
+      name: "image.png",
+      status: "ready",
+    });
+    expect(store.takeForTurn(scope)).toEqual(attached);
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(() =>
+      store.restoreUploaded([receipt(file(), "other-profile")]),
+    ).toThrow("Profile");
+    retire();
+    expect(() => store.restoreUploaded(attached)).toThrow("authority");
   });
   it("selection never uploads, stores no File in presentation, and publishes immutable snapshots", async () => {
     const { store, upload, commands } = fixture();

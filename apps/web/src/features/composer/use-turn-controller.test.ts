@@ -14,7 +14,7 @@ import {
   type TurnControllerDependencies,
   type NativeReviewStartRequest,
 } from "./use-turn-controller.ts";
-import { PromptTurnQueue } from "./turn-queue.ts";
+import { PromptTurnQueue, type PromptTurn } from "./turn-queue.ts";
 
 describe("queue-backed turn controller async authority", () => {
   it("returns local admission before consuming caller input and rejects repeated native UUIDs", () => {
@@ -1453,6 +1453,155 @@ describe("native review on the existing turn controller", () => {
         .filter((event) => event.turnId === reviewId)
         .map((event) => event.state),
     ).toEqual(["dispatching", "cancelled"]);
+  });
+});
+
+/**
+ * One `octos serve` can be shared by the octoscode terminal client and this
+ * browser client on the SAME session. The server keeps ONE turn slot per
+ * session, so whoever is second is refused. These cover the two ways this app
+ * learns that another client owns the session: the live `turn/started` it
+ * receives through the server's per-session fan-out, and the refusal of its
+ * own `turn/start`.
+ */
+describe("another attached client owns the session's turn", () => {
+  const OTHER_TURN = "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa";
+
+  function turnStarted(turnId: string, sessionId = "session-a") {
+    return {
+      jsonrpc: "2.0" as const,
+      method: "turn/started",
+      params: { session_id: sessionId, turn_id: turnId },
+    };
+  }
+
+  it("adopts a live turn it never queued and marks it as not ours", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    const active = harness.controller.snapshot().active;
+    expect(active?.turnId).toBe(OTHER_TURN);
+    expect(active?.origin).toBe("adopted");
+    // Adoption is for display only — it must never dispatch anything.
+    expect(harness.controller.snapshot().pending).toHaveLength(0);
+  });
+
+  it("does not mark this app's own turn as adopted", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.enqueuePrompt("mine");
+    const mine = harness.activeTurnId();
+    harness.controller.observeSteerDropped(turnStarted(mine));
+    expect(harness.controller.snapshot().active?.origin).toBeUndefined();
+  });
+
+  it("ignores a foreign start while this app already holds the foreground", () => {
+    // Only one turn can be active server-side, so this means our view is
+    // stale; hydrate reconciles it with the full ownership rules rather than
+    // this fast path stomping a turn we may still own.
+    const harness = renderController(fakeClient());
+    harness.controller.enqueuePrompt("mine");
+    const mine = harness.activeTurnId();
+    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    expect(harness.controller.snapshot().active?.turnId).toBe(mine);
+  });
+
+  it("ignores a start for a different session", () => {
+    const harness = renderController(fakeClient());
+    harness.controller.observeSteerDropped(
+      turnStarted(OTHER_TURN, "session-b"),
+    );
+    expect(harness.controller.snapshot().active).toBeNull();
+  });
+
+  it.each(["before reply", "after reply"] as const)(
+    "restores the full refused turn and drains FIFO when the occupier ends %s",
+    async (terminalOrder) => {
+      const reply = deferred<void>();
+      const restored: PromptTurn[] = [];
+      const client = fakeClient({ start: () => reply.promise });
+      const harness = renderController(client, {
+        onTurnNotSentRestore: (turn) => restored.push(turn),
+      });
+      const refused = {
+        turnId: "local-first",
+        text: "my message",
+        media: [{ path: "uploaded/image", mime: "image/png", size_bytes: 4 }],
+        reasoningEffort: "high",
+      };
+      harness.controller.enqueueTurn(refused);
+      harness.controller.enqueuePrompt("next local prompt");
+      if (terminalOrder === "before reply")
+        harness.controller.settleTurn(OTHER_TURN);
+      client.startTurn.mockImplementation(async () => undefined);
+      reply.reject(
+        new OctosUiProtocolError(-32600, "Session occupied", {
+          kind: "turn_in_progress",
+          turn_id: OTHER_TURN,
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(restored).toEqual([refused]);
+      if (terminalOrder === "after reply") {
+        expect(harness.controller.snapshot().active).toMatchObject({
+          turnId: OTHER_TURN,
+          origin: "adopted",
+        });
+        expect(client.startTurn).toHaveBeenCalledTimes(1);
+        harness.controller.settleTurn(OTHER_TURN);
+      }
+      expect(harness.controller.snapshot().active?.text).toBe(
+        "next local prompt",
+      );
+      expect(harness.controller.snapshot().pending).toEqual([]);
+      expect(client.startTurn).toHaveBeenCalledTimes(2);
+      expect(client.startTurn.mock.calls[1]?.[0]).not.toHaveProperty("media");
+      expect(harness.timeline.map((entry) => entry.title)).toContain(
+        "Session busy",
+      );
+      expect(harness.timeline.map((entry) => entry.title)).not.toContain(
+        "Turn rejected",
+      );
+    },
+  );
+
+  it("keeps untyped refusals on the rejection path and advances the queue", async () => {
+    const reply = deferred<void>();
+    const client = fakeClient({ start: () => reply.promise });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("my message");
+    harness.controller.enqueuePrompt("next local prompt");
+    client.startTurn.mockImplementation(async () => undefined);
+    reply.reject(
+      new OctosUiProtocolError(
+        -32600,
+        "turn/start: a turn is already running for this session",
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(harness.controller.snapshot().active?.text).toBe(
+      "next local prompt",
+    );
+    expect(client.startTurn).toHaveBeenCalledTimes(2);
+    expect(harness.timeline.map((entry) => entry.title)).toContain(
+      "Turn rejected",
+    );
+  });
+
+  it("leaves every other rejection on the existing failure path", async () => {
+    const harness = renderController(
+      fakeClient({
+        start: async () => {
+          throw new OctosUiProtocolError(-32602, "cwd is not accessible");
+        },
+      }),
+    );
+    harness.controller.enqueuePrompt("my message");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(harness.timeline.map((entry) => entry.title)).toContain(
+      "Turn rejected",
+    );
   });
 });
 

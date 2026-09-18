@@ -22,7 +22,7 @@ import type { DriverAcquireView } from "@octos-org/octoscode-client/external-dri
 import type { OctosUiClient } from "@octos-org/octoscode-client";
 import type { TimelineEntry } from "../timeline/model.ts";
 import { createQueueBackedTurnController } from "./use-turn-controller.ts";
-import { PromptTurnQueue } from "./turn-queue.ts";
+import { PromptTurnQueue, type PromptTurn } from "./turn-queue.ts";
 import {
   FOREIGN_SEAT_HOLDER_MESSAGE,
   RESUME_CHAT_LABEL,
@@ -267,7 +267,7 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
     >,
   ) => {
     const timeline: TimelineEntry[] = [];
-    const restores: Array<[string, string]> = [];
+    const restores: Array<[PromptTurn, string]> = [];
     const controller = createQueueBackedTurnController({
       queueRef: { current: new PromptTurnQueue() },
       dependenciesRef: {
@@ -313,15 +313,40 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
       sent: false as const,
       message: "turn admission refused for this session: ExternalMasterHeld",
     }));
-    controller.enqueuePrompt("keep me");
+    const turn = {
+      turnId: "refused-turn",
+      text: "keep me",
+      reasoningEffort: "high",
+      media: [{ path: "uploaded/image", mime: "image/png", size_bytes: 4 }],
+    };
+    controller.enqueueTurn(turn);
     await Promise.resolve();
     await Promise.resolve();
     expect(wire).toEqual([]);
-    expect(restores).toEqual([["keep me", "session-a"]]);
+    expect(restores).toEqual([[turn, "session-a"]]);
     expect(
       timeline.some((entry) =>
         JSON.stringify(entry).includes("Another app is using this session"),
       ),
     ).toBe(true);
+  });
+
+  it("holds an unsent prompt when transport changes during handback", async () => {
+    wire.length = 0;
+    let release!: (value: { sent: true }) => void;
+    const gate = new Promise<{ sent: true }>((resolve) => {
+      release = resolve;
+    });
+    const { controller } = harness(() => gate);
+    controller.enqueuePrompt("send after recovery");
+    controller.suspendTransport();
+    release({ sent: true });
+    await Promise.resolve();
+    expect(wire).toEqual([]);
+    expect(controller.snapshot().active?.text).toBe("send after recovery");
+
+    controller.resumePendingTurn();
+    await Promise.resolve();
+    expect(wire).toEqual(["turn/start"]);
   });
 });

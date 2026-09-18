@@ -22,6 +22,12 @@ export interface ResumeCandidate {
   readonly title: string;
   readonly updatedAt?: string;
   readonly lastPrompt?: string;
+  /**
+   * The server reported a live turn in this session. Absent when the server
+   * does not report the fact at all, which is NOT the same as idle — the row
+   * then says nothing rather than implying the session is free.
+   */
+  readonly activeTurn?: boolean;
 }
 export interface ResumeConfirmation {
   readonly sessionId: string;
@@ -334,5 +340,8 @@ function catalogCandidate(entry: SessionListEntry): ResumeCandidate {
     title: entry.title ?? entry.id,
     ...(entry.updated_at ? { updatedAt: entry.updated_at } : {}),
     ...(entry.last_prompt ? { lastPrompt: entry.last_prompt } : {}),
+    ...(typeof entry.active_turn === "boolean"
+      ? { activeTurn: entry.active_turn }
+      : {}),
   });
 }

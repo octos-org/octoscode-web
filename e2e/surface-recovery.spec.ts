@@ -20,15 +20,8 @@ async function start(page: Page) {
   await expect(composerInput(page)).toBeVisible();
 }
 
-/**
- * The composer textarea. It is a role=textbox for a plain draft but becomes a
- * role=combobox for command entry (a draft opened with "/"), because ARIA 1.2
- * does not allow aria-expanded on role=textbox (ComposerInput.tsx). Resolving
- * it by its accessible NAME therefore survives both modes; a role-pinned
- * locator silently stops matching the moment a "/" is typed.
- */
 function composerInput(page: Page) {
-  return page.getByLabel("Message Octos");
+  return page.getByRole("textbox", { name: "Message Octos" });
 }
 
 function settingsTrigger(page: Page) {

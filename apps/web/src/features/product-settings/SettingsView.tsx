@@ -40,6 +40,9 @@ interface SettingsViewProps {
   restartPending: boolean;
   onDisconnect: () => void;
   onForgetConnection: () => void;
+  /** The server offers `server/shutdown` (local `octos serve --solo`). */
+  canStopServer?: boolean;
+  onStopServer?: () => Promise<void>;
   onModelsChanged: () => Promise<void>;
   onSectionChange: (section: SettingsSectionId) => void;
   onClose: () => void;
@@ -59,6 +62,8 @@ export function SettingsView({
   restartPending,
   onDisconnect,
   onForgetConnection,
+  canStopServer = false,
+  onStopServer,
   onModelsChanged,
   onSectionChange,
   onClose,
@@ -110,6 +115,8 @@ export function SettingsView({
               locked={locked}
               onDisconnect={onDisconnect}
               onForgetConnection={onForgetConnection}
+              canStopServer={canStopServer}
+              {...(onStopServer ? { onStopServer } : {})}
               onCopyDiagnostics={() => {
                 // Redacted by construction: origin only (never the
                 // token, never the WS query string), plus state the

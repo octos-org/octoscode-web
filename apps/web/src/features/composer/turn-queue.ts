@@ -6,6 +6,17 @@ export interface PromptTurn {
   /** Native review owns a normal turn slot but dispatches review/start, not a prompt. */
   kind?: "review";
   /**
+   * Who started this turn. Absent means "local" — every enqueue path in this
+   * app produces a local turn, so only the adoption sites have to say so.
+   *
+   * "adopted" means the server reported this turn as the session's live turn
+   * and we took it over for display: another attached client (a terminal, a
+   * second tab) is driving it. We can watch it and Stop it — `turn/interrupt`
+   * is not connection-scoped — but we did not write the prompt, and the UI
+   * must not present it as ours.
+   */
+  origin?: "local" | "adopted";
+  /**
    * The Session's reasoning selection captured AT ENQUEUE TIME. rc11 clears
    * the persisted value when a turn omits it, so every queued entry must
    * carry the choice the user made when they typed it — not whatever is

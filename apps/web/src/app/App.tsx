@@ -22,6 +22,7 @@ import {
   useState,
 } from "react";
 import {
+  APPUI_SERVER_METHODS,
   CORE_UI_FEATURES,
   supportsFeature,
   supportsMethod,
@@ -38,7 +39,6 @@ import {
   shortcutTargetIsTextInput,
   shortcutTargetSuppressed,
 } from "../features/composer/shortcut-suppression.ts";
-import { RESUME_CHAT_LABEL } from "../features/composer/composer-seat-handover.ts";
 import {
   collapseAll,
   expandAll,
@@ -339,7 +339,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     pairingLink,
     cleanupFailed,
     restoreConnectionRef,
-    rememberedConnectRef,
     theme,
     cycleTheme,
     disconnect,
@@ -469,7 +468,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   const [fleetRouteActive, setFleetRouteActive] = useState(false);
-  /** §8 Alt+D: a pending "focus Fleet's Brief" request (see the effect below). */
+  /** Alt+D requests focus inside Fleet once the routed pane is visible. */
   const [fleetBriefFocusRequest, setFleetBriefFocusRequest] = useState(0);
   // §4.2: Advanced collapsed by default, remembered per browser.
   const [advancedOpen, setAdvancedOpen] = useState(() => {
@@ -746,26 +745,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (restoreAttemptedRef.current) return;
     // A pairing link drives its own connect; nothing else may race it.
     if (pairingLink) return;
-    if (!restoreConnectionRef.current && !rememberedConnectRef.current) return;
+    if (!restoreConnectionRef.current) return;
     const timer = window.setTimeout(() => {
       if (restoreAttemptedRef.current) return;
       restoreAttemptedRef.current = true;
-      // §Remembering: a token remembered on this device is asked for once. A
-      // fresh tab authenticates with it and stops at the workspace gate — it
-      // does not resurrect another tab's Session selection. The entry took
-      // this same decision to know whether to load this shell at all.
       const start = autoStartKind({
         pairingLink: pairingLink !== null,
         restoreConnection: restoreConnectionRef.current,
-        rememberedConnect: rememberedConnectRef.current,
         endpoint: connection.endpoint,
-        token: connection.token,
         sessionId: connection.sessionId,
       });
-      if (start === "connect") {
-        session.connect(connection);
-        return;
-      }
       if (start !== "restore") return;
       if (savedLink) {
         const rememberedKey = workspaceSessionKey(
@@ -952,12 +941,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return () => window.removeEventListener("keydown", onPeerDockKeyDown);
   }, []);
 
-  // Alt+D focuses the peer CONTROLLER console's Dispatch affordance (grant
-  // 2840; program WEB-PEER-CONTROLLER-2800 §3). WEB-UX-DESIGN-4000 §8 retargets
-  // the chord: Alt+D navigates to Fleet and focuses the Start form's Brief
-  // field. The same registry pattern as Alt+A/Alt+P, matched on the physical
-  // `code` (macOS Option+D is a dead key); an absent Fleet surface (never
-  // mounted) is a silent no-op.
+  // Alt+D opens Fleet and focuses Brief when starting peers is supported,
+  // otherwise its availability notice or Back. Match the physical code
+  // because macOS Option+D is a dead key.
   useEffect(() => {
     const onFocusDispatchKeyDown = (event: KeyboardEvent) => {
       if (matchKeyboardParityShortcut(event)?.id !== "focus-dispatch") return;
@@ -974,21 +960,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     window.addEventListener("keydown", onFocusDispatchKeyDown);
     return () => window.removeEventListener("keydown", onFocusDispatchKeyDown);
   }, []);
-  // §8 Alt+D, second half: land focus on Fleet's Start-form Brief field once
-  // the routed pane is actually visible. The lazy FleetView chunk may still be
-  // resolving, so the request survives a few frames before it gives up rather
-  // than silently focusing nothing.
+  // Wait only for the lazy Fleet surface to mount. An unavailable Start form
+  // has an immediate focus target, so it does not exhaust the frame retries.
   useEffect(() => {
     if (fleetBriefFocusRequest === 0 || !fleetRouteActive) return;
     let cancelled = false;
     let attempts = 0;
     const attempt = () => {
       if (cancelled) return;
-      const brief = document.querySelector<HTMLElement>(
-        '[data-fleet-field="brief"]',
-      );
-      if (brief) {
-        brief.focus();
+      const target =
+        document.querySelector<HTMLElement>(
+          '[data-fleet-field="brief"], [data-fleet-start-unavailable="true"]',
+        ) ??
+        (document.querySelector(".fleet-empty-session")
+          ? document.querySelector<HTMLElement>('[data-fleet-back="true"]')
+          : null);
+      if (target) {
+        target.focus();
         return;
       }
       if (attempts++ > 60) return;
@@ -1508,19 +1496,57 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return () => cancelAnimationFrame(frame);
   }, [activeSessionKey, conversationTab, compact]);
 
-  // Audit row 9: a user interrupt stashes the interrupted turn's prompt and the
-  // controller hands it back when that turn's OWN terminal lands. Restore it
-  // into the composer only while its OWNING Session is the selected one; the
-  // parked prompt for any other Session survives until the user returns to it.
+  // Interrupted and unsent inputs return to their owning Session. Wait for
+  // newer text and image selections to clear before consuming a saved restore.
   const interruptedPrompt = conversation.interruptedPrompt;
+  const attachmentSnapshot = conversation.attachments?.getSnapshot();
   useEffect(() => {
-    if (!interruptedPrompt) return;
+    if (
+      !interruptedPrompt ||
+      draftRef.current ||
+      attachmentSnapshot?.entries.length
+    )
+      return;
     const restored = conversation.takeInterruptedPrompt();
     if (restored === null) return;
     draftRef.current = restored;
     setDraft(restored);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interruptedPrompt]);
+  }, [interruptedPrompt, draft, activeSessionKey, attachmentSnapshot]);
+
+  const resumeChat = () => {
+    const prompt = draftRef.current;
+    const ownerKey = activeSessionKey;
+    setResumeChatBusy(true);
+    setResumeChatFailed(null);
+    void conversation
+      .resumeChatSend(prompt)
+      .then((outcome) => {
+        setResumeChatBusy(false);
+        if (!outcome.sent) {
+          setResumeChatFailed(
+            outcome.message ?? t("Couldn't resume chat — nothing was sent"),
+          );
+          return;
+        }
+        if (outcome.prompt === null) return;
+        // Sending A may finish after the operator starts editing B or switches
+        // Sessions. Consume only the draft this Resume action actually sent.
+        if (previousActiveSessionKeyRef.current === ownerKey) {
+          if (draftRef.current === prompt) {
+            draftRef.current = "";
+            setDraft("");
+          }
+        } else if (ownerKey && sessionDrafts.get(ownerKey) === prompt) {
+          sessionDrafts.set(ownerKey, "");
+          persistDrafts();
+        }
+      })
+      .catch(() => {
+        setResumeChatBusy(false);
+        setResumeChatFailed(t("Couldn't resume chat — nothing was sent"));
+      });
+  };
 
   const moveToProductSession = async (productSessionId: string) => {
     const target = navigableSessions.find(
@@ -1827,7 +1853,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             : foreignSeatHeld
               ? { kind: "external-held" }
               : conversation.queue.active
-                ? { kind: "responding" }
+                ? // The live turn is not ours: another attached client owns it.
+                  // Guarded by `selfSeatHeld` for the same reason §4.3 guards
+                  // the other-app copy — a peer THIS app started is SELF, so
+                  // its turn is never "another client".
+                  conversation.queue.active.origin === "adopted" &&
+                  !selfSeatHeld
+                  ? { kind: "busy-elsewhere" }
+                  : { kind: "responding" }
                 : peers.manager
                       ?.snapshot()
                       .peers.some((peer) =>
@@ -1970,9 +2003,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const failureActions = failureCopy?.actions;
     return (
       <>
-        <button type="button" onClick={gate.openPreferences}>
-          {t("Browser preferences")}
-        </button>
         <SurfaceBoundary
           name="Connection"
           fallback={<DeferredSurface label="Loading connection…" />}
@@ -2618,6 +2648,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             Math.max(0, suggestedCommands.length - 1),
                           )}
                           onSelect={chooseCommand}
+                          onSelectedIndexChange={setSelectedCommandIndex}
+                          onDismiss={() => {
+                            setCommandPaletteDismissed(true);
+                            setSelectedCommandIndex(0);
+                            composerRef.current?.focus();
+                          }}
                         />
                       </Suspense>
                     ) : null}
@@ -2773,10 +2809,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
-          <div
-            className="conversation fleet-pane"
-            hidden={!(fleetRouteActive && session.opened)}
-          >
+          <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button
                 type="button"
@@ -2881,36 +2914,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     resumeChatBusy,
                     resumeChatNotice:
                       resumeChatFailed ?? conversation.seatHandover ?? null,
-                    onResumeChat: () => {
-                      setResumeChatBusy(true);
-                      setResumeChatFailed(null);
-                      void conversation
-                        .resumeChatSend()
-                        .then((outcome) => {
-                          setResumeChatBusy(false);
-                          if (!outcome.sent)
-                            setResumeChatFailed(
-                              outcome.message ??
-                                t("Couldn't resume chat — nothing was sent"),
-                            );
-                          if (outcome.message)
-                            conversation.setTimeline((current) =>
-                              addSystemMessage(
-                                current,
-                                `resume-chat:${crypto.randomUUID()}`,
-                                t(RESUME_CHAT_LABEL),
-                                outcome.message ?? "",
-                                outcome.sent ? "info" : "error",
-                              ),
-                            );
-                        })
-                        .catch(() => {
-                          setResumeChatBusy(false);
-                          setResumeChatFailed(
-                            t("Couldn't resume chat — nothing was sent"),
-                          );
-                        });
-                    },
+                    onResumeChat: resumeChat,
                   }
                 : null
             }
@@ -3115,36 +3119,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ...(conversation.seatHandover
                       ? { resumeChatNotice: conversation.seatHandover }
                       : {}),
-                    onResumeChat: () => {
-                      setResumeChatBusy(true);
-                      setResumeChatFailed(null);
-                      void conversation
-                        .resumeChatSend()
-                        .then((outcome) => {
-                          setResumeChatBusy(false);
-                          if (!outcome.sent)
-                            setResumeChatFailed(
-                              outcome.message ??
-                                t("Couldn't resume chat — nothing was sent"),
-                            );
-                          if (outcome.message)
-                            conversation.setTimeline((current) =>
-                              addSystemMessage(
-                                current,
-                                `resume-chat:${crypto.randomUUID()}`,
-                                t(RESUME_CHAT_LABEL),
-                                outcome.message ?? "",
-                                outcome.sent ? "info" : "error",
-                              ),
-                            );
-                        })
-                        .catch(() => {
-                          setResumeChatBusy(false);
-                          setResumeChatFailed(
-                            t("Couldn't resume chat — nothing was sent"),
-                          );
-                        });
-                    },
+                    onResumeChat: resumeChat,
                     ...(resumeChatFailed
                       ? { resumeChatNotice: resumeChatFailed }
                       : {}),
@@ -3240,6 +3215,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         ? setLeaveConnectionAction("forget")
                         : forgetConnection()
                     }
+                    canStopServer={supportsMethod(
+                      session.capabilities,
+                      APPUI_SERVER_METHODS.SHUTDOWN,
+                    )}
+                    onStopServer={async () => {
+                      const client = protocol.client;
+                      if (!client) throw new Error("Not connected");
+                      await client.stopServer();
+                      // The server is going away. Disconnect on purpose so the
+                      // tab returns to the connect screen instead of retrying
+                      // a server that has shut down. The Stop confirmation
+                      // already warned that running work is cancelled, so this
+                      // skips the unfinished-work prompt Disconnect shows.
+                      disconnect();
+                    }}
                     onCopyDiagnostics={() => {
                       // Redacted by construction: origin only (never the
                       // token, never the WS query string), plus state the
