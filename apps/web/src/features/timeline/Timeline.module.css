@@ -24,6 +24,10 @@
   outline-offset: 3px;
 }
 
+.assistantEntry :global(.markdown-body > :where(p, ul, ol, blockquote)) {
+  max-width: 75ch;
+}
+
 .reasoningBlock,
 .toolBlock {
   min-width: 0;
