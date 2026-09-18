@@ -36,10 +36,12 @@ upstream limitations.
   screenshots were inspected independently after the intentional change.
 - #132 keeps primary Settings and Session settings available with the app. Model
   management loads within its stable dialog boundary, preserving Close and
-  return focus even when that chunk fails. Final integration is pending.
-- #53 is being corrected: returning to a Session must restore its reading
-  position and visible history window. The browser's deferred content layout is
-  part of this verification; the fix is not yet accepted.
+  return focus even when that chunk fails. All eight final CI jobs passed.
+- #53 restores each Session's reading anchor, expanded history window and
+  follow-bottom state. Its existing 360-message browser case now verifies
+  independent A/B positions, background output and identity cleanup. Desktop and
+  390 px drawer navigation preserve the visible paragraph; deferred content
+  layout is compensated once through the existing ResizeObserver.
 
 Desktop 1,440 px and phone 390 px long-history views had no axe violations or
 root horizontal overflow. Code and tables keep local horizontal scrolling.
@@ -51,23 +53,34 @@ are not real VoiceOver/NVDA or physical-device results.
 Measurements use production builds in Chromium on Linux without CPU/network
 throttling. They are local interaction measurements, not field INP.
 
-- On #132's measured build, actual click-to-dialog DOM appearance dropped from
-  304/302 ms to 5.3/3.8 ms for Settings/Session settings. The initial connection
-  payload remained about 228 KB of JavaScript. Playwright polling time was not
-  reported as application latency.
+- On #132's measured build, click-to-ready content dropped from 304/302 ms to
+  5.3/3.8 ms for Settings/Session settings. The old Settings loading shell
+  already appeared in about 4 ms; the improvement makes its controls available
+  immediately. The initial connection payload remained about 228 KB of
+  JavaScript. Playwright polling time was not reported as application latency.
 - Against isolated rc.11, three completed Sessions retained distinct drafts and
   stable sidebar order through 18 selections, with no additional `session/open`
   request and no page error. The 66–83 ms figures include Playwright and two
   animation frames; they are not a direct rendering metric.
-- A separate #112-build probe used a 360-entry Session and two completed peers.
-  Thirty selections reached correct enabled input in 16.0 ms median/17.8 ms
-  maximum; next animation frame was 30.7/35 ms. No switching long task or long
-  animation frame exceeded 50 ms. Each Session opened/hydrated once. **That
-  build remounted only 40 entries when returning**, exposing #53. These numbers
-  do not establish the cost of restoring all 360 visible entries.
+- A separate #112-build probe used a 360-entry Session and two other completed
+  ordinary Sessions. Of thirty selections, thirteen returned to the long
+  Session: correct enabled input appeared in 16.0 ms median/17.8 ms maximum;
+  next animation frame was 30.7/35 ms. No switching long task or long animation
+  frame exceeded 50 ms. Each Session opened/hydrated once. **That build
+  remounted only 40 entries when returning**, exposing #53. These numbers do not
+  establish the cost of restoring all 360 visible entries.
 
-Final integrated navigation and restored-history measurements remain required.
-JavaScript/CSS deployment budgets have not been raised.
+After #53, thirteen returns to the fully expanded 360-entry Session preserved
+the same paragraph with 0 px anchor error. Click-to-selection, correct editable
+draft and restored anchor measured 65.2 ms median/82.5 ms maximum. There were 13
+long animation frames, maximum 88.9 ms, and 13 long tasks, maximum 83 ms;
+React/Markdown remounting dominated the cost. Restoring all 360 entries costs
+more than discarding the window. The separate ordinary-streaming gate still
+recorded zero long frames; its 200 ms threshold does not excuse switching cost.
+Four phone drawer round-trips also preserved the paragraph and 360-entry window.
+
+Final integrated navigation remains required. JavaScript/CSS deployment budgets
+have not been raised.
 
 ## Verification discipline and delivery
 
@@ -78,10 +91,10 @@ review. Necessary protocol/identity/race assertions remain; existing browser
 cases were extended where they exposed an actual failure. No test-count or
 coverage-percentage target is used.
 
-Exact-head CI passed before merging #112, #125, #129, #130, #133, #134 and #137
-into the candidate. The final combined source still requires its own acceptance.
-CI now cancels obsolete runs of the same PR while keeping main/manual runs
-independent.
+Exact-head CI passed before merging #112, #125, #129, #130, #132, #133, #134 and
+#137 into the candidate. The final combined source still requires its own
+acceptance. CI now cancels obsolete runs of the same PR while keeping
+main/manual runs independent.
 
 The local auto-deployer previously activated main `9df5417` while the served
 manifest reported `dev` / `unknown`. Its build container now receives the
@@ -99,15 +112,24 @@ evidence.
   [web #78](https://github.com/octos-org/octoscode-web/issues/78) and
   [Core #2167](https://github.com/octos-org/octos/issues/2167). No browser
   shadow transcript is substituted for missing canonical history.
+- rc.11 evidence comes from an isolated instance. The shared local service is
+  still rc.9. Actual durable-draft checks used its `admin` principal; multiple
+  principals, token rotation and delayed identity replies are fixture evidence.
+  Offline Forget uses the principal previously verified in that tab, not an
+  anonymous new tab's authority to remove other users' drafts.
 - Fresh-browser Session discovery awaits authoritative workspace/profile
   ownership from [Core #2146](https://github.com/octos-org/octos/issues/2146).
   Remembered tab navigation is not a complete server catalog.
 - The tested rc.9/rc.11 servers do not advertise the candidate's external-driver
   contract. The corresponding UI remains capability-gated. Fixture passes do not
   establish live driver compatibility or detached execution.
-- #138/Core #2409's proposed `unknown` + `running:false` recovery is under
-  separate review. It is not proof of interrupted/completed outcome and is not
-  included in the accepted evidence above.
+- #138/Core #2409's proposed `unknown` + `running:false` recovery remains
+  pending. Review reproduced a Core sampling race that returns false while the
+  exact turn is active; the
+  [upstream finding](https://github.com/octos-org/octos/pull/2409#issuecomment-5737184687)
+  blocks automatic release based on this evidence. Manual #133 remains
+  available. Absence of running work also cannot prove interrupted/completed
+  outcome.
 - This round's real-Core checks use a deterministic provider for ownership and
   navigation. Historical real-provider endurance results are not attributed to
   the current artifact.

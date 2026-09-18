@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const settingsModule =
-  /\/(?:assets\/(?:SettingsView|SettingsDialog)-[^/]+\.js|src\/features\/product-controls\/SettingsDialog\.tsx)(?:\?.*)?$/;
+const modelManagementModule =
+  /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
 const reviewModule =
   /\/(?:assets\/DiffReviewDialog-[^/]+\.js|src\/features\/review\/DiffReviewDialog\.tsx)(?:\?.*)?$/;
 
@@ -30,7 +30,7 @@ function settingsTrigger(page: Page) {
     .getByRole("button", { name: "Settings", exact: true });
 }
 
-test("a failed Settings chunk preserves the owner, queue, draft and Stop", async ({
+test("a failed model-management chunk preserves the owner, queue, draft and Stop", async ({
   page,
 }) => {
   let closed = 0;
@@ -65,7 +65,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
   await composer.press("Enter");
   await composer.fill("Keep this unsent draft");
   const previouslyClosed = closed;
-  await page.route(settingsModule, (route) =>
+  await page.route(modelManagementModule, (route) =>
     route.fulfill({
       status: 503,
       contentType: "text/plain",
@@ -73,16 +73,22 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
     }),
   );
   await settingsTrigger(page).click();
-  const error = page.getByRole("dialog", { name: "Settings unavailable" });
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const error = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(error).toBeVisible();
   await expect(
-    error.getByRole("button", { name: "Close", exact: true }),
+    error.getByRole("heading", { name: "Model management unavailable" }),
+  ).toBeVisible();
+  await expect(
+    error.getByRole("button", { name: "Models", exact: true }),
   ).toBeFocused();
   await expect(error).toContainText("Reloading may stop running work");
   expect(closed).toBe(previouslyClosed);
   expect(starts).toHaveLength(1);
   expect(interrupts).toHaveLength(0);
-  await error.getByRole("button", { name: "Close", exact: true }).click();
+  await error
+    .getByRole("button", { name: "Close settings", exact: true })
+    .click();
   await expect(settingsTrigger(page)).toBeFocused();
   await expect(composer).toHaveValue("Keep this unsent draft");
   await expect(
@@ -92,7 +98,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
   await expect.poll(() => interrupts.length).toBe(1);
 });
 
-test("a slow Settings import can be canceled and never opens after cancellation", async ({
+test("a slow model-management import can be canceled and never opens after cancellation", async ({
   page,
 }) => {
   await start(page);
@@ -101,7 +107,7 @@ test("a slow Settings import can be canceled and never opens after cancellation"
     release = resolve;
   });
   let fulfilled = false;
-  await page.route(settingsModule, async (route) => {
+  await page.route(modelManagementModule, async (route) => {
     const response = await route.fetch();
     await released;
     await route.fulfill({ response });
@@ -110,9 +116,16 @@ test("a slow Settings import can be canceled and never opens after cancellation"
   const composer = composerInput(page);
   await composer.fill("Keep typing after cancellation");
   await settingsTrigger(page).click();
-  const loading = page.getByRole("dialog", { name: "Loading settings…" });
-  await expect(loading).toBeVisible();
-  await loading.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const loading = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(
+    loading
+      .getByRole("status")
+      .filter({ hasText: "Loading model management…" }),
+  ).toBeVisible();
+  await loading
+    .getByRole("button", { name: "Close settings", exact: true })
+    .click();
   await expect(settingsTrigger(page)).toBeFocused();
   release();
   await expect.poll(() => fulfilled).toBe(true);

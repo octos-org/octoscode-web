@@ -72,7 +72,7 @@ this report carry the lasting conclusions; no bearer token is included in the
 recorded artifacts. Release readiness remains governed by the maintenance
 workflow and its outcome ledger on main.
 
-## Integration evidence
+## Initial integration evidence (historical checkpoint)
 
 The combined 27-case browser acceptance run passes after integrating #125. The
 full check passes with 227,968 B initial JavaScript and 65,108 B initial CSS.

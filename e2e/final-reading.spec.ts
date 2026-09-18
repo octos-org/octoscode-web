@@ -283,6 +283,21 @@ test("360-message history stays readable while new output streams and unsafe Mar
   });
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
+  const selectedTitle = page.locator(
+    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+  );
+  const sessionA = (await selectedTitle.textContent())!;
+  const selectSession = async (title: string) => {
+    await page
+      .locator('button[role="treeitem"]')
+      .filter({ hasText: title })
+      .click();
+    await expect(selectedTitle).toHaveText(title);
+  };
+  const region = page.getByRole("region", {
+    name: "Conversation",
+    exact: true,
+  });
   await page
     .getByRole("button", { name: "Show 100 earlier messages" })
     .scrollIntoViewIfNeeded();
@@ -309,6 +324,62 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await expect(page.locator(".timeline-entry").first()).toContainText(
     "History 1:",
   );
+  const readingA = page.locator(".timeline-entry").nth(177);
+  await readingA.scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
+  let readingATop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = (await readingA.boundingBox())!.y;
+      const settled = top === readingATop;
+      readingATop = top;
+      return settled;
+    })
+    .toBe(true);
+  await page
+    .getByRole("button", { name: "final-reading", exact: true })
+    .hover();
+  await page
+    .getByRole("button", { name: "New session in final-reading", exact: true })
+    .click();
+  // Reused hydrate entry IDs must not borrow A's expansion or reading position.
+  await expect(page.locator(".timeline-entry")).toHaveCount(40);
+  const sessionB = (await selectedTitle.textContent())!;
+  await page.getByRole("button", { name: "Show 100 earlier messages" }).click();
+  await expect(page.locator(".timeline-entry")).toHaveCount(140);
+  const readingB = page.locator(".timeline-entry").nth(40);
+  await readingB.scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
+  let readingBTop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = (await readingB.boundingBox())!.y;
+      const settled = top === readingBTop;
+      readingBTop = top;
+      return settled;
+    })
+    .toBe(true);
+  for (let index = 0; index < 3; index++) {
+    await selectSession(sessionA);
+    await expect(page.locator(".timeline-entry")).toHaveCount(360);
+    await expect
+      .poll(async () =>
+        Math.abs((await readingA.boundingBox())!.y - readingATop),
+      )
+      .toBeLessThan(4);
+    await selectSession(sessionB);
+    await expect(page.locator(".timeline-entry")).toHaveCount(140);
+    await expect
+      .poll(async () =>
+        Math.abs((await readingB.boundingBox())!.y - readingBTop),
+      )
+      .toBeLessThan(4);
+  }
+  await selectSession(sessionA);
   await page.getByRole("button", { name: "Back to latest" }).click();
   await expect(
     page.getByRole("heading", { name: "Final history entry" }),
@@ -327,10 +398,6 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await composer.fill("Continue from history");
   await composer.press("Enter");
   await expect.poll(() => Boolean(emit)).toBe(true);
-  const region = page.getByRole("region", {
-    name: "Conversation",
-    exact: true,
-  });
   await region.hover();
   await page.mouse.wheel(0, -1800);
   await expect(
@@ -351,9 +418,26 @@ test("360-message history stays readable while new output streams and unsafe Mar
       return settled;
     })
     .toBe(true);
-  const before = settledTop;
+  const tableTop = (await page.locator(".md-table-scroll").boundingBox())!.y;
+  await selectSession(sessionB);
+  await expect
+    .poll(async () => Math.abs((await readingB.boundingBox())!.y - readingBTop))
+    .toBeLessThan(4);
   for (let index = 0; index < 25; index++)
     emit!("assistant_delta", { text: `Stream chunk ${index}. ` });
+  await selectSession(sessionA);
+  await expect(
+    page.getByText("Stream chunk 24.", { exact: false }),
+  ).toBeAttached();
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await page.locator(".md-table-scroll").boundingBox())!.y - tableTop,
+      ),
+    )
+    .toBeLessThan(4);
+  const before = await region.evaluate((el) => el.scrollTop);
+  emit!("assistant_delta", { text: "Foreground continuation. " });
   emit!("turn_terminal", { outcome: "completed" });
   await expect(
     page.getByText("Stream chunk 24.", { exact: false }),
@@ -392,18 +476,49 @@ test("360-message history stays readable while new output streams and unsafe Mar
     });
   }
   await page.setViewportSize({ width: 1280, height: 720 });
+  await selectSession(sessionB);
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  const previousEmit = emit;
+  await composer.fill("Keep following while this Session is in the background");
+  await composer.press("Enter");
+  await expect.poll(() => emit !== previousEmit).toBe(true);
+  await selectSession(sessionA);
+  for (let index = 0; index < 25; index++)
+    emit!("assistant_delta", { text: `Background paragraph ${index}.\n\n` });
+  emit!("turn_terminal", { outcome: "completed" });
+  await selectSession(sessionB);
+  await expect(
+    page.getByText("Background paragraph 24.", { exact: true }),
+  ).toBeInViewport();
+  await expect
+    .poll(() =>
+      region.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+    )
+    .toBeLessThan(4);
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeHidden();
+
+  // Reading memory ends with the authenticated scope, even for the same IDs.
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
-    .getByRole("treeitem", { name: "final-reading", exact: true })
-    .hover();
-  await page
-    .getByRole("button", { name: "New session in final-reading", exact: true })
+    .getByRole("dialog", { name: "Settings", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
     .click();
-  // Both sessions deliberately reuse hydrate fallback IDs. The session key,
-  // rather than a message ID coincidence, resets the initial rendering window.
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await selectSession(sessionA);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await expect(
     page.getByRole("button", { name: "Show 100 earlier messages" }),
   ).toBeAttached();
+  await expect
+    .poll(() =>
+      region.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+    )
+    .toBeLessThan(4);
   expect(errors).toEqual([]);
 });
 

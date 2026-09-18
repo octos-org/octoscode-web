@@ -18,6 +18,7 @@ import { thinkingSummaryParts, toolTarget, type FoldState } from "./folds.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
 import type { TurnActivity } from "./turn-activity.ts";
 import foldStyles from "./TimelineFolds.module.css";
+import type { ConversationViewState } from "./use-conversation-scroll.ts";
 
 const MarkdownBody = lazy(() =>
   import("../markdown/MarkdownBody.tsx").then((module) => ({
@@ -28,6 +29,8 @@ const MarkdownBody = lazy(() =>
 interface TimelineProps {
   entries: readonly TimelineEntry[];
   connected: boolean;
+  viewState?: ConversationViewState | null;
+  onSaveViewState?: () => void;
   /** Thinking option (Session settings); off = render no thinking at all. */
   showThinking?: boolean;
   /**
@@ -45,6 +48,8 @@ interface TimelineProps {
 export const Timeline = memo(function Timeline({
   entries,
   connected,
+  viewState,
+  onSaveViewState,
   showThinking = true,
   folds,
   onToggleFold,
@@ -70,7 +75,9 @@ export const Timeline = memo(function Timeline({
   const toggleFold = useCallback((id: string) => toggleRef.current?.(id), []);
   // Keep the server-provided projection intact; only bound the initial DOM.
   // Anchoring by identity prevents incoming messages evicting a reader's row.
-  const [firstVisibleId, setFirstVisibleId] = useState<string | null>(null);
+  const [firstVisibleId, setFirstVisibleId] = useState<string | null>(
+    () => viewState?.firstVisibleId ?? null,
+  );
   const knownIndex = visibleEntries.findIndex(
     (entry) => entry.id === firstVisibleId,
   );
@@ -78,7 +85,11 @@ export const Timeline = memo(function Timeline({
     knownIndex < 0 ? Math.max(0, visibleEntries.length - 40) : knownIndex;
   const timelineRef = useRef<HTMLDivElement>(null);
   const revealAnchor = useRef<{ element: Element; top: number } | null>(null);
+  // Capture the old DOM before a Session/tab switch removes its entries.
+  useLayoutEffect(() => onSaveViewState, [onSaveViewState]);
   useLayoutEffect(() => {
+    if (viewState)
+      viewState.firstVisibleId = visibleEntries[startIndex]?.id ?? null;
     if (knownIndex < 0 && visibleEntries[startIndex]) {
       setFirstVisibleId(visibleEntries[startIndex]!.id);
     }
@@ -253,6 +264,7 @@ function ReasoningBlock(props: FoldableBlockProps) {
   });
   return (
     <details
+      data-timeline-entry={entry.id}
       className={`${styles.reasoningBlock}${running ? ` ${styles.reasoningBlockLive}` : ""}`}
       data-live={running}
       {...disclosureProps(props)}
@@ -292,6 +304,7 @@ function ToolBlock(props: FoldableBlockProps) {
       : undefined;
   return (
     <details
+      data-timeline-entry={entry.id}
       className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
       data-live={running}
       {...disclosureProps(props)}
@@ -365,6 +378,7 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
   const t = useUiText();
   return (
     <article
+      data-timeline-entry={entry.id}
       className={`timeline-entry entry-${entry.kind}${entry.kind === "assistant" ? ` ${styles.assistantEntry}` : ""}`}
       aria-label={
         entry.kind === "assistant" ? t("Assistant response") : undefined

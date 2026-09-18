@@ -1,3 +1,9 @@
+import { ModelsSettingsContent } from "../features/product-settings/ModelsSettingsContent.tsx";
+import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
+import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
+import { SettingsDialog } from "../features/product-controls/SettingsDialog.tsx";
+import { SessionConfigPane } from "../features/session-config/SessionConfigPane.tsx";
+import { SessionControlBar } from "../features/product-controls/SessionControlBar.tsx";
 import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
@@ -183,10 +189,6 @@ const ComposerInput = lazyNamed(
   () => import("../features/composer/ComposerInput.tsx"),
   (module) => module.ComposerInput,
 );
-const SessionControlBar = lazyNamed(
-  () => import("../features/product-controls/SessionControlBar.tsx"),
-  (module) => module.SessionControlBar,
-);
 const ResumeDialog = lazyNamed(
   () => import("../features/resume/ResumeDialog.tsx"),
   (module) => module.ResumeDialog,
@@ -204,17 +206,9 @@ const SessionStatusStrip = lazyNamed(
   () => import("../features/session-config/SessionStatusStrip.tsx"),
   (module) => module.SessionStatusStrip,
 );
-const SessionConfigPane = lazyNamed(
-  () => import("../features/session-config/SessionConfigPane.tsx"),
-  (module) => module.SessionConfigPane,
-);
 const FleetPane = lazyNamed(
   () => import("../features/fleet/FleetPane.tsx"),
   (module) => module.FleetPane,
-);
-const SettingsDefaultsSection = lazyNamed(
-  () => import("../features/session-config/SettingsDefaultsSection.tsx"),
-  (module) => module.SettingsDefaultsSection,
 );
 const LaunchDecisionPanel = lazyNamed(
   () => import("../features/workspace/LaunchDecisionPanel.tsx"),
@@ -287,18 +281,6 @@ const NewSessionWorkspacePicker = lazyNamed(
 const SessionTrajectory = lazyNamed(
   () => import("../features/supervision/SessionTrajectory.tsx"),
   (module) => module.SessionTrajectory,
-);
-const SettingsDialog = lazyNamed(
-  () => import("../features/product-controls/SettingsDialog.tsx"),
-  (module) => module.SettingsDialog,
-);
-const GeneralSettingsContent = lazyNamed(
-  () => import("../features/product-settings/GeneralSettingsContent.tsx"),
-  (module) => module.GeneralSettingsContent,
-);
-const ModelsSettingsContent = lazyNamed(
-  () => import("../features/product-settings/ModelsSettingsContent.tsx"),
-  (module) => module.ModelsSettingsContent,
 );
 const ModelManagementSettings = lazyNamed(
   () => import("../features/product-settings/ModelManagementSettings.tsx"),
@@ -382,7 +364,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [draftRetained, setDraftRetained] = useState(true);
   const [attentionSettings, setAttentionSettings] =
     useState<AttentionSettings | null>(null);
-  const attentionIdentity = useMemo(
+  const connectionIdentity = useMemo(
     () => (session.authenticated ? {} : null),
     [session.authenticated, connection.endpoint, connection.token],
   );
@@ -1605,13 +1587,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   }, [activeSessionKey]);
 
   const {
+    viewState: conversationViewState,
     scrollRef: conversationScrollRef,
     contentRef: conversationContentRef,
     onScroll: syncConversationFollow,
     onDisclosureInteraction,
     showJumpLatest,
     jumpToLatest,
-  } = useConversationScroll(activeSessionKey, conversationTab);
+  } = useConversationScroll(
+    connectionIdentity,
+    activeSessionKey,
+    conversationTab,
+  );
 
   useEffect(() => {
     if (!activeSessionKey || conversationTab !== "chat" || compact) return;
@@ -2153,7 +2140,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       {session.authenticated ? (
         <SurfaceBoundary name="Notifications" fallback={null}>
           <AttentionBridge
-            identity={attentionIdentity}
+            identity={connectionIdentity}
             turns={workspaceProduct.attentionTurns}
             selectedSession={attentionSession}
             activeTurnId={activeTurnId}
@@ -2462,6 +2449,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     >
                       <Timeline
                         key={activeSessionKey ?? undefined}
+                        viewState={conversationViewState}
+                        onSaveViewState={syncConversationFollow}
                         entries={
                           conversation.showReasoning
                             ? conversation.timeline
@@ -3458,15 +3447,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             }
                           />
                         ) : null}
-                        <ModelManagementSettings
-                          key={models.management.authorityKey}
-                          client={models.management.client}
-                          profileId={models.management.profileId}
-                          capabilities={models.management.capabilities}
-                          profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
-                          locked={runtimeMutationBlocked}
-                          onConfiguredModelsChange={models.refresh}
-                        />
+                        <SurfaceBoundary
+                          name="Model management"
+                          fallback={
+                            <DeferredSurface label="Loading model management…" />
+                          }
+                        >
+                          <ModelManagementSettings
+                            key={models.management.authorityKey}
+                            client={models.management.client}
+                            profileId={models.management.profileId}
+                            capabilities={models.management.capabilities}
+                            profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
+                            locked={runtimeMutationBlocked}
+                            onConfiguredModelsChange={models.refresh}
+                          />
+                        </SurfaceBoundary>
                       </>
                     ),
                   }
