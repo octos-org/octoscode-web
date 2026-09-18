@@ -59,6 +59,8 @@ export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Loading peers for {value0} sessions": "正在为 {value0} 个会话加载同侪",
   "This server does not support remote control of peers":
     "此服务器不支持远程控制同侪",
+  "This server does not support starting peers": "此服务器不支持启动同侪",
+  "Peer controls are not ready": "同侪控制尚未就绪",
   "No peer models are configured — add one under Settings › Providers":
     "尚未配置同侪模型 — 请在 设置 › 提供商 中添加",
   "Open a project first": "请先打开一个项目",

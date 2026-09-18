@@ -104,8 +104,9 @@ export function consumePairingLink(): PairingLink | null {
   try {
     if (typeof window === "undefined") return null;
     const link = readPairingLink(window.location.search);
-    if (!link) return null;
     capturedLink = link;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("octos") && !params.has("pair")) return null;
     try {
       window.history.replaceState(
         null,

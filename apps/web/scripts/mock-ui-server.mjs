@@ -463,22 +463,33 @@ function peerControlSlug() {
  * `complete`/`external` and control readiness flips to `ready`.
  */
 function peerControlDriverResponse(state) {
+  const acquired = peerAcquires.get(state.sessionId);
+  const mode = peerDriverMode(state.sessionId);
   return {
-    mode: "external",
+    mode,
     recovery: "none",
-    binding: {
-      driver_id: `synthetic-driver-${state.sessionId}`,
-      epoch: DRIVER_EPOCH,
-      revision: DRIVER_REVISION,
-      lease_expires_at_ms: DRIVER_LEASE_EXPIRES_AT_MS,
-      workspace_root: state.workspaceRoot,
-    },
+    ...(mode === "external"
+      ? {
+          binding: {
+            driver_id:
+              acquired?.driver_id ?? `synthetic-driver-${state.sessionId}`,
+            epoch: DRIVER_EPOCH,
+            revision: DRIVER_REVISION,
+            lease_expires_at_ms:
+              acquired?.lease_expires_at_ms ??
+              (peerControlVariant(state).startsWith("handover")
+                ? 0
+                : DRIVER_LEASE_EXPIRES_AT_MS),
+            workspace_root: state.workspaceRoot,
+          },
+        }
+      : {}),
     // The discovery walk ALWAYS requests an operations page; empty items with
     // complete:true / next_cursor:null is the valid terminal page.
     operations: {
       items: [],
       snapshot: `synthetic-snapshot-${state.sessionId}`,
-      observed_revision: "1",
+      observed_revision: String(DRIVER_REVISION),
       complete: true,
       next_cursor: null,
     },
@@ -3049,6 +3060,8 @@ sockets.on("connection", (socket, request) => {
         peerAcquires.set(state.sessionId, {
           epoch: DRIVER_EPOCH,
           control_token: PEER_CONTROL_TOKEN,
+          driver_id: request.params.driver_id,
+          lease_expires_at_ms: DRIVER_LEASE_EXPIRES_AT_MS,
         });
         // An acquire makes the binding external-held for ADMISSION purposes
         // even before any dispatch: the Core refuses `turn/start` with
@@ -3077,8 +3090,11 @@ sockets.on("connection", (socket, request) => {
           state.activeTurn = null;
           heldTerminals.delete(state.sessionId);
         }
-      } else if (next === "external")
+      } else if (next === "external") {
         peerDriverModes.set(state.sessionId, "external");
+        const acquired = peerAcquires.get(state.sessionId);
+        if (acquired) acquired.lease_expires_at_ms = 0;
+      }
       reply(socket, request.id, peerControlReleaseResponse(state, request));
       return;
     }
@@ -3648,6 +3664,7 @@ sockets.on("connection", (socket, request) => {
       // turn here would contradict the adopted identity.)
       if (
         isPeerControlState(state) &&
+        !peerControlVariant(state).startsWith("handover") &&
         !state.sessionId.includes("#peer-") &&
         state.activeTurn === null
       ) {

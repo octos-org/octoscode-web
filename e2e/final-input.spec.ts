@@ -260,17 +260,10 @@ test("composer preserves IME confirmation and multiline edits around commands", 
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  // `start` already proved the composer is a textbox named "Message Octos".
-  // This row then opens the command palette, and our ComposerInput declares the
-  // ARIA 1.2 combobox pattern on the textarea while the palette is open
-  // (ComposerInput.tsx:230) — upstream's PromptComposer, which App.tsx no longer
-  // mounts, left the implicit textbox role. Address the SAME element by its
-  // accessible name so the assertions survive that role flip instead of
-  // silently losing the element.
-  const input = page.getByLabel("Message Octos");
+  const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("/");
   await expect(page.getByRole("listbox", { name: "Commands" })).toBeVisible();
-  await expect(input).toHaveAttribute("aria-expanded", "true");
+  await expect(input).toBeFocused();
   const selected = await input.getAttribute("aria-activedescendant");
   await input.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true });
   await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });

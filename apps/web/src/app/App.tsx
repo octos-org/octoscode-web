@@ -38,7 +38,6 @@ import {
   shortcutTargetIsTextInput,
   shortcutTargetSuppressed,
 } from "../features/composer/shortcut-suppression.ts";
-import { RESUME_CHAT_LABEL } from "../features/composer/composer-seat-handover.ts";
 import {
   collapseAll,
   expandAll,
@@ -339,7 +338,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     pairingLink,
     cleanupFailed,
     restoreConnectionRef,
-    rememberedConnectRef,
     theme,
     cycleTheme,
     disconnect,
@@ -746,26 +744,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (restoreAttemptedRef.current) return;
     // A pairing link drives its own connect; nothing else may race it.
     if (pairingLink) return;
-    if (!restoreConnectionRef.current && !rememberedConnectRef.current) return;
+    if (!restoreConnectionRef.current) return;
     const timer = window.setTimeout(() => {
       if (restoreAttemptedRef.current) return;
       restoreAttemptedRef.current = true;
-      // §Remembering: a token remembered on this device is asked for once. A
-      // fresh tab authenticates with it and stops at the workspace gate — it
-      // does not resurrect another tab's Session selection. The entry took
-      // this same decision to know whether to load this shell at all.
       const start = autoStartKind({
         pairingLink: pairingLink !== null,
         restoreConnection: restoreConnectionRef.current,
-        rememberedConnect: rememberedConnectRef.current,
         endpoint: connection.endpoint,
-        token: connection.token,
         sessionId: connection.sessionId,
       });
-      if (start === "connect") {
-        session.connect(connection);
-        return;
-      }
       if (start !== "restore") return;
       if (savedLink) {
         const rememberedKey = workspaceSessionKey(
@@ -1514,13 +1502,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // parked prompt for any other Session survives until the user returns to it.
   const interruptedPrompt = conversation.interruptedPrompt;
   useEffect(() => {
-    if (!interruptedPrompt) return;
+    if (!interruptedPrompt || draftRef.current) return;
     const restored = conversation.takeInterruptedPrompt();
     if (restored === null) return;
     draftRef.current = restored;
     setDraft(restored);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interruptedPrompt]);
+  }, [interruptedPrompt, draft, activeSessionKey]);
+
+  const resumeChat = () => {
+    const prompt = draftRef.current;
+    const ownerKey = activeSessionKey;
+    setResumeChatBusy(true);
+    setResumeChatFailed(null);
+    void conversation
+      .resumeChatSend(prompt)
+      .then((outcome) => {
+        setResumeChatBusy(false);
+        if (!outcome.sent) {
+          setResumeChatFailed(
+            outcome.message ?? t("Couldn't resume chat — nothing was sent"),
+          );
+          return;
+        }
+        if (outcome.prompt === null) return;
+        // Sending A may finish after the operator starts editing B or switches
+        // Sessions. Consume only the draft this Resume action actually sent.
+        if (previousActiveSessionKeyRef.current === ownerKey) {
+          if (draftRef.current === prompt) {
+            draftRef.current = "";
+            setDraft("");
+          }
+        } else if (ownerKey && sessionDrafts.get(ownerKey) === prompt) {
+          sessionDrafts.set(ownerKey, "");
+          persistDrafts();
+        }
+      })
+      .catch(() => {
+        setResumeChatBusy(false);
+        setResumeChatFailed(t("Couldn't resume chat — nothing was sent"));
+      });
+  };
 
   const moveToProductSession = async (productSessionId: string) => {
     const target = navigableSessions.find(
@@ -1970,9 +1992,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const failureActions = failureCopy?.actions;
     return (
       <>
-        <button type="button" onClick={gate.openPreferences}>
-          {t("Browser preferences")}
-        </button>
         <SurfaceBoundary
           name="Connection"
           fallback={<DeferredSurface label="Loading connection…" />}
@@ -2617,6 +2636,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             Math.max(0, suggestedCommands.length - 1),
                           )}
                           onSelect={chooseCommand}
+                          onSelectedIndexChange={setSelectedCommandIndex}
+                          onDismiss={() => {
+                            setCommandPaletteDismissed(true);
+                            setSelectedCommandIndex(0);
+                            composerRef.current?.focus();
+                          }}
                         />
                       </Suspense>
                     ) : null}
@@ -2772,10 +2797,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
-          <div
-            className="conversation fleet-pane"
-            hidden={!(fleetRouteActive && session.opened)}
-          >
+          <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button
                 type="button"
@@ -2880,36 +2902,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     resumeChatBusy,
                     resumeChatNotice:
                       resumeChatFailed ?? conversation.seatHandover ?? null,
-                    onResumeChat: () => {
-                      setResumeChatBusy(true);
-                      setResumeChatFailed(null);
-                      void conversation
-                        .resumeChatSend()
-                        .then((outcome) => {
-                          setResumeChatBusy(false);
-                          if (!outcome.sent)
-                            setResumeChatFailed(
-                              outcome.message ??
-                                t("Couldn't resume chat — nothing was sent"),
-                            );
-                          if (outcome.message)
-                            conversation.setTimeline((current) =>
-                              addSystemMessage(
-                                current,
-                                `resume-chat:${crypto.randomUUID()}`,
-                                t(RESUME_CHAT_LABEL),
-                                outcome.message ?? "",
-                                outcome.sent ? "info" : "error",
-                              ),
-                            );
-                        })
-                        .catch(() => {
-                          setResumeChatBusy(false);
-                          setResumeChatFailed(
-                            t("Couldn't resume chat — nothing was sent"),
-                          );
-                        });
-                    },
+                    onResumeChat: resumeChat,
                   }
                 : null
             }
@@ -3114,36 +3107,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ...(conversation.seatHandover
                       ? { resumeChatNotice: conversation.seatHandover }
                       : {}),
-                    onResumeChat: () => {
-                      setResumeChatBusy(true);
-                      setResumeChatFailed(null);
-                      void conversation
-                        .resumeChatSend()
-                        .then((outcome) => {
-                          setResumeChatBusy(false);
-                          if (!outcome.sent)
-                            setResumeChatFailed(
-                              outcome.message ??
-                                t("Couldn't resume chat — nothing was sent"),
-                            );
-                          if (outcome.message)
-                            conversation.setTimeline((current) =>
-                              addSystemMessage(
-                                current,
-                                `resume-chat:${crypto.randomUUID()}`,
-                                t(RESUME_CHAT_LABEL),
-                                outcome.message ?? "",
-                                outcome.sent ? "info" : "error",
-                              ),
-                            );
-                        })
-                        .catch(() => {
-                          setResumeChatBusy(false);
-                          setResumeChatFailed(
-                            t("Couldn't resume chat — nothing was sent"),
-                          );
-                        });
-                    },
+                    onResumeChat: resumeChat,
                     ...(resumeChatFailed
                       ? { resumeChatNotice: resumeChatFailed }
                       : {}),

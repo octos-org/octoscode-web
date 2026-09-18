@@ -85,27 +85,13 @@ test("skip link bypasses navigation and multiline commands retain valid accessib
       Boolean(document.activeElement?.closest("aside")),
     ),
   ).toBe(false);
-  // Resolved by accessible name, not role: this composer is a role=textbox for
-  // a plain draft and deliberately becomes a role=combobox in command entry
-  // (ARIA 1.2 forbids aria-expanded on textbox — see ComposerInput.tsx). The
-  // semantics this test guards are asserted below by axe and the
-  // aria-controls/aria-activedescendant wiring, which hold in both states.
-  const composer = page.getByLabel("Message Octos");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("/");
   await expect(page.getByRole("listbox")).toBeVisible();
   await expect(composer).toHaveAttribute(
     "aria-controls",
     (await page.getByRole("listbox").getAttribute("id")) ?? "",
   );
-  // This shell's composer deliberately becomes a role=combobox in command
-  // entry (ComposerInput.tsx), and e2e/final-input.spec.ts,
-  // e2e/keyboard-parity.spec.ts and e2e/surface-recovery.spec.ts each pin the
-  // aria-expanded that role carries. ARIA-in-HTML allows no explicit role on a
-  // <textarea>, so axe's best-practice `aria-allowed-role` reports that one
-  // node — a known divergence from upstream's "always a textbox" contract,
-  // not a regression. Pin it exactly instead of dropping the rule: every other
-  // node, and both aria-allowed-attr and aria-valid-attr-value, stay strict,
-  // so any new invalid ARIA still fails this test.
   const paletteAudit = await new AxeBuilder({ page })
     .withRules([
       "aria-allowed-role",
@@ -113,19 +99,7 @@ test("skip link bypasses navigation and multiline commands retain valid accessib
       "aria-valid-attr-value",
     ])
     .analyze();
-  expect(
-    paletteAudit.violations.flatMap((violation) =>
-      violation.nodes.map((node) => ({
-        id: violation.id,
-        target: node.target.join(" "),
-      })),
-    ),
-  ).toEqual([
-    {
-      id: "aria-allowed-role",
-      target: 'textarea[aria-label="Message Octos"]',
-    },
-  ]);
+  expect(paletteAudit.violations).toEqual([]);
   await composer.press("ArrowDown");
   const active = await composer.getAttribute("aria-activedescendant");
   expect(active).toBeTruthy();

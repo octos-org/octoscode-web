@@ -324,4 +324,23 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
       ),
     ).toBe(true);
   });
+
+  it("holds an unsent prompt when transport changes during handback", async () => {
+    wire.length = 0;
+    let release!: (value: { sent: true }) => void;
+    const gate = new Promise<{ sent: true }>((resolve) => {
+      release = resolve;
+    });
+    const { controller } = harness(() => gate);
+    controller.enqueuePrompt("send after recovery");
+    controller.suspendTransport();
+    release({ sent: true });
+    await Promise.resolve();
+    expect(wire).toEqual([]);
+    expect(controller.snapshot().active?.text).toBe("send after recovery");
+
+    controller.resumePendingTurn();
+    await Promise.resolve();
+    expect(wire).toEqual(["turn/start"]);
+  });
 });

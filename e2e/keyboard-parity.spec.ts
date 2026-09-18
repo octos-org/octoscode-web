@@ -120,9 +120,9 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   const options = palette(page).locator('[role="option"]');
   await expect(options).not.toHaveCount(0);
 
-  // ARIA combobox wiring (ComposerInput.tsx:185-191).
+  // The textbox exposes its suggestions without surrendering editing focus.
   await expect(input).toHaveAttribute("aria-haspopup", "listbox");
-  await expect(input).toHaveAttribute("aria-expanded", "true");
+  await expect(input).toBeFocused();
   await expect(input).toHaveAttribute("aria-controls", PALETTE_ID);
   const firstId = (await options.first().getAttribute("id"))!;
   await expect(input).toHaveAttribute("aria-activedescendant", firstId);
@@ -142,6 +142,15 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   await input.press("ArrowUp");
   const lastId = (await options.last().getAttribute("id"))!;
   await expect(input).toHaveAttribute("aria-activedescendant", lastId);
+  await expect(options.last()).toBeInViewport({ ratio: 1 });
+  await input.press("Shift+Tab");
+  await expect(options.last()).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(options.first()).toBeFocused();
+  await expect(options.first()).toBeInViewport({ ratio: 1 });
+  await page.keyboard.press("Escape");
+  await expect(input).toBeFocused();
+  await expect(palette(page)).toHaveCount(0);
 
   // Execute: filter to a known local command and dispatch it with Enter
   // (ComposerInput.tsx:167-174 onSubmit → App.tsx chooseCommand = submit("/x")).
@@ -269,7 +278,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   await expect(palette(page)).toBeVisible();
   await input.press("Escape");
   await expect(palette(page)).toHaveCount(0);
-  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await expect(input).not.toHaveAttribute("aria-controls");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
   // Bare Esc with no live turn is inert (TUI close/focus ladder never

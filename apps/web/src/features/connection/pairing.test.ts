@@ -78,6 +78,15 @@ describe("stripping the link", () => {
       win.location.search = "";
       expect(consumePairingLink()).toEqual({ origin: ORIGIN, code: CODE });
       expect(replaceState).toHaveBeenCalledTimes(1);
+      resetConsumedPairingLink();
+      win.location.search = `?pair=${CODE}`;
+      win.location.href = `http://127.0.0.1:4173/?pair=${CODE}`;
+      expect(consumePairingLink()).toBeNull();
+      expect(replaceState).toHaveBeenLastCalledWith(
+        null,
+        "",
+        "http://127.0.0.1:4173/",
+      );
     } finally {
       vi.unstubAllGlobals();
       resetConsumedPairingLink();
