@@ -9,6 +9,7 @@ import { CopySessionLink } from "../session-links/CopySessionLink.tsx";
 import type { SavedSessionReference } from "../session-links/saved-session-link.ts";
 import { knownSessionKey } from "../session/known-session-registry.ts";
 import styles from "./ProductSettings.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export type ProductConnectionStatus =
   "idle" | "connecting" | "connected" | "disconnected" | "error";
@@ -103,6 +104,7 @@ export function GeneralSettingsContent({
   onForgetConnection,
   onCopyDiagnostics,
 }: GeneralSettingsContentProps) {
+  const t = useUiText();
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState(false);
   const connectionBusy = connectionStatus === "connecting";
@@ -113,13 +115,13 @@ export function GeneralSettingsContent({
     <div className={styles.section} data-product-settings="general">
       <div className={styles.settingRow}>
         <div className={styles.settingCopy}>
-          <div className={styles.settingTitle}>Octos server</div>
+          <div className={styles.settingTitle}>{t("Octos server")}</div>
           <div className={styles.connectionStatus} role="status">
             <span
               className={statusClass(connectionStatus)}
               aria-hidden="true"
             />
-            {STATUS_COPY[connectionStatus]}
+            {t(STATUS_COPY[connectionStatus])}
           </div>
         </div>
         <span
@@ -132,9 +134,9 @@ export function GeneralSettingsContent({
 
       {workspaceLabel || workspacePath ? (
         <SettingRow
-          title="Current workspace"
+          title={t("Current workspace")}
           description={
-            workspacePath ?? "The workspace attached to this session."
+            workspacePath ?? t("The workspace attached to this session.")
           }
           value={workspaceLabel ?? workspacePath ?? null}
           valueIsPath={!workspaceLabel}
@@ -143,16 +145,16 @@ export function GeneralSettingsContent({
 
       {agentPreset ? (
         <SettingRow
-          title="Agent preset"
-          description="The coding-agent preset used for this session."
+          title={t("Agent preset")}
+          description={t("The coding-agent preset used for this session.")}
           value={agentPreset}
         />
       ) : null}
 
       {displayProfile ? (
         <SettingRow
-          title="Profile"
-          description="The Octos profile backing this session."
+          title={t("Profile")}
+          description={t("The Octos profile backing this session.")}
           value={displayProfile}
         />
       ) : null}
@@ -249,10 +251,11 @@ export function GeneralSettingsContent({
 
       <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
         <div className={styles.settingCopy}>
-          <div className={styles.settingTitle}>Connection</div>
+          <div className={styles.settingTitle}>{t("Connection")}</div>
           <div className={styles.settingDescription}>
-            Disconnect keeps this server remembered. Forget removes the saved
-            server and its tab-scoped credential.
+            {t(
+              "Disconnect keeps this server remembered. Forget removes the saved server and its tab-scoped credential.",
+            )}
           </div>
         </div>
         <div className={styles.actionGroup}>
@@ -262,7 +265,7 @@ export function GeneralSettingsContent({
             disabled={locked || connectionBusy || !canDisconnect}
             onClick={onDisconnect}
           >
-            Disconnect
+            {t("Disconnect")}
           </button>
           <button
             type="button"
@@ -270,7 +273,7 @@ export function GeneralSettingsContent({
             disabled={locked || connectionBusy}
             onClick={onForgetConnection}
           >
-            Forget server
+            {t("Forget server")}
           </button>
         </div>
       </div>

@@ -35,9 +35,9 @@ test("reload restores exact unsent text without dispatching it, and sent drafts 
   const input = page.getByRole("textbox", { name: "Message Octos" });
   const text = "  尚未发送的审阅说明 👩🏽‍💻\n\n保留最后的空白  ";
   await input.fill(text);
-  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
-    "尚未发送",
-  );
+  await expect
+    .poll(() => page.evaluate(() => JSON.stringify(localStorage)))
+    .toContain("尚未发送");
   await page.reload();
   await expect(input).toHaveValue(text);
   expect(starts).toHaveLength(0);
@@ -60,9 +60,15 @@ test("a rejected draft storage write preserves editing and warns before text can
   await start(page);
   const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("先前已经保存的草稿");
+  await expect
+    .poll(() => page.evaluate(() => JSON.stringify(localStorage)))
+    .toContain("先前已经保存的草稿");
   await page.evaluate(() => {
     Storage.prototype.setItem = function () {
       throw new DOMException("Storage full", "QuotaExceededError");
+    };
+    Storage.prototype.removeItem = function () {
+      throw new DOMException("Storage read-only", "SecurityError");
     };
   });
   await input.fill("仍然可以编辑和复制，不应白屏");

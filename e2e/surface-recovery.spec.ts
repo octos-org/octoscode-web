@@ -17,9 +17,11 @@ async function start(page: Page) {
     .getByLabel("Server workspace path")
     .fill("/workspace/surface-recovery");
   await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
+  await expect(composerInput(page)).toBeVisible();
+}
+
+function composerInput(page: Page) {
+  return page.getByRole("textbox", { name: "Message Octos" });
 }
 
 function settingsTrigger(page: Page) {
@@ -53,7 +55,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Keep this response active");
   await composer.press("Enter");
   await expect(
@@ -105,7 +107,7 @@ test("a slow Settings import can be canceled and never opens after cancellation"
     await route.fulfill({ response });
     fulfilled = true;
   });
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Keep typing after cancellation");
   await settingsTrigger(page).click();
   const loading = page.getByRole("dialog", { name: "Loading settings…" });
@@ -152,7 +154,7 @@ test("Escape from a failed review returns to approval without interrupting", asy
       body: "Resource unavailable",
     }),
   );
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Request approval fixture");
   await composer.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -182,8 +184,12 @@ test("a failed local-command chunk restores input and never sends command text t
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
+  // The local-command surface is no longer ONE lazily-imported executor: the
+  // command itself is dispatched inline and only its REPORT formatting is a
+  // chunk (`local-report.ts`). That chunk is the failure this test injects —
+  // the contract (input restored, nothing sent to the model) is unchanged.
   await page.route(
-    /\/(?:assets\/execute-local-command-[^/]+\.js|src\/features\/commands\/execute-local-command\.tsx?)(?:\?.*)?$/,
+    /\/(?:assets\/local-report-[^/]+\.js|src\/features\/commands\/local-report\.tsx?)(?:\?.*)?$/,
     (route) =>
       route.fulfill({
         status: 503,
@@ -191,7 +197,7 @@ test("a failed local-command chunk restores input and never sends command text t
         body: "Resource unavailable",
       }),
   );
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("/help");
   await composer.press("Enter");
   await expect(page.getByRole("alert")).toContainText(
@@ -216,7 +222,7 @@ test("a late clipboard command result does not enter a different conversation", 
     });
   });
   await start(page);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Write a short response for the clipboard");
   await composer.press("Enter");
   await expect(page.locator(".entry-assistant").last()).toBeVisible();

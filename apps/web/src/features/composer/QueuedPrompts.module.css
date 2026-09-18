@@ -2,7 +2,7 @@
   width: 100%;
   min-width: 0;
   margin: 0 auto 8px;
-  max-width: 768px;
+  max-width: var(--dsw-layout-chat-wide);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 14px;
   background: var(--dsw-specific-sidebar-fill);

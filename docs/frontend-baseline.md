@@ -75,7 +75,7 @@ Additional recovery and keyboard acceptance rules:
 - Use `theme.css` semantic tokens in both light and dark themes. Preserve one
   blue interaction accent; reserve status colors for real runtime state.
 - Use the platform font stack and the existing code font stack. Prose is bounded
-  to approximately 65 characters; code and data can use the wider transcript.
+  to a 65–75ch reading width; code and data can use the wider transcript.
 - Prefer whitespace and simple surfaces. Status labels should explain what is
   happening; implementation vocabulary belongs in diagnostics.
 - Feedback is approximately 120ms; surface entrances approximately 180ms. Drawer

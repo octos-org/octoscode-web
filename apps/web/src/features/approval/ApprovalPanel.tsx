@@ -5,8 +5,9 @@ import {
   type ApprovalDecision,
   type ApprovalRequested,
   type ApprovalScope,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface ApprovalPanelProps {
   approval: ApprovalRequested;
@@ -25,6 +26,7 @@ export function ApprovalPanel({
   onInterrupt,
   onReviewDiff,
 }: ApprovalPanelProps) {
+  const t = useUiText();
   const command = approvalCommand(approval.typedDetails);
   const previewId = approvalDiffPreviewId(approval);
 
@@ -55,6 +57,8 @@ export function ApprovalPanel({
 
   return (
     <ModalSurface
+      // Session-scoped takeover: other sessions stay reachable while it waits.
+      hidesBackground={false}
       backdropClassName="takeover-wrap"
       dialogClassName="approval-card"
       labelledBy="approval-title"
@@ -63,8 +67,13 @@ export function ApprovalPanel({
     >
       <div className="approval-strip">
         <span className="approval-dot" />
-        <span>Approval required</span>
-        {approval.risk ? <em>{approval.risk} risk</em> : null}
+        <span>{t("Approval required")}</span>
+        {approval.risk ? (
+          <em>
+            {approval.risk}
+            {" " + t("risk")}
+          </em>
+        ) : null}
       </div>
       <div className="approval-body">
         <strong id="approval-title">{approval.title}</strong>
@@ -84,7 +93,8 @@ export function ApprovalPanel({
             disabled={busy}
             onClick={() => onReviewDiff(previewId)}
           >
-            Review diff <kbd>D</kbd>
+            {t("Review diff") + " "}
+            <kbd>D</kbd>
           </button>
         ) : null}
         <button
@@ -93,7 +103,8 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("deny", "request")}
         >
-          No <kbd>N</kbd>
+          {t("No") + " "}
+          <kbd>N</kbd>
         </button>
         <button
           className="takeover-button"
@@ -101,7 +112,8 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("approve", "session")}
         >
-          This session <kbd>S</kbd>
+          {t("This session") + " "}
+          <kbd>S</kbd>
         </button>
         <button
           className="takeover-button primary"
@@ -109,7 +121,7 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("approve", "request")}
         >
-          {busy ? "Sending…" : "Yes"} <kbd>Y</kbd>
+          {busy ? t("Sending…") : t("Yes")} <kbd>Y</kbd>
         </button>
       </div>
     </ModalSurface>

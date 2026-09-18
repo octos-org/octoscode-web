@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
-import type { DiffPreviewLine } from "@octos-org/octoscode-client";
+import type { DiffPreviewLine } from "@octos-org/octoscode-client/protocol";
 import type { DiffReviewRuntimeState } from "./use-coding-safety.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import {
@@ -14,6 +14,7 @@ import {
   type DiffToken,
 } from "./diff-presentation.ts";
 import styles from "./DiffReviewDialog.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface DiffReviewDialogProps {
   state: DiffReviewRuntimeState;
@@ -26,6 +27,7 @@ export function DiffReviewDialog({
   onClose,
   onRefresh,
 }: DiffReviewDialogProps) {
+  const t = useUiText();
   const totals = useMemo(() => {
     let additions = 0;
     let deletions = 0;
@@ -66,9 +68,9 @@ export function DiffReviewDialog({
     >
       <header className="review-header">
         <div>
-          <span className="eyebrow">Authoritative diff preview</span>
+          <span className="eyebrow">{t("Authoritative diff preview")}</span>
           <h2 id="review-title" title={preview?.title}>
-            {preview?.title ?? "Review changes"}
+            {preview?.title ?? t("Review changes")}
           </h2>
         </div>
         <div className="review-header-actions">
@@ -79,9 +81,13 @@ export function DiffReviewDialog({
             </span>
           ) : null}
           <button type="button" onClick={onRefresh} disabled={state.loading}>
-            Refresh
+            {t("Refresh")}
           </button>
-          <button type="button" onClick={onClose} aria-label="Close review">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("Close review")}
+          >
             ×
           </button>
         </div>
@@ -103,15 +109,17 @@ export function DiffReviewDialog({
           </p>
         ) : null}
         {state.loading ? (
-          <div className="review-empty">Loading the server snapshot…</div>
+          <div className="review-empty">
+            {t("Loading the server snapshot…")}
+          </div>
         ) : state.error ? (
           <div className="review-empty review-error" role="alert">
-            <strong>Preview unavailable</strong>
+            <strong>{t("Preview unavailable")}</strong>
             <span>{state.error}</span>
           </div>
         ) : !preview?.files.length ? (
           <div className="review-empty">
-            The preview is ready, but it contains no changed files.
+            {t("The preview is ready, but it contains no changed files.")}
           </div>
         ) : (
           preview.files.map((file, index) => (
@@ -123,7 +131,12 @@ export function DiffReviewDialog({
                   {fileStatusMark(file.status)}
                 </span>
                 <strong title={file.path}>{file.path}</strong>
-                {file.old_path ? <small>from {file.old_path}</small> : null}
+                {file.old_path ? (
+                  <small>
+                    {t("from") + " "}
+                    {file.old_path}
+                  </small>
+                ) : null}
                 <em>{file.status}</em>
               </summary>
               {file.hunks.length ? (
@@ -136,10 +149,10 @@ export function DiffReviewDialog({
                     <div className="diff-lines" role="table">
                       <div className="sr-only" role="rowgroup">
                         <div role="row">
-                          <span role="columnheader">Old line</span>
-                          <span role="columnheader">New line</span>
-                          <span role="columnheader">Change</span>
-                          <span role="columnheader">Code</span>
+                          <span role="columnheader">{t("Old line")}</span>
+                          <span role="columnheader">{t("New line")}</span>
+                          <span role="columnheader">{t("Change")}</span>
+                          <span role="columnheader">{t("Code")}</span>
                         </div>
                       </div>
                       <div role="rowgroup">
@@ -158,7 +171,7 @@ export function DiffReviewDialog({
                 ))
               ) : (
                 <div className="diff-unavailable">
-                  Line-level diff unavailable for this mutation.
+                  {t("Line-level diff unavailable for this mutation.")}
                 </div>
               )}
             </details>

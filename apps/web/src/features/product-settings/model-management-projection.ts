@@ -1,4 +1,4 @@
-import type { ProfileLlmConfiguredModel } from "@octos-org/octoscode-client";
+import type { ProfileLlmConfiguredModel } from "@octos-org/octoscode-client/protocol";
 import type {
   ModelSettingsDraft,
   ModelSettingsState,
@@ -80,6 +80,8 @@ export function modelSettingsDraftFromProvider(
 ): ModelSettingsDraft {
   return {
     familyId: draft.familyId,
+    ...(draft.inference ? { inference: draft.inference } : {}),
+    ...(draft.editBlocked ? { editBlocked: true as const } : {}),
     modelId: draft.modelId,
     route: {
       routeId: draft.route.id,
@@ -166,14 +168,35 @@ function projectConfiguredModel(
     route,
     apiKeyConfigured: model.has_api_key,
     primary: model.selected,
-    editable: model.available && mutationSafe,
+    inference: {
+      ...(model.temperature !== undefined
+        ? { temperature: model.temperature }
+        : {}),
+      ...(model.top_p !== undefined ? { top_p: model.top_p } : {}),
+      ...(model.context_window !== undefined
+        ? { context_window: model.context_window }
+        : {}),
+      ...(model.reasoning_effort !== undefined
+        ? { reasoning_effort: model.reasoning_effort }
+        : {}),
+      ...(model.model_hints !== undefined
+        ? { model_hints: model.model_hints }
+        : {}),
+    },
+    ...(model.edit_blocked ? { editBlocked: true as const } : {}),
+    editable: model.available && mutationSafe && !model.edit_blocked,
     removable: mutationSafe,
     ...(!mutationSafe
       ? {
           mutationUnavailableReason:
             "Core did not report a complete route identity. This entry is read-only.",
         }
-      : {}),
+      : model.edit_blocked
+        ? {
+            mutationUnavailableReason:
+              "This entry contains settings the editor cannot preserve. Edit it through Core configuration instead.",
+          }
+        : {}),
   };
 }
 

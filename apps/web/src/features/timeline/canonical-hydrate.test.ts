@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ProjectionEnvelopeV2,
   SessionHydrateResult,
@@ -53,6 +53,16 @@ function message(
 }
 
 describe("canonical hydrate recovery", () => {
+  // Replayed entries carry wall-clock start/end stamps. Tests that build the
+  // same snapshot twice must compare equal, so pin the clock for the file.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_700_000_000_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses unique message identity to link a parent-client transcript to its background child and retains attachments", () => {
     const background = event(
       1,

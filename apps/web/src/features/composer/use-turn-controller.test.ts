@@ -1,22 +1,90 @@
-import { createElement, type Dispatch, type SetStateAction } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   OctosUiProtocolError,
   OctosUiRequestTimeoutError,
+  type OctosUiClient,
+  type TurnStateGetResult,
 } from "@octos-org/octoscode-client";
-import type {
-  OctosUiClient,
-  TurnStateGetResult,
-} from "@octos-org/octoscode-client";
+import type { ReviewStartResult } from "@octos-org/octoscode-client/history";
 import type { TimelineEntry } from "../timeline/model.ts";
 import {
-  useTurnController,
+  createQueueBackedTurnController,
   type TurnDispatchStateEvent,
-  type TurnController,
+  type QueueBackedTurnController,
+  type TurnControllerDependencies,
+  type NativeReviewStartRequest,
 } from "./use-turn-controller.ts";
+import { PromptTurnQueue } from "./turn-queue.ts";
 
-describe("useTurnController async authority", () => {
+describe("queue-backed turn controller async authority", () => {
+  it("returns local admission before consuming caller input and rejects repeated native UUIDs", () => {
+    let allowed = false;
+    const client = fakeClient();
+    const harness = renderController(client, { canEnqueue: () => allowed });
+    const turn = { turnId: "native-uuid", text: "  review this  " };
+    expect(harness.controller.enqueueTurn(turn)).toBe(false);
+    expect(harness.controller.enqueuePrompt("draft")).toBe(false);
+    expect(client.startTurn).not.toHaveBeenCalled();
+    allowed = true;
+    expect(harness.controller.enqueueTurn(turn)).toBe(true);
+    expect(harness.controller.enqueueTurn(turn)).toBe(false);
+    expect(client.startTurn).toHaveBeenCalledWith({
+      session_id: "session-a",
+      turn_id: "native-uuid",
+      input: [{ kind: "text", text: "review this" }],
+    });
+  });
+
+  it("sends each queued turn's captured text, reasoning and media after later drafts change", async () => {
+    let reasoning = "high";
+    const client = fakeClient();
+    const harness = renderController(client, {
+      reasoningEffort: () => reasoning,
+    });
+    harness.controller.enqueuePrompt("first");
+    const first = harness.activeTurnId();
+    const media = [
+      { path: "uploaded/second", mime: "image/png", size_bytes: 4 },
+    ];
+    harness.controller.enqueueTurn({
+      turnId: "second",
+      text: "second",
+      reasoningEffort: "low",
+      media,
+    });
+    reasoning = "medium";
+    media[0]!.path = "wrong-draft";
+    harness.controller.snapshot().pending[0]!.media![0]!.path =
+      "mutated-snapshot";
+    harness.controller.enqueuePrompt("third");
+    harness.controller.settleTurn(first);
+    await Promise.resolve();
+    expect(client.startTurn.mock.calls[0]?.[0]).toMatchObject({
+      reasoning_effort: "high",
+    });
+    expect(client.startTurn.mock.calls[1]?.[0]).toEqual({
+      session_id: "session-a",
+      turn_id: "second",
+      input: [{ kind: "text", text: "second" }],
+      reasoning_effort: "low",
+      media: [{ path: "uploaded/second", mime: "image/png", size_bytes: 4 }],
+    });
+    harness.controller.settleTurn("second");
+    expect(client.startTurn.mock.calls[2]?.[0]).toMatchObject({
+      reasoning_effort: "medium",
+    });
+  });
+
+  it("does not start supplied work that has not been admitted to its queue", async () => {
+    const client = fakeClient();
+    const harness = renderController(client);
+    await harness.controller.startTurn({
+      turnId: "not-enqueued",
+      text: "not-enqueued",
+    });
+    expect(client.startTurn).not.toHaveBeenCalled();
+  });
+
   it("cancels a queued prompt without interrupting or dispatching server work", async () => {
     const client = fakeClient();
     const harness = renderController(client);
@@ -729,6 +797,57 @@ describe("useTurnController async authority", () => {
     expect(client.interruptTurn).toHaveBeenCalledTimes(1);
   });
 
+  it("restores an interrupted prompt on its OWN session's terminal, never another session's", async () => {
+    let session = "session-a";
+    const restored: string[] = [];
+    const client = fakeClient();
+    const harness = renderController(client, {
+      sessionId: () => session,
+      onInterruptPromptRestore: (prompt) => restored.push(prompt),
+    });
+    harness.controller.enqueuePrompt("  draft a  ");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    const turnA = harness.activeTurnId();
+    await harness.controller.interrupt();
+
+    // The user switched to session B before A's terminal round-tripped.
+    session = "session-b";
+    harness.controller.settleTurn("turn-b");
+    expect(restored).toEqual([]);
+
+    // A's own terminal still finds its stashed prompt (nothing was lost).
+    session = "session-a";
+    harness.controller.settleTurn(turnA);
+    expect(restored).toEqual(["draft a"]);
+  });
+
+  it("re-arms one pending restore per session and drops it on reset", async () => {
+    const restored: string[] = [];
+    const client = fakeClient();
+    const harness = renderController(client, {
+      onInterruptPromptRestore: (prompt) => restored.push(prompt),
+    });
+    harness.controller.enqueuePrompt("first draft");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    await harness.controller.interrupt();
+    harness.controller.settleTurn(harness.activeTurnId());
+    expect(restored).toEqual(["first draft"]);
+
+    harness.controller.enqueuePrompt("second draft");
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    const second = harness.activeTurnId();
+    await harness.controller.interrupt();
+    harness.controller.reset();
+    harness.controller.settleTurn(second);
+    expect(restored).toEqual(["first draft"]);
+  });
+
   it("treats a hydrated active turn as observed, never as owner of this socket", () => {
     const client = fakeClient();
     const harness = renderController(client);
@@ -922,8 +1041,366 @@ describe("useTurnController async authority", () => {
   });
 });
 
-function renderController(initialClient: FakeTurnClient): {
-  controller: TurnController;
+const reviewId = "00000000-0000-4000-8000-000000000042";
+function reviewAck(
+  request: Pick<NativeReviewStartRequest, "sessionId" | "turnId">,
+): ReviewStartResult {
+  return {
+    accepted: true,
+    session_id: request.sessionId,
+    turn_id: request.turnId,
+    workflow: "code_review",
+    backend: "native",
+    agent_count: 3,
+  };
+}
+
+describe("native review on the existing turn controller", () => {
+  it("dispatches an optional review prompt and exact UUID without an ordinary user turn", async () => {
+    const client = fakeClient();
+    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
+      request.markSent();
+      return reviewAck(request);
+    });
+    const h = renderController(client, { startReview });
+    expect(
+      h.controller.enqueueTurn({
+        kind: "review",
+        turnId: reviewId,
+        text: "  check races  ",
+      }),
+    ).toBe(true);
+    await Promise.resolve();
+    expect(startReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        client,
+        sessionId: "session-a",
+        turnId: reviewId,
+        prompt: "check races",
+      }),
+    );
+    expect(client.startTurn).not.toHaveBeenCalled();
+    expect(h.timeline.some((entry) => entry.kind === "user")).toBe(false);
+    expect(
+      h.timeline.some((entry) => entry.title === "Native code review"),
+    ).toBe(true);
+    expect(h.controller.backgroundHandoffTurn()).toMatchObject({
+      turnId: reviewId,
+      state: "running",
+    });
+    expect(h.dispatchEvents.map((event) => event.state)).toEqual([
+      "dispatching",
+      "accepted",
+    ]);
+  });
+
+  it("omits the default review prompt instead of manufacturing model input", async () => {
+    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
+      request.markSent();
+      return reviewAck(request);
+    });
+    const h = renderController(fakeClient(), { startReview });
+    expect(
+      h.controller.enqueueTurn({
+        kind: "review",
+        turnId: reviewId,
+        text: "  ",
+      }),
+    ).toBe(true);
+    await Promise.resolve();
+    expect(startReview.mock.calls[0]![0]).not.toHaveProperty("prompt");
+    expect(h.controller.snapshot().active).toMatchObject({
+      kind: "review",
+      text: "",
+    });
+  });
+
+  it("fails closed without a starter, with active work, or with unsupported review arguments", () => {
+    const h = renderController(fakeClient());
+    expect(
+      h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" }),
+    ).toBe(false);
+    const startReview = vi.fn(async (request: NativeReviewStartRequest) =>
+      reviewAck(request),
+    );
+    const idle = renderController(fakeClient(), { startReview });
+    expect(
+      idle.controller.enqueueTurn({
+        kind: "review",
+        turnId: "not-a-uuid",
+        text: "",
+      }),
+    ).toBe(false);
+    expect(
+      idle.controller.enqueueTurn({
+        kind: "review",
+        turnId: reviewId,
+        text: "",
+        reasoningEffort: "high",
+      }),
+    ).toBe(false);
+    expect(
+      idle.controller.enqueueTurn({
+        kind: "review",
+        turnId: reviewId,
+        text: "",
+        media: [{ path: "attachment", mime: "image/png", size_bytes: 1 }],
+      }),
+    ).toBe(false);
+    idle.controller.enqueuePrompt("ordinary active turn");
+    expect(
+      idle.controller.enqueueTurn({
+        kind: "review",
+        turnId: reviewId,
+        text: "",
+      }),
+    ).toBe(false);
+    expect(startReview).not.toHaveBeenCalled();
+  });
+
+  it("allows ordinary prompts behind review but starts them only on the exact review terminal", async () => {
+    const client = fakeClient();
+    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
+      request.markSent();
+      return reviewAck(request);
+    });
+    const h = renderController(client, { startReview });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.enqueuePrompt("follow up");
+    await Promise.resolve();
+    expect(client.startTurn).not.toHaveBeenCalled();
+    expect(h.controller.snapshot().pending).toHaveLength(1);
+    h.controller.settleTurn("foreign-terminal");
+    expect(client.startTurn).not.toHaveBeenCalled();
+    h.controller.settleTurn(reviewId);
+    expect(client.startTurn).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ input: [{ kind: "text", text: "follow up" }] }),
+    );
+    h.controller.settleTurn(reviewId);
+    expect(client.startTurn).toHaveBeenCalledOnce();
+  });
+
+  it.each(["not sent", "protocol rejection", "negative ACK"] as const)(
+    "settles a definite %s without treating it as an ambiguous start",
+    async (failure) => {
+      const gate = deferred<ReviewStartResult>();
+      const startReview = vi.fn((request: NativeReviewStartRequest) => {
+        if (failure !== "not sent") request.markSent();
+        return gate.promise;
+      });
+      const client = fakeClient();
+      const h = renderController(client, { startReview });
+      h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+      h.controller.enqueuePrompt("following");
+      if (failure === "not sent") gate.reject(new Error("factory unavailable"));
+      else if (failure === "protocol rejection")
+        gate.reject(new OctosUiProtocolError(-32600, "already running"));
+      else
+        gate.resolve({
+          ...reviewAck({ sessionId: "session-a", turnId: reviewId }),
+          accepted: false,
+        });
+      await Promise.resolve();
+      expect(h.controller.snapshot().active?.kind).not.toBe("review");
+      expect(
+        h.timeline.some((entry) => entry.title === "Native review rejected"),
+      ).toBe(true);
+      expect(client.startTurn).toHaveBeenCalledOnce();
+      expect(
+        h.dispatchEvents.some(
+          (event) => event.turnId === reviewId && event.state === "accepted",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("holds an ambiguous review and queued work without replay until hydrate or terminal provides evidence", async () => {
+    const client = fakeClient();
+    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
+      request.markSent();
+      throw new Error("response timed out");
+    });
+    const h = renderController(client, { startReview });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.enqueuePrompt("following");
+    await Promise.resolve();
+    expect(h.controller.snapshot().active?.turnId).toBe(reviewId);
+    expect(h.controller.backgroundHandoffTurn()).toBeNull();
+    expect(
+      h.timeline.some(
+        (entry) => entry.title === "Native review outcome unknown",
+      ),
+    ).toBe(true);
+    h.controller.resumePendingTurn();
+    h.controller.reconcileFromHydrate(
+      { session_id: "session-a", cursor: { stream: "s", seq: 1 }, turns: [] },
+      true,
+    );
+    h.controller.resumePendingTurn();
+    expect(startReview).toHaveBeenCalledOnce();
+    expect(client.startTurn).not.toHaveBeenCalled();
+    h.controller.reconcileFromHydrate(
+      {
+        session_id: "session-a",
+        cursor: { stream: "s", seq: 2 },
+        turns: [{ turn_id: reviewId, state: "active" }],
+      },
+      true,
+    );
+    expect(h.controller.backgroundHandoffTurn()).toMatchObject({
+      turnId: reviewId,
+      state: "running",
+    });
+    h.controller.settleTurn(reviewId);
+    expect(client.startTurn).toHaveBeenCalledOnce();
+  });
+
+  it("treats an acknowledged foreign turn as uncertain and never advances the queue", async () => {
+    const client = fakeClient();
+    const h = renderController(client, {
+      startReview: async (request) => {
+        request.markSent();
+        return reviewAck({ ...request, sessionId: "foreign" });
+      },
+    });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.enqueuePrompt("following");
+    await Promise.resolve();
+    expect(h.controller.snapshot().active?.turnId).toBe(reviewId);
+    expect(client.startTurn).not.toHaveBeenCalled();
+    expect(h.controller.backgroundHandoffTurn()).toBeNull();
+  });
+
+  it("uses the normal accepted-turn interrupt path for review", async () => {
+    const client = fakeClient();
+    const h = renderController(client, {
+      startReview: async (request) => {
+        request.markSent();
+        return reviewAck(request);
+      },
+    });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    await Promise.resolve();
+    await h.controller.interrupt();
+    await h.controller.interrupt();
+    expect(client.interruptTurn).toHaveBeenCalledExactlyOnceWith(
+      "session-a",
+      reviewId,
+    );
+  });
+
+  it("does not send after its controller authority is suspended during lazy command resolution", async () => {
+    const gate = deferred<void>();
+    const sent = vi.fn();
+    const h = renderController(fakeClient(), {
+      startReview: async (request) => {
+        await gate.promise;
+        request.markSent();
+        sent();
+        return reviewAck(request);
+      },
+    });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.suspendTransport();
+    gate.resolve(undefined);
+    await gate.promise;
+    await Promise.resolve();
+    expect(sent).not.toHaveBeenCalled();
+    expect(h.controller.snapshot().active?.turnId).toBe(reviewId);
+    expect(h.dispatchEvents.some((event) => event.state === "accepted")).toBe(
+      false,
+    );
+  });
+
+  it("resumes only the never-sent review UUID after suspension and fences the older factory", async () => {
+    const oldFactory = deferred<void>();
+    const wire = vi.fn();
+    let calls = 0;
+    const h = renderController(fakeClient(), {
+      startReview: async (request) => {
+        calls += 1;
+        if (calls === 1) await oldFactory.promise;
+        request.markSent();
+        wire(request.turnId);
+        return reviewAck(request);
+      },
+    });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.suspendTransport();
+    h.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "s", seq: 1 },
+      turns: [],
+    });
+    h.controller.resumePendingTurn();
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    expect(wire).toHaveBeenCalledExactlyOnceWith(reviewId);
+    oldFactory.resolve(undefined);
+    await oldFactory.promise;
+    await Promise.resolve();
+    expect(wire).toHaveBeenCalledOnce();
+    expect(h.controller.backgroundHandoffTurn()).toMatchObject({
+      turnId: reviewId,
+      state: "running",
+    });
+  });
+
+  it("never resumes a review whose wire boundary was crossed before suspension", async () => {
+    const reply = deferred<ReviewStartResult>();
+    const startReview = vi.fn((request: NativeReviewStartRequest) => {
+      request.markSent();
+      return reply.promise;
+    });
+    const h = renderController(fakeClient(), { startReview });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.suspendTransport();
+    h.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "s", seq: 1 },
+      turns: [],
+    });
+    h.controller.resumePendingTurn();
+    reply.resolve(reviewAck({ sessionId: "session-a", turnId: reviewId }));
+    await reply.promise;
+    h.controller.resumePendingTurn();
+    expect(startReview).toHaveBeenCalledOnce();
+    expect(h.controller.snapshot().active?.turnId).toBe(reviewId);
+    expect(h.controller.backgroundHandoffTurn()).toBeNull();
+  });
+
+  it("ignores a late review ACK after terminal has started the next ordinary prompt", async () => {
+    const gate = deferred<ReviewStartResult>();
+    const client = fakeClient();
+    const h = renderController(client, {
+      startReview: (request) => {
+        request.markSent();
+        return gate.promise;
+      },
+    });
+    h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text: "" });
+    h.controller.enqueuePrompt("following");
+    h.controller.settleTurn(reviewId);
+    const nextId = h.activeTurnId();
+    gate.resolve(reviewAck({ sessionId: "session-a", turnId: reviewId }));
+    await gate.promise;
+    await Promise.resolve();
+    expect(h.activeTurnId()).toBe(nextId);
+    expect(h.controller.backgroundHandoffTurn()?.turnId).toBe(nextId);
+    expect(client.startTurn).toHaveBeenCalledOnce();
+    expect(
+      h.dispatchEvents
+        .filter((event) => event.turnId === reviewId)
+        .map((event) => event.state),
+    ).toEqual(["dispatching", "cancelled"]);
+  });
+});
+
+function renderController(
+  initialClient: FakeTurnClient,
+  overrides: Partial<TurnControllerDependencies> = {},
+): {
+  controller: QueueBackedTurnController;
   timeline: TimelineEntry[];
   connectionErrors: string[];
   dispatchEvents: TurnDispatchStateEvent[];
@@ -934,7 +1411,6 @@ function renderController(initialClient: FakeTurnClient): {
   setCanStart(value: boolean): void;
   activeTurnId(): string;
 } {
-  let controller: TurnController | null = null;
   let client: FakeTurnClient = initialClient;
   let canStart = true;
   let canGetTurnState = true;
@@ -943,30 +1419,30 @@ function renderController(initialClient: FakeTurnClient): {
   const timeline: TimelineEntry[] = [];
   const connectionErrors: string[] = [];
   const dispatchEvents: TurnDispatchStateEvent[] = [];
-  const setTimeline: Dispatch<SetStateAction<TimelineEntry[]>> = (action) => {
+  const setTimeline: TurnControllerDependencies["setTimeline"] = (action) => {
     const next = typeof action === "function" ? action([...timeline]) : action;
     timeline.splice(0, timeline.length, ...next);
   };
 
-  function Probe() {
-    controller = useTurnController({
-      client: () => client as unknown as OctosUiClient,
-      sessionId: () => sessionId,
-      canEnqueue: () => true,
-      canStart: () => canStart,
-      canInterrupt: () => true,
-      canGetTurnState: () => canGetTurnState,
-      onRecoveredTerminal: (turnId) => recoveredTerminals.push(turnId),
-      setTimeline,
-      setConnectionError: (message) => connectionErrors.push(message),
-      onDispatchState: (event) => dispatchEvents.push(event),
-    });
-    return null;
-  }
-
-  renderToStaticMarkup(createElement(Probe));
-  if (!controller) throw new Error("Turn controller probe did not render");
-  const renderedController: TurnController = controller;
+  const controller = createQueueBackedTurnController({
+    queueRef: { current: new PromptTurnQueue() },
+    dependenciesRef: {
+      current: {
+        client: () => client as unknown as OctosUiClient,
+        sessionId: () => sessionId,
+        canEnqueue: () => true,
+        canStart: () => canStart,
+        canInterrupt: () => true,
+        canGetTurnState: () => canGetTurnState,
+        onRecoveredTerminal: (turnId) => recoveredTerminals.push(turnId),
+        setTimeline,
+        setConnectionError: (message) => connectionErrors.push(message),
+        onDispatchState: (event) => dispatchEvents.push(event),
+        ...overrides,
+      },
+    },
+  });
+  const renderedController = controller;
   return {
     controller: renderedController,
     timeline,

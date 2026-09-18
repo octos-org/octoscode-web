@@ -17,9 +17,7 @@ async function connectAndStartWorkspace(page: Page): Promise<void> {
 }
 
 async function openModelSettings(page: Page): Promise<Locator> {
-  const productNavigation = page.getByRole("complementary", {
-    name: "Product navigation",
-  });
+  const productNavigation = page.locator("aside");
   await productNavigation.getByRole("button", { name: "Settings" }).click();
 
   const settings = page.getByRole("dialog", { name: "Settings" });
@@ -144,7 +142,10 @@ test("manages a provider through the DSH-style Models settings flow", async ({
 
   added = configuredProvider(settings, "deepseek-chat");
   await added.getByRole("button", { name: "Delete Deepseek Chat" }).click();
-  const confirmation = settings.getByRole("dialog", {
+  // Modal surfaces render at the page root (they must not be trapped in an
+  // opener's stacking or scrolling context — see ModalSurface), so this
+  // confirmation is a sibling of Settings rather than a descendant.
+  const confirmation = page.getByRole("dialog", {
     name: "Delete model provider?",
   });
   const deleteButton = confirmation.getByRole("button", {
@@ -177,7 +178,7 @@ test("keeps a rejected provider draft while redacting the failure", async ({
   await editor.getByLabel("API key").fill(rejectedCredential);
   await editor.getByRole("button", { name: "Test connection" }).click();
 
-  await expect(editor.getByRole("alert")).toHaveText(
+  await expect(editor.locator('[role="alert"]')).toHaveText(
     "Connection failed. Check the endpoint, protocol, model, and credential.",
   );
   await expect(editor.getByLabel("Provider / family ID")).toHaveValue(

@@ -210,6 +210,23 @@
   font: inherit;
 }
 
+/* The plain block shown while a reply streams (and while the highlighter
+   loads): same box as the highlighted one, so nothing jumps when it swaps. */
+.markdown-body pre.md-code-plain {
+  margin: 0;
+  overflow-x: auto;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-primary);
+  white-space: pre;
+  font: 400 12px/20px var(--dsw-font-family-code);
+}
+
+.markdown-body pre.md-code-plain code {
+  font: inherit;
+}
+
 .shiki-bg {
   background-color: var(--shiki-background);
 }
@@ -261,11 +278,4 @@
 
 .shiki-underline {
   text-decoration: underline;
-}
-
-.md-streaming {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  font: 400 15px/25px var(--dsw-font-family);
 }

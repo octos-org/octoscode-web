@@ -11,7 +11,11 @@ for (const canonicalReplay of [false, true]) {
     let turnId = "";
     let recoveryModuleRequests = 0;
     await page.route(
-      "**/features/timeline/canonical-hydrate.ts*",
+      // The cold recovery chunk. A dev server serves the module path; this
+      // repo's e2e runs `vite preview`, which serves it as the built
+      // /assets/canonical-hydrate-<hash>.js (the trailing `-[A-Za-z0-9_]+`
+      // excludes sibling modules such as canonical-hydrate-loader).
+      /\/canonical-hydrate(\.ts|-[A-Za-z0-9_]+\.js)(\?|$)/,
       async (route) => {
         recoveryModuleRequests += 1;
         if (canonicalReplay) await route.continue();

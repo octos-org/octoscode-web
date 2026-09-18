@@ -1,17 +1,19 @@
-import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
+  CORE_UI_METHODS,
+  isProtocolUuid,
   OctosUiProtocolError,
-  OctosUiRequestTimeoutError,
-  isTurnLifecycleState,
-} from "@octos-org/octoscode-client";
-import type {
-  OctosUiClient,
-  SessionHydrateResult,
-  TurnLifecycleState,
-} from "@octos-org/octoscode-client";
+  type OctosUiClient,
+  type SessionHydrateResult,
+} from "@octos-org/octoscode-client/protocol";
+import type { TurnLifecycleState } from "@octos-org/octoscode-client";
+import type { ReviewStartResult } from "@octos-org/octoscode-client/history";
+import type { TurnSteerResult } from "@octos-org/octoscode-client/steer";
+import type { RpcNotification } from "@octos-org/octoscode-client/protocol";
+import { notificationMatchesSessionScope } from "../session/scope.ts";
 import {
   addOptimisticUser,
   addSystemMessage,
+  notificationTurnId,
   settleTimelineTurn,
   type TimelineEntry,
 } from "../timeline/model.ts";
@@ -21,18 +23,85 @@ import {
   type PromptTurnQueueSnapshot,
 } from "./turn-queue.ts";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
+import { boundedTurnAdmissionError } from "./composer-seat-handover.ts";
 
-interface TurnControllerDependencies {
+export interface TurnControllerDependencies {
   client: () => OctosUiClient | null;
   sessionId: () => string;
   canEnqueue: () => boolean;
   canStart: () => boolean;
   canInterrupt: () => boolean;
-  canGetTurnState: () => boolean;
+  /**
+   * Whether the Session advertises the targeted `turn/state/get` lifecycle
+   * lookup. Absent or false holds an unresolved turn as "unavailable".
+   */
+  canGetTurnState?: () => boolean;
+  /** A lifecycle lookup proved the turn terminal (settle its interactions). */
   onRecoveredTerminal?: (turnId: string) => void;
-  setTimeline: Dispatch<SetStateAction<TimelineEntry[]>>;
+  setTimeline: (
+    update: TimelineEntry[] | ((previous: TimelineEntry[]) => TimelineEntry[]),
+  ) => void;
   setConnectionError: (message: string) => void;
   onDispatchState?: (event: TurnDispatchStateEvent) => void;
+  /**
+   * Fires when a user-interrupted turn's prompt comes back, on THAT turn's own
+   * terminal. `sessionId` is the turn's OWNING session (not necessarily the one
+   * on screen), so the caller can route the prompt into the owning Session's
+   * composer or saved draft — mirroring the TUI's per-session
+   * `pending_interrupt_restores`. Never fires for a forgotten or superseded turn.
+   */
+  onInterruptPromptRestore?: (prompt: string, sessionId: string) => void;
+  /**
+   * The Session's current reasoning selection. Read at ENQUEUE time and stored
+   * on the PromptTurn, because rc11 clears the persisted value on any turn
+   * that omits it.
+   */
+  reasoningEffort?: () => string | undefined;
+  /** Root resolves scoped public commands, fencing full record authority across awaits. */
+  startReview?: (
+    request: NativeReviewStartRequest,
+  ) => Promise<ReviewStartResult>;
+  steer?: (request: NativeSteerRequest) => Promise<TurnSteerResult>;
+  /**
+   * §5.2 composer handover gate (brief 4010 clause b). Called ONCE per user
+   * turn, BEFORE any `turn/start` frame. THIS tab holding the driver seat
+   * would make Core refuse the turn `ExternalMasterHeld`, so the seam must
+   * first release the seat (`next:"internal"`) and only resolve `{ sent: true }`
+   * once the release is CONFIRMED; a refusal resolves `{ sent: false, message }`
+   * and the turn is never started (the draft is kept by the caller). NULL =
+   * the session carries no driver-seat surface at all (ordinary chat): send
+   * directly, exactly as before.
+   */
+  releaseSeatBeforeTurn?: () => Promise<
+    { readonly sent: true } | { readonly sent: false; readonly message: string }
+  >;
+  /**
+   * §6 "kept" column (brief 4010 clause b): a turn the seat gate refused was
+   * never started, so the queue's copy is the ONLY remaining one. Park the text
+   * back on the OWNING record (resolved by session id) so the composer shows it
+   * again instead of silently eating the message. Never overwrites a pending
+   * restore.
+   */
+  onTurnNotSentRestore?: (prompt: string, sessionId: string) => void;
+}
+
+export interface NativeSteerRequest {
+  readonly client: OctosUiClient;
+  readonly sessionId: string;
+  readonly expectedTurnId: string;
+  readonly text: string;
+  isCurrent(): boolean;
+  markSent(): void;
+}
+
+export interface NativeReviewStartRequest {
+  readonly client: OctosUiClient;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly prompt?: string;
+  isCurrent(): boolean;
+  /** Call exactly once, immediately before invoking typed commands.startReview. */
+  markSent(): void;
 }
 
 export interface TurnDispatchStateEvent {
@@ -48,18 +117,22 @@ export interface TurnRecoveryState {
   message?: string;
 }
 
-export interface TurnController {
-  queue: PromptTurnQueueSnapshot;
-  turnRecovery: TurnRecoveryState | null;
+export interface QueueBackedTurnController {
+  queueSnapshot: () => PromptTurnQueueSnapshot;
+  /**
+   * The active turn whose outcome hydrate could not prove. While set, new
+   * admission, dispatch and interrupt are held until a lifecycle lookup (or a
+   * terminal) resolves it; the turn is never resent.
+   */
+  readonly turnRecovery: TurnRecoveryState | null;
+  turnRecoveryNow: () => TurnRecoveryState | null;
   retryTurnRecovery: () => Promise<void>;
-  /** The optimistic start request that has not yet been accepted by Core. */
-  dispatchingTurnId: string | null;
-  /** True only when the active turn is server-owned and interrupt is advertised. */
-  interruptible: boolean;
-  interruptingTurnId: string | null;
+  dispatchingTurnIdNow: () => string | null;
+  interruptingTurnIdNow: () => string | null;
+  interruptibleNow: () => boolean;
   snapshot: () => PromptTurnQueueSnapshot;
   /**
-   * The active turn only after `turn/start` has been accepted by Core.
+   * The active turn only after `turn/start` or `review/start` is accepted by Core.
    * Optimistic/in-flight starts cannot be detached because a rejected RPC
    * would otherwise leave an owner socket parked without a terminal event.
    */
@@ -70,8 +143,25 @@ export interface TurnController {
   activeTurnOwnership: () =>
     "none" | "dispatching" | "local-owner" | "observed";
   reset: () => void;
-  enqueuePrompt: (text: string) => void;
+  enqueuePrompt: (text: string) => boolean;
+  /** Remove a not-yet-dispatched queued prompt; the active turn stays. */
   cancelQueuedPrompt: (turnId: string) => boolean;
+  /** Admit an immutable turn with the caller's native UUID. */
+  enqueueTurn: (turn: PromptTurn) => boolean;
+  /** Explicit user submission only; peer/gather submissions keep enqueueTurn FIFO. */
+  submitTurn: (turn: PromptTurn) => boolean;
+  setSteeringEnabled: (enabled: boolean) => void;
+  steeringEnabled: () => boolean;
+  /**
+   * Observe every admitted notification for this Session: returned steering
+   * inputs, and server-side turn activity, which proves an unacknowledged
+   * `turn/start` was accepted (see `confirmTurnAccepted`).
+   */
+  observeSteerDropped: (notification: RpcNotification) => void;
+  /** Retry only a never-sent queue head after the record becomes ready. */
+  resumePendingTurn: () => void;
+  /** Invalidate old RPC completions without dropping any queued turns. */
+  suspendTransport: () => void;
   interrupt: () => Promise<void>;
   reconcileFromHydrate: (
     hydrated: SessionHydrateResult,
@@ -94,74 +184,102 @@ export interface TurnController {
   settleTurn: (turnId: string, outcome?: "completed" | "failed") => void;
 }
 
-export function useTurnController(
-  dependencies: TurnControllerDependencies,
-): TurnController {
-  const recoveryRequestsRef = useRef(new RequestAuthorityGate<OctosUiClient>());
-  const recoveryRef = useRef<TurnRecoveryState | null>(null);
-  const [, setTurnRecovery] = useState<TurnRecoveryState | null>(null);
-  const startRequestsRef = useRef(new RequestAuthorityGate<OctosUiClient>());
-  const interruptRequestsRef = useRef(
-    new RequestAuthorityGate<OctosUiClient>(),
-  );
-  const dependenciesRef = useRef(dependencies);
-  dependenciesRef.current = dependencies;
-  const queueRef = useRef(new PromptTurnQueue());
-  const hydratedActiveTurnRef = useRef<{
-    turnId: string;
-    state: "active" | "interrupting";
-  } | null>(null);
-  const locallyStartedTurnRef = useRef<{
+/** One executable controller for one persistent Session queue. */
+export function createQueueBackedTurnController(options: {
+  /**
+   * Record-scoped dependencies. Async requests capture their originating
+   * client and Session and recheck that authority at completion.
+   */
+  dependenciesRef: { current: TurnControllerDependencies };
+  /**
+   * The persistent record's queue. Captured once: selection never rebinds an
+   * existing executable controller to a different Session's queue.
+   */
+  queueRef: { current: PromptTurnQueue };
+  /** Publish queue and ownership changes to record subscribers. */
+  sync?: () => void;
+  setDispatchingTurnId?: (turnId: string | null) => void;
+  setInterruptingTurnId?: (turnId: string | null) => void;
+}): QueueBackedTurnController {
+  const startRequests = new RequestAuthorityGate<OctosUiClient>();
+  const interruptRequests = new RequestAuthorityGate<OctosUiClient>();
+  const recoveryRequests = new RequestAuthorityGate<OctosUiClient>();
+  const dependenciesRef = options.dependenciesRef;
+  const queue = options.queueRef.current;
+  const queueOf = () => queue;
+  const sync = options.sync ?? (() => undefined);
+  const setDispatchingTurnId =
+    options.setDispatchingTurnId ?? (() => undefined);
+  const setInterruptingTurnId =
+    options.setInterruptingTurnId ?? (() => undefined);
+  let locallyStartedTurn: {
     client: OctosUiClient;
     sessionId: string;
     turnId: string;
-  } | null>(null);
-  const acceptedOwnerRef = useRef<{
+  } | null = null;
+  let acceptedOwner: {
     client: OctosUiClient;
     sessionId: string;
     turnId: string;
     state: "running" | "waiting" | "completed" | "failed";
-  } | null>(null);
-  const interruptingTurnIdRef = useRef<string | null>(null);
+  } | null = null;
+  let interruptingTurnId: string | null = null;
+  let dispatchingTurnId: string | null = null;
+  let recovery: TurnRecoveryState | null = null;
+  /** Hydrate's server foreground turn; local FIFO never advances over it. */
+  let hydratedActiveTurn: {
+    turnId: string;
+    state: "active" | "interrupting";
+  } | null = null;
   /** The start whose RPC timed out: unknown outcome until evidence arrives. */
-  const timedOutStartTurnIdRef = useRef<string | null>(null);
-  /** A queued prompt promoted while transport recovery still blocks dispatch. */
-  const deferredStartTurnIdRef = useRef<string | null>(null);
-  const dispatchingTurnIdRef = useRef<string | null>(null);
-  const [queue, setQueue] = useState<PromptTurnQueueSnapshot>(() =>
-    queueRef.current.snapshot(),
-  );
-  const [dispatchingTurnId, setDispatchingTurnId] = useState<string | null>(
-    null,
-  );
-  const [interruptingTurnId, setInterruptingTurnId] = useState<string | null>(
-    null,
-  );
-
-  const sync = () => setQueue(queueRef.current.snapshot());
+  let timedOutStartTurnId: string | null = null;
+  // Absence from hydrate cannot prove an RPC was rejected. Retain attempted
+  // IDs across suspension, so an ambiguous accepted start is never replayed.
+  const attemptedTurns = new Set<string>();
+  // Review loading and control handback happen before a turn crosses the wire.
+  let preflightTurnId: string | null = null;
+  let steeringEnabled = false;
+  let steerEpoch = 0;
+  let steerInFlight = false;
+  let steerUnknown = false;
+  const terminalReceipts = new Set<string>();
+  const steerAdmittedIds = new Set<string>();
+  const retainedSteers: Array<{
+    turn: PromptTurn;
+    ownerTurnId: string;
+    sent: boolean;
+    returned: boolean;
+  }> = [];
 
   const publishRecovery = (value: TurnRecoveryState | null) => {
-    recoveryRef.current = value;
-    setTurnRecovery(value);
+    recovery = value;
+    sync();
   };
   const clearRecovery = () => {
-    recoveryRequestsRef.current.invalidate();
-    publishRecovery(null);
+    recoveryRequests.invalidate();
+    if (recovery) publishRecovery(null);
   };
 
   const reset = () => {
     clearRecovery();
-    startRequestsRef.current.invalidate();
-    interruptRequestsRef.current.invalidate();
-    queueRef.current.clear();
-    hydratedActiveTurnRef.current = null;
-    locallyStartedTurnRef.current = null;
-    acceptedOwnerRef.current = null;
-    dispatchingTurnIdRef.current = null;
-    timedOutStartTurnIdRef.current = null;
-    deferredStartTurnIdRef.current = null;
+    hydratedActiveTurn = null;
+    timedOutStartTurnId = null;
+    steerEpoch++;
+    steerInFlight = false;
+    steerUnknown = false;
+    retainedSteers.length = 0;
+    terminalReceipts.clear();
+    steerAdmittedIds.clear();
+    startRequests.invalidate();
+    interruptRequests.invalidate();
+    queueOf().clear();
+    attemptedTurns.clear();
+    preflightTurnId = null;
+    locallyStartedTurn = null;
+    acceptedOwner = null;
+    dispatchingTurnId = null;
     setDispatchingTurnId(null);
-    interruptingTurnIdRef.current = null;
+    interruptingTurnId = null;
     setInterruptingTurnId(null);
     sync();
   };
@@ -170,14 +288,26 @@ export function useTurnController(
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
-    if (!client || !sessionId) return;
-    if (recoveryRef.current || !currentDependencies.canStart()) {
-      deferredStartTurnIdRef.current = turn.turnId;
+    const queued = queueOf().snapshot().active;
+    // A turn held by lifecycle recovery or blocked admission stays unsent (not
+    // attempted); reconcile or the record's ready drain dispatches it later.
+    if (
+      !client ||
+      !sessionId ||
+      recovery ||
+      !currentDependencies.canStart() ||
+      steerInFlight ||
+      steerUnknown ||
+      queued?.turnId !== turn.turnId ||
+      attemptedTurns.has(turn.turnId)
+    )
       return;
-    }
-    deferredStartTurnIdRef.current = null;
-    locallyStartedTurnRef.current = { client, sessionId, turnId: turn.turnId };
-    dispatchingTurnIdRef.current = turn.turnId;
+    // Dispatch the queue's owned copy, never the caller's mutable object.
+    turn = queued;
+    attemptedTurns.add(turn.turnId);
+    preflightTurnId = turn.turnId;
+    locallyStartedTurn = { client, sessionId, turnId: turn.turnId };
+    dispatchingTurnId = turn.turnId;
     setDispatchingTurnId(turn.turnId);
     currentDependencies.onDispatchState?.({
       state: "dispatching",
@@ -185,34 +315,114 @@ export function useTurnController(
       sessionId,
       turnId: turn.turnId,
     });
-    const request = startRequestsRef.current.begin(client, sessionId);
-
+    const request = startRequests.begin(client, sessionId);
+    let reviewSent = false;
+    let reviewRejected = false;
     currentDependencies.setTimeline((current) =>
-      addOptimisticUser(current, turn.turnId, turn.text),
+      turn.kind === "review"
+        ? addSystemMessage(
+            current,
+            `review-request:${turn.turnId}`,
+            "Native code review",
+            turn.text || "Review requested for current project changes.",
+          )
+        : addOptimisticUser(current, turn.turnId, turn.text),
     );
+    // §5.2: a user prompt crosses the driver seam FIRST. Await the seat
+    // release (or its refusal) BEFORE any turn/start frame is written.
+    const seatGate = currentDependencies.releaseSeatBeforeTurn;
+    if (seatGate && turn.kind !== "review") {
+      const outcome = await seatGate();
+      if (!requestIsCurrent()) return;
+      if (!dependenciesRef.current.canStart()) {
+        attemptedTurns.delete(turn.turnId);
+        preflightTurnId = null;
+        retireLocalDispatch(turn.turnId, "cancelled");
+        startRequests.finish(request);
+        return;
+      }
+      if (!outcome.sent) {
+        retireLocalDispatch(turn.turnId, "rejected");
+        dependenciesRef.current.onTurnNotSentRestore?.(turn.text, sessionId);
+        dependenciesRef.current.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `send-error:${turn.turnId}`,
+            "Turn not sent",
+            boundedTurnAdmissionError(outcome.message),
+            "error",
+          ),
+        );
+        settleTurn(turn.turnId, "failed");
+        startRequests.finish(request);
+        return;
+      }
+    }
     try {
-      await client.startTurn({
-        session_id: sessionId,
-        turn_id: turn.turnId,
-        input: [{ kind: "text", text: turn.text }],
-      });
+      if (turn.kind === "review") {
+        if (!currentDependencies.startReview)
+          throw new Error("Native review is unavailable for this Session.");
+        const result = await currentDependencies.startReview({
+          client,
+          sessionId,
+          turnId: turn.turnId,
+          ...(turn.text ? { prompt: turn.text } : {}),
+          isCurrent: requestIsCurrent,
+          markSent() {
+            if (reviewSent) throw new Error("Native review was already sent.");
+            if (!requestIsCurrent() || !dependenciesRef.current.canStart())
+              throw new Error(
+                "Native review authority changed before dispatch.",
+              );
+            reviewSent = true;
+            preflightTurnId = null;
+          },
+        });
+        if (!requestIsCurrent()) return;
+        if (
+          result.session_id !== sessionId ||
+          result.turn_id !== turn.turnId ||
+          result.workflow !== "code_review" ||
+          result.backend !== "native"
+        )
+          throw new Error("Native review returned another turn or workflow.");
+        if (!result.accepted) {
+          reviewRejected = true;
+          throw new Error("The server did not accept native review.");
+        }
+      } else {
+        preflightTurnId = null;
+        await client.startTurn({
+          session_id: sessionId,
+          turn_id: turn.turnId,
+          input: [{ kind: "text", text: turn.text }],
+          // rc11 clears the persisted reasoning selection when a turn omits it,
+          // so every dispatched turn re-sends the value captured at enqueue time.
+          ...(turn.reasoningEffort
+            ? { reasoning_effort: turn.reasoningEffort }
+            : {}),
+          ...(turn.media?.length
+            ? { media: turn.media.map((media) => ({ ...media })) }
+            : {}),
+        });
+      }
       if (requestIsCurrent()) {
         acceptLocalDispatch(turn.turnId, "running");
       }
     } catch (reason) {
       if (!requestIsCurrent()) return;
-      if (!(reason instanceof OctosUiProtocolError)) {
+      if (turn.kind !== "review" && !(reason instanceof OctosUiProtocolError)) {
         // Server-side activity may already have promoted the dispatch while
         // the ACK was still missing; then the timeout says nothing new.
-        if (locallyStartedTurnRef.current?.turnId !== turn.turnId) return;
+        if (locallyStartedTurn?.turnId !== turn.turnId) return;
         // Missing ACKs and transport failures cannot prove rejection. Keep
         // the turn and FIFO until explicit lifecycle evidence arrives.
-        timedOutStartTurnIdRef.current = turn.turnId;
+        timedOutStartTurnId = turn.turnId;
         dependenciesRef.current.setTimeline((current) =>
           addSystemMessage(
             current,
             `send-timeout:${turn.turnId}`,
-            reason instanceof OctosUiRequestTimeoutError
+            isRequestTimeout(reason)
               ? "Turn start timed out"
               : "Turn start unconfirmed",
             "The server did not acknowledge the turn. It may still be running — do not resubmit; check its status after reconnecting.",
@@ -221,30 +431,48 @@ export function useTurnController(
         );
         return;
       }
-      retireLocalDispatch(turn.turnId, "rejected");
       const message = reason instanceof Error ? reason.message : String(reason);
+      if (
+        turn.kind === "review" &&
+        reviewSent &&
+        !reviewRejected &&
+        !(reason instanceof OctosUiProtocolError)
+      ) {
+        // A timeout/invalid ACK does not prove rejection. Keep the actual queue
+        // head and attempted UUID until canonical hydrate or a terminal settles
+        // it; advancing here could run ordinary prompts over an active review.
+        dependenciesRef.current.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `review-uncertain:${turn.turnId}`,
+            "Native review outcome unknown",
+            `The request may have started. Wait for Session recovery; it will not be sent again. ${message}`,
+            "error",
+          ),
+        );
+        sync();
+        return;
+      }
+      retireLocalDispatch(turn.turnId, "rejected");
       dependenciesRef.current.setTimeline((current) =>
         addSystemMessage(
           current,
           `send-error:${turn.turnId}`,
-          "Turn rejected",
+          turn.kind === "review" ? "Native review rejected" : "Turn rejected",
           message,
           "error",
         ),
       );
-      settleTurn(turn.turnId);
+      settleTurn(turn.turnId, "failed");
     } finally {
-      startRequestsRef.current.finish(request);
+      startRequests.finish(request);
     }
 
     function requestIsCurrent(): boolean {
       const latest = dependenciesRef.current;
       return (
-        startRequestsRef.current.isCurrent(
-          request,
-          latest.client(),
-          latest.sessionId(),
-        ) && queueRef.current.snapshot().active?.turnId === turn.turnId
+        startRequests.isCurrent(request, latest.client(), latest.sessionId()) &&
+        queueOf().snapshot().active?.turnId === turn.turnId
       );
     }
   };
@@ -253,75 +481,355 @@ export function useTurnController(
     turnId: string,
     outcome: "completed" | "failed" = "completed",
   ) => {
-    if (recoveryRef.current?.turnId === turnId) clearRecovery();
-    if (hydratedActiveTurnRef.current?.turnId === turnId)
-      hydratedActiveTurnRef.current = null;
-    if (deferredStartTurnIdRef.current === turnId) {
-      deferredStartTurnIdRef.current = null;
+    if (recovery?.turnId === turnId) clearRecovery();
+    if (hydratedActiveTurn?.turnId === turnId) hydratedActiveTurn = null;
+    if (timedOutStartTurnId === turnId) timedOutStartTurnId = null;
+    terminalReceipts.add(turnId);
+    if (terminalReceipts.size > 256)
+      terminalReceipts.delete(terminalReceipts.values().next().value!);
+    // Core returns undrained inputs BEFORE terminal. Remaining acknowledged
+    // steers were consumed. An in-flight receipt is still needed for fallback.
+    if (!steerInFlight) {
+      for (let index = retainedSteers.length - 1; index >= 0; index--)
+        if (retainedSteers[index]!.ownerTurnId === turnId)
+          retainedSteers.splice(index, 1);
     }
-    if (timedOutStartTurnIdRef.current === turnId) {
-      timedOutStartTurnIdRef.current = null;
-    }
-    if (acceptedOwnerRef.current?.turnId === turnId) {
-      acceptedOwnerRef.current = {
-        ...acceptedOwnerRef.current,
+    if (acceptedOwner?.turnId === turnId) {
+      acceptedOwner = {
+        ...acceptedOwner,
         state: outcome,
       };
     }
-    if (locallyStartedTurnRef.current?.turnId === turnId) {
+    if (locallyStartedTurn?.turnId === turnId) {
       retireLocalDispatch(turnId, "cancelled");
     }
-    const otherActive = hydratedActiveTurnRef.current;
-    const snapshot = queueRef.current.snapshot();
+    const otherActive = hydratedActiveTurn;
     if (
-      snapshot.active?.turnId === turnId &&
       otherActive &&
-      otherActive.turnId !== turnId
+      otherActive.turnId !== turnId &&
+      queueOf().snapshot().active?.turnId === turnId
     ) {
       // Both a lookup and a buffered terminal notification can settle the old
       // turn. Neither may advance local FIFO over another hydrated foreground.
-      startRequestsRef.current.invalidate();
-      interruptRequestsRef.current.invalidate();
-      queueRef.current.clear();
-      queueRef.current.restoreActive({ turnId: otherActive.turnId, text: "" });
-      for (const prompt of snapshot.pending) queueRef.current.enqueue(prompt);
-      interruptingTurnIdRef.current =
+      startRequests.invalidate();
+      interruptRequests.invalidate();
+      queueOf().settle(turnId);
+      attemptedTurns.add(otherActive.turnId);
+      queueOf().restoreActive({ turnId: otherActive.turnId, text: "" }, true);
+      interruptingTurnId =
         otherActive.state === "interrupting" ? otherActive.turnId : null;
-      setInterruptingTurnId(interruptingTurnIdRef.current);
+      setInterruptingTurnId(interruptingTurnId);
+      const restore = queueOf().takeInterruptPrompt(turnId);
+      if (restore)
+        dependenciesRef.current.onInterruptPromptRestore?.(
+          restore.prompt,
+          restore.sessionId,
+        );
       sync();
       return;
     }
-    const transition = queueRef.current.settle(turnId);
+    const transition = queueOf().settle(turnId);
     if (!transition.settled) return;
-    startRequestsRef.current.invalidate();
-    interruptRequestsRef.current.invalidate();
-    if (interruptingTurnIdRef.current === turnId) {
-      interruptingTurnIdRef.current = null;
+    startRequests.invalidate();
+    interruptRequests.invalidate();
+    if (interruptingTurnId === turnId) {
+      interruptingTurnId = null;
       setInterruptingTurnId(null);
     }
+    // This turn settled: if the user Esc/Ctrl+C'd it, give the prompt back —
+    // into its OWNING session, even when another Session is now selected.
+    const restore = queueOf().takeInterruptPrompt(turnId);
+    if (restore)
+      dependenciesRef.current.onInterruptPromptRestore?.(
+        restore.prompt,
+        restore.sessionId,
+      );
     sync();
     if (transition.next) void startTurn(transition.next);
   };
 
-  const enqueuePrompt = (text: string) => {
+  const enqueueTurn = (turn: PromptTurn): boolean => {
     if (
-      recoveryRef.current ||
+      recovery ||
       !dependenciesRef.current.canEnqueue() ||
-      !text.trim()
+      !turn.turnId.trim() ||
+      (turn.kind !== "review" && !turn.text.trim() && !turn.media?.length)
     )
-      return;
-    const turn: PromptTurn = { turnId: crypto.randomUUID(), text: text.trim() };
-    const { startNow } = queueRef.current.enqueue(turn);
+      return false;
+    const snapshot = queueOf().snapshot();
+    if (
+      turn.kind === "review" &&
+      (!dependenciesRef.current.startReview ||
+        !dependenciesRef.current.canStart() ||
+        !isProtocolUuid(turn.turnId) ||
+        snapshot.active !== null ||
+        snapshot.pending.length > 0 ||
+        Boolean(turn.media?.length) ||
+        turn.reasoningEffort !== undefined)
+    )
+      return false;
+    if (
+      attemptedTurns.has(turn.turnId) ||
+      steerAdmittedIds.has(turn.turnId) ||
+      snapshot.active?.turnId === turn.turnId ||
+      snapshot.pending.some((pending) => pending.turnId === turn.turnId)
+    )
+      return false;
+    const { startNow } = queueOf().enqueue({ ...turn, text: turn.text.trim() });
     sync();
     if (startNow) void startTurn(turn);
+    return true;
+  };
+
+  const enqueuePrompt = (text: string): boolean => {
+    if (recovery || !dependenciesRef.current.canEnqueue() || !text.trim())
+      return false;
+    // Capture the Session's reasoning selection NOW: rc11 clears the persisted
+    // value when a turn omits it, and a queued prompt must keep the choice
+    // made when it was typed, not a later re-selection.
+    const reasoningEffort = dependenciesRef.current.reasoningEffort?.();
+    const turn: PromptTurn = {
+      turnId: crypto.randomUUID(),
+      text: text.trim(),
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+    };
+    return enqueueTurn(turn);
+  };
+
+  function restageSteers(turns: readonly PromptTurn[]): void {
+    if (!turns.length) return;
+    const active = queue.snapshot().active;
+    if (!active || !attemptedTurns.has(active.turnId)) {
+      queue.restoreActive(turns[0]!, Boolean(active));
+      queue.prependPending(turns.slice(1));
+    } else queue.prependPending(turns);
+    sync();
+  }
+
+  function reportSteer(turn: PromptTurn, title: string, body: string): void {
+    dependenciesRef.current.setTimeline((current) =>
+      addSystemMessage(
+        current,
+        `steer:${turn.turnId}`,
+        title,
+        body,
+        title.includes("unknown") ? "error" : undefined,
+      ),
+    );
+  }
+
+  const submitTurn = (candidate: PromptTurn): boolean => {
+    const current = dependenciesRef.current;
+    const snapshot = queue.snapshot();
+    const active = snapshot.active;
+    const client = current.client();
+    const sessionId = current.sessionId();
+    if (
+      !steeringEnabled ||
+      recovery ||
+      !current.steer ||
+      !client ||
+      !sessionId ||
+      !active ||
+      !attemptedTurns.has(active.turnId) ||
+      dispatchingTurnId !== null ||
+      !current.canStart() ||
+      snapshot.pending.length ||
+      interruptingTurnId ||
+      steerInFlight ||
+      steerUnknown ||
+      candidate.kind ||
+      candidate.media?.length ||
+      candidate.reasoningEffort !== undefined
+    )
+      return enqueueTurn(candidate);
+    if (
+      !current.canEnqueue() ||
+      !candidate.text.trim() ||
+      !isProtocolUuid(active.turnId) ||
+      !isProtocolUuid(candidate.turnId) ||
+      attemptedTurns.has(candidate.turnId) ||
+      steerAdmittedIds.has(candidate.turnId) ||
+      retainedSteers.some((entry) => entry.turn.turnId === candidate.turnId)
+    )
+      return false;
+    const turn = { ...candidate, text: candidate.text.trim() };
+    steerAdmittedIds.add(turn.turnId);
+    const entry = {
+      turn,
+      ownerTurnId: active.turnId,
+      sent: false,
+      returned: false,
+    };
+    retainedSteers.push(entry);
+    steerInFlight = true;
+    const epoch = steerEpoch;
+    const isCurrent = () =>
+      epoch === steerEpoch &&
+      dependenciesRef.current.client() === client &&
+      dependenciesRef.current.sessionId() === sessionId;
+    sync();
+    void (async () => {
+      try {
+        const result = await current.steer!({
+          client,
+          sessionId,
+          expectedTurnId: active.turnId,
+          text: turn.text,
+          isCurrent,
+          markSent() {
+            if (
+              entry.sent ||
+              !isCurrent() ||
+              !dependenciesRef.current.canStart() ||
+              queue.snapshot().active?.turnId !== active.turnId ||
+              interruptingTurnId
+            )
+              throw new Error(
+                "Steering authority or active turn changed before dispatch",
+              );
+            entry.sent = true;
+          },
+        });
+        if (!isCurrent()) return;
+        if (
+          !entry.sent ||
+          !isProtocolUuid(result.turn_id) ||
+          typeof result.steered !== "boolean" ||
+          (result.steered && result.turn_id !== active.turnId)
+        )
+          throw new Error("Invalid native steering receipt");
+        if (entry.returned) return;
+        if (!result.steered) {
+          // Core's atomic no-active fallback already STARTED this new UUID.
+          // Adopt it without sending a second start or losing a waiting draft.
+          const index = retainedSteers.indexOf(entry);
+          if (index >= 0) retainedSteers.splice(index, 1);
+          attemptedTurns.add(result.turn_id);
+          if (!terminalReceipts.has(result.turn_id)) {
+            const prior = queue.snapshot().active;
+            if (
+              prior &&
+              prior.turnId !== active.turnId &&
+              prior.turnId !== result.turn_id &&
+              attemptedTurns.has(prior.turnId)
+            )
+              throw new Error(
+                "Another confirmed turn superseded the steering receipt",
+              );
+            if (prior?.turnId === active.turnId) queue.settle(active.turnId);
+            queue.restoreActive({ ...turn, turnId: result.turn_id }, true);
+            acceptedOwner = {
+              client,
+              sessionId,
+              turnId: result.turn_id,
+              state: "running",
+            };
+          }
+          reportSteer(
+            turn,
+            "Native steering started a new turn",
+            "The prior turn ended before admission. Core started the submitted text as a new turn.",
+          );
+        } else reportSteer(turn, "Steering accepted", turn.text);
+      } catch (reason) {
+        if (!isCurrent() || entry.returned) return;
+        if (!entry.sent || reason instanceof OctosUiProtocolError) {
+          const index = retainedSteers.indexOf(entry);
+          if (index >= 0) retainedSteers.splice(index, 1);
+          restageSteers([turn]);
+          reportSteer(
+            turn,
+            "Steering queued",
+            "Steering was not admitted. The text remains ahead of later pending prompts.",
+          );
+        } else {
+          steerUnknown = true;
+          reportSteer(
+            turn,
+            "Steering outcome unknown",
+            "The request may have been consumed or started a new turn. It will not be resent automatically. Recover the Session before continuing. Submitted text: " +
+              turn.text,
+          );
+        }
+      } finally {
+        if (isCurrent()) {
+          steerInFlight = false;
+          if (!steerUnknown && terminalReceipts.has(entry.ownerTurnId)) {
+            for (let index = retainedSteers.length - 1; index >= 0; index--)
+              if (retainedSteers[index]!.ownerTurnId === entry.ownerTurnId)
+                retainedSteers.splice(index, 1);
+          }
+          sync();
+          const next = queue.snapshot().active;
+          if (next) void startTurn(next);
+        }
+      }
+    })();
+    return true;
+  };
+
+  const observeSteerDropped = (notification: RpcNotification): void => {
+    // Server-side activity for a turn proves acceptance even when its
+    // turn/start RPC timed out locally.
+    if (
+      notificationMatchesSessionScope(
+        notification,
+        dependenciesRef.current.sessionId(),
+      )
+    ) {
+      const activeTurnId = notificationTurnId(notification);
+      if (activeTurnId) confirmTurnAccepted(activeTurnId);
+    }
+    const params = notification.params;
+    if (
+      notification.method !== CORE_UI_METHODS.TURN_STEER_DROPPED ||
+      !notificationMatchesSessionScope(
+        notification,
+        dependenciesRef.current.sessionId(),
+      ) ||
+      !params ||
+      typeof params !== "object" ||
+      Array.isArray(params)
+    )
+      return;
+    const value = params as Record<string, unknown>;
+    if (
+      typeof value.session_id !== "string" ||
+      !value.session_id ||
+      !isProtocolUuid(value.turn_id) ||
+      typeof value.reason !== "string" ||
+      !Array.isArray(value.inputs) ||
+      value.inputs.length > 10000 ||
+      !value.inputs.every((text) => typeof text === "string")
+    )
+      return;
+    const returned: PromptTurn[] = [];
+    for (const text of value.inputs) {
+      const index = retainedSteers.findIndex(
+        (entry) =>
+          entry.sent &&
+          !entry.returned &&
+          entry.ownerTurnId === value.turn_id &&
+          entry.turn.text === text,
+      );
+      if (index < 0) continue;
+      const entry = retainedSteers[index]!;
+      entry.returned = true;
+      retainedSteers.splice(index, 1);
+      returned.push(entry.turn);
+      reportSteer(entry.turn, "Steering returned to queue", entry.turn.text);
+    }
+    if (returned.length) steerUnknown = false;
+    restageSteers(returned);
   };
 
   const interrupt = async () => {
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
-    const activeTurn = queueRef.current.snapshot().active;
-    if (recoveryRef.current || !currentDependencies.canInterrupt()) return;
+    const activeTurn = queueOf().snapshot().active;
+    if (recovery || !currentDependencies.canInterrupt()) return;
     if (!client || !sessionId || !activeTurn) {
       currentDependencies.setTimeline((current) =>
         addSystemMessage(
@@ -335,9 +843,9 @@ export function useTurnController(
     }
     const activeTurnId = activeTurn.turnId;
     if (
-      locallyStartedTurnRef.current?.client === client &&
-      locallyStartedTurnRef.current.sessionId === sessionId &&
-      locallyStartedTurnRef.current.turnId === activeTurnId
+      locallyStartedTurn?.client === client &&
+      locallyStartedTurn.sessionId === sessionId &&
+      locallyStartedTurn.turnId === activeTurnId
     ) {
       currentDependencies.setTimeline((current) =>
         addSystemMessage(
@@ -349,11 +857,18 @@ export function useTurnController(
       );
       return;
     }
-    if (interruptingTurnIdRef.current === activeTurnId) return;
+    if (interruptingTurnId === activeTurnId) return;
 
-    interruptingTurnIdRef.current = activeTurnId;
+    // Arm the per-session prompt restore (TUI parity, audit row 9): the prompt
+    // returns only when THIS turn's own terminal lands. Keyed by the turn's
+    // OWNING session inside the queue, so switching Sessions neither loses nor
+    // misapplies a pending restore (one re-armable entry per session).
+    if (activeTurn.text.trim())
+      queueOf().stashInterruptPrompt(sessionId, activeTurnId, activeTurn.text);
+
+    interruptingTurnId = activeTurnId;
     setInterruptingTurnId(activeTurnId);
-    const request = interruptRequestsRef.current.begin(client, sessionId);
+    const request = interruptRequests.begin(client, sessionId);
     let accepted = false;
     try {
       await client.interruptTurn(sessionId, activeTurnId);
@@ -366,29 +881,27 @@ export function useTurnController(
     } finally {
       const scopeIsCurrent = requestScopeIsCurrent();
       if (
-        interruptRequestsRef.current.finish(request) &&
+        interruptRequests.finish(request) &&
         (!accepted || !scopeIsCurrent) &&
-        interruptingTurnIdRef.current === activeTurnId
+        interruptingTurnId === activeTurnId
       ) {
-        interruptingTurnIdRef.current = null;
+        interruptingTurnId = null;
         setInterruptingTurnId(null);
       }
     }
 
     function requestIsCurrent(): boolean {
-      return (
-        interruptRequestsRef.current.owns(request) && requestScopeIsCurrent()
-      );
+      return interruptRequests.owns(request) && requestScopeIsCurrent();
     }
 
     function requestScopeIsCurrent(): boolean {
       const latest = dependenciesRef.current;
       return (
-        interruptRequestsRef.current.isCurrent(
+        interruptRequests.isCurrent(
           request,
           latest.client(),
           latest.sessionId(),
-        ) && queueRef.current.snapshot().active?.turnId === activeTurnId
+        ) && queueOf().snapshot().active?.turnId === activeTurnId
       );
     }
   };
@@ -397,19 +910,14 @@ export function useTurnController(
     const latest = dependenciesRef.current;
     const client = latest.client();
     const sessionId = latest.sessionId();
-    const turnId = queueRef.current.snapshot().active?.turnId;
-    if (
-      !client ||
-      !sessionId ||
-      !turnId ||
-      recoveryRef.current?.phase === "checking"
-    )
+    const turnId = queueOf().snapshot().active?.turnId;
+    if (!client || !sessionId || !turnId || recovery?.phase === "checking")
       return;
-    if (!latest.canGetTurnState()) {
+    if (!latest.canGetTurnState?.()) {
       publishRecovery({ turnId, phase: "unavailable" });
       return;
     }
-    const request = recoveryRequestsRef.current.begin(client, sessionId);
+    const request = recoveryRequests.begin(client, sessionId);
     publishRecovery({ turnId, phase: "checking" });
     try {
       const result = await client.getTurnState({
@@ -439,16 +947,16 @@ export function useTurnController(
         message: reason instanceof Error ? reason.message : String(reason),
       });
     } finally {
-      recoveryRequestsRef.current.finish(request);
+      recoveryRequests.finish(request);
     }
-    function requestIsCurrent() {
+    function requestIsCurrent(): boolean {
       const current = dependenciesRef.current;
       return (
-        recoveryRequestsRef.current.isCurrent(
+        recoveryRequests.isCurrent(
           request,
           current.client(),
           current.sessionId(),
-        ) && queueRef.current.snapshot().active?.turnId === turnId
+        ) && queueOf().snapshot().active?.turnId === turnId
       );
     }
   };
@@ -456,9 +964,9 @@ export function useTurnController(
   function applyRecoveredState(
     turnId: string,
     state: Exclude<TurnLifecycleState, "unknown">,
-  ) {
+  ): void {
     clearRecovery();
-    startRequestsRef.current.invalidate();
+    startRequests.invalidate();
     acceptLocalDispatch(
       turnId,
       state === "completed"
@@ -467,17 +975,20 @@ export function useTurnController(
           ? "running"
           : "failed",
     );
-    interruptRequestsRef.current.invalidate();
-    interruptingTurnIdRef.current = state === "interrupting" ? turnId : null;
-    setInterruptingTurnId(interruptingTurnIdRef.current);
-    if (state === "active" || state === "interrupting") return;
+    interruptRequests.invalidate();
+    interruptingTurnId = state === "interrupting" ? turnId : null;
+    setInterruptingTurnId(interruptingTurnId);
+    if (state === "active" || state === "interrupting") {
+      sync();
+      return;
+    }
     dependenciesRef.current.setTimeline((entries) =>
       settleTimelineTurn(entries, turnId, state),
     );
     dependenciesRef.current.onRecoveredTerminal?.(turnId);
-    if (acceptedOwnerRef.current?.turnId === turnId) {
-      acceptedOwnerRef.current = {
-        ...acceptedOwnerRef.current,
+    if (acceptedOwner?.turnId === turnId) {
+      acceptedOwner = {
+        ...acceptedOwner,
         state: state === "completed" ? "completed" : "failed",
       };
     }
@@ -490,25 +1001,27 @@ export function useTurnController(
   ): PromptTurn | null => {
     if (hydrated.session_id !== dependenciesRef.current.sessionId())
       return null;
+    // Canonical hydrate resolves whether Core's fallback owns a new active turn.
+    steerUnknown = false;
     clearRecovery();
     if (!preserveTransportOwnership) {
-      const localTurnId = locallyStartedTurnRef.current?.turnId;
+      const localTurnId = locallyStartedTurn?.turnId;
       if (localTurnId) retireLocalDispatch(localTurnId, "cancelled");
-      acceptedOwnerRef.current = null;
+      acceptedOwner = null;
     } else {
-      if (!leaseMatchesCurrent(locallyStartedTurnRef.current)) {
-        const localTurnId = locallyStartedTurnRef.current?.turnId;
+      if (!leaseMatchesCurrent(locallyStartedTurn)) {
+        const localTurnId = locallyStartedTurn?.turnId;
         if (localTurnId) retireLocalDispatch(localTurnId, "cancelled");
       }
-      if (!leaseMatchesCurrent(acceptedOwnerRef.current)) {
-        acceptedOwnerRef.current = null;
+      if (!leaseMatchesCurrent(acceptedOwner)) {
+        acceptedOwner = null;
       }
     }
-    const snapshot = queueRef.current.snapshot();
+    const snapshot = queueOf().snapshot();
     const serverActive = hydrated.turns?.find(
       (turn) => turn.state === "active" || turn.state === "interrupting",
     );
-    hydratedActiveTurnRef.current = serverActive
+    hydratedActiveTurn = serverActive
       ? {
           turnId: serverActive.turn_id,
           state: serverActive.state as "active" | "interrupting",
@@ -517,45 +1030,32 @@ export function useTurnController(
     // Hydrate is authoritative for interrupt state. A server-confirmed
     // interrupt must keep Stop de-duplicated even though the original request
     // belongs to an older transport generation.
-    interruptRequestsRef.current.invalidate();
+    interruptRequests.invalidate();
     const hydratedInterruptingTurnId =
       serverActive?.state === "interrupting" ? serverActive.turn_id : null;
-    interruptingTurnIdRef.current = hydratedInterruptingTurnId;
+    interruptingTurnId = hydratedInterruptingTurnId;
     setInterruptingTurnId(hydratedInterruptingTurnId);
     if (
-      snapshot.active &&
-      deferredStartTurnIdRef.current === snapshot.active.turnId
+      serverActive &&
+      snapshot.active?.turnId !== serverActive.turn_id &&
+      (!snapshot.active || !attemptedTurns.has(snapshot.active.turnId))
     ) {
-      if (serverActive) {
-        // A lost start ACK can promote the next local prompt just before
-        // reconnect proves the previous server turn is still running. Put
-        // the unsent prompt back at the front of the FIFO behind that turn.
-        queueRef.current.clear();
-        queueRef.current.restoreActive({
+      attemptedTurns.add(serverActive.turn_id);
+      startRequests.invalidate();
+      queueOf().restoreActive(
+        {
           turnId: serverActive.turn_id,
           text: "",
-        });
-        queueRef.current.enqueue(snapshot.active);
-        for (const pending of snapshot.pending)
-          queueRef.current.enqueue(pending);
-        deferredStartTurnIdRef.current = null;
-        sync();
-        return null;
-      }
-      // This prompt has never reached Core, so hydrate cannot report it.
-      // Let session-ready dispatch it once recovery has reopened admission.
-      return snapshot.active;
-    }
-    if (!snapshot.active && serverActive) {
-      startRequestsRef.current.invalidate();
-      queueRef.current.restoreActive({
-        turnId: serverActive.turn_id,
-        text: "",
-      });
+        },
+        true,
+      );
       sync();
       return null;
     }
     if (!snapshot.active) return null;
+    // A queue head that never reached Core (admission or recovery held its
+    // dispatch) cannot appear in hydrate. Let the ready drain send it once.
+    if (!attemptedTurns.has(snapshot.active.turnId)) return snapshot.active;
     const serverTurn = hydrated.turns?.find(
       (turn) => turn.turn_id === snapshot.active?.turnId,
     );
@@ -568,8 +1068,9 @@ export function useTurnController(
       isTurnLifecycleState(serverTurn.state) &&
       serverTurn.state !== "unknown"
     ) {
-      startRequestsRef.current.invalidate();
-      if (locallyStartedTurnRef.current?.turnId === snapshot.active.turnId) {
+      attemptedTurns.add(serverTurn.turn_id);
+      startRequests.invalidate();
+      if (locallyStartedTurn?.turnId === snapshot.active.turnId) {
         acceptLocalDispatch(
           snapshot.active.turnId,
           serverTurn.state === "completed"
@@ -588,23 +1089,24 @@ export function useTurnController(
       serverTurn.state !== "interrupting" &&
       serverTurn.state !== "unknown"
     ) {
-      if (acceptedOwnerRef.current?.turnId === snapshot.active.turnId) {
-        acceptedOwnerRef.current = {
-          ...acceptedOwnerRef.current,
+      if (acceptedOwner?.turnId === snapshot.active.turnId) {
+        acceptedOwner = {
+          ...acceptedOwner,
           state: serverTurn.state === "completed" ? "completed" : "failed",
         };
       }
+      const transition = queueOf().settle(snapshot.active.turnId);
       if (serverActive && serverActive.turn_id !== snapshot.active.turnId) {
-        queueRef.current.clear();
-        queueRef.current.restoreActive({
-          turnId: serverActive.turn_id,
-          text: "",
-        });
-        for (const prompt of snapshot.pending) queueRef.current.enqueue(prompt);
+        // Another server turn owns the foreground: pending prompts wait
+        // behind it instead of dispatching over it.
+        attemptedTurns.add(serverActive.turn_id);
+        queueOf().restoreActive(
+          { turnId: serverActive.turn_id, text: "" },
+          true,
+        );
         sync();
         return null;
       }
-      const transition = queueRef.current.settle(snapshot.active.turnId);
       sync();
       return transition.next;
     }
@@ -620,43 +1122,62 @@ export function useTurnController(
     return null;
   };
 
+  const confirmTurnAccepted = (turnId: string): boolean => {
+    const wasTimedOut = timedOutStartTurnId === turnId;
+    const accepted = acceptLocalDispatch(turnId, "running");
+    if (accepted && wasTimedOut) {
+      dependenciesRef.current.setTimeline((current) =>
+        addSystemMessage(
+          current,
+          `send-timeout:${turnId}`,
+          "Turn start timed out",
+          "The server had accepted the turn after all — no resubmission needed.",
+          "info",
+        ),
+      );
+    }
+    return accepted;
+  };
+
   return {
-    queue,
+    queueSnapshot: () => queueOf().snapshot(),
     get turnRecovery() {
-      return recoveryRef.current;
+      return recovery;
     },
+    turnRecoveryNow: () => recovery,
     retryTurnRecovery,
-    dispatchingTurnId,
-    interruptible: Boolean(
-      queue.active &&
-      !recoveryRef.current &&
-      dispatchingTurnId !== queue.active.turnId &&
-      dependencies.canInterrupt(),
-    ),
-    interruptingTurnId,
-    snapshot: () => queueRef.current.snapshot(),
+    dispatchingTurnIdNow: () => dispatchingTurnId,
+    interruptingTurnIdNow: () => interruptingTurnId,
+    interruptibleNow: () =>
+      Boolean(
+        queueOf().snapshot().active &&
+        !recovery &&
+        dispatchingTurnId !== queueOf().snapshot().active?.turnId &&
+        dependenciesRef.current.canInterrupt(),
+      ),
+    snapshot: () => queueOf().snapshot(),
     backgroundHandoffTurn: () => {
-      const owner = acceptedOwnerRef.current;
+      const owner = acceptedOwner;
       return owner && leaseMatchesCurrent(owner)
         ? { turnId: owner.turnId, state: owner.state }
         : null;
     },
     activeTurnOwnership: () => {
-      const active = queueRef.current.snapshot().active;
-      if (leaseMatchesCurrent(locallyStartedTurnRef.current)) {
+      const active = queueOf().snapshot().active;
+      if (leaseMatchesCurrent(locallyStartedTurn)) {
         return "dispatching";
       }
-      if (leaseMatchesCurrent(acceptedOwnerRef.current)) return "local-owner";
+      if (leaseMatchesCurrent(acceptedOwner)) return "local-owner";
       return active ? "observed" : "none";
     },
     clearTransportOwnership: () => {
-      locallyStartedTurnRef.current = null;
-      acceptedOwnerRef.current = null;
-      dispatchingTurnIdRef.current = null;
+      locallyStartedTurn = null;
+      acceptedOwner = null;
+      dispatchingTurnId = null;
       setDispatchingTurnId(null);
     },
     setAcceptedOwnerInteraction: (waiting, turnId) => {
-      const owner = acceptedOwnerRef.current;
+      const owner = acceptedOwner;
       if (
         !owner ||
         !leaseMatchesCurrent(owner) ||
@@ -666,7 +1187,7 @@ export function useTurnController(
       ) {
         return false;
       }
-      acceptedOwnerRef.current = {
+      acceptedOwner = {
         ...owner,
         state: waiting ? "waiting" : "running",
       };
@@ -677,34 +1198,62 @@ export function useTurnController(
       const client = current.client();
       const sessionId = current.sessionId();
       if (!client || !sessionId || !turn.turnId) return false;
-      locallyStartedTurnRef.current = null;
-      dispatchingTurnIdRef.current = null;
+      locallyStartedTurn = null;
+      dispatchingTurnId = null;
       setDispatchingTurnId(null);
-      acceptedOwnerRef.current = { client, sessionId, ...turn };
+      acceptedOwner = { client, sessionId, ...turn };
       return true;
     },
-    confirmTurnAccepted: (turnId) => {
-      const wasTimedOut = timedOutStartTurnIdRef.current === turnId;
-      const accepted = acceptLocalDispatch(turnId, "running");
-      if (accepted && wasTimedOut) {
-        dependenciesRef.current.setTimeline((current) =>
-          addSystemMessage(
-            current,
-            `send-timeout:${turnId}`,
-            "Turn start timed out",
-            "The server had accepted the turn after all — no resubmission needed.",
-            "info",
-          ),
-        );
-      }
-      return accepted;
-    },
+    confirmTurnAccepted,
     reset,
     enqueuePrompt,
     cancelQueuedPrompt: (turnId) => {
-      if (!queueRef.current.removePending(turnId)) return false;
+      if (!queueOf().removePending(turnId)) return false;
       sync();
       return true;
+    },
+    enqueueTurn,
+    submitTurn,
+    setSteeringEnabled: (enabled) => {
+      steeringEnabled = enabled;
+      sync();
+    },
+    steeringEnabled: () => steeringEnabled,
+    observeSteerDropped,
+    resumePendingTurn: () => {
+      const active = queueOf().snapshot().active;
+      if (active) void startTurn(active);
+    },
+    suspendTransport: () => {
+      steerEpoch++;
+      const unsent = retainedSteers
+        .filter((entry) => !entry.sent)
+        .map((entry) => entry.turn);
+      for (const entry of retainedSteers)
+        if (entry.sent && !entry.returned)
+          reportSteer(
+            entry.turn,
+            "Steering outcome unknown",
+            "Transport changed before consumption could be confirmed. This text will not be resent automatically: " +
+              entry.turn.text,
+          );
+      retainedSteers.length = 0;
+      steerInFlight = false;
+      steerUnknown = false;
+      restageSteers(unsent);
+      // An interrupted lazy factory can resume on the same queue and UUID;
+      // an ambiguous sent request cannot.
+      if (preflightTurnId) attemptedTurns.delete(preflightTurnId);
+      preflightTurnId = null;
+      startRequests.invalidate();
+      interruptRequests.invalidate();
+      locallyStartedTurn = null;
+      acceptedOwner = null;
+      dispatchingTurnId = null;
+      interruptingTurnId = null;
+      setDispatchingTurnId(null);
+      setInterruptingTurnId(null);
+      sync();
     },
     interrupt,
     reconcileFromHydrate,
@@ -724,8 +1273,8 @@ export function useTurnController(
   }
 
   function clearDispatchingTurn(turnId: string): void {
-    if (dispatchingTurnIdRef.current !== turnId) return;
-    dispatchingTurnIdRef.current = null;
+    if (dispatchingTurnId !== turnId) return;
+    dispatchingTurnId = null;
     setDispatchingTurnId(null);
   }
 
@@ -733,7 +1282,7 @@ export function useTurnController(
     turnId: string,
     state: "running" | "completed" | "failed",
   ): boolean {
-    const dispatch = locallyStartedTurnRef.current;
+    const dispatch = locallyStartedTurn;
     if (
       !dispatch ||
       dispatch.turnId !== turnId ||
@@ -744,12 +1293,11 @@ export function useTurnController(
     // Background tool activity can outlive foreground completion. Only an
     // exact local dispatch acceptance supersedes lifecycle recovery; an
     // observer notification cannot cancel the authoritative status lookup.
-    if (recoveryRef.current?.turnId === turnId) clearRecovery();
-    if (timedOutStartTurnIdRef.current === turnId) {
-      timedOutStartTurnIdRef.current = null;
-    }
-    acceptedOwnerRef.current = { ...dispatch, state };
-    locallyStartedTurnRef.current = null;
+    if (recovery?.turnId === turnId) clearRecovery();
+    if (timedOutStartTurnId === turnId) timedOutStartTurnId = null;
+    acceptedOwner = { ...dispatch, state };
+    if (preflightTurnId === turnId) preflightTurnId = null;
+    locallyStartedTurn = null;
     clearDispatchingTurn(turnId);
     dependenciesRef.current.onDispatchState?.({
       state: "accepted",
@@ -764,9 +1312,10 @@ export function useTurnController(
     turnId: string,
     state: "rejected" | "cancelled",
   ): boolean {
-    const dispatch = locallyStartedTurnRef.current;
+    const dispatch = locallyStartedTurn;
     if (!dispatch || dispatch.turnId !== turnId) return false;
-    locallyStartedTurnRef.current = null;
+    if (preflightTurnId === turnId) preflightTurnId = null;
+    locallyStartedTurn = null;
     clearDispatchingTurn(turnId);
     dependenciesRef.current.onDispatchState?.({
       state,
@@ -776,4 +1325,27 @@ export function useTurnController(
     });
     return true;
   }
+}
+
+const TURN_LIFECYCLE_STATES: ReadonlySet<string> = new Set([
+  "active",
+  "interrupting",
+  "completed",
+  "errored",
+  "interrupted",
+  "unknown",
+]);
+
+// Mirrors the client's isTurnLifecycleState without importing the transport-
+// bearing package root into this render-time controller.
+function isTurnLifecycleState(value: unknown): value is TurnLifecycleState {
+  return typeof value === "string" && TURN_LIFECYCLE_STATES.has(value);
+}
+
+// OctosUiRequestTimeoutError lives in the lazily loaded transport; match its
+// stable error name instead of importing the class for instanceof.
+function isRequestTimeout(reason: unknown): boolean {
+  return (
+    reason instanceof Error && reason.name === "OctosUiRequestTimeoutError"
+  );
 }

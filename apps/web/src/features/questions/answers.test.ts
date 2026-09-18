@@ -50,3 +50,18 @@ describe("structured question answers", () => {
     ]);
   });
 });
+
+describe("toControlAnswers — the peer control wire shape (judge r2 #4)", () => {
+  it("maps a draft to the control command's answer array", async () => {
+    const { toControlAnswers } = await import("./answers.ts");
+    expect(
+      toControlAnswers([{ selectedLabels: ["Fast"], freeText: "" }]),
+    ).toEqual([{ freeText: "Fast" }]);
+    expect(
+      toControlAnswers([{ selectedLabels: [], freeText: " run full " }]),
+    ).toEqual([{ freeText: "run full" }]);
+    expect(toControlAnswers([{ selectedLabels: [], freeText: "" }])).toEqual(
+      [],
+    );
+  });
+});

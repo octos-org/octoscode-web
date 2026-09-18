@@ -13,6 +13,10 @@ import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import { SkeletonRows } from "../../ui/Skeleton.tsx";
 import { ArrowLeftIcon, FolderIcon, PlusIcon } from "../../ui/Icon.tsx";
 import styles from "./NewSessionWorkspacePicker.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
+import { WorkspaceFolderBrowser } from "./WorkspaceFolderBrowser.tsx";
+import { workspaceBrowseOpenPath } from "./workspace-browse.ts";
+import type { WorkspaceBrowseAdapter } from "./workspace-browse.ts";
 
 export interface RecentWorkspacePath {
   id: string;
@@ -20,24 +24,46 @@ export interface RecentWorkspacePath {
   path: string;
 }
 
+/**
+ * §5.1: the picker's FIRST entry — the server's working directory, obtained by
+ * opening the first session WITHOUT `cwd` and reading `opened.workspace_root`.
+ */
+export interface ServerWorkingDirectoryEntry {
+  /** "Server's working directory", or the "(path not reported)" fallback. */
+  label: string;
+  /** The reported workspace_root; null when the server did not report one. */
+  path: string | null;
+}
+
 export interface WorkspaceCreateRequest {
   workspacePath: string;
 }
 
 export type WorkspacePickerPresentation = "dialog" | "hero";
-export type WorkspacePickerView = "choose" | "add";
+export type WorkspacePickerView = "choose" | "add" | "browse";
 
 export interface NewSessionWorkspacePickerProps {
   open?: boolean;
   presentation?: WorkspacePickerPresentation;
   initialView?: WorkspacePickerView;
   workspaces: readonly RecentWorkspacePath[];
+  /** §5.1 first entry; omit while no session has reported a root. */
+  serverWorkingDirectory?: ServerWorkingDirectoryEntry | null;
   selectedWorkspaceId?: string;
   recentWorkspaceId?: string;
   loading?: boolean;
   error?: string | null;
   creating?: boolean;
   cancelLabel?: string;
+  /** The server's verbatim path rejection ("not a directory", …). */
+  serverPathError?: string | null;
+  /**
+   * WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate. Present ONLY when the server
+   * advertises `onboarding.workspace_browse.v1`. Absent means no browsing
+   * affordance exists at all and this form behaves exactly as it did before
+   * the feature — fail closed, structurally.
+   */
+  browse?: WorkspaceBrowseAdapter | null;
   onRetry?: () => void;
   onCancel: () => void;
   onCreate: (request: WorkspaceCreateRequest) => void;
@@ -63,6 +89,7 @@ interface PickerBodyProps extends NewSessionWorkspacePickerProps {
   onViewChange: (view: WorkspacePickerView) => void;
   onServerPathChange: (path: string) => void;
   onServerPathSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onBrowseChoose: (path: string) => void;
 }
 
 function PickerBody({
@@ -70,12 +97,15 @@ function PickerBody({
   descriptionId,
   view,
   workspaces,
+  serverWorkingDirectory = null,
   selectedWorkspaceId,
   recentWorkspaceId,
   loading = false,
   error = null,
   creating = false,
   cancelLabel = "Cancel",
+  serverPathError = null,
+  browse = null,
   serverPath,
   validationError,
   cancelRef,
@@ -87,19 +117,25 @@ function PickerBody({
   onViewChange,
   onServerPathChange,
   onServerPathSubmit,
+  onBrowseChoose,
 }: PickerBodyProps) {
+  const t = useUiText();
   const hasWorkspaces = workspaces.length > 0;
 
   return (
     <>
       <header className={styles.header}>
-        {view === "add" && hasWorkspaces ? (
+        {view === "browse" || (view === "add" && hasWorkspaces) ? (
           <button
             type="button"
             className={styles.back}
-            aria-label="Back to workspaces"
+            aria-label={
+              view === "browse"
+                ? t("Back to the workspace path")
+                : t("Back to workspaces")
+            }
             disabled={creating}
-            onClick={() => onViewChange("choose")}
+            onClick={() => onViewChange(view === "browse" ? "add" : "choose")}
           >
             <ArrowLeftIcon />
           </button>
@@ -108,14 +144,20 @@ function PickerBody({
           <OctopusLogo size={32} />
         </span>
         <div className={styles.heading}>
-          <div className={styles.eyebrow}>New Session</div>
+          <div className={styles.eyebrow}>{t("New Session")}</div>
           <h2 id={titleId} className={styles.title}>
-            {view === "choose" ? "Choose a workspace" : "Add workspace"}
+            {view === "choose"
+              ? t("Choose a workspace")
+              : view === "browse"
+                ? t("Browse server folders")
+                : t("Add workspace")}
           </h2>
           <p id={descriptionId} className={styles.description}>
             {view === "choose"
-              ? "Choose where this coding session will run."
-              : "Choose a project folder to start your coding session."}
+              ? t("Choose where this coding session will run.")
+              : view === "browse"
+                ? t("Pick a folder on the Octos server.")
+                : t("Choose a project folder to start your coding session.")}
           </p>
         </div>
       </header>
@@ -125,7 +167,7 @@ function PickerBody({
           {loading && !hasWorkspaces ? (
             <div className={styles.state} role="status" aria-live="polite">
               <SkeletonRows rows={3} />
-              <span>Loading recent workspace paths…</span>
+              <span>{t("Loading recent workspace paths…")}</span>
             </div>
           ) : null}
 
@@ -141,17 +183,51 @@ function PickerBody({
                   className={styles.retry}
                   onClick={onRetry}
                 >
-                  Retry
+                  {t("Retry")}
                 </button>
               ) : null}
             </div>
           ) : null}
 
-          {hasWorkspaces ? (
+          {hasWorkspaces || serverWorkingDirectory ? (
             <ul
               className={styles.workspaceList}
-              aria-label="Recent workspace paths"
+              aria-label={t("Recent workspace paths")}
             >
+              {serverWorkingDirectory ? (
+                <li key="server-working-directory">
+                  <button
+                    type="button"
+                    className={styles.workspace}
+                    data-workspace-entry="server-working-directory"
+                    aria-label={t("Start a new session in {value0}", {
+                      value0: serverWorkingDirectory.label,
+                    })}
+                    disabled={creating || serverWorkingDirectory.path === null}
+                    onClick={() => {
+                      const path = serverWorkingDirectory.path;
+                      if (path) onCreate({ workspacePath: path });
+                    }}
+                  >
+                    <span className={styles.folder} aria-hidden="true">
+                      <FolderIcon />
+                    </span>
+                    <span className={styles.workspaceText}>
+                      <span className={styles.workspaceName}>
+                        {serverWorkingDirectory.label}
+                      </span>
+                      {serverWorkingDirectory.path ? (
+                        <span className={styles.workspacePath}>
+                          {serverWorkingDirectory.path}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className={styles.rowAction} aria-hidden="true">
+                      {t("Start")}
+                    </span>
+                  </button>
+                </li>
+              ) : null}
               {workspaces.map((workspace, index) => {
                 const selected = workspace.id === selectedWorkspaceId;
                 const recent = workspace.id === recentWorkspaceId;
@@ -162,7 +238,9 @@ function PickerBody({
                       ref={index === 0 ? firstWorkspaceRef : undefined}
                       type="button"
                       className={`${styles.workspace} ${selected ? styles.selected : ""}`}
-                      aria-label={`Start a new session in ${workspace.name}`}
+                      aria-label={t("Start a new session in {value0}", {
+                        value0: String(workspace.name),
+                      })}
                       aria-describedby={`${titleId}-workspace-${index}`}
                       aria-current={selected ? "true" : undefined}
                       disabled={creating || request === null}
@@ -187,14 +265,14 @@ function PickerBody({
                       </span>
                       <span className={styles.badges} aria-hidden="true">
                         {selected ? (
-                          <span className={styles.badge}>Current</span>
+                          <span className={styles.badge}>{t("Current")}</span>
                         ) : null}
                         {recent ? (
-                          <span className={styles.badge}>Recent</span>
+                          <span className={styles.badge}>{t("Recent")}</span>
                         ) : null}
                       </span>
                       <span className={styles.rowAction} aria-hidden="true">
-                        Start
+                        {t("Start")}
                       </span>
                     </button>
                   </li>
@@ -206,22 +284,33 @@ function PickerBody({
               <span className={styles.emptyIcon} aria-hidden="true">
                 <OctopusLogo size={22} />
               </span>
-              <strong>No recent workspace paths</strong>
-              <span>Enter a path on the Octos server to start a session.</span>
+              <strong>{t("No recent workspace paths")}</strong>
+              <span>
+                {t("Enter a path on the Octos server to start a session.")}
+              </span>
             </div>
           ) : null}
 
           {loading && hasWorkspaces ? (
             <div className={styles.refreshing} role="status" aria-live="polite">
-              Refreshing recent paths…
+              {t("Refreshing recent paths…")}
             </div>
           ) : null}
           {creating ? (
             <p className={styles.refreshing} role="status">
-              Starting your session…
+              {t("Starting your session…")}
             </p>
           ) : null}
         </div>
+      ) : view === "browse" && browse ? (
+        <WorkspaceFolderBrowser
+          adapter={browse}
+          initialPath={workspaceBrowseOpenPath(serverPath)}
+          titleId={titleId}
+          disabled={creating}
+          onChoose={onBrowseChoose}
+          onBack={() => onViewChange("add")}
+        />
       ) : (
         <form
           className={styles.body}
@@ -235,7 +324,7 @@ function PickerBody({
             className={styles.fieldLabel}
             htmlFor={`${titleId}-server-path`}
           >
-            Server workspace path
+            {t("Server workspace path")}
           </label>
           <input
             ref={pathRef}
@@ -254,16 +343,31 @@ function PickerBody({
             onChange={(event) => onServerPathChange(event.target.value)}
           />
           <p id={`${titleId}-path-help`} className={styles.pathHelp}>
-            Enter a path on the Octos server, for example
-            /home/you/projects/my-app.
+            {t(
+              "Enter a path on the Octos server, for example /home/you/projects/my-app.",
+            )}
           </p>
-          {validationError ? (
+          {browse ? (
+            <button
+              type="button"
+              className={styles.addButton}
+              data-workspace-browse="true"
+              aria-label={t("Browse server folders")}
+              disabled={creating}
+              onClick={() => onViewChange("browse")}
+            >
+              <FolderIcon />
+              <span>{t("Browse…")}</span>
+            </button>
+          ) : null}
+          {validationError || serverPathError ? (
             <p
               id={`${titleId}-path-error`}
               className={styles.validation}
               role="alert"
+              data-server-path-error="true"
             >
-              {validationError}
+              {serverPathError ?? validationError}
             </p>
           ) : null}
           {error ? (
@@ -279,7 +383,7 @@ function PickerBody({
                   onClick={onRetry}
                   disabled={creating}
                 >
-                  Retry
+                  {t("Retry")}
                 </button>
               ) : null}
             </div>
@@ -293,14 +397,14 @@ function PickerBody({
               disabled={creating}
               onClick={onCancel}
             >
-              {cancelLabel}
+              {t(cancelLabel)}
             </button>
             <button
               type="submit"
               className={styles.primaryButton}
               disabled={creating || !serverPath.trim()}
             >
-              {creating ? "Starting…" : "Start session"}
+              {creating ? t("Starting…") : t("Start session")}
             </button>
           </div>
         </form>
@@ -316,7 +420,7 @@ function PickerBody({
             onClick={() => onViewChange("add")}
           >
             <PlusIcon />
-            <span>Add workspace</span>
+            <span>{t("Add workspace")}</span>
           </button>
           <button
             ref={cancelRef}
@@ -325,7 +429,7 @@ function PickerBody({
             disabled={creating}
             onClick={onCancel}
           >
-            {cancelLabel}
+            {t(cancelLabel)}
           </button>
         </footer>
       ) : null}
@@ -351,11 +455,21 @@ export function NewSessionWorkspacePicker({
   const [view, setView] = useState<WorkspacePickerView>(initialView);
   const [serverPath, setServerPath] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
-  // A fresh browser has no paths to choose from. Open the useful step directly.
+  // A fresh browser has no paths to choose from. Open the useful step directly
+  // — unless the §5.1 "Server's working directory" row is there to choose
+  // (including its disabled "(path not reported)" variant, which must stay
+  // visible so the user sees why an explicit path is needed).
   const activeView =
-    view === "choose" && !props.workspaces.length && !props.loading
+    // Fail closed: a browse view can only stand while the adapter the feature
+    // gate handed us is still there.
+    view === "browse" && !props.browse
       ? "add"
-      : view;
+      : view === "choose" &&
+          !props.workspaces.length &&
+          !props.serverWorkingDirectory &&
+          !props.loading
+        ? "add"
+        : view;
 
   useEffect(() => {
     if (!open) return;
@@ -380,6 +494,13 @@ export function NewSessionWorkspacePicker({
   const changeServerPath = (path: string) => {
     setServerPath(path);
     if (validationError) setValidationError(null);
+  };
+
+  /** §Client behaviour: "Choosing a folder fills the path box." */
+  const chooseBrowsedFolder = (path: string) => {
+    setServerPath(path);
+    setValidationError(null);
+    setView("add");
   };
 
   const submitServerPath = (event: FormEvent<HTMLFormElement>) => {
@@ -410,6 +531,7 @@ export function NewSessionWorkspacePicker({
       onViewChange={changeView}
       onServerPathChange={changeServerPath}
       onServerPathSubmit={submitServerPath}
+      onBrowseChoose={chooseBrowsedFolder}
     />
   );
 
@@ -442,3 +564,4 @@ export function NewSessionWorkspacePicker({
     </ModalSurface>
   );
 }
+export { serverWorkingDirectoryEntry } from "./server-working-directory.ts";

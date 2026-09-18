@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
+import type { UiProtocolCapabilities } from "@octos-org/octoscode-client/protocol";
 import type { ModelSettingsClient } from "../models/model-settings.ts";
 import { useModelSettings } from "../models/use-model-settings.ts";
 import {

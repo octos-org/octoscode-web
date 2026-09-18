@@ -32,6 +32,7 @@ async function warnsOnLeave(page: Page) {
 
 async function reopen(page: Page, url: string, token = "tab-scoped-e2e-token") {
   await page.goto(url);
+  await page.getByLabel("Server origin").fill(ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseLlmCatalogResult,
+  parseLlmInferenceOverrides,
   parseLlmFetchModelsResult,
   parseLlmTestResult,
   parseLlmUpsertResult,
@@ -9,9 +10,102 @@ import {
   parseProfileLlmDeleteResult,
   parseProfileLlmListResult,
   parseProfileLlmSelectResult,
-} from "../src/index.ts";
+} from "@octos-org/octoscode-client/onboarding";
 
 describe("solo onboarding transport contract", () => {
+  it("preserves omission, null, zero, and closed rc11 inference hints", () => {
+    expect(parseLlmInferenceOverrides({})).toEqual({});
+    const overrides = {
+      temperature: 0,
+      top_p: 0,
+      context_window: 4294967295,
+      reasoning_effort: "none",
+      model_hints: {
+        uses_completion_tokens: false,
+        fixed_temperature: true,
+        lacks_vision: false,
+        merge_system_messages: false,
+        reasoning_style: "effort_and_thinking_toggle",
+      },
+    };
+    const parsed = parseLlmInferenceOverrides(overrides);
+    expect(parsed).toEqual(overrides);
+    overrides.model_hints.lacks_vision = true;
+    expect(parsed?.model_hints?.lacks_vision).toBe(false);
+    const inherited = {
+      temperature: null,
+      top_p: null,
+      context_window: null,
+      reasoning_effort: null,
+      model_hints: null,
+    };
+    expect(parseLlmInferenceOverrides(inherited)).toEqual(inherited);
+    expect(parseLlmInferenceOverrides({ model_hints: {} })).toEqual({
+      model_hints: {},
+    });
+  });
+
+  it.each([
+    { temperature: NaN },
+    { temperature: Infinity },
+    { temperature: -1 },
+    { temperature: 2.01 },
+    { top_p: 1.01 },
+    { context_window: 0 },
+    { context_window: 1.5 },
+    { context_window: 4294967296 },
+    { reasoning_effort: "disabled" },
+    { reasoning_effort: "xhigh" },
+    { model_hints: { fixed_temperature: null } },
+    { model_hints: { reasoning_style: null } },
+    { model_hints: { reasoning_style: "future" } },
+    { model_hints: { future: true } },
+    { max_output_tokens: 100 },
+    { temperature: undefined },
+    { api_key: "not-an-inference-field" },
+  ])("rejects invalid or foreign inference configuration %j", (value) => {
+    expect(parseLlmInferenceOverrides(value)).toBeNull();
+  });
+
+  it.each([
+    [{ cost_per_m: 0 }, true],
+    [{ strong: false }, true],
+    [{ future_setting: null }, true],
+    [{ max_output_tokens: 100 }, true],
+    [{ cost_per_m: null, strong: null }, false],
+    [
+      {
+        provider: "zai",
+        model: "model",
+        route_id: "official",
+        base_url: null,
+        api_key_env: null,
+      },
+      false,
+    ],
+  ])(
+    "keeps unknown configured values read-only without retaining arbitrary data %j",
+    (extra, blocked) => {
+      const parsed = parseProfileLlmConfigResult({
+        profile_id: "coding",
+        primary: {
+          family_id: "zai",
+          model_id: "model",
+          route: { route_id: "official", api_type: "openai" },
+          has_api_key: false,
+          selected: true,
+          available: true,
+          ...extra,
+        },
+        fallbacks: [],
+      });
+      expect(parsed).not.toBeNull();
+      expect(Boolean(parsed?.primary?.edit_blocked)).toBe(blocked);
+      expect(parsed?.primary).not.toHaveProperty("max_output_tokens");
+      expect(parsed?.primary).not.toHaveProperty("cost_per_m");
+      expect(parsed?.primary).not.toHaveProperty("future_setting");
+    },
+  );
   it("projects the server-owned provider catalog into bounded arrays", () => {
     expect(
       parseLlmCatalogResult({
@@ -145,6 +239,7 @@ describe("solo onboarding transport contract", () => {
       primary: {
         family_id: "zai",
         model_id: "glm-5.3-flash",
+        edit_blocked: true,
         route: {
           route_id: "official",
           label: "Official",
@@ -160,6 +255,7 @@ describe("solo onboarding transport contract", () => {
         {
           family_id: "deepseek",
           model_id: "deepseek-v4-pro",
+          edit_blocked: true,
           route: {
             route_id: "official",
             label: "Official",

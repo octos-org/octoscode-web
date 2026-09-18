@@ -8,14 +8,16 @@ import {
   foldNotification,
   timelineFromHydrate,
   withHydratedTurnOutcome,
+  type HydratedTimelineIdentityOptions,
   type TimelineEntry,
 } from "./model.ts";
 
 export function timelineFromCanonicalHydrate(
   result: SessionHydrateResult,
+  identities: HydratedTimelineIdentityOptions = {},
 ): TimelineEntry[] {
   return withHydratedTurnOutcome(
-    restoreCanonicalHydrate(result, timelineFromHydrate(result)),
+    restoreCanonicalHydrate(result, timelineFromHydrate(result, identities)),
     result,
   );
 }

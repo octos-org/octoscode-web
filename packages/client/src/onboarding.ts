@@ -47,7 +47,28 @@ export interface LlmRouteSelection {
   api_type: string;
 }
 
-export interface LlmSelection {
+/** rc11's closed, per-model configuration schema; null and omission inherit. */
+export interface LlmInferenceOverrides {
+  temperature?: number | null;
+  top_p?: number | null;
+  context_window?: number | null;
+  reasoning_effort?: "none" | "low" | "medium" | "high" | "max" | null;
+  model_hints?: {
+    uses_completion_tokens?: boolean;
+    fixed_temperature?: boolean;
+    lacks_vision?: boolean;
+    merge_system_messages?: boolean;
+    reasoning_style?:
+      | "none"
+      | "effort"
+      | "effort_and_thinking_toggle"
+      | "effort_max_only"
+      | "effort_low_high_max"
+      | "thinking_toggle";
+  } | null;
+}
+
+export interface LlmSelection extends LlmInferenceOverrides {
   family_id: string;
   model_id: string;
   route: LlmRouteSelection;
@@ -87,13 +108,15 @@ export interface ProfileLlmConfiguredRoute {
 }
 
 /** A secret-free projection of one configured primary or fallback model. */
-export interface ProfileLlmConfiguredModel {
+export interface ProfileLlmConfiguredModel extends LlmInferenceOverrides {
   family_id: string;
   model_id: string;
   route: ProfileLlmConfiguredRoute;
   has_api_key: boolean;
   selected: boolean;
   available: boolean;
+  /** The read contains configuration this client's closed write schema cannot preserve. */
+  edit_blocked?: true;
 }
 
 export interface ProfileLlmConfigResult {
@@ -431,7 +454,24 @@ function parseProfileLlmConfiguredModel(
   const apiType = optionalText(value.route.api_type);
   if ([routeId, label, baseUrl, apiKeyEnv, apiType].includes(null)) return null;
 
+  const inference = parseLlmInferenceOverrides(
+    Object.fromEntries(
+      INFERENCE_KEYS.filter((key) => Object.hasOwn(value, key)).map((key) => [
+        key,
+        value[key],
+      ]),
+    ),
+  );
+  if (!inference) return null;
+  const editBlocked =
+    Object.keys(value).some(
+      (key) =>
+        !CONFIGURED_KEYS.includes(key) &&
+        !((key === "cost_per_m" || key === "strong") && value[key] === null),
+    ) || Object.keys(value.route).some((key) => !ROUTE_KEYS.includes(key));
+
   return {
+    ...inference,
     family_id: familyId,
     model_id: modelId,
     route: {
@@ -444,7 +484,129 @@ function parseProfileLlmConfiguredModel(
     has_api_key: value.has_api_key,
     selected: value.selected,
     available: value.available,
+    ...(editBlocked ? { edit_blocked: true as const } : {}),
   };
+}
+
+const INFERENCE_KEYS = [
+  "temperature",
+  "top_p",
+  "context_window",
+  "reasoning_effort",
+  "model_hints",
+] as const;
+const ROUTE_KEYS = ["route_id", "label", "base_url", "api_key_env", "api_type"];
+// rc11 configured_provider_json includes redundant display/address fields.
+// cost_per_m / strong are outside the accepted write schema. rc11 preserves
+// existing same-address QoS, but the client cannot negotiate that guarantee;
+// conservatively keep those configured entries edit-ineligible.
+const CONFIGURED_KEYS: readonly string[] = [
+  "provider",
+  "model",
+  "family_id",
+  "model_id",
+  "route",
+  "route_id",
+  "base_url",
+  "api_key_env",
+  "has_api_key",
+  "selected",
+  "available",
+  "temperature",
+  "top_p",
+  "context_window",
+  "reasoning_effort",
+  "model_hints",
+];
+const HINT_BOOLEAN_KEYS = [
+  "uses_completion_tokens",
+  "fixed_temperature",
+  "lacks_vision",
+  "merge_system_messages",
+] as const;
+const REASONING_STYLES = [
+  "none",
+  "effort",
+  "effort_and_thinking_toggle",
+  "effort_max_only",
+  "effort_low_high_max",
+  "thinking_toggle",
+];
+
+/** Copies only Core-accepted fields; never a provider request-body passthrough. */
+export function parseLlmInferenceOverrides(
+  value: unknown,
+): LlmInferenceOverrides | null {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some(
+      (key) => !(INFERENCE_KEYS as readonly string[]).includes(key),
+    )
+  )
+    return null;
+  const result: LlmInferenceOverrides = {};
+  for (const key of ["temperature", "top_p", "context_window"] as const) {
+    if (!Object.hasOwn(value, key)) continue;
+    const item = value[key];
+    if (item === null) {
+      result[key] = null;
+      continue;
+    }
+    if (typeof item !== "number" || !Number.isFinite(item)) return null;
+    if (
+      key === "context_window"
+        ? !Number.isInteger(item) || item < 1 || item > 0xffffffff
+        : item < 0 || item > (key === "temperature" ? 2 : 1)
+    )
+      return null;
+    result[key] = item;
+  }
+  if (Object.hasOwn(value, "reasoning_effort")) {
+    const item = value.reasoning_effort;
+    if (
+      item !== null &&
+      item !== "none" &&
+      item !== "low" &&
+      item !== "medium" &&
+      item !== "high" &&
+      item !== "max"
+    )
+      return null;
+    result.reasoning_effort = item;
+  }
+  if (Object.hasOwn(value, "model_hints")) {
+    const hints = value.model_hints;
+    if (hints === null) result.model_hints = null;
+    else {
+      if (
+        !isRecord(hints) ||
+        Object.keys(hints).some(
+          (key) =>
+            key !== "reasoning_style" &&
+            !(HINT_BOOLEAN_KEYS as readonly string[]).includes(key),
+        )
+      )
+        return null;
+      const parsed: NonNullable<LlmInferenceOverrides["model_hints"]> = {};
+      for (const key of HINT_BOOLEAN_KEYS) {
+        if (!Object.hasOwn(hints, key)) continue;
+        const item = hints[key];
+        if (typeof item !== "boolean") return null;
+        parsed[key] = item;
+      }
+      if (Object.hasOwn(hints, "reasoning_style")) {
+        const style = hints.reasoning_style;
+        if (typeof style !== "string" || !REASONING_STYLES.includes(style))
+          return null;
+        parsed.reasoning_style = style as NonNullable<
+          LlmInferenceOverrides["model_hints"]
+        >["reasoning_style"] &
+          string;
+      }
+      result.model_hints = parsed;
+    }
+  }
+  return result;
 }
 
 function text(value: unknown): string | null {

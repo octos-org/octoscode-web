@@ -4,7 +4,7 @@ import {
   supportsFeature,
   supportsMethod,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 
 const CODING_SESSION_METHODS = [
   CORE_UI_METHODS.SESSION_OPEN,

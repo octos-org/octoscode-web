@@ -1,26 +1,286 @@
+/* The question takeover's card. Moved out of app/styles.css so the surface
+   owns its own presentation (AGENTS.md: colocated CSS Modules, semantic
+   --dsw-* aliases only). The card itself is the scroll container: a 320x360
+   viewport must be able to reach the primary action. */
 .card {
+  width: 100%;
   min-width: 0;
+  /* The card never touches the viewport edge: the gap is also the room the
+     browser needs to scroll the last field clear of the card's bottom. */
+  margin-block: var(--dsw-space-4);
+  max-width: var(--dsw-layout-chat);
   max-height: min(620px, calc(100dvh - 120px));
-  overflow-wrap: anywhere;
+  overflow-y: auto;
   overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-shadow-dialog);
 }
 
-.card :global(.question-options) {
-  grid-template-columns: minmax(0, 1fr);
+/* Hierarchy: who is asking, what is being decided, and the context under it. */
+.heading {
+  display: grid;
+  gap: var(--dsw-space-1);
+  padding: var(--dsw-space-4) var(--dsw-space-4) var(--dsw-space-3);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: linear-gradient(
+    var(--dsw-alias-interactive-bg-hover),
+    transparent
+  );
 }
 
-.card :global(.question-option) > span {
+.eyebrow {
+  color: var(--dsw-alias-state-business-primary);
+  font-size: var(--dsw-font-size-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.body {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.list {
+  display: grid;
+  gap: var(--dsw-space-5);
+  padding: var(--dsw-space-4);
+}
+
+.field {
   min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
 }
 
-.card > :global(.takeover-error) {
-  padding: 0 16px 10px;
+.legend {
+  display: grid;
+  gap: var(--dsw-space-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.legend span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hint {
+  margin: var(--dsw-space-1) 0 var(--dsw-space-2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+/* One column: a choice is a full-width row, never a cramped grid cell. */
+.options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--dsw-space-2);
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dsw-space-3);
+  margin: 0;
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+  transition: border-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.option:hover {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The chosen row reads as chosen at a glance, not only by the control glyph. */
+.option[data-selected="true"] {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-specific-bubble);
+}
+
+/* Focus lands on the input; the row it names carries the ring. */
+.option:focus-within {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.option input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 1px 0 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.option > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.option strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.option small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+/* The written-answer path is a visible field beside the choices, not a
+   disclosure the operator has to find. */
+.other {
+  display: grid;
+  gap: 6px;
+  /* Separated by a rule above rather than a box around it: nothing may sit
+     below the field, or the browser's minimal scroll leaves it clipped at the
+     bottom of a short card. */
+  margin: var(--dsw-space-2) 0 0;
+  padding: var(--dsw-space-3) 0 0;
+  border-top: 1px dashed var(--dsw-alias-border-l2);
+}
+
+.other > span {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.other input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family-code);
+  font-size: 12px;
+}
+
+.other input:focus {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.other input:disabled {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.error {
+  padding: 0 var(--dsw-space-4) 10px;
   color: var(--dsw-alias-state-error-text);
 }
 
+/* The footer keeps the primary action last in DOM order: it is also the last
+   Tab stop, which the modal's focus wrap depends on. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-3) var(--dsw-space-4) var(--dsw-space-4);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.escHint {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+}
+
+.consequence {
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+.reason {
+  flex-basis: 100%;
+  text-align: end;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+.submit {
+  min-height: 38px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+/* A short viewport (a phone in landscape, or a small window) spends its room
+   on the choices rather than on card chrome. */
+@media (max-height: 520px) {
+  .heading {
+    padding: var(--dsw-space-3) var(--dsw-space-3) var(--dsw-space-2);
+  }
+
+  .list {
+    gap: var(--dsw-space-3);
+    padding: var(--dsw-space-3);
+  }
+
+  .actions {
+    padding: var(--dsw-space-2) var(--dsw-space-3) var(--dsw-space-3);
+  }
+}
+
 @media (max-width: 760px) {
-  .card :global(.question-other input) {
+  .card {
+    border-radius: 16px;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .submit {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  /* 16px keeps iOS from zooming the viewport when the field takes focus. */
+  .other input {
     min-height: 44px;
     font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option {
+    transition: none;
   }
 }

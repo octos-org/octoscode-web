@@ -43,8 +43,8 @@ second agent loop, plugin host, sandbox, or session store.
   new browser after authentication and explicit review.
 - A DSH-aligned Workspace/Session sidebar with search, New Session, Add
   workspace, tab-confirmed Session navigation, and Settings.
-- Same-tab background continuation for server-acknowledged turns while another
-  Session is selected or created.
+- Concurrent retained Sessions on one pooled WebSocket, with independent prompt
+  queues, approvals, questions, and native peer hosting while switching views.
 - Unread tab counts and opt-in desktop notifications when hidden or background
   responses finish or need attention.
 - Session-local Chat and Trajectory views, safe Markdown/code rendering,
@@ -54,12 +54,19 @@ second agent loop, plugin host, sandbox, or session store.
   discovery, save/delete, and Profile-default management in Settings.
 - Browser onboarding for an empty solo server, with transient credentials and a
   truthful TUI fallback on older Core versions.
+- Single-use pairing links, so connecting needs no pasted token, with the token
+  optionally remembered per device and a Forget action.
+- Server folder browsing when creating a workspace, including New folder, behind
+  `onboarding.workspace_browse.v1`.
+- Math in chat output through KaTeX, loaded only for messages that carry math.
 - A responsive coding workspace informed by
   [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), with its
   MIT attribution preserved.
 
 See [Product scope](docs/product.md) for the supported surface and deliberate
-non-goals.
+non-goals. The expanded parity implementation is a candidate: fixture and unit
+passes do not establish complete TUI parity or acceptance of the live soak. See
+[Feature parity](docs/feature-parity.md) for the acceptance boundary.
 
 ## Run locally
 
@@ -70,42 +77,71 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run `octos serve` separately, then enter its origin and optional auth token. The
+Run `octos serve` separately. There are two ways to connect it.
+
+**From a pairing link, when the server offers one.** Start the server with the
+address this app is served from:
+
+```sh
+octos serve --web-url http://127.0.0.1:5173
+```
+
+It prints one line:
+
+```
+Open the web client: http://127.0.0.1:5173/?octos=http://127.0.0.1:53124&pair=EMX3MBRB
+```
+
+Open that link and the app connects on its own. The code works once, expires
+five minutes after the server starts, and is only accepted over loopback. The
+link's parameters are removed from the address bar before the first render. The
+page also suppresses referrers while its resources load. The auth token stays in
+this browser tab; it is never saved to localStorage. **Cancel** stops the
+current claim, and **Forget saved connection** removes this tab's saved
+connection and any legacy device token. Without `--web-url`, servers supporting
+pairing print their origin and code as separate labelled lines instead.
+
+**By hand, which always works.** Enter the server's origin and auth token. The
 connection form defaults to this page's origin; **Use this page** restores that
-address after a custom server was saved. After connecting for the first time,
-enter a workspace path on the Octos server and select **Start session**. For
-later conversations, **New Session** offers recent Workspaces and **Add
-workspace**. The sidebar remembers the Sessions this tab successfully opens, so
-multiple conversations in the same Workspace remain distinct and can be selected
-again. The selected Session is restored on refresh in the same tab. Unsent
-composer drafts also survive closing the tab: sign in again and open the same
-Session to restore its text. Drafts stay scoped to the server, authenticated
-user and Session; they are never sent automatically after restoration. These
-confirmed references are navigation memory, not a complete Session catalog: Core
-rc.9 can misroute `session/list({cwd})` for unscoped/admin connections, so the
-Web client cannot promise a complete or correctly grouped catalog until the
-server-owned SessionRef contract in
+address after a custom server was saved. A server that does not offer pairing
+shows this form with no extra step.
+
+Then choose where the session runs: type a path on the Octos server, or select
+**Browse…** to walk the server's folders, which appears when the server
+advertises `onboarding.workspace_browse.v1`. The browser lists subfolders only,
+goes up and down, and **New folder** creates one and moves into it. Select
+**Start session** to open the conversation. For later conversations, **New
+Session** offers recent Workspaces and **Add workspace**. The sidebar remembers
+the Sessions this tab successfully opens, so multiple conversations in the same
+Workspace remain distinct and can be selected again. The selected Session is
+restored on refresh in the same tab. Unsent composer drafts also survive closing
+the tab: sign in again and open the same Session to restore its text. Drafts
+stay scoped to the server, authenticated user and Session; they are never sent
+automatically after restoration. These confirmed references are navigation
+memory, not a complete Session catalog: Core rc.9 can misroute
+`session/list({cwd})` for unscoped/admin connections, so the Web client cannot
+promise a complete or correctly grouped catalog until the server-owned
+SessionRef contract in
 [octos#2146](https://github.com/octos-org/octos/issues/2146) lands. The browser
 cannot start or provision the Octos binary.
 
-A turn that this tab started and Core acknowledged can keep running while you
-select or create another Session in the same live tab. Browser-local queued
-prompts still block navigation; remove unwanted entries from the queue above the
-composer before switching. If `turn/start` is awaiting acknowledgement, the Web
-app labels the turn **Starting**, remembers the latest create/switch click, and
-executes it exactly once after Core accepts the turn. Rejection or local
-cancellation drops that intent and keeps the source Session selected. Core rc.9
-provides no safe post-turn release signal, so the Web app retains at most eight
-owner connections. Reopening one of those retained Sessions reuses its
-connection even at the limit; opening a ninth new target is refused until you
-explicitly Disconnect and reconnect. No completed owner is silently evicted.
-This is not detached server execution: refreshing or closing the tab, losing the
-network connection, or selecting **Disconnect** closes the owner WebSocket and
-Core rc.9 terminates a still-running turn. A browser leave warning helps prevent
-accidental refresh or close while work is active. Disconnect keeps the current
-tab's confirmed Session references; **Forget server** or changing the server
-identity clears them. Durable detached execution and exact stale-connection
-cleanup are tracked in
+Switch or create Sessions while other Sessions are running, starting, waiting,
+or holding queued prompts. Each confirmed Session retains its own controller,
+FIFO, interactions, cursor, and bounded transcript projection; selecting another
+view does not move or discard that work. All records share one physical
+WebSocket, replacing the old eight-owner-connection limit and ACK navigation
+guard. Native peer Sessions are hosted without selecting them.
+
+This is not detached server execution. Core rc11 still interrupts
+connection-owned work when the pooled socket closes: refresh, tab close,
+network/proxy loss, or **Disconnect** can stop running turns. Same-tab reconnect
+retains local queues but must reconcile each Session through hydrate/replay
+before dispatch; a page reload loses queued prompts and attachment drafts. A
+browser leave warning helps prevent accidental refresh or close while work is
+active. Disconnect keeps confirmed navigation refs, not live records. **Forget
+server** or an endpoint/token change clears those refs. The rc11 candidate does
+not replace the repository's separately pinned rc9 runtime baseline. Durable
+detached execution remains a Core boundary, tracked in
 [octos#2167](https://github.com/octos-org/octos/issues/2167).
 
 For UI work without a local Octos installation, start the deterministic AppUI

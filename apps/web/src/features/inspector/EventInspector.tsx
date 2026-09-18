@@ -1,4 +1,5 @@
-import type { RpcNotification } from "@octos-org/octoscode-client";
+import type { RpcNotification } from "@octos-org/octoscode-client/protocol";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export interface ObservedEvent {
   id: number;
@@ -19,20 +20,21 @@ export function EventInspector({
   omittedEvents = 0,
   embedded = false,
 }: EventInspectorProps) {
+  const t = useUiText();
   const content = (
     <>
       <section>
         <div className="section-heading compact-heading">
           <div>
-            <span className="eyebrow">Negotiated</span>
-            <h2>Capabilities</h2>
+            <span className="eyebrow">{t("Negotiated")}</span>
+            <h2>{t("Capabilities")}</h2>
           </div>
           <span className="count-badge">{features.length}</span>
         </div>
         <div className="feature-list">
           {features.length === 0 ? (
             <p className="muted">
-              Connect to inspect accepted server features.
+              {t("Connect to inspect accepted server features.")}
             </p>
           ) : (
             features.map((feature) => <span key={feature}>{feature}</span>)
@@ -43,21 +45,22 @@ export function EventInspector({
       <section className="event-section">
         <div className="section-heading compact-heading">
           <div>
-            <span className="eyebrow">Wire</span>
-            <h2>Event stream</h2>
+            <span className="eyebrow">{t("Wire")}</span>
+            <h2>{t("Event stream")}</h2>
           </div>
           <span className="count-badge">{events.length}</span>
         </div>
         <div className="event-list">
           {omittedEvents ? (
             <p className="muted" role="status">
-              {omittedEvents} older protocol event
-              {omittedEvents === 1 ? " is" : "s are"} outside this diagnostic
-              window.
+              {omittedEvents}
+              {" " + t("older protocol event")}
+              {omittedEvents === 1 ? " " + t("is") : t("s are")}
+              {" " + t("outside this diagnostic window.")}
             </p>
           ) : null}
           {events.length === 0 ? (
-            <p className="muted">No protocol events received.</p>
+            <p className="muted">{t("No protocol events received.")}</p>
           ) : (
             [...events].reverse().map((event) => (
               <details className="event-row" key={event.id}>

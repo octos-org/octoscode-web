@@ -1,5 +1,6 @@
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface FatalErrorBoundaryProps {
   children: ReactNode;
@@ -35,6 +36,7 @@ export class FatalErrorBoundary extends Component<
 }
 
 export function FatalCrashScreen({ report }: { report: string }) {
+  const t = useUiText();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -52,21 +54,21 @@ export function FatalCrashScreen({ report }: { report: string }) {
     <main className="fatal-shell" role="alert">
       <section className="fatal-card">
         <OctopusLogo className="fatal-brand-logo" size={32} />
-        <span className="eyebrow">Octoscode Web stopped rendering</span>
-        <h1>Client view unavailable</h1>
+        <span className="eyebrow">{t("Octoscode Web stopped rendering")}</span>
+        <h1>{t("Client view unavailable")}</h1>
         <p>
-          The client could not recover this view. Closing its connection may
-          have stopped running work. Octos keeps persisted history; unsent
-          drafts and queued messages may be lost when you reload.
+          {t(
+            "The client could not recover this view. Closing its connection may have stopped running work. Octos keeps persisted history; unsent drafts and queued messages may be lost when you reload.",
+          )}
         </p>
-        <pre aria-label="Redacted crash diagnostics">{report}</pre>
+        <pre aria-label={t("Redacted crash diagnostics")}>{report}</pre>
         <div className="fatal-actions">
           <button
             className="button button-primary"
             type="button"
             onClick={() => window.location.reload()}
           >
-            Reload app
+            {t("Reload app")}
           </button>
           <button
             className="button button-secondary"
@@ -74,14 +76,14 @@ export function FatalCrashScreen({ report }: { report: string }) {
             onClick={() => void copy()}
           >
             {copyState === "copied"
-              ? "Copied"
+              ? t("Copied")
               : copyState === "failed"
-                ? "Copy failed"
-                : "Copy diagnostics"}
+                ? t("Copy failed")
+                : t("Copy diagnostics")}
           </button>
         </div>
         <a href="https://github.com/octos-org/octoscode-web/issues/new">
-          Report this crash ↗
+          {t("Report this crash ↗")}
         </a>
       </section>
     </main>

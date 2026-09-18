@@ -7,7 +7,7 @@ import type {
   TaskOutputDelta,
   TaskOutputReadResult,
   TaskUpdated,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 
 export interface SupervisedTask {
   id: string;

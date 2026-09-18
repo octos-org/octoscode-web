@@ -1,4 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useDeferredValue } from "react";
+import { hasMath } from "./math.ts";
+import { closeOpenFence } from "./streaming-fence.ts";
 import ReactMarkdown, {
   type Components,
   type UrlTransform,
@@ -15,7 +17,7 @@ interface MarkdownBodyProps {
   streaming?: boolean;
 }
 
-const safeUrlTransform: UrlTransform = (url, key) => {
+export const safeUrlTransform: UrlTransform = (url, key) => {
   try {
     const protocol = new URL(url).protocol;
     if (key === "src") {
@@ -34,7 +36,7 @@ const safeUrlTransform: UrlTransform = (url, key) => {
   }
 };
 
-const components: Components = {
+export const markdownComponents: Components = {
   a({ href, children }) {
     if (!href) return <>{children}</>;
     return (
@@ -88,17 +90,86 @@ const components: Components = {
   },
 };
 
+/**
+ * The components used while a reply is still streaming. Identical, except that
+ * a code block renders as the plain block `CodeBlock` shows while loading, not
+ * the syntax-highlighted one: highlighting re-tokenises the whole block, and
+ * doing that on every streamed token is the expensive part of live rendering.
+ * The finished reply is highlighted once, when the turn completes.
+ */
+const streamingComponents: Components = {
+  ...markdownComponents,
+  code({ className, children }) {
+    const language = /language-([^\s]+)/.exec(className ?? "")?.[1];
+    const value = String(children);
+    if (language || value.includes("\n")) {
+      return (
+        <pre className="md-code-plain">
+          <code>{value}</code>
+        </pre>
+      );
+    }
+    return <code>{children}</code>;
+  },
+};
+
+/** KaTeX and its fonts load only for a message that actually carries math. */
+const MathMarkdown = lazy(() =>
+  import("./MathMarkdown.tsx").then((module) => ({
+    default: module.MathMarkdown,
+  })),
+);
+
+function PlainMarkdown({
+  text,
+  components = markdownComponents,
+}: {
+  text: string;
+  components?: Components;
+}) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={components}
+      urlTransform={safeUrlTransform}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 export function MarkdownBody({ text, streaming = false }: MarkdownBodyProps) {
-  if (streaming) return <pre className="md-streaming">{text}</pre>;
+  // Reparsing on every token would compete with the stream itself. A deferred
+  // value lets React render the markdown at low priority and skip stale
+  // intermediate texts, so a long reply keeps flowing while it formats.
+  const deferredText = useDeferredValue(text);
+  if (streaming) {
+    // Rendered as markdown as it arrives, not held back as raw text until the
+    // turn ends. Two things wait for the finished reply: math, since a
+    // half-written `$…` cannot be typeset, and syntax highlighting (see
+    // streamingComponents). An unclosed inline marker such as `**` stays
+    // literal until its closer arrives, as CommonMark specifies, so nothing is
+    // formatted before the model has actually written it.
+    return (
+      <div className="markdown-body">
+        <PlainMarkdown
+          text={closeOpenFence(deferredText)}
+          components={streamingComponents}
+        />
+      </div>
+    );
+  }
   return (
     <div className="markdown-body">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-        urlTransform={safeUrlTransform}
-      >
-        {text}
-      </ReactMarkdown>
+      {hasMath(text) ? (
+        // Until the math chunk resolves the same text renders unformatted
+        // rather than blank, so a reply is never briefly missing.
+        <Suspense fallback={<PlainMarkdown text={text} />}>
+          <MathMarkdown text={text} />
+        </Suspense>
+      ) : (
+        <PlainMarkdown text={text} />
+      )}
     </div>
   );
 }
