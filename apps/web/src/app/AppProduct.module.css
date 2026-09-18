@@ -88,7 +88,7 @@
 .pendingNavigation {
   display: flex;
   width: 100%;
-  max-width: 768px;
+  max-width: var(--dsw-layout-chat-wide);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
