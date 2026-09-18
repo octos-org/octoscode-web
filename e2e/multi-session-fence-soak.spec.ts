@@ -332,7 +332,15 @@ function trackRuntimeErrors(page: Page): () => RuntimeErrors {
   const consoleErrors: string[] = [];
   page.on("pageerror", (error) => unhandled.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    // §Discovery probes the last origin this browser saw for /pair/info, and a
+    // fixture that does not implement pairing answers 404. The contract calls a
+    // failed probe silent, and the app treats it as "pairing not supported" —
+    // but the BROWSER still logs the response, which is not a defect in the
+    // code under soak. Every other console error still fails the run.
+    if (message.type() !== "error") return;
+    const text = message.text();
+    if (text.includes("/pair/info") && text.includes("404")) return;
+    consoleErrors.push(text);
   });
   return () => ({
     unhandled: unhandled.slice(),
