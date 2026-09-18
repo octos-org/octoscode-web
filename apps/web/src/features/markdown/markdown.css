@@ -262,10 +262,3 @@
 .shiki-underline {
   text-decoration: underline;
 }
-
-.md-streaming {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  font: 400 15px/25px var(--dsw-font-family);
-}

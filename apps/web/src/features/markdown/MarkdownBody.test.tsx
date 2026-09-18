@@ -41,13 +41,43 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("keeps a growing stream plain until the canonical persisted row", () => {
+  it("never formats a marker the model has not closed yet", () => {
+    // Mid-stream, `**` has been written but its closer has not: it must stay
+    // literal rather than turning the rest of the reply bold.
     const html = renderToStaticMarkup(
       <MarkdownBody text="**still streaming" streaming />,
     );
 
-    expect(html).toContain('class="md-streaming"');
     expect(html).toContain("**still streaming");
     expect(html).not.toContain("<strong>");
+  });
+
+  it("renders markdown while the reply is still streaming", () => {
+    const html = renderToStaticMarkup(
+      <MarkdownBody
+        text={
+          "# Plan\n\n- read the file\n- **fix** it\n\n| a | b |\n| - | - |\n| 1 | 2 |"
+        }
+        streaming
+      />,
+    );
+
+    expect(html).toContain('class="markdown-body"');
+    expect(html).toContain("<h1>Plan</h1>");
+    expect(html).toContain("<li>read the file</li>");
+    expect(html).toContain("<strong>fix</strong>");
+    expect(html).toContain("<table>");
+  });
+
+  it("shows an unfinished code block as code, unhighlighted, while streaming", () => {
+    const html = renderToStaticMarkup(
+      <MarkdownBody text={"Here:\n\n```ts\nconst x = 1;"} streaming />,
+    );
+
+    // The open fence is closed for display, so the block renders as code
+    // rather than as a raw "```ts" line...
+    expect(html).toContain('class="md-code-plain"');
+    expect(html).toContain("const x = 1;");
+    expect(html).not.toContain("```");
   });
 });
