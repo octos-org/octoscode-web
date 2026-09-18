@@ -727,6 +727,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     pendingConnectClaimedRef.current = true;
     const pending = gate.takePendingConnect();
     if (pending) session.connect(pending);
+    return () => {
+      // React StrictMode mounts, unmounts and remounts in development, and the
+      // session's own cleanup tears this connect's socket down in between.
+      // Undo the claim and hand the draft back so the remount connects it.
+      // Without this the remount finds the claim already taken and the draft
+      // already consumed, and `pnpm dev` never connects to anything. The shell
+      // is never unmounted in production — the entry only ever arms it — so
+      // there this runs only when the page itself goes away.
+      pendingConnectClaimedRef.current = false;
+      if (pending) gate.returnPendingConnect(pending);
+    };
     // Mount only: the entry hands over at most one parked connect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

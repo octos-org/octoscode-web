@@ -479,3 +479,46 @@
     display: none;
   }
 }
+
+/* ── Reading progress bar (scroll-driven, #57) ──────────────────── */
+/* Zero-JS: animation-timeline: scroll() drives the width transform
+   directly from the conversation scroll position. Falls back to
+   hidden on engines without scroll-driven animations support. */
+
+.progressTrack {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 2px;
+  pointer-events: none;
+  background: transparent;
+}
+
+.progressBar {
+  content: "";
+  display: block;
+  height: 100%;
+  background: var(--dsw-alias-state-business-primary);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+
+@supports (animation-timeline: scroll()) {
+  .conversationScroll {
+    scroll-timeline: --conversation-progress block;
+  }
+
+  .progressBar {
+    animation: conversation-progress-grow linear both;
+    animation-timeline: --conversation-progress;
+  }
+
+  @keyframes conversation-progress-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+}

@@ -75,6 +75,7 @@ export function ConnectionPanel({
   const t = useUiText();
   const connected = status === "connected";
   const connecting = status === "connecting";
+  const tokenRef = useRef<HTMLInputElement>(null);
   const endpointRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
@@ -97,6 +98,11 @@ export function ConnectionPanel({
     setValidationError(invalid);
     if (invalid) {
       endpointRef.current?.focus();
+      return;
+    }
+    if (!value.token.trim()) {
+      setValidationError("Auth token is required.");
+      tokenRef.current?.focus();
       return;
     }
     onConnect();
