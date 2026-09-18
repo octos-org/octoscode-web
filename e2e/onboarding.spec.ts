@@ -59,7 +59,9 @@ test("explains missing authentication while preserving password privacy and IME 
     page.getByRole("button", { name: "Connect", exact: true }),
   ).toBeVisible();
   await token.press("Enter");
-  await expect(page.getByRole("alert")).toContainText("enter its token above");
+  await expect(page.getByRole("alert")).toContainText(
+    "Auth token is required.",
+  );
   await expect(
     page.getByRole("complementary", { name: "Product navigation" }),
   ).toHaveCount(0);
