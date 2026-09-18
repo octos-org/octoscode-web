@@ -70,21 +70,91 @@ passes do not establish complete TUI parity or acceptance of the live soak. See
 
 ## Run locally
 
-Requires Node.js 22+ and pnpm 11.5.2.
+### First time, against a real Octos server
+
+Four steps. Each was run exactly as written from an empty home directory. Pick a
+token — any string — and use the same one everywhere.
+
+You need Node.js 22+ and pnpm (`corepack enable` installs the right pnpm), and
+an `octos` binary. Running the
+[Octoscode TUI](https://github.com/octos-org/octoscode) once downloads one to
+`~/.octos/bin/octos`. It is **not** added to your `PATH`, so the commands below
+use the full path.
+
+**1. Start the server:**
+
+```sh
+export OCTOS_AUTH_TOKEN=my-local-token
+~/.octos/bin/octos serve --host 127.0.0.1 --port 50080 \
+  --auth-token "$OCTOS_AUTH_TOKEN" --solo
+```
+
+`--solo` lets this app create your profile on first run. Without it a fresh
+server answers "This server cannot onboard from the Web".
+
+**2. Start this app**, in another terminal:
 
 ```sh
 pnpm install --frozen-lockfile
+OCTOSCODE_DEV_PROXY_TARGET=http://127.0.0.1:50080 \
+OCTOSCODE_DEV_PROXY_ORIGIN=http://127.0.0.1:50080 \
 pnpm dev
 ```
+
+Keep both `OCTOSCODE_DEV_PROXY_*` variables. They make the browser talk only to
+this app's own address, which forwards to the server. Leave them out and the
+server refuses the browser, because by default it trusts only its own address —
+and the page reports a connection failure that blames your server and token,
+though both are fine.
+
+**3. Open the address step 2 prints** — usually <http://127.0.0.1:4173>. Leave
+**Server origin** as it is, paste the token into **Auth token**, and select
+**Connect**. Under **Add workspace** enter a project folder's full path and
+select **Start session**. The first time, **Create your local coding profile**
+opens: set **Profile ID** to `main`, pick a **Provider** and **Model**, and
+paste the provider's API key.
+
+**4. Optionally attach the terminal too:**
+
+```sh
+OCTOS_AUTH_TOKEN=my-local-token octoscode \
+  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws --profile-id main
+```
+
+It reports "Pass --session to open an interactive session." That is expected:
+type `/resume` to join the conversation from the browser. See
+[Share a session with the terminal](#share-a-session-with-the-terminal).
+
+| You see                                                         | Fix                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `command not found: octos`                                      | Use the full path, `~/.octos/bin/octos`                                   |
+| "This server cannot onboard from the Web"                       | Restart the server with `--solo`                                          |
+| A connection failure, though the server runs and token is right | Restart step 2 with both `OCTOSCODE_DEV_PROXY_*` variables set            |
+| Nothing to pick after `/resume` in the terminal                 | Send one message in the browser first; a session lists once it has a turn |
+
+Serving this app somewhere without that proxy? Tell the server to trust its
+address: `OCTOS_APPUI_ALLOWED_ORIGINS=http://<host>:<port>` on the server, or
+`appui.allowed_origins` in its config.
+
+### Developing this app, without Octos
+
+The deterministic fixture stands in for a server. It listens on port 50080 by
+default — the same port as step 1 — so run one or the other, or move the fixture
+with `OCTOSCODE_MOCK_PORT`:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm mock:server   # terminal 1
+pnpm dev           # terminal 2
+```
+
+Open the app, set **Server origin** to `http://127.0.0.1:50080`, and connect;
+the fixture needs no token.
 
 ### The server must be listening on a port
 
 A browser can only reach Octos over HTTP, so `octos serve` has to be bound to a
-host and port:
-
-```sh
-octos serve --host 127.0.0.1 --port 50080
-```
+host and port, as in step 1 above.
 
 **Not `--stdio`.** That mode runs the UI Protocol over the process's stdin and
 stdout _instead of_ binding HTTP, so it serves exactly one client — the one that
