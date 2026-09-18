@@ -9,7 +9,7 @@ export function TurnRecoveryNotice({
 }: {
   recovery: TurnRecoveryState;
   onRetry: () => void;
-  /** Settle the held turn as lost and resume sending; never resends it. */
+  /** Release the local wait; never stops or resends the held turn. */
   onContinue?: () => void;
 }) {
   const titleId = useId();
@@ -43,8 +43,8 @@ export function TurnRecoveryNotice({
         {!checking && onContinue ? (
           <p>
             If the response was lost, for example because the server restarted,
-            continue without it. Nothing is sent again; queued messages send
-            next.
+            continue without confirming its outcome. This does not stop or
+            resend it; queued messages send next.
           </p>
         ) : null}
       </div>

@@ -127,12 +127,7 @@ export interface QueueBackedTurnController {
   readonly turnRecovery: TurnRecoveryState | null;
   turnRecoveryNow: () => TurnRecoveryState | null;
   retryTurnRecovery: () => Promise<void>;
-  /**
-   * The user's way out when no lookup can settle the held turn (the server
-   * lost it, e.g. across a restart): settle it locally as interrupted and
-   * resume the FIFO. The held turn is never resent. Ignored while a lookup is
-   * in flight.
-   */
+  /** Release the local wait without claiming a terminal or resending. */
   continueWithoutTurn: () => void;
   dispatchingTurnIdNow: () => string | null;
   interruptingTurnIdNow: () => string | null;
@@ -501,14 +496,18 @@ export function createQueueBackedTurnController(options: {
     if (locallyStartedTurn?.turnId === turnId) {
       retireLocalDispatch(turnId, "cancelled");
     }
+    releaseQueueTurn(turnId);
+  };
+
+  const releaseQueueTurn = (turnId: string) => {
     const otherActive = hydratedActiveTurn;
     if (
       otherActive &&
       otherActive.turnId !== turnId &&
       queueOf().snapshot().active?.turnId === turnId
     ) {
-      // Both a lookup and a buffered terminal notification can settle the old
-      // turn. Neither may advance local FIFO over another hydrated foreground.
+      // Releasing the old turn must not advance local FIFO over another
+      // hydrated foreground, even when its outcome remains unknown.
       startRequests.invalidate();
       interruptRequests.invalidate();
       queueOf().settle(turnId);
@@ -963,7 +962,27 @@ export function createQueueBackedTurnController(options: {
     const turnId = queueOf().snapshot().active?.turnId;
     if (!recovery || recovery.phase === "checking") return;
     if (!turnId || recovery.turnId !== turnId) return;
-    applyRecoveredState(turnId, "interrupted");
+    clearRecovery();
+    timedOutStartTurnId = null;
+    if (locallyStartedTurn?.turnId === turnId)
+      retireLocalDispatch(turnId, "cancelled");
+    if (acceptedOwner?.turnId === turnId) acceptedOwner = null;
+    // Abandon only the local wait. No server terminal was observed, so retain
+    // pending interactions and steering receipts and never restore the prompt.
+    queueOf().takeInterruptPrompt(turnId);
+    dependenciesRef.current.setTimeline((entries) =>
+      addSystemMessage(
+        entries.map((entry) =>
+          entry.turnId === turnId && entry.status === "running"
+            ? { ...entry, status: "info", statusLabel: "Unconfirmed" }
+            : entry,
+        ),
+        `turn-unresolved:${turnId}`,
+        "Response outcome unknown",
+        "Continued without confirming this response. No stop request or resubmission was sent.",
+      ),
+    );
+    releaseQueueTurn(turnId);
   };
 
   function applyRecoveredState(

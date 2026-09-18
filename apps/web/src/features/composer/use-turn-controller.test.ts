@@ -425,9 +425,8 @@ describe("queue-backed turn controller async authority", () => {
 
   it("lets the user continue past a turn whose status stays unknown, without resending it", async () => {
     // A server restart loses the turn: every lookup answers "unknown", so the
-    // hold would never lift on its own. Continuing settles the lost turn
-    // locally as interrupted and resumes the FIFO; the lost prompt is never
-    // sent again.
+    // hold would never lift on its own. Continue releases the local wait;
+    // the lost prompt is never sent again or declared terminal.
     const client = fakeClient();
     const harness = renderController(client);
     harness.controller.enqueuePrompt("lost to a restart");
@@ -450,6 +449,11 @@ describe("queue-backed turn controller async authority", () => {
     );
     expect(startedIds.filter((id) => id === lostTurnId)).toHaveLength(1);
     expect(harness.activeTurnId()).not.toBe(lostTurnId);
+    expect(client.interruptTurn).not.toHaveBeenCalled();
+    expect(harness.recoveredTerminals).toEqual([]);
+    expect(harness.timeline.some((entry) => entry.latestTurnOutcome)).toBe(
+      false,
+    );
   });
 
   it("ignores continue while a status check is still in flight", async () => {
