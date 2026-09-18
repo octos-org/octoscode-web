@@ -63,6 +63,33 @@ production/candidate screenshots and the real-Core Stop draft reproduction. This
 ledger records intake, not completed fixes; subsequent PRs must update the
 outcome and evidence as each item is resolved.
 
+## Candidate progress — 2026-09-18
+
+The tables above preserve intake findings. They are not the current unresolved
+bug list. [PR #130](https://github.com/octos-org/octoscode-web/pull/130) merged
+into the parity branch after eight passing CI jobs, 27 combined browser cases,
+real-Core Stop verification, and separately generated Linux/macOS screenshots.
+It fixes the pairing identity/security paths, Stop draft loss, command list
+geometry/ARIA, handback recovery and Fleet capability presentation, and removes
+20 redundant test files. Issues close only after integration into main.
+
+PR #125's reviewed visual changes are also in the parity branch. Further
+integration covers #112 collision/media recovery, the corrected principal-scoped
+durable drafts, #129 capability-gated server shutdown, and #132 first-click
+settings latency. The audited common settings implementation reduces actual
+click-to-dialog latency from about 300 ms to 4–5 ms without changing budgets.
+
+On isolated rc.11, three completed sessions survived 18 reselections without
+reopening, reordering or mixing drafts. Long-history and final deployed-artifact
+acceptance are still required. Refresh now restores the explicit connection
+closure terminal; missing accepted input is being traced at the Core persistence
+boundary. The shared local service remains rc.9 and is not evidence that the
+rc.11 integration has been deployed.
+
+The [issue outcome review](020-issue-review.md) separates stale implementation
+proposals, optional UX improvements and real upstream limits. This candidate
+progress is not a 0.20 release declaration.
+
 ## Completion rule
 
 No known reproducible P0/P1 bug or unresolved credential/identity boundary may
