@@ -4,6 +4,7 @@ import { DISPLAY_THEMES, isDisplayTheme, isUiLanguage } from "./model.ts";
 import { usePreferences } from "./preferences.tsx";
 import { useUiText } from "./ui-text.tsx";
 import styles from "./PreferencesDialog.module.css";
+import { CloseButton } from "../../ui/CloseButton.tsx";
 
 const themeLabels = {
   terminal: "Terminal",
@@ -28,7 +29,10 @@ export function PreferencesDialog({ onClose }: { onClose: () => void }) {
       onEscape={onClose}
       closeOnBackdrop
     >
-      <h2 id={`${id}-title`}>{t("Browser preferences")}</h2>
+      <header className={styles.header}>
+        <h2 id={`${id}-title`}>{t("Browser preferences")}</h2>
+        <CloseButton label={t("Close preferences")} onClick={onClose} />
+      </header>
       <p id={`${id}-scope`} className={styles.note}>
         {t(
           "Display settings apply immediately. Save remembers them only in this browser; no server configuration, credentials or conversations are stored.",
@@ -92,9 +96,6 @@ export function PreferencesDialog({ onClose }: { onClose: () => void }) {
       <footer className={styles.actions}>
         <button type="button" onClick={() => setSaved(preferences.save())}>
           {t("Save browser preferences")}
-        </button>
-        <button type="button" onClick={onClose}>
-          {t("Close preferences")}
         </button>
       </footer>
     </ModalSurface>

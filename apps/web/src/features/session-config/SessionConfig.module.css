@@ -131,3 +131,16 @@
   margin: 0;
   accent-color: var(--dsw-alias-state-business-primary);
 }
+
+/* Title on the left, the × close control on the right. Previously unstyled,
+   which stacked a text Close button under the title. */
+.session-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-config-header h2 {
+  margin: 0;
+}

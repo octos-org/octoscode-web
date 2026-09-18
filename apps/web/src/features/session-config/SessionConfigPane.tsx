@@ -15,6 +15,7 @@ import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { REASONING_COPY } from "../reasoning/reasoning-copy.ts";
 import styles from "./SessionConfig.module.css";
+import { CloseButton } from "../../ui/CloseButton.tsx";
 import {
   type ModelControlProps,
   type PermissionControlProps,
@@ -206,15 +207,9 @@ export function SessionConfigPane({
       initialFocusRef={modelHeadingRef}
       onEscape={onClose}
     >
-      <header className="session-config-header">
+      <header className={styles["session-config-header"]!}>
         <h2 id={titleId}>{t("Session settings")}</h2>
-        <button
-          type="button"
-          className={styles["session-config-button"]!}
-          onClick={onClose}
-        >
-          {t("Close")}
-        </button>
+        <CloseButton label={t("Close")} onClick={onClose} />
       </header>
       <div className="session-config-body">
         {holderBanner?.foreignSeatHeld ? (
