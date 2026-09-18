@@ -23,7 +23,7 @@
  * Copy rules (program goal 4 / design §1): model names, not lane keys;
  * "Peer N", not slugs; operation ids hidden. Fail-closed: when the server
  * lacks the control methods the rows render WITHOUT actions plus the single
- * explanation line, and Start is disabled.
+ * explanation line, and the Start form is hidden.
  */
 import { useState, type ReactNode } from "react";
 import {
@@ -63,8 +63,7 @@ export interface FleetViewProps {
   /**
    * The SAME `peerController` value App already derives — the roster rows,
    * the lane picker, the seat state, the binding and the sinks, threaded
-   * verbatim. Null (readiness not "ready") still renders the shell; the
-   * rows simply have no actions.
+   * verbatim. An unavailable controller still supplies read-only rows.
    */
   readonly peerController:
     | (PeerControllerPanelProps & {
@@ -233,15 +232,15 @@ export function FleetView({
   const lanePicker = peerController?.lanePicker ?? {
     kind: "disabled" as const,
   };
-  const seatHeld = peerController?.seatHeld ?? false;
-  void seatHeld; // (Advanced's console still renders it; Start no longer gates on it)
   // Fail-closed (§4.3): no advertised control methods ⇒ no actions, and the
   // single explanation line. The capabilities gate is the SAME one the
   // controller console uses, read off the value App already derived.
-  const controlSupported =
+  const controlAdvertised =
     peerController !== null &&
     peerControlAdmitted(peerController.capabilities) &&
     peerDispatchAdmitted(peerController.capabilities);
+  const controlSupported =
+    controlAdvertised && peerController?.readiness === "ready";
 
   // Rows: the caller projects the roster into fleet rows (fleet-model.ts) and
   // rides them on the same controller value (one seam, one writer).
@@ -292,6 +291,23 @@ export function FleetView({
       {laneStatus === "no-session" ? (
         <p className={styles.empty} data-fleet-empty="true">
           {t("Open a project first")}
+        </p>
+      ) : !controlAdvertised ? (
+        <p
+          className={styles.formNote}
+          data-fleet-start-unavailable="true"
+          tabIndex={-1}
+        >
+          {t("This server does not support starting peers")}
+        </p>
+      ) : !controlSupported ? (
+        <p
+          className={styles.formNote}
+          role="status"
+          data-fleet-start-unavailable="true"
+          tabIndex={-1}
+        >
+          {t("Peer controls are not ready")}
         </p>
       ) : (
         <form className={styles.form} data-fleet-form="start">
@@ -537,7 +553,7 @@ export function FleetView({
 
       {/* §4.3 footer: the protocol console, unchanged, behind a compact
           native details/summary disclosure (Round 4 C3: no tall empty box). */}
-      {peerController ? (
+      {peerController && controlSupported ? (
         <details
           className={styles.advanced}
           data-fleet-advanced="true"

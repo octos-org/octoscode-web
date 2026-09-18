@@ -124,7 +124,7 @@ async function submit(page: Page, text: string) {
   await composer.fill(text);
   // Escape dismisses an open palette, but otherwise interrupts active work.
   // Ordinary prompt submission must not change the owning turn's lifecycle.
-  if ((await composer.getAttribute("aria-expanded")) === "true") {
+  if (await page.getByRole("listbox", { name: "Commands" }).isVisible()) {
     await composer.press("Escape");
   }
   await page.getByRole("button", { name: /^(Send|Queue) prompt$/ }).click();

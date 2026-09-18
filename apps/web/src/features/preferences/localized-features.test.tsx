@@ -139,6 +139,8 @@ describe("Chinese browser feature presentation", () => {
         commands={[command]}
         selectedIndex={0}
         onSelect={vi.fn()}
+        onSelectedIndexChange={vi.fn()}
+        onDismiss={vi.fn()}
       />,
     );
     expect(html).toContain("/lang");
@@ -151,6 +153,8 @@ describe("Chinese browser feature presentation", () => {
           commands={[command]}
           selectedIndex={0}
           onSelect={vi.fn()}
+          onSelectedIndexChange={vi.fn()}
+          onDismiss={vi.fn()}
         />,
       ),
     ).toContain(command.description);

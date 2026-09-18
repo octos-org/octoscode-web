@@ -236,8 +236,8 @@ export function createQueueBackedTurnController(options: {
   // Absence from hydrate cannot prove an RPC was rejected. Retain attempted
   // IDs across suspension, so an ambiguous accepted start is never replayed.
   const attemptedTurns = new Set<string>();
-  // Lazy review command loading has not crossed the wire until markSent().
-  let reviewPreflightTurnId: string | null = null;
+  // Review loading and control handback happen before a turn crosses the wire.
+  let preflightTurnId: string | null = null;
   let steeringEnabled = false;
   let steerEpoch = 0;
   let steerInFlight = false;
@@ -274,7 +274,7 @@ export function createQueueBackedTurnController(options: {
     interruptRequests.invalidate();
     queueOf().clear();
     attemptedTurns.clear();
-    reviewPreflightTurnId = null;
+    preflightTurnId = null;
     locallyStartedTurn = null;
     acceptedOwner = null;
     dispatchingTurnId = null;
@@ -305,7 +305,7 @@ export function createQueueBackedTurnController(options: {
     // Dispatch the queue's owned copy, never the caller's mutable object.
     turn = queued;
     attemptedTurns.add(turn.turnId);
-    reviewPreflightTurnId = turn.kind === "review" ? turn.turnId : null;
+    preflightTurnId = turn.turnId;
     locallyStartedTurn = { client, sessionId, turnId: turn.turnId };
     dispatchingTurnId = turn.turnId;
     setDispatchingTurnId(turn.turnId);
@@ -333,6 +333,14 @@ export function createQueueBackedTurnController(options: {
     const seatGate = currentDependencies.releaseSeatBeforeTurn;
     if (seatGate && turn.kind !== "review") {
       const outcome = await seatGate();
+      if (!requestIsCurrent()) return;
+      if (!dependenciesRef.current.canStart()) {
+        attemptedTurns.delete(turn.turnId);
+        preflightTurnId = null;
+        retireLocalDispatch(turn.turnId, "cancelled");
+        startRequests.finish(request);
+        return;
+      }
       if (!outcome.sent) {
         retireLocalDispatch(turn.turnId, "rejected");
         dependenciesRef.current.onTurnNotSentRestore?.(turn.text, sessionId);
@@ -367,7 +375,7 @@ export function createQueueBackedTurnController(options: {
                 "Native review authority changed before dispatch.",
               );
             reviewSent = true;
-            reviewPreflightTurnId = null;
+            preflightTurnId = null;
           },
         });
         if (!requestIsCurrent()) return;
@@ -383,6 +391,7 @@ export function createQueueBackedTurnController(options: {
           throw new Error("The server did not accept native review.");
         }
       } else {
+        preflightTurnId = null;
         await client.startTurn({
           session_id: sessionId,
           turn_id: turn.turnId,
@@ -1234,8 +1243,8 @@ export function createQueueBackedTurnController(options: {
       restageSteers(unsent);
       // An interrupted lazy factory can resume on the same queue and UUID;
       // an ambiguous sent request cannot.
-      if (reviewPreflightTurnId) attemptedTurns.delete(reviewPreflightTurnId);
-      reviewPreflightTurnId = null;
+      if (preflightTurnId) attemptedTurns.delete(preflightTurnId);
+      preflightTurnId = null;
       startRequests.invalidate();
       interruptRequests.invalidate();
       locallyStartedTurn = null;
@@ -1287,7 +1296,7 @@ export function createQueueBackedTurnController(options: {
     if (recovery?.turnId === turnId) clearRecovery();
     if (timedOutStartTurnId === turnId) timedOutStartTurnId = null;
     acceptedOwner = { ...dispatch, state };
-    if (reviewPreflightTurnId === turnId) reviewPreflightTurnId = null;
+    if (preflightTurnId === turnId) preflightTurnId = null;
     locallyStartedTurn = null;
     clearDispatchingTurn(turnId);
     dependenciesRef.current.onDispatchState?.({
@@ -1305,7 +1314,7 @@ export function createQueueBackedTurnController(options: {
   ): boolean {
     const dispatch = locallyStartedTurn;
     if (!dispatch || dispatch.turnId !== turnId) return false;
-    if (reviewPreflightTurnId === turnId) reviewPreflightTurnId = null;
+    if (preflightTurnId === turnId) preflightTurnId = null;
     locallyStartedTurn = null;
     clearDispatchingTurn(turnId);
     dependenciesRef.current.onDispatchState?.({

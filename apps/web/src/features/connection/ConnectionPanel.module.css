@@ -275,10 +275,18 @@
   cursor: pointer;
 }
 
+.footer {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: -14px;
+}
+
 .forget {
   display: block;
   width: fit-content;
-  margin: -14px auto 0;
+  min-height: 36px;
   border: 0;
   padding: 3px 7px;
   background: transparent;
@@ -331,35 +339,6 @@
   .connect {
     transition: none;
   }
-}
-
-/* WEB-PAIRING-CONTRACT-5100 §Remembering: the per-device choice sits with the
-   token it governs, and its effect is stated in the note below the form. */
-/* `.fields > label` sets `display: grid` at equal specificity, so this row
-   qualifies its own tag to win on source order instead of !important. */
-label.remember {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -4px 0 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.remember input {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  accent-color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-}
-
-.remember input:disabled,
-.remember:has(input:disabled) {
-  cursor: default;
-  opacity: 0.6;
 }
 
 /* §Discovery: one offer for one origin — never a scanned range. */

@@ -1298,19 +1298,14 @@ const catalog: Readonly<Record<string, string>> = {
   // loaded catalog; carry it here so the consequence line is translated.
   "Sends this answer and resumes the peer": "发送此回答并让同侪继续",
 
-  // WEB-PAIRING-CONTRACT-5100 — the pairing link, the per-device memory, and
+  // WEB-PAIRING-CONTRACT-5100 — the pairing link and
   // the bounded copy for every refusal kind.
   "Opening your pairing link…": "正在打开配对链接…",
   "That pairing link did not work": "配对链接无法使用",
-  "Remember on this device": "在此设备上记住",
   "Found Octos on {value0}.": "在 {value0} 发现了 Octos。",
   "Connect to {value0}": "连接到 {value0}",
-  "Your token is remembered on this device. Your server address is remembered.":
-    "令牌已记在此设备上，服务器地址也会被记住。",
   "Your token stays in this browser tab. Your server address is remembered.":
     "令牌仅保存在此浏览器标签页中，服务器地址会被记住。",
-  "This browser blocked saved data, so your token is kept in memory only and is gone when you close this tab.":
-    "此浏览器阻止了站点数据存储，令牌仅保存在内存中，关闭此标签页后即失效。",
   "That link was already used. Start the server again for a fresh link.":
     "该链接已被使用。请重新启动服务器以获取新链接。",
   "That link expired. Start the server again for a fresh link.":
