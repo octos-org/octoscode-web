@@ -249,6 +249,14 @@ const catalog: Readonly<Record<string, string>> = {
   "Fixed interval": "固定间隔",
   "Forget saved connection": "忘记已保存的连接",
   "Forget server": "忘记服务器",
+  "Stop server": "停止服务器",
+  "Stops octos serve on this computer, like Ctrl+C in its terminal. Every connected client is disconnected and running turns are cancelled. Start it again from a terminal.":
+    "停止本机上的 octos serve，效果等同于在其终端按 Ctrl+C。所有已连接的客户端都会断开，正在运行的回合会被取消。需要时请在终端中重新启动。",
+  "Stop the Octos server?": "停止 Octos 服务器？",
+  "Every client connected to this server — this tab, other tabs, the terminal — is disconnected, and any running turn is cancelled. Conversations are kept on disk. To use Octos again, start octos serve from a terminal.":
+    "连接到此服务器的所有客户端（本标签页、其他标签页、终端）都会断开，正在运行的回合会被取消。会话保存在磁盘上，不会丢失。要再次使用 Octos，请在终端中启动 octos serve。",
+  "Could not stop the server. It is still running; try again.":
+    "无法停止服务器。服务器仍在运行，请重试。",
   "Fork:": "分支：",
   "GLM-5.3-Flash guidance": "GLM-5.3-Flash 使用指南",
   "GLM-5.3-Flash recommended settings": "GLM-5.3-Flash 建议设置",
