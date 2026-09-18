@@ -148,8 +148,9 @@ pnpm mock:server   # terminal 1
 pnpm dev           # terminal 2
 ```
 
-Open the app, set **Server origin** to `http://127.0.0.1:50080`, and connect;
-the fixture needs no token.
+Open the app, set **Server origin** to `http://127.0.0.1:50080`, type any value
+into **Auth token** — the form requires one, but the fixture accepts anything —
+and connect.
 
 ### The server must be listening on a port
 
