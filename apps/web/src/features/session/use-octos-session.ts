@@ -90,7 +90,10 @@ import {
   type PeerDispatchReceiptView,
 } from "@octos-org/octoscode-client/external-driver-meta";
 import type { SessionInteractionSnapshot } from "./session-interaction-ledger.ts";
-import { SessionComposerDrafts } from "./session-composer-drafts.ts";
+import {
+  SessionComposerDrafts,
+  type ComposerRestore,
+} from "./session-composer-drafts.ts";
 import { peerControlRefusalLabel } from "../control/peer-control-commands.ts";
 import { EXTERNAL_DRIVER_REFUSAL_KINDS } from "@octos-org/octoscode-client/external-driver-meta";
 import {
@@ -316,8 +319,8 @@ export interface OctosSessionRuntime {
     setShowReasoning(value: boolean): void;
     attachments: AttachmentDraftStore | null;
     prepareAttachments(): Promise<AttachmentDraftStore | null>;
-    /** A stashed interrupt prompt for the selected Session (audit row 9). */
-    interruptedPrompt: string | null;
+    /** An interrupted or unsent input for the selected Session. */
+    interruptedPrompt: ComposerRestore | null;
     /** Drain it exactly once; null when nothing is pending. */
     takeInterruptedPrompt(): string | null;
     /**
@@ -1398,10 +1401,9 @@ export function useOctosSession(): OctosSessionRuntime {
         // every other record sends directly (no seat ⇒ no frame).
         releaseSeatBeforeTurn: () => releaseControlSeatForUserTurn(scope),
         // §6 kept-column: park a gate-refused prompt back on the OWNING record.
-        onTurnNotSentRestore: (prompt) => {
+        onTurnNotSentRestore: (turn) => {
           const owner = recordManagerRef.current?.get(scope);
-          if (owner)
-            composerDraftsRef.current?.restoreInterruptPrompt(owner, prompt);
+          if (owner) composerDraftsRef.current?.restoreUnsentTurn(owner, turn);
         },
         // Gate on the RECORD's own runtime snapshot, never the pool's: the pool
         // only authenticates (idle) while the record owns opened/healthy.

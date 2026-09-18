@@ -147,6 +147,23 @@ cursors, deletion, all-owner interruption, and exact interaction resolution. It
 neither launches a browser nor proves the native browser peer host or live Core
 behavior. Its printed assertion count describes only that synthetic run.
 
+## Opt-in shared-session collision gate
+
+`pnpm test:e2e:collision` runs only the shared-session test. It requires an
+isolated local Core, a writable fixture workspace, and its `main` Profile
+configured to use `stub-model` at a separately launched
+`node e2e-live/support/stub-llm.mjs <port>` OpenAI-compatible endpoint. Supply
+`OCTOSCODE_LIVE_PROXY_TARGET`, `OCTOSCODE_LIVE_PROXY_ORIGIN`,
+`OCTOSCODE_LIVE_TOKEN`, `OCTOSCODE_LIVE_WORKSPACE`, and the local
+`OCTOSCODE_LIVE_CORE_PORT`. `OCTOSCODE_LIVE_WEB_PORT` optionally overrides the
+preview port. Do not point this test at a shared model Profile.
+
+A second client occupies the Session, the browser queues a prompt, and the
+holder interrupts its own turn through Core. The gate waits for the browser's
+exact queued turn to complete. This proves shared-session ownership and FIFO
+behavior against real Core with a stub provider; it is separate from the real
+model gate below and does not imply external-driver support.
+
 ## Opt-in live model gate
 
 The live gate consumes a real provider and mutates the explicitly supplied

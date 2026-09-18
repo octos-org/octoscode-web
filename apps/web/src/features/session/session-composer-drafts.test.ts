@@ -3,6 +3,7 @@ import type { OctosUiClient } from "@octos-org/octoscode-client";
 import type { SessionRecord } from "./session-record-manager.ts";
 import type { PromptTurn } from "../composer/turn-queue.ts";
 import { SessionComposerDrafts } from "./session-composer-drafts.ts";
+import { AttachmentDraftStore } from "../media/attachment-drafts.ts";
 
 // This suite tests draft capture only; dispatch/recovery authority is covered by
 // the real queue-controller/record integration suites, not simulated here.
@@ -44,14 +45,65 @@ function fixture() {
 }
 
 describe("record-owned composer inputs", () => {
-  it("hands a stashed interrupt prompt back to the session that owns it, once", () => {
-    const { a, b, drafts } = fixture();
-    drafts.restoreInterruptPrompt(a, "half-typed prompt");
-    expect(drafts.consumeRestore(a)).toBe("half-typed prompt");
-    // Draining is one-shot: a later terminal must not re-inject the prompt.
+  it("keeps full returned drafts in order without replacing new images or another Session", async () => {
+    const { a, b, drafts, submissions, retire } = fixture();
+    const image = new File(["image bytes"], "original.png", {
+      type: "image/png",
+    });
+    const media = {
+      path: `up/${btoa("p1/original").replace(/=/g, "")}/original.png`,
+      mime: image.type,
+      size_bytes: image.size,
+    };
+    const upload = vi.fn(async () => media);
+    const images = new AttachmentDraftStore({
+      scope: { authorityKey: "owner-a", sessionId: "A", profileId: "p1" },
+      uploadAvailable: true,
+      commands: async () => ({ upload }),
+      isCurrent: () => true,
+    });
+    drafts.get(a).images = images;
+    images.selectFiles([image]);
+    await images.uploadSelected();
+    expect(drafts.enqueue(a, "first returned draft")).toBe(true);
+    expect(images.getSnapshot().entries).toEqual([]);
+    drafts.setEffort(a, "low");
+    expect(drafts.enqueue(a, "second returned draft")).toBe(true);
+    // Admission consumes A's media, so a following queued prompt cannot borrow it.
+    expect(submissions[1]).not.toHaveProperty("media");
+    drafts.restoreUnsentTurn(a, submissions[0]!);
+    drafts.restoreUnsentTurn(a, submissions[1]!);
+    images.selectFiles([new File(["new"], "new.png", { type: "image/png" })]);
     expect(drafts.consumeRestore(a)).toBeNull();
-    // Another session's composer is untouched.
+    expect(drafts.get(a).effort).toBe("low");
+    expect(images.getSnapshot().entries[0]?.name).toBe("new.png");
     expect(drafts.consumeRestore(b)).toBeNull();
+    images.remove(images.getSnapshot().entries[0]!.id);
+    expect(drafts.consumeRestore(a)).toBe("first returned draft");
+    expect(drafts.get(a).effort).toBe("high");
+    expect(images.getSnapshot().entries[0]).toMatchObject({
+      name: "original.png",
+      status: "ready",
+    });
+    expect(drafts.consumeRestore(a)).toBeNull();
+    expect(drafts.enqueue(a, "first returned draft")).toBe(true);
+    expect(submissions[2]).toMatchObject({
+      media: [media],
+      reasoningEffort: "high",
+    });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(drafts.consumeRestore(a)).toBe("second returned draft");
+    expect(drafts.get(a).effort).toBe("low");
+    expect(drafts.consumeRestore(a)).toBeNull();
+    drafts.restoreInterruptPrompt(a, "interrupted prompt");
+    expect(drafts.consumeRestore(a)).toBe("interrupted prompt");
+    expect(drafts.consumeRestore(a)).toBeNull();
+    drafts.restoreUnsentTurn(a, submissions[0]!);
+    drafts.retire(a);
+    retire();
+    drafts.restoreUnsentTurn(a, submissions[0]!);
+    expect(drafts.peekRestore(a)).toBeNull();
+    expect(images.getSnapshot().disposed).toBe(true);
   });
   it("keeps reasoning visibility per record without changing captured effort or transcript state", () => {
     const { a, b, drafts, submissions, changed, retire } = fixture();

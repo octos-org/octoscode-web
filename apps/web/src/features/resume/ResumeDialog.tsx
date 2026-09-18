@@ -218,6 +218,11 @@ function BoundResumeDialog({
                 {row.id} · {row.messageCount}
                 {" " + t("listed message(s) · unverified")}
               </p>
+              {row.activeTurn === true ? (
+                <p className={styles.busy}>
+                  {t("Busy — another client is working in this session")}
+                </p>
+              ) : null}
               {row.lastPrompt ? <p>{row.lastPrompt}</p> : null}
               {reason ? <p>{reason}</p> : null}
             </li>
