@@ -26,6 +26,19 @@ attestations and refuses to replace an existing release. It publishes
 `octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the release
 identity; moving release tags is unsupported.
 
+An automatic main-branch deployment must also identify its build. Pass the
+checked-out commit into the build process, including through a container's
+environment when applicable:
+
+```sh
+OCTOSCODE_WEB_RELEASE=main \
+OCTOSCODE_WEB_REVISION="$(git rev-parse HEAD)" pnpm build
+```
+
+After activation, compare the served manifest's `source_revision` with that
+commit and verify the referenced hashed assets. A release directory named after
+a commit does not establish the identity reported by its contents.
+
 To build for an absolute subpath, set a slash-terminated base path:
 
 ```sh

@@ -6,6 +6,10 @@ shipped. The intake heads were main `c79d85b7`, #105 `c5839d09`, and #112
 own Core. Findings come from source review, protocol probes, production builds,
 real browser interactions and inspected screenshots.
 
+This document records the initial integration review. The
+[maintainer acceptance report](reviews/2026-09-18-020-maintainer-audit.md)
+tracks the subsequent corrections and final delivery evidence.
+
 ## Bugs addressed in the candidate
 
 | Finding                                                                                             | Change                                                                                                                         | Evidence and limits                                                                                                                     |
@@ -26,10 +30,9 @@ an unstyled button outside the page layout. The 390px connection and preferences
 views were inspected; neither overflows horizontally. Existing DSH tokens and
 input sizes are retained.
 
-PR #125 is reviewed independently for wider code/table space, readable prose,
-phone input sizing and visibility of operational state. Its incoming design must
-not hide an external-holder explanation behind model text truncation. These
-changes are kept in that PR to avoid conflicting implementations.
+PR #125 was independently reviewed and merged for wider code/table space,
+readable prose, phone input sizing and visibility of operational state. Its
+external-holder explanation remains readable alongside model selection.
 
 ## Verification quality
 
@@ -46,24 +49,22 @@ zero forbidden sends, preserved drafts, acquire/release/start order and a single
 accepted submission. This establishes the frontend contract against the fixture;
 it does not establish compatibility with an unavailable live Core method.
 
-## Remaining integration work
+## Follow-up outcomes
 
-- #112: reconcile terminal-before-collision-reply ordering and retain the full
-  refused prompt, including media and reasoning selection. Update its old base
-  without losing newer #105 fixes.
-- #66 / #122: actual close-tab testing disproved the claimed durable-draft
-  behavior. The localStorage write uses a helper requiring a tab-only connection
-  envelope. Replace that path with credential-free storage scoped to a verified
-  principal; never copy the envelope or token into durable storage.
-- Handback refusal currently restores text only. Extend the existing recovery
-  payload to preserve the complete unsent turn rather than introducing another
-  upload/cache mechanism.
+- #112 is merged into the candidate: terminal-before-collision-reply ordering
+  and full refused-prompt recovery, including media and reasoning, are verified.
+  Handback refusal uses the same full-turn recovery payload.
+- #134 corrects #66 / #122's durable-draft implementation. Close-tab testing had
+  disproved the old helper's use of a tab-only connection envelope; the
+  replacement stores credential-free text scoped to a freshly verified
+  principal. Actual Core and browser identity/failure checks passed.
 - #103: React's dependency update needs refreshed licenses. Against main it also
   adds about 29 KB of initial JavaScript and exceeds the existing budget.
   Recheck after the parity connection-shell split; do not raise the budget to
   pass CI.
-- Finish integrated navigation, long-session performance, phone, keyboard,
-  recovery and post-deployment checks on the exact final revision.
+- The maintainer report records additional settings, reading-position and
+  rejected-input findings. Exact final integration and deployment acceptance
+  remain required; earlier component passes do not substitute for that gate.
 
 Local audit evidence is in `/tmp/octos-020/`. That temporary directory is useful
 for this maintenance session, not a durable release artifact. CI runs, PRs and

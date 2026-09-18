@@ -1,9 +1,10 @@
 # TUI parity implementation and acceptance
 
-Status: integration implemented; final browser and live-provider acceptance is
-in progress. Historical delivery reviews below are retained as an audit trail;
-the latest checkpoint is recorded at the end. This is not a blanket parity or
-soak-pass claim.
+Current acceptance is tracked in the
+[0.20 maintainer audit](reviews/2026-09-18-020-maintainer-audit.md) and
+[readiness ledger](release-readiness-020.md). The checkpoints below are
+historical records of their named artifacts, not evidence for the current
+candidate. This is not a blanket parity or soak-pass claim.
 
 ## Pinned comparison
 
@@ -472,10 +473,10 @@ B / 81,920 B caps. The full 73-case browser suite and real-provider
 workflow/capacity/recovery/endurance gates are being rerun on this exact build.
 Earlier C/D or preliminary E results do not substitute for those final gates.
 
-## Current checkpoint (native2221 static source; no browser or soak acceptance)
+## Historical checkpoint (native2221 static source; no browser or soak acceptance)
 
-This is the authoritative current static checkpoint; the C/D/E numbers above
-stay as an audit trail.
+This records the native2221 static checkpoint; the C/D/E numbers above remain an
+audit trail. Current acceptance is linked at the top of this document.
 
 Native2221 ran the deterministic gate on the frozen Web source plus the one
 already-existing 2150 multi-session E2E spec. `pnpm check` reached true exit 0

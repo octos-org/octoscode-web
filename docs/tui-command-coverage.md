@@ -5,8 +5,10 @@ reference is octoscode `0a174d95ddec2b123adb3498432e29eb13affb81`, especially
 `src/menu/registry.rs:565–1088` (all 44 canonical commands), `src/menu/types.rs`
 and their dispatched handlers in `src/store.rs`. Runtime contracts below were
 checked against the isolated rc11 Core source. The generated repository contract
-pin remains unchanged. The [acceptance checkpoint](feature-parity.md) owns the
-build, browser, native execution, and endurance results.
+pin remains unchanged. The
+[0.20 maintainer audit](reviews/2026-09-18-020-maintainer-audit.md) owns current
+acceptance. D/E results below describe historical artifacts, not the latest
+build.
 
 “Implemented” means a current Web route exists; it does not independently
 certify every route's live acceptance. “Equivalent” means native behavior has a
