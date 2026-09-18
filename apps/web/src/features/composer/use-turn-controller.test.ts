@@ -456,6 +456,39 @@ describe("queue-backed turn controller async authority", () => {
     );
   });
 
+  it("settles a lost turn by itself when the server is certain it is not running", async () => {
+    // UPCR-2026-031: `unknown` + `running: false` is proof nothing will run.
+    // The hold lifts without the user, and the lost prompt is never resent.
+    const client = fakeClient({
+      state: async (params) => ({
+        ...params,
+        state: "unknown",
+        running: false,
+        committed_seqs: [],
+      }),
+    });
+    const harness = renderController(client);
+    harness.controller.enqueuePrompt("lost to a restart");
+    const lostTurnId = harness.activeTurnId();
+    await vi.waitFor(() =>
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner"),
+    );
+    harness.controller.enqueuePrompt("queued behind it");
+    harness.controller.reconcileFromHydrate(emptyHydrate());
+
+    await vi.waitFor(() => expect(client.startTurn).toHaveBeenCalledTimes(2));
+    expect(harness.controller.turnRecovery).toBeNull();
+    const startedIds = client.startTurn.mock.calls.map(
+      ([params]) => (params as { turn_id: string }).turn_id,
+    );
+    expect(startedIds.filter((id) => id === lostTurnId)).toHaveLength(1);
+    expect(
+      harness.timeline.some(
+        (entry) => entry.kind === "system" && entry.title === "Response lost",
+      ),
+    ).toBe(true);
+  });
+
   it("ignores continue while a status check is still in flight", async () => {
     const lookup = deferred<void>();
     const client = fakeClient({

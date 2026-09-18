@@ -1012,6 +1012,17 @@ export function createQueueBackedTurnController(options: {
         );
       }
       if (result.state === "unknown") {
+        if (result.running === false) {
+          // UPCR-2026-031: the server is certain it is not running the turn
+          // (lost across a restart). Release the wait without the user; no
+          // terminal is invented and the prompt is never resent.
+          releaseUnconfirmedTurn(
+            turnId,
+            "Response lost",
+            "The server has no record of this response and is not running it. It was not sent again; your next message goes ahead.",
+          );
+          return;
+        }
         publishRecovery({ turnId, phase: "unknown" });
         return;
       }
@@ -1042,13 +1053,28 @@ export function createQueueBackedTurnController(options: {
     const turnId = queueOf().snapshot().active?.turnId;
     if (!recovery || recovery.phase === "checking") return;
     if (!turnId || recovery.turnId !== turnId) return;
+    releaseUnconfirmedTurn(
+      turnId,
+      "Response outcome unknown",
+      "Continued without confirming this response. No stop request or resubmission was sent.",
+    );
+  };
+
+  /**
+   * Abandon only the local wait for a turn whose outcome is not known. No
+   * server terminal was observed, so none is invented: pending interactions
+   * and steering receipts stay, the prompt is never restored or resent.
+   */
+  function releaseUnconfirmedTurn(
+    turnId: string,
+    title: string,
+    body: string,
+  ): void {
     clearRecovery();
     timedOutStartTurnId = null;
     if (locallyStartedTurn?.turnId === turnId)
       retireLocalDispatch(turnId, "cancelled");
     if (acceptedOwner?.turnId === turnId) acceptedOwner = null;
-    // Abandon only the local wait. No server terminal was observed, so retain
-    // pending interactions and steering receipts and never restore the prompt.
     queueOf().takeInterruptPrompt(turnId);
     dependenciesRef.current.setTimeline((entries) =>
       addSystemMessage(
@@ -1058,12 +1084,12 @@ export function createQueueBackedTurnController(options: {
             : entry,
         ),
         `turn-unresolved:${turnId}`,
-        "Response outcome unknown",
-        "Continued without confirming this response. No stop request or resubmission was sent.",
+        title,
+        body,
       ),
     );
     releaseQueueTurn(turnId);
-  };
+  }
 
   function applyRecoveredState(
     turnId: string,

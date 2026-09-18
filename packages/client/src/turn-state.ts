@@ -41,5 +41,10 @@ export function parseTurnStateGetResult(
     ...(typeof value.thread_id === "string"
       ? { thread_id: value.thread_id }
       : {}),
+    // UPCR-2026-031: only meaningful beside `unknown`; anything else is
+    // outside the contract and dropped rather than trusted.
+    ...(value.state === "unknown" && value.running === false
+      ? { running: false as const }
+      : {}),
   };
 }

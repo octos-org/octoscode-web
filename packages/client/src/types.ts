@@ -530,6 +530,12 @@ export interface TurnStateGetResult extends TurnStateGetParams {
   completed_at?: string;
   thread_id?: string;
   committed_seqs: number[];
+  /**
+   * UPCR-2026-031: present (as `false`) only with `state: "unknown"`, when the
+   * server is certain it is not executing the turn — e.g. one lost across a
+   * restart. Proof that the turn will produce nothing further.
+   */
+  running?: false;
 }
 
 export interface HydratedTurn {
