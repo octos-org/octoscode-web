@@ -15,6 +15,7 @@ export {
 } from "./generated/core-contract.ts";
 export { isRecord } from "./rpc.ts";
 export { APPUI_INVENTORY_METHODS } from "./inventory-methods.ts";
+export { APPUI_SERVER_METHODS } from "./server-methods.ts";
 export { APPUI_SKILL_METHODS } from "./skill-methods.ts";
 export { APPUI_RESEARCH_METHODS } from "./research-methods.ts";
 export {

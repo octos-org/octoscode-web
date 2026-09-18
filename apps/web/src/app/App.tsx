@@ -22,6 +22,7 @@ import {
   useState,
 } from "react";
 import {
+  APPUI_SERVER_METHODS,
   CORE_UI_FEATURES,
   supportsFeature,
   supportsMethod,
@@ -3202,6 +3203,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         ? setLeaveConnectionAction("forget")
                         : forgetConnection()
                     }
+                    canStopServer={supportsMethod(
+                      session.capabilities,
+                      APPUI_SERVER_METHODS.SHUTDOWN,
+                    )}
+                    onStopServer={async () => {
+                      const client = protocol.client;
+                      if (!client) throw new Error("Not connected");
+                      await client.stopServer();
+                      // The server is going away. Disconnect on purpose so the
+                      // tab returns to the connect screen instead of retrying
+                      // a server that has shut down. The Stop confirmation
+                      // already warned that running work is cancelled, so this
+                      // skips the unfinished-work prompt Disconnect shows.
+                      disconnect();
+                    }}
                     onCopyDiagnostics={() => {
                       // Redacted by construction: origin only (never the
                       // token, never the WS query string), plus state the
