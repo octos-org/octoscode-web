@@ -53,9 +53,6 @@ export function ComposerInput(props: ComposerInputProps) {
     props.peerRoster ?? [],
     props.peerSessionId ?? null,
   );
-  // Command entry: the palette trigger is a leading "/" (registry.ts
-  // `commandSuggestions`). It survives an Escape dismissal, which is why the
-  // combobox wiring keys off the draft rather than the open list.
   const commandMode =
     props.commandCount > 0 || props.value.trimStart().startsWith("/");
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -254,21 +251,10 @@ export function ComposerInput(props: ComposerInputProps) {
             props.onInterrupt();
           }
         }}
-        // ARIA 1.2: `aria-expanded` is NOT supported on role=textbox, so a
-        // plain draft must not carry it (axe `aria-allowed-attr`). The
-        // composer IS a combobox while it is in command entry — a draft that
-        // opens with "/" — and only then does an expanded state exist to
-        // report, whether or not the list is currently showing.
-        {...(commandMode
-          ? {
-              role: "combobox" as const,
-              "aria-autocomplete": "list" as const,
-              "aria-haspopup": "listbox" as const,
-              "aria-expanded": props.commandCount > 0,
-              "aria-controls": props.paletteId,
-              "aria-activedescendant": props.selectedCommandId,
-            }
-          : {})}
+        aria-autocomplete={commandMode ? "list" : undefined}
+        aria-haspopup={commandMode ? "listbox" : undefined}
+        aria-controls={props.commandCount > 0 ? props.paletteId : undefined}
+        aria-activedescendant={props.selectedCommandId}
         rows={3}
       />
       {readOnlyPeerSlug !== null ? (

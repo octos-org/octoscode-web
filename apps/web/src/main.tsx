@@ -8,8 +8,8 @@ import "./app/theme.css";
 import "./app/styles.css";
 
 // WEB-PAIRING-CONTRACT-5100 §Client step 3: read `octos`/`pair` and rewrite the
-// address HERE — before the first render — so neither value can reach a
-// screenshot, a referrer, or a devtools screenshot of the mounted app.
+// address before the first render. The HTML referrer policy also protects
+// the resource requests made before this module runs.
 consumePairingLink();
 
 const root = document.getElementById("root");

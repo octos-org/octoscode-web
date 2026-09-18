@@ -120,11 +120,10 @@ export function FleetPane({
   return (
     <FleetView
       peerController={
-        peerController && peerController.readiness === "ready"
+        peerController
           ? {
               ...peerController,
-              readiness: "ready" as const,
-              ...(fleetPeers !== null ? { fleetPeers } : {}),
+              fleetPeers,
             }
           : null
       }

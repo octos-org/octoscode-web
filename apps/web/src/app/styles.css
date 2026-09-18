@@ -1358,7 +1358,9 @@ label > span {
   bottom: calc(100% + 8px);
   left: 0;
   z-index: 10;
-  overflow: hidden;
+  max-height: min(360px, 45dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 14px;
   background: var(--dsw-specific-menu);

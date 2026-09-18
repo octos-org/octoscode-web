@@ -36,16 +36,9 @@ import {
   probePairingInfo,
   type PairingLink,
 } from "../features/connection/pairing.ts";
-import {
-  forgetRememberedToken,
-  loadRememberedToken,
-  rememberToken,
-  type TokenStorageKind,
-} from "../features/connection/remembered-token.ts";
-import { connectionEndpointError } from "../features/connection/validation.ts";
+import { clearRememberedTokens } from "../features/connection/remembered-token.ts";
 import { clearRecentWorkspaces } from "../features/workspace/workspace-recents.ts";
 import { useTheme, type ThemePreference } from "./use-theme.ts";
-import { useUiText } from "../features/preferences/ui-text.tsx";
 
 /**
  * The product shell. Everything an operator with a live server needs — the
@@ -82,15 +75,13 @@ export interface ConnectionPanelOwnedProps {
   readonly value: ConnectionDraft;
   readonly pairing: boolean;
   readonly pairingError: string | null;
-  readonly tokenStorage: TokenStorageKind;
-  readonly remember: boolean;
-  readonly onRememberChange: (next: boolean) => void;
   readonly discoveredOrigin: string | null;
   readonly onUseDiscovered: () => void;
   readonly onChange: (next: ConnectionDraft) => void;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
   readonly onForget: () => void;
+  readonly onPreferences: () => void;
   readonly storageWarning?: string;
 }
 
@@ -106,8 +97,6 @@ export interface ConnectionGateApi {
   readonly cleanupFailed: boolean;
   /** This tab was already connected; the shell restores its Session. */
   readonly restoreConnectionRef: RefObject<boolean>;
-  /** This tab woke up holding a token remembered on this device. */
-  readonly rememberedConnectRef: RefObject<boolean>;
   /** The shell publishes its session seam here while it is mounted. */
   readonly bridgeRef: RefObject<ConnectionGateBridge | null>;
   /** A connect the operator asked for before the shell finished loading. */
@@ -132,7 +121,6 @@ export interface ConnectionGateApi {
  * here rather than reading storage a second time.
  */
 export function ConnectionGate() {
-  const t = useUiText();
   // Applied before the first paint, so the connect screen is already in the
   // remembered theme rather than flashing the system one.
   const { theme, cycleTheme } = useTheme();
@@ -145,41 +133,19 @@ export function ConnectionGate() {
   }
   // WEB-PAIRING-CONTRACT-5100 §Client: main.tsx already read `octos`/`pair` and
   // rewrote the address before this first render; this reads what it captured.
-  // The code lives in memory only, for exactly one POST.
+  // The code lives only in memory.
   const [pairingLink] = useState(() => consumePairingLink());
-  /** True when this tab woke up holding a token remembered on this device. */
-  const rememberedConnectRef = useRef(false);
-  /** True when this device ALREADY remembers a token for the loaded origin. */
-  const rememberedAtStartRef = useRef(false);
   const [connection, setConnection] = useState(() => {
     const loaded = loadConnectionPreferences(
       initialConnection,
       browserStorage("localStorage"),
       browserStorage("sessionStorage"),
     );
-    const remembered = loadRememberedToken(
-      browserStorage("localStorage"),
-      loaded.endpoint,
-    );
-    // The two are NOT the same question. A reload finds the token in this
-    // tab's own storage, which must not be read as "the operator unchecked
-    // Remember" and silently erase the device memory.
-    rememberedAtStartRef.current = remembered !== null;
-    // A pairing link brings its own token from /pair/claim; nothing is typed.
-    if (pairingLink) return { ...loaded, token: "" };
-    if (loaded.token || !remembered) return loaded;
-    rememberedConnectRef.current = true;
-    return { ...loaded, token: remembered };
+    return pairingLink ? { ...loaded, token: "" } : loaded;
   });
-  const connectionRef = useRef(connection);
-  // §Remembering: ON by default for a pairing link and for an origin this
-  // device already remembers; OFF for a hand-typed token.
-  const [remember, setRemember] = useState(
-    () => Boolean(pairingLink) || rememberedAtStartRef.current,
-  );
+  const pairingAbortRef = useRef<AbortController | null>(null);
   const [pairingClaiming, setPairingClaiming] = useState(Boolean(pairingLink));
   const [pairingError, setPairingError] = useState<string | null>(null);
-  const [tokenStorageBlocked, setTokenStorageBlocked] = useState(false);
   const [discoveredOrigin, setDiscoveredOrigin] = useState<string | null>(null);
   const [cleanupFailed, setCleanupFailed] = useState(false);
   const bridgeRef = useRef<ConnectionGateBridge | null>(null);
@@ -191,9 +157,7 @@ export function ConnectionGate() {
       autoStartKind({
         pairingLink: pairingLink !== null,
         restoreConnection: restoreConnectionRef.current === true,
-        rememberedConnect: rememberedConnectRef.current,
         endpoint: connection.endpoint,
-        token: connection.token,
         sessionId: connection.sessionId,
       }) !== null,
   );
@@ -224,11 +188,13 @@ export function ConnectionGate() {
       browserStorage("localStorage"),
       browserStorage("sessionStorage"),
     );
-    connectionRef.current = connection;
   }, [connection]);
 
-  // WEB-PAIRING-CONTRACT-5100 §Client steps 1-4. The code is read from the
-  // closure, posted once, and dropped: it reaches neither storage nor a log.
+  useEffect(() => {
+    if (!clearRememberedTokens()) setCleanupFailed(true);
+  }, []);
+
+  // Pairing replaces the connection identity only while this claim is current.
   useEffect(() => {
     if (!pairingLink) return;
     const origin = loopbackOrigin(pairingLink.origin);
@@ -237,65 +203,35 @@ export function ConnectionGate() {
       // NOT prefilled into the form the operator falls back to.
       setPairingError(pairingErrorCopy("pair_origin_not_loopback"));
       setPairingClaiming(false);
-      setRemember(rememberedAtStartRef.current);
       return;
     }
     const controller = new AbortController();
-    let live = true;
+    pairingAbortRef.current = controller;
     void claimPairingCode(pairingLink, { signal: controller.signal }).then(
       (result) => {
-        if (!live) return;
+        if (controller.signal.aborted) return;
+        pairingAbortRef.current = null;
         if (!result.ok) {
-          // Step 4: bounded copy per kind, and the normal form with the
-          // origin prefilled so the operator can paste a token instead.
+          changeConnection({ ...initialConnection, endpoint: origin });
           setPairingError(pairingErrorCopy(result.kind));
           setPairingClaiming(false);
-          // The token will now be hand-typed, so Remember goes back to its
-          // hand-typed default unless this device already remembers one.
-          setRemember(rememberedAtStartRef.current);
-          setConnection((current) => ({ ...current, endpoint: origin }));
           return;
         }
         const next = {
-          ...connectionRef.current,
+          ...initialConnection,
           endpoint: result.claim.serverOrigin,
           token: result.claim.token,
         };
-        setConnection(next);
+        changeConnection(next);
         requestConnect(next);
       },
     );
-    return () => {
-      live = false;
-      controller.abort();
-    };
+    return () => controller.abort();
   }, [pairingLink]);
 
-  // §Remembering: checked persists the token under the per-origin durable key;
-  // unchecked leaves it in sessionStorage exactly as before. A write that
-  // cannot be read back downgrades to in-memory WITH a visible notice.
+  // Probe only the last saved origin when this tab has no credential.
   useEffect(() => {
-    const durable = browserStorage("localStorage");
-    if (!remember) {
-      forgetRememberedToken(durable, connection.endpoint);
-      return;
-    }
-    if (
-      !connection.token.trim() ||
-      connectionEndpointError(connection.endpoint)
-    ) {
-      return;
-    }
-    setTokenStorageBlocked(
-      !rememberToken(durable, connection.endpoint, connection.token),
-    );
-  }, [remember, connection.endpoint, connection.token]);
-
-  // §Discovery: with no link and no remembered token, probe the ONE origin
-  // this browser last saw. A 404 is "pairing not supported" — no complaint —
-  // and every other failure is silent. Never a range of ports.
-  useEffect(() => {
-    if (pairingLink || rememberedConnectRef.current) return;
+    if (pairingLink) return;
     if (restoreConnectionRef.current || connection.token.trim()) return;
     const last = loadDurableEndpoint(browserStorage("localStorage"));
     if (!last) return;
@@ -321,19 +257,14 @@ export function ConnectionGate() {
       setPairingError(null);
       setDiscoveredOrigin(null);
       clearKnownSessions(browserStorage("sessionStorage"), connection);
-      let cleared = clearConnectionPreferences(
-        browserStorage("localStorage"),
-        browserStorage("sessionStorage"),
-      );
-      // §Remembering: the device memory belongs to the identity being left.
+      let cleared = clearRememberedTokens();
       if (
-        !forgetRememberedToken(
+        !clearConnectionPreferences(
           browserStorage("localStorage"),
-          connection.endpoint,
+          browserStorage("sessionStorage"),
         )
-      ) {
+      )
         cleared = false;
-      }
       for (const endpoint of new Set([
         connection.endpoint.trim(),
         next.endpoint.trim(),
@@ -359,25 +290,18 @@ export function ConnectionGate() {
     );
   };
   const disconnect = () => {
+    pairingAbortRef.current?.abort();
+    pairingAbortRef.current = null;
     restoreConnectionRef.current = false;
     // Cancel is also the way out of an auto-start that has not reached the
     // shell yet: the parked connect and the unattended restore both stop here.
-    rememberedConnectRef.current = false;
     pendingConnectRef.current = null;
     setPairingClaiming(false);
     setAutoConnect(browserStorage("sessionStorage"), false);
     bridgeRef.current?.disconnect();
   };
   const forgetConnection = () => {
-    // §Remembering: Forget clears the device memory too, and the checkbox goes
-    // back to its hand-typed default.
-    const rememberedCleared = forgetRememberedToken(
-      browserStorage("localStorage"),
-      connection.endpoint,
-    );
-    rememberedConnectRef.current = false;
-    setRemember(false);
-    setTokenStorageBlocked(false);
+    const rememberedCleared = clearRememberedTokens();
     setPairingError(null);
     setDiscoveredOrigin(null);
     clearKnownSessions(browserStorage("sessionStorage"), connection);
@@ -406,32 +330,23 @@ export function ConnectionGate() {
   /** §Discovery: one button, one origin — the one that answered /pair/info. */
   const useDiscoveredOrigin = () => {
     if (!discoveredOrigin) return;
-    const next = { ...connectionRef.current, endpoint: discoveredOrigin };
+    const next = { ...initialConnection, endpoint: discoveredOrigin };
     setDiscoveredOrigin(null);
-    setConnection(next);
+    changeConnection(next);
     requestConnect(next);
   };
 
-  // §Remembering: the single line the panel shows must name the storage that
-  // is ACTUALLY in effect, including the in-memory downgrade.
-  const tokenStorage: TokenStorageKind = tokenStorageBlocked
-    ? "memory"
-    : remember
-      ? "device"
-      : "tab";
   const panel: ConnectionPanelOwnedProps = {
     value: connection,
     pairing: pairingClaiming,
     pairingError,
-    tokenStorage,
-    remember,
-    onRememberChange: setRemember,
     discoveredOrigin,
     onUseDiscovered: useDiscoveredOrigin,
     onChange: changeConnection,
     onConnect: () => requestConnect(connection),
     onDisconnect: disconnect,
     onForget: forgetConnection,
+    onPreferences: () => setPreferencesOpen(true),
     ...(cleanupFailed ? { storageWarning: STORAGE_CLEAR_WARNING } : {}),
   };
 
@@ -442,7 +357,6 @@ export function ConnectionGate() {
     setPairingClaiming,
     cleanupFailed,
     restoreConnectionRef: restoreConnectionRef as RefObject<boolean>,
-    rememberedConnectRef,
     bridgeRef,
     takePendingConnect,
     returnPendingConnect,
@@ -474,9 +388,6 @@ export function ConnectionGate() {
         </Suspense>
       ) : (
         <>
-          <button type="button" onClick={() => setPreferencesOpen(true)}>
-            {t("Browser preferences")}
-          </button>
           <SurfaceBoundary name="Connection" fallback={null}>
             <ConnectionPanel {...panel} status="idle" error={null} />
           </SurfaceBoundary>

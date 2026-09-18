@@ -52,19 +52,26 @@ bridge, or raw protocol event bus.
 
 ## State ownership
 
-| State                                                         | Owner                                                                   |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Sessions, transcript, tasks, plans, permissions, diffs, usage | `octos serve`                                                           |
-| Cursor, hydrate integrity, and current server projections     | Protocol/session feature boundaries                                     |
-| Drafts, focus, selection, and expansion                       | Browser memory                                                          |
-| Remembered server endpoint                                    | `localStorage`; the only durable browser preference                     |
-| Token, auto-connect, and selected Session restore hints       | Endpoint-bound current tab (`sessionStorage`)                           |
-| Recent Workspace paths                                        | Endpoint-bound current tab (`sessionStorage`)                           |
-| Confirmed Session routing tuples and local recency            | Endpoint-and-token-bound current tab; navigation only, not a catalog    |
-| Per-Session controller, FIFO, ledger, and bounded projection  | Retained in browser memory; server hydrate/replay remains authoritative |
-| One pooled physical WebSocket                                 | Current authenticated tab; closed on refresh, loss, or Disconnect       |
-| Provider credential draft                                     | Operation-local browser memory; sent only to Core                       |
-| Saved provider credential                                     | `octos serve`; browser receives only `has_api_key`                      |
+| State                                                               | Owner                                                                   |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Sessions, transcript, tasks, plans, permissions, diffs, usage       | `octos serve`                                                           |
+| Cursor, hydrate integrity, and current server projections           | Protocol/session feature boundaries                                     |
+| Focus, selection, and expansion                                     | Browser memory                                                          |
+| Per-Session text drafts                                             | Browser memory and authenticated current tab (`sessionStorage`)         |
+| Remembered server endpoint and explicitly saved display preferences | `localStorage`; no token, Session identity, or draft                    |
+| Token, auto-connect, and selected Session restore hints             | Endpoint-bound current tab (`sessionStorage`)                           |
+| Recent Workspace paths                                              | Endpoint-bound current tab (`sessionStorage`)                           |
+| Confirmed Session routing tuples and local recency                  | Endpoint-and-token-bound current tab; navigation only, not a catalog    |
+| Per-Session controller, FIFO, ledger, and bounded projection        | Retained in browser memory; server hydrate/replay remains authoritative |
+| One pooled physical WebSocket                                       | Current authenticated tab; closed on refresh, loss, or Disconnect       |
+| Provider credential draft                                           | Operation-local browser memory; sent only to Core                       |
+| Saved provider credential                                           | `octos serve`; browser receives only `has_api_key`                      |
+
+Pairing replaces the previous connection identity and its tab-local restore
+hints. Cancellation invalidates a pending claim; late replies cannot connect.
+The HTML referrer policy protects pairing parameters before application code
+removes them. Legacy device bearer entries are deleted when the connection gate
+loads.
 
 `SessionRecordManager` retains one executable controller/FIFO, interaction
 ledger, durable cursor, and bounded timeline projection per confirmed scope:

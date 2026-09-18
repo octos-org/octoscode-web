@@ -94,13 +94,12 @@ Open the web client: http://127.0.0.1:5173/?octos=http://127.0.0.1:53124&pair=EM
 
 Open that link and the app connects on its own. The code works once, expires
 five minutes after the server starts, and is only accepted over loopback. The
-link's parameters are removed from the address bar before the first render, so
-they do not reach history or a screenshot. **Remember on this device** is ticked
-for a pairing link, so later restarts do not ask again even though the port
-changes; a line under the form says whether the token lives on this device, in
-this tab, or only in memory when the browser blocks saved data, and **Forget**
-clears it. Without `--web-url` the server prints its origin and the code as two
-labelled lines instead.
+link's parameters are removed from the address bar before the first render. The
+page also suppresses referrers while its resources load. The auth token stays in
+this browser tab; it is never saved to localStorage. **Cancel** stops the
+current claim, and **Forget saved connection** removes this tab's saved
+connection and any legacy device token. Without `--web-url`, servers supporting
+pairing print their origin and code as separate labelled lines instead.
 
 **By hand, which always works.** Enter the server's origin and auth token. The
 connection form defaults to this page's origin; **Use this page** restores that

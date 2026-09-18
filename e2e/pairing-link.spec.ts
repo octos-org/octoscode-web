@@ -7,7 +7,7 @@ import {
 
 /**
  * WEB-PAIRING-CONTRACT-5100 §Client — opening the web client from the link the
- * server prints, and remembering the token it hands back per device.
+ * server prints. The resulting credential stays within this browser tab.
  */
 const FIXTURE_PORT = process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080";
 const ORIGIN = `http://127.0.0.1:${FIXTURE_PORT}`;
@@ -51,6 +51,47 @@ test("a good link connects with no token box and leaves nothing in the address",
 }) => {
   await stagePairing(request, "fresh");
   const errors = watchErrors(page);
+  const leakedReferrers: string[] = [];
+  page.on("request", (request) => {
+    if (request.headers().referer?.includes("pair="))
+      leakedReferrers.push(new URL(request.url()).pathname);
+  });
+  await page.goto("/");
+  await tokenBox(page).waitFor();
+  await page.evaluate(
+    ({ origin, key }) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, token: "legacy-token" }),
+      );
+      localStorage.setItem(
+        key + "-other-origin",
+        JSON.stringify({ version: 1, token: "other-legacy-token" }),
+      );
+      sessionStorage.setItem(
+        "octoscode-web.tab-connection.v3",
+        JSON.stringify({
+          version: 3,
+          endpoint: origin,
+          token: "previous-token",
+          sessionId: "coding:api:previous-identity",
+          profileId: "coding",
+          cwd: "/workspace/previous-identity",
+          autoConnect: true,
+          knownSessions: [],
+          composerDrafts: [],
+        }),
+      );
+    },
+    { origin: ORIGIN, key: REMEMBERED_KEY(ORIGIN) },
+  );
+  const openedSessions: unknown[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method === "session/open") openedSessions.push(frame.params);
+    }),
+  );
   await page.goto(link(ORIGIN, CODE));
   // Step 3: the link is exchanged, the client connects, and the address no
   // longer carries either value.
@@ -58,13 +99,32 @@ test("a good link connects with no token box and leaves nothing in the address",
   await expect(tokenBox(page)).toHaveCount(0);
   expect(page.url()).not.toContain("pair=");
   expect(page.url()).not.toContain("octos=");
-  // §Remembering: default ON for a pairing link — the token is on the device,
-  // and the code that fetched it is nowhere at all.
-  const stored = await page.evaluate(
-    (key) => localStorage.getItem(key),
-    REMEMBERED_KEY(ORIGIN),
-  );
-  expect(stored).toContain("paired-e2e-token");
+  expect(leakedReferrers).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) =>
+        key.startsWith("octoscode-web.remembered-token.v1:"),
+      ),
+    ),
+  ).toEqual([]);
+  const selection = await page.evaluate(() => {
+    const saved = JSON.parse(
+      sessionStorage.getItem("octoscode-web.tab-connection.v3")!,
+    );
+    return {
+      sessionId: saved.sessionId,
+      profileId: saved.profileId,
+      cwd: saved.cwd,
+    };
+  });
+  expect(selection).toEqual({
+    sessionId: "coding:local:main",
+    profileId: "",
+    cwd: "",
+  });
+  await page.reload();
+  await expect(workspaceGate(page)).toBeVisible();
+  expect(openedSessions).toEqual([]);
   const everything = await page.evaluate(() =>
     JSON.stringify([
       Object.entries(localStorage),
@@ -142,7 +202,7 @@ test("an octos origin off this computer is refused without a request", async ({
   );
 });
 
-test("the paired token is remembered across a reload and a fresh tab, then Forget clears it", async ({
+test("the paired token survives only this tab until Forget", async ({
   page,
   context,
   request,
@@ -156,16 +216,14 @@ test("the paired token is remembered across a reload and a fresh tab, then Forge
   await expect(workspaceGate(page)).toBeVisible();
   await expect(tokenBox(page)).toHaveCount(0);
 
-  // A fresh tab has no sessionStorage at all — only the device memory can
-  // carry this, and the code was single use, so it cannot be replayed.
+  // A fresh tab has no credential, even while the paired tab remains open.
   const second = await context.newPage();
   await second.goto("/");
-  await expect(workspaceGate(second)).toBeVisible();
-  await expect(tokenBox(second)).toHaveCount(0);
+  await expect(tokenBox(second)).toBeVisible();
+  await expect(tokenBox(second)).toHaveValue("");
   await second.close();
 
-  // Forget: the device memory goes, and the checkbox returns to its
-  // hand-typed default with the storage line saying so.
+  // Forget removes the tab-scoped credential.
   await page
     .getByRole("complementary", { name: "Product navigation" })
     .getByRole("button", { name: "Settings", exact: true })
@@ -177,44 +235,10 @@ test("the paired token is remembered across a reload and a fresh tab, then Forge
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("checkbox", { name: "Remember on this device" }),
-  ).not.toBeChecked();
-  await expect(
-    page.getByText("Your token stays in this browser tab."),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(
-      (key) => localStorage.getItem(key),
-      REMEMBERED_KEY(ORIGIN),
-    ),
-  ).toBeNull();
-});
-
-test("a browser that blocks site data still connects, and says so", async ({
-  page,
-  request,
-}) => {
-  await stagePairing(request, "fresh");
-  const errors = watchErrors(page);
-  await page.addInitScript(() => {
-    const write = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === localStorage) {
-        throw new DOMException("Blocked site data", "SecurityError");
-      }
-      write.call(this, key, value);
-    };
-  });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await tokenBox(page).fill("tab-scoped-e2e-token");
-  await page.getByRole("checkbox", { name: "Remember on this device" }).check();
-  // Degraded to in-memory WITH a notice — and the connect still works.
-  await expect(page.getByText("This browser blocked saved data")).toBeVisible();
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(workspaceGate(page)).toBeVisible();
-  expect(errors).toEqual([]);
+  await expect(tokenBox(page)).toHaveValue("");
+  await page.reload();
+  await expect(tokenBox(page)).toBeVisible();
+  await expect(tokenBox(page)).toHaveValue("");
 });
 
 test("a server that 404s /pair/info is simply pairing not supported", async ({
