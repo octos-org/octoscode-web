@@ -22,7 +22,7 @@ for (const viewport of [
   { width: 390, height: 844 },
   { width: 320, height: 480 },
 ]) {
-  test(`settings preserves its loading geometry at ${viewport.width}px`, async ({
+  test(`settings preserves its geometry while model management loads at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -30,9 +30,11 @@ for (const viewport of [
     const ready = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let requests = 0;
     await page.route(
-      "**/features/product-controls/SettingsDialog.tsx*",
+      /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/,
       async (route) => {
+        requests += 1;
         await ready;
         await route.continue();
       },
@@ -42,25 +44,38 @@ for (const viewport of [
       if (viewport.width < 760)
         await page.getByRole("button", { name: "Open sessions" }).click();
       await page.getByRole("button", { name: "Settings", exact: true }).click();
-      const loading = page.getByRole("dialog", {
-        name: "Loading settings…",
-        exact: true,
-      });
-      await expect(loading).toBeVisible();
-      await expect(
-        loading.getByRole("button", { name: "Cancel" }),
-      ).toBeFocused();
-      const before = await loading.boundingBox();
-      release();
-      const loaded = page.getByRole("dialog", {
+      const settings = page.getByRole("dialog", {
         name: "Settings",
         exact: true,
       });
-      await expect(loaded).toBeVisible();
-      expect(await loaded.boundingBox()).toEqual(before);
-      await page
-        .getByRole("button", { name: "Close settings", exact: true })
-        .click();
+      await expect(settings).toBeVisible();
+      const close = settings.getByRole("button", { name: "Close settings" });
+      await expect(close).toBeFocused();
+      await expect(
+        settings.getByRole("button", { name: "Disconnect", exact: true }),
+      ).toBeVisible();
+      const before = await settings.boundingBox();
+      const models = settings.getByRole("button", {
+        name: "Models",
+        exact: true,
+      });
+      await models.click();
+      await expect.poll(() => requests).toBe(1);
+      await expect(
+        settings
+          .getByRole("status")
+          .filter({ hasText: "Loading model management…" }),
+      ).toBeVisible();
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      await expect(models).toBeFocused();
+      expect(await settings.boundingBox()).toEqual(before);
+      release();
+      await expect(
+        settings.getByRole("list", { name: "Configured providers" }),
+      ).toBeVisible();
+      await expect(models).toBeFocused();
+      expect(await settings.boundingBox()).toEqual(before);
+      await close.click();
       await expect(page.getByLabel("Message Octos")).toBeVisible();
     } finally {
       release();
