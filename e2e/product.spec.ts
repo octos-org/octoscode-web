@@ -588,12 +588,17 @@ test("keeps B selected when A's unacknowledged start is rejected", async ({
   await expect(sessions).toHaveCount(2);
   const sibling = sessions.filter({ hasNotText: originalTitle });
   await expect(sibling).toHaveAttribute("aria-current", "page");
+  await composer.fill("Newer draft in B");
   await settleHeldTurnStart(request, "reject");
+  await expect(composer).toHaveValue("Newer draft in B");
   await expect(sibling).toHaveAttribute("aria-current", "page");
   await expect(page.getByText("Turn rejected", { exact: true })).toHaveCount(0);
   await originalSession.click();
 
   await expect(page.getByText("Turn rejected", { exact: true })).toBeVisible();
+  await expect(composer).toHaveValue(
+    "Reject this fixture turn before it starts",
+  );
   await expect(
     page.getByText("Fixture rejected turn/start before acceptance", {
       exact: true,
