@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group:
+    ${{ github.workflow }}-${{ github.event_name }}-${{
+    github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   contract:
     runs-on: ubuntu-latest
@@ -53,6 +59,15 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The suite outgrew one 15-minute job. Playwright runs it with a single
+    # worker on purpose (the specs share one stateful fixture process), so the
+    # way to keep it inside the cap is more jobs, not more workers: each shard
+    # gets its own fixture. Baseline regeneration stays on shard 1, which is
+    # where e2e/visual.spec.ts lands.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -69,20 +84,20 @@ jobs:
       # baselines rendered by the same engine and fonts as CI).
       - name: Run all browser regressions
         if: inputs.update_visual_snapshots != true
-        run: pnpm test:e2e
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
       - name: Regenerate visual baselines
-        if: inputs.update_visual_snapshots == true
+        if: inputs.update_visual_snapshots == true && matrix.shard == 1
         run: pnpm test:e2e e2e/visual.spec.ts --update-snapshots
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure() || inputs.update_visual_snapshots == true
         with:
-          name: visual-baselines
+          name: visual-baselines-shard-${{ matrix.shard }}
           path: e2e/visual.spec.ts-snapshots/
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

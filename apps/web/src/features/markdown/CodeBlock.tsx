@@ -17,6 +17,7 @@ import {
   highlightToHtml,
   subscribeGrammarLoaded,
 } from "./highlight.ts";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface CodeBlockProps {
   code: string;
@@ -24,6 +25,7 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ code, language }: CodeBlockProps) {
+  const t = useUiText();
   const blockRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -88,19 +90,19 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   return (
     <div ref={blockRef} className="md-code-block">
       <div className="md-code-banner">
-        <span>{language ?? "text"}</span>
+        <span>{language ?? t("text")}</span>
         <button
           type="button"
           onClick={() => void copy()}
           disabled={copying}
-          aria-label="Copy code block"
+          aria-label={t("Copy code block")}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("Copied") : t("Copy")}
         </button>
       </div>
       {copyError ? (
         <div className="md-copy-error" role="alert">
-          Could not copy. Select the code to copy it, or try again.
+          {t("Could not copy. Select the code to copy it, or try again.")}
         </div>
       ) : null}
       <pre

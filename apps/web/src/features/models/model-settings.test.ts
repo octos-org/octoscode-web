@@ -44,6 +44,64 @@ const configuration: ProfileLlmConfigResult = {
 };
 
 describe("model settings contract", () => {
+  it("freezes hidden inference and primary disposition before Test awaits", async () => {
+    const pending = deferred<{
+      profile_id: string;
+      applied: boolean;
+      message: string;
+    }>();
+    const edited: ModelSettingsDraft = {
+      ...draft,
+      inference: {
+        temperature: 0,
+        top_p: null,
+        model_hints: { fixed_temperature: false },
+      },
+    };
+    const client = fakeClient({
+      testLlmProfile: vi.fn(() => pending.promise),
+      upsertLlmProfile: vi.fn(async () => ({
+        profile_id: "coding",
+        applied: true,
+      })),
+    });
+    const controller = controllerFor(client, []);
+    controller.configureCapabilities(allCapabilities());
+    const saved = controller.save(edited);
+    edited.inference!.temperature = 2;
+    edited.inference!.model_hints!.fixed_temperature = true;
+    edited.setPrimary = false;
+    pending.resolve({
+      profile_id: "coding",
+      applied: true,
+      message: "Verified",
+    });
+    await saved;
+    expect(client.upsertLlmProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        set_primary: true,
+        selection: expect.objectContaining({
+          temperature: 0,
+          top_p: null,
+          model_hints: { fixed_temperature: false },
+        }),
+      }),
+    );
+  });
+
+  it("rejects unsupported existing edits before Test and releases the operation gate", async () => {
+    const client = fakeClient();
+    vi.spyOn(client, "testLlmProfile");
+    vi.spyOn(client, "upsertLlmProfile");
+    const controller = controllerFor(client, []);
+    controller.configureCapabilities(allCapabilities());
+    expect(await controller.save({ ...draft, editBlocked: true })).toBeNull();
+    expect(await controller.test({ ...draft, editBlocked: true })).toBeNull();
+    expect(client.testLlmProfile).not.toHaveBeenCalled();
+    expect(client.upsertLlmProfile).not.toHaveBeenCalled();
+    expect(controller.snapshot.phase).toBe("idle");
+    expect(controller.snapshot.error).toContain("cannot preserve");
+  });
   it("gates every operation independently from server capabilities", () => {
     const projected = modelSettingsCapabilities(
       capabilities(

@@ -1,0 +1,236 @@
+/* FleetView — the operator fleet surface (WEB-UX-PROGRAM-4000 goal 3).
+   Fixes 4210: every token below EXISTS in theme.css (the previous version
+   referenced undefined dsw-space and dsw-alias-surface and dsw-alias-focus
+   custom properties, so the whole module resolved to dead fallbacks and the
+   view rendered unstyled). Spacing, radii and typography mirror
+   SessionConfig.module.css and PeerDock.module.css. */
+.fleet {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  max-width: 720px;
+  margin-inline: auto;
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.live {
+  /* §8: a polite live region needs no box; keep it in the a11y tree. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.select,
+.textarea,
+.steerInput {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.select:disabled,
+.textarea:disabled {
+  opacity: 0.6;
+}
+
+.empty {
+  margin: 0;
+  padding: 16px 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  text-align: center;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.formNote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+}
+
+.groupHeading {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.rows,
+.finishedList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.rowTitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.meta {
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.glyph {
+  font-size: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.action,
+.disclosure {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled),
+.disclosure:hover {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.action:focus-visible,
+.disclosure:focus-visible,
+.steerInput:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.steer {
+  display: inline-flex;
+  gap: 4px;
+  flex: 1 1 220px;
+}
+
+.reason {
+  font-size: 0.6875rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.unsupported {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.finishedToggle {
+  justify-self: start;
+}
+
+/* Round 4 C3: Advanced is a compact native disclosure row, not a tall box. */
+.advanced {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  padding: 0;
+}
+
+.advancedSummary {
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  list-style: revert;
+}
+
+.advancedSummary:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.advanced > *:not(summary) {
+  padding: 8px 12px 12px;
+}

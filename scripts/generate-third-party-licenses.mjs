@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, basename } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const outputPath = resolve(root, "THIRD_PARTY_LICENSES.md");
@@ -91,6 +92,19 @@ async function readPackageNotice(packagePath) {
     });
   }
   if (!files.length) {
+    // A few packages omit their license from the npm tarball although the
+    // repository carries one. The verbatim upstream text is vendored under
+    // third-party-notices/ and used only in that case; the notice records that
+    // it came from the repository rather than the package.
+    const vendored = resolve(
+      root,
+      "third-party-notices",
+      `${basename(packagePath)}.LICENSE`,
+    );
+    if (existsSync(vendored)) {
+      const text = (await readFile(vendored, "utf8")).trim();
+      return `===== license (from the package's repository) =====\n${text}`;
+    }
     throw new Error(`No license or notice file found in ${packagePath}`);
   }
   return files

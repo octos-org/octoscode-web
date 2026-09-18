@@ -52,29 +52,44 @@ bridge, or raw protocol event bus.
 
 ## State ownership
 
-| State                                                         | Owner                                                                |
-| ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Sessions, transcript, tasks, plans, permissions, diffs, usage | `octos serve`                                                        |
-| Cursor, hydrate integrity, and current server projections     | Protocol/session feature boundaries                                  |
-| Drafts, focus, selection, and expansion                       | Browser memory                                                       |
-| Remembered server endpoint                                    | `localStorage`; the only durable browser preference                  |
-| Token, auto-connect, and selected Session restore hints       | Endpoint-bound current tab (`sessionStorage`)                        |
-| Recent Workspace paths                                        | Endpoint-bound current tab (`sessionStorage`)                        |
-| Confirmed Session routing tuples and local recency            | Endpoint-and-token-bound current tab; navigation only, not a catalog |
-| Retained acknowledged-turn owner transports                   | Current live tab; closed on refresh, loss, or Disconnect             |
-| Provider credential draft                                     | Operation-local browser memory; sent only to Core                    |
-| Saved provider credential                                     | `octos serve`; browser receives only `has_api_key`                   |
+| State                                                               | Owner                                                                                         |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Sessions, transcript, tasks, plans, permissions, diffs, usage       | `octos serve`                                                                                 |
+| Cursor, hydrate integrity, and current server projections           | Protocol/session feature boundaries                                                           |
+| Focus, selection, and expansion                                     | Browser memory                                                                                |
+| Per-Session text drafts                                             | Browser memory and separate `localStorage` entries, scoped to REST-confirmed user and Session |
+| Remembered server endpoint and explicitly saved display preferences | `localStorage`; no token, Session identity, or draft                                          |
+| Token, auto-connect, and selected Session restore hints             | Endpoint-bound current tab (`sessionStorage`)                                                 |
+| Recent Workspace paths                                              | Endpoint-bound current tab (`sessionStorage`)                                                 |
+| Confirmed Session routing tuples and local recency                  | Endpoint-and-token-bound current tab; navigation only, not a catalog                          |
+| Per-Session controller, FIFO, ledger, and bounded projection        | Retained in browser memory; server hydrate/replay remains authoritative                       |
+| One pooled physical WebSocket                                       | Current authenticated tab; closed on refresh, loss, or Disconnect                             |
+| Provider credential draft                                           | Operation-local browser memory; sent only to Core                                             |
+| Saved provider credential                                           | `octos serve`; browser receives only `has_api_key`                                            |
 
-The selected-session orchestration boundary converts validated protocol
-notifications into feature-specific actions. A committed `session/open` may add
-its exact Workspace/Profile/Session routing tuple to tab navigation, but durable
-state remains reconstructible from server hydrate/replay. Retained background
-owner sockets preserve execution lifetime; they do not preserve a second copy of
-transcript or Session state.
+Pairing replaces the previous connection identity and its tab-local restore
+hints. Cancellation invalidates a pending claim; late replies cannot connect.
+The HTML referrer policy protects pairing parameters before application code
+removes them. Legacy device bearer entries are deleted when the connection gate
+loads.
+
+`SessionRecordManager` retains one executable controller/FIFO, interaction
+ledger, durable cursor, and bounded timeline projection per confirmed scope:
+`(endpoint, workspaceRoot, profileId, sessionId, authorityEpoch)`. The opaque
+epoch separates authentication identities without putting credentials in keys.
+`LazySessionRecordManager` loads this engine on the first explicit coding
+Session open; authentication itself needs only the pooled transport.
+
+Every record uses a non-owning runtime lease on that one physical WebSocket.
+Validated events update their owning record whether selected or background;
+selection only changes presentation. Candidate opens commit after scoped
+hydrate/replay and authority checks. They never steal another record's queue.
+Background forks and native peers become selectable only after confirmation.
+These retained projections are not another durable transcript store.
 
 The React hook is a composition root, not a catch-all state API. Consumers see
 grouped connection, conversation, interaction, safety, work, workspace-product,
-and diagnostic domains. Connection/recovery and foreground-turn transitions live
+and diagnostic domains. Connection/recovery and per-record turn transitions live
 in React-free controllers; overlapping refreshes use request generations so an
 older response cannot overwrite newer session state. Ephemeral per-session
 drafts use a 50-entry LRU, and the timeline exposes when its 200-row rendering
@@ -93,9 +108,10 @@ their presentation but not their state transition:
   Session uses a fresh opaque Web identity;
 - an unambiguous fresh Web `activate` follows the server-resolved Profile
   automatically, while `cross_profile` and `no_profile` remain explicit;
-- a server-acknowledged local turn may retain its owner transport during Session
-  navigation; pending local prompts block, while a dispatching start retains one
-  latest-wins navigation intent and releases it only after the exact ACK;
+- Session switching does not wait for a turn ACK or an empty local FIFO; the
+  source record keeps its queue and interactions while the destination opens;
+- native staged/closed events reach the master record's peer coordinator even in
+  the background; hosting uses native identities and never changes focus;
 - the composer reports the effective Session runtime model, while Settings may
   manage provider/model/route configuration and the active Profile default;
 - provider keys are write-only operation arguments in the client; Core owns
@@ -123,10 +139,11 @@ See [ADR 0002](adr/0002-dsh-evaluation.md) and
   effective Workspace/Profile scope, so they are not used as a product catalog;
   only a successful exact open can add a Session row until Core exposes
   Workspace/SessionRef.
-- Background continuation is transport-bound on Core rc.9. A server-acknowledged
-  local turn may keep its owner socket while another Session is selected in the
-  same live tab. Refresh, tab close, network loss, and Disconnect close that
-  socket and terminate a still-running turn.
+- Core rc11 continuation remains transport-bound. Switching views does not close
+  the shared socket, but refresh, tab close, network loss, and Disconnect can
+  interrupt all connection-owned work. In-memory queues survive ordinary
+  reconnect, pause during recovery, and reconcile against each Session's actual
+  terminal state. Unsent prompts and attachment drafts do not survive reload.
 - Reconnect without hydrate, replay, dedupe, session scope, and gap handling is
   not recovery.
 
@@ -136,8 +153,11 @@ recent Workspace paths, and confirmed Session routing tuples to that endpoint
 and token in the current tab. Disconnect retains that navigation memory but
 stops automatic reconnection; Forget or an identity change clears it. Closing
 the tab leaves the origin but clears that working context. See
-[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md) and
-[ADR 0018](adr/0018-dsh-aligned-product-shell.md) for the current boundary.
+[ADR 0018](adr/0018-dsh-aligned-product-shell.md) for the product boundary.
+[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md)
+records the historical per-owner-socket design; this retained-record candidate
+supersedes its ACK navigation guard and eight-connection budget without claiming
+detached execution. The ADR is preserved as historical evidence.
 [ADR 0017](adr/0017-workspace-session-and-connection-memory.md) is the
 superseded historical restore design. Durable detached turn ownership remains a
 Core contract tracked in
@@ -160,6 +180,11 @@ rejects raw feature colors, inline JSX styles, retired token prefixes, and
 sub-11px text.
 
 ## Verification layers
+
+The expanded parity implementation is a candidate. Passing fixtures, unit tests,
+or a baseline runtime smoke is not a full parity or live-soak acceptance; see
+[Feature parity](feature-parity.md) and [Testing](testing.md). The rc11
+candidate evidence does not change the separately pinned rc9 runtime baseline.
 
 | Layer                   | Responsibility                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------- |

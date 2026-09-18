@@ -26,6 +26,19 @@ attestations and refuses to replace an existing release. It publishes
 `octoscode-web-<tag>.tar.gz` and its SHA-256 file. A tag is the release
 identity; moving release tags is unsupported.
 
+An automatic main-branch deployment must also identify its build. Pass the
+checked-out commit into the build process, including through a container's
+environment when applicable:
+
+```sh
+OCTOSCODE_WEB_RELEASE=main \
+OCTOSCODE_WEB_REVISION="$(git rev-parse HEAD)" pnpm build
+```
+
+After activation, compare the served manifest's `source_revision` with that
+commit and verify the referenced hashed assets. A release directory named after
+a commit does not establish the identity reported by its contents.
+
 To build for an absolute subpath, set a slash-terminated base path:
 
 ```sh
@@ -66,6 +79,15 @@ classes. Remote transcript images are blocked, so `img-src` does not grant
 arbitrary HTTPS origins. CI runs both the semantic deployment verifier (against
 comment-stripped configuration) and `nginx -t`.
 
+Authenticated file transfer retains Core's blob REST routes. Uploads use a
+Bearer header and confirmed Profile header; downloads also bind the confirmed
+Session. Tokens are never added to blob URL queries. The reference proxy keeps
+the general 1 MiB body limit and allows 51 MiB only at exact `/api/upload`, for
+one Core-limited 50 MiB file plus multipart framing. Request buffering is
+disabled there. The image composer has a stricter 20 MiB per-image limit.
+Preserve these route-specific settings in custom ingress configurations or
+otherwise valid images larger than 1 MiB will be rejected before reaching Core.
+
 ## Octos runtime boundary
 
 Run a compatible `octos serve` separately. The connection gate asks for its
@@ -93,23 +115,33 @@ endpoint-and-token-bound envelope also keeps the minimal
 Workspace/Profile/Session tuples that this tab has successfully opened. Those
 refs are incomplete navigation memory, not a catalog, and contain no titles,
 prompts, transcript, or model output. Refresh can restore the selected Session;
-closing the tab leaves only the endpoint. Disconnect preserves tab navigation
-refs but closes live transports; Forget or an endpoint/token change clears the
-refs. Provider API keys are never persisted in browser storage.
+closing the tab discards its credential and navigation hints. Disconnect
+preserves tab navigation refs but closes live transports; Forget or an
+endpoint/token change clears the refs. Provider API keys are never persisted in
+browser storage.
 
-The same tab envelope now keeps bounded unsent composer drafts, isolated by the
-exact Session and credential identity. Closing the tab ends this editing cache;
-it is not cross-device storage or a transcript database. Drafts are not
-submitted on reload. The client reports rejected saves and deletions, including
-failed Forget operations, so a browser storage restriction cannot masquerade as
-success.
+Unsent composer text uses separate localStorage entries scoped to the server,
+the user id confirmed by REST `/api/auth/me`, and the exact
+Workspace/Profile/Session. These entries contain no token or connection
+envelope. A new tab must authenticate before restoring them; a rotated token for
+the same user can restore that user's drafts. Forget removes the confirmed
+user's drafts, including after an offline reload using the principal remembered
+in sessionStorage. This is not cross-device storage or a transcript database.
+Drafts and queued work are never automatically submitted on reload. Rejected
+saves and deletions show a warning.
 
-A reverse proxy must also preserve long-lived WebSocket connections when the
-product switches Sessions. Core rc.9 binds a server-acknowledged turn to its
-owner socket; the browser retains that socket while another Session is focused.
-Refresh, tab close, proxy/network loss, and manual Disconnect close it and
-terminate a still-running turn. Hosting must not advertise this as detached or
-cross-refresh execution.
+A reverse proxy must preserve the one long-lived pooled WebSocket used by all
+retained Sessions. Switching among running, starting, queued, waiting, and
+native peer Sessions does not require a new physical connection or wait for a
+turn ACK. The old eight-owner-connection budget no longer applies.
+
+Core rc11 still interrupts connection-owned work when that socket closes.
+Refresh, tab close, proxy/network loss, daemon restart, and manual Disconnect
+must not be advertised as detached continuation. Ordinary reconnect retains
+in-memory queues but pauses dispatch until each record's hydrate/replay is
+reconciled; reload loses queued prompts and attachment drafts. Reverse-proxy
+timeouts or rolling restarts can therefore affect several simultaneous Sessions
+at once. Preserve the full hashed asset set for cold feature/receipt loading.
 
 The current UI Protocol transports the auth token in the WebSocket URL query, so
 HTTPS/WSS is mandatory outside loopback and reverse proxies must redact query
@@ -119,6 +151,10 @@ Compatibility is capability-gated at runtime. The build manifest records the
 contract verified during release, but it is not a promise that every future or
 older server is compatible. Unsupported required methods or features fail closed
 in the connection surface.
+
+The expanded rc11 parity work is a candidate, not a blanket production/parity or
+live-soak acceptance. Its evidence is tracked separately from the unchanged rc9
+runtime baseline in the build manifest; see [Feature parity](feature-parity.md).
 
 ## Rollback and health
 

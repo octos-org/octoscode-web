@@ -263,6 +263,7 @@ test("composer preserves IME confirmation and multiline edits around commands", 
   const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("/");
   await expect(page.getByRole("listbox", { name: "Commands" })).toBeVisible();
+  await expect(input).toBeFocused();
   const selected = await input.getAttribute("aria-activedescendant");
   await input.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true });
   await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });
@@ -314,6 +315,14 @@ test("question radio selection keeps backward Tab inside its dialog", async ({
   await expect(
     question.getByRole("button", { name: "Continue" }),
   ).toBeFocused();
+  // Answer the question before leaving. Every focus assertion above has already
+  // run, so this adds nothing to what the case proves — but this case drives a
+  // REAL turn on the shared fixture process, and abandoning the dialog leaves
+  // that turn active in `/__test__/diagnostics/state` for every later spec in
+  // the run. Responding clears the Session's active turn (mock-ui-server.mjs
+  // user_question/respond), so the case leaves the fixture as it found it.
+  await question.getByRole("button", { name: "Continue" }).click();
+  await expect(question).toBeHidden();
 });
 
 test("phone search and view menus consume Escape before the sessions drawer", async ({

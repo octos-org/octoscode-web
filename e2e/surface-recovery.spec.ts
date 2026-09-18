@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const settingsModule =
-  /\/(?:assets\/(?:SettingsView|SettingsDialog)-[^/]+\.js|src\/features\/product-controls\/SettingsDialog\.tsx)(?:\?.*)?$/;
+const modelManagementModule =
+  /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
 const reviewModule =
   /\/(?:assets\/DiffReviewDialog-[^/]+\.js|src\/features\/review\/DiffReviewDialog\.tsx)(?:\?.*)?$/;
 
@@ -17,9 +17,11 @@ async function start(page: Page) {
     .getByLabel("Server workspace path")
     .fill("/workspace/surface-recovery");
   await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
+  await expect(composerInput(page)).toBeVisible();
+}
+
+function composerInput(page: Page) {
+  return page.getByRole("textbox", { name: "Message Octos" });
 }
 
 function settingsTrigger(page: Page) {
@@ -28,7 +30,7 @@ function settingsTrigger(page: Page) {
     .getByRole("button", { name: "Settings", exact: true });
 }
 
-test("a failed Settings chunk preserves the owner, queue, draft and Stop", async ({
+test("a failed model-management chunk preserves the owner, queue, draft and Stop", async ({
   page,
 }) => {
   let closed = 0;
@@ -53,7 +55,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Keep this response active");
   await composer.press("Enter");
   await expect(
@@ -63,7 +65,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
   await composer.press("Enter");
   await composer.fill("Keep this unsent draft");
   const previouslyClosed = closed;
-  await page.route(settingsModule, (route) =>
+  await page.route(modelManagementModule, (route) =>
     route.fulfill({
       status: 503,
       contentType: "text/plain",
@@ -71,16 +73,22 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
     }),
   );
   await settingsTrigger(page).click();
-  const error = page.getByRole("dialog", { name: "Settings unavailable" });
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const error = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(error).toBeVisible();
   await expect(
-    error.getByRole("button", { name: "Close", exact: true }),
+    error.getByRole("heading", { name: "Model management unavailable" }),
+  ).toBeVisible();
+  await expect(
+    error.getByRole("button", { name: "Models", exact: true }),
   ).toBeFocused();
   await expect(error).toContainText("Reloading may stop running work");
   expect(closed).toBe(previouslyClosed);
   expect(starts).toHaveLength(1);
   expect(interrupts).toHaveLength(0);
-  await error.getByRole("button", { name: "Close", exact: true }).click();
+  await error
+    .getByRole("button", { name: "Close settings", exact: true })
+    .click();
   await expect(settingsTrigger(page)).toBeFocused();
   await expect(composer).toHaveValue("Keep this unsent draft");
   await expect(
@@ -90,7 +98,7 @@ test("a failed Settings chunk preserves the owner, queue, draft and Stop", async
   await expect.poll(() => interrupts.length).toBe(1);
 });
 
-test("a slow Settings import can be canceled and never opens after cancellation", async ({
+test("a slow model-management import can be canceled and never opens after cancellation", async ({
   page,
 }) => {
   await start(page);
@@ -99,18 +107,25 @@ test("a slow Settings import can be canceled and never opens after cancellation"
     release = resolve;
   });
   let fulfilled = false;
-  await page.route(settingsModule, async (route) => {
+  await page.route(modelManagementModule, async (route) => {
     const response = await route.fetch();
     await released;
     await route.fulfill({ response });
     fulfilled = true;
   });
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Keep typing after cancellation");
   await settingsTrigger(page).click();
-  const loading = page.getByRole("dialog", { name: "Loading settings…" });
-  await expect(loading).toBeVisible();
-  await loading.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const loading = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(
+    loading
+      .getByRole("status")
+      .filter({ hasText: "Loading model management…" }),
+  ).toBeVisible();
+  await loading
+    .getByRole("button", { name: "Close settings", exact: true })
+    .click();
   await expect(settingsTrigger(page)).toBeFocused();
   release();
   await expect.poll(() => fulfilled).toBe(true);
@@ -152,7 +167,7 @@ test("Escape from a failed review returns to approval without interrupting", asy
       body: "Resource unavailable",
     }),
   );
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Request approval fixture");
   await composer.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
@@ -182,8 +197,12 @@ test("a failed local-command chunk restores input and never sends command text t
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
+  // The local-command surface is no longer ONE lazily-imported executor: the
+  // command itself is dispatched inline and only its REPORT formatting is a
+  // chunk (`local-report.ts`). That chunk is the failure this test injects —
+  // the contract (input restored, nothing sent to the model) is unchanged.
   await page.route(
-    /\/(?:assets\/execute-local-command-[^/]+\.js|src\/features\/commands\/execute-local-command\.tsx?)(?:\?.*)?$/,
+    /\/(?:assets\/local-report-[^/]+\.js|src\/features\/commands\/local-report\.tsx?)(?:\?.*)?$/,
     (route) =>
       route.fulfill({
         status: 503,
@@ -191,7 +210,7 @@ test("a failed local-command chunk restores input and never sends command text t
         body: "Resource unavailable",
       }),
   );
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("/help");
   await composer.press("Enter");
   await expect(page.getByRole("alert")).toContainText(
@@ -216,7 +235,7 @@ test("a late clipboard command result does not enter a different conversation", 
     });
   });
   await start(page);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const composer = composerInput(page);
   await composer.fill("Write a short response for the clipboard");
   await composer.press("Enter");
   await expect(page.locator(".entry-assistant").last()).toBeVisible();

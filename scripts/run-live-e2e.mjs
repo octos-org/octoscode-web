@@ -9,7 +9,13 @@ const playwrightCli = require.resolve("@playwright/test/cli");
 // the password-field value in Playwright's automatic accessibility snapshot.
 const child = spawn(
   process.execPath,
-  [playwrightCli, "test", "--config", "playwright.live.config.ts"],
+  [
+    playwrightCli,
+    "test",
+    "--config",
+    "playwright.live.config.ts",
+    ...process.argv.slice(2),
+  ],
   {
     stdio: "inherit",
     env: { ...process.env, PLAYWRIGHT_NO_COPY_PROMPT: "1" },

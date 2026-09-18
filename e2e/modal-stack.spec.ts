@@ -54,6 +54,23 @@ for (const viewport of [
     await reviewTrigger.click();
     const review = page.getByRole("dialog", { name: "Mock coding change" });
     await expect(review).toBeVisible();
+    // Each surface mounts at document.body through its own portal, so the
+    // review is not nested in the approval that opened it. Safari does not
+    // anchor a position:fixed dialog to the viewport once an ancestor scrolls
+    // or establishes a containing block, which left such a nested dialog
+    // unreachable behind its own backdrop.
+    const nesting = await review.evaluate((element) => ({
+      reviewAtBody: element.parentElement?.parentElement === document.body,
+      insideAnotherDialog:
+        element.parentElement?.parentElement?.closest("[role='dialog']") !==
+        null,
+    }));
+    expect(nesting).toEqual({ reviewAtBody: true, insideAnotherDialog: false });
+    expect(
+      await approval.evaluate(
+        (element) => element.parentElement?.parentElement === document.body,
+      ),
+    ).toBe(true);
     const visited = new Set<string>();
     for (let index = 0; index < 5; index++) {
       await page.keyboard.press("Tab");
@@ -87,13 +104,35 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await start(page);
-    const trigger = page.getByRole("button", { name: /^Runtime model:/ });
-    await trigger.click();
+    // Retargeted after the v0.10.0 rebase: this shell keeps our composer and
+    // its Session status strip, which replaced upstream's composer-level
+    // "Runtime model:" chip, so Settings is reached from the navigation rail.
+    // What this test guards is unchanged — the Settings dialog below the
+    // provider confirmation.
+    // The narrow layout keeps the rail behind "Open sessions" and dismisses it
+    // with the dialog, handing focus back to that toggle; the wide layout shows
+    // the rail outright and hands focus back to its Settings entry. Either way
+    // focus must land back on the control that opened the dialog.
+    const railToggle = page.getByRole("button", { name: "Open sessions" });
+    const railWasClosed = await railToggle.isVisible();
+    if (railWasClosed) await railToggle.click();
+    const settingsEntry = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+    });
+    const trigger = railWasClosed ? railToggle : settingsEntry;
+    await settingsEntry.click();
     const settings = page.getByRole("dialog", {
       name: "Settings",
       exact: true,
     });
     await expect(settings).toBeVisible();
+    // Upstream's chip opened Settings already on the models section; the rail
+    // entry opens it on General, so select Models to reach the same surface.
+    await settings.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(
+      settings.getByRole("list", { name: "Configured providers" }),
+    ).toBeVisible();
     const deleteTrigger = settings
       .getByRole("list", { name: "Configured providers" })
       .getByRole("button", { name: /^Delete / })

@@ -1,12 +1,17 @@
 import {
   CORE_UI_METHODS,
+  CORE_UI_FEATURES,
+  supportsFeature,
+  isRecord,
+  parseProjectionEnvelope,
   type ConfigCapabilitiesListResult,
   type ConnectionStatus,
   type RpcNotification,
   type SessionHydrateResult,
   type SessionOpened,
+  type UiCursor,
   type UiProtocolCapabilities,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import type {
   CandidateSessionClient,
   CandidateSessionSnapshot,
@@ -18,6 +23,7 @@ import {
   type SessionRecoverySnapshot,
 } from "./durable-session.ts";
 import { notificationMatchesSessionScope } from "./scope.ts";
+import type { HydratedAssistantIdentity } from "../timeline/model.ts";
 
 const RECOVERY_NOTIFICATION_LIMIT = 4_096;
 const HYDRATE_INCLUDE = [
@@ -32,6 +38,19 @@ export interface ActiveSessionClient extends CandidateSessionClient {
   subscribeStatus(listener: (status: ConnectionStatus) => void): () => void;
   subscribeErrors(listener: (error: Error) => void): () => void;
   listConfigCapabilities(): Promise<ConfigCapabilitiesListResult>;
+  /**
+   * OPTIONAL read-only external-driver commands (B discovery). Clients
+   * without the negotiated capability simply omit the method; the record
+   * manager treats its absence as explicit unavailable — never a cast.
+   */
+  externalDriverCommands?(
+    sessionId: string,
+    profileId: string,
+    capabilities: UiProtocolCapabilities,
+    topic?: string,
+  ): Promise<
+    import("@octos-org/octoscode-client/external-driver").ExternalDriverReadCommands
+  >;
 }
 
 export interface PrepareRetainedCandidateSessionOptions<
@@ -40,6 +59,8 @@ export interface PrepareRetainedCandidateSessionOptions<
   client: Client;
   config: SessionConnectionInput;
   signal: AbortSignal;
+  /** Durable cursor to resume replay from (reconnect recovery), if any. */
+  after?: UiCursor;
   validateOpened(opened: SessionOpened): void;
   prepareHydrate?: (hydrated: SessionHydrateResult) => Promise<void>;
 }
@@ -117,6 +138,12 @@ export async function prepareRetainedCandidateSession<
   try {
     signal.addEventListener("abort", abort, { once: true });
     unsubscribe = client.subscribeNotifications((notification) => {
+      // Filter to THIS Session's scope BEFORE buffering: on a pooled transport
+      // every Session's traffic flows past, so foreign events must never
+      // consume this record's bound or be able to overflow it.
+      if (!notificationMatchesSessionScope(notification, config.sessionId)) {
+        return;
+      }
       if (notifications.length >= RECOVERY_NOTIFICATION_LIMIT) {
         fail(
           new Error(
@@ -133,6 +160,7 @@ export async function prepareRetainedCandidateSession<
         session_id: config.sessionId,
         ...(config.profileId ? { profile_id: config.profileId } : {}),
         ...(config.cwd ? { cwd: config.cwd } : {}),
+        ...(options.after ? { after: options.after } : {}),
       }),
     );
     assertPreparing();
@@ -263,6 +291,8 @@ export type ActiveSessionRuntimeEvent<
       reason: ActiveSessionHydrateReason;
       authority: ActiveSessionAuthority<Client>;
       hydrated: SessionHydrateResult;
+      /** Covered receipts contribute identity only, never replacement prose. */
+      assistantIdentities?: readonly HydratedAssistantIdentity[];
     }
   | {
       type: "notification";
@@ -274,7 +304,7 @@ export type ActiveSessionRuntimeEvent<
       reason: ActiveSessionHydrateReason;
       authority: ActiveSessionAuthority<Client>;
     }
-  | { type: "session-cleared" };
+  | { type: "session-cleared"; reason: "select" | "resume" | "disconnect" };
 
 export interface ActiveSessionRuntimeOptions<
   Client extends ActiveSessionClient,
@@ -295,6 +325,14 @@ export interface ActiveSessionRuntimeOptions<
     delayMs: number,
   ) => ReturnType<typeof setTimeout>;
   cancelSchedule?: (handle: ReturnType<typeof setTimeout>) => void;
+  /**
+   * Managed-transport mode: this runtime does NOT own the physical socket.
+   * A transport pool (one connection per authenticated profile scope) owns
+   * create/close/retry; this runtime only installs, suspends, and resumes its
+   * logical Session binding on that shared socket. Session errors cannot kill
+   * other Sessions because this runtime never disconnects the pooled socket.
+   */
+  managedTransport?: boolean;
 }
 
 export interface AdoptCandidateOptions<Client extends ActiveSessionClient> {
@@ -347,6 +385,8 @@ interface ClientBinding {
 
 interface BufferedNotification {
   notification: RpcNotification;
+  /** Covered receipt advances ordering but has no ordinary projection effects. */
+  identityOnly?: boolean;
   /** The event already caused one authoritative hydrate and is being retried. */
   retriedAfterHydrate: boolean;
 }
@@ -457,7 +497,7 @@ export class ActiveSessionRuntime<
     this.#status = "idle";
     this.#error = null;
     const authority = this.#replaceTransport(config);
-    this.#emit({ type: "session-cleared" });
+    this.#emit({ type: "session-cleared", reason: "select" });
     this.#publish();
 
     try {
@@ -502,7 +542,59 @@ export class ActiveSessionRuntime<
     if (!this.isCurrent(options.expected)) {
       throw new StaleSessionAuthorityError();
     }
-    const { candidate } = options;
+    const previous = this.#authority;
+    const previousBinding = this.#binding;
+    const next = this.#commitCandidate(
+      options.config,
+      options.candidate,
+      options.authorizeCommit
+        ? { authorizeCommit: options.authorizeCommit }
+        : {},
+    );
+
+    this.#disposeBinding(previousBinding);
+    if (!options.preservePreviousTransport) {
+      try {
+        previous?.client.disconnect();
+      } catch {
+        // The new authority is already committed; old transport cleanup is best effort.
+      }
+    }
+
+    this.#emitCandidateProjection(next, options.candidate, "select");
+    return next;
+  }
+
+  /**
+   * Adopt a candidate into an EMPTY runtime (first install). There is no
+   * previous authority to validate or clean up; the shared validation and
+   * commit logic runs and the candidate's hydrate is projected.
+   */
+  #adoptFirst(
+    config: SessionConnectionInput,
+    candidate: CandidateSessionSnapshot<Client>,
+    authorizeCommit?: () => boolean,
+  ): ActiveSessionAuthority<Client> {
+    // authorizeCommit runs BEFORE any side effects — a rejected first install
+    // must not bind or project the candidate.
+    if (authorizeCommit && !authorizeCommit()) {
+      throw new StaleSessionAuthorityError();
+    }
+    const next = this.#commitCandidate(
+      config,
+      candidate,
+      authorizeCommit ? { authorizeCommit } : {},
+    );
+    this.#emitCandidateProjection(next, candidate, "resume");
+    return next;
+  }
+
+  /** Validate + bind + commit a candidate as this runtime's authority. */
+  #commitCandidate(
+    inputConfig: SessionConnectionInput,
+    candidate: CandidateSessionSnapshot<Client>,
+    options: { authorizeCommit?: () => boolean },
+  ): ActiveSessionAuthority<Client> {
     this.#options.validateServerCapabilities(candidate.opened.capabilities);
     this.#options.validateSessionCapabilities(candidate.opened.capabilities);
     if (candidate.hydrated.session_id !== candidate.opened.session_id) {
@@ -515,9 +607,7 @@ export class ActiveSessionRuntime<
       throw new Error("The prepared candidate contains too many events");
     }
 
-    const config = committedSessionConfig(options.config, candidate.opened);
-    const previous = this.#authority;
-    const previousBinding = this.#binding;
+    const config = committedSessionConfig(inputConfig, candidate.opened);
     this.#cancelReconnect();
 
     const next = this.#createAuthority(candidate.client, config, {
@@ -535,7 +625,7 @@ export class ActiveSessionRuntime<
     this.#binding = nextBinding;
     nextBinding.active = true;
     this.#target = { kind: "session", config };
-    this.#retryEnabled = true;
+    this.#retryEnabled = !this.#managed;
     this.#retryAttempt = 0;
     this.#identityValidated = true;
     this.#serverCapabilities = candidate.opened.capabilities;
@@ -549,38 +639,175 @@ export class ActiveSessionRuntime<
     this.#recovering = false;
     this.#recoveryBuffer = [];
     this.#phase = "recovering";
+    return next;
+  }
 
-    this.#disposeBinding(previousBinding);
-    if (!options.preservePreviousTransport) {
-      try {
-        previous?.client.disconnect();
-      } catch {
-        // The new authority is already committed; old transport cleanup is best effort.
-      }
-    }
-
+  /** Emit the cleared→hydrate→notifications→ready projection for a commit. */
+  #emitCandidateProjection(
+    next: ActiveSessionAuthority<Client>,
+    candidate: CandidateSessionSnapshot<Client>,
+    clearedReason: "select" | "resume",
+  ): void {
     this.#publish();
-    // The candidate is now the product authority. Clear the previous product
-    // projection before exposing this Session's raw diagnostics.
-    this.#emit({ type: "session-cleared" });
+    // The candidate is now the product authority. On "select" the previous
+    // product projection is cleared; on "resume" (reconnect recovery) the
+    // record's queue is preserved — the hook distinguishes presentation
+    // replacement from a queue reset via this reason.
+    this.#emit({ type: "session-cleared", reason: clearedReason });
     for (const notification of candidate.notifications) {
       this.#emit({ type: "raw-notification", notification });
     }
+    if (!this.isCurrent(next)) return;
+    const covered = hydrateAssistantIdentities(
+      next,
+      candidate.hydrated,
+      candidate.notifications,
+    );
     this.#emit({
       type: "session-hydrate",
       reason: "candidate",
       authority: next,
       hydrated: candidate.hydrated,
+      assistantIdentities: covered.identities,
     });
-    this.#drainCandidateNotifications(candidate.notifications);
+    if (!this.isCurrent(next)) return;
+    this.#drainCandidateNotifications(
+      candidate.notifications,
+      covered.receipts,
+    );
     this.#finishRecovery("candidate", next);
-    return next;
   }
 
   /** Set a product-operation error without granting product code transport ownership. */
   reportError(message: string | null): void {
     this.#error = message;
     this.#publish();
+  }
+
+  /** Refresh an existing record without replacing its transport or selection. */
+  async rehydrateSession(
+    expected: ActiveSessionAuthority<Client>,
+    authorizeCommit: () => boolean,
+  ): Promise<void> {
+    if (!this.isCurrent(expected) || !authorizeCommit())
+      throw new StaleSessionAuthorityError();
+    try {
+      await this.#hydrate(expected, "recovery", authorizeCommit);
+      if (!this.isCurrent(expected) || !authorizeCommit())
+        throw new StaleSessionAuthorityError();
+    } catch (reason) {
+      if (this.isCurrent(expected)) {
+        // A history mutation may already be committed. Keep its notification
+        // binding so the retained lease can retry only this hydrate, without
+        // silently becoming a ready record that no longer observes events.
+        this.#invalidateRecoveryOperation();
+        this.#recovering = false;
+        this.#recoveryBuffer = [];
+        this.#error = errorMessage(reason);
+        this.#phase = "error";
+        this.#projection.fail(this.#error);
+        this.#publish();
+      }
+      throw reason;
+    }
+  }
+
+  get #managed(): boolean {
+    return this.#options.managedTransport === true;
+  }
+
+  /**
+   * Install a fully prepared candidate as this record's authority. Managed
+   * mode ONLY: the shared pooled transport stays open (the pool owns its
+   * lifecycle); this runtime binds to it and projects the candidate's
+   * hydrate. Never creates or closes the socket.
+   */
+  installPreparedSession(
+    options: Omit<
+      AdoptCandidateOptions<Client>,
+      "expected" | "preservePreviousTransport"
+    > & {
+      expected?: ActiveSessionAuthority<Client>;
+    },
+  ): ActiveSessionAuthority<Client> {
+    if (!this.#managed) {
+      throw new Error("installPreparedSession requires managed-transport mode");
+    }
+    const current = this.#authority;
+    if (current) {
+      if (!options.expected || !this.isCurrent(options.expected)) {
+        throw new StaleSessionAuthorityError();
+      }
+      return this.adoptCandidate({
+        ...options,
+        expected: current,
+        preservePreviousTransport: true,
+      });
+    }
+    // First install on a fresh record: adopt into the empty runtime.
+    return this.#adoptFirst(
+      options.config,
+      options.candidate,
+      options.authorizeCommit,
+    );
+  }
+
+  /**
+   * Detach this record from the pooled transport without closing it. The
+   * Session's server-side work is unaffected; the record simply stops
+   * observing until `resumePreparedSession` re-binds it.
+   */
+  suspendTransport(expected: ActiveSessionAuthority<Client>): void {
+    if (!this.#managed) {
+      throw new Error("suspendTransport requires managed-transport mode");
+    }
+    if (!this.isCurrent(expected)) {
+      throw new StaleSessionAuthorityError();
+    }
+    this.#cancelReconnect();
+    this.#retryEnabled = false;
+    // Invalidate the authority and any in-flight hydrate/recovery operation so
+    // a LATE hydrate that resolves after suspension cannot commit or emit
+    // ready. The durable identity + cursor are retained for resume.
+    this.#invalidateRecoveryOperation();
+    this.#generation += 1;
+    this.#recovering = false;
+    this.#recoveryBuffer = [];
+    const binding = this.#binding;
+    this.#binding = null;
+    this.#disposeBinding(binding);
+    // Null the authority so every lease (isCurrent) fails during suspension:
+    // a start/interrupt RPC captured against the OLD authority cannot dispatch
+    // while the record is detached. The Session's server-side work continues;
+    // this client simply stops being an authority until resume.
+    this.#authority = null;
+    // Freeze dispatch: the record is detached and unhealthy until resume.
+    this.#phase = "disconnected";
+    this.#status = "disconnected";
+    this.#publish();
+  }
+
+  /**
+   * Re-bind a suspended (or fresh) record to the pooled transport with a new
+   * prepared candidate. The pool supplies the connected socket; this runtime
+   * validates and projects it.
+   */
+  resumePreparedSession(
+    options: Omit<
+      AdoptCandidateOptions<Client>,
+      "preservePreviousTransport" | "expected"
+    >,
+  ): ActiveSessionAuthority<Client> {
+    if (!this.#managed) {
+      throw new Error("resumePreparedSession requires managed-transport mode");
+    }
+    // After suspendTransport the authority is null; this is a re-install on the
+    // shared pooled socket (never a new transport). authorizeCommit still gates.
+    return this.#adoptFirst(
+      options.config,
+      options.candidate,
+      options.authorizeCommit,
+    );
   }
 
   disconnect(): void {
@@ -604,13 +831,17 @@ export class ActiveSessionRuntime<
     this.#status = "disconnected";
     this.#error = null;
     this.#disposeBinding(previousBinding);
-    try {
-      previous?.client.disconnect();
-    } catch {
-      // Explicit disconnect is idempotent and best effort.
+    if (!this.#managed) {
+      try {
+        previous?.client.disconnect();
+      } catch {
+        // Explicit disconnect is idempotent and best effort.
+      }
     }
+    // Managed mode: the pooled socket belongs to the pool. One record's
+    // teardown never closes the shared transport other Sessions live on.
     this.#publish();
-    this.#emit({ type: "session-cleared" });
+    this.#emit({ type: "session-cleared", reason: "disconnect" });
   }
 
   dispose(): void {
@@ -626,6 +857,11 @@ export class ActiveSessionRuntime<
       capabilities: UiProtocolCapabilities | undefined;
     },
   ): ActiveSessionAuthority<Client> {
+    if (this.#managed) {
+      throw new Error(
+        "A managed Session runtime cannot replace its transport; the pool owns the socket",
+      );
+    }
     this.#invalidateRecoveryOperation();
     const previous = this.#authority;
     const previousBinding = this.#binding;
@@ -711,6 +947,7 @@ export class ActiveSessionRuntime<
   }
 
   #scheduleReconnect(): void {
+    if (this.#managed) return; // the pool owns reconnect scheduling
     if (this.#reconnectTimer || !this.#retryEnabled || !this.#target) return;
     this.#invalidateRecoveryOperation();
     const attempt = this.#retryAttempt + 1;
@@ -834,6 +1071,7 @@ export class ActiveSessionRuntime<
   async #hydrate(
     authority: ActiveSessionAuthority<Client>,
     reason: Exclude<ActiveSessionHydrateReason, "candidate">,
+    authorizeCommit?: () => boolean,
   ): Promise<void> {
     if (!authority.sessionId || !this.isCurrent(authority)) return;
     const operation = ++this.#recoveryOperation;
@@ -871,21 +1109,37 @@ export class ActiveSessionRuntime<
       }
       if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
     }
+    if (authorizeCommit && !authorizeCommit())
+      throw new StaleSessionAuthorityError();
     this.#projection.commitHydrate(hydrated);
     this.#recovering = false;
     this.#error = null;
     this.#logDiagnostic("hydrated");
     this.#publish();
+    if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
+    const covered = hydrateAssistantIdentities(
+      authority,
+      hydrated,
+      this.#recoveryBuffer.map((entry) => entry.notification),
+    );
     this.#emit({
       type: "session-hydrate",
       reason,
       authority,
       hydrated,
+      assistantIdentities: covered.identities,
     });
     if (!this.#isRecoveryOperationCurrent(authority, operation)) return;
     const buffered = this.#recoveryBuffer;
     this.#recoveryBuffer = [];
-    const disposition = this.#drainNotifications(authority, buffered);
+    const disposition = this.#drainNotifications(
+      authority,
+      buffered.map((entry) =>
+        covered.receipts.has(entry.notification)
+          ? { ...entry, identityOnly: true }
+          : entry,
+      ),
+    );
     if (
       disposition === "settled" &&
       this.#isRecoveryOperationCurrent(authority, operation)
@@ -916,6 +1170,7 @@ export class ActiveSessionRuntime<
 
   #drainCandidateNotifications(
     notifications: readonly RpcNotification[],
+    identityOnly: ReadonlySet<RpcNotification> = new Set(),
   ): void {
     const authority = this.#authority;
     if (!authority) return;
@@ -924,6 +1179,7 @@ export class ActiveSessionRuntime<
       notifications.map((notification) => ({
         notification,
         retriedAfterHydrate: false,
+        identityOnly: identityOnly.has(notification),
       })),
     );
   }
@@ -957,7 +1213,20 @@ export class ActiveSessionRuntime<
   ): NotificationDisposition {
     if (!this.isCurrent(authority)) return "terminal";
     const { notification } = entry;
+    // Raw diagnostics observe every event on the pooled transport (the event
+    // inspector is transport-scoped, not Session-scoped); this consumes no
+    // recovery buffer and does not project into the timeline.
     if (raw) this.#emit({ type: "raw-notification", notification });
+    // P8: filter FOREIGN-Session traffic BEFORE the recovery buffer-capacity
+    // check and BEFORE any timeline projection. On a pooled transport every
+    // Session's events flow past every record's runtime; a foreign Session's
+    // flood must never consume this record's recovery bound nor fold into its
+    // timeline. rc11 projection envelopes DO carry session_id (+ topic), so
+    // they are scope-filtered too — a deferred-recovery flood of another
+    // Session's envelopes cannot overflow this record.
+    if (!notificationMatchesSessionScope(notification, authority.sessionId)) {
+      return "settled";
+    }
     if (this.#recovering) {
       return this.#enqueueRecovery(authority, entry)
         ? "recovering"
@@ -995,12 +1264,11 @@ export class ActiveSessionRuntime<
     ) {
       return "settled";
     }
-    if (
-      notification.method !== CORE_UI_METHODS.PROJECTION_ENVELOPE &&
-      !notificationMatchesSessionScope(notification, authority.sessionId)
-    ) {
-      return "settled";
-    }
+    // A covered persisted receipt still participates in thread/cursor ordering.
+    // Its identity was joined to hydrate before draining; its stale prose and
+    // ordinary notification/queue/peer effects are deliberately not replayed.
+    if (entry.identityOnly) return "settled";
+    // Foreign-session traffic was already filtered at the top of this method.
     this.#emit({ type: "notification", authority, notification });
     return "settled";
   }
@@ -1029,6 +1297,15 @@ export class ActiveSessionRuntime<
     this.#phase = "error";
     this.#error = message;
     this.#publish();
+    if (this.#managed) {
+      // Managed mode: the pool owns the physical socket and every other
+      // Session on it. Quarantine THIS record instead of closing the shared
+      // transport.
+      const binding = this.#binding;
+      this.#binding = null;
+      this.#disposeBinding(binding);
+      return;
+    }
     try {
       authority.client.disconnect();
     } finally {
@@ -1058,6 +1335,12 @@ export class ActiveSessionRuntime<
     this.#error = message;
     this.#status = authority.client.status;
     this.#publish();
+    if (this.#managed) {
+      const binding = this.#binding;
+      this.#binding = null;
+      this.#disposeBinding(binding);
+      return;
+    }
     try {
       authority.client.disconnect();
     } finally {
@@ -1131,6 +1414,55 @@ export class ActiveSessionRuntime<
       }
     }
   }
+}
+
+/** Split only receipts already covered by this exact, committed hydrate head. */
+function hydrateAssistantIdentities<Client extends ActiveSessionClient>(
+  authority: ActiveSessionAuthority<Client>,
+  hydrated: SessionHydrateResult,
+  notifications: readonly RpcNotification[],
+): { identities: HydratedAssistantIdentity[]; receipts: Set<RpcNotification> } {
+  const identities: HydratedAssistantIdentity[] = [];
+  const receipts = new Set<RpcNotification>();
+  for (const notification of notifications) {
+    const envelope =
+      notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE &&
+      hydrated.session_id === authority.sessionId &&
+      supportsFeature(
+        authority.capabilities,
+        CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
+      ) &&
+      notificationMatchesSessionScope(notification, authority.sessionId)
+        ? parseProjectionEnvelope(notification.params)
+        : null;
+    if (
+      envelope?.payload.type !== "assistant_persisted" ||
+      !envelope.cursor ||
+      envelope.cursor.stream !== hydrated.cursor.stream ||
+      envelope.cursor.seq > hydrated.cursor.seq
+    ) {
+      continue;
+    }
+    receipts.add(notification);
+    // Even an unusable identity cannot authorize covered prose to replace the
+    // hydrate. Missing/reused IDs are rejected by the record's identity join.
+    const data = envelope.payload.data;
+    if (
+      isRecord(data) &&
+      isRecord(data.meta) &&
+      typeof data.meta.message_id === "string" &&
+      data.meta.message_id.length > 0 &&
+      typeof data.assistant_segment_id === "string" &&
+      data.assistant_segment_id.length > 0
+    ) {
+      identities.push({
+        messageId: data.meta.message_id,
+        turnId: envelope.turn_id,
+        segmentId: data.assistant_segment_id,
+      });
+    }
+  }
+  return { identities, receipts };
 }
 
 function authorityWith<Client extends ActiveSessionClient>(

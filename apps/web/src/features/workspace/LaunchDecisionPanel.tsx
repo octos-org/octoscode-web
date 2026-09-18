@@ -4,6 +4,7 @@ import type {
   OnboardingRuntimeState,
   OnboardingSubmission,
 } from "../onboarding/use-onboarding.ts";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface LaunchDecisionPanelProps {
   state: LaunchRuntimeState;
@@ -24,6 +25,7 @@ export function LaunchDecisionPanel({
   onChooseProfile,
   onCancel,
 }: LaunchDecisionPanelProps) {
+  const t = useUiText();
   const decision = state.decision;
   if (!decision) return null;
   const opening = state.phase === "opening";
@@ -56,11 +58,12 @@ export function LaunchDecisionPanel({
       role="dialog"
       aria-labelledby="launch-decision-title"
     >
-      <span className="eyebrow">Workspace launch</span>
-      <h2 id="launch-decision-title">Choose this workspace’s profile</h2>
+      <span className="eyebrow">{t("Workspace launch")}</span>
+      <h2 id="launch-decision-title">{t("Choose this workspace’s profile")}</h2>
       <p>
-        This folder is known to more than one profile. Choose which profile
-        should own the new Session.
+        {t(
+          "This folder is known to more than one profile. Choose which profile should own the new Session.",
+        )}
       </p>
       {state.cwd ? <code>{state.cwd}</code> : null}
       {error ? (
@@ -75,8 +78,14 @@ export function LaunchDecisionPanel({
           disabled={opening}
           onClick={() => onChooseProfile(resolvedProfile)}
         >
-          <strong>Start {resolvedProfile} here</strong>
-          <small>Create this profile’s coding conversation in the folder</small>
+          <strong>
+            {t("Start") + " "}
+            {resolvedProfile}
+            {" " + t("here")}
+          </strong>
+          <small>
+            {t("Create this profile’s coding conversation in the folder")}
+          </small>
         </button>
         {decision.existing_profiles.map((profile) => (
           <button
@@ -85,15 +94,20 @@ export function LaunchDecisionPanel({
             key={profile}
             onClick={() => onChooseProfile(profile)}
           >
-            <strong>Start new session with {profile}</strong>
-            <small>Use this existing profile for a new Session</small>
+            <strong>
+              {t("Start new session with") + " "}
+              {profile}
+            </strong>
+            <small>{t("Use this existing profile for a new Session")}</small>
           </button>
         ))}
       </div>
       <div className="launch-actions">
-        <span>{opening ? "Opening durable session…" : "Server decision"}</span>
+        <span>
+          {opening ? t("Opening durable session…") : t("Server decision")}
+        </span>
         <button type="button" disabled={opening} onClick={onCancel}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </section>

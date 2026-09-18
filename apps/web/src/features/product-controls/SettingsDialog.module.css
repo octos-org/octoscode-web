@@ -137,24 +137,6 @@
   margin-left: auto;
 }
 
-.close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-}
-
-.close:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
 .options {
   flex: 1;
   min-height: 0;

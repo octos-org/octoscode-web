@@ -22,7 +22,7 @@ for (const viewport of [
   { width: 390, height: 844 },
   { width: 320, height: 480 },
 ]) {
-  test(`settings preserves its loading geometry at ${viewport.width}px`, async ({
+  test(`settings preserves its geometry while model management loads at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -30,9 +30,11 @@ for (const viewport of [
     const ready = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let requests = 0;
     await page.route(
-      "**/features/product-controls/SettingsDialog.tsx*",
+      /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/,
       async (route) => {
+        requests += 1;
         await ready;
         await route.continue();
       },
@@ -42,25 +44,38 @@ for (const viewport of [
       if (viewport.width < 760)
         await page.getByRole("button", { name: "Open sessions" }).click();
       await page.getByRole("button", { name: "Settings", exact: true }).click();
-      const loading = page.getByRole("dialog", {
-        name: "Loading settings…",
-        exact: true,
-      });
-      await expect(loading).toBeVisible();
-      await expect(
-        loading.getByRole("button", { name: "Cancel" }),
-      ).toBeFocused();
-      const before = await loading.boundingBox();
-      release();
-      const loaded = page.getByRole("dialog", {
+      const settings = page.getByRole("dialog", {
         name: "Settings",
         exact: true,
       });
-      await expect(loaded).toBeVisible();
-      expect(await loaded.boundingBox()).toEqual(before);
-      await page
-        .getByRole("button", { name: "Close settings", exact: true })
-        .click();
+      await expect(settings).toBeVisible();
+      const close = settings.getByRole("button", { name: "Close settings" });
+      await expect(close).toBeFocused();
+      await expect(
+        settings.getByRole("button", { name: "Disconnect", exact: true }),
+      ).toBeVisible();
+      const before = await settings.boundingBox();
+      const models = settings.getByRole("button", {
+        name: "Models",
+        exact: true,
+      });
+      await models.click();
+      await expect.poll(() => requests).toBe(1);
+      await expect(
+        settings
+          .getByRole("status")
+          .filter({ hasText: "Loading model management…" }),
+      ).toBeVisible();
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      await expect(models).toBeFocused();
+      expect(await settings.boundingBox()).toEqual(before);
+      release();
+      await expect(
+        settings.getByRole("list", { name: "Configured providers" }),
+      ).toBeVisible();
+      await expect(models).toBeFocused();
+      expect(await settings.boundingBox()).toEqual(before);
+      await close.click();
       await expect(page.getByLabel("Message Octos")).toBeVisible();
     } finally {
       release();
@@ -92,17 +107,14 @@ test("skip link bypasses navigation and multiline commands retain valid accessib
     "aria-controls",
     (await page.getByRole("listbox").getAttribute("id")) ?? "",
   );
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .withRules([
-          "aria-allowed-role",
-          "aria-allowed-attr",
-          "aria-valid-attr-value",
-        ])
-        .analyze()
-    ).violations,
-  ).toEqual([]);
+  const paletteAudit = await new AxeBuilder({ page })
+    .withRules([
+      "aria-allowed-role",
+      "aria-allowed-attr",
+      "aria-valid-attr-value",
+    ])
+    .analyze();
+  expect(paletteAudit.violations).toEqual([]);
   await composer.press("ArrowDown");
   const active = await composer.getAttribute("aria-activedescendant");
   expect(active).toBeTruthy();
@@ -118,10 +130,18 @@ test("skip link bypasses navigation and multiline commands retain valid accessib
   await expect(composer).toHaveValue("Draft line one\nDraft line two");
 });
 
-test("empty session search offers a direct way back and prose has the intended width", async ({
+test("empty session search offers a direct way back and replies use the chat column", async ({
   page,
 }) => {
   await openSession(page);
+  // A freshly launched Session no longer hydrates the fixture's static demo
+  // transcript (that is pinned deliberately by "A newly created Session must
+  // not inherit the static demo transcript" in e2e/product.spec.ts), so drive
+  // one turn to put real assistant prose on screen for the width measurement
+  // at the end of this test.
+  await page.getByLabel("Message Octos").fill("Stream a reply fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.getByText("Completed with")).toBeVisible();
   await page
     .getByRole("button", { name: "Search sessions", exact: true })
     .click();
@@ -140,22 +160,18 @@ test("empty session search offers a direct way back and prose has the intended w
   await expect(
     page.getByRole("textbox", { name: "Search sessions", exact: true }),
   ).toHaveValue("");
-  const width = await page
-    .locator(".entry-assistant .entry-content")
-    .first()
-    .evaluate((element) => {
-      const expected = document.createElement("span");
-      expected.style.font = getComputedStyle(element).font;
-      expected.style.width = "65ch";
-      expected.style.display = "block";
-      document.body.append(expected);
-      const value = getComputedStyle(expected).width;
-      expected.remove();
-      return { actual: getComputedStyle(element).maxWidth, expected: value };
-    });
-  expect(
-    Math.abs(
-      Number.parseFloat(width.actual) - Number.parseFloat(width.expected),
-    ),
-  ).toBeLessThan(0.1);
+  // A reply uses the whole chat column (code and tables need the room); it is
+  // not held to a prose measure narrower than the composer beneath it.
+  const width = await page.evaluate(() => {
+    const reply = document.querySelector(".entry-assistant .entry-content");
+    const column = document.querySelector(".timeline");
+    return {
+      maxWidth: reply ? getComputedStyle(reply).maxWidth : null,
+      reply: reply?.getBoundingClientRect().width ?? 0,
+      column: column?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(width.maxWidth).toBe("none");
+  expect(width.column).toBeGreaterThan(0);
+  expect(width.column - width.reply).toBeLessThan(1);
 });

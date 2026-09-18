@@ -18,6 +18,61 @@ async function start(page: Page) {
   ).toBeVisible();
 }
 
+/**
+ * Serve `assistantMarkdown` as the hydrated transcript of the next Session.
+ *
+ * A freshly launched Session no longer inherits the fixture's static demo
+ * transcript — "A newly created Session must not inherit the static demo
+ * transcript" in e2e/product.spec.ts pins that deliberately — so a test that
+ * reads rendered transcript content now supplies that content itself instead
+ * of assuming the fixture ships one.
+ */
+async function hydrateWith(page: Page, assistantMarkdown: string) {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    const requests = new Map<string | number, string>();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      requests.set(request.id, request.method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const response = JSON.parse(String(message));
+      if (requests.get(response.id) === "session/hydrate") {
+        response.result.messages = [
+          {
+            seq: 1,
+            role: "user",
+            content: "Show the Markdown transcript surface",
+            turn_id: "fixture-turn",
+            persisted_at: "2026-08-26T00:00:00Z",
+            media: [],
+          },
+          {
+            seq: 2,
+            role: "assistant",
+            content: assistantMarkdown,
+            turn_id: "fixture-turn",
+            thread_id: "fixture-thread",
+            message_id: "fixture-message",
+            persisted_at: "2026-08-26T00:00:01Z",
+            media: [],
+          },
+        ];
+      }
+      socket.send(JSON.stringify(response));
+    });
+  });
+}
+
+const TS_CODE_BLOCK = [
+  "```ts",
+  "export function answer(value: number): number {",
+  "  return value * 2;",
+  "}",
+  "```",
+].join("\n");
+
 test("code copy reports rejected and missing clipboard APIs without losing the code", async ({
   page,
 }) => {
@@ -33,6 +88,7 @@ test("code copy reports rejected and missing clipboard APIs without losing the c
       },
     });
   });
+  await hydrateWith(page, TS_CODE_BLOCK);
   await start(page);
   const copy = page.getByRole("button", { name: "Copy code block" });
   await copy.click();
@@ -227,6 +283,21 @@ test("360-message history stays readable while new output streams and unsafe Mar
   });
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
+  const selectedTitle = page.locator(
+    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+  );
+  const sessionA = (await selectedTitle.textContent())!;
+  const selectSession = async (title: string) => {
+    await page
+      .locator('button[role="treeitem"]')
+      .filter({ hasText: title })
+      .click();
+    await expect(selectedTitle).toHaveText(title);
+  };
+  const region = page.getByRole("region", {
+    name: "Conversation",
+    exact: true,
+  });
   await page
     .getByRole("button", { name: "Show 100 earlier messages" })
     .scrollIntoViewIfNeeded();
@@ -253,6 +324,62 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await expect(page.locator(".timeline-entry").first()).toContainText(
     "History 1:",
   );
+  const readingA = page.locator(".timeline-entry").nth(177);
+  await readingA.scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
+  let readingATop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = (await readingA.boundingBox())!.y;
+      const settled = top === readingATop;
+      readingATop = top;
+      return settled;
+    })
+    .toBe(true);
+  await page
+    .getByRole("button", { name: "final-reading", exact: true })
+    .hover();
+  await page
+    .getByRole("button", { name: "New session in final-reading", exact: true })
+    .click();
+  // Reused hydrate entry IDs must not borrow A's expansion or reading position.
+  await expect(page.locator(".timeline-entry")).toHaveCount(40);
+  const sessionB = (await selectedTitle.textContent())!;
+  await page.getByRole("button", { name: "Show 100 earlier messages" }).click();
+  await expect(page.locator(".timeline-entry")).toHaveCount(140);
+  const readingB = page.locator(".timeline-entry").nth(40);
+  await readingB.scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
+  let readingBTop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = (await readingB.boundingBox())!.y;
+      const settled = top === readingBTop;
+      readingBTop = top;
+      return settled;
+    })
+    .toBe(true);
+  for (let index = 0; index < 3; index++) {
+    await selectSession(sessionA);
+    await expect(page.locator(".timeline-entry")).toHaveCount(360);
+    await expect
+      .poll(async () =>
+        Math.abs((await readingA.boundingBox())!.y - readingATop),
+      )
+      .toBeLessThan(4);
+    await selectSession(sessionB);
+    await expect(page.locator(".timeline-entry")).toHaveCount(140);
+    await expect
+      .poll(async () =>
+        Math.abs((await readingB.boundingBox())!.y - readingBTop),
+      )
+      .toBeLessThan(4);
+  }
+  await selectSession(sessionA);
   await page.getByRole("button", { name: "Back to latest" }).click();
   await expect(
     page.getByRole("heading", { name: "Final history entry" }),
@@ -271,18 +398,46 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await composer.fill("Continue from history");
   await composer.press("Enter");
   await expect.poll(() => Boolean(emit)).toBe(true);
-  const region = page.getByRole("region", {
-    name: "Conversation",
-    exact: true,
-  });
   await region.hover();
   await page.mouse.wheel(0, -1800);
   await expect(
     page.getByRole("button", { name: "Back to latest" }),
   ).toBeVisible();
-  const before = await region.evaluate((el) => el.scrollTop);
+  // The wheel scroll settles asynchronously: content above the viewport
+  // (markdown and code blocks) finishes measuring a frame or two later and
+  // nudges the offset — 43041 then 42496 in this fixture. Take the baseline
+  // only once it has stopped moving, so this measures what the test is about,
+  // that streaming output never moves a detached reader, rather than the tail
+  // of the test's own scroll.
+  let settledTop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = await region.evaluate((el) => el.scrollTop);
+      const settled = top === settledTop;
+      settledTop = top;
+      return settled;
+    })
+    .toBe(true);
+  const tableTop = (await page.locator(".md-table-scroll").boundingBox())!.y;
+  await selectSession(sessionB);
+  await expect
+    .poll(async () => Math.abs((await readingB.boundingBox())!.y - readingBTop))
+    .toBeLessThan(4);
   for (let index = 0; index < 25; index++)
     emit!("assistant_delta", { text: `Stream chunk ${index}. ` });
+  await selectSession(sessionA);
+  await expect(
+    page.getByText("Stream chunk 24.", { exact: false }),
+  ).toBeAttached();
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await page.locator(".md-table-scroll").boundingBox())!.y - tableTop,
+      ),
+    )
+    .toBeLessThan(4);
+  const before = await region.evaluate((el) => el.scrollTop);
+  emit!("assistant_delta", { text: "Foreground continuation. " });
   emit!("turn_terminal", { outcome: "completed" });
   await expect(
     page.getByText("Stream chunk 24.", { exact: false }),
@@ -321,18 +476,49 @@ test("360-message history stays readable while new output streams and unsafe Mar
     });
   }
   await page.setViewportSize({ width: 1280, height: 720 });
+  await selectSession(sessionB);
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  const previousEmit = emit;
+  await composer.fill("Keep following while this Session is in the background");
+  await composer.press("Enter");
+  await expect.poll(() => emit !== previousEmit).toBe(true);
+  await selectSession(sessionA);
+  for (let index = 0; index < 25; index++)
+    emit!("assistant_delta", { text: `Background paragraph ${index}.\n\n` });
+  emit!("turn_terminal", { outcome: "completed" });
+  await selectSession(sessionB);
+  await expect(
+    page.getByText("Background paragraph 24.", { exact: true }),
+  ).toBeInViewport();
+  await expect
+    .poll(() =>
+      region.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+    )
+    .toBeLessThan(4);
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeHidden();
+
+  // Reading memory ends with the authenticated scope, even for the same IDs.
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
-    .getByRole("treeitem", { name: "final-reading", exact: true })
-    .hover();
-  await page
-    .getByRole("button", { name: "New session in final-reading", exact: true })
+    .getByRole("dialog", { name: "Settings", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
     .click();
-  // Both sessions deliberately reuse hydrate fallback IDs. The session key,
-  // rather than a message ID coincidence, resets the initial rendering window.
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await selectSession(sessionA);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await expect(
     page.getByRole("button", { name: "Show 100 earlier messages" }),
   ).toBeAttached();
+  await expect
+    .poll(() =>
+      region.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+    )
+    .toBeLessThan(4);
   expect(errors).toEqual([]);
 });
 
@@ -400,27 +586,17 @@ test("a missing optional syntax grammar leaves readable and copyable plain code"
   const errors: string[] = [];
   let rejected = false;
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(/shikijs_langs_python.*\.js/, async (route) => {
-    rejected = true;
-    await route.abort("failed");
-  });
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    const requests = new Map<string | number, string>();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      requests.set(request.id, request.method);
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const response = JSON.parse(String(message));
-      if (requests.get(response.id) === "session/hydrate") {
-        response.result.messages[1].content =
-          "```python\nprint('still readable')\n```";
-      }
-      socket.send(JSON.stringify(response));
-    });
-  });
+  // The optional Python grammar chunk. A dev server serves it as
+  // @shikijs_langs_python.js; this repo's e2e runs `vite preview`, which
+  // serves the built /assets/python-<hash>.js instead.
+  await page.route(
+    /\/(?:@shikijs_langs_)?python(?:\.js|-[A-Za-z0-9_-]+\.js)(\?|$)/,
+    async (route) => {
+      rejected = true;
+      await route.abort("failed");
+    },
+  );
+  await hydrateWith(page, "```python\nprint('still readable')\n```");
   await start(page);
   await expect.poll(() => rejected).toBe(true);
   await expect(page.locator(".md-code-plain")).toContainText(

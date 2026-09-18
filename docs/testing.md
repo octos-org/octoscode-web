@@ -1,26 +1,33 @@
 # Testing and verification
 
 Use the smallest gate that proves the change while developing, then run the
-complete gate before review.
+complete gate before review. A fixture pass is not live Core or model evidence.
 
 | Gate                  | Command                                         | Proves                                                                             |
 | --------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Unit                  | `pnpm test`                                     | parsers, reducers, state machines, and components                                  |
+| Unit                  | `pnpm test`                                     | parsers, reducers, ownership state machines, and components                        |
 | Types and lint        | `pnpm typecheck && pnpm lint`                   | package boundaries and exhaustive cases                                            |
 | Repository policy     | `pnpm policy:verify`                            | UI tokens, style ownership, and ADR metadata                                       |
-| Product browser       | `pnpm test:e2e`                                 | launch, recovery, multi-Session/background turns, WCAG                             |
+| Product browser       | `pnpm test:e2e`                                 | production browser behavior against the deterministic fixture                      |
 | Cross-browser smoke   | `pnpm test:e2e:cross-browser`                   | Firefox/WebKit connect, send, durable history, drafts, theme and keyboard Settings |
-| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, runtime model, tools, turn, and tab restore                             |
+| Fixture soak          | `node scripts/soak-fixture-e2e.mjs`             | synthetic multiplexed protocol and durable fixture contract                        |
+| Live model (opt-in)   | `pnpm test:e2e:live`                            | real Core, runtime model, tools, turns, and tab restore                            |
 | Generated contract    | `pnpm contract:verify`                          | Core vocabulary matches the immutable source pin                                   |
 | Released Core runtime | `OCTOS_BINARY=/abs/octos pnpm integration:core` | a matching released Core completes the critical flow                               |
 | Deployment            | `pnpm build && pnpm deploy:verify`              | artifact, CSP, nginx contract, and size budgets                                    |
 | Complete local gate   | `pnpm check`                                    | all deterministic non-browser gates                                                |
 
-Install Chromium once with `pnpm exec playwright install chromium`. E2E owns its
-fixture and Vite ports; it deliberately refuses to reuse an existing server so a
-developer's real Octos process cannot make a fixture test pass. Set
-`OCTOSCODE_E2E_FIXTURE_PORT` and `OCTOSCODE_E2E_WEB_PORT` when the defaults are
-occupied; the configured fixture origin is injected into the app.
+Install Chromium once with `pnpm exec playwright install chromium`. The browser
+gate defaults to bundled Chromium; opt into an installed release channel with
+`OCTOSCODE_E2E_CHANNEL=chrome` or `msedge`.
+
+Product tests build and serve a fixed production artifact through Vite preview,
+not HMR. Set `OCTOSCODE_E2E_SKIP_BUILD=1` only after building the intended
+`apps/web/dist` artifact. The gate owns both fixture and preview ports and
+refuses to reuse an existing server. Override occupied ports with
+`OCTOSCODE_E2E_FIXTURE_PORT` and `OCTOSCODE_E2E_WEB_PORT`; the fixture origin is
+injected during the build. A prebuilt artifact must match the desired connection
+defaults, although tests explicitly enter their fixture origin.
 
 Install Firefox and WebKit with `pnpm exec playwright install firefox webkit`
 for the small continuous smoke lane. Its separate config keeps Chromium-only
@@ -31,104 +38,171 @@ fixture response was persisted. Scenario-specific recovery tests and the real
 Core gate supply that evidence. Keyboard and accessibility assertions do not
 claim real VoiceOver, NVDA or physical-mobile coverage.
 
-## Multi-Session and background-turn gate
+## Multi-Session browser gate
 
-The deterministic AppUI fixture must model Session state per exact
-Workspace/Profile/Session tuple. Hydrate must return that Session's own
-messages, turns, and pending interactions, and durable turn events must reach
-every socket that has the Session open. A fixed completed hydrate or an
-arbitrary short timeout cannot prove background execution.
+The fixture tracks exact Session/Profile/Workspace bindings, opened socket
+membership, active turn owners, persisted messages, turns, and pending
+interactions. One pooled socket may own many Sessions. A wrong profile,
+workspace binding, unknown socket membership, concurrent start on one Session,
+or invalid/reused turn UUID must fail admission.
 
-The product browser gate currently covers these sequences:
+The browser suites prove:
 
-1. Create two confirmed Sessions in one Workspace, reopen each exact identity,
-   refresh the tab, and verify neither creation deletes or replaces the other.
-2. Start a server-acknowledged turn in A, create B, and verify A's owner socket
-   remains open while its status and terminal result stay out of B's timeline.
-3. Hold the next `turn/start` acknowledgement and verify the composer says
-   Starting. `Stop` is absent and `/stop` sends no interrupt. One New Session
-   click is queued without sending `session/open`, then runs automatically after
-   release. A replay-lossy recovery whose hydrate already proves that exact turn
-   active must release the same intent after recovery becomes ready, without
-   waiting forever for the superseded RPC reply. If the same hydrate restores a
-   pending approval or question—either in the hydrate snapshot or buffered
-   before ready—the parked Session must project **Waiting**, not stale
-   **Working**. A buffered resolution must make the inverse transition.
-4. Click several existing targets while the acknowledgement is held and verify
-   latest-wins with exactly one candidate open. Cancelling the pending banner or
-   rejecting the start clears the intent and leaves the source Session active.
-5. Reject the candidate `session/open` after accepting the start and verify the
-   handoff rolls back: the source remains selected, its owner socket stays open,
-   its turn completes in the foreground, and a later retry succeeds.
+1. Confirmed Sessions survive sibling creation and refresh. Selecting a healthy
+   retained record changes focus immediately without another open or hydrate.
+2. A/B/C turns and timelines remain independent through rapid selection. Unsent
+   per-record FIFO work drains in order even while another record is selected;
+   refocusing never replays an admitted turn.
+3. A held start acknowledgement does not block New Session or retained-record
+   selection. Starting is not acceptance: Stop is absent and `/stop` sends no
+   interrupt. Rejecting A's start leaves B selected and reports the error only
+   when A is selected. A failed B candidate leaves A's source record intact.
+4. With A1 accepted server-side but its reply held, A2/A3 queued, and B
+   selected, loss interrupts A1. Reopen/hydrate reconciles A before ready admits
+   A2; A3 starts only after A2's terminal. A1 is never sent again.
+5. Approval/question payloads remain owned by their exact Session and request
+   IDs. B cannot display A's request; returning to A restores it, and a response
+   resolves exactly that request and produces only A's terminal.
+6. Twelve browser turns plus three native peers are simultaneously active. The
+   test uses the browser's `/peer` command and `peer/prepare`, then observes
+   three exact `profile:local:tui#peer-slug` opens and three UUID-backed kickoff
+   prompts on the same socket. Duplicate staged delivery produces no duplicate
+   opens/starts. No HTTP control fabricates active peers. Closing a selected
+   peer retains its read-only transcript and focus; a later disconnect recovers
+   the other records without reopening that closed peer.
+7. Unknown commands fail closed; `/sessions` and Activity open their actual
+   product surfaces without starting a prompt or stealing Session ownership.
+8. Fork, rewind, and workspace undo keep their confirmation receipts while the
+   owning Session's canonical refresh is explicitly held. Fork opens and
+   hydrates the exact child in the background; rewind restores the selected
+   checkpoint's prompt draft; workspace undo leaves the conversation intact.
+   Each mutation is sent once to its exact owner.
+9. A captured native stream order—partial deltas, a full persisted segment, more
+   deltas for that same segment, then terminal—keeps canonical text exact and
+   settled. The next queued turn remains independent while B is selected.
+   Contiguous fixture counters and an unchanged source-hydrate count prevent
+   recovery from masking a live rendering failure.
+10. `/gather` captures its source record, reads a filtered native blackboard,
+    and queues one bounded TUI-shaped synthesis there even if B becomes selected
+    while the reply is held. Duplicate invocations share one read; an empty
+    result sends no model input. The panel's “Refresh blackboard” stays
+    read-only.
+11. A topicless Session rejects foreign-topic approvals and questions even when
+    their base Session, turn, and request IDs exactly match its own. Foreign
+    approval decisions and canonical terminals cannot settle the owner; a
+    foreign cursor cannot trigger another hydrate or leak output. The genuine
+    owner remains answerable exactly once, and its never-sent queued turn then
+    drains on the same Session with a new UUID. Native peer lifecycle events
+    retain their distinct originating-Session routing semantics.
 
-The queue state machine, prepare-window terminal race, candidate transaction,
-and eight-owner capacity exchange remain deterministic unit-test concerns.
-Closing an owner socket in the fixture must produce the same durable
-`connection_closed` result as Core rc.9, so a transport-preservation regression
-cannot pass accidentally. The opt-in live gate supplies the real Core/model
-proof for persisted output and hydrate after refresh.
+The fixture's explicit acknowledgement and terminal barriers avoid using short
+delays as proof of admission or concurrency. Controls include
+`/__test__/turn-start/{hold-next,state,admit,release,reject,reset}`,
+`/__test__/terminal/{hold-next,state,release,reset}`,
+`/__test__/session-open/{reject-next,reset}`, `/__test__/disconnect`, and
+`/__test__/replay-lossy`. Controls are fixture-only and are not product RPCs.
 
-The fixture exposes one-shot `/__test__/turn-start/hold-next`, `state`,
-`release`, `reject`, and `reset` controls for this sequence. Product tests poll
-the explicit held state and release or reject it themselves; they must not use a
-short artificial acknowledgement timeout, a second UI click, or `Stop` as proof
-that Core accepted the start. The one-shot `/__test__/session-open/reject-next`
-control exercises candidate rollback without changing any production protocol.
+History tests use `/__test__/history/{hold-refresh,state,release,reset}` to
+pause only the post-mutation canonical hydrate, not the initial history read.
+The fixture's native-shaped history results model protocol state only; its
+snapshot restore does not modify real workspace files.
+
+Gather ownership tests use `/__test__/gather/{hold-next,state,release,reset}` to
+hold an exact Session's native reply without staging synthetic active peers.
+
+Topic ownership tests use `/__test__/scope/inject` only for an active synthetic
+topicless approval or question probe. It sends conflicting wire frames without
+changing the owner's canonical log, followed by a valid-owner warning receipt.
+The later valid interaction and FIFO completion prove the owner remains usable;
+no timing delay substitutes for a protocol receipt.
+
+Socket loss records interrupted `connection_closed` terminals for every turn
+owned by the lost transport and suppresses their pending success callbacks. It
+must not fabricate uninterrupted completion.
+
+## Canonical fixture hydration and synthetic soak
+
+Browser and native-peer Sessions persist user/assistant messages and completed
+turn outcomes. `session/open` replays canonical envelopes after the supplied
+cursor. `session/hydrate` returns the full persisted `messages`, `turns`, and
+exact pending interactions; tool envelopes are separate. It does not replay
+ordinary user/assistant text as a second hydrate transcript. Messages carry
+stable IDs and thread IDs matching their turns, as Core does.
+
+A Session with no turns hydrates empty. Demo Sessions retain their static demo
+transcript. `session/delete` drops the Session's stored state. The replay log is
+bounded to the latest 500 events per Session. Context state uses the native
+estimate fields, not billing usage presented as model-window occupancy.
+
+Run the synthetic runner directly:
+
+```sh
+node scripts/soak-fixture-e2e.mjs --rounds 4 --sessions 4 --port 62111
+```
+
+It launches its own loopback fixture and checks shared-socket concurrent
+admission, independent active hydrate, exact transcript/replay identity,
+per-thread sequences, cross-scope rejection, observer isolation, reconnect
+cursors, deletion, all-owner interruption, and exact interaction resolution. It
+neither launches a browser nor proves the native browser peer host or live Core
+behavior. Its printed assertion count describes only that synthetic run.
+
+## Opt-in shared-session collision gate
+
+`pnpm test:e2e:collision` runs only the shared-session test. It requires an
+isolated local Core, a writable fixture workspace, and its `main` Profile
+configured to use `stub-model` at a separately launched
+`node e2e-live/support/stub-llm.mjs <port>` OpenAI-compatible endpoint. Supply
+`OCTOSCODE_LIVE_PROXY_TARGET`, `OCTOSCODE_LIVE_PROXY_ORIGIN`,
+`OCTOSCODE_LIVE_TOKEN`, `OCTOSCODE_LIVE_WORKSPACE`, and the local
+`OCTOSCODE_LIVE_CORE_PORT`. `OCTOSCODE_LIVE_WEB_PORT` optionally overrides the
+preview port. Do not point this test at a shared model Profile.
+
+A second client occupies the Session, the browser queues a prompt, and the
+holder interrupts its own turn through Core. The gate waits for the browser's
+exact queued turn to complete. This proves shared-session ownership and FIFO
+behavior against real Core with a stub provider; it is separate from the real
+model gate below and does not imply external-driver support.
 
 ## Opt-in live model gate
 
-The live gate is intentionally separate from CI because it consumes a real
-provider and mutates a real server workspace. It runs the production Web client
-against a developer-supplied Core proxy, creates a fresh opaque Web Session,
-requires the effective runtime model id to be exactly `glm-5.3-flash`, performs
-one bounded file edit/read turn, and reloads the page to prove same-tab restore
-plus durable server hydrate. It does not configure, change, or infer the active
-Profile default. Set the Profile default through Core first and restart Octos
-when required; the Session-runtime label must already report GLM-5.3-Flash
-before the turn begins.
+The live gate consumes a real provider and mutates the explicitly supplied
+server workspace. It creates a fresh opaque Web Session, requires the effective
+runtime model to match `OCTOSCODE_LIVE_EXPECTED_MODEL` (default
+`glm-5.3-flash`), performs a bounded file edit/read turn, and reloads to prove
+same-tab restore and durable hydrate. It also checks a background turn while a
+sibling Session is selected. It does not change or infer the Profile default.
 
-The gate disables Playwright traces, screenshots, and video so the tab-scoped
-auth token cannot enter test artifacts. Its launcher also disables Playwright's
-automatic failure-page accessibility snapshot before the worker starts because
-that snapshot can serialize password field values.
-
-Supply all four values explicitly:
+Configure the Profile through Core and restart Octos when required before
+running. Supply the server, trusted origin, token, and workspace explicitly:
 
 ```sh
 OCTOSCODE_LIVE_PROXY_TARGET=http://127.0.0.1:18031 \
 OCTOSCODE_LIVE_PROXY_ORIGIN=https://octoscode-web.example \
 OCTOSCODE_LIVE_TOKEN='<ephemeral server token>' \
 OCTOSCODE_LIVE_WORKSPACE=/absolute/path/on/server \
+OCTOSCODE_LIVE_EXPECTED_MODEL=glm-5.3-flash \
 pnpm test:e2e:live
 ```
 
-`OCTOSCODE_LIVE_PROXY_ORIGIN` must be an Origin that Core explicitly allows
-(normally the deployed Web origin), not merely the local preview URL. The Vite
-proxy rewrites the WebSocket Origin to this value; an untrusted local Origin is
-expected to fail the handshake with 403.
+The gate disables traces, screenshots, video, and failure-page accessibility
+snapshots so a tab-scoped token cannot enter test artifacts. Do not put tokens
+in proxy variables, shell history, or committed configuration.
 
-There is no Session-id input: the product creates one through the same Add
-workspace flow used by a person. The environment supplies a server path, not a
-browser-owned Workspace record.
+The live gate builds `apps/web/dist` and serves it through Vite preview.
+`OCTOSCODE_DEV_PROXY_TARGET` and `OCTOSCODE_DEV_PROXY_ORIGIN` configure only the
+local preview proxy, not a deployed static host. The origin must be trusted by
+Core; an untrusted origin is expected to fail its handshake.
 
-Model-settings changes need deterministic unit and product-fixture coverage for
-capability-gated read/edit, exact-draft Test/Save, model discovery with manual
-fallback, delete confirmation, Profile-default selection, and secret
-non-retention. Those tests must use a fake provider; only the opt-in live gate
-may spend a real credential.
-
-The live gate builds `apps/web/dist` first and serves that production artifact
-through Vite preview. `OCTOSCODE_DEV_PROXY_TARGET` and
-`OCTOSCODE_DEV_PROXY_ORIGIN` configure only the local Vite dev/preview proxy;
-they are absent from the built JavaScript and from a deployed static host. The
-origin override is necessary when a local SSH tunnel reaches a Core that trusts
-the deployed Web origin. Do not put tokens in either proxy variable, shell
-history, committed files, or Playwright configuration.
+Model settings need deterministic capability-gated read/edit, exact-draft
+Test/Save, discovery/manual fallback, delete, Profile-default, and secret
+non-retention tests. These use a fake provider; only the opt-in live gate may
+spend a real credential.
 
 ## Flake triage
 
-Do not weaken an assertion solely because it failed once. Re-run the smallest
-test, inspect `test-results/` and `playwright-report/`, then decide whether the
-assertion observes a product invariant or incidental markup. Text and role
-assertions are preferred over exact syntax-highlighter span boundaries. A CI E2E
-failure uploads both Playwright outputs for seven days.
+Do not weaken an invariant because it failed once. Re-run the smallest test on a
+fixed artifact, inspect `test-results/` and `playwright-report/`, and
+distinguish product ownership from incidental markup. Prefer role/text
+assertions to syntax-highlighter span boundaries. CI retains Playwright failure
+artifacts for seven days.

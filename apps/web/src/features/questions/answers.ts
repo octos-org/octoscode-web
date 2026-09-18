@@ -1,7 +1,7 @@
 import type {
   UserQuestion,
   UserQuestionAnswer,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 
 export interface DraftAnswer {
   selectedLabels: string[];
@@ -47,4 +47,24 @@ export function toWireAnswers(
       : {}),
     ...(answer.freeText.trim() ? { free_text: answer.freeText.trim() } : {}),
   }));
+}
+
+/**
+ * Judge r2 #4: map ONE draft answer onto the peer CONTROL command's answer
+ * array (`PeerUserQuestionAnswer`: `freeText`, not the interaction leaf's
+ * snake_case wire shape). A selected option maps to its label as free text
+ * (single-slot card); a blank draft contributes NOTHING, so the caller's
+ * fail-closed empty-array rule holds. Pure, allocation-free on the hot path.
+ */
+export function toControlAnswers(
+  answers: readonly DraftAnswer[],
+): { freeText: string }[] {
+  const mapped: { freeText: string }[] = [];
+  for (const answer of answers) {
+    const label = answer.selectedLabels.join(", ").trim();
+    const text = answer.freeText.trim();
+    if (label !== "") mapped.push({ freeText: label });
+    else if (text !== "") mapped.push({ freeText: text });
+  }
+  return mapped;
 }

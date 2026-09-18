@@ -1,0 +1,73 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--dsw-alias-bg-mask-1);
+}
+.dialog {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.header h2 {
+  margin: 0;
+}
+.scope {
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-tertiary);
+}
+.rows {
+  display: grid;
+  gap: 12px;
+  padding-inline-start: 20px;
+  overflow-wrap: anywhere;
+}
+.field {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+}
+.confirm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.dialog button,
+.field input {
+  padding: 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+.dialog button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dialog button[aria-pressed="true"] {
+  border-color: var(--dsw-alias-label-primary);
+}
+/**
+ * A candidate that is mid-turn RIGHT NOW, per the server's process-global
+ * registry — usually because another attached client (a terminal, another
+ * tab) is driving it. Shown only when the server said so: an older server
+ * omits the fact, and silence must not read as "idle".
+ */
+.busy {
+  margin: 0;
+  color: var(--dsw-alias-state-business-primary);
+}

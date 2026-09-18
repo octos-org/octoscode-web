@@ -342,3 +342,39 @@ button.modelRow:hover:not(:disabled),
     align-self: flex-start;
   }
 }
+
+/* Stop-server confirmation. */
+.confirmBackdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+.confirmDialog {
+  display: grid;
+  gap: 12px;
+  width: min(440px, 100%);
+  padding: 20px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.confirmDialog h3,
+.confirmDialog p {
+  margin: 0;
+}
+
+.confirmError {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

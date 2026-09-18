@@ -101,6 +101,11 @@ change. After those pass, repeat or broaden testing only for a new change,
 failure, unresolved concern or required release gate. Report meaningful coverage
 and limits, not a rising test count as a quality metric.
 
+CI cancels superseded runs for the same pull request. Main pushes and manual
+runs keep separate concurrency groups, so an unrelated review cannot cancel
+delivery verification. This avoids the duplicate and obsolete browser runs
+observed during parity integration; it does not replace exact-head acceptance.
+
 ## Finish the delivery
 
 Use focused PRs with the problem, resulting behavior and relevant validation.

@@ -75,40 +75,38 @@ If Core returned an unambiguous `activate` decision for a fresh Web Session, the
 browser opens it automatically. `cross_profile` still asks which Profile to use;
 `no_profile` still requires onboarding or the TUI fallback.
 
-Session switching and creation are allowed while a locally started turn is
-running after Core has acknowledged it. They remain blocked while a prompt is
-queued only in this browser. While `turn/start` is awaiting acknowledgement, the
-composer shows **Starting** and a create/switch click becomes the next action;
-you do not need to click again. The latest target wins, **Cancel** removes the
-pending navigation, and a rejected start leaves the source Session selected.
+Switching and creating Sessions no longer waits for a source turn ACK or an
+empty FIFO. Each confirmed record retains its own queue while another Session is
+selected. A destination still needs a valid server path/Profile and a successful
+scoped open/hydrate; a failed destination does not replace the source view.
+Mutation/recovery locks may still disable unsafe actions.
 
-## New Session says eight background connections are being preserved
+## An older build reports an eight-connection limit
 
-Core rc.9 does not advertise when a terminal turn's owner connection is safe to
-release. The Web app therefore keeps a safety budget of eight live owner
-connections instead of closing an older one and potentially interrupting Core
-tail work or evicting a live Session scope.
-
-You can still select any Session whose owner is already retained: the app
-reclaims that exact connection without consuming another slot. To open a new
-target after the budget is full, explicitly **Disconnect**, reconnect, and then
-open it. Disconnect releases every retained transport and can terminate a turn
-or post-terminal cleanup still owned by those connections; confirmed Session
-references remain available in the same tab.
+That message belongs to the superseded per-owner-socket implementation. The
+retained-record candidate multiplexes Sessions over one authenticated physical
+WebSocket and has no eight-Session navigation limit. Verify the served build
+identity and reload the current static bundle; do not disconnect healthy running
+work merely to free a supposed Session socket slot.
 
 ## A background turn stopped after navigation or refresh
 
-Selecting or creating another Session does not close the owner WebSocket of a
-turn that this tab started and Core acknowledged. If the old Session later shows
-failed, check whether the WebSocket, reverse proxy, or Octos process restarted.
+Selecting another Session does not close the shared WebSocket or move the source
+queue. Check for a socket/proxy failure, daemon restart, or explicit interrupt
+if a background turn stops. An empty Session is idle, not completed; only a
+retained canonical turn terminal supplies a completed/failed work badge.
 
-Core rc.9 background continuation is transport-bound. Refreshing or closing the
-tab, losing the network/proxy connection, and selecting **Disconnect** all close
-the owner socket and terminate a still-running turn with `connection_closed`.
-Confirmed Session refs survive a same-tab refresh and Disconnect, but execution
-ownership does not. **Forget server** or changing endpoint/token identity clears
-the refs as well. Durable continuation across transport loss requires a future
-server-owned turn lease; it cannot be repaired with browser storage.
+Core rc11 still interrupts connection-owned work when the pooled socket closes,
+including a `connection_closed` terminal on ordinary connection teardown.
+Refresh, tab close, network/proxy loss, and **Disconnect** cannot preserve that
+execution. Daemon restart also requires authoritative reconciliation, not a
+claim that old work kept running. Ordinary reconnect retains local pending
+prompts in memory and pauses dispatch until each Session recovers; it does not
+blindly retry an ambiguous sent turn. Reload loses unsent prompts and image
+drafts. Confirmed refs can survive a same-tab refresh or Disconnect, but are
+only navigation hints. **Forget server** or changing endpoint/token identity
+clears them. Durable detached execution needs a Core contract, not browser
+storage.
 
 ## Full access cannot be selected
 
@@ -145,10 +143,14 @@ Restart Octos before expecting new turns to use the default. A true
 Session-scoped override is tracked in
 [octos#2148](https://github.com/octos-org/octos/issues/2148).
 
-Temperature, `top_p`, maximum-token/context values, and reasoning controls are
-not missing because of a collapsed panel: the current Core AppUI configuration
-contract cannot persist them. Configure supported runtime parameters outside the
-Web until Core exports an explicit contract.
+Web and the pinned TUI have no inference-override editor. Core rc11 nevertheless
+supports typed per-model `temperature`, `top_p`, `context_window`, reasoning
+defaults, and compatibility hints; Web preserves those configured values while
+editing a provider. If an entry contains fields this editor cannot preserve,
+edit it through Core configuration instead. `max_output_tokens` belongs to the
+Profile gateway and is rejected by the model upsert contract. The separate
+`/thinking` control snapshots reasoning effort into new and queued Session
+turns.
 
 If using GLM Coding Plan, confirm that your tool is in Z.AI's
 [official supported-tool list](https://docs.z.ai/devpack/tool/others). Octos is
@@ -173,6 +175,13 @@ not guess missing provider APIs.
 
 Unknown slash commands fail closed. `!` executes on the TUI host and therefore
 cannot be emulated safely by a browser. Use the TUI for host shell commands.
+
+The expanded parity surface is still a candidate. **Refresh blackboard** in
+`/peer` is deliberately read-only. `/gather [all|slug…]` instead reads peer
+results and queues a synthesis prompt in its originating Session; empty results
+create no turn. A blocked/stale receipt does not silently retry. A blackboard
+read is not synthesis completion; see [Feature parity](feature-parity.md) for
+current acceptance and remaining gaps.
 
 ## A transcript image shows only alt text
 

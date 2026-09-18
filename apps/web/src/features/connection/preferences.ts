@@ -1,5 +1,5 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
-import type { SessionOpened } from "@octos-org/octoscode-client";
+import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
 import { connectionEndpointError } from "./validation.ts";
 import {
   parseSessionDrafts,
@@ -65,6 +65,7 @@ interface TabConnectionPreferences {
   autoConnect: boolean;
   knownSessions: KnownSessionRef[];
   composerDrafts: SessionDraftRecord[];
+  draftPrincipal?: string | undefined;
 }
 
 type ConnectionIdentity = Pick<ConnectionDraft, "endpoint" | "token">;
@@ -130,6 +131,7 @@ export function saveConnectionPreferences(
     // tab-known Session projection together. No token is copied into an entry.
     knownSessions: sameIdentity ? previous.knownSessions : [],
     composerDrafts: sameIdentity ? previous.composerDrafts : [],
+    draftPrincipal: sameIdentity ? previous.draftPrincipal : undefined,
   };
   safely(() => durableStorage.setItem(DURABLE_KEY, JSON.stringify(durable)));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
@@ -213,6 +215,17 @@ export function clearKnownSessions(
   writeTabConnection(tabStorage, { ...current, knownSessions: [] });
 }
 
+/**
+ * The last origin this browser actually saved, or null when this is a first
+ * visit. WEB-PAIRING-CONTRACT-5100 §Discovery probes exactly this address and
+ * nothing else — never the configured default, and never a range of ports.
+ */
+export function loadDurableEndpoint(
+  durableStorage: StorageLike,
+): string | null {
+  return readDurable(durableStorage)?.endpoint ?? null;
+}
+
 export function loadAutoConnect(tabStorage: StorageLike): boolean {
   return readTabConnection(tabStorage)?.autoConnect === true;
 }
@@ -225,6 +238,28 @@ export function loadComposerDrafts(
   return current && matchesIdentity(current, identity)
     ? current.composerDrafts
     : [];
+}
+
+/** Remember only for offline Forget; restoring drafts still requires REST auth. */
+export function loadDraftPrincipal(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+): string | null {
+  const current = readTabConnection(tabStorage);
+  return current && matchesIdentity(current, identity)
+    ? (current.draftPrincipal ?? null)
+    : null;
+}
+
+export function rememberDraftPrincipal(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+  principal: string,
+): void {
+  const current = readTabConnection(tabStorage);
+  if (current && matchesIdentity(current, identity)) {
+    writeTabConnection(tabStorage, { ...current, draftPrincipal: principal });
+  }
 }
 
 /** Unsent text only; never restore or dispatch a server-owned turn. */
@@ -313,6 +348,7 @@ function readTabConnection(
           ? parseKnownSessionRegistry(value.knownSessions)
           : [],
       composerDrafts: parseSessionDrafts(value.composerDrafts),
+      draftPrincipal: bounded(value.draftPrincipal, 1_024) || undefined,
     };
   } catch {
     return null;

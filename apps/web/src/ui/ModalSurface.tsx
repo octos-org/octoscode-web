@@ -5,6 +5,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalSurfaceProps {
   backdropClassName: string;
@@ -14,6 +15,17 @@ interface ModalSurfaceProps {
   busy?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   closeOnBackdrop?: boolean;
+  /**
+   * Whether this surface hides the app behind it from assistive tech.
+   *
+   * True for a surface that owns the whole window. False for a takeover that
+   * belongs to ONE session — an approval or a question — because the operator
+   * is expected to keep working in other sessions while it waits. Before
+   * surfaces moved to the page root this distinction was accidental: a surface
+   * rendered inside the shell skipped the hiding because the shell contained
+   * it, and only a surface outside it ever hid anything.
+   */
+  hidesBackground?: boolean;
   onEscape?: () => void;
   onKeyDown?: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   children: ReactNode;
@@ -43,13 +55,49 @@ export function ModalSurface({
   busy,
   initialFocusRef,
   closeOnBackdrop = false,
+  hidesBackground = true,
   onEscape,
   onKeyDown,
   children,
 }: ModalSurfaceProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
+
+  // While open, hide the app background from assistive tech so this surface is
+  // the only announced content. The exact prior state is restored on close or
+  // unmount, including an unmount while the surface is still open.
+  useEffect(() => {
+    if (!hidesBackground) return;
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    const background =
+      // The workspace shell is a plain <div> since v0.10.0 (the <main>
+      // landmark moved inside it, onto #workspace-main), so match the shell by
+      // class alone. A tag-qualified "main.workspace-grid" silently found
+      // nothing and left the whole background announced to assistive tech.
+      document.querySelector<HTMLElement>(".workspace-grid") ??
+      // The backdrop is portalled into <body>, so this fallback now looks for a
+      // top-level <main> beside the surface rather than one beside it inside
+      // the app container. Both resolve to the same shell in practice.
+      backdrop.parentElement?.querySelector<HTMLElement>(":scope > main") ??
+      null;
+    // Never hide a container that holds this surface. With the body portal a
+    // surface is no longer a descendant of the shell, so this guard only fires
+    // when a test or embedder renders the shell around <body> itself.
+    if (!background || background.contains(backdrop)) return;
+    const previousAriaHidden = background.getAttribute("aria-hidden");
+    background.setAttribute("aria-hidden", "true");
+    return () => {
+      if (background.getAttribute("aria-hidden") !== "true") return;
+      if (previousAriaHidden === null) {
+        background.removeAttribute("aria-hidden");
+      } else {
+        background.setAttribute("aria-hidden", previousAriaHidden);
+      }
+    };
+  }, [hidesBackground]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -59,6 +107,16 @@ export function ModalSurface({
         ? document.activeElement
         : null;
     modalStack.push(dialog);
+    // Surfaces render at the page root, so nesting no longer decides which one
+    // is on top: a confirmation opened from inside another dialog is its
+    // sibling, and the opener's own z-index could sit above it and swallow the
+    // clicks. Layer by open order instead, above whatever the callers' modules
+    // declare. Restored on close so a reopened surface starts clean.
+    const backdropElement = backdropRef.current;
+    const previousZIndex = backdropElement?.style.zIndex ?? "";
+    if (backdropElement) {
+      backdropElement.style.zIndex = String(1000 + modalStack.length * 10);
+    }
     const frame = requestAnimationFrame(() => {
       if (modalStack.at(-1) === dialog) {
         (initialFocusRef?.current ?? dialog).focus();
@@ -141,6 +199,7 @@ export function ModalSurface({
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("keydown", handleEscape);
+      if (backdropElement) backdropElement.style.zIndex = previousZIndex;
       const wasTop = modalStack.at(-1) === dialog;
       const index = modalStack.indexOf(dialog);
       if (index !== -1) modalStack.splice(index, 1);
@@ -154,9 +213,10 @@ export function ModalSurface({
     };
   }, [initialFocusRef]);
 
-  return (
+  const surface = (
     <div
       className={backdropClassName}
+      ref={backdropRef}
       role="presentation"
       onMouseDown={(event) => {
         if (
@@ -185,4 +245,20 @@ export function ModalSurface({
       </div>
     </div>
   );
+
+  // Every surface mounts at document.body rather than where it was written.
+  // Safari does not reliably anchor a position:fixed element to the viewport
+  // once an ancestor scrolls or establishes a containing block, so the
+  // full-access confirmation raised from the scrolled session settings pane
+  // rendered inside that pane's scrollable subtree: the backdrop appeared with
+  // no reachable dialog, and the choice could be neither confirmed nor
+  // dismissed. A body-level portal keeps a surface opened from inside another
+  // out of its opener's stacking and containing-block context.
+  //
+  // The static renderer has no document to portal into, and createPortal
+  // rejects a non-element container, so server rendering keeps the same markup
+  // in place. Only the browser path can hit the Safari defect.
+  return typeof document === "undefined"
+    ? surface
+    : createPortal(surface, document.body);
 }

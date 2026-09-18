@@ -38,6 +38,14 @@ semantics. Octos Core remains the runtime and source of durable truth.
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.  |
 
+The expanded candidate also exposes capability-gated native peers and gather,
+agents/goals/loops/monitors, context/cache/compaction, snapshot undo,
+rewind/fork, native review, tool/MCP inventory, skills, and research lanes.
+`/thinking` captures per-Session reasoning effort in new queued turns; `/images`
+explicitly uploads up to four supported images, each at most 20 MiB. These
+controls do not imply full TUI parity or a passed live soak; acceptance is
+tracked in [Feature parity](feature-parity.md).
+
 Transcript rows are a bounded browser rendering projection, not the durable
 history store. When older rows fall outside that window the first visible row
 states how many were omitted and points back to server hydrate. Model-authored
@@ -70,49 +78,51 @@ complete server Session directory until the scoped catalog tracked in
 
 ## Session navigation and running turns
 
-A locally started turn becomes safe to move behind another Session only after
-Core acknowledges `turn/start`. The Web stages and hydrates the destination,
-then retains the exact old owner WebSocket while the new Session becomes the
-foreground view. The old Session row continues to show running, waiting,
-completed, or failed status; returning to it reconstructs conversation truth
-from server hydrate/replay rather than from a browser transcript copy.
+Each confirmed Session retains one controller, FIFO, interaction ledger, cursor,
+and bounded transcript projection in the current tab. Several Sessions may run
+simultaneously, and switching or creating a Session is independent of another
+Session's queued prompts or pending start acknowledgement. The source queue
+drains on its own terminal events, not on selection. Returning selects that
+retained projection; reconnect still requires authoritative hydrate/replay.
 
-Browser-local pending prompts still belong to the selected Session's FIFO, and a
-start request without its acknowledgement has unresolved ownership. Pending
-prompts block create/switch. During an unresolved start, the product shows
-**Starting**, retains only the latest navigation intent, and performs the normal
-two-phase candidate transaction exactly once after acceptance. A rejected or
-cancelled start clears the intent and preserves the source Session. **Stop** is
-not offered during Starting, and `/stop` sends no interrupt until Core has
-accepted the turn. A fresh unambiguous `activate` decision for a Web Session
-opens automatically; `cross_profile` and `no_profile` remain explicit product
-decisions.
+Approvals and questions remain attached to their exact Session and generation. A
+background waiting badge does not resolve them in the selected Session.
+Running/waiting states take precedence over retained terminal evidence; an empty
+or metadata-only Session has no completed-work badge. Candidate open failure
+leaves the source view intact. Stop and other mutations still require their own
+current authority and readiness checks. A fresh unambiguous `activate` decision
+opens automatically; `cross_profile` and `no_profile` remain explicit choices.
 
-The rc.9 compatibility layer retains at most eight live owner connections.
-Reopening an already retained Session reclaims its exact connection and still
-works at the limit. A new target is refused at the limit with an explicit
-Disconnect/reconnect recovery path; the product never silently evicts a terminal
-owner because Core has not proved its tail work quiesced.
+All retained Sessions share one physical authenticated WebSocket. The old
+eight-owner-connection cap and ACK navigation guard no longer govern this
+candidate. Native peers use server-staged identities and the same record engine;
+hosting a background master's peer does not change focus. **Refresh blackboard**
+reads Profile-wide peer results. `/gather [all|slug…]` additionally composes a
+bounded synthesis prompt in the originating master's FIFO, not an invented
+browser agent fleet.
 
-This rc.9 compatibility behavior lasts only inside the same live tab. Refresh,
-tab close, network or proxy loss, and manual **Disconnect** close the owner
-WebSocket and terminate a still-running turn; even a terminal owner may still be
-finishing Core tail cleanup. Disconnect keeps the current tab's confirmed
-Session references for a later reconnect. **Forget server** or changing
-endpoint/token identity clears those references, recent Workspace paths, and
-tab-scoped drafts. Durable execution across transport loss requires a future
-server-owned turn lease.
+Core rc11 still interrupts connection-owned work on transport loss. Refresh, tab
+close, network/proxy loss, and manual **Disconnect** are not detached
+continuation. Ordinary reconnect preserves in-memory queues but suspends
+dispatch until each record is rehydrated and reconciled; a failed/interrupted
+turn is not blindly resubmitted. Reload loses queued prompts and image drafts.
+Disconnect retires records but keeps confirmed navigation refs. **Forget
+server** or changing endpoint/token identity clears those refs, recent Workspace
+paths, and tab-scoped drafts. The rc9 pinned runtime baseline is unchanged; the
+rc11 parity candidate needs its own acceptance evidence.
 
-Unsent composer drafts survive ordinary refresh in the current tab, bound to the
-same server, sign-in and exact Session. They are browser editing state, not
-server transcript history, and are never automatically submitted on restore.
-Pending queued messages are still tab-runtime state and are not restored after a
-full reload. Storage failures preserve in-memory editing and show a warning; an
-older persisted draft can remain when the browser refuses an update or deletion.
-Forgetting reports failure if the browser refuses to clear saved data. The tab
-retains at most 50 nonempty drafts. At capacity it keeps the current input and
-existing drafts, and asks the user to send or clear the input before switching;
-it never silently evicts an earlier draft.
+Unsent composer drafts survive refresh and tab close. After authenticating
+again, opening the same Session restores its text for the server-confirmed user.
+Drafts are browser editing state, not server transcript history, and are never
+automatically submitted on restore. Forget clears that user's saved drafts;
+changing credentials clears the current editing view without deleting another
+user's saved text. Pending queued messages are still tab-runtime state and are
+not restored after a full reload. Storage failures preserve in-memory editing
+and show a warning; an older persisted draft can remain when the browser refuses
+an update or deletion. Forgetting reports failure if the browser refuses to
+clear saved data. The tab retains at most 50 nonempty drafts. At capacity it
+keeps the current input and existing drafts, and asks the user to send or clear
+the input before switching; it never silently evicts an earlier draft.
 
 The tab title counts unseen background responses that complete or need input.
 General Settings offers an explicit desktop-notification opt-in. Notifications
@@ -137,12 +147,15 @@ blank for a configured route preserves and reuses the Core-owned key. Save tests
 the exact draft before mutating the Profile, and Delete requires confirmation.
 
 Changing the Profile default affects every Session using that Profile and can
-require an Octos restart; it is not a Session-scoped choice. The current AppUI
-configuration contract does not persist `temperature`, `top_p`, token limits,
-context limits, or reasoning controls, so Settings does not present inert
-controls for them. Runtime architecture, raw capabilities, boundary
-explanations, session files, and global Activity do not occupy the product
-navigation.
+require an Octos restart; it is not a Session-scoped choice. The inspected rc11
+AppUI contract supports typed per-model `temperature`, `top_p`,
+`context_window`, reasoning defaults, and compatibility hints. Neither the
+pinned TUI nor Web offers an editor for those overrides. Web preserves known
+configured values when editing a provider and blocks edits it cannot preserve
+safely. The separate `/thinking` control captures per-turn reasoning.
+`/activity` searches confirmed Sessions; tool/MCP, skills/research, context,
+history, and peer controls open scoped product panels rather than a raw RPC
+console.
 
 ## Deliberate non-goals
 
@@ -157,8 +170,11 @@ navigation.
 
 ## Forward work
 
-The current self-hosted slice has bounded recovery and execution guarantees.
-Broader parity depends on explicit Core contracts:
+The current self-hosted slice has bounded recovery and execution guarantees. The
+expanded product is an acceptance candidate, not a blanket parity pass. Fixture
+results and limited real-Core checks must remain distinct from the
+multi-Session/native-peer live soak. Broader parity also depends on explicit
+Core contracts rather than more client-side inference:
 
 - Generate request, result, and event payload types from a machine-readable Core
   schema
@@ -172,6 +188,7 @@ Broader parity depends on explicit Core contracts:
 
 These are upstream contract boundaries, not invitations to add a transcript
 store or a second event dialect. See
-[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md),
+[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md) for
+the historical, superseded per-owner-connection/ACK guard,
 [ADR 0018](adr/0018-dsh-aligned-product-shell.md), and the
 [ADR index](adr/README.md) for the decisions behind the current product.

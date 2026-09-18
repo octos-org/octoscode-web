@@ -88,6 +88,12 @@ export function PromptComposer({
           id={paletteId}
           commands={commands}
           selectedIndex={selectedIndex}
+          onSelectedIndexChange={setSelectedIndex}
+          onDismiss={() => {
+            setDismissed(true);
+            setSelectedIndex(0);
+            inputRef.current?.focus();
+          }}
           onSelect={(command) => {
             if (!sendDisabled) onSubmit(`/${command.name}`);
           }}

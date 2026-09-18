@@ -71,6 +71,17 @@ async function createConversation(page: Page) {
   await authenticate(page);
   await page.getByLabel("Server workspace path").fill(SAVED_REFERENCE[0]);
   await page.getByLabel("Server workspace path").press("Enter");
+  // Upstream's fixture answered every session/hydrate with a canned Markdown
+  // transcript, so a conversation had history the instant it was created. Our
+  // Sessions are durable records: a brand-new one starts empty and earns its
+  // transcript. Run one turn so the conversation this test bookmarks has a
+  // genuinely persisted transcript to restore — the round trip below then
+  // proves durable replay rather than a fixture constant every socket is
+  // handed.
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
+  await composer.fill("Show the Markdown transcript surface");
+  await composer.press("Enter");
   await expect(page.locator(".markdown-body").first()).toBeVisible();
   await expect
     .poll(() => new URL(page.url()).searchParams.get("s"))

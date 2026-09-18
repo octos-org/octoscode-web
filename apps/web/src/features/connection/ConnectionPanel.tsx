@@ -1,8 +1,9 @@
-import type { ConnectionStatus } from "@octos-org/octoscode-client";
-import { useRef, useState, type FormEvent } from "react";
+import type { ConnectionStatus } from "@octos-org/octoscode-client/protocol";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import { connectionEndpointError } from "./validation.ts";
 import styles from "./ConnectionPanel.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export interface ConnectionDraft {
   endpoint: string;
@@ -17,10 +18,33 @@ interface ConnectionPanelProps {
   status: ConnectionStatus;
   error: string | null;
   storageWarning?: string;
+  /** §5.1 rejected token: focus the token field, keep the typed value. */
+  focusTokenField?: boolean;
+  /** The classifier's named next actions, rendered under the error. */
+  failureActions?: readonly string[];
+  /**
+   * The raw failure was the handshake error, which the browser CANNOT tell
+   * apart from a rejected token. §5.1's classified message names the address;
+   * this flag keeps the honest second half — "if it requires authentication,
+   * enter its token above" — so an empty-token connect is never diagnosed as
+   * an address problem alone.
+   */
+  handshakeAmbiguous?: boolean;
+  /**
+   * WEB-PAIRING-CONTRACT-5100 §Client: a pairing link is being exchanged for a
+   * token. There is nothing to type, so the form is not shown at all.
+   */
+  pairing?: boolean;
+  /** §Client step 4: bounded copy for a link this client would not use. */
+  pairingError?: string | null;
+  /** §Discovery: the last origin this browser saw answered /pair/info. */
+  discoveredOrigin?: string | null;
+  onUseDiscovered?: () => void;
   onChange: (next: ConnectionDraft) => void;
   onConnect: () => void;
   onDisconnect: () => void;
   onForget: () => void;
+  onPreferences?: () => void;
 }
 
 export function ConnectionPanel({
@@ -28,11 +52,20 @@ export function ConnectionPanel({
   status,
   error,
   storageWarning,
+  focusTokenField = false,
+  failureActions,
+  handshakeAmbiguous = false,
+  pairing = false,
+  pairingError = null,
+  discoveredOrigin = null,
+  onUseDiscovered,
   onChange,
   onConnect,
   onDisconnect,
   onForget,
+  onPreferences,
 }: ConnectionPanelProps) {
+  const t = useUiText();
   const connected = status === "connected";
   const connecting = status === "connecting";
   const tokenRef = useRef<HTMLInputElement>(null);
@@ -41,6 +74,10 @@ export function ConnectionPanel({
   const [showToken, setShowToken] = useState(false);
   const pageOrigin =
     typeof window === "undefined" ? null : window.location.origin;
+  const tokenInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusTokenField && !connecting) tokenInputRef.current?.focus();
+  }, [focusTokenField, connecting]);
 
   const field = (key: keyof ConnectionDraft, next: string) => {
     if (key === "endpoint") setValidationError(null);
@@ -65,6 +102,42 @@ export function ConnectionPanel({
   };
 
   if (connected) return null;
+
+  // §Client: while the link is being exchanged there is no token to paste, so
+  // the operator is never shown a box asking for one.
+  if (pairing) {
+    return (
+      <main className={styles.gate}>
+        <div className={styles.card} aria-labelledby="connection-title">
+          <div className={styles.brand}>
+            <span className={styles.mark} aria-hidden="true">
+              <OctopusLogo size={30} />
+            </span>
+            <span>
+              <strong>octoscode</strong>
+              <small>web</small>
+            </span>
+          </div>
+          <div className={styles.heading}>
+            <h1 id="connection-title">{t("Connect to Octos")}</h1>
+          </div>
+          <div className={styles.connecting}>
+            <span role="status">
+              <span className={styles.spinner} aria-hidden="true" />{" "}
+              {t("Opening your pairing link…")}
+            </span>
+            <button
+              className={styles.cancel}
+              onClick={onDisconnect}
+              type="button"
+            >
+              {t("Cancel")}
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.gate}>
@@ -91,13 +164,39 @@ export function ConnectionPanel({
           </span>
         </div>
         <div className={styles.heading}>
-          <h1 id="connection-title">Connect to Octos</h1>
-          <p>Connect your server, then open a project to start coding.</p>
+          <h1 id="connection-title">{t("Connect to Octos")}</h1>
+          <p>
+            {t("Connect your server, then open a project to start coding.")}
+          </p>
         </div>
+        {pairingError ? (
+          <div className={styles.error} role="alert">
+            <strong>{t("That pairing link did not work")}</strong>
+            <span>{t(pairingError)}</span>
+          </div>
+        ) : null}
+        {discoveredOrigin && onUseDiscovered ? (
+          <div className={styles.discovered} role="status">
+            <span>
+              {t("Found Octos on {value0}.", {
+                value0: discoveredLabel(discoveredOrigin),
+              })}
+            </span>
+            <button
+              type="button"
+              disabled={connecting}
+              onClick={onUseDiscovered}
+            >
+              {t("Connect to {value0}", {
+                value0: discoveredLabel(discoveredOrigin),
+              })}
+            </button>
+          </div>
+        ) : null}
         <div className={styles.fields}>
           <div className={styles.tokenField}>
             <div className={styles.fieldHeading}>
-              <label htmlFor="connection-origin">Server origin</label>
+              <label htmlFor="connection-origin">{t("Server origin")}</label>
               {pageOrigin && value.endpoint.trim() !== pageOrigin ? (
                 <button
                   type="button"
@@ -108,7 +207,7 @@ export function ConnectionPanel({
                     endpointRef.current?.focus();
                   }}
                 >
-                  Use this page
+                  {t("Use this page")}
                 </button>
               ) : null}
             </div>
@@ -129,7 +228,9 @@ export function ConnectionPanel({
               aria-describedby={`connection-origin-help${validationError ? " connection-origin-error" : ""}`}
             />
             <small id="connection-origin-help" className={styles.fieldHelp}>
-              Usually the address of this page. Change it to use another server.
+              {t(
+                "Usually the address of this page. Change it to use another server.",
+              )}
             </small>
             {validationError ? (
               <small
@@ -142,14 +243,15 @@ export function ConnectionPanel({
             ) : null}
           </div>
           <div className={styles.tokenField}>
-            <label htmlFor="connection-token">Auth token</label>
+            <label htmlFor="connection-token">{t("Auth token")}</label>
             <div className={styles.tokenInput}>
               <input
+                ref={tokenInputRef}
                 id="connection-token"
                 name="token"
                 value={value.token}
                 onChange={(event) => field("token", event.target.value)}
-                placeholder="Paste your server token"
+                placeholder={t("Paste your server token")}
                 type={showToken ? "text" : "password"}
                 autoComplete="off"
                 autoCapitalize="none"
@@ -162,38 +264,47 @@ export function ConnectionPanel({
                 type="button"
                 onClick={() => setShowToken((shown) => !shown)}
                 disabled={connecting}
-                aria-label={showToken ? "Hide token" : "Show token"}
+                aria-label={showToken ? t("Hide token") : t("Show token")}
               >
-                {showToken ? "Hide" : "Show"}
+                {showToken ? t("Hide") : t("Show")}
               </button>
             </div>
             <small id="connection-token-help" className={styles.fieldHelp}>
-              Required only if your server uses authentication.
+              {t("Required only if your server uses authentication.")}
             </small>
           </div>
         </div>
         {error ? (
           <div className={styles.error} role="alert">
-            <strong>Could not connect</strong>
-            {isHandshakeError(error) ? (
+            <strong>{t("Could not connect")}</strong>
+            {isHandshakeError(error) || handshakeAmbiguous ? (
               <>
+                {isHandshakeError(error) ? null : <span>{error}</span>}
                 <span>
                   {value.token.trim()
-                    ? "Check that your server is running and your token is current."
-                    : "Check that your server is running. If it requires authentication, enter its token above."}
+                    ? t(
+                        "Check that your server is running and your token is current.",
+                      )
+                    : t(
+                        "Check that your server is running. If it requires authentication, enter its token above.",
+                      )}
                 </span>
                 <details className={styles.troubleshooting}>
-                  <summary>Connection details</summary>
+                  <summary>{t("Connection details")}</summary>
                   <p>
-                    {error}. The browser cannot distinguish an unavailable
-                    server from a rejected token. If these are correct, check
-                    allowed Web origins and WebSocket proxy forwarding.
+                    {t(
+                      "{value0}. The browser cannot distinguish an unavailable server from a rejected token. If these are correct, check allowed Web origins and WebSocket proxy forwarding.",
+                      { value0: error },
+                    )}
                   </p>
                 </details>
               </>
             ) : (
               <span>{error}</span>
             )}
+            {failureActions && failureActions.length > 0 ? (
+              <small>{failureActions.join(" · ")}</small>
+            ) : null}
           </div>
         ) : null}
         {storageWarning ? (
@@ -204,37 +315,58 @@ export function ConnectionPanel({
         {connecting ? (
           <div className={styles.connecting}>
             <span role="status">
-              <span className={styles.spinner} aria-hidden="true" /> Connecting
-              to your server…
+              <span className={styles.spinner} aria-hidden="true" />{" "}
+              {t("Connecting to your server…")}
             </span>
             <button
               className={styles.cancel}
               onClick={onDisconnect}
               type="button"
             >
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         ) : (
           <button className={styles.connect} type="submit">
-            Connect
+            {t("Connect")}
           </button>
         )}
         <p className={styles.note}>
-          Your token stays in this browser tab. Your server address is
-          remembered.
+          {t(
+            "Your token stays in this browser tab. Your server address is remembered.",
+          )}
         </p>
-        <button
-          className={styles.forget}
-          onClick={onForget}
-          type="button"
-          disabled={connecting}
-        >
-          Forget saved connection
-        </button>
+        <div className={styles.footer}>
+          {onPreferences ? (
+            <button
+              className={styles.forget}
+              onClick={onPreferences}
+              type="button"
+            >
+              {t("Browser preferences")}
+            </button>
+          ) : null}
+          <button
+            className={styles.forget}
+            onClick={onForget}
+            type="button"
+            disabled={connecting}
+          >
+            {t("Forget saved connection")}
+          </button>
+        </div>
       </form>
     </main>
   );
+}
+
+/** host:port is what the server printed; the scheme adds nothing here. */
+function discoveredLabel(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
 }
 
 function isHandshakeError(error: string | null): boolean {

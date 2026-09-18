@@ -12,10 +12,18 @@ async function start(page: Page) {
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
   await page.getByLabel("Server workspace path").fill("/workspace/ux-review");
   await page.getByLabel("Server workspace path").press("Enter");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeVisible();
+  // Upstream's fixture handed every freshly opened Session a canned demo
+  // transcript, so waiting for `.markdown-body` doubled as "the workspace
+  // finished attaching". Our Sessions are durable records: a brand-new one
+  // starts with an empty transcript, so the equivalent readiness signal is the
+  // conversation surface being mounted and the composer no longer disabled by
+  // the launch transition / pending navigation.
   await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
+    page.getByRole("region", { name: "Conversation", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".markdown-body").first()).toBeVisible();
+  await expect(composer).toBeEnabled();
 }
 
 async function holdTurns(page: Page) {
@@ -481,11 +489,14 @@ for (const action of ["Disconnect", "Forget server"] as const) {
     await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(confirm).toBeHidden();
     await expect(settings).toBeVisible();
-    await expect(
-      page
-        .getByRole("region", { name: "Queued prompts" })
-        .getByRole("listitem"),
-    ).toHaveCount(1);
+    // Cancelling kept the prompt queued. ModalSurface aria-hides the workspace
+    // behind an open dialog, so while Settings is up that surviving queue is
+    // deliberately outside the accessibility tree — read the region from the
+    // DOM rather than by role, and keep asserting the same fact: exactly one
+    // prompt is still waiting.
+    await expect(page.locator('[aria-label="Queued prompts"] li')).toHaveCount(
+      1,
+    );
     expect(turns.sent).toHaveLength(1);
     await settings.getByRole("button", { name: action, exact: true }).click();
     await confirm.getByRole("button", { name: action, exact: true }).click();

@@ -46,6 +46,8 @@ export interface PermissionRiskCopy {
   accessLabel: string;
   networkLabel: string;
   acknowledgement: string;
+  /** Why the confirm button is inert until the box is ticked. */
+  hint?: string;
   cancel: string;
   confirm: string;
 }

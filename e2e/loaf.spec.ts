@@ -38,8 +38,9 @@ test("streaming turn stays under the long-frame budget", async ({ page }) => {
     (window as unknown as Record<string, unknown>).__loaf = [];
     const observer = new PerformanceObserver((list) => {
       const frames = (
-        window as unknown as Record<string, { duration: number }[]>
+        window as unknown as Record<string, { duration: number }[] | undefined>
       ).__loaf;
+      if (!frames) return;
       for (const entry of list.getEntries()) {
         frames.push({ duration: entry.duration });
       }
@@ -55,9 +56,16 @@ test("streaming turn stays under the long-frame budget", async ({ page }) => {
   });
   await page.waitForTimeout(1_000);
 
-  const frames = await page.evaluate(
-    () => (window as unknown as Record<string, { duration: number }[]>).__loaf,
-  );
+  const frames =
+    (await page.evaluate(
+      () =>
+        (
+          window as unknown as Record<
+            string,
+            { duration: number }[] | undefined
+          >
+        ).__loaf,
+    )) ?? [];
   const worst = frames.reduce((max, f) => Math.max(max, f.duration), 0);
   console.log(`[loaf] frames=${frames.length} worst=${worst.toFixed(1)}ms`);
   // The gate: nothing in the streaming phase may block the main thread for

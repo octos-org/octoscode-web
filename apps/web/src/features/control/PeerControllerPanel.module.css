@@ -1,0 +1,132 @@
+/* PeerControllerPanel — the peer controller console (grant 2840). Mirrors the
+   seat's sibling treatment so the two read as one controller surface. */
+.panel {
+  display: grid;
+  gap: var(--dsw-space-2, 0.5rem);
+  padding-block-start: var(--dsw-space-3, 0.75rem);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.binding {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.field {
+  display: grid;
+  gap: var(--dsw-space-1, 0.25rem);
+}
+
+.fieldLabel {
+  font-size: 0.75rem;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.select,
+.input,
+.textarea {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 3.5rem;
+}
+
+.select:disabled,
+.input:disabled,
+.textarea:disabled {
+  opacity: 0.5;
+}
+
+.actions,
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.action,
+.rowAction {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled),
+.rowAction:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.action:disabled,
+.rowAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.roster {
+  display: grid;
+  gap: var(--dsw-space-1, 0.25rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.slug {
+  font-size: 0.8125rem;
+  font-family: var(--dsw-font-mono, monospace);
+}
+
+.refusal,
+.receipt,
+.live {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.refusal {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.receipt {
+  display: grid;
+  gap: var(--dsw-space-1, 0.25rem);
+}
+
+.receiptRow {
+  display: flex;
+  gap: var(--dsw-space-2, 0.5rem);
+}
+
+.receiptRow dt {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}

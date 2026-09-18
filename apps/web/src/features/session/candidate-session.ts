@@ -5,7 +5,7 @@ import type {
   SessionOpened,
   SessionOpenParams,
   SessionOpenResult,
-} from "@octos-org/octoscode-client";
+} from "@octos-org/octoscode-client/protocol";
 import type { SessionConnectionInput } from "./connection-lifecycle.ts";
 
 const CANDIDATE_NOTIFICATION_LIMIT = 4_096;

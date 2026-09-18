@@ -54,6 +54,28 @@ assert(
   !effectiveNginx.includes("'unsafe-inline'"),
   "nginx CSP must not permit inline styles or scripts",
 );
+const uploadLocation = effectiveNginx.match(
+  /location\s*=\s*\/api\/upload\s*\{([^}]+)\}/,
+)?.[1];
+assert(uploadLocation, "authenticated uploads need an exact proxy location");
+for (const required of [
+  "client_max_body_size 51m;",
+  "proxy_pass http://octos_appui;",
+  "proxy_request_buffering off;",
+  "proxy_buffering off;",
+]) {
+  assert(
+    uploadLocation.includes(required),
+    `upload proxy is missing ${required}`,
+  );
+}
+const bodyLimits = [
+  ...effectiveNginx.matchAll(/client_max_body_size\s+([^;]+);/g),
+].map((match) => match[1].trim());
+assert(
+  JSON.stringify(bodyLimits) === JSON.stringify(["1m", "51m"]),
+  "only the exact upload route may override the general 1 MiB body limit",
+);
 assert(
   effectiveNginx.includes("img-src 'self' data: blob:"),
   "nginx CSP must block automatic cross-origin transcript images",

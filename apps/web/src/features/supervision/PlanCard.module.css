@@ -1,0 +1,171 @@
+.card {
+  width: 100%;
+  max-width: var(--dsw-layout-chat-wide);
+  margin: 0 auto var(--dsw-space-2);
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  padding: var(--dsw-space-3) var(--dsw-space-4);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.heading {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  border: 0;
+  border-radius: 8px;
+  padding: 2px 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chevron {
+  flex: none;
+  width: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--dsw-font-size-micro);
+}
+
+/* The announcement is for assistive tech only; the visible summary above
+   carries the same words for sighted readers. */
+.announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* `hidden` must beat the layout display below, or a collapsed list stays
+   visible to sighted readers while aria-expanded says otherwise. */
+.items[hidden],
+.updated[hidden] {
+  display: none;
+}
+
+.items {
+  display: grid;
+  gap: 2px;
+  margin: var(--dsw-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--dsw-space-2);
+  padding: 3px 4px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mark {
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+}
+
+.item[data-plan-item-status="completed"] .mark {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.item[data-plan-item-status="completed"] .itemTitle {
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: line-through;
+}
+
+.item[data-plan-item-status="in_progress"] .mark {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-primary);
+  animation: plan-pulse 1.4s var(--dsw-ease-in-out) infinite;
+}
+
+.item[data-plan-item-status="in_progress"] .itemTitle {
+  font-weight: 500;
+}
+
+.itemTitle {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.priority {
+  flex: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+.status {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+}
+
+.updated {
+  margin: var(--dsw-space-2) 0 0;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  line-height: 16px;
+}
+
+@keyframes plan-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item[data-plan-item-status="in_progress"] .mark {
+    animation: none;
+  }
+}

@@ -1,0 +1,194 @@
+/* §4.1 session status strip: one full-width read-only button under the
+   composer; wraps to two lines at narrow widths. */
+.session-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 8px 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: 500 13px/20px var(--dsw-font-family);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dsw-motion-feedback) ease;
+}
+
+.session-status-strip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.session-status-strip:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.session-status-strip-text {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.session-status-strip-context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-status-strip-state {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.session-status-strip > svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .session-status-strip {
+    border-radius: 12px;
+  }
+
+  .session-status-strip-text {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .session-status-strip-context {
+    max-width: 100%;
+  }
+
+  .session-status-strip-state {
+    order: -1;
+  }
+
+  .session-status-strip-separator {
+    display: none;
+  }
+}
+
+.session-config-pane {
+  position: fixed;
+  inset: 0 0 0 auto;
+  max-width: 480px;
+  width: min(480px, 92vw);
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--dsw-alias-bg-layer-2);
+  color: inherit;
+  padding: 16px 20px;
+}
+
+.session-config-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+.session-config-section {
+  margin-block-end: 24px;
+  padding-block-end: 24px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.session-config-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.session-config-notice {
+  margin: 8px 0 0;
+}
+
+/* Round 4 §D: native buttons follow the app's .button recipe (8px grid). */
+.session-config-button {
+  width: auto;
+  height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.session-config-button:hover:not(:disabled) {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
+.session-config-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.session-config-button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* Label+control rows: one 8px-grid line per value (spec 1188 rows). */
+.session-config-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.session-config-row-label {
+  flex: 0 1 auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.session-config-row-value {
+  flex: 0 1 auto;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* Show thinking: the switch sits in one row with its label. */
+.session-config-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.session-config-switch input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+/* Title on the left, the × close control on the right. Previously unstyled,
+   which stacked a text Close button under the title. */
+.session-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-config-header h2 {
+  margin: 0;
+}

@@ -121,6 +121,30 @@ describe("workspace product contract", () => {
     expect(parseSessionDeleteResult(fixture.session_delete.result)).toEqual({});
   });
 
+  it("keeps a session's live-turn flag distinguishable from an older server's silence", () => {
+    // The flag is how this client learns that ANOTHER client attached to the
+    // same server is mid-turn in a session it has not opened. A server that
+    // does not report it must not be read as reporting "idle".
+    const parsed = parseSessionListResult({
+      sessions: [
+        { id: "busy", message_count: 1, active_turn: true },
+        { id: "idle", message_count: 1, active_turn: false },
+        { id: "unknown", message_count: 1 },
+      ],
+    });
+    expect(parsed?.sessions[0]?.active_turn).toBe(true);
+    expect(parsed?.sessions[1]?.active_turn).toBe(false);
+    expect(parsed?.sessions[2]).not.toHaveProperty("active_turn");
+  });
+
+  it("rejects a live-turn flag that is not a boolean", () => {
+    expect(
+      parseSessionListResult({
+        sessions: [{ id: "busy", message_count: 1, active_turn: "yes" }],
+      }),
+    ).toBeNull();
+  });
+
   it("rejects malformed session metadata and file sizes", () => {
     expect(
       parseSessionListResult({ sessions: [{ id: "", message_count: -1 }] }),

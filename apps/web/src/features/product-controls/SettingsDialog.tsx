@@ -5,7 +5,8 @@
  */
 import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
-import { GearIcon, ModelsIcon, CloseIcon } from "../../ui/Icon.tsx";
+import { GearIcon, ModelsIcon } from "../../ui/Icon.tsx";
+import { CloseButton } from "../../ui/CloseButton.tsx";
 import { settingsNavigationIntent } from "./selection-policy.ts";
 import type {
   SettingsLabels,
@@ -136,15 +137,11 @@ export function SettingsDialog({
       <div className={styles.content}>
         <div className={styles.header}>
           <div className={styles.actions}>{actions}</div>
-          <button
-            ref={closeRef}
-            type="button"
-            className={styles.close}
-            aria-label={labels.close}
+          <CloseButton
+            buttonRef={closeRef}
+            label={labels.close}
             onClick={onClose}
-          >
-            <CloseIcon />
-          </button>
+          />
         </div>
         <section
           className={styles.options}

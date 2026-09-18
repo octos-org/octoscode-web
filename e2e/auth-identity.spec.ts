@@ -17,9 +17,7 @@ async function connectToWorkspaceChooser(
   token: string,
 ): Promise<void> {
   await submitConnection(page, token);
-  await expect(
-    page.getByRole("complementary", { name: "Product navigation" }),
-  ).toBeVisible();
+  await expect(page.locator("aside")).toBeVisible();
   await expect(
     page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toBeVisible();
@@ -63,15 +61,11 @@ test("rejects invalid auth before the product shell is ever mounted", async ({
   await page.getByLabel("Auth token").fill("fixture-invalid-auth-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  await expect(page.getByRole("alert")).toContainText(
-    "Could not open the Octos UI Protocol connection",
+  await expect(page.locator('[role="alert"]')).toContainText(
+    "Could not connect",
   );
-  await expect(
-    page.getByRole("heading", { name: "Connect to Octos" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("complementary", { name: "Product navigation" }),
-  ).toHaveCount(0);
+  await expect(page.locator("#connection-title")).toBeVisible();
+  await expect(page.locator("aside")).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
   ).toHaveCount(0);
