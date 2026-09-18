@@ -90,7 +90,10 @@ still-running turn. The browser warns before refresh or close while foreground,
 queued, or background work is active; this warning does not keep work alive
 after leaving. Disconnect keeps the current tab's confirmed Session refs for
 reconnect. **Forget server** and endpoint/token identity changes clear those
-refs, recent Workspace paths, and in-memory drafts.
+refs, recent Workspace paths, and in-memory drafts. Unsent text also survives
+closing a tab: authenticate again and open the same Session to restore your
+draft. **Forget server** deletes your saved drafts on this browser; changing the
+token does not expose another user's drafts.
 
 For a fresh Web Session, an unambiguous `activate` result opens automatically
 with Core's resolved Profile. A `cross_profile` result still asks which Profile

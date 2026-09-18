@@ -6,8 +6,10 @@ import {
   loadAutoConnect,
   loadConnectionPreferences,
   loadComposerDrafts,
+  loadDraftPrincipal,
   loadKnownSessions,
   rememberKnownSession,
+  rememberDraftPrincipal,
   saveConnectionPreferences,
   saveComposerDrafts,
   setAutoConnect,
@@ -31,9 +33,14 @@ describe("connection preferences", () => {
       ["scoped-session", "  私有草稿\n保留空白  "],
     ];
     saveConnectionPreferences(identity, durable, tab);
+    rememberDraftPrincipal(tab, identity, "confirmed-user");
     expect(saveComposerDrafts(tab, identity, drafts)).toBe(true);
     saveConnectionPreferences({ ...identity, cwd: "/another" }, durable, tab);
     expect(loadComposerDrafts(tab, identity)).toEqual(drafts);
+    expect(loadDraftPrincipal(tab, identity)).toBe("confirmed-user");
+    expect(
+      loadDraftPrincipal(tab, { ...identity, token: "another-secret" }),
+    ).toBeNull();
     expect([...durable.values.values()].join("")).not.toContain("私有草稿");
     expect(
       loadComposerDrafts(tab, { ...identity, token: "another-secret" }),
@@ -52,6 +59,9 @@ describe("connection preferences", () => {
       durable,
       tab,
     );
+    expect(
+      loadDraftPrincipal(tab, { ...identity, token: "another-secret" }),
+    ).toBeNull();
     expect(
       loadComposerDrafts(tab, { ...identity, token: "another-secret" }),
     ).toEqual([]);

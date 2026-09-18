@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const TAB_KEY = "octoscode-web.tab-connection.v3";
+const DRAFT_PREFIX = "octoscode-web.draft.v1:";
 
 async function start(page: Page) {
   await page.goto("/");
@@ -29,6 +30,173 @@ async function warnsOnLeave(page: Page) {
   });
 }
 
+async function reopen(page: Page, url: string, token = "tab-scoped-e2e-token") {
+  await page.goto(url);
+  await page.getByLabel("Auth token", { exact: true }).fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open conversation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeVisible();
+}
+
+async function connectionAction(
+  page: Page,
+  action: "Disconnect" | "Forget server",
+) {
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Settings", exact: true })
+    .getByRole("button", { name: action, exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Connect to Octos" }),
+  ).toBeVisible();
+}
+
+test("closed-tab drafts restore only for the authenticated principal and Forget clears that principal", async ({
+  page,
+  context,
+}) => {
+  await start(page);
+  const input = page.getByRole("textbox", { name: "Message Octos" });
+  await input.fill("First session, owner A");
+  const firstUrl = page.url();
+  const second = await context.newPage();
+  await start(second);
+  await second
+    .getByRole("textbox", { name: "Message Octos" })
+    .fill("Second session, owner A");
+  const secondUrl = second.url();
+  await input.fill("Updated first session, owner A");
+  await expect.poll(() => warnsOnLeave(page)).toBe(false);
+  await expect.poll(() => warnsOnLeave(second)).toBe(false);
+  await page.close();
+  await second.close();
+
+  const restored = await context.newPage();
+  await reopen(restored, firstUrl, "remember-this-tab-token");
+  await expect(
+    restored.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue("Updated first session, owner A");
+  const otherOwner = await context.newPage();
+  await reopen(otherOwner, secondUrl, "forget-me-token");
+  await expect(
+    otherOwner.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue("");
+  await otherOwner
+    .getByRole("textbox", { name: "Message Octos" })
+    .fill("Same session, owner B");
+  await expect.poll(() => warnsOnLeave(otherOwner)).toBe(false);
+
+  const otherSession = await context.newPage();
+  await reopen(otherSession, secondUrl);
+  await expect(
+    otherSession.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue("Second session, owner A");
+  await connectionAction(restored, "Disconnect");
+  await restored.reload();
+  await restored
+    .getByRole("button", { name: "Forget saved connection", exact: true })
+    .click();
+  await otherSession.close();
+  await otherOwner.close();
+  const forgotten = await context.newPage();
+  await reopen(forgotten, firstUrl);
+  await expect(
+    forgotten.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue("");
+  const retained = await context.newPage();
+  await reopen(retained, secondUrl, "forget-me-token");
+  await expect(
+    retained.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue("Same session, owner B");
+  const durable = await retained.evaluate(() => JSON.stringify(localStorage));
+  for (const token of [
+    "tab-scoped-e2e-token",
+    "remember-this-tab-token",
+    "forget-me-token",
+  ]) {
+    expect(durable).not.toContain(token);
+  }
+  expect(durable).not.toContain(TAB_KEY);
+  expect(durable).not.toContain("owner A");
+});
+
+test("a delayed principal lookup preserves newly typed text and cannot restore a retired identity", async ({
+  page,
+  context,
+}) => {
+  await start(page);
+  await page
+    .getByRole("textbox", { name: "Message Octos" })
+    .fill("Older saved draft");
+  await expect.poll(() => warnsOnLeave(page)).toBe(false);
+  const savedUrl = page.url();
+  await page.close();
+  const delayed = await context.newPage();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await delayed.route("**/api/auth/me", async (route) => {
+    await held;
+    await route.fulfill({ json: { user: { id: "fixture-user" } } });
+  });
+  await reopen(delayed, savedUrl);
+  const input = delayed.getByRole("textbox", { name: "Message Octos" });
+  await input.fill("Typed while authentication identity was loading");
+  release();
+  await expect.poll(() => warnsOnLeave(delayed)).toBe(false);
+  await expect(input).toHaveValue(
+    "Typed while authentication identity was loading",
+  );
+
+  await connectionAction(delayed, "Disconnect");
+  await delayed.unroute("**/api/auth/me");
+  let releaseRetired!: () => void;
+  const retired = new Promise<void>((resolve) => {
+    releaseRetired = resolve;
+  });
+  let retiredStarted = false;
+  let retiredDelivered = false;
+  await delayed.route("**/api/auth/me", async (route) => {
+    if (route.request().headers().authorization === "Bearer forget-me-token") {
+      await route.fulfill({ json: { user: { id: "other-user" } } });
+    } else {
+      retiredStarted = true;
+      await retired;
+      await route.fulfill({ json: { user: { id: "fixture-user" } } });
+      retiredDelivered = true;
+    }
+  });
+  await delayed.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect.poll(() => retiredStarted).toBe(true);
+  await connectionAction(delayed, "Disconnect");
+  await delayed
+    .getByLabel("Auth token", { exact: true })
+    .fill("forget-me-token");
+  await delayed.getByRole("button", { name: "Connect", exact: true }).click();
+  await delayed
+    .getByLabel("Server workspace path")
+    .fill("/workspace/storage-check");
+  await delayed
+    .getByRole("button", { name: "Start session", exact: true })
+    .click();
+  await input.fill("New principal's input");
+  await expect.poll(() => warnsOnLeave(delayed)).toBe(false);
+  releaseRetired();
+  await expect.poll(() => retiredDelivered).toBe(true);
+  await expect(input).toHaveValue("New principal's input");
+  await delayed.reload();
+  await expect(input).toHaveValue("New principal's input");
+});
+
 test("failed Forget stays visible across identity edits until saved data can actually be cleared", async ({
   page,
 }) => {
@@ -42,12 +210,12 @@ test("failed Forget stays visible across identity edits until saved data can act
     const write = Storage.prototype.setItem;
     const remove = Storage.prototype.removeItem;
     Storage.prototype.setItem = function (key, value) {
-      if (this === sessionStorage)
+      if (this === sessionStorage || this === localStorage)
         throw new DOMException("Read-only storage", "SecurityError");
       write.call(this, key, value);
     };
     Storage.prototype.removeItem = function (key) {
-      if (this === sessionStorage)
+      if (this === sessionStorage || this === localStorage)
         throw new DOMException("Read-only storage", "SecurityError");
       remove.call(this, key);
     };
@@ -73,9 +241,9 @@ test("failed Forget stays visible across identity edits until saved data can act
     .filter({ hasText: "Saved data could not be cleared" });
   await expect(warning).toBeVisible();
   expect(await warnsOnLeave(page)).toBe(true);
-  expect(
-    await page.evaluate((key) => sessionStorage.getItem(key), TAB_KEY),
-  ).toContain("A draft that must not silently return");
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).toContain(
+    "A draft that must not silently return",
+  );
   await page
     .getByLabel("Auth token", { exact: true })
     .fill("new-identity-token");
@@ -89,9 +257,9 @@ test("failed Forget stays visible across identity edits until saved data can act
     .click();
   await expect(warning).toHaveCount(0);
   expect(await warnsOnLeave(page)).toBe(false);
-  expect(
-    (await page.evaluate((key) => sessionStorage.getItem(key), TAB_KEY)) ?? "",
-  ).not.toContain("A draft that must not silently return");
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
+    "A draft that must not silently return",
+  );
   expect(errors).toEqual([]);
 });
 
@@ -130,18 +298,31 @@ test("a 51st unsent draft keeps the existing 50 intact and blocks navigation unt
   page,
 }) => {
   await start(page);
-  await page.evaluate((key) => {
-    const connection = JSON.parse(sessionStorage.getItem(key)!);
-    connection.composerDrafts = Array.from({ length: 50 }, (_, index) => [
-      JSON.stringify([
-        `/workspace/saved-${index}`,
-        "_main",
-        `session-${index}`,
-      ]),
-      `Retained text ${index}`,
-    ]);
-    sessionStorage.setItem(key, JSON.stringify(connection));
-  }, TAB_KEY);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (key) => JSON.parse(sessionStorage.getItem(key)!).draftPrincipal,
+        TAB_KEY,
+      ),
+    )
+    .toBe("fixture-user");
+  await page.evaluate(
+    ({ prefix, origin }) => {
+      const scope = `${prefix}${JSON.stringify([origin, "fixture-user"])}:`;
+      for (let index = 0; index < 50; index++) {
+        const key = JSON.stringify([
+          `/workspace/saved-${index}`,
+          "_main",
+          `session-${index}`,
+        ]);
+        localStorage.setItem(
+          scope + key,
+          JSON.stringify(`Retained text ${index}`),
+        );
+      }
+    },
+    { prefix: DRAFT_PREFIX, origin: ORIGIN },
+  );
   await page.reload();
   const input = page.getByRole("textbox", { name: "Message Octos" });
   await expect(input).toBeVisible();
@@ -165,11 +346,14 @@ test("a 51st unsent draft keeps the existing 50 intact and blocks navigation unt
   ).toHaveCount(0);
   await expect(input).toHaveValue(draft);
   const retained = await page.evaluate(
-    (key) => JSON.parse(sessionStorage.getItem(key)!).composerDrafts,
-    TAB_KEY,
+    (prefix) =>
+      Object.entries(localStorage).filter(([key]) => key.startsWith(prefix)),
+    DRAFT_PREFIX,
   );
   expect(retained).toHaveLength(50);
-  expect(retained[0][1]).toBe("Retained text 0");
+  expect(
+    retained.some(([, value]) => JSON.parse(value) === "Retained text 0"),
+  ).toBe(true);
   const originalSession = await sidebar
     .getByRole("treeitem", { name: /Session / })
     .first()

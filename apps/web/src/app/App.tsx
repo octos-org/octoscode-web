@@ -17,14 +17,23 @@ import { useOctosSession } from "../features/session/use-octos-session.ts";
 import { codingProductCapabilities } from "../features/session/coding-capabilities.ts";
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 import {
+  clearDurableDrafts,
+  durableDraftScope,
+  loadDurableDrafts,
+  resolveDraftPrincipal,
+  saveDurableDraft,
+} from "../features/session/durable-session-drafts.ts";
+import {
   browserStorage,
   clearConnectionPreferences,
   clearKnownSessions,
   loadAutoConnect,
   loadConnectionPreferences,
   loadComposerDrafts,
+  loadDraftPrincipal,
   loadKnownSessions,
   rememberKnownSession,
+  rememberDraftPrincipal,
   saveConnectionPreferences,
   saveComposerDrafts,
   setAutoConnect,
@@ -154,12 +163,16 @@ export function App() {
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
-        loadComposerDrafts(browserStorage("localStorage"), connection).length >
-          0
-          ? loadComposerDrafts(browserStorage("localStorage"), connection)
-          : loadComposerDrafts(browserStorage("sessionStorage"), connection),
+        loadComposerDrafts(browserStorage("sessionStorage"), connection),
       ),
   );
+  const draftPrincipalRef = useRef(
+    loadDraftPrincipal(browserStorage("sessionStorage"), connection),
+  );
+  const durableDraftScopeRef = useRef<string | null>(null);
+  const principalRequestRef = useRef<AbortController | null>(null);
+  const pendingDraftEditsRef = useRef(new Set<string>());
+  const failedDraftCleanupRef = useRef(new Set<string>());
   const [draft, updateDraft] = useState("");
   const [draftSaved, setDraftSaved] = useState(true);
   const [draftRetained, setDraftRetained] = useState(true);
@@ -170,30 +183,28 @@ export function App() {
     () => (session.authenticated ? {} : null),
     [session.authenticated, connection.endpoint, connection.token],
   );
-  const persistDrafts = () => {
-    const snapshot = sessionDrafts.snapshot();
-    // Dual-write: localStorage for cross-tab persistence, sessionStorage
-    // as a guaranteed same-tab fallback (Firefox private mode may block
-    // localStorage but allows sessionStorage).
-    const localOk = saveComposerDrafts(
-      browserStorage("localStorage"),
-      connection,
-      snapshot,
-    );
-    const sessionOk = saveComposerDrafts(
+  const persistDraft = (key: string, text: string) => {
+    const scope = durableDraftScopeRef.current;
+    if (scope) {
+      if (!saveDurableDraft(scope, key, text)) return false;
+      pendingDraftEditsRef.current.delete(key);
+      return pendingDraftEditsRef.current.size === 0;
+    }
+    saveComposerDrafts(
       browserStorage("sessionStorage"),
       connection,
-      snapshot,
+      sessionDrafts.snapshot(),
     );
-    return localOk || sessionOk;
+    return false;
   };
   const setDraft = (text: string) => {
     updateDraft(text);
     const key = previousActiveSessionKeyRef.current;
     if (key) {
+      pendingDraftEditsRef.current.add(key);
       const retained = sessionDrafts.set(key, text);
       setDraftRetained(retained);
-      setDraftSaved(retained && persistDrafts());
+      setDraftSaved(retained && persistDraft(key, text));
     }
   };
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -280,6 +291,89 @@ export function App() {
       setAutoConnect(browserStorage("sessionStorage"), true);
     }
   }, [session.authenticated]);
+
+  useEffect(() => {
+    if (!session.authenticated) return;
+    const request = new AbortController();
+    principalRequestRef.current = request;
+    void resolveDraftPrincipal(
+      connection.endpoint,
+      connection.token,
+      request.signal,
+    )
+      .catch(() => null)
+      .then((principal) => {
+        if (request.signal.aborted) return;
+        if (!principal) {
+          if (sessionDrafts.size) setDraftSaved(false);
+          return;
+        }
+        const migrateTabDrafts = draftPrincipalRef.current === null;
+        draftPrincipalRef.current = principal;
+        rememberDraftPrincipal(
+          browserStorage("sessionStorage"),
+          connection,
+          principal,
+        );
+        const scope = durableDraftScope(connection.endpoint, principal);
+        durableDraftScopeRef.current = scope;
+        const stored = loadDurableDrafts(scope);
+        if (!stored) {
+          if (sessionDrafts.size) setDraftSaved(false);
+          return;
+        }
+        const edited = new Set(pendingDraftEditsRef.current);
+        const pending = sessionDrafts.snapshot();
+        const key = previousActiveSessionKeyRef.current;
+        const existing = new Map(stored);
+        sessionDrafts.clear();
+        let saved = true;
+        for (const [key, text] of pending) {
+          if (edited.has(key) || (migrateTabDrafts && !existing.has(key))) {
+            sessionDrafts.set(key, text);
+            if (saveDurableDraft(scope, key, text)) {
+              pendingDraftEditsRef.current.delete(key);
+            } else {
+              pendingDraftEditsRef.current.add(key);
+              saved = false;
+            }
+          }
+        }
+        for (const [key, text] of stored) {
+          if (!edited.has(key)) sessionDrafts.set(key, text);
+        }
+        // An input cleared while identity was loading must also stay cleared.
+        for (const editedKey of edited) {
+          if (pending.some(([pendingKey]) => pendingKey === editedKey))
+            continue;
+          if (editedKey === key && draftRef.current) {
+            saved = false;
+            continue;
+          }
+          sessionDrafts.set(editedKey, "");
+          if (saveDurableDraft(scope, editedKey, "")) {
+            pendingDraftEditsRef.current.delete(editedKey);
+          } else saved = false;
+        }
+        if (key && !edited.has(key)) {
+          const restored = sessionDrafts.get(key) ?? existing.get(key) ?? "";
+          draftRef.current = restored;
+          updateDraft(restored);
+          setDraftRetained(sessionDrafts.set(key, restored));
+        }
+        if (key && edited.has(key)) {
+          const retained =
+            sessionDrafts.get(key) === (draftRef.current || undefined);
+          setDraftRetained(retained);
+          if (!retained) saved = false;
+        }
+        setDraftSaved(saved);
+        if (saved) {
+          saveComposerDrafts(browserStorage("sessionStorage"), connection, []);
+        }
+      });
+    return () => request.abort();
+  }, [session.authenticated, connection.endpoint, connection.token]);
 
   useEffect(() => {
     if (!session.authenticated || !session.restoreRejected) return;
@@ -518,14 +612,22 @@ export function App() {
       // Session restores this exact input without borrowing another scope.
       return;
     }
+    const scope = durableDraftScopeRef.current;
     const restored = activeSessionKey
-      ? (sessionDrafts.get(activeSessionKey) ?? "")
+      ? (sessionDrafts.get(activeSessionKey) ??
+        (scope && !pendingDraftEditsRef.current.has(activeSessionKey)
+          ? loadDurableDrafts(scope)?.find(
+              ([key]) => key === activeSessionKey,
+            )?.[1]
+          : undefined) ??
+        "")
       : "";
     draftRef.current = restored;
     updateDraft(restored);
-    setDraftRetained(true);
-    if (persistDrafts()) setDraftSaved(true);
-    else if (sessionDrafts.size > 0) setDraftSaved(false);
+    setDraftRetained(
+      !activeSessionKey || sessionDrafts.set(activeSessionKey, restored),
+    );
+    if (restored && !durableDraftScopeRef.current) setDraftSaved(false);
 
     setCommandError(null);
     previousActiveSessionKeyRef.current = activeSessionKey;
@@ -743,6 +845,10 @@ export function App() {
     const identityChanged =
       next.endpoint !== connection.endpoint || next.token !== connection.token;
     if (identityChanged) {
+      principalRequestRef.current?.abort();
+      draftPrincipalRef.current = null;
+      durableDraftScopeRef.current = null;
+      pendingDraftEditsRef.current.clear();
       clearKnownSessions(browserStorage("sessionStorage"), connection);
       let cleared = clearConnectionPreferences(
         browserStorage("localStorage"),
@@ -758,7 +864,7 @@ export function App() {
         if (!clearRecentWorkspaces(browserStorage("localStorage"), endpoint))
           cleared = false;
       }
-      setCleanupFailed(!cleared);
+      setCleanupFailed(!cleared || failedDraftCleanupRef.current.size > 0);
       setRecentWorkspaces([]);
       setKnownSessions([]);
       sessionDrafts.clear();
@@ -787,6 +893,20 @@ export function App() {
     session.disconnect();
   };
   const forgetConnection = () => {
+    principalRequestRef.current?.abort();
+    const principal = draftPrincipalRef.current;
+    if (principal) {
+      failedDraftCleanupRef.current.add(
+        durableDraftScope(connection.endpoint, principal),
+      );
+    }
+    for (const scope of failedDraftCleanupRef.current) {
+      if (clearDurableDrafts(scope))
+        failedDraftCleanupRef.current.delete(scope);
+    }
+    durableDraftScopeRef.current = null;
+    pendingDraftEditsRef.current.clear();
+    draftPrincipalRef.current = null;
     clearKnownSessions(browserStorage("sessionStorage"), connection);
     const tabRecentsCleared = clearRecentWorkspaces(
       browserStorage("sessionStorage"),
@@ -811,7 +931,8 @@ export function App() {
         browserStorage("sessionStorage"),
       ) ||
         !tabRecentsCleared ||
-        !durableRecentsCleared,
+        !durableRecentsCleared ||
+        failedDraftCleanupRef.current.size > 0,
     );
     setConnection(initialConnection);
   };
@@ -1289,8 +1410,9 @@ export function App() {
                   </p>
                 ) : !draftSaved ? (
                   <p role="status">
-                    Draft changes could not be saved in this tab. Copy your text
-                    before reloading; an older draft may be restored.
+                    Draft changes could not be saved on this device. Copy your
+                    text before closing this tab; an older draft may be
+                    restored.
                   </p>
                 ) : null}
                 <QueuedPrompts

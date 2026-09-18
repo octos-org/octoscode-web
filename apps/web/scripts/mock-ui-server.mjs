@@ -165,6 +165,31 @@ function modelTitle(modelId) {
 }
 
 const http = createServer((request, response) => {
+  if (request.url === "/api/auth/me") {
+    response.setHeader(
+      "Access-Control-Allow-Origin",
+      request.headers.origin ?? "*",
+    );
+    response.setHeader("Access-Control-Allow-Headers", "Authorization");
+    response.setHeader("Access-Control-Allow-Methods", "GET");
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
+    const token = authTokenFromUpgradeRequest(request);
+    if (mockAuthMode === "required" && !mockAuthTokens.has(token)) {
+      response.writeHead(401).end();
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" }).end(
+      JSON.stringify({
+        user: {
+          id: token === "forget-me-token" ? "other-user" : "fixture-user",
+        },
+      }),
+    );
+    return;
+  }
   if (request.url === "/health") {
     response
       .writeHead(200, { "content-type": "application/json" })

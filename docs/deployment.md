@@ -93,16 +93,20 @@ endpoint-and-token-bound envelope also keeps the minimal
 Workspace/Profile/Session tuples that this tab has successfully opened. Those
 refs are incomplete navigation memory, not a catalog, and contain no titles,
 prompts, transcript, or model output. Refresh can restore the selected Session;
-closing the tab leaves only the endpoint. Disconnect preserves tab navigation
-refs but closes live transports; Forget or an endpoint/token change clears the
-refs. Provider API keys are never persisted in browser storage.
+closing the tab discards its credential and navigation hints. Disconnect
+preserves tab navigation refs but closes live transports; Forget or an
+endpoint/token change clears the refs. Provider API keys are never persisted in
+browser storage.
 
-The same tab envelope now keeps bounded unsent composer drafts, isolated by the
-exact Session and credential identity. Closing the tab ends this editing cache;
-it is not cross-device storage or a transcript database. Drafts are not
-submitted on reload. The client reports rejected saves and deletions, including
-failed Forget operations, so a browser storage restriction cannot masquerade as
-success.
+Unsent composer text uses separate localStorage entries scoped to the server,
+the user id confirmed by REST `/api/auth/me`, and the exact
+Workspace/Profile/Session. These entries contain no token or connection
+envelope. A new tab must authenticate before restoring them; a rotated token for
+the same user can restore that user's drafts. Forget removes the confirmed
+user's drafts, including after an offline reload using the principal remembered
+in sessionStorage. This is not cross-device storage or a transcript database.
+Drafts and queued work are never automatically submitted on reload. Rejected
+saves and deletions show a warning.
 
 A reverse proxy must also preserve long-lived WebSocket connections when the
 product switches Sessions. Core rc.9 binds a server-acknowledged turn to its
