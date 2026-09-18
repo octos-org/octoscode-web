@@ -154,7 +154,10 @@ export function App() {
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
-        loadComposerDrafts(browserStorage("sessionStorage"), connection),
+        loadComposerDrafts(browserStorage("localStorage"), connection).length >
+          0
+          ? loadComposerDrafts(browserStorage("localStorage"), connection)
+          : loadComposerDrafts(browserStorage("sessionStorage"), connection),
       ),
   );
   const [draft, updateDraft] = useState("");
@@ -167,12 +170,23 @@ export function App() {
     () => (session.authenticated ? {} : null),
     [session.authenticated, connection.endpoint, connection.token],
   );
-  const persistDrafts = () =>
-    saveComposerDrafts(
+  const persistDrafts = () => {
+    const snapshot = sessionDrafts.snapshot();
+    // Dual-write: localStorage for cross-tab persistence, sessionStorage
+    // as a guaranteed same-tab fallback (Firefox private mode may block
+    // localStorage but allows sessionStorage).
+    const localOk = saveComposerDrafts(
+      browserStorage("localStorage"),
+      connection,
+      snapshot,
+    );
+    const sessionOk = saveComposerDrafts(
       browserStorage("sessionStorage"),
       connection,
-      sessionDrafts.snapshot(),
+      snapshot,
     );
+    return localOk || sessionOk;
+  };
   const setDraft = (text: string) => {
     updateDraft(text);
     const key = previousActiveSessionKeyRef.current;

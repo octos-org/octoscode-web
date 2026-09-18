@@ -61,11 +61,8 @@ test("a rejected draft storage write preserves editing and warns before text can
   const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("先前已经保存的草稿");
   await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === sessionStorage)
-        throw new DOMException("Storage full", "QuotaExceededError");
-      original.call(this, key, value);
+    Storage.prototype.setItem = function () {
+      throw new DOMException("Storage full", "QuotaExceededError");
     };
   });
   await input.fill("仍然可以编辑和复制，不应白屏");
