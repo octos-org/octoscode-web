@@ -353,7 +353,9 @@ export function GeneralSettingsContent({
           </p>
           {stopFailed ? (
             <p className={styles.confirmError} role="alert">
-              {t("Could not stop the server. It is still running; try again.")}
+              {t(
+                "Shutdown was not confirmed. Check the server before trying again.",
+              )}
             </p>
           ) : null}
           <div className={styles.confirmActions}>

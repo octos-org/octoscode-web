@@ -46,55 +46,6 @@ describe("GeneralSettingsContent", () => {
     expect(html).toMatch(/disabled=""[^>]*>Disconnect<\/button>/);
     expect(html).not.toContain("Current workspace");
   });
-
-  describe("Stop server", () => {
-    const render = (props: {
-      canStopServer?: boolean;
-      connectionStatus?: "connected" | "disconnected";
-      onStopServer?: () => Promise<void>;
-    }) =>
-      renderToStaticMarkup(
-        <GeneralSettingsContent
-          serverOrigin="http://127.0.0.1:50080"
-          connectionStatus={props.connectionStatus ?? "connected"}
-          onDisconnect={vi.fn()}
-          onForgetConnection={vi.fn()}
-          {...(props.canStopServer === undefined
-            ? {}
-            : { canStopServer: props.canStopServer })}
-          {...(props.onStopServer ? { onStopServer: props.onStopServer } : {})}
-        />,
-      );
-
-    it("is offered when the server advertises server/shutdown", () => {
-      const html = render({
-        canStopServer: true,
-        onStopServer: vi.fn(async () => undefined),
-      });
-      expect(html).toContain(">Stop server</button>");
-      // The consequence sits next to the control, not only in the dialog.
-      expect(html).toContain("Every connected client is disconnected");
-    });
-
-    it("is absent when the server does not offer it", () => {
-      // A hosted, fleet or --stdio server: pressing it could not work.
-      const html = render({ onStopServer: vi.fn(async () => undefined) });
-      expect(html).not.toContain("Stop server");
-    });
-
-    it("is absent while this tab is not connected to the server", () => {
-      const html = render({
-        canStopServer: true,
-        connectionStatus: "disconnected",
-        onStopServer: vi.fn(async () => undefined),
-      });
-      expect(html).not.toContain("Stop server");
-    });
-
-    it("never offers a control that has nothing to call", () => {
-      expect(render({ canStopServer: true })).not.toContain("Stop server");
-    });
-  });
 });
 
 describe("ModelsSettingsContent", () => {

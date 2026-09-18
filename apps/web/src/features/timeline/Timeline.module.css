@@ -24,8 +24,8 @@
   outline-offset: 3px;
 }
 
-.assistantEntry :global(.entry-content) {
-  max-width: 65ch;
+.assistantEntry :global(.markdown-body > :where(p, ul, ol, blockquote)) {
+  max-width: 75ch;
 }
 
 .reasoningBlock,

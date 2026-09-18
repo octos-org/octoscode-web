@@ -339,7 +339,8 @@ function trackRuntimeErrors(page: Page): () => RuntimeErrors {
     // code under soak. Every other console error still fails the run.
     if (message.type() !== "error") return;
     const text = message.text();
-    if (text.includes("/pair/info") && text.includes("404")) return;
+    if (message.location().url.endsWith("/pair/info") && text.includes("404"))
+      return;
     consoleErrors.push(text);
   });
   return () => ({

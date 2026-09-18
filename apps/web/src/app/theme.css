@@ -26,6 +26,11 @@
   --dsw-space-5: 24px;
   --dsw-space-6: 32px;
   --dsw-space-7: 48px;
+  /* Chat column: the transcript and its cards use --dsw-layout-chat, the
+     composer (and anything aligned with it) the slightly wider -wide. It grows
+     with the window so a large monitor is not left mostly empty. */
+  --dsw-layout-chat: clamp(736px, 62vw, 1040px);
+  --dsw-layout-chat-wide: calc(var(--dsw-layout-chat) + 32px);
   --dsw-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --dsw-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dsw-motion-enter: 180ms;
@@ -35,6 +40,8 @@
   --dsw-font-size-micro: 11px;
   --dsw-shadow-lv1: 0 2px 4px rgb(0 0 0 / 5%);
   --dsw-shadow-lv2: 0 4px 12px rgb(0 0 0 / 2%), 0 2px 8px rgb(0 0 0 / 4%);
+  --dsw-shadow-composer: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 28px rgb(0 0 0 / 6%);
+  --dsw-shadow-composer-lift: 0 8px 28px rgb(0 0 0 / 7%);
   --dsw-shadow-lv3: 0 0 1px rgb(0 0 0 / 20%), 0 12px 32px rgb(0 0 0 / 8%);
   --dsw-shadow-dialog: 0 24px 70px rgb(0 0 0 / 10%);
   --dsw-shadow-drawer: -18px 0 48px rgb(0 0 0 / 22%);

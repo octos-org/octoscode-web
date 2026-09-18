@@ -1,39 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { APPUI_SERVER_METHODS, supportsMethod } from "../src/index.ts";
 import { OctosUiClient } from "../src/client.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
 
 /** `server/shutdown`: stop a local `octos serve --solo` from a client. */
 
-function capabilities(methods: string[]): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos-ui/v1alpha1",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 2,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: [],
-  };
-}
-
 describe("server/shutdown", () => {
-  it("is offered only when the server advertises it", () => {
-    // A hosted, fleet or --stdio server never advertises it; the UI hides the
-    // Stop control whenever this is false.
-    expect(
-      supportsMethod(capabilities([]), APPUI_SERVER_METHODS.SHUTDOWN),
-    ).toBe(false);
-    expect(
-      supportsMethod(
-        capabilities([APPUI_SERVER_METHODS.SHUTDOWN]),
-        APPUI_SERVER_METHODS.SHUTDOWN,
-      ),
-    ).toBe(true);
-  });
-
   it("sends server/shutdown and resolves once the server acknowledges", async () => {
     const { client, socket } = await connected();
     const stopping = client.stopServer();

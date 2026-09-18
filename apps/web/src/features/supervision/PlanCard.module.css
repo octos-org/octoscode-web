@@ -1,6 +1,6 @@
 .card {
   width: 100%;
-  max-width: 768px;
+  max-width: var(--dsw-layout-chat-wide);
   margin: 0 auto var(--dsw-space-2);
   min-width: 0;
   border: 1px solid var(--dsw-alias-border-l2);

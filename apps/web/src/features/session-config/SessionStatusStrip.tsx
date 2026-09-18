@@ -102,12 +102,18 @@ export function SessionStatusStrip({
         {text}
       </span>
       <span className={styles["session-status-strip-text"]}>
-        {liveLabel ? (
-          <span className="thinking-spinner" aria-hidden="true">
-            ◠
-          </span>
-        ) : null}
-        {text}
+        <span className={styles["session-status-strip-context"]}>
+          {segments[0]} · {segments[1]}
+        </span>
+        <span className={styles["session-status-strip-state"]}>
+          <span className={styles["session-status-strip-separator"]}> · </span>
+          {liveLabel ? (
+            <span className="thinking-spinner" aria-hidden="true">
+              ◠
+            </span>
+          ) : null}
+          {segments[2]}
+        </span>
       </span>
       <svg
         className="session-status-strip-chevron"

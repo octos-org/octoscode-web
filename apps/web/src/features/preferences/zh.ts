@@ -255,8 +255,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Stop the Octos server?": "停止 Octos 服务器？",
   "Every client connected to this server — this tab, other tabs, the terminal — is disconnected, and any running turn is cancelled. Conversations are kept on disk. To use Octos again, start octos serve from a terminal.":
     "连接到此服务器的所有客户端（本标签页、其他标签页、终端）都会断开，正在运行的回合会被取消。会话保存在磁盘上，不会丢失。要再次使用 Octos，请在终端中启动 octos serve。",
-  "Could not stop the server. It is still running; try again.":
-    "无法停止服务器。服务器仍在运行，请重试。",
+  "Shutdown was not confirmed. Check the server before trying again.":
+    "未能确认服务器是否已停止。请先检查服务器状态，再决定是否重试。",
   "Fork:": "分支：",
   "GLM-5.3-Flash guidance": "GLM-5.3-Flash 使用指南",
   "GLM-5.3-Flash recommended settings": "GLM-5.3-Flash 建议设置",
