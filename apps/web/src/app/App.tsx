@@ -467,7 +467,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   const [fleetRouteActive, setFleetRouteActive] = useState(false);
-  /** §8 Alt+D: a pending "focus Fleet's Brief" request (see the effect below). */
+  /** Alt+D requests focus inside Fleet once the routed pane is visible. */
   const [fleetBriefFocusRequest, setFleetBriefFocusRequest] = useState(0);
   // §4.2: Advanced collapsed by default, remembered per browser.
   const [advancedOpen, setAdvancedOpen] = useState(() => {
@@ -940,12 +940,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return () => window.removeEventListener("keydown", onPeerDockKeyDown);
   }, []);
 
-  // Alt+D focuses the peer CONTROLLER console's Dispatch affordance (grant
-  // 2840; program WEB-PEER-CONTROLLER-2800 §3). WEB-UX-DESIGN-4000 §8 retargets
-  // the chord: Alt+D navigates to Fleet and focuses the Start form's Brief
-  // field. The same registry pattern as Alt+A/Alt+P, matched on the physical
-  // `code` (macOS Option+D is a dead key); an absent Fleet surface (never
-  // mounted) is a silent no-op.
+  // Alt+D opens Fleet and focuses Brief when starting peers is supported,
+  // otherwise its availability notice or Back. Match the physical code
+  // because macOS Option+D is a dead key.
   useEffect(() => {
     const onFocusDispatchKeyDown = (event: KeyboardEvent) => {
       if (matchKeyboardParityShortcut(event)?.id !== "focus-dispatch") return;
@@ -962,21 +959,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     window.addEventListener("keydown", onFocusDispatchKeyDown);
     return () => window.removeEventListener("keydown", onFocusDispatchKeyDown);
   }, []);
-  // §8 Alt+D, second half: land focus on Fleet's Start-form Brief field once
-  // the routed pane is actually visible. The lazy FleetView chunk may still be
-  // resolving, so the request survives a few frames before it gives up rather
-  // than silently focusing nothing.
+  // Wait only for the lazy Fleet surface to mount. An unavailable Start form
+  // has an immediate focus target, so it does not exhaust the frame retries.
   useEffect(() => {
     if (fleetBriefFocusRequest === 0 || !fleetRouteActive) return;
     let cancelled = false;
     let attempts = 0;
     const attempt = () => {
       if (cancelled) return;
-      const brief = document.querySelector<HTMLElement>(
-        '[data-fleet-field="brief"]',
-      );
-      if (brief) {
-        brief.focus();
+      const target =
+        document.querySelector<HTMLElement>(
+          '[data-fleet-field="brief"], [data-fleet-start-unavailable="true"]',
+        ) ??
+        (document.querySelector(".fleet-empty-session")
+          ? document.querySelector<HTMLElement>('[data-fleet-back="true"]')
+          : null);
+      if (target) {
+        target.focus();
         return;
       }
       if (attempts++ > 60) return;

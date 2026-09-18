@@ -8,7 +8,7 @@
   /* The card never touches the viewport edge: the gap is also the room the
      browser needs to scroll the last field clear of the card's bottom. */
   margin-block: var(--dsw-space-4);
-  max-width: 736px;
+  max-width: var(--dsw-layout-chat);
   max-height: min(620px, calc(100dvh - 120px));
   overflow-y: auto;
   overscroll-behavior: contain;

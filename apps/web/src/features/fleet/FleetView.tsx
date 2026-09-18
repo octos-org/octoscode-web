@@ -293,11 +293,20 @@ export function FleetView({
           {t("Open a project first")}
         </p>
       ) : !controlAdvertised ? (
-        <p className={styles.formNote} data-fleet-start-unavailable="true">
+        <p
+          className={styles.formNote}
+          data-fleet-start-unavailable="true"
+          tabIndex={-1}
+        >
           {t("This server does not support starting peers")}
         </p>
       ) : !controlSupported ? (
-        <p className={styles.formNote} role="status">
+        <p
+          className={styles.formNote}
+          role="status"
+          data-fleet-start-unavailable="true"
+          tabIndex={-1}
+        >
           {t("Peer controls are not ready")}
         </p>
       ) : (
