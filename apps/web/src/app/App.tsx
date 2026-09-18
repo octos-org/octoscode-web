@@ -3287,15 +3287,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             }
                           />
                         ) : null}
-                        <ModelManagementSettings
-                          key={models.management.authorityKey}
-                          client={models.management.client}
-                          profileId={models.management.profileId}
-                          capabilities={models.management.capabilities}
-                          profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
-                          locked={runtimeMutationBlocked}
-                          onConfiguredModelsChange={models.refresh}
-                        />
+                        <SurfaceBoundary
+                          name="Model management"
+                          fallback={
+                            <DeferredSurface label="Loading model management…" />
+                          }
+                        >
+                          <ModelManagementSettings
+                            key={models.management.authorityKey}
+                            client={models.management.client}
+                            profileId={models.management.profileId}
+                            capabilities={models.management.capabilities}
+                            profileDefaultKey={`${currentProfileModel?.providerId ?? ""}:${currentProfileModel?.modelId ?? ""}`}
+                            locked={runtimeMutationBlocked}
+                            onConfiguredModelsChange={models.refresh}
+                          />
+                        </SurfaceBoundary>
                       </>
                     ),
                   }
