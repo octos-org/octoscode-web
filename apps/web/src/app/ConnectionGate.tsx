@@ -113,6 +113,11 @@ export interface ConnectionGateApi {
   readonly bridgeRef: RefObject<ConnectionGateBridge | null>;
   /** A connect the operator asked for before the shell finished loading. */
   readonly takePendingConnect: () => ConnectionDraft | null;
+  /**
+   * Hand a claimed draft back, for a shell that unmounts before its connect
+   * could settle. Never overwrites a newer draft the operator has since parked.
+   */
+  readonly returnPendingConnect: (draft: ConnectionDraft) => void;
   readonly panel: ConnectionPanelOwnedProps;
   readonly disconnect: () => void;
   readonly forgetConnection: () => void;
@@ -209,6 +214,9 @@ export function ConnectionGate() {
     const pending = pendingConnectRef.current;
     pendingConnectRef.current = null;
     return pending;
+  };
+  const returnPendingConnect = (draft: ConnectionDraft) => {
+    if (pendingConnectRef.current === null) pendingConnectRef.current = draft;
   };
 
   useEffect(() => {
@@ -444,6 +452,7 @@ export function ConnectionGate() {
     rememberedConnectRef,
     bridgeRef,
     takePendingConnect,
+    returnPendingConnect,
     panel,
     disconnect,
     forgetConnection,
