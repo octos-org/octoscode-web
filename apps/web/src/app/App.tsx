@@ -2503,6 +2503,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         <TurnRecoveryNotice
                           recovery={conversation.turnRecovery}
                           onRetry={() => void conversation.retryTurnRecovery()}
+                          onContinue={() => conversation.continueWithoutTurn()}
                         />
                       </SurfaceBoundary>
                     ) : null}
