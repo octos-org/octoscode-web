@@ -75,7 +75,8 @@ workflow and its outcome ledger on main.
 
 The combined 27-case browser acceptance run passes after integrating #125. The
 full check passes with 227,968 B initial JavaScript and 65,108 B initial CSS.
-The open command list has no axe violations. The Linux connection screenshot
-baseline is refreshed after inspecting the intentional credential-checkbox
-removal and in-card preferences placement; the Darwin baseline still requires
-regeneration on macOS. CI must pass on the submitted revision before merging.
+The open command list has no axe violations. The Linux and Darwin connection
+screenshot baselines are refreshed after inspecting the intentional
+credential-checkbox removal and in-card preferences placement. Darwin was
+generated and rerun on a separate macOS machine, with its full check passing. CI
+must pass on the submitted revision before merging.
