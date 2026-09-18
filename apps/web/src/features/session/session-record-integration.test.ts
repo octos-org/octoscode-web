@@ -1202,7 +1202,9 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     await h.manager.recoverRecords(new AbortController().signal);
     expect(starts(h.client)).toEqual([]);
     expect(a.queue.snapshot()).toEqual({
-      active: { turnId: "external", text: "" },
+      // The server's turn is not ours: adoption marks it so the strip can name
+      // the other client instead of reading "Responding".
+      active: { turnId: "external", text: "", origin: "adopted" },
       pending: [
         { turnId: "A1", text: "A1" },
         { turnId: "A2", text: "A2" },

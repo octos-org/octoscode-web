@@ -284,6 +284,35 @@ export class AttachmentDraftStore {
     return true;
   }
 
+  /** Return this record's already-uploaded turn media without uploading again. */
+  restoreUploaded(media: readonly TurnMedia[]): boolean {
+    this.#assertCurrent();
+    if (this.#entries.size) return false;
+    if (
+      media.some(
+        (item) => !uploadedHandleForProfile(item.path, this.scope.profileId),
+      )
+    )
+      throw new Error("Attachments belong to another Profile.");
+    for (const item of media) {
+      const id = crypto.randomUUID();
+      this.#entries.set(id, {
+        draft: Object.freeze({
+          id,
+          name: item.path.split("/")[2]!,
+          bytes: item.size_bytes,
+          mime: item.mime,
+          status: "ready",
+          error: null,
+        }),
+        file: null,
+        media: { ...item },
+      });
+    }
+    this.#publish();
+    return true;
+  }
+
   #validatedMedia(expectedScope: AttachmentScope): TurnMedia[] {
     this.#assertCurrent();
     if (

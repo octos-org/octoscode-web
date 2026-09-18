@@ -1496,19 +1496,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return () => cancelAnimationFrame(frame);
   }, [activeSessionKey, conversationTab, compact]);
 
-  // Audit row 9: a user interrupt stashes the interrupted turn's prompt and the
-  // controller hands it back when that turn's OWN terminal lands. Restore it
-  // into the composer only while its OWNING Session is the selected one; the
-  // parked prompt for any other Session survives until the user returns to it.
+  // Interrupted and unsent inputs return to their owning Session. Wait for
+  // newer text and image selections to clear before consuming a saved restore.
   const interruptedPrompt = conversation.interruptedPrompt;
+  const attachmentSnapshot = conversation.attachments?.getSnapshot();
   useEffect(() => {
-    if (!interruptedPrompt || draftRef.current) return;
+    if (
+      !interruptedPrompt ||
+      draftRef.current ||
+      attachmentSnapshot?.entries.length
+    )
+      return;
     const restored = conversation.takeInterruptedPrompt();
     if (restored === null) return;
     draftRef.current = restored;
     setDraft(restored);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interruptedPrompt, draft, activeSessionKey]);
+  }, [interruptedPrompt, draft, activeSessionKey, attachmentSnapshot]);
 
   const resumeChat = () => {
     const prompt = draftRef.current;
@@ -1849,7 +1853,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             : foreignSeatHeld
               ? { kind: "external-held" }
               : conversation.queue.active
-                ? { kind: "responding" }
+                ? // The live turn is not ours: another attached client owns it.
+                  // Guarded by `selfSeatHeld` for the same reason §4.3 guards
+                  // the other-app copy — a peer THIS app started is SELF, so
+                  // its turn is never "another client".
+                  conversation.queue.active.origin === "adopted" &&
+                  !selfSeatHeld
+                  ? { kind: "busy-elsewhere" }
+                  : { kind: "responding" }
                 : peers.manager
                       ?.snapshot()
                       .peers.some((peer) =>

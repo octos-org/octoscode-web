@@ -431,6 +431,16 @@ export interface SessionListEntry {
   title?: string;
   updated_at?: string;
   last_prompt?: string;
+  /**
+   * Does this session have a live turn RIGHT NOW? Sourced from the server's
+   * process-global active-turn registry, so it is honest about sessions this
+   * connection never opened — which is the point: it is how this client sees
+   * that a terminal attached to the same server is mid-turn somewhere.
+   *
+   * ABSENT against a server that predates the field. Absent means UNKNOWN,
+   * never idle, so every reader must test for `true` rather than falsiness.
+   */
+  active_turn?: boolean;
 }
 
 export interface SessionListResult {

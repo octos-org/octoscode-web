@@ -35,6 +35,7 @@ describe("SessionStatusStrip (§4.1)", () => {
     ["waiting-answer", "Waiting for your answer"],
     ["responding", "Responding"],
     ["external-held", "Another app is using this session"],
+    ["busy-elsewhere", "Another client is working in this session"],
     ["reconnecting", "Reconnecting"],
   ] as const)("maps %s to its task word", (kind, words) => {
     const html = renderToStaticMarkup(

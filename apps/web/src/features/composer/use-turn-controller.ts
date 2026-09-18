@@ -24,6 +24,7 @@ import {
 } from "./turn-queue.ts";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
 import { boundedTurnAdmissionError } from "./composer-seat-handover.ts";
+import { turnCollisionFrom } from "./turn-collision.ts";
 
 export interface TurnControllerDependencies {
   client: () => OctosUiClient | null;
@@ -76,13 +77,13 @@ export interface TurnControllerDependencies {
     { readonly sent: true } | { readonly sent: false; readonly message: string }
   >;
   /**
-   * §6 "kept" column (brief 4010 clause b): a turn the seat gate refused was
-   * never started, so the queue's copy is the ONLY remaining one. Park the text
+   * A turn refused by handback or a collision never started, so the queue's
+   * copy is the ONLY remaining one. Park the turn
    * back on the OWNING record (resolved by session id) so the composer shows it
    * again instead of silently eating the message. Never overwrites a pending
    * restore.
    */
-  onTurnNotSentRestore?: (prompt: string, sessionId: string) => void;
+  onTurnNotSentRestore?: (turn: PromptTurn, sessionId: string) => void;
 }
 
 export interface NativeSteerRequest {
@@ -343,7 +344,7 @@ export function createQueueBackedTurnController(options: {
       }
       if (!outcome.sent) {
         retireLocalDispatch(turn.turnId, "rejected");
-        dependenciesRef.current.onTurnNotSentRestore?.(turn.text, sessionId);
+        dependenciesRef.current.onTurnNotSentRestore?.(turn, sessionId);
         dependenciesRef.current.setTimeline((current) =>
           addSystemMessage(
             current,
@@ -453,6 +454,40 @@ export function createQueueBackedTurnController(options: {
         sync();
         return;
       }
+      const collision =
+        turn.kind === "review" ? null : turnCollisionFrom(reason);
+      if (collision) {
+        // Another attached client (a terminal, a second tab) holds the
+        // session's only turn slot. That is an ordinary busy signal, not a
+        // rejected turn: the prompt goes back to the composer instead of being
+        // reported as failed and discarded.
+        retireLocalDispatch(turn.turnId, "rejected");
+        startRequests.invalidate();
+        const transition = queueOf().settle(turn.turnId);
+        // Core can send the occupier's terminal before replying to our start.
+        // Never re-adopt that completed turn or wait for its terminal twice.
+        const occupied = !terminalReceipts.has(collision.turnId);
+        if (occupied) {
+          attemptedTurns.add(collision.turnId);
+          queueOf().restoreActive(
+            { turnId: collision.turnId, text: "", origin: "adopted" },
+            true,
+          );
+        }
+        dependenciesRef.current.onTurnNotSentRestore?.(turn, sessionId);
+        dependenciesRef.current.setTimeline((current) =>
+          addSystemMessage(
+            current,
+            `send-busy:${turn.turnId}`,
+            "Session busy",
+            "Another client was working in this session, so this message was not sent. It was kept for retry and will return when the composer is empty. Send it again when the running turn finishes, or Stop that turn to take over.",
+            "info",
+          ),
+        );
+        sync();
+        if (!occupied && transition.next) void startTurn(transition.next);
+        return;
+      }
       retireLocalDispatch(turn.turnId, "rejected");
       dependenciesRef.current.setTimeline((current) =>
         addSystemMessage(
@@ -515,7 +550,10 @@ export function createQueueBackedTurnController(options: {
       interruptRequests.invalidate();
       queueOf().settle(turnId);
       attemptedTurns.add(otherActive.turnId);
-      queueOf().restoreActive({ turnId: otherActive.turnId, text: "" }, true);
+      queueOf().restoreActive(
+        { turnId: otherActive.turnId, text: "", origin: "adopted" },
+        true,
+      );
       interruptingTurnId =
         otherActive.state === "interrupting" ? otherActive.turnId : null;
       setInterruptingTurnId(interruptingTurnId);
@@ -769,6 +807,33 @@ export function createQueueBackedTurnController(options: {
     return true;
   };
 
+  /**
+   * A `turn/started` for a turn this app never queued means ANOTHER attached
+   * client began a turn in this session: the server fans every session event
+   * out to every connection that opened it, so a terminal typing into the same
+   * session is visible here. Adopt it the way `reconcileFromHydrate` already
+   * adopts a server-reported active turn — but marked "adopted", so the strip
+   * and composer can name the other client instead of presenting the turn as
+   * ours. Without this the adoption only happened at hydrate time, leaving a
+   * live client idle-looking while someone else drove the session.
+   *
+   * Deliberately silent when we already own the foreground (our own turn, a
+   * turn we dispatched, or anything already queued). Only one turn can be
+   * active per session server-side, so a foreign start while we hold the
+   * foreground means our own view is stale; hydrate reconciles that case with
+   * the full ownership rules rather than this fast path guessing.
+   */
+  const adoptForeignTurn = (turnId: string): void => {
+    if (attemptedTurns.has(turnId)) return;
+    if (locallyStartedTurn?.turnId === turnId) return;
+    const snapshot = queueOf().snapshot();
+    if (snapshot.active) return;
+    if (snapshot.pending.some((turn) => turn.turnId === turnId)) return;
+    attemptedTurns.add(turnId);
+    queueOf().restoreActive({ turnId, text: "", origin: "adopted" }, true);
+    sync();
+  };
+
   const observeSteerDropped = (notification: RpcNotification): void => {
     // Server-side activity for a turn proves acceptance even when its
     // turn/start RPC timed out locally.
@@ -779,7 +844,11 @@ export function createQueueBackedTurnController(options: {
       )
     ) {
       const activeTurnId = notificationTurnId(notification);
-      if (activeTurnId) confirmTurnAccepted(activeTurnId);
+      if (activeTurnId) {
+        confirmTurnAccepted(activeTurnId);
+        if (notification.method === CORE_UI_METHODS.TURN_STARTED)
+          adoptForeignTurn(activeTurnId);
+      }
     }
     const params = notification.params;
     if (
@@ -1046,6 +1115,7 @@ export function createQueueBackedTurnController(options: {
         {
           turnId: serverActive.turn_id,
           text: "",
+          origin: "adopted",
         },
         true,
       );
@@ -1101,7 +1171,7 @@ export function createQueueBackedTurnController(options: {
         // behind it instead of dispatching over it.
         attemptedTurns.add(serverActive.turn_id);
         queueOf().restoreActive(
-          { turnId: serverActive.turn_id, text: "" },
+          { turnId: serverActive.turn_id, text: "", origin: "adopted" },
           true,
         );
         sync();

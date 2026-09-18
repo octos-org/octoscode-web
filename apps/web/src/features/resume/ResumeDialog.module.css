@@ -61,3 +61,13 @@
 .dialog button[aria-pressed="true"] {
   border-color: var(--dsw-alias-label-primary);
 }
+/**
+ * A candidate that is mid-turn RIGHT NOW, per the server's process-global
+ * registry — usually because another attached client (a terminal, another
+ * tab) is driving it. Shown only when the server said so: an older server
+ * omits the fact, and silence must not read as "idle".
+ */
+.busy {
+  margin: 0;
+  color: var(--dsw-alias-state-business-primary);
+}
