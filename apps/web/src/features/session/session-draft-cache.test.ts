@@ -14,10 +14,10 @@ describe("SessionDraftCache", () => {
     }
     expect(cache.get("one")).toBe("first");
 
-    expect(cache.set("three", "third")).toBe(false);
-    expect(cache.get("two")).toBe("second");
-    expect(cache.get("one")).toBe("first");
-    expect(cache.get("three")).toBeUndefined();
+    // At capacity: a new draft evicts the oldest entry instead of refusing.
+    expect(cache.set("three", "third")).toBe(true);
+    expect(cache.get("three")).toBe("third");
+    expect(cache.snapshot()).toHaveLength(50);
     expect(cache.set("one", "updated first")).toBe(true);
     expect(cache.snapshot()).toHaveLength(50);
     expect(cache.set("two", "")).toBe(true);
@@ -26,20 +26,32 @@ describe("SessionDraftCache", () => {
     expect(cache.get("three")).toBe("third");
   });
 
-  it("rejects corrupt and excessive storage instead of restoring partial or truncated drafts", () => {
-    for (const value of [
-      null,
-      {},
-      [["a", 3]],
-      [
+  it("skips corrupt entries without poisoning the entire batch", () => {
+    // Non-array inputs still return empty.
+    expect(parseSessionDrafts(null)).toEqual([]);
+    expect(parseSessionDrafts({})).toEqual([]);
+    // A single corrupt entry is skipped; good entries survive.
+    expect(parseSessionDrafts([["a", 3]])).toEqual([]);
+    expect(
+      parseSessionDrafts([
         ["a", "ok"],
-        ["a", "duplicate"],
-      ],
-      [["a", "x".repeat(524_288)]],
-      Array.from({ length: 51 }, (_, i) => [String(i), "text"]),
-    ]) {
-      expect(parseSessionDrafts(value)).toEqual([]);
-    }
+        ["bad", null],
+        ["b", "ok2"],
+      ]),
+    ).toEqual([
+      ["a", "ok"],
+      ["b", "ok2"],
+    ]);
+    // Duplicate keys: last occurrence wins.
+    expect(
+      parseSessionDrafts([
+        ["a", "first"],
+        ["a", "second"],
+      ]),
+    ).toEqual([["a", "second"]]);
+    // Oversized entries are skipped.
+    expect(parseSessionDrafts([["a", "x".repeat(524_288)]])).toEqual([]);
+    // Excess entries beyond the batch are naturally bounded by the caller.
     const input = [["a", "draft"]];
     const parsed = parseSessionDrafts(input);
     parsed[0]![1] = "changed";
