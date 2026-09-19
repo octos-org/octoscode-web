@@ -24,7 +24,7 @@ DeepSeek Harness UI reference.
 - `@types/katex@0.16.8` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/katex
 - `@types/mdast@4.0.4` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/mdast
 - `@types/ms@2.1.0` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ms
-- `@types/react@19.2.18` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
+- `@types/react@19.3.0` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
 - `@types/unist@2.0.11` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/unist
 - `@types/unist@3.0.3` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/unist
 - `@ungap/structured-clone@1.3.3` — ISC — https://github.com/ungap/structured-clone#readme
@@ -120,9 +120,9 @@ DeepSeek Harness UI reference.
 - `parse-entities@4.0.2` — MIT — https://github.com/wooorm/parse-entities
 - `parse5@7.3.0` — MIT — https://parse5.js.org
 - `property-information@7.2.0` — MIT — https://github.com/wooorm/property-information
-- `react-dom@19.2.8` — MIT — https://react.dev/
+- `react-dom@19.3.0` — MIT — https://react.dev/
 - `react-markdown@10.1.0` — MIT — https://github.com/remarkjs/react-markdown
-- `react@19.2.8` — MIT — https://react.dev/
+- `react@19.3.0` — MIT — https://react.dev/
 - `regex-recursion@6.0.2` — MIT — https://github.com/slevithan/regex-recursion
 - `regex-utilities@2.3.0` — MIT — https://github.com/slevithan/regex-utilities
 - `regex@6.1.0` — MIT — https://github.com/slevithan/regex
@@ -132,7 +132,7 @@ DeepSeek Harness UI reference.
 - `remark-parse@11.0.0` — MIT — https://remark.js.org
 - `remark-rehype@11.1.2` — MIT — https://github.com/remarkjs/remark-rehype
 - `remark-stringify@11.0.0` — MIT — https://remark.js.org
-- `scheduler@0.27.0` — MIT — https://react.dev/
+- `scheduler@0.28.0` — MIT — https://react.dev/
 - `shiki@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
 - `space-separated-tokens@2.0.2` — MIT — https://github.com/wooorm/space-separated-tokens
 - `stringify-entities@4.0.4` — MIT — https://github.com/wooorm/stringify-entities
@@ -233,7 +233,7 @@ Applies to:
 - `@types/katex@0.16.8`
 - `@types/mdast@4.0.4`
 - `@types/ms@2.1.0`
-- `@types/react@19.2.18`
+- `@types/react@19.3.0`
 - `@types/unist@2.0.11`
 - `@types/unist@3.0.3`
 
@@ -1119,9 +1119,9 @@ Applies to:
 
 Applies to:
 
-- `react-dom@19.2.8`
-- `react@19.2.8`
-- `scheduler@0.27.0`
+- `react-dom@19.3.0`
+- `react@19.3.0`
+- `scheduler@0.28.0`
 
     ===== LICENSE =====
     MIT License
