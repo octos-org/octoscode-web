@@ -25,6 +25,27 @@ describe("Core rc.9 turn/state/get narrow contract", () => {
     });
   });
 
+  it("keeps the server's certainty that an unknown turn is not running (UPCR-2026-031)", () => {
+    expect(
+      parseTurnStateGetResult({ ...base, state: "unknown", running: false }),
+    ).toEqual({
+      ...base,
+      state: "unknown",
+      committed_seqs: [],
+      running: false,
+    });
+  });
+
+  it.each([
+    [{ state: "active", running: false }],
+    [{ state: "unknown", running: true }],
+    [{ state: "unknown", running: "false" }],
+  ])("drops a running flag outside the UPCR-2026-031 contract: %j", (extra) => {
+    expect(parseTurnStateGetResult({ ...base, ...extra })).not.toHaveProperty(
+      "running",
+    );
+  });
+
   it("accepts lifecycle metadata and ignores unrelated context extensions", () => {
     expect(
       parseTurnStateGetResult({
