@@ -142,7 +142,6 @@ import {
   type TaskArtifactRecord,
   isProtocolUuid,
 } from "@octos-org/octoscode-client/protocol";
-import type { ObservedEvent } from "../inspector/EventInspector.tsx";
 import {
   useCodingSafety,
   type DiffReviewRuntimeState,
@@ -418,7 +417,6 @@ export interface OctosSessionRuntime {
     retryOnboarding: () => Promise<void>;
     submitOnboarding: (submission: OnboardingSubmission) => Promise<void>;
   };
-  diagnostics: { events: ObservedEvent[]; omittedEvents: number };
   /**
    * Scoped protocol access for feature modules (Context/Autonomy consume this
    * instead of `models.management.client`). The client is the CURRENT shared
@@ -1242,7 +1240,6 @@ export function useOctosSession(): OctosSessionRuntime {
     onEvent: (event) => runtimeEventSinkRef.current(event),
   });
   const activeRuntime = serverConnection.runtime;
-  const eventId = useRef(0);
   const candidateAbortRef = useRef<AbortController | null>(null);
   const recoveryAbortRef = useRef<AbortController | null>(null);
   const [recoveryNotice, setRecoveryNotice] = useState<{
@@ -1278,10 +1275,6 @@ export function useOctosSession(): OctosSessionRuntime {
   const [attentionTurns, setAttentionTurns] = useState<
     readonly BackgroundTurnSnapshot[]
   >([]);
-  const [eventLog, setEventLog] = useState<{
-    events: ObservedEvent[];
-    omitted: number;
-  }>({ events: [], omitted: 0 });
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   // The POOL is the single physical socket (useServerConnection's runtime).
   // The SELECTED record supplies the product identity (Session id + workspace).
@@ -2846,7 +2839,6 @@ export function useOctosSession(): OctosSessionRuntime {
   }
 
   function resetProductSessionState(): void {
-    setEventLog({ events: [], omitted: 0 });
     setTimeline([]);
     codingSafetyController.reset();
     supervisionController.reset();
@@ -2884,7 +2876,6 @@ export function useOctosSession(): OctosSessionRuntime {
       return;
     }
     if (event.type === "raw-notification") {
-      appendObservedEvent(event.notification);
       return;
     }
     if (event.type === "session-hydrate") {
@@ -2925,28 +2916,6 @@ export function useOctosSession(): OctosSessionRuntime {
       void workspaceController.refresh(event.authority.client);
       void modelController.refresh(event.authority.client);
     }
-  }
-
-  function appendObservedEvent(notification: RpcNotification): void {
-    setEventLog((current) => {
-      const appended = [
-        ...current.events,
-        {
-          id: eventId.current++,
-          at: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          }),
-          notification,
-        },
-      ];
-      const overflow = Math.max(0, appended.length - 100);
-      return {
-        events: appended.slice(-100),
-        omitted: current.omitted + overflow,
-      };
-    });
   }
 
   function restoreLaunchChoice(lease: LaunchTransitionLease): boolean {
@@ -3665,10 +3634,6 @@ export function useOctosSession(): OctosSessionRuntime {
       cancelLaunch,
       retryOnboarding: onboardingController.prepare,
       submitOnboarding: onboardingController.submit,
-    },
-    diagnostics: {
-      events: eventLog.events,
-      omittedEvents: eventLog.omitted,
     },
     protocol: {
       client: currentClient(),
