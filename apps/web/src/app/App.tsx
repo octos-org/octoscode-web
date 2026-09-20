@@ -156,7 +156,8 @@ import {
 import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
-import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
+import { MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
+import { SessionRecoveryBanner } from "../features/session/SessionRecoveryBanner.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
 import type {
@@ -2604,31 +2605,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               {session.opened &&
               !session.closed &&
               session.recovery.phase !== "healthy" ? (
-                <div
-                  className={`recovery-banner recovery-${session.recovery.phase}`}
-                  role="status"
-                >
-                  <span className="recovery-banner-mark">
-                    <RefreshIcon size={16} />
-                  </span>
-                  <span>
-                    <strong>
-                      {t(
-                        session.recovery.phase === "reconnecting"
-                          ? "Reconnecting to Octos"
-                          : session.recovery.phase === "hydrating"
-                            ? "Restoring session state"
-                            : "Session recovery required",
-                      )}
-                    </strong>
-                    <small>
-                      {session.recovery.detail ??
-                        t(
-                          "Your session is reconnecting. Queued messages will wait until it is ready.",
-                        )}
-                    </small>
-                  </span>
-                </div>
+                <SessionRecoveryBanner
+                  recovery={session.recovery}
+                  onReload={session.reloadSession}
+                  t={t}
+                />
               ) : interactions.approval ? (
                 <SurfaceBoundary
                   key={`approval:${interactions.approval.approvalId}`}

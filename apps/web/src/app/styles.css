@@ -1192,7 +1192,34 @@ label > span {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-.recovery-banner > span:last-child {
+.recovery-banner-action {
+  flex: none;
+  min-height: 32px;
+  margin-left: auto;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.recovery-banner-action:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.recovery-banner-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.recovery-banner-error {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.recovery-banner > span:nth-child(2) {
   display: grid;
   gap: var(--dsw-space-1);
   min-width: 0;
