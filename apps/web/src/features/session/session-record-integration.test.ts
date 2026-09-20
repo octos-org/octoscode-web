@@ -219,7 +219,12 @@ function config(sessionId: string): SessionConnectionInput {
     cwd: "/srv/project",
   };
 }
-function harness(client = new PooledClient()) {
+function harness(
+  client = new PooledClient(),
+  overrides: Partial<
+    import("./session-record-manager.ts").SessionRecordManagerOptions<PooledClient>
+  > = {},
+) {
   const pool = { client, epoch: 1, allowStart: true };
   const view = {
     timeline: [] as TimelineEntry[],
@@ -275,6 +280,7 @@ function harness(client = new PooledClient()) {
         setConnectionError: (error) => view.errors.push(error),
       };
     },
+    ...overrides,
   });
   client.checkStart = (params) => {
     const record = manager
@@ -2773,6 +2779,56 @@ describe("SessionRecordManager read-only driver discovery", () => {
       watchdog.cancel();
       h.manager.suspendRecords();
     }
+  });
+});
+
+describe("a record whose recovery failed reloads itself", () => {
+  /** Quarantine A (gap + failing hydrate) on a manager with a fast backoff. */
+  async function quarantinedWithAutoReload(delays: readonly number[]) {
+    const h = harness(new PooledClient(), { autoReloadDelaysMs: delays });
+    const a = await open(h, "A");
+    h.manager.select(a.scope);
+    h.client.emit(envelope("A", "A1", 1, "assistant_delta", { text: "one" }));
+    h.client.hydratedFor = () => Promise.reject(new Error("hydrate failed"));
+    h.client.emit(envelope("A", "A1", 3, "assistant_delta", { text: "three" }));
+    for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("error");
+    return { h, a };
+  }
+
+  async function settle(ms: number) {
+    await new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it("heals without the user once the server answers again", async () => {
+    const { h, a } = await quarantinedWithAutoReload([80, 80, 80]);
+    h.client.hydratedFor = (id) => hydrate(id);
+
+    await settle(200);
+
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("healthy");
+    expect(a.runtime.getSnapshot().phase).toBe("ready");
+    h.manager.evict(a.scope);
+  });
+
+  it("gives up after the backoff instead of hammering a server that keeps refusing", async () => {
+    const { h, a } = await quarantinedWithAutoReload([40, 40]);
+
+    await settle(220);
+
+    // Two scheduled attempts, both refused: opens = first open + 2 retries.
+    expect(h.client.opens.length).toBe(3);
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("error");
+
+    // The manual reload still works after the automatic attempts stop.
+    h.client.hydratedFor = (id) => hydrate(id);
+    const result = await h.manager.reloadRecord(
+      a.scope,
+      new AbortController().signal,
+    );
+    expect(result.state).toBe("rehydrated");
+    h.manager.evict(a.scope);
   });
 });
 

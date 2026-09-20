@@ -161,6 +161,12 @@ export interface SessionRecord<Client extends ActiveSessionClient> {
    * never reject; resolved state is applied only when the token still wins.
    */
   driverInventoryWalk: Promise<DriverInventoryState> | null;
+  /** How many automatic reloads this record has tried since it last healed. */
+  autoReloadAttempt: number;
+  /** Pending automatic reload, if one is scheduled. */
+  autoReloadTimer: ReturnType<typeof setTimeout> | null;
+  /** A reload of this record is running; scheduling another would abort it. */
+  reloadInFlight: boolean;
   /** Manager-internal resolver firing the in-flight walk's cancel signal. */
   driverInventoryCancel: (() => void) | null;
 }
@@ -212,7 +218,22 @@ export interface SessionRecordManagerOptions<
     capabilities: UiProtocolCapabilities | undefined,
   ): void;
   isFatalSessionError?(reason: unknown): boolean;
+  /**
+   * Backoff for the automatic reload of a record whose recovery failed
+   * (see `#scheduleAutoReload`). One entry per attempt; when they run out the
+   * record waits for the user. Tests shorten it.
+   */
+  autoReloadDelaysMs?: readonly number[];
 }
+
+/**
+ * Default automatic-reload backoff: ~1 minute of trying, front-loaded so a
+ * transient server hiccup is invisible, then it stops rather than hammering a
+ * server that keeps refusing.
+ */
+const AUTO_RELOAD_DELAYS_MS: readonly number[] = [
+  1_000, 3_000, 8_000, 20_000, 30_000,
+];
 
 /**
  * Owns every Session record on one pooled transport. The pool reconnects the
@@ -385,6 +406,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       driverInventoryRefresh: 0,
       driverInventoryWalk: null,
       driverInventoryCancel: null,
+      autoReloadAttempt: 0,
+      autoReloadTimer: null,
+      reloadInFlight: false,
     };
     this.#records.set(key, record);
     let observedAuthority = runtime.currentAuthority();
@@ -397,6 +421,12 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       const snapshot = runtime.getSnapshot();
       if (snapshot.status !== "connected" && runtime.currentAuthority()) {
         this.suspendRecords();
+      }
+      if (snapshot.recovery.phase === "healthy") {
+        record.autoReloadAttempt = 0;
+        this.#cancelAutoReload(record);
+      } else if (snapshot.recovery.phase === "error") {
+        this.#scheduleAutoReload(record);
       }
       this.#notify();
     });
@@ -1306,6 +1336,54 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     }
   }
 
+  /**
+   * A record whose recovery failed is quarantined by its runtime: the
+   * notification binding is gone and nothing re-arms it while the shared
+   * socket stays up. Reload it on a backoff so the user is not asked to do
+   * it, and stop once the backoff is spent rather than hammering a server
+   * that keeps refusing — the banner's Reload session stays for that case.
+   */
+  #scheduleAutoReload(record: SessionRecord<Client>): void {
+    // A reload in flight publishes snapshots that still read `error` (it
+    // suspends the record first). Scheduling on those would bump the recovery
+    // epoch under the running attempt and supersede it — the attempts would
+    // cancel each other and never heal.
+    if (
+      record.closed ||
+      record.autoReloadTimer !== null ||
+      record.reloadInFlight
+    )
+      return;
+    const delays = this.#options.autoReloadDelaysMs ?? AUTO_RELOAD_DELAYS_MS;
+    const delay = delays[record.autoReloadAttempt];
+    if (delay === undefined) return;
+    record.autoReloadAttempt += 1;
+    record.autoReloadTimer = setTimeout(() => {
+      record.autoReloadTimer = null;
+      if (this.get(record.scope) !== record || record.closed) return;
+      if (record.runtime.getSnapshot().recovery.phase !== "error") return;
+      const pooled = this.#options.pooledClient();
+      // A dropped socket heals through the pool's own reconnect sweep.
+      if (!pooled || pooled.status !== "connected") return;
+      void this.reloadRecord(record.scope, new AbortController().signal).then(
+        (result) => {
+          if (this.get(record.scope) !== record) return;
+          if (result.state === "rehydrated") {
+            record.autoReloadAttempt = 0;
+            return;
+          }
+          this.#scheduleAutoReload(record);
+        },
+      );
+    }, delay);
+  }
+
+  #cancelAutoReload(record: SessionRecord<Client>): void {
+    if (record.autoReloadTimer === null) return;
+    clearTimeout(record.autoReloadTimer);
+    record.autoReloadTimer = null;
+  }
+
   /** Freeze all records synchronously at socket loss, before any async reopen. */
   suspendRecords(): void {
     this.#recoveryEpoch += 1;
@@ -1325,6 +1403,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     this.#recoveryEpoch += 1;
     this.#historyLeases.clear();
     for (const record of this.#records.values()) {
+      this.#cancelAutoReload(record);
       this.#cancelDriverInventoryWalk(record);
       record.controller.reset();
       record.interactions.clear();
@@ -1344,6 +1423,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     for (const [lease, held] of this.#historyLeases) {
       if (held.record === record) this.#historyLeases.delete(lease);
     }
+    this.#cancelAutoReload(record);
     this.#cancelDriverInventoryWalk(record);
     record.controller.reset();
     record.interactions.clear();
@@ -1365,6 +1445,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     for (const [lease, held] of this.#historyLeases) {
       if (held.record === record) this.#historyLeases.delete(lease);
     }
+    this.#cancelAutoReload(record);
     this.#cancelDriverInventoryWalk(record);
     record.controller.reset();
     record.interactions.clear();
@@ -1433,6 +1514,8 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
         error: "That Session is no longer open here",
       };
     }
+    this.#cancelAutoReload(record);
+    record.reloadInFlight = true;
     this.#recoveryEpoch += 1;
     this.#cancelDriverInventoryWalk(record);
     record.controller.suspendTransport();
@@ -1440,13 +1523,17 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     const authority = record.runtime.currentAuthority();
     if (authority) record.runtime.suspendTransport(authority);
     this.#notify();
-    return this.#recoverRecord(record, {
-      signal,
-      recoveryEpoch: this.#recoveryEpoch,
-      authorityEpoch: this.#options.authorityEpoch(),
-      pooled: this.#options.pooledClient(),
-      fromCursor: false,
-    });
+    try {
+      return await this.#recoverRecord(record, {
+        signal,
+        recoveryEpoch: this.#recoveryEpoch,
+        authorityEpoch: this.#options.authorityEpoch(),
+        pooled: this.#options.pooledClient(),
+        fromCursor: false,
+      });
+    } finally {
+      record.reloadInFlight = false;
+    }
   }
 
   async #recoverRecord(
