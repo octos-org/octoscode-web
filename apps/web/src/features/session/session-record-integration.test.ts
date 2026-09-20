@@ -2775,3 +2775,53 @@ describe("SessionRecordManager read-only driver discovery", () => {
     }
   });
 });
+
+describe("a record whose recovery failed can be reloaded", () => {
+  /** Drive A into the quarantined state: one projection gap + a failing hydrate. */
+  async function quarantined() {
+    const h = harness();
+    const a = await open(h, "A");
+    h.manager.select(a.scope);
+    h.client.emit(envelope("A", "A1", 1, "assistant_delta", { text: "one" }));
+    h.client.hydratedFor = () => Promise.reject(new Error("hydrate failed"));
+    // seq 3 after seq 1 is a gap: the runtime recovers by re-hydrating, and
+    // that hydrate fails.
+    h.client.emit(envelope("A", "A1", 3, "assistant_delta", { text: "three" }));
+    for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+    return { h, a };
+  }
+
+  it("is stuck: no retry, and later events no longer reach it", async () => {
+    const { h, a } = await quarantined();
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("error");
+    const hydratesAfterFailure = h.client.hydrates.length;
+    h.client.hydratedFor = (id) => hydrate(id);
+    h.client.emit(envelope("A", "A1", 4, "assistant_delta", { text: "four" }));
+    for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+    expect(h.client.hydrates.length).toBe(hydratesAfterFailure);
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("error");
+  });
+
+  it("recovers on an explicit reload, from scratch rather than the stale cursor", async () => {
+    const { h, a } = await quarantined();
+    h.client.hydratedFor = (id) => hydrate(id);
+    const opensBefore = h.client.opens.length;
+
+    const result = await h.manager.reloadRecord(
+      a.scope,
+      new AbortController().signal,
+    );
+
+    expect(result.state).toBe("rehydrated");
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("healthy");
+    expect(a.runtime.getSnapshot().phase).toBe("ready");
+    // A stuck record's stored cursor may be exactly what the server refused,
+    // so a reload asks for the whole session again.
+    expect(h.client.opens.length).toBe(opensBefore + 1);
+    expect(h.client.opens.at(-1)?.after).toBeUndefined();
+    // Live events reach the record again.
+    h.client.emit(envelope("A", "A1", 1, "assistant_delta", { text: "again" }));
+    for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+    expect(a.runtime.getSnapshot().recovery.phase).toBe("healthy");
+  });
+});

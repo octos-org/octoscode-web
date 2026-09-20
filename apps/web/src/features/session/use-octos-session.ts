@@ -293,6 +293,12 @@ export interface OctosSessionRuntime {
      */
     recoveryNotice: { message: string; failedSessionIds: string[] } | null;
     dismissRecoveryNotice: () => void;
+    /**
+     * Reload the SELECTED Session from the server. The way out of a recovery
+     * that failed and quarantined the record: nothing else re-arms it while
+     * the shared socket stays up. Rejects with the reason on failure.
+     */
+    reloadSession: () => Promise<void>;
     connect: (input: SessionConnectionInput) => void;
     restore: (input: SessionConnectionInput) => void;
     disconnect: () => void;
@@ -2808,6 +2814,32 @@ export function useOctosSession(): OctosSessionRuntime {
     publishBackgroundTurns();
   }
 
+  /**
+   * Reload the selected Session on the user's command. Automatic recovery
+   * runs once and then quarantines the record (no binding, no retry), so
+   * without this the only exit is reloading the browser tab.
+   */
+  async function reloadSelectedSession(): Promise<void> {
+    const scope = recordManager.selected()?.scope;
+    if (!scope) throw new Error("No Session is selected");
+    recoveryAbortRef.current?.abort();
+    const abort = new AbortController();
+    recoveryAbortRef.current = abort;
+    let result;
+    try {
+      result = await recordManager.reloadRecord(scope, abort.signal);
+    } finally {
+      if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
+    }
+    if (abort.signal.aborted) return;
+    if (result.state !== "rehydrated") {
+      throw new Error(result.error ?? "The Session could not be reloaded");
+    }
+    if (workspaceController.state.error !== null) {
+      workspaceController.setError(null);
+    }
+  }
+
   // Pool recovery: the shared socket reconnected. Freeze ALL records, reopen +
   // rehydrate each scoped Session + cursor, reconcile the exact accepted turn,
   // and drain only never-accepted unsent turns once the server is idle+healthy.
@@ -3489,6 +3521,7 @@ export function useOctosSession(): OctosSessionRuntime {
         connectionSnapshot.session?.opened ??
         (viewRecord?.closed ? (viewRecord.payload?.opened ?? null) : null),
       recovery: connectionSnapshot.recovery,
+      reloadSession: reloadSelectedSession,
       diagnostics: connectionSnapshot.diagnostics,
       capabilities:
         connectionSnapshot.session?.capabilities ??

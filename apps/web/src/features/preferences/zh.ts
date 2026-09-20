@@ -933,6 +933,11 @@ const catalog: Readonly<Record<string, string>> = {
   hydrating: "正在恢复",
   "Restoring session state": "正在恢复会话状态",
   "Session recovery required": "需要恢复会话",
+  "This session stopped following the server and will not recover on its own. Reload it to fetch the conversation again. Nothing is sent again.":
+    "该会话已与服务器脱节，且不会自行恢复。重新加载可再次拉取对话内容，不会重复发送任何消息。",
+  "Reload session": "重新加载会话",
+  "Reloading…": "正在重新加载…",
+  "Could not reload the session.": "无法重新加载会话。",
   "Prompts are paused until the durable projection is synchronized.":
     "持久化投影同步前，提示发送已暂停。",
   "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.":

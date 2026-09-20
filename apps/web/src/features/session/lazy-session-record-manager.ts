@@ -213,6 +213,28 @@ export class LazySessionRecordManager<Client extends ActiveSessionClient> {
       ? result
       : [];
   }
+  async reloadRecord(
+    scope: SessionRuntimeScope,
+    signal: AbortSignal,
+  ): Promise<SessionRecordRecoveryResult> {
+    const engine = this.#engine;
+    if (!engine) {
+      return {
+        sessionId: scope.sessionId,
+        state: "failed",
+        error: "No Session is open here",
+      };
+    }
+    const generation = this.#generation;
+    const result = await engine.reloadRecord(scope, signal);
+    return this.#engine === engine && generation === this.#generation
+      ? result
+      : {
+          sessionId: scope.sessionId,
+          state: "failed",
+          error: "Session reload was superseded",
+        };
+  }
   closeRetainedRecord(
     record: SessionRecord<Client>,
     message?: string,
