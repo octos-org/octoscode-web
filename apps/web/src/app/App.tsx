@@ -86,6 +86,7 @@ import { codingProductCapabilities } from "../features/session/coding-capabiliti
 import { SessionDraftCache } from "../features/session/session-draft-cache.ts";
 import {
   durableDraftScope,
+  evictDurableDraft,
   loadDurableDrafts,
   resolveDraftPrincipal,
   saveDurableDraft,
@@ -350,13 +351,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const restoreAttemptedRef = useRef(false);
   /** A Connect pressed while this shell was still loading is claimed once. */
   const pendingConnectClaimedRef = useRef(false);
+  const durableDraftScopeRef = useRef<string | null>(null);
+  /** While the stored drafts re-enter the cache, their durable copies stay:
+      a passive reload must not delete another tab's draft. */
+  const suppressDurableEvictionRef = useRef(false);
   const [sessionDrafts] = useState(
     () =>
       new SessionDraftCache(
         loadComposerDrafts(browserStorage("sessionStorage"), connection),
+        (evicted) => {
+          if (suppressDurableEvictionRef.current) return;
+          const scope = durableDraftScopeRef.current;
+          if (scope) evictDurableDraft(scope, evicted);
+        },
       ),
   );
-  const durableDraftScopeRef = useRef<string | null>(null);
   const principalRequestRef = useRef<AbortController | null>(null);
   const pendingDraftEditsRef = useRef(new Set<string>());
   const [draft, updateDraft] = useState("");
@@ -823,6 +832,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         const existing = new Map(stored);
         sessionDrafts.clear();
         let saved = true;
+        // Stored drafts enter first so a fresh edit is always the newest
+        // entry: at capacity the oldest stored draft is evicted, never the
+        // text the user is typing right now. Re-entering stored drafts must
+        // not delete their durable copies — an overflowing scope (another
+        // tab's drafts) stays readable until a real save evicts from it.
+        suppressDurableEvictionRef.current = true;
+        try {
+          for (const [key, text] of stored) {
+            if (!edited.has(key)) sessionDrafts.set(key, text);
+          }
+        } finally {
+          suppressDurableEvictionRef.current = false;
+        }
         for (const [key, text] of pending) {
           if (edited.has(key) || (migrateTabDrafts && !existing.has(key))) {
             sessionDrafts.set(key, text);
@@ -833,9 +855,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               saved = false;
             }
           }
-        }
-        for (const [key, text] of stored) {
-          if (!edited.has(key)) sessionDrafts.set(key, text);
         }
         // An input cleared while identity was loading must also stay cleared.
         for (const editedKey of edited) {
