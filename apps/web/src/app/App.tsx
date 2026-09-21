@@ -408,6 +408,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const profileMutationBusy = mutationLeases.current.held(profileMutationScope);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
+  const [commandPaletteForced, setCommandPaletteForced] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(compact);
   useEffect(() => setSidebarCollapsed(compact), [compact]);
   const [sidebarOrder, setSidebarOrder] =
@@ -1014,6 +1015,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // `peer_dock_collapsed`). The TUI's Ctrl+L alias is deliberately DROPPED:
   // Ctrl+L focuses the browser's own location bar on Chromium/Firefox/Safari,
   // so it would be UA-swallowed. Like show-approval, the matcher requires Alt
+  // Cmd/Ctrl+K toggles the command palette (all commands, no draft filter).
+  useEffect(() => {
+    const onGlobalKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setCommandPaletteDismissed(false);
+        setCommandPaletteForced((prev) => !prev);
+        composerRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onGlobalKeyDown);
+    return () => window.removeEventListener("keydown", onGlobalKeyDown);
+  }, []);
+
   // and rejects Ctrl/Meta, and matches the physical `code` (macOS Option+P is a
   // dead key). The fold is CONTROLLED shell state — PeerDock only renders it.
   useEffect(() => {
@@ -1494,7 +1509,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const suggestedCommands =
     commandPaletteDismissed || navigationPending
       ? []
-      : commandSuggestions(draft, session.opened?.capabilities);
+      : commandPaletteForced
+        ? commandSuggestions("/", session.opened?.capabilities)
+        : commandSuggestions(draft, session.opened?.capabilities);
   const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
   // A server-accepted turn may keep running on its owner socket while this
   // tab focuses another Session. Browser-local queued prompts cannot: they
@@ -2765,6 +2782,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onSelectedIndexChange={setSelectedCommandIndex}
                           onDismiss={() => {
                             setCommandPaletteDismissed(true);
+                            setCommandPaletteForced(false);
                             setSelectedCommandIndex(0);
                             composerRef.current?.focus();
                           }}
