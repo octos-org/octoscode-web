@@ -77,6 +77,20 @@ export function saveDurableDraft(
   }
 }
 
+/**
+ * Remove the durable copy of a draft the SessionDraftCache evicted. Skipped
+ * when the scope is unreadable: in a poisoned scope every save fails, and
+ * destroying drafts that can no longer be re-saved must not follow.
+ */
+export function evictDurableDraft(scope: string, sessionKey: string): boolean {
+  try {
+    if (!loadDurableDrafts(scope)) return false;
+    return saveDurableDraft(scope, sessionKey, "");
+  } catch {
+    return false;
+  }
+}
+
 export function clearDurableDrafts(scope: string): boolean {
   try {
     const storage = window.localStorage;

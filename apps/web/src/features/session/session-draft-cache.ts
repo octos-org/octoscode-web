@@ -34,9 +34,14 @@ export function parseSessionDrafts(value: unknown): SessionDraftRecord[] {
 
 export class SessionDraftCache {
   readonly #drafts: Map<string, string>;
+  readonly #onEvict: ((sessionId: string) => void) | undefined;
 
-  constructor(initial: SessionDraftRecord[] = []) {
+  constructor(
+    initial: SessionDraftRecord[] = [],
+    onEvict?: (sessionId: string) => void,
+  ) {
     this.#drafts = new Map(initial);
+    this.#onEvict = onEvict;
   }
 
   get(sessionId: string): string | undefined {
@@ -48,13 +53,18 @@ export class SessionDraftCache {
       this.#drafts.delete(sessionId);
       return true;
     }
+    let oldest: string | undefined;
     if (!this.#drafts.has(sessionId) && this.#drafts.size >= MAX_DRAFTS) {
       // Evict the oldest entry to make room — saves must never permanently
       // lock out because the cache is full.
-      const oldest = this.#drafts.keys().next().value;
+      oldest = this.#drafts.keys().next().value;
       if (oldest !== undefined) this.#drafts.delete(oldest);
     }
     this.#drafts.set(sessionId, draft);
+    // Report the eviction only after the mutation settled, so the durable
+    // copy can be removed too: otherwise a dropped draft would resurface on
+    // the next reload.
+    if (oldest !== undefined) this.#onEvict?.(oldest);
     return true;
   }
 

@@ -295,7 +295,7 @@ test("denied storage getters still allow an in-memory connection and readable cl
   expect(errors).toEqual([]);
 });
 
-test.fixme("a 51st unsent draft keeps the existing 50 intact and blocks navigation until cleared", async ({
+test("a 51st unsent draft evicts the oldest, stays saved, and never blocks navigation", async ({
   page,
 }) => {
   await start(page);
@@ -329,8 +329,37 @@ test.fixme("a 51st unsent draft keeps the existing 50 intact and blocks navigati
   await expect(input).toBeVisible();
   const draft = "The 51st draft stays here until I send, clear, or copy it";
   await input.fill(draft);
-  // At capacity the oldest entry is evicted; the 51st draft is saved.
-  // No beforeunload warning: the draft is persisted to localStorage.
+  const drafts = () =>
+    page.evaluate(
+      (prefix) =>
+        Object.entries(localStorage).filter(([key]) => key.startsWith(prefix)),
+      DRAFT_PREFIX,
+    );
+  // The 51st draft is persisted to localStorage...
+  await expect
+    .poll(async () =>
+      (await drafts()).some(([, value]) => JSON.parse(value) === draft),
+    )
+    .toBe(true);
+  // ...and exactly one pre-existing draft was evicted to make room. (Which
+  // one is the cache's oldest; localStorage enumeration order is opaque, so
+  // the e2e assertion is that exactly one of the 50 is gone.)
+  const retained = await drafts();
+  expect(retained).toHaveLength(50);
+  const texts = retained.map(([, value]) => JSON.parse(value) as string);
+  const evicted = Array.from(
+    { length: 50 },
+    (_, index) => `Retained text ${index}`,
+  ).filter((text) => !texts.includes(text));
+  expect(evicted).toHaveLength(1);
+  // A persisted draft shows no capacity warning and no beforeunload guard.
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "already keeps 50 unsent drafts" }),
+  ).toHaveCount(0);
+  await expect.poll(() => warnsOnLeave(page)).toBe(false);
+  // Navigation is not blocked: the New session dialog opens...
   const sidebar = page.getByRole("complementary", {
     name: "Product navigation",
   });
@@ -338,61 +367,90 @@ test.fixme("a 51st unsent draft keeps the existing 50 intact and blocks navigati
     .getByRole("button", { name: "New session", exact: true })
     .last()
     .click();
-  await expect(
-    page.getByRole("dialog", { name: /New session|Choose a workspace/ }),
-  ).toHaveCount(0);
-  await expect(input).toHaveValue(draft);
-  const retained = await page.evaluate(
-    (prefix) =>
-      Object.entries(localStorage).filter(([key]) => key.startsWith(prefix)),
-    DRAFT_PREFIX,
-  );
-  expect(retained).toHaveLength(50);
-  // The oldest entry ("Retained text 0") was evicted to make room.
-  expect(
-    retained.some(([, value]) => JSON.parse(value) === "Retained text 0"),
-  ).toBe(false);
-  const originalSession = await sidebar
-    .getByRole("treeitem", { name: /Session / })
-    .first()
-    .locator('[class*="sessionTitle"]')
-    .textContent();
-  if (!originalSession) throw new Error("Expected current Session title");
-  await sidebar.getByRole("button", { name: "Settings", exact: true }).click();
-  await page
-    .getByRole("dialog", { name: "Settings", exact: true })
-    .getByRole("button", { name: "Disconnect", exact: true })
-    .click();
-  const confirmation = page.getByRole("dialog", {
-    name: "Disconnect from Octos?",
+  const chooser = page.getByRole("dialog", {
+    name: "Choose a workspace",
     exact: true,
   });
-  await expect(confirmation).toContainText("This input has not been saved");
-  await confirmation
-    .getByRole("button", { name: "Disconnect", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Connect to Octos" }),
-  ).toBeVisible();
-  expect(await warnsOnLeave(page)).toBe(true);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await sidebar
-    .locator('button[role="treeitem"]')
-    .filter({ hasText: originalSession })
-    .click();
+  await expect(chooser).toBeVisible();
+  await chooser.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(input).toHaveValue(draft);
-  await input.fill("");
+  // ...and a full reload restores the 51st draft.
+  await page.reload();
   await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "already keeps 50 unsent drafts" }),
-  ).toHaveCount(0);
-  expect(await warnsOnLeave(page)).toBe(false);
-  await sidebar
-    .getByRole("button", { name: "New session", exact: true })
-    .last()
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Choose a workspace", exact: true }),
-  ).toBeVisible();
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toHaveValue(draft);
+});
+
+test("a draft typed while identity loads is never the capacity eviction victim", async ({
+  page,
+}) => {
+  await start(page);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (key) => JSON.parse(sessionStorage.getItem(key)!).draftPrincipal,
+        TAB_KEY,
+      ),
+    )
+    .toBe("fixture-user");
+  await page.evaluate(
+    ({ prefix, origin }) => {
+      const scope = `${prefix}${JSON.stringify([origin, "fixture-user"])}:`;
+      for (let index = 0; index < 50; index++) {
+        const key = JSON.stringify([
+          `/workspace/saved-${index}`,
+          "_main",
+          `session-${index}`,
+        ]);
+        localStorage.setItem(
+          scope + key,
+          JSON.stringify(`Retained text ${index}`),
+        );
+      }
+    },
+    { prefix: DRAFT_PREFIX, origin: ORIGIN },
+  );
+  // Hold the identity lookup so the edit lands before hydration merges the
+  // 50 stored drafts back into the cache. Only the first request is held;
+  // later ones fulfill immediately with the same identity.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let holding = true;
+  await page.route("**/api/auth/me", async (route) => {
+    if (holding) {
+      await held;
+      holding = false;
+    }
+    await route.fulfill({ json: { user: { id: "fixture-user" } } });
+  });
+  await page.reload();
+  const input = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(input).toBeVisible();
+  const draft = "Typed while the authenticated identity was still loading";
+  await input.fill(draft);
+  release();
+  const drafts = () =>
+    page.evaluate(
+      (prefix) =>
+        Object.entries(localStorage).filter(([key]) => key.startsWith(prefix)),
+      DRAFT_PREFIX,
+    );
+  // The fresh text is persisted...
+  await expect
+    .poll(async () =>
+      (await drafts()).some(([, value]) => JSON.parse(value) === draft),
+    )
+    .toBe(true);
+  // ...and the capacity eviction took exactly one stored draft instead.
+  const retained = await drafts();
+  expect(retained).toHaveLength(50);
+  const texts = retained.map(([, value]) => JSON.parse(value) as string);
+  const evicted = Array.from(
+    { length: 50 },
+    (_, index) => `Retained text ${index}`,
+  ).filter((text) => !texts.includes(text));
+  expect(evicted).toHaveLength(1);
+  await expect(input).toHaveValue(draft);
 });

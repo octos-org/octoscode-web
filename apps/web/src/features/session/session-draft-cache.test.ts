@@ -26,6 +26,32 @@ describe("SessionDraftCache", () => {
     expect(cache.get("three")).toBe("third");
   });
 
+  it("reports evictions so the durable copy can be removed with the cache entry", () => {
+    const evicted: string[] = [];
+    let cacheStateDuringEvict: string | undefined;
+    const cache = new SessionDraftCache([], (key) => {
+      evicted.push(key);
+      // The callback fires after the mutation settled.
+      cacheStateDuringEvict = cache.get("fresh");
+    });
+    for (let index = 0; index < 50; index += 1) {
+      cache.set(String(index), "draft");
+    }
+    // Updating an existing entry at capacity evicts nothing.
+    cache.set("0", "updated");
+    expect(evicted).toEqual([]);
+    // A new entry at capacity evicts and reports the oldest.
+    cache.set("fresh", "draft");
+    expect(evicted).toEqual(["0"]);
+    expect(cacheStateDuringEvict).toBe("draft");
+    // clear() is a rebuild, not an eviction: nothing is reported.
+    cache.clear();
+    expect(evicted).toEqual(["0"]);
+    // With room again, a new entry evicts nothing.
+    cache.set("another", "draft");
+    expect(evicted).toEqual(["0"]);
+  });
+
   it("skips corrupt entries without poisoning the entire batch", () => {
     // Non-array inputs still return empty.
     expect(parseSessionDrafts(null)).toEqual([]);
