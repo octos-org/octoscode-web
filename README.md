@@ -52,6 +52,9 @@ second agent loop, plugin host, sandbox, or session store.
 - Server-advertised permission control and effective runtime-model status in the
   composer, plus capability-gated provider, model, route, credential, test,
   discovery, save/delete, and Profile-default management in Settings.
+- A capability-gated Stop server control in Settings that stops a local
+  `octos serve --solo` after confirmation, shown only when the server advertises
+  `server/shutdown`.
 - Browser onboarding for an empty solo server, with transient credentials and a
   truthful TUI fallback on older Core versions.
 - Single-use pairing links, so connecting needs no pasted token, with the token
