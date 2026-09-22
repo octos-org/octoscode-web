@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stop a local `octos serve --solo` from Settings when the server advertises
+  `server/shutdown`: a confirmation dialog guards the stop, a failure keeps the
+  session connected, and success disconnects the tab to the connect screen.
 - Preserve unsent drafts across same-tab refresh, isolate them by sign-in and
   Session, and report browser storage failures without silently losing editing
   state.

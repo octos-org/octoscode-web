@@ -131,10 +131,12 @@ history does not notify again. A hidden current Session uses explicit turn
 terminal events, never the disappearance of a local queue, to detect completion.
 
 Settings opens from the bottom of the sidebar. General shows the active server
-and Workspace and provides Disconnect and Forget server. Models distinguishes
-the Session runtime model from the active Profile default. It reads Core's
-configured primary and fallback models and, when the corresponding methods are
-advertised, can add, edit, test, discover, save, select, or delete a
+and Workspace and provides Disconnect and Forget server. When the server
+advertises `server/shutdown` (a local `octos serve --solo`), General also offers
+a confirmation-guarded Stop server that disconnects the tab on success. Models
+distinguishes the Session runtime model from the active Profile default. It
+reads Core's configured primary and fallback models and, when the corresponding
+methods are advertised, can add, edit, test, discover, save, select, or delete a
 provider/model/route entry. The editable route fields are label, base URL,
 credential environment name, and protocol. Provider discovery supplies model id
 suggestions; it does not remove the manual model-id path.
