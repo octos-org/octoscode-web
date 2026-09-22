@@ -433,6 +433,14 @@ export function foldNotification(
         stringOf(params.message, "The server reported a warning."),
         "error",
       );
+    case "file_attached":
+      return addSystemMessage(
+        entries,
+        `file-attached:${turnId}:${stringOf(params.file_name, "unknown")}`,
+        "File attached",
+        stringOf(params.file_name, ""),
+        "info",
+      );
     default:
       return entries.slice();
   }
