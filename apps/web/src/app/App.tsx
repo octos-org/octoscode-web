@@ -1037,6 +1037,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // Cmd/Ctrl+K toggles the command palette (all commands, no draft filter).
   useEffect(() => {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
+      if (shortcutTargetSuppressed(event.target)) return;
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
         setCommandPaletteDismissed(false);
@@ -1149,6 +1150,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
 
     draftRef.current = "";
     setDraft("");
+    setCommandPaletteForced(false);
     setCommandError(null);
 
     // Capture the originating timeline and immutable projection before loading
@@ -1531,7 +1533,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       : commandPaletteForced
         ? commandSuggestions("/", session.opened?.capabilities)
         : commandSuggestions(draft, session.opened?.capabilities);
-  const chooseCommand = (command: WebCommandSpec) => submit(`/${command.name}`);
+  const chooseCommand = (command: WebCommandSpec) => {
+    setCommandPaletteForced(false);
+    submit(`/${command.name}`);
+  };
   // A server-accepted turn may keep running on its owner socket while this
   // tab focuses another Session. Browser-local queued prompts cannot: they
   // still belong to the current controller and therefore block navigation.

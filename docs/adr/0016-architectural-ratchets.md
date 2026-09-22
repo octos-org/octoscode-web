@@ -52,3 +52,9 @@ claims mechanically repeatable.
   `octos-web` architecture.
 - Depend on review checklists alone. Checklists are useful context, but they are
   not enforcement.
+- Apply the same file-length ratchet to the shell wiring files themselves
+  ([#58](https://github.com/octos-org/octoscode-web/issues/58), closed
+  2026-09-18). Another arbitrary line-count gate is not a user outcome and would
+  encourage more indirection; extraction of `App.tsx` and `use-octos-session.ts`
+  happens when it resolves a concrete coupling or maintenance problem alongside
+  the relevant change.
