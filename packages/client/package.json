@@ -28,6 +28,6 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "fast-check": "^4.10.1"
+    "fast-check": "^4.10.2"
   }
 }
