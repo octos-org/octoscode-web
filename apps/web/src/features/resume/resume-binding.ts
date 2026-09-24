@@ -193,7 +193,13 @@ export function createResumeBinding({
         );
       const epoch = ++readEpoch;
       known = new Map();
-      const result = await client.listSessions({ cwd: scope.workspaceRoot });
+      // Name the profile too: on a token-paired connection the server has no
+      // authenticated profile, and would otherwise resolve its default rather
+      // than the store session/open wrote for this scope.
+      const result = await client.listSessions({
+        cwd: scope.workspaceRoot,
+        profile_id: scope.profileId,
+      });
       assertCurrent(signal);
       if (epoch !== readEpoch)
         throw new Error("A newer history listing replaced this request.");

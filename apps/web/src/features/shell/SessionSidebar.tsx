@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { SessionOpened } from "@octos-org/octoscode-client";
 import type { KnownSessionRef } from "../session/known-session-registry.ts";
+import {
+  mergeWorkspaceSessionRows,
+  type WorkspaceSessionCatalogSnapshot,
+} from "../session/workspace-session-catalog.ts";
 import type { TimelineEntry } from "../timeline/model.ts";
 import {
   workspaceName,
@@ -17,6 +21,12 @@ import {
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   recentWorkspaces: readonly RecentWorkspace[];
   knownSessions: readonly KnownSessionRef[];
+  /**
+   * The server's per-workspace catalog (`session/list { cwd, profile_id }`).
+   * Absent when the server cannot list per workspace: the sidebar then shows
+   * only the refs this tab opened, exactly as before.
+   */
+  sessionCatalog?: WorkspaceSessionCatalogSnapshot | undefined;
   activeWorkspacePath: string;
   opened: SessionOpened | null;
   collapsedWorkspaceIds: ReadonlySet<string>;
@@ -38,6 +48,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
 export function SessionSidebar({
   recentWorkspaces,
   knownSessions,
+  sessionCatalog,
   activeWorkspacePath,
   opened,
   collapsedWorkspaceIds,
@@ -98,14 +109,16 @@ export function SessionSidebar({
     );
     const projected: ProductSidebarWorkspace[] = workspaces.map((workspace) => {
       const isActiveWorkspace = workspace.path === activeWorkspacePath;
-      const sourceSessions = knownSessions
-        .filter((item) => item.workspaceRoot === workspace.path)
-        .map((item) => ({
-          sessionId: item.sessionId,
-          profileId: item.profileId,
-          title: knownSessionTitle(item.sessionId),
-          updatedAt: item.lastOpenedAt,
-        }));
+      const catalog = sessionCatalog?.get(workspace.path);
+      const sourceSessions = mergeWorkspaceSessionRows(
+        knownSessions.filter((item) => item.workspaceRoot === workspace.path),
+        catalog?.sessions ?? [],
+      ).map((item) => ({
+        sessionId: item.sessionId,
+        profileId: item.profileId,
+        title: item.title ?? knownSessionTitle(item.sessionId),
+        updatedAt: item.updatedAt,
+      }));
       if (
         isActiveWorkspace &&
         opened &&
@@ -127,9 +140,13 @@ export function SessionSidebar({
         label: workspace.name,
         path: workspace.path,
         expanded: !collapsedWorkspaceIds.has(workspace.id),
-        // Core rc.9 has no authoritative server-wide SessionRef catalog.
-        // These rows are only the server-confirmed refs opened in this tab.
-        sessionCatalogStatus: "known-only",
+        // With the server's per-workspace catalog these rows are the
+        // workspace's whole history; without it, only the refs opened in
+        // this tab.
+        sessionCatalogStatus: catalog?.status ?? "known-only",
+        ...(catalog?.status === "error" && catalog.error
+          ? { sessionCatalogError: catalog.error }
+          : {}),
         sessions: sourceSessions.map((item): ProductSidebarSession => {
           const productId = workspaceSessionKey(
             workspace.path,
@@ -164,6 +181,7 @@ export function SessionSidebar({
     recoveryPhase,
     hasPendingInteraction,
     knownSessions,
+    sessionCatalog,
     recentWorkspaces,
     turnStarting,
     backgroundTurns,

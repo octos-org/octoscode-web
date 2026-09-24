@@ -405,6 +405,9 @@ export interface TokenCostUpdate {
 
 export interface SessionListParams {
   cwd?: string;
+  /** Profile whose `<cwd>/.octos/<profile>` store to list; same scope rules
+   *  as `session/open` (`profile_id`). */
+  profile_id?: string;
 }
 
 export interface ConfigCapabilitiesListResult {

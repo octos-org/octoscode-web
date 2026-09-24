@@ -159,10 +159,18 @@ describe("historical identity boundaries", () => {
     expect(isFullSessionForProfile("api:local:A", "api")).toBe(false));
 });
 describe("resume binding on the real persistent engine", () => {
-  it("lists unverified candidates with cwd without creating or selecting records", async () => {
+  it("lists unverified candidates with cwd and profile without creating or selecting records", async () => {
+    // The profile is sent alongside cwd so a token-paired connection (no
+    // authenticated profile on the server side) still reads the SAME
+    // `<cwd>/.octos/<profile>` store its sessions were opened under; without
+    // it the server falls back to its default profile and the history of a
+    // single-profile local install is invisible.
     const h = await fixture();
     const rows = await h.binding.list(h.abort.signal);
-    expect(h.list).toHaveBeenCalledWith({ cwd: "/srv/project" });
+    expect(h.list).toHaveBeenCalledWith({
+      cwd: "/srv/project",
+      profile_id: "coding",
+    });
     expect(rows[0]).toEqual({ id: B, messageCount: 1, title: "History" });
     expect(Object.isFrozen(rows[0])).toBe(true);
     expect(h.manager.records()).toEqual([h.source]);
