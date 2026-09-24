@@ -176,7 +176,7 @@ async function main() {
     );
     assertEqual(launch.resolved_profile, profileId, "resolved profile");
 
-    const openedResult = await openSessionWhenReady(socket, {
+    const openedResult = await socket.request("session/open", {
       session_id: sessionId,
       profile_id: profileId,
       cwd: workspaceDir,
@@ -371,23 +371,6 @@ async function requestUntilReady(socket, method, params) {
     }
   }
   throw new Error(`${method} did not become ready`, { cause: latest });
-}
-
-async function openSessionWhenReady(socket, params) {
-  const deadline = Date.now() + 20_000;
-  let latest;
-  while (Date.now() < deadline) {
-    try {
-      return await socket.request("session/open", params);
-    } catch (reason) {
-      latest = reason;
-      if (reason?.data?.kind !== "data_dir_locked") throw reason;
-      await delay(400);
-    }
-  }
-  throw new Error("session/open remained locked after profile setup", {
-    cause: latest,
-  });
 }
 
 async function waitForHealth(port, child) {
