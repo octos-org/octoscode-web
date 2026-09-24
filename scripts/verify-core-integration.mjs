@@ -166,6 +166,10 @@ async function main() {
     assertEqual(saved.profile_id, profileId, "saved profile id");
     assertEqual(saved.applied, true, "provider save result");
 
+    // The HTTP server scans changed profiles every five seconds. Opening a
+    // Session after that scan catches a gateway competing for the same store.
+    await delay(6_000);
+
     const launch = await socket.request("launch/resolve", {
       cwd: workspaceDir,
       profile_id: profileId,

@@ -6,8 +6,9 @@
 
 - Rebuild the 0.11.0 candidate from its tagged source. The rc.1 artifact was
   withdrawn because its build revision did not match its tag.
-- Validate the browser client against Octos v2.0.3-rc.12 and pin that Core
-  runtime and UI Protocol contract for this release.
+- Validate the browser client against Octos v2.0.3-rc.13 and pin that Core
+  runtime and UI Protocol contract for this release. The Core update keeps local
+  Solo Sessions in-process when its profile watcher runs.
 
 ## v0.11.0-rc.1 — 2026-09-24
 
