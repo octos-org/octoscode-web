@@ -13,9 +13,9 @@ for (const canonicalReplay of [false, true]) {
     await page.route(
       // The cold recovery chunk. A dev server serves the module path; this
       // repo's e2e runs `vite preview`, which serves it as the built
-      // /assets/canonical-hydrate-<hash>.js (the trailing `-[A-Za-z0-9_]+`
-      // excludes sibling modules such as canonical-hydrate-loader).
-      /\/canonical-hydrate(\.ts|-[A-Za-z0-9_]+\.js)(\?|$)/,
+      // /assets/canonical-hydrate-<hash>.js. Vite hashes may contain `-`;
+      // exclude the sibling canonical-hydrate-loader module explicitly.
+      /\/canonical-hydrate(\.ts|-(?!loader[-.])[A-Za-z0-9_-]+\.js)(\?|$)/,
       async (route) => {
         recoveryModuleRequests += 1;
         if (canonicalReplay) await route.continue();
