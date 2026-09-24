@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.11.0-rc.1 — 2026-09-24
+
 - Stop a local `octos serve --solo` from Settings when the server advertises
   `server/shutdown`: a confirmation dialog guards the stop, a failure keeps the
   session connected, and success disconnects the tab to the connect screen.

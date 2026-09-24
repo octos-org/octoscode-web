@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/octos-org/octos",
-  "revision": "04cb5596ec0935926d2e8afdd0826bfa18e0c4bb",
-  "contract_blob": "853140d45c3e59e1c4ab2e4445c0282dbb09a8bc",
+  "revision": "62431443cec51f96b882de761cad49219f371124",
+  "contract_blob": "779e71d64d6efd81dfcdfdb3ea274d53c30a4335",
   "path": "crates/octos-core/src/ui_protocol.rs"
 }
