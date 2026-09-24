@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "repository": "https://github.com/octos-org/octos",
-  "tag": "v2.0.3-rc.9",
-  "revision": "5ea987813de4fd2afdd1d78f2106ad2868f0d923",
-  "version": "2.0.3-rc.9",
+  "tag": "v2.0.3-rc.12",
+  "revision": "f4a31d9a0ef2228e919c3d516b78a9d82ad6f470",
+  "version": "2.0.3-rc.12",
   "required_web_methods": [
     "config/capabilities/list",
     "launch/resolve",
@@ -44,11 +44,11 @@
   "assets": {
     "linux-x64": {
       "name": "octos-bundle-x86_64-unknown-linux-gnu.tar.gz",
-      "sha256": "c40c9804e34076182f3c7d537d521c131bcee3a8603671543d06cfa83b14e22e"
+      "sha256": "6b479b5f3fa3bb85351bcac050d575ce3a296d48e95e1e496ce8658c30ec70fb"
     },
     "darwin-arm64": {
       "name": "octos-bundle-aarch64-apple-darwin.tar.gz",
-      "sha256": "8d19e1d2c614df6472e7e69bc9154848382a5e0272462c9dbd64d2d70dee028b"
+      "sha256": "164957481d6550d8cdfee0a0dc3040d1a0cff79c7ee3b5a0dec3dc2ee060fff3"
     }
   }
 }

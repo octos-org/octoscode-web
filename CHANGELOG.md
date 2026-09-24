@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.11.0-rc.2 — 2026-09-24
+
+- Rebuild the 0.11.0 candidate from its tagged source. The rc.1 artifact was
+  withdrawn because its build revision did not match its tag.
+- Validate the browser client against Octos v2.0.3-rc.12 and pin that Core
+  runtime and UI Protocol contract for this release.
+
 ## v0.11.0-rc.1 — 2026-09-24
 
 - Stop a local `octos serve --solo` from Settings when the server advertises
