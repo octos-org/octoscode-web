@@ -1523,16 +1523,6 @@ export interface LoopFiredEvent {
   status?: string;
 }
 
-export interface LoopCompletedEvent {
-  session_id: string;
-  profile_id?: string;
-  loop_id: string;
-  loop?: AutonomyLoopRecord;
-  status?: string;
-  completed_at_ms?: number;
-  error?: string;
-}
-
 export interface MonitorUpdatedEvent {
   session_id: string;
   profile_id?: string;
@@ -1572,7 +1562,6 @@ export type AutonomyNotification =
   | { kind: "goal_cleared"; event: SessionGoalClearedEvent }
   | { kind: "loop_updated"; event: LoopUpdatedEvent }
   | { kind: "loop_fired"; event: LoopFiredEvent }
-  | { kind: "loop_completed"; event: LoopCompletedEvent }
   | { kind: "monitor_updated"; event: MonitorUpdatedEvent }
   | { kind: "monitor_fired"; event: MonitorFiredEvent }
   | { kind: "monitor_expired"; event: MonitorExpiredEvent }
@@ -1685,46 +1674,6 @@ export function parseAutonomyNotification(
           ...(fire === undefined ? {} : { fire }),
           ...(value.ok === undefined ? {} : { ok: value.ok }),
           ...(value.status === undefined ? {} : { status: value.status }),
-        },
-      };
-    }
-    case CORE_UI_METHODS.LOOP_COMPLETED: {
-      if (
-        !isNonEmptyString(value.session_id) ||
-        !isNonEmptyString(value.loop_id) ||
-        !isOptionalNonEmptyString(value.profile_id) ||
-        !isOptionalNonEmptyString(value.status) ||
-        !isOptionalTimestamp(value.completed_at_ms) ||
-        (value.error !== undefined && typeof value.error !== "string")
-      ) {
-        return null;
-      }
-      const loop = parseOptionalNested(value.loop, parseLoopRecord);
-      if (loop === null) return null;
-      if (
-        loop &&
-        !nestedRecordAgrees(
-          value.session_id,
-          value.loop_id,
-          loop.session_id,
-          loop.loop_id,
-        )
-      )
-        return null;
-      return {
-        kind: "loop_completed",
-        event: {
-          session_id: value.session_id,
-          loop_id: value.loop_id,
-          ...(value.profile_id === undefined
-            ? {}
-            : { profile_id: value.profile_id }),
-          ...(loop === undefined ? {} : { loop }),
-          ...(value.status === undefined ? {} : { status: value.status }),
-          ...(value.completed_at_ms === undefined
-            ? {}
-            : { completed_at_ms: value.completed_at_ms }),
-          ...(value.error === undefined ? {} : { error: value.error }),
         },
       };
     }
@@ -1862,7 +1811,6 @@ export const AUTONOMY_NOTIFICATION_METHODS: readonly string[] = [
   CORE_UI_METHODS.SESSION_GOAL_CLEARED,
   CORE_UI_METHODS.LOOP_UPDATED,
   CORE_UI_METHODS.LOOP_FIRED,
-  CORE_UI_METHODS.LOOP_COMPLETED,
   CORE_UI_METHODS.MONITOR_UPDATED,
   CORE_UI_METHODS.MONITOR_FIRED,
   CORE_UI_METHODS.MONITOR_EXPIRED,

@@ -931,7 +931,6 @@ function notificationResource(notification: AutonomyNotification): Resource {
       return "goal";
     case "loop_updated":
     case "loop_fired":
-    case "loop_completed":
       return "loops";
     case "monitor_updated":
     case "monitor_fired":

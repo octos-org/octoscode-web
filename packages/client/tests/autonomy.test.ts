@@ -134,7 +134,6 @@ describe("autonomy capability gating", () => {
   it.each([
     ["loop/updated", "loop", "loop_id", LOOP_RECORD],
     ["loop/fired", "loop", "loop_id", LOOP_RECORD],
-    ["loop/completed", "loop", "loop_id", LOOP_RECORD],
     ["monitor/updated", "monitor", "monitor_id", MONITOR_RECORD],
     ["monitor/expired", "monitor", "monitor_id", MONITOR_RECORD],
   ] as const)(
@@ -722,11 +721,6 @@ describe("autonomy notifications", () => {
       ["loop/updated", { session_id: "s1", loop: LOOP_RECORD }, "loop_updated"],
       ["loop/fired", { session_id: "s1", loop_id: "loop_01" }, "loop_fired"],
       [
-        "loop/completed",
-        { session_id: "s1", loop_id: "loop_01", error: "boom" },
-        "loop_completed",
-      ],
-      [
         "monitor/updated",
         { session_id: "s1", monitor: MONITOR_RECORD },
         "monitor_updated",
@@ -772,13 +766,13 @@ describe("autonomy notifications", () => {
 
   it("lists exactly the autonomy notification methods", () => {
     expect(AUTONOMY_NOTIFICATION_METHODS).toContain("session/goal/updated");
-    expect(AUTONOMY_NOTIFICATION_METHODS).toHaveLength(9);
+    expect(AUTONOMY_NOTIFICATION_METHODS).toHaveLength(8);
   });
 });
 
-describe("rc11 wire shapes: json! emits explicit null for absent Option fields", () => {
+describe("rc12 wire shapes: json! emits explicit null for absent Option fields", () => {
   // Mirrors autonomy_loop_json / autonomy_monitor_json / autonomy_agent_json
-  // (agent_orchestrator.rs — rc11 excerpts): Option::None serializes as null,
+  // (agent_orchestrator.rs): Option::None serializes as null,
   // the key is present. Decoders must treat null as absent for exactly these
   // audited fields and stay strict for required ones.
   const LOOP_WITH_NULLS = {

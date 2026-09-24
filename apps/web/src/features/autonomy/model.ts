@@ -294,14 +294,6 @@ export function applyAutonomyNotification(
         loops: event.loop ? upsertLoop(state.loops, event.loop) : state.loops,
       };
     }
-    case "loop_completed": {
-      const event = notification.event;
-      return {
-        ...state,
-        activity: `Loop ${event.loop_id} completed`,
-        loops: event.loop ? upsertLoop(state.loops, event.loop) : state.loops,
-      };
-    }
     case "monitor_updated": {
       const event = notification.event;
       return {
