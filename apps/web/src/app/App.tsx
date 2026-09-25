@@ -92,6 +92,7 @@ import {
   saveDurableDraft,
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
+import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
   loadComposerDrafts,
@@ -705,14 +706,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     "/",
     session.opened?.capabilities,
   ).some((command) => command.intent === "autonomy");
-  const navigableSessions = useMemo(
-    () =>
-      mergeConfirmedRetainedSessions(
-        knownSessions,
-        workspaceProduct.backgroundTurns,
-      ),
-    [knownSessions, workspaceProduct.backgroundTurns],
-  );
+  // The server's per-workspace history (`session/list { cwd, profile_id }`),
+  // re-listed when the active session changes or a turn finishes so a new
+  // conversation or a retitled one shows up without a reload. It is keyed to
+  // the profile this connection opens sessions under; before the first open
+  // there is nothing to scope it to and the sidebar stays tab-only.
+  const catalogProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const sessionCatalog = useWorkspaceSessionCatalog({
+    client: protocol.client,
+    capabilities: session.capabilities,
+    profileId: catalogProfileId,
+    workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
+    refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
+      conversation.queue.active?.turnId ?? ""
+    }`,
+  });
+  const navigableSessions = useMemo(() => {
+    const catalogRefs = [...sessionCatalog.values()].flatMap(
+      (workspace) => workspace.sessions,
+    );
+    return mergeConfirmedRetainedSessions(knownSessions, [
+      ...workspaceProduct.backgroundTurns,
+      ...catalogRefs,
+    ]);
+  }, [knownSessions, sessionCatalog, workspaceProduct.backgroundTurns]);
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -2220,6 +2238,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               collapsed={sidebarCollapsed}
               recentWorkspaces={recentWorkspaces}
               knownSessions={navigableSessions}
+              sessionCatalog={sessionCatalog}
               activeWorkspacePath={activeWorkspacePath}
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}

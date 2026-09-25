@@ -69,8 +69,16 @@ export function parseSessionListResult(
 ): SessionListResult | null {
   if (!isRecord(value) || !Array.isArray(value.sessions)) return null;
   const sessions = value.sessions.map(parseSessionEntry);
-  return sessions.some((entry) => entry === null)
-    ? null
+  if (sessions.some((entry) => entry === null)) return null;
+  // The scope attestation counts only when complete; half of one (or a
+  // malformed one) attests nothing, so the listing reads as unscoped.
+  return isNonEmptyString(value.workspace_root) &&
+    isNonEmptyString(value.profile_id)
+    ? {
+        sessions: sessions as SessionListEntry[],
+        workspace_root: value.workspace_root,
+        profile_id: value.profile_id,
+      }
     : { sessions: sessions as SessionListEntry[] };
 }
 

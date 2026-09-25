@@ -1184,6 +1184,44 @@ test("does not project ambiguous legacy Session rows into a Workspace", async ({
   ).toHaveCount(0);
 });
 
+test("lists a workspace's server-attested history in a fresh tab and opens a row it never opened", async ({
+  browser,
+  page,
+  request,
+}) => {
+  // A unique root per attempt: the fixture is shared across specs (and CI
+  // retries), and this test counts the workspace's rows.
+  const cwd = `/srv/work/scoped-history-${Date.now()}`;
+  await request.post(
+    `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(cwd)}`,
+  );
+  const fresh = await browser.newContext();
+  try {
+    // Tab A creates the history.
+    await connectAndStartWorkspace(page, cwd);
+    // Tab B has none of A's tab storage; only the server's attested listing
+    // can tell it about A's Session.
+    const tabB = await fresh.newPage();
+    await connectAndStartWorkspace(tabB, cwd);
+    const sessions = productNavigation(tabB).locator('button[role="treeitem"]');
+    await expect(sessions).toHaveCount(2);
+    const history = productNavigation(tabB).locator(
+      'button[role="treeitem"]:not([aria-current="page"])',
+    );
+    await expect(history).toHaveCount(1);
+    const historyId = await history.getAttribute("id");
+    expect(historyId).toBeTruthy();
+    await history.click();
+    // Row ids embed a JSON tuple, so quote them as a CSS string.
+    await expect(
+      tabB.locator(`[id=${JSON.stringify(historyId)}]`),
+    ).toHaveAttribute("aria-current", "page");
+  } finally {
+    await fresh.close();
+    await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
+  }
+});
+
 test("moves drafts only after a profile-choice Session transition commits", async ({
   page,
 }) => {

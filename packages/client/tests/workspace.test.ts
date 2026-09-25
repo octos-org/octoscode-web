@@ -137,6 +137,35 @@ describe("workspace product contract", () => {
     expect(parsed?.sessions[2]).not.toHaveProperty("active_turn");
   });
 
+  it("keeps a listing's scope attestation, and reads its absence as unscoped", () => {
+    // Only a listing the server attests as scoped to one project store may be
+    // placed under a workspace; the same `{cwd}` request to an older or
+    // flag-off server returns the legacy global list with no attestation.
+    expect(
+      parseSessionListResult({
+        sessions: [],
+        workspace_root: "/srv/project",
+        profile_id: "dev",
+      }),
+    ).toEqual({
+      sessions: [],
+      workspace_root: "/srv/project",
+      profile_id: "dev",
+    });
+    const legacy = parseSessionListResult({ sessions: [] });
+    expect(legacy).toEqual({ sessions: [] });
+    expect(legacy).not.toHaveProperty("workspace_root");
+    // Half an attestation (or a malformed one) attests nothing.
+    for (const partial of [
+      { sessions: [], workspace_root: "/srv/project" },
+      { sessions: [], profile_id: "dev" },
+      { sessions: [], workspace_root: "", profile_id: "dev" },
+      { sessions: [], workspace_root: 7, profile_id: "dev" },
+    ]) {
+      expect(parseSessionListResult(partial)).toEqual({ sessions: [] });
+    }
+  });
+
   it("rejects a live-turn flag that is not a boolean", () => {
     expect(
       parseSessionListResult({
