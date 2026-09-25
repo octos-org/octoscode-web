@@ -1,4 +1,5 @@
 import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
+import { isRecord } from "../../shared/guards.ts";
 
 const MAX_KNOWN_SESSIONS = 100;
 const LIMITS = {
@@ -126,8 +127,4 @@ function timestamp(value: unknown): number | null {
 
 function compareRecency(left: KnownSessionRef, right: KnownSessionRef): number {
   return right.lastOpenedAt - left.lastOpenedAt;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

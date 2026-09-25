@@ -2,6 +2,7 @@ import {
   isProtocolUuid,
   OctosUiProtocolError,
 } from "@octos-org/octoscode-client/protocol";
+import { isRecord } from "../../shared/guards.ts";
 
 /**
  * One `octos serve` instance can be shared: the octoscode terminal client and
@@ -15,10 +16,6 @@ import {
  */
 export interface TurnCollision {
   turnId: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

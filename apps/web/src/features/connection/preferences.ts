@@ -1,4 +1,5 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
+import { isRecord } from "../../shared/guards.ts";
 import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
 import { connectionEndpointError } from "./validation.ts";
 import {
@@ -398,8 +399,4 @@ function safely<T>(operation: () => T): T | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
