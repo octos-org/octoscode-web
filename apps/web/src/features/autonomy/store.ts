@@ -17,6 +17,7 @@ import {
   type AutonomyRuntimeState,
 } from "./model.ts";
 import type { LoopCreationInput } from "./loop-creation.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 /**
  * React-free autonomy engine. Owns state, busy-flag ownership, per-resource
@@ -58,10 +59,6 @@ export interface MonitorInput {
   filterRegex?: string;
   mode: "poll" | "stream";
   intervalSeconds?: number;
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }
 
 const LOOP_ACTIVITY: Record<LoopAction, (id: string) => string> = {

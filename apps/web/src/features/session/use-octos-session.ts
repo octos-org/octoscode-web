@@ -170,6 +170,7 @@ import {
   type ModelSelectionRuntimeState,
 } from "../models/use-model-selection.ts";
 import type { ModelSettingsClient } from "../models/model-settings.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 export type {
   DiffReviewRuntimeState,
@@ -3797,10 +3798,6 @@ function assertCodingSessionContract(
       `Server lacks the coding Session contract: ${missing.join(", ")}`,
     );
   }
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }
 
 /**

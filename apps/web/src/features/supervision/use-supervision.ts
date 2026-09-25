@@ -26,6 +26,7 @@ import { applyPlanUpdated, clearPlanForTurn } from "./plan.ts";
 import { RequestGate } from "../async/request-gate.ts";
 import { terminalTurnId } from "../timeline/entry-model.ts";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
@@ -530,8 +531,4 @@ export function useSupervision(
     loadMoreTaskArtifact,
     observeNotification,
   };
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }

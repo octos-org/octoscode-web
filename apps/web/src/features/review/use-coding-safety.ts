@@ -12,6 +12,7 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 export interface PermissionRuntimeState {
   available: boolean;
@@ -364,8 +365,4 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     closeDiffReview,
     observeNotification,
   };
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }

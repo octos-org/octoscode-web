@@ -7,6 +7,7 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import {
   nextModelNoticeBoard,
   parseRuntimeDisposition,
@@ -351,8 +352,4 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
   };
 
   return { state, reset, configureCapabilities, refresh, select };
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }

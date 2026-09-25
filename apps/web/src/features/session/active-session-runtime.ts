@@ -24,6 +24,7 @@ import {
 } from "./durable-session.ts";
 import { notificationMatchesSessionScope } from "./scope.ts";
 import type { HydratedAssistantIdentity } from "../timeline/model.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 const RECOVERY_NOTIFICATION_LIMIT = 4_096;
 const HYDRATE_INCLUDE = [
@@ -1533,10 +1534,6 @@ function assertConnected(client: ActiveSessionClient): void {
       "The server transport disconnected before the response was ready",
     );
   }
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }
 
 function errorFrom(reason: unknown): Error {
