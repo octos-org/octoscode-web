@@ -1,3 +1,4 @@
+import { isRecord } from "../../shared/guards.ts";
 export interface RecentWorkspace {
   id: string;
   name: string;
@@ -95,10 +96,6 @@ function parseWorkspace(value: unknown): RecentWorkspace | null {
   const lastOpenedAt = value.lastOpenedAt;
   if (!id || !name || !path || typeof lastOpenedAt !== "number") return null;
   return { id, name, path, lastOpenedAt };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function text(value: unknown): string | null {

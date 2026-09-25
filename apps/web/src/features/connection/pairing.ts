@@ -1,3 +1,4 @@
+import { isRecord } from "../../shared/guards.ts";
 /**
  * WEB-PAIRING-CONTRACT-5100 §Client — open the web client from a pairing link.
  *
@@ -299,10 +300,6 @@ function readInfo(body: unknown, origin: string): PairingInfo | null {
     pairingRequired: body.pairing_required === true,
     serverOrigin: echoed ?? origin,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The printed alphabet, exported so a fixture can mint the same shape. */
