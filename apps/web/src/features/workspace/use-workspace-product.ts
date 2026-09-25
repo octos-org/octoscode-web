@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { errorMessage } from "../../shared/errors.ts";
 import {
   CORE_UI_METHODS,
   supportsMethod,
@@ -163,8 +164,4 @@ export function useWorkspaceProduct(
         tokenCost: mergeTokenCost(current.tokenCost, update),
       })),
   };
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }

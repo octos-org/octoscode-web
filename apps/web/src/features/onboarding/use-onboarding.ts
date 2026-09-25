@@ -7,6 +7,7 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { RequestGate } from "../async/request-gate.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 const REQUIRED_METHODS = Object.values(APPUI_ONBOARDING_METHODS);
 
@@ -174,10 +175,6 @@ export function useOnboarding(options: UseOnboardingOptions) {
   };
 
   return { state, prepare, reset, submit };
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }
 
 function redactSecret(message: string, secret: string): string {
