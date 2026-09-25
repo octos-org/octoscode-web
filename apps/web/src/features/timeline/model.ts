@@ -599,8 +599,7 @@ function foldProjection(
       });
     }
     case "file_attached": {
-      const fileRecord = isRecord(data.file) ? data.file : {};
-      const filePath = stringOf(fileRecord.path, "");
+      const filePath = stringOf(data.path, "");
       const fileName = filePath.split("/").pop() || filePath || "unknown";
       return addSystemMessage(
         entries,
