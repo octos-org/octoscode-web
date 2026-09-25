@@ -140,25 +140,27 @@ describe("workspace session catalog rows", () => {
 });
 
 describe("workspace session catalog loader", () => {
-  function fixture() {
+  function fixture(profileId = "dev") {
     const client = new OctosUiClient({ endpoint: "ws://server.test/ui" });
     const list = vi.spyOn(client, "listSessions");
-    const catalog = createWorkspaceSessionCatalog({ client, profileId: "dev" });
+    const catalog = createWorkspaceSessionCatalog({ client, profileId });
     const seen: number[] = [];
     catalog.subscribe(() => seen.push(catalog.getSnapshot().size));
     return { client, list, catalog, seen };
   }
-  it("lists each workspace with cwd and profile and publishes loading then loaded", async () => {
+  const scoped = (cwd: string, sessions: { id: string; title?: string }[]) => ({
+    sessions: sessions.map((row) => ({ message_count: 1, ...row })),
+    workspace_root: cwd,
+    profile_id: "dev",
+  });
+
+  it("lists each workspace with cwd and profile and projects an attested listing", async () => {
     const f = fixture();
     f.list.mockImplementation(async (params) => {
       const cwd = params?.cwd ?? "";
-      return {
-        sessions: [{ id: `dev:api:${cwd}`, message_count: 1, title: cwd }],
-      };
+      return scoped(cwd, [{ id: `dev:api:${cwd}`, title: cwd }]);
     });
-    const pending = f.catalog.refresh(["/a", "/b"]);
-    expect(f.catalog.getSnapshot().get("/a")?.status).toBe("loading");
-    await pending;
+    await f.catalog.refresh(["/a", "/b"]);
     expect(f.list).toHaveBeenCalledWith({ cwd: "/a", profile_id: "dev" });
     expect(f.list).toHaveBeenCalledWith({ cwd: "/b", profile_id: "dev" });
     const a = f.catalog.getSnapshot().get("/a");
@@ -167,30 +169,85 @@ describe("workspace session catalog loader", () => {
     expect(f.catalog.getSnapshot().get("/b")?.status).toBe("loaded");
     expect(f.seen.length).toBeGreaterThan(0);
   });
-  it("keeps the previous rows while reloading and on a server error", async () => {
+
+  it("projects nothing from a legacy listing the server did not attest as scoped", async () => {
+    // An older or `appui.sessions_in_cwd`-off server ignores cwd and returns
+    // its global list. Those rows belong to no particular workspace, so they
+    // must never appear under one.
     const f = fixture();
-    f.list.mockResolvedValueOnce({
-      sessions: [{ id: "dev:api:one", message_count: 1 }],
+    f.list.mockResolvedValue({
+      sessions: [
+        { id: "dev:local:main", message_count: 12, title: "Ship it" },
+        { id: "dev:local:review", message_count: 4, title: "Review" },
+      ],
     });
     await f.catalog.refresh(["/a"]);
-    f.list.mockRejectedValueOnce(new Error("cwd_runtime_unavailable"));
+    expect(f.catalog.getSnapshot().get("/a")).toEqual({
+      status: "unscoped",
+      sessions: [],
+    });
+  });
+
+  it("projects nothing when the attested scope is another profile's store", async () => {
+    const f = fixture();
+    f.list.mockResolvedValue({
+      sessions: [{ id: "dev:api:web-x", message_count: 1 }],
+      workspace_root: "/a",
+      profile_id: "other",
+    });
+    await f.catalog.refresh(["/a"]);
+    expect(f.catalog.getSnapshot().get("/a")?.status).toBe("unscoped");
+    expect(f.catalog.getSnapshot().get("/a")?.sessions).toEqual([]);
+  });
+
+  it("keeps the last attested rows through a refresh and a later server error", async () => {
+    const f = fixture();
+    f.list.mockResolvedValueOnce(scoped("/a", [{ id: "dev:api:one" }]));
+    await f.catalog.refresh(["/a"]);
+    let release!: () => void;
+    f.list.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(scoped("/a", [{ id: "dev:api:two" }]));
+        }),
+    );
     const pending = f.catalog.refresh(["/a"]);
-    const loading = f.catalog.getSnapshot().get("/a");
-    expect(loading?.status).toBe("loading");
-    expect(loading?.sessions.map((row) => row.sessionId)).toEqual([
-      "dev:api:one",
-    ]);
+    // A background refresh never blanks or flashes a loading state.
+    expect(f.catalog.getSnapshot().get("/a")?.status).toBe("loaded");
+    expect(
+      f.catalog
+        .getSnapshot()
+        .get("/a")
+        ?.sessions.map((row) => row.sessionId),
+    ).toEqual(["dev:api:one"]);
+    release();
     await pending;
+    f.list.mockRejectedValueOnce(new Error("cwd_runtime_unavailable"));
+    await f.catalog.refresh(["/a"]);
     const failed = f.catalog.getSnapshot().get("/a");
     expect(failed?.status).toBe("error");
     expect(failed?.error).toBe("cwd_runtime_unavailable");
     expect(failed?.sessions.map((row) => row.sessionId)).toEqual([
-      "dev:api:one",
+      "dev:api:two",
     ]);
   });
+
+  it("does not surface an error for a workspace the server never scoped", async () => {
+    // A server that cannot list per workspace at all (for example one that
+    // rejects this connection's cwd listing) must look exactly like one
+    // without the feature: tab-known rows only, no error banner.
+    const f = fixture();
+    f.list.mockRejectedValue(new Error("cwd_runtime_unavailable"));
+    await f.catalog.refresh(["/a"]);
+    expect(f.catalog.getSnapshot().get("/a")).toEqual({
+      status: "unscoped",
+      sessions: [],
+    });
+  });
+
   it("drops workspaces that are no longer requested and ignores results after dispose", async () => {
     const f = fixture();
-    f.list.mockResolvedValue({ sessions: [] });
+    f.list.mockImplementation(async (params) => scoped(params?.cwd ?? "", []));
     await f.catalog.refresh(["/a", "/b"]);
     await f.catalog.refresh(["/a"]);
     expect([...f.catalog.getSnapshot().keys()]).toEqual(["/a"]);
@@ -198,8 +255,7 @@ describe("workspace session catalog loader", () => {
     f.list.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          release = () =>
-            resolve({ sessions: [{ id: "dev:api:late", message_count: 1 }] });
+          release = () => resolve(scoped("/a", [{ id: "dev:api:late" }]));
         }),
     );
     const pending = f.catalog.refresh(["/a"]);
@@ -208,12 +264,11 @@ describe("workspace session catalog loader", () => {
     await pending;
     expect(f.catalog.getSnapshot().size).toBe(0);
   });
+
   it("does nothing without a profile to scope the listing", async () => {
-    const client = new OctosUiClient({ endpoint: "ws://server.test/ui" });
-    const list = vi.spyOn(client, "listSessions");
-    const catalog = createWorkspaceSessionCatalog({ client, profileId: "" });
-    await catalog.refresh(["/a"]);
-    expect(list).not.toHaveBeenCalled();
-    expect(catalog.getSnapshot().size).toBe(0);
+    const f = fixture("");
+    await f.catalog.refresh(["/a"]);
+    expect(f.list).not.toHaveBeenCalled();
+    expect(f.catalog.getSnapshot().size).toBe(0);
   });
 });

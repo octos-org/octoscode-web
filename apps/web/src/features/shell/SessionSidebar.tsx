@@ -109,7 +109,10 @@ export function SessionSidebar({
     );
     const projected: ProductSidebarWorkspace[] = workspaces.map((workspace) => {
       const isActiveWorkspace = workspace.path === activeWorkspacePath;
-      const catalog = sessionCatalog?.get(workspace.path);
+      // A workspace the server has not attested a scoped listing for keeps
+      // the tab-known behavior exactly (see WorkspaceCatalogState).
+      const listed = sessionCatalog?.get(workspace.path);
+      const catalog = listed?.status === "unscoped" ? undefined : listed;
       const sourceSessions = mergeWorkspaceSessionRows(
         knownSessions.filter((item) => item.workspaceRoot === workspace.path),
         catalog?.sessions ?? [],
@@ -143,7 +146,10 @@ export function SessionSidebar({
         // With the server's per-workspace catalog these rows are the
         // workspace's whole history; without it, only the refs opened in
         // this tab.
-        sessionCatalogStatus: catalog?.status ?? "known-only",
+        sessionCatalogStatus:
+          catalog?.status === "loaded" || catalog?.status === "error"
+            ? catalog.status
+            : "known-only",
         ...(catalog?.status === "error" && catalog.error
           ? { sessionCatalogError: catalog.error }
           : {}),

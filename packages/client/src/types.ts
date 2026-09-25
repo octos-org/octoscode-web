@@ -448,6 +448,16 @@ export interface SessionListEntry {
 
 export interface SessionListResult {
   sessions: SessionListEntry[];
+  /**
+   * Present only when the server actually scoped the listing to one project
+   * store: the canonical workspace root whose `<root>/.octos/<profile_id>` it
+   * read. A `{cwd}` request to an older or `appui.sessions_in_cwd`-off server
+   * returns the legacy global list without it, so rows must not be placed
+   * under a workspace unless this attests the scope.
+   */
+  workspace_root?: string;
+  /** The profile whose project store was read; present with `workspace_root`. */
+  profile_id?: string;
 }
 
 export interface SessionDeleteParams {

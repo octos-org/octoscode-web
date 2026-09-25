@@ -1778,6 +1778,35 @@ const http = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  // Scoped session listings. By default this fixture answers `session/list`
+  // the way an older / `appui.sessions_in_cwd`-off Core does: rows with no
+  // scope attestation, which the client must never place under a workspace.
+  // Arming a workspace makes its listing attest `workspace_root` +
+  // `profile_id`, the way a Core that read `<cwd>/.octos/<profile>` does.
+  if (
+    new URL(request.url, "http://fixture").pathname.startsWith(
+      "/__test__/session-list/",
+    )
+  ) {
+    const url = new URL(request.url, "http://fixture");
+    const workspace = url.searchParams.get("workspace");
+    if (
+      request.method === "POST" &&
+      url.pathname === "/__test__/session-list/scoped" &&
+      workspace
+    ) {
+      scopedListingWorkspaces.add(workspace);
+      response.writeHead(204).end();
+    } else if (
+      request.method === "POST" &&
+      url.pathname === "/__test__/session-list/reset"
+    ) {
+      scopedListingWorkspaces.clear();
+      response.writeHead(204).end();
+    } else
+      response.writeHead(409).end("No matching fixture session-list control");
+    return;
+  }
   if (request.method === "POST" && request.url === "/__test__/disconnect") {
     for (const client of sockets.clients) {
       client.close(1012, "fixture restart");
@@ -2200,6 +2229,7 @@ const defaultSessions = [
   },
 ];
 const sessionsByWorkspace = new Map([[defaultWorkspace, defaultSessions]]);
+const scopedListingWorkspaces = new Set();
 
 // Durable per-Session projection log. The fixture records every projection
 // envelope a Session emits so a later hydrate of the same Session — from any
@@ -4500,9 +4530,22 @@ sockets.on("connection", (socket, request) => {
         request.params?.cwd ??
         openedWorkspaceBySocket.get(socket) ??
         defaultWorkspace;
-      reply(socket, request.id, {
-        sessions: sessionsByWorkspace.get(workspaceRoot) ?? [],
-      });
+      const sessions = sessionsByWorkspace.get(workspaceRoot) ?? [];
+      const listedProfile =
+        request.params?.profile_id ?? openedProfileBySocket.get(socket);
+      reply(
+        socket,
+        request.id,
+        request.params?.cwd &&
+          scopedListingWorkspaces.has(workspaceRoot) &&
+          listedProfile
+          ? {
+              sessions,
+              workspace_root: workspaceRoot,
+              profile_id: listedProfile,
+            }
+          : { sessions },
+      );
       return;
     }
     if (request.method === "session/delete") {

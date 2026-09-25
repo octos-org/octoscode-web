@@ -9,6 +9,7 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { isFullSessionForProfile } from "../resume/resume-binding.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import type { KnownSessionRef } from "./known-session-registry.ts";
 
 /**
@@ -33,8 +34,16 @@ export interface WorkspaceCatalogSession {
   readonly activeTurn?: boolean;
 }
 
+/**
+ * `unscoped` — the server has not attested a listing scoped to this workspace
+ * (an older or flag-off server returns its global list instead, or it cannot
+ * list for this connection at all). Nothing is projected, and the sidebar
+ * behaves exactly as it does without the catalog.
+ * `loaded` / `error` — the server has attested scope at least once; `error`
+ * keeps the last attested rows.
+ */
 export interface WorkspaceCatalogState {
-  readonly status: "loading" | "loaded" | "error";
+  readonly status: "unscoped" | "loaded" | "error";
   readonly sessions: readonly WorkspaceCatalogSession[];
   readonly error?: string;
 }
@@ -137,6 +146,11 @@ export interface WorkspaceSessionCatalog {
   dispose(): void;
 }
 
+const UNSCOPED: WorkspaceCatalogState = Object.freeze({
+  status: "unscoped",
+  sessions: [],
+});
+
 export function createWorkspaceSessionCatalog(deps: {
   client: OctosUiClient;
   profileId: string;
@@ -164,37 +178,47 @@ export function createWorkspaceSessionCatalog(deps: {
       if (disposed || !deps.profileId) return;
       const generation = ++epoch;
       const paths = [...new Set(workspacePaths)];
+      // Stale-while-revalidate: a refresh keeps each workspace's last state
+      // (never a loading flash); workspaces no longer requested are dropped.
       const next = new Map<string, WorkspaceCatalogState>();
       for (const path of paths) {
-        next.set(path, {
-          status: "loading",
-          sessions: snapshot.get(path)?.sessions ?? [],
-        });
+        next.set(path, snapshot.get(path) ?? UNSCOPED);
       }
       publish(next);
       await Promise.all(
         paths.map(async (path) => {
-          const previous = next.get(path)?.sessions ?? [];
+          const previous = next.get(path) ?? UNSCOPED;
           let state: WorkspaceCatalogState;
           try {
             const result = await deps.client.listSessions({
               cwd: path,
               profile_id: deps.profileId,
             });
-            state = {
-              status: "loaded",
-              sessions: catalogSessionsFromList(
-                path,
-                deps.profileId,
-                result.sessions,
-              ),
-            };
+            // Only a listing the server attests as this profile's project
+            // store may be placed under the workspace.
+            state =
+              result.workspace_root && result.profile_id === deps.profileId
+                ? {
+                    status: "loaded",
+                    sessions: catalogSessionsFromList(
+                      path,
+                      deps.profileId,
+                      result.sessions,
+                    ),
+                  }
+                : UNSCOPED;
           } catch (reason) {
-            state = {
-              status: "error",
-              sessions: previous,
-              error: reason instanceof Error ? reason.message : String(reason),
-            };
+            // An error means something only once the server has proven it
+            // lists this workspace; before that it is indistinguishable from
+            // a server without the capability.
+            state =
+              previous.status === "unscoped"
+                ? UNSCOPED
+                : {
+                    status: "error",
+                    sessions: previous.sessions,
+                    error: errorMessage(reason),
+                  };
           }
           if (disposed || generation !== epoch) return;
           patch(path, state);
