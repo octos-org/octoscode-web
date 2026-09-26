@@ -17,6 +17,7 @@ import { useUiText } from "../preferences/ui-text.tsx";
 import { thinkingSummaryParts, toolTarget, type FoldState } from "./folds.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
 import type { TurnActivity } from "./turn-activity.ts";
+import { AttachmentList } from "./AttachmentList.tsx";
 import foldStyles from "./TimelineFolds.module.css";
 import type { ConversationViewState } from "./use-conversation-scroll.ts";
 
@@ -58,8 +59,13 @@ export const Timeline = memo(function Timeline({
   activity = null,
 }: TimelineProps) {
   const t = useUiText();
+  // An assistant row with no text still renders when it delivers files (a
+  // `send_file` without a caption).
   const renderableEntries = entries.filter(
-    (entry) => entry.kind !== "assistant" || entry.body.trim(),
+    (entry) =>
+      entry.kind !== "assistant" ||
+      entry.body.trim() ||
+      Boolean(entry.media?.length),
   );
   const visibleEntries = showThinking
     ? renderableEntries
@@ -408,6 +414,7 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
             <pre>{entry.body}</pre>
           )
         ) : null}
+        {entry.media?.length ? <AttachmentList media={entry.media} /> : null}
       </div>
     </article>
   );

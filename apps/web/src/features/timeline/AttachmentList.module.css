@@ -1,0 +1,68 @@
+.attachments {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment {
+  display: grid;
+  gap: 6px;
+  max-width: min(100%, 480px);
+  padding: 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+}
+
+.preview {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.download:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.download:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-text);
+  font-size: 12px;
+}

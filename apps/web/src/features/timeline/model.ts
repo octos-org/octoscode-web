@@ -129,7 +129,11 @@ export function timelineFromHydrate(
             : role === "tool"
               ? "Tool output"
               : message.role,
-      body: appendMedia(message.content, message.media),
+      // Chat rows carry their files as attachments; tool and system rows
+      // keep the paths in their text (their disclosure is a separate surface).
+      ...(role === "user" || role === "assistant"
+        ? { body: message.content, ...withMedia(message.media) }
+        : { body: appendMedia(message.content, message.media) }),
       status: "complete",
       ...(turnId ? { turnId } : {}),
       ...(message.message_id ? { messageId: message.message_id } : {}),
@@ -509,7 +513,8 @@ function foldProjection(
         id: hydrated?.id ?? streamId,
         kind: "assistant",
         title: "Octos",
-        body: appendMedia(textOf(data), mediaOf(meta?.media)),
+        body: textOf(data),
+        ...withMedia(mediaOf(meta?.media)),
         status: "complete",
         turnId,
         streamId,
@@ -588,10 +593,8 @@ function foldProjection(
         id: hydrated?.id ?? `background:${stringOf(data.task_id, turnId)}`,
         kind: "assistant",
         title: "Background agent",
-        body: appendMedia(
-          stringOf(data.content, "Background task completed."),
-          mediaOf(data.media),
-        ),
+        body: stringOf(data.content, "Background task completed."),
+        ...withMedia(mediaOf(data.media)),
         status: "complete",
         turnId,
         ...(messageId ? { messageId } : {}),
@@ -612,6 +615,10 @@ function foldProjection(
     default:
       return entries.slice();
   }
+}
+
+function withMedia(media: readonly string[]): { media?: readonly string[] } {
+  return media.length ? { media } : {};
 }
 
 function appendMedia(content: string, media: readonly string[]): string {

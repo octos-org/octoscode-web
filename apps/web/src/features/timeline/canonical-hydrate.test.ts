@@ -94,7 +94,8 @@ describe("canonical hydrate recovery", () => {
     expect(timelineFromHydrate(data)).toMatchObject([
       {
         id: "hydrated:background-message",
-        body: "Background result\n\nAttachment: report.md",
+        body: "Background result",
+        media: ["report.md"],
         turnId: "turn:background:task",
       },
     ]);
@@ -137,8 +138,8 @@ describe("canonical hydrate recovery", () => {
     });
     const restored = timelineFromHydrate(data);
     expect(
-      restored.find((entry) => entry.id === "hydrated:shared-message")?.body,
-    ).toBe("Shared result\n\nAttachment: report.md");
+      restored.find((entry) => entry.id === "hydrated:shared-message"),
+    ).toMatchObject({ body: "Shared result", media: ["report.md"] });
     expect(restored.map((entry) => entry.id)).toEqual([
       "hydrated:shared-message",
       "background:child-a",
