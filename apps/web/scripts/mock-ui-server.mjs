@@ -1208,7 +1208,51 @@ function readJsonBody(request, limit = 4_096) {
   });
 }
 
+// Files an agent delivered (`send_file`), keyed by Session + the original
+// path the transcript records. `/api/files` serves one only for the Session
+// it was delivered in — Core's stored-copy rule; anything else is `403`.
+const deliveredFiles = new Map();
+const deliveredFileKey = (sessionId, path) => `${sessionId}\n${path}`;
+// 1x1 transparent PNG.
+const FIXTURE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 const http = createServer((request, response) => {
+  if (new URL(request.url, "http://fixture").pathname === "/api/files") {
+    response.setHeader(
+      "Access-Control-Allow-Origin",
+      request.headers.origin ?? "*",
+    );
+    response.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, X-Profile-Id",
+    );
+    response.setHeader("Access-Control-Allow-Methods", "GET");
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
+    const token = authTokenFromUpgradeRequest(request);
+    if (mockAuthMode === "required" && !mockAuthTokens.has(token)) {
+      response.writeHead(401).end();
+      return;
+    }
+    const query = new URL(request.url, "http://fixture").searchParams;
+    const path = query.get("path");
+    const session = query.get("session");
+    const file =
+      path && session
+        ? deliveredFiles.get(deliveredFileKey(session, path))
+        : undefined;
+    if (!request.headers["x-profile-id"] || !file) {
+      response.writeHead(403).end("access denied");
+      return;
+    }
+    response.writeHead(200, { "content-type": file.type }).end(file.bytes);
+    return;
+  }
   if (request.url === "/api/auth/me") {
     response.setHeader(
       "Access-Control-Allow-Origin",
@@ -1807,6 +1851,65 @@ const http = createServer((request, response) => {
       response.writeHead(409).end("No matching fixture session-list control");
     return;
   }
+  // Deliver a file to a Session the way Core projects a `send_file` row: a
+  // persisted assistant message whose media is a downloadable artifact path.
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname === "/__test__/deliver-file"
+  ) {
+    const url = new URL(request.url, "http://fixture");
+    const sessionId = url.searchParams.get("session_id") ?? "";
+    const name = url.searchParams.get("name") ?? "delivered.png";
+    const state = sessionStateBySessionId.get(sessionId);
+    const socket = state ? [...state.sockets][0] : undefined;
+    if (!socket) {
+      response.writeHead(409).end("No open Session to deliver to");
+      return;
+    }
+    // The original workspace path, as Core records it.
+    const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
+    deliveredFiles.set(deliveredFileKey(sessionId, path), {
+      type: name.endsWith(".png") ? "image/png" : "application/octet-stream",
+      bytes: name.endsWith(".png")
+        ? FIXTURE_PNG
+        : Buffer.from(`fixture ${name}`),
+    });
+    const turnId = crypto.randomUUID();
+    notify(
+      socket,
+      sessionId,
+      turnId,
+      turnId,
+      1,
+      state.log.seq + 1,
+      "assistant_persisted",
+      {
+        text: url.searchParams.get("caption") ?? "",
+        assistant_segment_id: `${turnId}:assistant:delivery`,
+        meta: {
+          message_id: `delivery-${turnId}`,
+          persisted_at: new Date().toISOString(),
+          media: [path],
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      turnId,
+      turnId,
+      2,
+      state.log.seq + 1,
+      "turn_terminal",
+      {
+        outcome: "completed",
+      },
+    );
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify({ path }));
+    return;
+  }
   if (request.method === "POST" && request.url === "/__test__/disconnect") {
     for (const client of sockets.clients) {
       client.close(1012, "fixture restart");
@@ -2273,7 +2376,9 @@ function recordProjection(sessionId, params) {
       thread_id: params.thread_id,
       message_id: messageId,
       persisted_at: new Date().toISOString(),
-      media: [],
+      media: Array.isArray(data.meta?.media)
+        ? data.meta.media.filter((item) => typeof item === "string")
+        : [],
     };
     if (existing) Object.assign(existing, message);
     else state.messages.push(message);

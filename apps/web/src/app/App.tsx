@@ -202,6 +202,10 @@ const SessionSidebar = lazyNamed(
   () => import("../features/shell/SessionSidebar.tsx"),
   (module) => module.SessionSidebar,
 );
+import {
+  AttachmentAccessContext,
+  type AttachmentAccess,
+} from "../features/timeline/attachment-access.ts";
 const Timeline = lazyNamed(
   () => import("../features/timeline/Timeline.tsx"),
   (module) => module.Timeline,
@@ -704,6 +708,37 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     () => workspaceBrowseAdapter(protocol.client, session.capabilities),
     [protocol.client, session.capabilities],
   );
+  // Downloads for files delivered in the open Session, through the
+  // authenticated blob API (`/api/files`) the composer uploads through.
+  const attachmentSessionId = session.opened?.session_id ?? "";
+  const attachmentProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const attachmentAccess = useMemo((): AttachmentAccess | null => {
+    const client = protocol.client;
+    const capabilities = session.capabilities;
+    if (
+      !client ||
+      !capabilities ||
+      !attachmentSessionId ||
+      !attachmentProfileId
+    )
+      return null;
+    return {
+      async download(reference, signal) {
+        const commands = await client.mediaCommands(
+          attachmentSessionId,
+          attachmentProfileId,
+          capabilities,
+        );
+        return commands.download(reference, signal);
+      },
+    };
+  }, [
+    protocol.client,
+    session.capabilities,
+    attachmentSessionId,
+    attachmentProfileId,
+  ]);
   const autonomyAvailable = commandSuggestions(
     "/",
     session.opened?.capabilities,
@@ -2529,41 +2564,45 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         <DeferredSurface label="Loading conversation…" />
                       }
                     >
-                      <Timeline
-                        key={activeSessionKey ?? undefined}
-                        viewState={conversationViewState}
-                        onSaveViewState={syncConversationFollow}
-                        entries={
-                          conversation.showReasoning
-                            ? conversation.timeline
-                            : conversation.timeline.filter(
-                                (entry) => entry.kind !== "reasoning",
-                              )
-                        }
-                        connected={session.connected}
-                        showThinking={conversation.showReasoning}
-                        folds={timelineFolds}
-                        onToggleFold={(id) =>
-                          setTimelineFolds(toggleFold(timelineFolds, id))
-                        }
-                        onExpandAll={() =>
-                          setTimelineFolds(
-                            expandAll(
-                              timelineFolds,
-                              conversation.timeline
-                                .filter(
-                                  (entry) =>
-                                    entry.kind === "reasoning" ||
-                                    entry.kind === "tool",
+                      <AttachmentAccessContext.Provider
+                        value={attachmentAccess}
+                      >
+                        <Timeline
+                          key={activeSessionKey ?? undefined}
+                          viewState={conversationViewState}
+                          onSaveViewState={syncConversationFollow}
+                          entries={
+                            conversation.showReasoning
+                              ? conversation.timeline
+                              : conversation.timeline.filter(
+                                  (entry) => entry.kind !== "reasoning",
                                 )
-                                .map((entry) => entry.id),
-                            ),
-                          )
-                        }
-                        onCollapseAll={() =>
-                          setTimelineFolds(collapseAll(timelineFolds))
-                        }
-                      />
+                          }
+                          connected={session.connected}
+                          showThinking={conversation.showReasoning}
+                          folds={timelineFolds}
+                          onToggleFold={(id) =>
+                            setTimelineFolds(toggleFold(timelineFolds, id))
+                          }
+                          onExpandAll={() =>
+                            setTimelineFolds(
+                              expandAll(
+                                timelineFolds,
+                                conversation.timeline
+                                  .filter(
+                                    (entry) =>
+                                      entry.kind === "reasoning" ||
+                                      entry.kind === "tool",
+                                  )
+                                  .map((entry) => entry.id),
+                              ),
+                            )
+                          }
+                          onCollapseAll={() =>
+                            setTimelineFolds(collapseAll(timelineFolds))
+                          }
+                        />
+                      </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>
                     {conversation.turnRecovery ? (
                       <SurfaceBoundary

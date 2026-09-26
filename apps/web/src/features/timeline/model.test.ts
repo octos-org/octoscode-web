@@ -395,7 +395,8 @@ describe("timeline projection", () => {
     ]);
     expect(result[2]).toMatchObject({
       messageId: "message-1",
-      body: "Done\n\nAttachment: report.md",
+      body: "Done",
+      media: ["report.md"],
       latestTurnOutcome: "completed",
     });
   });
@@ -724,7 +725,8 @@ describe("streaming lifecycle regressions", () => {
     });
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
-      body: "Final answer\n\nAttachment: report.md",
+      body: "Final answer",
+      media: ["report.md"],
       status: "complete",
       messageId: "msg-1",
     });
@@ -1432,7 +1434,8 @@ describe("durable background completion", () => {
       id: "hydrated:research-message",
       messageId: "research-message",
       title: "Background agent",
-      body: "Research complete\n\nAttachment: research/report.md\nAttachment: research/chart.png",
+      body: "Research complete",
+      media: ["research/report.md", "research/chart.png"],
     });
     expect(result[1]?.kind).toBe("user");
     expect(
@@ -1458,7 +1461,8 @@ describe("durable background completion", () => {
     expect(result[1]).toMatchObject({
       id: "background:research-task",
       messageId: "research-message",
-      body: "Research complete\n\nAttachment: research/report.md\nAttachment: research/chart.png",
+      body: "Research complete",
+      media: ["research/report.md", "research/chart.png"],
       turnId: "child-turn",
     });
     expect(
@@ -1749,3 +1753,47 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
+
+describe("delivered attachments", () => {
+  it("keeps a file-only assistant delivery as media, not as path text", () => {
+    // `send_file` with no caption persists an assistant row with empty text.
+    const entries = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      messages: [
+        {
+          seq: 1,
+          role: "assistant",
+          content: "",
+          persisted_at: "2026-09-26T00:27:17Z",
+          media: ["/data/users/x/workspace/.artifacts/01-p20-art.png"],
+          message_id: "delivery-1",
+        },
+      ],
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "assistant",
+      body: "",
+      media: ["/data/users/x/workspace/.artifacts/01-p20-art.png"],
+    });
+  });
+
+  it("leaves tool rows' media as text: their disclosure is a separate surface", () => {
+    const entries = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      messages: [
+        {
+          seq: 1,
+          role: "tool",
+          content: "shown to model",
+          persisted_at: "2026-09-26T00:00:00Z",
+          media: ["/w/shot.png"],
+        },
+      ],
+    });
+    expect(entries[0]?.body).toBe("shown to model\n\nAttachment: /w/shot.png");
+    expect(entries[0]).not.toHaveProperty("media");
+  });
+});

@@ -35,6 +35,11 @@ export interface TimelineEntry {
   /** Explicit terminal state from this owner's hydrate/live lifecycle. */
   textTerminal?: "completed" | "errored" | "interrupted";
   omittedCount?: number;
+  /**
+   * Files delivered with a user or assistant message (server paths or upload
+   * handles). Rendered as attachments, never as part of `body`.
+   */
+  media?: readonly string[];
   /** First-seen wall-clock for a streamed block (duration in fold headers). */
   startedAtMs?: number;
   /** Latest stream time while running; final time once settled. */
