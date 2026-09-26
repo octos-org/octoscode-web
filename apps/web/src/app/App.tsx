@@ -30,6 +30,7 @@ import {
 import {
   APPUI_SERVER_METHODS,
   CORE_UI_FEATURES,
+  CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
 } from "@octos-org/octoscode-client/protocol";
@@ -159,6 +160,7 @@ import productStyles from "./AppProduct.module.css";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
+import { CopyConversationButton } from "../features/transcript-export/CopyConversationButton.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
 import type {
@@ -2401,6 +2403,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 </nav>
               ) : null}
               <div className="header-actions">
+                {/* Desktop only: at phone width the header keeps its room
+                    for the workspace title and Review changes. */}
+                {!compact &&
+                protocol.client &&
+                session.opened &&
+                supportsMethod(
+                  session.capabilities,
+                  CORE_UI_METHODS.SESSION_HYDRATE,
+                ) ? (
+                  <CopyConversationButton
+                    key={session.opened.session_id}
+                    source={{
+                      client: protocol.client,
+                      sessionId: session.opened.session_id,
+                      workspaceRoot:
+                        session.opened.workspace_root ?? activeWorkspacePath,
+                    }}
+                    className={productStyles.preferencesTrigger ?? ""}
+                  />
+                ) : null}
                 <button
                   className={productStyles.preferencesTrigger}
                   type="button"
