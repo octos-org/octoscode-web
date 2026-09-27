@@ -104,5 +104,7 @@ export function buildSafeDiagnostic(
 function redactSecrets(value: string): string {
   return value
     .replace(/([?&]token=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/([?&]auth_token=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/([?&]api_key=)[^&\s)]+/gi, "$1[redacted]")
     .replace(/Bearer\s+[^\s)]+/gi, "Bearer [redacted]");
 }
