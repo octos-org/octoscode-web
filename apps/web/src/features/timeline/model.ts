@@ -772,14 +772,18 @@ export function settleTimelineTurn(
         ? "Turn complete"
         : outcome === "interrupted"
           ? "Turn stopped"
-          : "Turn failed",
+          : outcome === "rate_limited"
+            ? "Turn rate limited"
+            : "Turn failed",
     body,
     status:
       outcome === "completed"
         ? "complete"
-        : outcome === "interrupted"
+        : outcome === "rate_limited"
           ? "info"
-          : "error",
+          : outcome === "interrupted"
+            ? "info"
+            : "error",
     turnId,
     latestTurnOutcome: outcome,
   });
