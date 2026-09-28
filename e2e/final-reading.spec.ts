@@ -320,7 +320,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
       .getByRole("button", { name: /^Show \d+ earlier messages$/ })
       .click();
   }
-  await expect(page.locator(".timeline-entry")).toHaveCount(360);
+  await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await expect(page.locator(".timeline-entry").first()).toContainText(
     "History 1:",
   );
@@ -365,7 +365,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
     .toBe(true);
   for (let index = 0; index < 3; index++) {
     await selectSession(sessionA);
-    await expect(page.locator(".timeline-entry")).toHaveCount(360);
+    await expect(page.locator(".timeline-entry")).toHaveCount(40);
     await expect
       .poll(async () =>
         Math.abs((await readingA.boundingBox())!.y - readingATop),

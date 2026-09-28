@@ -22,13 +22,13 @@ export function useConversationScroll(
   view: string,
 ) {
   // Reading positions live only for this authenticated browser identity.
-  const positions = useMemo(
-    () => new Map<string, ConversationViewState>(),
-    [identity],
-  );
+  // useRef: stable across re-renders AND concurrent render discards.
+  // useMemo can be dropped by React, silently resetting all session
+  // reading positions to zero (correctness audit P2, 2026-09-22).
+  const positionsRef = useRef(new Map<string, ConversationViewState>());
   const viewState = useMemo(() => {
     if (!identity || !sessionKey || view !== "chat") return null;
-    let state = positions.get(sessionKey);
+    let state = positionsRef.current.get(sessionKey);
     if (!state) {
       state = {
         firstVisibleId: null,
@@ -36,10 +36,10 @@ export function useConversationScroll(
         scrollTop: 0,
         anchor: null,
       };
-      positions.set(sessionKey, state);
+      positionsRef.current.set(sessionKey, state);
     }
     return state;
-  }, [identity, positions, sessionKey, view]);
+  }, [sessionKey, view]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
