@@ -75,7 +75,7 @@ const LIVE = {
   masterSessionId: "dev:api:web-1181050b-70e9-4a36-8ec7-cd178a9b48c5",
   profileId: "dev",
   workspaceRoot:
-    "/Users/ychen/.octos/outer/web-parity-20260906.504DUp/octoscode-web",
+    "/Users/me/.octos/outer/web-parity-20260906.504DUp/octoscode-web",
   modelLane: "glm-53",
   model: "glm-5.3",
   acceptedAtMs: 1_789_287_846_267,
