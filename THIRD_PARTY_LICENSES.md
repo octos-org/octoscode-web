@@ -66,7 +66,7 @@ DeepSeek Harness UI reference.
 - `is-hexadecimal@2.0.1` — MIT — https://github.com/wooorm/is-hexadecimal
 - `is-plain-obj@4.1.0` — MIT — https://github.com/sindresorhus/is-plain-obj
 - `katex@0.16.47` — MIT — https://katex.org
-- `katex@0.18.7` — MIT — https://katex.org
+- `katex@0.18.9` — MIT — https://katex.org
 - `longest-streak@3.1.0` — MIT — https://github.com/wooorm/longest-streak
 - `markdown-table@3.0.4` — MIT — https://github.com/wooorm/markdown-table
 - `mdast-util-find-and-replace@3.0.2` — MIT — https://github.com/syntax-tree/mdast-util-find-and-replace
@@ -852,7 +852,7 @@ Applies to:
 Applies to:
 
 - `katex@0.16.47`
-- `katex@0.18.7`
+- `katex@0.18.9`
 
     ===== LICENSE =====
     The MIT License (MIT)
