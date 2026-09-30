@@ -165,58 +165,8 @@ button:active:not(:disabled) {
   background: var(--dsw-specific-sidebar-fill);
 }
 
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  height: 60px;
-  padding: var(--dsw-space-2) var(--dsw-space-1);
-  margin-bottom: var(--dsw-space-2);
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dsw-space-2);
-  min-width: 0;
-  color: var(--dsw-alias-label-primary);
-  text-decoration: none;
-}
-
-.brand > span:last-child {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.brand strong {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.brand small {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--dsw-font-size-micro);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .connection-summary dt,
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--dsw-space-4);
-  margin-bottom: var(--dsw-space-4);
-}
-
 .section-heading h2,
-.section-heading h2 {
-  font-size: 15px;
-  font-weight: 600;
-}
-
 .eyebrow {
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsw-font-size-micro);
@@ -312,11 +262,6 @@ label > span {
 .connection-error {
   margin: -2px 0 12px;
   color: var(--dsw-alias-state-error-primary);
-}
-
-.navigator-actions {
-  display: flex;
-  gap: var(--dsw-space-1);
 }
 
 .navigator-actions button,
@@ -481,17 +426,6 @@ label > span {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-font-family-code);
   font-size: var(--dsw-font-size-micro);
-}
-
-.repo-link {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.repo-link:hover {
-  color: var(--dsw-alias-label-primary);
 }
 
 .review-chip {
@@ -1160,43 +1094,6 @@ kbd {
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.compact-heading {
-  margin-bottom: var(--dsw-space-3);
-}
-
-.compact-heading h2 {
-  font-size: 13px;
-}
-
-.count-badge {
-  min-width: 24px;
-  padding: 4px 6px;
-  border-radius: 20px;
-  background: var(--dsw-specific-selector);
-  color: var(--dsw-alias-label-tertiary);
-  text-align: center;
-  font-size: var(--dsw-font-size-micro);
-}
-
-.feature-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--dsw-space-1);
-}
-
-.feature-list > span {
-  padding: var(--dsw-space-1) var(--dsw-space-2);
-  border-radius: 6px;
-  background: var(--dsw-specific-tip);
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsw-font-family-code);
-  font-size: var(--dsw-font-size-micro);
-}
-
-.event-section {
-  margin-top: var(--dsw-space-5);
-}
-
 .work-section {
   margin-top: 26px;
 }
@@ -1205,70 +1102,8 @@ kbd {
 .usage-summary span,
 .context-meter progress::-webkit-progress-value,
 .plan-list .plan-in_progress > span,
-.task-list {
-  display: grid;
-  gap: 6px;
-}
-
-.task-card {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 9px;
-  background: var(--dsw-specific-tip);
-}
-
-.task-card > button:first-child {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  gap: var(--dsw-space-2);
-  align-items: start;
-  border: 0;
-  padding: 9px 30px 9px 9px;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-  text-align: left;
-}
-
-.task-card > button:first-child:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.task-card > button > span:nth-child(2) {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
 .task-card strong,
-.task-card small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-card strong {
-  font-size: var(--dsw-font-size-micro);
-  font-weight: 500;
-}
-
 .task-card small,
-.task-card em {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--dsw-font-size-micro);
-  font-style: normal;
-}
-
-.task-state {
-  width: 7px;
-  height: 7px;
-  margin-top: var(--dsw-space-1);
-  border-radius: 50%;
-  background: var(--dsw-alias-label-caption);
-}
-
 .task-state.state-running,
 .task-status-pill.state-running {
   background: var(--dsw-alias-state-warn-primary);
@@ -1284,88 +1119,6 @@ kbd {
 .task-status-pill.state-failed,
 .task-status-pill.state-cancelled {
   background: var(--dsw-alias-state-error-primary);
-}
-
-.task-cancel {
-  position: absolute;
-  top: 6px;
-  right: 5px;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-}
-
-.task-cancel:hover {
-  background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.wire-disclosure {
-  margin-top: var(--dsw-space-5);
-  border-top: 1px solid var(--dsw-alias-border-l1);
-  padding-top: var(--dsw-space-3);
-}
-
-.wire-disclosure > summary {
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
-}
-
-.embedded-inspector {
-  padding-top: var(--dsw-space-4);
-}
-
-.embedded-inspector .event-section {
-  margin-top: 22px;
-}
-
-.event-list {
-  display: grid;
-  gap: var(--dsw-space-1);
-}
-
-.event-row {
-  overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 8px;
-  background: var(--dsw-specific-tip);
-}
-
-.event-row summary {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--dsw-space-2);
-  padding: var(--dsw-space-2);
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  font-family: var(--dsw-font-family-code);
-  font-size: var(--dsw-font-size-micro);
-  list-style: none;
-}
-
-.event-row summary::-webkit-details-marker {
-  display: none;
-}
-
-.event-row time {
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.event-row pre {
-  max-height: 240px;
-  margin: 0;
-  overflow: auto;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-  padding: var(--dsw-space-2);
-  color: var(--dsw-alias-label-tertiary);
-  font: 400 var(--dsw-font-size-micro)/15px var(--dsw-font-family-code);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .review-backdrop {
@@ -2190,10 +1943,6 @@ kbd {
   }
 
   .review-status code,
-  .repo-link {
-    display: none;
-  }
-
   .review-content {
     padding: var(--dsw-space-2);
   }
