@@ -10,8 +10,11 @@ candidate. This is not a blanket parity or soak-pass claim.
 
 - Web baseline: `2f23a72d8dad26777d4bc3296a3d99048c9360a1`.
 - TUI behavioral reference: `0a174d95ddec2b123adb3498432e29eb13affb81`.
-- Live Core candidate: `2.0.3-rc.11` (`d51601d`). The existing released-runtime
-  compatibility gate remains separately pinned to rc.9 until explicitly updated.
+- Live Core candidate for the historical comparison: `2.0.3-rc.11` (`d51601d`).
+  Its released-runtime gate used rc.9. The current baseline is defined
+  separately by [`core-runtime.json`](../packages/client/core-runtime.json), now
+  rc.13; updating that pin does not rerun or extend the historical acceptance
+  results.
 - Architecture and independent acceptance: Codex GPT-6 Astra.
 - Execution lanes: native Octos peers using Kimi K3, GLM-5.3, and DeepSeek V4
   Flash. A configured lane alone is not proof of effective model execution.

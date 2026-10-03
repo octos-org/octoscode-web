@@ -15,19 +15,22 @@ of rewriting the original decision.
 
 ## Sessions, coding, and supervision
 
-| ADR                                                                  | Decision                                                              |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [0005](0005-durable-session-recovery.md)                             | Treat hydrate, cursor replay, dedupe, and reconnect as one invariant. |
-| [0006](0006-safe-markdown-transcript.md)                             | Parse Markdown only after assistant output settles.                   |
-| [0007](0007-coding-safety-surfaces.md)                               | Keep permission and diff safety surfaces server-authoritative.        |
-| [0008](0008-supervised-work-surfaces.md)                             | Project plans, tasks, output, and artifacts from Octos.               |
-| [0009](0009-workspace-session-surfaces.md)                           | Historical foreground-only navigation, partially superseded by 0019.  |
-| [0010](0010-server-resolved-workspace-launch.md)                     | Server-resolved launch; activation confirmation superseded by 0019.   |
-| [0012](0012-background-session-activity.md)                          | Retired the incomplete cross-session Activity navigator.              |
-| [0015](0015-solo-web-onboarding.md)                                  | Onboard an empty solo server through capability-gated Core methods.   |
-| [0017](0017-workspace-session-and-connection-memory.md)              | Historical connection/restore design, superseded by ADR 0018.         |
-| [0018](0018-dsh-aligned-product-shell.md)                            | DSH-aligned shell, partially superseded by ADR 0019.                  |
-| [0019](0019-tab-session-navigation-and-background-turn-ownership.md) | Remember confirmed Sessions and retain acknowledged turn owners.      |
+| ADR                                                                  | Decision                                                                    |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [0005](0005-durable-session-recovery.md)                             | Hydrate/replay invariant; retained-Session scope extended by 0020.          |
+| [0006](0006-safe-markdown-transcript.md)                             | Parse Markdown only after assistant output settles.                         |
+| [0007](0007-coding-safety-surfaces.md)                               | Keep permission and diff safety surfaces server-authoritative.              |
+| [0008](0008-supervised-work-surfaces.md)                             | Project plans, tasks, output, and artifacts from Octos.                     |
+| [0009](0009-workspace-session-surfaces.md)                           | Historical foreground-only navigation, partially superseded by 0019.        |
+| [0010](0010-server-resolved-workspace-launch.md)                     | Server-resolved launch; onboarding/activation extended by 0015/0019.        |
+| [0012](0012-background-session-activity.md)                          | Retired the incomplete cross-session Activity navigator.                    |
+| [0015](0015-solo-web-onboarding.md)                                  | Onboard an empty solo server through capability-gated Core methods.         |
+| [0017](0017-workspace-session-and-connection-memory.md)              | Historical connection/restore design, superseded by ADR 0018.               |
+| [0018](0018-dsh-aligned-product-shell.md)                            | DSH-aligned shell; later navigation, storage, and Activity decisions below. |
+| [0019](0019-tab-session-navigation-and-background-turn-ownership.md) | Confirmed Session refs; owner sockets/ACK guards superseded by 0020.        |
+| [0020](0020-retained-sessions-on-a-shared-transport.md)              | Retain Session controllers and queues on one shared transport.              |
+| [0021](0021-user-scoped-durable-composer-drafts.md)                  | Persist unsent text by server, verified user, and Session.                  |
+| [0022](0022-activity-for-confirmed-sessions.md)                      | Poll confirmed Session tasks only while Activity is open.                   |
 
 ## Contracts and delivery
 

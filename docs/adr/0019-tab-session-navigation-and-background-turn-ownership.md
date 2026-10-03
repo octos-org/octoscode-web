@@ -2,6 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-08-28
+- Superseded in part by:
+  - [ADR 0020](0020-retained-sessions-on-a-shared-transport.md) for transport
+    ownership, retained queues, and navigation during pending starts
+  - [ADR 0021](0021-user-scoped-durable-composer-drafts.md) for durable drafts
+    and their lifetime across credential changes
 - Supersedes in part:
   - [ADR 0009](0009-workspace-session-surfaces.md), where it forbids Session
     navigation during every active turn

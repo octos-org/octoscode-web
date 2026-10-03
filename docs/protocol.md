@@ -72,7 +72,7 @@ Markdown tree.
 
 ## Turn ownership during Session navigation
 
-The rc11 candidate uses one physical pooled WebSocket for all confirmed
+The current client uses one physical pooled WebSocket for all confirmed
 Sessions. One `SessionRecord` per full endpoint/Workspace/Profile/Session/auth
 epoch owns its controller, FIFO, interactions, cursor, and bounded timeline.
 Selection does not close a socket, reset a queue, or wait for another turn's
@@ -91,9 +91,13 @@ Closing it interrupts connection-owned work; ordinary teardown persists a
 `connection_closed` terminal. A daemon restart likewise requires fresh hydrate
 and cannot be presented as continuous detached execution. A terminal event is
 not permission to close the shared transport while other work may remain. This
+ownership is recorded in
+[ADR 0020](adr/0020-retained-sessions-on-a-shared-transport.md), which
 supersedes ADR 0019's ACK navigation guard and eight retained-owner-socket
-budget, not Core's execution-lifetime boundary. The separately pinned rc9
-baseline is unchanged by rc11 candidate testing.
+budget. An unresolved turn-recovery state still blocks navigation until checked.
+The downloadable runtime baseline is
+[`core-runtime.json`](../packages/client/core-runtime.json), currently
+`v2.0.3-rc.13`; historical rc.11 testing is separate evidence.
 
 Native peer `peer/staged` and `peer/closed` events route to the retained master
 record even while backgrounded. The coordinator binds one peer manager to that
@@ -261,3 +265,6 @@ or complete TUI parity. See [Feature parity](feature-parity.md).
 - [ADR 0014: Pinned Core runtime smoke](adr/0014-pinned-core-runtime-smoke.md)
 - [ADR 0015: Solo Web onboarding](adr/0015-solo-web-onboarding.md)
 - [ADR 0019: Tab Session navigation and background turn ownership](adr/0019-tab-session-navigation-and-background-turn-ownership.md)
+- [ADR 0020: Retained Sessions on a shared transport](adr/0020-retained-sessions-on-a-shared-transport.md)
+- [ADR 0021: User-scoped durable composer drafts](adr/0021-user-scoped-durable-composer-drafts.md)
+- [ADR 0022: Activity for confirmed Sessions](adr/0022-activity-for-confirmed-sessions.md)

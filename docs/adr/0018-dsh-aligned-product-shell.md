@@ -5,8 +5,14 @@
 - Supersedes: ADR 0012 and ADR 0017; the primary session-files presentation in
   ADR 0009
 - Superseded in part by:
-  [ADR 0019](0019-tab-session-navigation-and-background-turn-ownership.md) for
-  tab-confirmed Session references and acknowledged-turn background navigation
+  - [ADR 0019](0019-tab-session-navigation-and-background-turn-ownership.md) for
+    tab-confirmed Session references and acknowledged-turn background navigation
+  - [ADR 0020](0020-retained-sessions-on-a-shared-transport.md) for candidate
+    Sessions on one shared transport
+  - [ADR 0021](0021-user-scoped-durable-composer-drafts.md) for durable unsent
+    text
+  - [ADR 0022](0022-activity-for-confirmed-sessions.md) for on-demand Activity
+    across confirmed Sessions
 
 ## Context
 

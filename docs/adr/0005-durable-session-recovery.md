@@ -2,6 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-08-26
+- Superseded in part by:
+  [ADR 0020](0020-retained-sessions-on-a-shared-transport.md) for projection
+  ownership and recovery across retained Sessions on one transport
 
 ## Context
 
