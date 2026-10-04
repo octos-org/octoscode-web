@@ -270,44 +270,11 @@ label > span {
   background: var(--dsw-alias-state-success-primary);
 }
 
-.activity-running .session-presence {
-  background: var(--dsw-alias-button-info-fill);
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--dsw-alias-button-info-fill) 18%, transparent);
-}
-
 .activity-failed .session-presence,
-.activity-unknown .session-presence {
-  background: var(--dsw-alias-state-error-primary);
-}
-
-.activity-done:not(.active) .session-presence {
-  background: var(--dsw-alias-state-success-primary);
-}
-
 .session-row strong,
-.session-activity-note {
-  margin-top: var(--dsw-space-2);
-}
-
 .session-files strong,
 .session-files small,
-.permission-card {
-  display: grid;
-  gap: var(--dsw-space-2);
-  margin: 8px 4px 0;
-  padding: 13px 0;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-}
-
 .permission-heading,
-.permission-network {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--dsw-space-2);
-}
-
 .permission-heading button,
 .review-header-actions button,
 .review-chip {
@@ -328,31 +295,6 @@ label > span {
 .review-header-actions button:disabled {
   cursor: wait;
   opacity: 0.55;
-}
-
-.permission-state {
-  color: var(--dsw-alias-label-caption);
-  font-size: var(--dsw-font-size-micro);
-}
-
-.permission-network > span {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-}
-
-.permission-network .permission-group {
-  min-width: 128px;
-}
-
-.permission-card p {
-  margin: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--dsw-font-size-micro);
-  line-height: 15px;
-}
-
-.permission-card p.permission-error {
-  color: var(--dsw-alias-state-error-primary);
 }
 
 .conversation {
@@ -1094,10 +1036,6 @@ kbd {
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.work-section {
-  margin-top: 26px;
-}
-
 .runtime-facts dt,
 .usage-summary span,
 .context-meter progress::-webkit-progress-value,
@@ -1823,10 +1761,6 @@ kbd {
     visibility: visible;
     transform: translateX(0);
   }
-
-  .work-inspector > section:first-of-type .section-heading {
-    padding-right: 32px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -1852,10 +1786,6 @@ kbd {
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--dsw-alias-border-l2);
-  }
-
-  .permission-card {
-    margin-bottom: var(--dsw-space-1);
   }
 
   .conversation {
