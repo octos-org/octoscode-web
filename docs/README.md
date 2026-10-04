@@ -16,17 +16,19 @@ your question.
 
 ## Understand and change
 
-| Document                                                                                   | Purpose                                                                   |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| [Architecture](architecture.md)                                                            | Runtime ownership, dependency direction, state, and extension boundaries. |
-| [Protocol integration](protocol.md)                                                        | Capability negotiation, projections, Core pins, and compatibility gates.  |
-| [ADR index](adr/README.md)                                                                 | Accepted decisions, grouped by concern.                                   |
-| [Product shell ADR](adr/0018-dsh-aligned-product-shell.md)                                 | Authentication, Workspace/Session navigation, and controls.               |
-| [Session navigation ADR](adr/0019-tab-session-navigation-and-background-turn-ownership.md) | Confirmed Session refs and background turn ownership.                     |
-| [Contributing](../CONTRIBUTING.md)                                                         | Development workflow and review expectations.                             |
-| [Testing](testing.md)                                                                      | Unit, browser, contract, runtime, and deployment verification.            |
-| [Releasing](releasing.md)                                                                  | Immutable publication, provenance, and rollback procedure.                |
-| [Agent guide](../AGENTS.md)                                                                | Non-negotiable repository rules for coding agents.                        |
+| Document                                                                     | Purpose                                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Architecture](architecture.md)                                              | Runtime ownership, dependency direction, state, and extension boundaries. |
+| [Protocol integration](protocol.md)                                          | Capability negotiation, projections, Core pins, and compatibility gates.  |
+| [ADR index](adr/README.md)                                                   | Accepted decisions, grouped by concern.                                   |
+| [Product shell ADR](adr/0018-dsh-aligned-product-shell.md)                   | Authentication, Workspace/Session navigation, and controls.               |
+| [Session execution ADR](adr/0020-retained-sessions-on-a-shared-transport.md) | Retained Session controllers, shared transport, and recovery.             |
+| [Draft storage ADR](adr/0021-user-scoped-durable-composer-drafts.md)         | User-scoped unsent text, restoration, and cleanup.                        |
+| [Activity ADR](adr/0022-activity-for-confirmed-sessions.md)                  | On-demand task inspection across confirmed Sessions.                      |
+| [Contributing](../CONTRIBUTING.md)                                           | Development workflow and review expectations.                             |
+| [Testing](testing.md)                                                        | Unit, browser, contract, runtime, and deployment verification.            |
+| [Releasing](releasing.md)                                                    | Immutable publication, provenance, and rollback procedure.                |
+| [Agent guide](../AGENTS.md)                                                  | Non-negotiable repository rules for coding agents.                        |
 
 ## Project records
 

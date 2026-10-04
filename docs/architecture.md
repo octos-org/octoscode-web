@@ -91,9 +91,11 @@ The React hook is a composition root, not a catch-all state API. Consumers see
 grouped connection, conversation, interaction, safety, work, workspace-product,
 and diagnostic domains. Connection/recovery and per-record turn transitions live
 in React-free controllers; overlapping refreshes use request generations so an
-older response cannot overwrite newer session state. Ephemeral per-session
-drafts use a 50-entry LRU, and the timeline exposes when its 200-row rendering
-window omits older durable history.
+older response cannot overwrite newer session state. The text-draft cache evicts
+the oldest insertion when a new draft reaches its 50-entry threshold; updating
+an entry does not reorder it. Durable eviction is attempted separately, while
+restore protects saved copies during cache rebuild. The timeline exposes when
+its 200-row rendering window omits older durable history.
 
 ## Interaction authority
 
@@ -109,13 +111,20 @@ their presentation but not their state transition:
 - an unambiguous fresh Web `activate` follows the server-resolved Profile
   automatically, while `cross_profile` and `no_profile` remain explicit;
 - Session switching does not wait for a turn ACK or an empty local FIFO; the
-  source record keeps its queue and interactions while the destination opens;
+  source record keeps its queue and interactions while the destination opens. An
+  unresolved turn-recovery state still blocks navigation until checked;
 - native staged/closed events reach the master record's peer coordinator even in
   the background; hosting uses native identities and never changes focus;
 - the composer reports the effective Session runtime model, while Settings may
   manage provider/model/route configuration and the active Profile default;
 - provider keys are write-only operation arguments in the client; Core owns
   persistence and returns only a configured/not-configured projection.
+
+Activity scans only eligible confirmed Session references while its dialog is
+open. It reads `task/list` in batches of four and refreshes ten seconds after
+each scan completes. Closing the dialog cancels polling; scanning never opens
+Sessions. Trajectory remains scoped to the selected Session. See
+[ADR 0022](adr/0022-activity-for-confirmed-sessions.md).
 
 DeepSeek Harness supplies the audited browser-product and visual reference. Its
 Cordis host, agent runtime, and full plugin graph are not part of this system.
@@ -139,25 +148,30 @@ See [ADR 0002](adr/0002-dsh-evaluation.md) and
   effective Workspace/Profile scope, so they are not used as a product catalog;
   only a successful exact open can add a Session row until Core exposes
   Workspace/SessionRef.
-- Core rc11 continuation remains transport-bound. Switching views does not close
-  the shared socket, but refresh, tab close, network loss, and Disconnect can
-  interrupt all connection-owned work. In-memory queues survive ordinary
+- The client does not provide detached continuation. Switching views does not
+  close the shared socket, but refresh, tab close, network loss, and Disconnect
+  can interrupt all connection-owned work. In-memory queues survive ordinary
   reconnect, pause during recovery, and reconcile against each Session's actual
-  terminal state. Unsent prompts and attachment drafts do not survive reload.
+  terminal state. Queued prompts and attachment drafts do not survive reload;
+  unsent text can be restored from its separate draft storage.
 - Reconnect without hydrate, replay, dedupe, session scope, and gap handling is
   not recovery.
 
-Only the connection origin is remembered durably. A successful connection binds
-the token, auto-connect marker, active Workspace/Profile/Session restore hints,
-recent Workspace paths, and confirmed Session routing tuples to that endpoint
-and token in the current tab. Disconnect retains that navigation memory but
-stops automatic reconnection; Forget or an identity change clears it. Closing
-the tab leaves the origin but clears that working context. See
-[ADR 0018](adr/0018-dsh-aligned-product-shell.md) for the product boundary.
-[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md)
-records the historical per-owner-socket design; this retained-record candidate
-supersedes its ACK navigation guard and eight-connection budget without claiming
-detached execution. The ADR is preserved as historical evidence.
+Connection preferences persist the origin. Display preferences and unsent text
+use separate durable storage. Text drafts are scoped to the server origin, the
+user confirmed by REST `/api/auth/me`, and the Workspace/Profile/Session tuple.
+They can survive tab closure; restoring them requires authentication and never
+submits a turn. Forget attempts to remove that user's saved drafts, while an
+identity change clears the active editing view. Storage failures are surfaced.
+See [ADR 0021](adr/0021-user-scoped-durable-composer-drafts.md).
+
+The token, auto-connect marker, selected Session restore hints, recent paths,
+and confirmed navigation tuples remain bound to the current tab's endpoint and
+token. Disconnect retains navigation memory but stops automatic reconnection;
+Forget or an identity change clears it.
+[ADR 0020](adr/0020-retained-sessions-on-a-shared-transport.md) records the
+shared transport and retained queues that replace ADR 0019's per-owner sockets,
+ACK navigation guard, and eight-connection budget.
 [ADR 0017](adr/0017-workspace-session-and-connection-memory.md) is the
 superseded historical restore design. Durable detached turn ownership remains a
 Core contract tracked in
@@ -183,8 +197,12 @@ sub-11px text.
 
 The expanded parity implementation is a candidate. Passing fixtures, unit tests,
 or a baseline runtime smoke is not a full parity or live-soak acceptance; see
-[Feature parity](feature-parity.md) and [Testing](testing.md). The rc11
-candidate evidence does not change the separately pinned rc9 runtime baseline.
+[Feature parity](feature-parity.md) and [Testing](testing.md).
+[`core-runtime.json`](../packages/client/core-runtime.json) defines the
+downloadable runtime baseline (currently `v2.0.3-rc.13`).
+[`contract-source.json`](../packages/client/contract-source.json) separately
+pins the generated vocabulary source. Earlier rc.9/rc.11 audit evidence does not
+certify later changes.
 
 | Layer                   | Responsibility                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------- |

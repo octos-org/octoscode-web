@@ -83,7 +83,9 @@ and bounded transcript projection in the current tab. Several Sessions may run
 simultaneously, and switching or creating a Session is independent of another
 Session's queued prompts or pending start acknowledgement. The source queue
 drains on its own terminal events, not on selection. Returning selects that
-retained projection; reconnect still requires authoritative hydrate/replay.
+retained projection; reconnect still requires authoritative hydrate/replay. An
+unresolved turn-recovery state still blocks navigation until the user checks its
+status, so ambiguous dispatch evidence is not abandoned.
 
 Approvals and questions remain attached to their exact Session and generation. A
 background waiting badge does not resolve them in the selected Session.
@@ -108,8 +110,9 @@ dispatch until each record is rehydrated and reconciled; a failed/interrupted
 turn is not blindly resubmitted. Reload loses queued prompts and image drafts.
 Disconnect retires records but keeps confirmed navigation refs. **Forget
 server** or changing endpoint/token identity clears those refs, recent Workspace
-paths, and tab-scoped drafts. The rc9 pinned runtime baseline is unchanged; the
-rc11 parity candidate needs its own acceptance evidence.
+paths, and tab-scoped drafts. The downloadable runtime baseline is defined by
+[`core-runtime.json`](../packages/client/core-runtime.json); feature acceptance
+requires its own evidence.
 
 Unsent composer drafts survive refresh and tab close. After authenticating
 again, opening the same Session restores its text for the server-confirmed user.
@@ -120,9 +123,12 @@ user's saved text. Pending queued messages are still tab-runtime state and are
 not restored after a full reload. Storage failures preserve in-memory editing
 and show a warning; an older persisted draft can remain when the browser refuses
 an update or deletion. Forgetting reports failure if the browser refuses to
-clear saved data. The tab retains at most 50 nonempty drafts. At capacity it
-keeps the current input and existing drafts, and asks the user to send or clear
-the input before switching; it never silently evicts an earlier draft.
+clear saved data. When inserting a new nonempty draft at the cache's 50-entry
+threshold, the cache evicts its oldest insertion and attempts to remove the
+saved copy. Updating an existing entry does not reorder it. Restore suppresses
+durable deletion while rebuilding the cache. See
+[ADR 0021](adr/0021-user-scoped-durable-composer-drafts.md) for storage scope,
+restoration, and cleanup.
 
 The tab title counts unseen background responses that complete or need input.
 General Settings offers an explicit desktop-notification opt-in. Notifications
@@ -155,9 +161,12 @@ AppUI contract supports typed per-model `temperature`, `top_p`,
 pinned TUI nor Web offers an editor for those overrides. Web preserves known
 configured values when editing a provider and blocks edits it cannot preserve
 safely. The separate `/thinking` control captures per-turn reasoning.
-`/activity` searches confirmed Sessions; tool/MCP, skills/research, context,
-history, and peer controls open scoped product panels rather than a raw RPC
-console.
+`/activity` searches confirmed Sessions and reads their task snapshots in
+batches of four while its dialog is open. It refreshes ten seconds after each
+scan completes and stops polling when closed; it never opens Sessions to
+discover work. See [ADR 0022](adr/0022-activity-for-confirmed-sessions.md).
+Tool/MCP, skills/research, context, history, and peer controls open scoped
+product panels rather than a raw RPC console.
 
 ## Deliberate non-goals
 
@@ -189,8 +198,8 @@ Core contracts rather than more client-side inference:
   [octos#2148](https://github.com/octos-org/octos/issues/2148)).
 
 These are upstream contract boundaries, not invitations to add a transcript
-store or a second event dialect. See
-[ADR 0019](adr/0019-tab-session-navigation-and-background-turn-ownership.md) for
-the historical, superseded per-owner-connection/ACK guard,
-[ADR 0018](adr/0018-dsh-aligned-product-shell.md), and the
-[ADR index](adr/README.md) for the decisions behind the current product.
+store or a second event dialect. The current decisions are
+[retained Sessions](adr/0020-retained-sessions-on-a-shared-transport.md),
+[durable drafts](adr/0021-user-scoped-durable-composer-drafts.md), and
+[on-demand Activity](adr/0022-activity-for-confirmed-sessions.md). The
+[ADR index](adr/README.md) links their historical predecessors.

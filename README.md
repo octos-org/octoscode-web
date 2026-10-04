@@ -242,10 +242,17 @@ retains local queues but must reconcile each Session through hydrate/replay
 before dispatch; a page reload loses queued prompts and attachment drafts. A
 browser leave warning helps prevent accidental refresh or close while work is
 active. Disconnect keeps confirmed navigation refs, not live records. **Forget
-server** or an endpoint/token change clears those refs. The rc11 candidate does
-not replace the repository's separately pinned rc9 runtime baseline. Durable
-detached execution remains a Core boundary, tracked in
+server** or an endpoint/token change clears those refs. The current downloadable
+runtime baseline is recorded in
+[`core-runtime.json`](packages/client/core-runtime.json); earlier rc.9/rc.11
+audit results remain tied to their tested revisions. Durable detached execution
+remains a Core boundary, tracked in
 [octos#2167](https://github.com/octos-org/octos/issues/2167).
+
+The architecture decisions cover
+[retained Sessions on one transport](docs/adr/0020-retained-sessions-on-a-shared-transport.md),
+[user-scoped draft persistence](docs/adr/0021-user-scoped-durable-composer-drafts.md),
+and [on-demand Activity](docs/adr/0022-activity-for-confirmed-sessions.md).
 
 ### Share a session with the terminal
 

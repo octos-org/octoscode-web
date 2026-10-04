@@ -134,8 +134,9 @@ browser; changing the token does not expose another user's drafts.
 The retained-Session implementation has passed local real-provider capacity,
 recovery and endurance checkpoints. New source additions still require their own
 acceptance: see the artifact-specific results in
-[Feature parity](feature-parity.md). The separately pinned rc9 baseline remains
-unchanged.
+[Feature parity](feature-parity.md). The current downloadable runtime baseline
+is recorded in [`core-runtime.json`](../packages/client/core-runtime.json);
+earlier audit results remain tied to their tested revisions.
 
 For a fresh Web Session, an unambiguous `activate` result opens automatically
 with Core's resolved Profile. A `cross_profile` result still asks which Profile

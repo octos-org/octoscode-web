@@ -162,8 +162,9 @@ separate authorization.
 The app pauses prompts until hydrate and durable cursor replay agree. A gap,
 lossy replay signal, or wrong-session envelope causes another authoritative
 hydrate instead of continuing with partial state. If reconnect keeps failing,
-verify server availability and disconnect/reconnect explicitly; do not clear
-browser storage because durable state is not stored there.
+verify server availability and disconnect/reconnect explicitly. Clearing browser
+storage cannot repair the server ledger and can remove saved unsent drafts,
+navigation references, and preferences.
 
 ## Onboarding falls back to the TUI
 

@@ -152,9 +152,11 @@ contract verified during release, but it is not a promise that every future or
 older server is compatible. Unsupported required methods or features fail closed
 in the connection surface.
 
-The expanded rc11 parity work is a candidate, not a blanket production/parity or
-live-soak acceptance. Its evidence is tracked separately from the unchanged rc9
-runtime baseline in the build manifest; see [Feature parity](feature-parity.md).
+The expanded parity work is not a blanket production/parity or live-soak
+acceptance. Historical rc.9/rc.11 evidence is separate from the current
+downloadable runtime baseline in
+[`core-runtime.json`](../packages/client/core-runtime.json), currently
+`v2.0.3-rc.13`; see [Feature parity](feature-parity.md).
 
 ## Rollback and health
 
