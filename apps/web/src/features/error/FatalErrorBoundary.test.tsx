@@ -13,4 +13,16 @@ describe("fatal render recovery", () => {
     expect(report).not.toContain("secret-value");
     expect(report).not.toContain("second-secret");
   });
+
+  it("redacts auth_token and api_key query credentials", () => {
+    const report = buildSafeDiagnostic(
+      new Error(
+        "connect to ws://host?auth_token=auth-secret&api_key=key-secret",
+      ),
+    );
+    expect(report).toContain("auth_token=[redacted]");
+    expect(report).toContain("api_key=[redacted]");
+    expect(report).not.toContain("auth-secret");
+    expect(report).not.toContain("key-secret");
+  });
 });
