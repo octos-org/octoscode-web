@@ -19,6 +19,7 @@ export function useConversationSearch(
   containerRef: RefObject<HTMLElement | null>,
 ) {
   const [query, setQuery] = useState("");
+  const [caseSensitive, setCaseSensitive] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rangesRef = useRef<Range[]>([]);
   const activeRangeRef = useRef<Range | null>(null);
@@ -61,10 +62,13 @@ export function useConversationSearch(
       clearHighlights();
       return;
     }
-    const needle = query.toLowerCase();
+    const haystack = caseSensitive
+      ? (node: Text) => node.textContent ?? ""
+      : (node: Text) => (node.textContent ?? "").toLowerCase();
+    const needle = caseSensitive ? query : query.toLowerCase();
     const ranges: Range[] = [];
     for (const node of collectTextNodes(container)) {
-      const text = (node.textContent ?? "").toLowerCase();
+      const text = haystack(node);
       let from = 0;
       let hit = text.indexOf(needle, from);
       while (hit !== -1) {
@@ -81,7 +85,7 @@ export function useConversationSearch(
       ranges.length === 0 ? 0 : Math.min(current, ranges.length - 1),
     );
     applyHighlight();
-  }, [clearHighlights, collectTextNodes, containerRef, query]);
+  }, [caseSensitive, clearHighlights, collectTextNodes, containerRef, query]);
 
   const applyHighlight = useCallback(() => {
     const ranges = rangesRef.current;
@@ -157,12 +161,14 @@ export function useConversationSearch(
     () => ({
       query,
       setQuery,
+      caseSensitive,
+      setCaseSensitive,
       matchCount: rangesRef.current.length,
       activeIndex,
       nextMatch,
       previousMatch,
       jumpTo,
     }),
-    [query, activeIndex, nextMatch, previousMatch, jumpTo],
+    [caseSensitive, query, activeIndex, nextMatch, previousMatch, jumpTo],
   );
 }

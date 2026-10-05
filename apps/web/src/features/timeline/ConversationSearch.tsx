@@ -4,6 +4,8 @@ import styles from "./conversation-search.module.css";
 export interface ConversationSearchProps {
   query: string;
   onQueryChange: (query: string) => void;
+  caseSensitive: boolean;
+  onCaseSensitiveChange: (value: boolean) => void;
   matchCount: number;
   activeIndex: number;
   onNext: () => void;
@@ -15,6 +17,8 @@ export interface ConversationSearchProps {
 export function ConversationSearch({
   query,
   onQueryChange,
+  caseSensitive,
+  onCaseSensitiveChange,
   matchCount,
   activeIndex,
   onNext,
@@ -51,6 +55,16 @@ export function ConversationSearch({
         onChange={(event) => onQueryChange(event.target.value)}
         aria-label="Search conversation"
       />
+      <button
+        type="button"
+        className={`${styles.navButton} ${caseSensitive ? styles.toggleOn : ""}`}
+        onClick={() => onCaseSensitiveChange(!caseSensitive)}
+        aria-pressed={caseSensitive}
+        aria-label="Match case"
+        title="Match case"
+      >
+        Aa
+      </button>
       <span className={styles.count}>
         {matchCount === 0 ? "0" : `${activeIndex + 1}/${matchCount}`}
       </span>

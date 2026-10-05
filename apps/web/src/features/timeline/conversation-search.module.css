@@ -60,3 +60,8 @@
 .closeButton {
   composes: navButton;
 }
+
+.toggleOn {
+  background: var(--display-highlight);
+  color: var(--dsw-alias-label-on-accent, var(--display-surface));
+}
