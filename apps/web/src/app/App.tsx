@@ -2583,6 +2583,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             <ConversationSearch
                               query={conversationSearch.query}
                               onQueryChange={conversationSearch.setQuery}
+                              caseSensitive={conversationSearch.caseSensitive}
+                              onCaseSensitiveChange={
+                                conversationSearch.setCaseSensitive
+                              }
                               matchCount={conversationSearch.matchCount}
                               activeIndex={conversationSearch.activeIndex}
                               onNext={conversationSearch.nextMatch}
