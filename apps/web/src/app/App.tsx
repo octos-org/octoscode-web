@@ -206,6 +206,11 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
+import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
+const ConversationSearch = lazyNamed(
+  () => import("../features/timeline/ConversationSearch.tsx"),
+  (module) => module.ConversationSearch,
+);
 const Timeline = lazyNamed(
   () => import("../features/timeline/Timeline.tsx"),
   (module) => module.Timeline,
@@ -410,6 +415,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
   const [commandError, setCommandError] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const compact = useCompactLayout();
   const [, setMutationRevision] = useState(0);
   const mutationLeases = useRef<ProfileMutationLeases | null>(null);
@@ -1099,6 +1105,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         setCommandPaletteForced((prev) => !prev);
         composerRef.current?.focus();
       }
+      if ((event.metaKey || event.ctrlKey) && event.key === "f") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
     };
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
@@ -1695,6 +1705,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     activeSessionKey,
     conversationTab,
   );
+  const conversationSearch = useConversationSearch(conversationScrollRef);
 
   useEffect(() => {
     if (!activeSessionKey || conversationTab !== "chat" || compact) return;
@@ -2567,6 +2578,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       <AttachmentAccessContext.Provider
                         value={attachmentAccess}
                       >
+                        {searchOpen ? (
+                          <Suspense fallback={null}>
+                            <ConversationSearch
+                              query={conversationSearch.query}
+                              onQueryChange={conversationSearch.setQuery}
+                              matchCount={conversationSearch.matchCount}
+                              activeIndex={conversationSearch.activeIndex}
+                              onNext={conversationSearch.nextMatch}
+                              onPrevious={conversationSearch.previousMatch}
+                              onClose={() => {
+                                setSearchOpen(false);
+                                conversationSearch.setQuery("");
+                                composerRef.current?.focus();
+                              }}
+                            />
+                          </Suspense>
+                        ) : null}
                         <Timeline
                           key={activeSessionKey ?? undefined}
                           viewState={conversationViewState}
