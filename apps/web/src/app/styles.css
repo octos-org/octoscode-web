@@ -1879,3 +1879,18 @@ kbd {
 }
 
 /* ── Reasoning block ──────────────────────────────────────────────── */
+
+/* Conversation search highlights (CSS Custom Highlights API). */
+::highlight(conversation-search) {
+  background-color: color-mix(
+    in srgb,
+    var(--display-highlight) 45%,
+    transparent
+  );
+  color: inherit;
+}
+
+::highlight(conversation-search-active) {
+  background-color: var(--display-highlight);
+  color: var(--dsw-alias-label-on-accent, var(--display-surface));
+}
