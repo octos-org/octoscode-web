@@ -53,6 +53,16 @@ export function ConversationSearch({
         placeholder="Search conversation"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (event.shiftKey) {
+              onPrevious();
+            } else {
+              onNext();
+            }
+          }
+        }}
         aria-label="Search conversation"
       />
       <button
