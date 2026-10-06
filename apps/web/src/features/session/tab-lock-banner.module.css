@@ -1,0 +1,30 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  border-bottom: 1px solid var(--dsw-border);
+  background: color-mix(in srgb, var(--display-highlight) 14%, transparent);
+  font-size: var(--dsw-font-size-sm);
+  color: var(--dsw-text);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.takeOver {
+  flex-shrink: 0;
+  padding: var(--dsw-space-1) var(--dsw-space-2);
+  border: 1px solid var(--dsw-border);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-surface-raised);
+  color: var(--dsw-text);
+  font-size: var(--dsw-font-size-sm);
+  cursor: pointer;
+}
+
+.takeOver:hover {
+  border-color: var(--dsw-accent);
+}

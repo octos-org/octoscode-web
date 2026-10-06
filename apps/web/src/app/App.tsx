@@ -207,6 +207,8 @@ import {
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
+import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
+import { TabLockBanner } from "../features/session/TabLockBanner.tsx";
 const ConversationSearch = lazyNamed(
   () => import("../features/timeline/ConversationSearch.tsx"),
   (module) => module.ConversationSearch,
@@ -1628,6 +1630,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     historyView !== null,
   );
   const openingSession = workspaceProduct.openingSession;
+  const tabLock = useTabSessionLock(activeSessionKey);
   const openingSessionKey = openingSession
     ? workspaceSessionKey(
         openingSession.cwd,
@@ -2578,6 +2581,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       <AttachmentAccessContext.Provider
                         value={attachmentAccess}
                       >
+                        {tabLock.state.kind === "held-elsewhere" ? (
+                          <TabLockBanner onTakeOver={tabLock.takeOver} />
+                        ) : null}
                         {searchOpen ? (
                           <Suspense fallback={null}>
                             <ConversationSearch
