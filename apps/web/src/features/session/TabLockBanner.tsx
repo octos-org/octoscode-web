@@ -12,8 +12,8 @@ export function TabLockBanner({ onTakeOver }: TabLockBannerProps) {
   return (
     <div className={styles.banner} role="status">
       <span className={styles.text}>
-        This session is also open in another tab. Inputs here may conflict with
-        it.
+        This session is open in another tab. Sending is disabled here until you
+        take over.
       </span>
       <button type="button" className={styles.takeOver} onClick={onTakeOver}>
         Take over here
