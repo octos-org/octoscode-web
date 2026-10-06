@@ -160,14 +160,6 @@ export function useConversationSearch(
     });
   }, []);
 
-  const jumpTo = useCallback(
-    (index: number) => {
-      goTo(index);
-      scrollToActive();
-    },
-    [goTo, scrollToActive],
-  );
-
   return useMemo(
     () => ({
       query,
@@ -178,16 +170,7 @@ export function useConversationSearch(
       activeIndex,
       nextMatch,
       previousMatch,
-      jumpTo,
     }),
-    [
-      caseSensitive,
-      matchCount,
-      query,
-      activeIndex,
-      nextMatch,
-      previousMatch,
-      jumpTo,
-    ],
+    [caseSensitive, matchCount, query, activeIndex, nextMatch, previousMatch],
   );
 }

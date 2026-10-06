@@ -48,7 +48,7 @@
 }
 
 .navButton:hover:not(:disabled) {
-  background: var(--dsw-surface-hover, var(--dsw-surface-raised));
+  background: var(--dsw-surface-raised);
   color: var(--dsw-text);
 }
 

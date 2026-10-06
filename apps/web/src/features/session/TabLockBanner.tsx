@@ -1,4 +1,4 @@
-import styles from "./tab-lock-banner.module.css";
+import styles from "./TabLockBanner.module.css";
 
 export interface TabLockBannerProps {
   onTakeOver: () => void;
