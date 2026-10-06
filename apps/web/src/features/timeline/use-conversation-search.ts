@@ -22,6 +22,7 @@ export function useConversationSearch(
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rangesRef = useRef<Range[]>([]);
+  const [matchCount, setMatchCount] = useState(0);
   const activeRangeRef = useRef<Range | null>(null);
 
   const clearHighlights = useCallback(() => {
@@ -81,6 +82,7 @@ export function useConversationSearch(
       }
     }
     rangesRef.current = ranges;
+    setMatchCount(ranges.length);
     setActiveIndex((current) =>
       ranges.length === 0 ? 0 : Math.min(current, ranges.length - 1),
     );
@@ -163,12 +165,20 @@ export function useConversationSearch(
       setQuery,
       caseSensitive,
       setCaseSensitive,
-      matchCount: rangesRef.current.length,
+      matchCount,
       activeIndex,
       nextMatch,
       previousMatch,
       jumpTo,
     }),
-    [caseSensitive, query, activeIndex, nextMatch, previousMatch, jumpTo],
+    [
+      caseSensitive,
+      matchCount,
+      query,
+      activeIndex,
+      nextMatch,
+      previousMatch,
+      jumpTo,
+    ],
   );
 }
