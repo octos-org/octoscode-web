@@ -1189,6 +1189,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !session.connected ||
       !opened ||
       !text ||
+      // #56: another tab owns this session's lock — dispatching here
+      // would interleave with it. Take over (banner button) to regain.
+      tabLock.state.kind === "held-elsewhere" ||
       mutationLeases.current!.held(profileMutationScope) ||
       workspaceProduct.transitioning
     )

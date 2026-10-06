@@ -9,8 +9,8 @@ import {
  * slice). State machine lives in tab-session-lock-core.ts (unit-tested
  * there); this hook only binds it to the component lifecycle.
  *
- * This slice is advisory only: it drives the takeover banner. It does
- * not gate sending.
+ * App.submit consults this state: while held-elsewhere, dispatch is
+ * blocked until the banner's Take-over steals the lock back.
  */
 export function useTabSessionLock(sessionKey: string | null) {
   // Optimistic: the common single-tab case shows no banner while the
