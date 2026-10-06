@@ -108,7 +108,7 @@ describe("tab-session-lock-core", () => {
     expect(states).toEqual(["owner", "held-elsewhere"]);
   });
 
-  it(" voluntary release followed by dispose stays quiet", async () => {
+  it("voluntary release followed by dispose stays quiet", async () => {
     const shim = installShim();
     const states: string[] = [];
     const controller = createTabLockController(

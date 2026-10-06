@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import styles from "./conversation-search.module.css";
+import styles from "./ConversationSearch.module.css";
 
 export interface ConversationSearchProps {
   query: string;

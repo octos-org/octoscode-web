@@ -12,8 +12,6 @@ import {
  * This slice is advisory only: it drives the takeover banner. It does
  * not gate sending.
  */
-export type { TabLockState };
-
 export function useTabSessionLock(sessionKey: string | null) {
   // Optimistic: the common single-tab case shows no banner while the
   // availability check is in flight.
