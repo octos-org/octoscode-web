@@ -54,6 +54,16 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
     });
     server.onMessage((message) => socket.send(message));
   });
+  // Armed before navigation: the settings chunk is now idle-preloaded
+  // (#131), so the failure must apply from the very first fetch onward,
+  // not just at click time.
+  await page.route(modelManagementModule, (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "text/plain",
+      body: "Resource unavailable",
+    }),
+  );
   await start(page);
   const composer = composerInput(page);
   await composer.fill("Keep this response active");
@@ -65,13 +75,6 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   await composer.press("Enter");
   await composer.fill("Keep this unsent draft");
   const previouslyClosed = closed;
-  await page.route(modelManagementModule, (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: "text/plain",
-      body: "Resource unavailable",
-    }),
-  );
   await settingsTrigger(page).click();
   await page.getByRole("button", { name: "Models", exact: true }).click();
   const error = page.getByRole("dialog", { name: "Settings", exact: true });
@@ -101,7 +104,8 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
 test("a slow model-management import can be canceled and never opens after cancellation", async ({
   page,
 }) => {
-  await start(page);
+  // Armed before navigation: the settings chunk is idle-preloaded
+  // (#131), so the slow response must gate the very first fetch too.
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
     release = resolve;
@@ -113,6 +117,7 @@ test("a slow model-management import can be canceled and never opens after cance
     await route.fulfill({ response });
     fulfilled = true;
   });
+  await start(page);
   const composer = composerInput(page);
   await composer.fill("Keep typing after cancellation");
   await settingsTrigger(page).click();

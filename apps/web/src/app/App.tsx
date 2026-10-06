@@ -277,8 +277,10 @@ const InventoryDialog = lazyNamed(
   () => import("../features/inventory/InventoryDialog.tsx"),
   (module) => module.InventoryDialog,
 );
+const profileExtensionsDialogLoader = () =>
+  import("../features/product-settings/ProfileExtensionsDialog.tsx");
 const ProfileExtensionsDialog = lazyNamed(
-  () => import("../features/product-settings/ProfileExtensionsDialog.tsx"),
+  profileExtensionsDialogLoader,
   (module) => module.ProfileExtensionsDialog,
 );
 const ApprovalPanel = lazyNamed(
@@ -297,8 +299,12 @@ const SessionTrajectory = lazyNamed(
   () => import("../features/supervision/SessionTrajectory.tsx"),
   (module) => module.SessionTrajectory,
 );
+// #131: the first click on Settings/model settings waits on these chunks.
+// Preload them during idle so the first click is instant (preloadIdle below).
+const modelManagementSettingsLoader = () =>
+  import("../features/product-settings/ModelManagementSettings.tsx");
 const ModelManagementSettings = lazyNamed(
-  () => import("../features/product-settings/ModelManagementSettings.tsx"),
+  modelManagementSettingsLoader,
   (module) => module.ModelManagementSettings,
 );
 const DiffReviewDialog = lazyNamed(
@@ -1634,6 +1640,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   );
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
+
+  // #131: settings panels are code-split; the first click otherwise waits
+  // on the chunk fetch. Pull the settings-surface chunks in during idle
+  // (capped, so it never competes with real interaction work).
+  useEffect(() => {
+    const preload = () => {
+      // Best-effort: a failed preload is fine (the click-time loader
+      // surfaces the recovery UI); swallow so it never becomes an
+      // unhandled rejection.
+      modelManagementSettingsLoader().catch(() => {});
+      profileExtensionsDialogLoader().catch(() => {});
+    };
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(preload, { timeout: 5_000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(preload, 3_000);
+    return () => clearTimeout(timer);
+  }, []);
   const openingSessionKey = openingSession
     ? workspaceSessionKey(
         openingSession.cwd,
