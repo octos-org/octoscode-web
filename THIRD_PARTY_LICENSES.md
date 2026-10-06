@@ -9,13 +9,13 @@ DeepSeek Harness UI reference.
 
 ## Inventory
 
-- `@shikijs/core@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/engine-javascript@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/engine-oniguruma@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/langs@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/primitive@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/themes@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
-- `@shikijs/types@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/core@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/engine-javascript@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/engine-oniguruma@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/langs@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/primitive@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/themes@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
+- `@shikijs/types@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
 - `@shikijs/vscode-textmate@10.0.2` — MIT — https://github.com/shikijs/vscode-textmate
 - `@types/debug@4.1.13` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/debug
 - `@types/estree-jsx@1.0.5` — MIT — https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree-jsx
@@ -35,6 +35,7 @@ DeepSeek Harness UI reference.
 - `character-entities@2.0.2` — MIT — https://github.com/wooorm/character-entities
 - `character-reference-invalid@2.0.1` — MIT — https://github.com/wooorm/character-reference-invalid
 - `comma-separated-tokens@2.0.3` — MIT — https://github.com/wooorm/comma-separated-tokens
+- `commander@15.0.0` — MIT — https://github.com/tj/commander.js
 - `commander@8.3.0` — MIT — https://github.com/tj/commander.js
 - `csstype@3.2.3` — MIT — https://github.com/frenic/csstype
 - `debug@4.4.3` — MIT — https://github.com/debug-js/debug
@@ -65,6 +66,7 @@ DeepSeek Harness UI reference.
 - `is-hexadecimal@2.0.1` — MIT — https://github.com/wooorm/is-hexadecimal
 - `is-plain-obj@4.1.0` — MIT — https://github.com/sindresorhus/is-plain-obj
 - `katex@0.16.47` — MIT — https://katex.org
+- `katex@0.19.0` — MIT — https://katex.org
 - `longest-streak@3.1.0` — MIT — https://github.com/wooorm/longest-streak
 - `markdown-table@3.0.4` — MIT — https://github.com/wooorm/markdown-table
 - `mdast-util-find-and-replace@3.0.2` — MIT — https://github.com/syntax-tree/mdast-util-find-and-replace
@@ -131,7 +133,7 @@ DeepSeek Harness UI reference.
 - `remark-rehype@11.1.2` — MIT — https://github.com/remarkjs/remark-rehype
 - `remark-stringify@11.0.0` — MIT — https://remark.js.org
 - `scheduler@0.28.0` — MIT — https://react.dev/
-- `shiki@4.4.3` — MIT — https://github.com/shikijs/shiki#readme
+- `shiki@4.5.0` — MIT — https://github.com/shikijs/shiki#readme
 - `space-separated-tokens@2.0.2` — MIT — https://github.com/wooorm/space-separated-tokens
 - `stringify-entities@4.0.4` — MIT — https://github.com/wooorm/stringify-entities
 - `style-to-js@1.1.21` — MIT — https://github.com/remarkablemark/style-to-js
@@ -158,14 +160,14 @@ DeepSeek Harness UI reference.
 
 Applies to:
 
-- `@shikijs/core@4.4.3`
-- `@shikijs/engine-javascript@4.4.3`
-- `@shikijs/engine-oniguruma@4.4.3`
-- `@shikijs/langs@4.4.3`
-- `@shikijs/primitive@4.4.3`
-- `@shikijs/themes@4.4.3`
-- `@shikijs/types@4.4.3`
-- `shiki@4.4.3`
+- `@shikijs/core@4.5.0`
+- `@shikijs/engine-javascript@4.5.0`
+- `@shikijs/engine-oniguruma@4.5.0`
+- `@shikijs/langs@4.5.0`
+- `@shikijs/primitive@4.5.0`
+- `@shikijs/themes@4.5.0`
+- `@shikijs/types@4.5.0`
+- `shiki@4.5.0`
 
     ===== LICENSE =====
     MIT License
@@ -370,6 +372,7 @@ Applies to:
 
 Applies to:
 
+- `commander@15.0.0`
 - `commander@8.3.0`
 
     ===== LICENSE =====
@@ -849,6 +852,7 @@ Applies to:
 Applies to:
 
 - `katex@0.16.47`
+- `katex@0.19.0`
 
     ===== LICENSE =====
     The MIT License (MIT)
