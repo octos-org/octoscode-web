@@ -112,12 +112,21 @@ export function useConversationSearch(
   }, [search]);
 
   // Re-search when the DOM content changes (new messages stream in).
+  // Debounced: streaming deltas mutate the DOM many times per second and
+  // each re-search walks every text node in the timeline.
   useEffect(() => {
     const container = containerRef.current;
     if (container === null || query.trim().length === 0) return;
-    const observer = new MutationObserver(() => search());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => search(), 250);
+    });
     observer.observe(container, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      clearTimeout(timer);
+    };
   }, [containerRef, query, search]);
 
   // Clean up highlights on unmount.
