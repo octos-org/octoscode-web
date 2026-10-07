@@ -208,6 +208,7 @@ import {
 } from "../features/timeline/attachment-access.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
+import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
 import { TabLockBanner } from "../features/session/TabLockBanner.tsx";
 const ConversationSearch = lazyNamed(
   () => import("../features/timeline/ConversationSearch.tsx"),
@@ -424,6 +425,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [commandError, setCommandError] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const compact = useCompactLayout();
   const [, setMutationRevision] = useState(0);
   const mutationLeases = useRef<ProfileMutationLeases | null>(null);
@@ -1116,6 +1118,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
         event.preventDefault();
         setSearchOpen(true);
+      }
+      // `?` (Shift+/) opens the shortcuts help — only outside text
+      // inputs and dialogs, matching the sibling handlers' §8 rule.
+      if (event.key === "?" && !event.metaKey && !event.ctrlKey) {
+        if (shortcutTargetSuppressed(event.target)) return;
+        event.preventDefault();
+        setShortcutHelpOpen(true);
       }
     };
     window.addEventListener("keydown", onGlobalKeyDown);
@@ -2611,6 +2620,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       >
                         {tabLock.state.kind === "held-elsewhere" ? (
                           <TabLockBanner onTakeOver={tabLock.takeOver} />
+                        ) : null}
+                        {shortcutHelpOpen ? (
+                          <ShortcutHelp
+                            onClose={() => setShortcutHelpOpen(false)}
+                          />
                         ) : null}
                         {searchOpen ? (
                           <Suspense fallback={null}>
