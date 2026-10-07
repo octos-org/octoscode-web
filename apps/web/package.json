@@ -13,7 +13,7 @@
   "dependencies": {
     "@octos-org/octoscode-client": "workspace:*",
     "@shikijs/langs": "^4.5.0",
-    "katex": "^0.19.0",
+    "katex": "0.16.47",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import styles from "./ShortcutHelp.module.css";
 
 export interface ShortcutHelpProps {
@@ -23,6 +24,22 @@ const ENTRIES: readonly Entry[] = [
  * Opened with `?` outside text inputs and dialogs.
  */
 export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Escape closes (the shortcut list below advertises this), and focus
+  // moves into the dialog on open so the modal owns the keyboard.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    cardRef.current?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className={styles.backdrop}
@@ -31,7 +48,12 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
       aria-label="Keyboard shortcuts"
       onClick={onClose}
     >
-      <div className={styles.card} onClick={(event) => event.stopPropagation()}>
+      <div
+        ref={cardRef}
+        className={styles.card}
+        onClick={(event) => event.stopPropagation()}
+        tabIndex={-1}
+      >
         <div className={styles.header}>
           <h2 className={styles.title}>Keyboard shortcuts</h2>
           <button
