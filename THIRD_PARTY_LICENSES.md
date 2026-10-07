@@ -35,7 +35,6 @@ DeepSeek Harness UI reference.
 - `character-entities@2.0.2` — MIT — https://github.com/wooorm/character-entities
 - `character-reference-invalid@2.0.1` — MIT — https://github.com/wooorm/character-reference-invalid
 - `comma-separated-tokens@2.0.3` — MIT — https://github.com/wooorm/comma-separated-tokens
-- `commander@15.0.0` — MIT — https://github.com/tj/commander.js
 - `commander@8.3.0` — MIT — https://github.com/tj/commander.js
 - `csstype@3.2.3` — MIT — https://github.com/frenic/csstype
 - `debug@4.4.3` — MIT — https://github.com/debug-js/debug
@@ -66,7 +65,6 @@ DeepSeek Harness UI reference.
 - `is-hexadecimal@2.0.1` — MIT — https://github.com/wooorm/is-hexadecimal
 - `is-plain-obj@4.1.0` — MIT — https://github.com/sindresorhus/is-plain-obj
 - `katex@0.16.47` — MIT — https://katex.org
-- `katex@0.19.0` — MIT — https://katex.org
 - `longest-streak@3.1.0` — MIT — https://github.com/wooorm/longest-streak
 - `markdown-table@3.0.4` — MIT — https://github.com/wooorm/markdown-table
 - `mdast-util-find-and-replace@3.0.2` — MIT — https://github.com/syntax-tree/mdast-util-find-and-replace
@@ -372,7 +370,6 @@ Applies to:
 
 Applies to:
 
-- `commander@15.0.0`
 - `commander@8.3.0`
 
     ===== LICENSE =====
@@ -852,7 +849,6 @@ Applies to:
 Applies to:
 
 - `katex@0.16.47`
-- `katex@0.19.0`
 
     ===== LICENSE =====
     The MIT License (MIT)
