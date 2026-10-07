@@ -165,8 +165,6 @@ button:active:not(:disabled) {
   background: var(--dsw-specific-sidebar-fill);
 }
 
-.connection-summary dt,
-.section-heading h2,
 .eyebrow {
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsw-font-size-micro);
@@ -175,18 +173,15 @@ button:active:not(:disabled) {
   text-transform: uppercase;
 }
 
-.status-connected,
 .glyph-complete {
   background: var(--dsw-alias-state-success-primary);
 }
 
-.status-connecting,
 .glyph-running {
   background: var(--dsw-alias-state-warn-primary);
   animation: pulse 1s ease-in-out infinite;
 }
 
-.status-error,
 .glyph-error {
   background: var(--dsw-alias-state-error-primary);
 }
@@ -243,7 +238,6 @@ label > span {
 
 .field-note,
 .connection-error,
-.boundary-note p,
 .muted {
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
@@ -264,18 +258,10 @@ label > span {
   color: var(--dsw-alias-state-error-primary);
 }
 
-.navigator-actions button,
-.navigator-actions button:hover,
 .active .session-presence {
   background: var(--dsw-alias-state-success-primary);
 }
 
-.activity-failed .session-presence,
-.session-row strong,
-.session-files strong,
-.session-files small,
-.permission-heading,
-.permission-heading button,
 .review-header-actions button,
 .review-chip {
   border: 0;
@@ -285,13 +271,11 @@ label > span {
   font-size: var(--dsw-font-size-micro);
 }
 
-.permission-heading button:hover:not(:disabled),
 .review-header-actions button:hover:not(:disabled),
 .review-chip:hover:not(:disabled) {
   color: var(--dsw-alias-label-primary);
 }
 
-.permission-heading button:disabled,
 .review-header-actions button:disabled {
   cursor: wait;
   opacity: 0.55;
@@ -385,10 +369,6 @@ label > span {
   gap: var(--dsw-space-4);
 }
 
-.inspector-toggle,
-.inspector-close,
-.recovery-pill.recovery-error > span,
-.recovery-pill.recovery-gap > span,
 .conversation-scroll {
   min-height: 0;
   overflow-y: auto;
@@ -1036,12 +1016,7 @@ kbd {
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.runtime-facts dt,
-.usage-summary span,
-.context-meter progress::-webkit-progress-value,
 .plan-list .plan-in_progress > span,
-.task-card strong,
-.task-card small,
 .task-state.state-running,
 .task-status-pill.state-running {
   background: var(--dsw-alias-state-warn-primary);
