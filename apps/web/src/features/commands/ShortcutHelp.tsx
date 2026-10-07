@@ -25,10 +25,13 @@ const ENTRIES: readonly Entry[] = [
  */
 export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<Element | null>(null);
 
   // Escape closes (the shortcut list below advertises this), and focus
-  // moves into the dialog on open so the modal owns the keyboard.
+  // moves into the dialog on open so the modal owns the keyboard. On
+  // close, focus returns to the trigger.
   useEffect(() => {
+    restoreFocusRef.current = document.activeElement;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -37,8 +40,32 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
     };
     window.addEventListener("keydown", onKey);
     cardRef.current?.focus();
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      (restoreFocusRef.current as HTMLElement | null)?.focus?.();
+    };
   }, [onClose]);
+
+  // Focus trap: Tab cycles inside the dialog (P3-②) so sibling global
+  // shortcuts cannot fire while the modal is up.
+  const trapTab = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const card = cardRef.current;
+    if (card === null) return;
+    const focusables = card.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0] as HTMLElement;
+    const last = focusables[focusables.length - 1] as HTMLElement;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div
@@ -50,6 +77,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
     >
       <div
         ref={cardRef}
+        onKeyDown={trapTab}
         className={styles.card}
         onClick={(event) => event.stopPropagation()}
         tabIndex={-1}
