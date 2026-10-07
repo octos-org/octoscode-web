@@ -29,7 +29,7 @@ export interface LockHandleLike {
   readonly name: string;
 }
 
-export interface LocksRequestLike {
+interface LocksRequestLike {
   (
     name: string,
     options: { ifAvailable?: boolean; steal?: boolean },
