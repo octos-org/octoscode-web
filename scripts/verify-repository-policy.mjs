@@ -51,90 +51,107 @@ for (const file of cssFiles) {
       violations.push(`${relative(file)} contains sub-11px shorthand text`);
     }
   }
-}
 
-for (const file of sourceFiles) {
-  const text = await readFile(file, "utf8");
-  if (/\bstyle\s*=\s*\{\{/.test(text)) {
-    violations.push(`${relative(file)} contains an inline JSX style`);
-  }
-  if (file !== generatedContractPath && !/\.test\.[cm]?[jt]sx?$/.test(file)) {
-    for (const value of generatedVocabulary) {
-      if (text.includes(`"${value}"`) || text.includes(`'${value}'`)) {
-        violations.push(
-          `${relative(file)} handwrites generated Core vocabulary ${value}`,
-        );
+  for (const file of sourceFiles) {
+    const text = await readFile(file, "utf8");
+    if (/\bstyle\s*=\s*\{\{/.test(text)) {
+      violations.push(`${relative(file)} contains an inline JSX style`);
+    }
+    if (file !== generatedContractPath && !/\.test\.[cm]?[jt]sx?$/.test(file)) {
+      for (const value of generatedVocabulary) {
+        if (text.includes(`"${value}"`) || text.includes(`'${value}'`)) {
+          violations.push(
+            `${relative(file)} handwrites generated Core vocabulary ${value}`,
+          );
+        }
       }
     }
   }
-}
 
-const globalStyle = resolve(sourceRoot, "app/styles.css");
-const globalStyleLines = (await readFile(globalStyle, "utf8")).split(
-  "\n",
-).length;
-const globalStyleBudget = 2_877;
-if (globalStyleLines > globalStyleBudget) {
-  violations.push(
-    `apps/web/src/app/styles.css grew to ${globalStyleLines} lines (budget ${globalStyleBudget}); new feature styles belong in CSS Modules`,
+  const globalStyle = resolve(sourceRoot, "app/styles.css");
+  const globalStyleLines = (await readFile(globalStyle, "utf8")).split(
+    "\n",
+  ).length;
+  const globalStyleBudget = 2_877;
+  if (globalStyleLines > globalStyleBudget) {
+    violations.push(
+      `apps/web/src/app/styles.css grew to ${globalStyleLines} lines (budget ${globalStyleBudget}); new feature styles belong in CSS Modules`,
+    );
+  }
+
+  const markdownStyle = await readFile(
+    resolve(sourceRoot, "features/markdown/markdown.css"),
+    "utf8",
   );
-}
-
-const markdownStyle = await readFile(
-  resolve(sourceRoot, "features/markdown/markdown.css"),
-  "utf8",
-);
-if (
-  !/\.markdown-body a\s*\{[^}]*text-decoration:\s*underline;/s.test(
-    markdownStyle,
-  )
-) {
-  violations.push(
-    "markdown transcript links must remain distinguishable without color",
-  );
-}
-
-const adrDirectory = resolve(root, "docs/adr");
-for (const name of (await readdir(adrDirectory)).filter((name) =>
-  /^\d{4}-.*\.md$/.test(name),
-)) {
-  const text = await readFile(resolve(adrDirectory, name), "utf8");
   if (
-    !/^# ADR \d{4}: .+\n\n- Status: (?:Proposed|Accepted|Superseded)\n- Date: \d{4}-\d{2}-\d{2}\n/.test(
-      text,
+    !/\.markdown-body a\s*\{[^}]*text-decoration:\s*underline;/s.test(
+      markdownStyle,
     )
   ) {
-    violations.push(`docs/adr/${name} does not use canonical ADR metadata`);
+    violations.push(
+      "markdown transcript links must remain distinguishable without color",
+    );
   }
-}
 
-for (const workflow of await walk(resolve(root, ".github/workflows"))) {
-  const text = await readFile(workflow, "utf8");
-  for (const match of text.matchAll(/uses:\s+[^\s@]+@([^\s#]+)/g)) {
-    if (!/^[a-f0-9]{40}$/.test(match[1])) {
+  const adrDirectory = resolve(root, "docs/adr");
+  for (const name of (await readdir(adrDirectory)).filter((name) =>
+    /^\d{4}-.*\.md$/.test(name),
+  )) {
+    const text = await readFile(resolve(adrDirectory, name), "utf8");
+    if (
+      !/^# ADR \d{4}: .+\n\n- Status: (?:Proposed|Accepted|Superseded)\n- Date: \d{4}-\d{2}-\d{2}\n/.test(
+        text,
+      )
+    ) {
+      violations.push(`docs/adr/${name} does not use canonical ADR metadata`);
+    }
+  }
+
+  for (const workflow of await walk(resolve(root, ".github/workflows"))) {
+    const text = await readFile(workflow, "utf8");
+    for (const match of text.matchAll(/uses:\s+[^\s@]+@([^\s#]+)/g)) {
+      if (!/^[a-f0-9]{40}$/.test(match[1])) {
+        violations.push(
+          `${relative(workflow)} uses an unpinned action ref ${match[1]}`,
+        );
+      }
+    }
+    if (text.includes("--clobber")) {
       violations.push(
-        `${relative(workflow)} uses an unpinned action ref ${match[1]}`,
+        `${relative(workflow)} permits release asset replacement`,
       );
     }
   }
-  if (text.includes("--clobber")) {
-    violations.push(`${relative(workflow)} permits release asset replacement`);
+
+  // katex must resolve to exactly one version. The CSS import (direct dep)
+  // and the render engine (rehype-katex's pinned dep) must match, or the
+  // stylesheet styles a DOM shape the engine does not produce — the drift
+  // regression caught by the 10-07 security audit (#178 fixed it, #184
+  // dependabot reintroduced it).
+  const lockfile = await readFile(resolve(root, "pnpm-lock.yaml"), "utf8");
+  const katexVersions = new Set(
+    [...lockfile.matchAll(/^  katex@(\d+\.\d+\.\d+):$/gm)].map(
+      (match) => match[1],
+    ),
+  );
+  if (katexVersions.size > 1) {
+    violations.push(
+      `pnpm-lock.yaml resolves katex to ${katexVersions.size} versions (${[
+        ...katexVersions,
+      ].join(", ")}); CSS import and rehype-katex engine must use one version`,
+    );
   }
 }
 
-if (violations.length) {
+if (violations.length > 0) {
   throw new Error(
     `Repository policy violations:\n- ${violations.join("\n- ")}`,
   );
 }
-process.stdout.write(
-  `Verified UI token, CSS ownership, inline-style, and ADR metadata policies (${globalStyleLines}/${globalStyleBudget} global CSS lines).\n`,
-);
 
 async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
-    entries.map((entry) => {
+    (await readdir(directory, { withFileTypes: true })).map((entry) => {
       const path = resolve(directory, entry.name);
       return entry.isDirectory() ? walk(path) : [path];
     }),
