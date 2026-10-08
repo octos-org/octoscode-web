@@ -32,17 +32,23 @@ export function ConversationSearch({
     inputRef.current?.focus();
   }, []);
 
-  // Escape closes the search and returns focus to the composer.
+  // Escape is two-stage (the standard search pattern): with a query it
+  // clears first, and an empty query closes the bar and returns focus to
+  // the composer.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && event.target === inputRef.current) {
         event.preventDefault();
+        if (query.length > 0) {
+          onQueryChange("");
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, onQueryChange, query]);
 
   return (
     <div className={styles.searchBar} role="search">
