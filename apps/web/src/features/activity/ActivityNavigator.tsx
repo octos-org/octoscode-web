@@ -34,10 +34,12 @@ export function ActivityNavigator({
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ActivityFilter>("all");
+  // Keep the last triage context across opens: a manager re-opening the
+  // surface usually wants the same filter (e.g. "running"), only the
+  // search resets since it targets a specific lookup.
   useEffect(() => {
     if (!open) return;
     setQuery("");
-    setFilter("all");
   }, [open]);
   const model = useMemo(
     () => buildWorkspaceActivityModel(state, query, filter),
