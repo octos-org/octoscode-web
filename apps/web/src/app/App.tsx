@@ -2593,6 +2593,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         </button>
                       </section>
                     )}
+                    {searchOpen && conversationTab === "chat" ? (
+                      <Suspense fallback={null}>
+                        <ConversationSearch
+                          query={conversationSearch.query}
+                          onQueryChange={conversationSearch.setQuery}
+                          caseSensitive={conversationSearch.caseSensitive}
+                          onCaseSensitiveChange={
+                            conversationSearch.setCaseSensitive
+                          }
+                          matchCount={conversationSearch.matchCount}
+                          activeIndex={conversationSearch.activeIndex}
+                          onNext={conversationSearch.nextMatch}
+                          onPrevious={conversationSearch.previousMatch}
+                          onClose={() => {
+                            setSearchOpen(false);
+                            conversationSearch.setQuery("");
+                            composerRef.current?.focus();
+                          }}
+                        />
+                      </Suspense>
+                    ) : null}
                   </div>
                 ) : conversationTab === "trajectory" ? (
                   <SurfaceBoundary
@@ -2625,27 +2646,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           <ShortcutHelp
                             onClose={() => setShortcutHelpOpen(false)}
                           />
-                        ) : null}
-                        {searchOpen ? (
-                          <Suspense fallback={null}>
-                            <ConversationSearch
-                              query={conversationSearch.query}
-                              onQueryChange={conversationSearch.setQuery}
-                              caseSensitive={conversationSearch.caseSensitive}
-                              onCaseSensitiveChange={
-                                conversationSearch.setCaseSensitive
-                              }
-                              matchCount={conversationSearch.matchCount}
-                              activeIndex={conversationSearch.activeIndex}
-                              onNext={conversationSearch.nextMatch}
-                              onPrevious={conversationSearch.previousMatch}
-                              onClose={() => {
-                                setSearchOpen(false);
-                                conversationSearch.setQuery("");
-                                composerRef.current?.focus();
-                              }}
-                            />
-                          </Suspense>
                         ) : null}
                         <Timeline
                           key={activeSessionKey ?? undefined}
