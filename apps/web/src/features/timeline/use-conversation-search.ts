@@ -1,3 +1,4 @@
+import { collectMatchOffsets } from "./search-matches.ts";
 import {
   useCallback,
   useEffect,
@@ -63,22 +64,18 @@ export function useConversationSearch(
       clearHighlights();
       return;
     }
-    const haystack = caseSensitive
-      ? (node: Text) => node.textContent ?? ""
-      : (node: Text) => (node.textContent ?? "").toLowerCase();
-    const needle = caseSensitive ? query : query.toLowerCase();
     const ranges: Range[] = [];
     for (const node of collectTextNodes(container)) {
-      const text = haystack(node);
-      let from = 0;
-      let hit = text.indexOf(needle, from);
-      while (hit !== -1) {
+      const text = node.textContent ?? "";
+      for (const [start, end] of collectMatchOffsets(
+        text,
+        query,
+        caseSensitive,
+      )) {
         const range = new Range();
-        range.setStart(node, hit);
-        range.setEnd(node, hit + needle.length);
+        range.setStart(node, start);
+        range.setEnd(node, end);
         ranges.push(range);
-        from = hit + needle.length;
-        hit = text.indexOf(needle, from);
       }
     }
     rangesRef.current = ranges;
