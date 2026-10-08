@@ -206,6 +206,15 @@ exported Core constants. They are isolated in
 `packages/client/src/onboarding.ts` behind strict bounded decoders until Core
 exports them in the generated contract.
 
+## Server control surface
+
+One capability-gated control crosses the session boundary downward:
+`server/shutdown` stops a local `octos serve --solo` from the Settings General
+section. The method is only offered when the connected server advertises it, the
+dialog confirms before dispatch, a failure keeps the tab connected, and success
+disconnects to the connect screen. The browser never infers the capability from
+the endpoint shape.
+
 ## Contract artifacts
 
 Two machine-readable pins answer different questions:
