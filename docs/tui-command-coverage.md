@@ -187,10 +187,12 @@ and full validation results.
   `{session_id, expected_turn_id, input:[{kind:"text",text}]}` and returns
   `{turn_id,steered}`. True means the existing active turn consumed/buffered the
   input; false means Core already started a new server-minted UUID. Default
-  Enter remains FIFO. Never steer before admission, past pending drafts, after
-  local interrupt, or by dropping attachments/reasoning metadata unsupported by
-  this method. `turn/steer_dropped` returns ordered text before terminal; only
-  exact retained local matches may be restaged, count-exact and
+  Enter steers compatible text; Tab/Queue explicitly defers it. Ctrl+X/Send now
+  interrupts and sends pending input after terminal without restoring the old
+  prompt into the draft. Never steer before admission, past pending drafts,
+  after local interrupt, or by dropping attachments/reasoning metadata
+  unsupported by this method. `turn/steer_dropped` returns ordered text before
+  terminal; only exact retained local matches may be restaged, count-exact and
   replay-idempotent. Ambiguous sent requests are not automatically replayed. See
   TUI `store.rs:699` and `12857`, Core `api/ui_protocol_transport.rs:319` and
   `22352`.

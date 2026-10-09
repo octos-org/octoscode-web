@@ -22,11 +22,13 @@ command and apply the same state transition.
 The parity contract includes:
 
 - Enter submits; Shift+Enter, Ctrl+J, and Alt+Enter insert a newline.
-- A prompt submitted during an active turn joins a FIFO queue by default. Each
-  item starts as its own turn only after the prior turn settles.
-- Mid-turn steering is opt-in, capability-gated, and may never jump ahead of a
-  queued prompt. It is not implemented until the Web client can meet all three
-  conditions.
+- Enter steers compatible text into the accepted active turn by default, with
+  capability and ownership checks. `/steer off` restores FIFO submission.
+- Tab or Queue explicitly defers a draft until the prior turn settles. Steering
+  never jumps ahead of queued input or discards attachments or changed effort.
+- Ctrl+X or Send now interrupts the active turn and releases pending input only
+  after its terminal event. Accepted steers are resent only when the server
+  explicitly returns them; the unfinished composer draft stays intact.
 - Slash and bang commands are resolved before prompt dispatch. Unsupported
   commands fail visibly and are never sent to the model as text.
 - `/activity` opens a searchable, status-filtered cross-session task navigator;

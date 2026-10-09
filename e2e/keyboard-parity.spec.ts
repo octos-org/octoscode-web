@@ -530,3 +530,34 @@ async function release(request: APIRequestContext, owner: string) {
     ).status(),
   ).toBe(204);
 }
+
+test("Tab queues and Ctrl+X sends pending input while preserving the current draft", async ({
+  page,
+  request,
+}) => {
+  const w = wire(page);
+  await connectAndStartWorkspace(page, "pending-input");
+  const input = composer(page);
+  expect(
+    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
+  ).toBe(204);
+  await input.fill("original held turn");
+  await input.press("Enter");
+  await expect.poll(() => w.calls("turn/start").length).toBe(1);
+  const owner = w.calls("turn/start")[0]!.params!.session_id!;
+  await heldTurn(request, owner);
+  await input.fill("queued next task");
+  await input.press("Tab");
+  await expect(input).toHaveValue("");
+  await expect(
+    page.getByRole("region", { name: "Queued prompts" }),
+  ).toContainText("queued next task");
+  await input.fill("unfinished draft");
+  await input.press("Home");
+  await input.press("Control+x");
+  await expect.poll(() => w.calls("turn/interrupt").length).toBe(1);
+  await expect(input).toHaveValue("unfinished draft");
+  await release(request, owner);
+  await expect.poll(() => w.calls("turn/start").length).toBe(2);
+  await expect(input).toHaveValue("unfinished draft");
+});

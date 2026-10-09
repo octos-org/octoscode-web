@@ -1206,7 +1206,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
   }, [fleetBriefFocusRequest, fleetRouteActive]);
 
-  const submit = (override?: string) => {
+  const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
       conversation.btw?.dismiss();
@@ -1238,7 +1238,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       return;
     // Local admission may reject an incomplete upload or a retired Session.
     // Keep the original text and image drafts until that admission succeeds.
-    if (intent.kind === "prompt" && !conversation.enqueuePrompt(intent.text))
+    if (
+      intent.kind === "prompt" &&
+      !conversation.enqueuePrompt(intent.text, queueOnly)
+    )
       return;
     if (
       intent.kind === "btw" &&
@@ -3026,6 +3029,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           if (selected) chooseCommand(selected);
                           else submit();
                         }}
+                        {...(activeTurnId
+                          ? { onQueue: () => submit(undefined, true) }
+                          : {})}
+                        {...(conversation.canSendPendingNow
+                          ? {
+                              onSendPendingNow: () =>
+                                void conversation.sendPendingNow(),
+                            }
+                          : {})}
                         onInterrupt={() => {
                           if (conversation.interruptible)
                             void conversation.interrupt();
@@ -3092,10 +3104,35 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           available={conversation.interruptible}
                           onInterrupt={() => void conversation.interrupt()}
                         />
-                        {/* While a turn runs the arrow means "queue this
-                          draft" — with nothing to queue it is not an
-                          affordance at all, so Stop stands alone instead of
-                          beside a dead Queue prompt button. */}
+                        {conversation.canSendPendingNow ? (
+                          <button
+                            type="button"
+                            title={t(
+                              "Interrupt the current response and send pending input",
+                            )}
+                            onClick={() => void conversation.sendPendingNow()}
+                          >
+                            {t("Send now (Ctrl+X)")}
+                          </button>
+                        ) : null}
+                        {activeTurnId && draft.trim() ? (
+                          <button
+                            type="button"
+                            disabled={
+                              !session.connected ||
+                              profileMutationBusy ||
+                              workspaceProduct.transitioning ||
+                              Boolean(navigationPending) ||
+                              Boolean(conversation.turnRecovery)
+                            }
+                            title={t(
+                              "Queue for after the current response (Tab)",
+                            )}
+                            onClick={() => submit(undefined, true)}
+                          >
+                            {t("Queue")}
+                          </button>
+                        ) : null}
                         {!activeTurnId || draft.trim() ? (
                           <button
                             className="send-button"
@@ -3113,10 +3150,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               !draft.trim()
                             }
                             aria-label={t(
-                              activeTurnId ? "Queue prompt" : "Send prompt",
+                              activeTurnId && conversation.steeringEnabled
+                                ? "Steer prompt"
+                                : activeTurnId
+                                  ? "Queue prompt"
+                                  : "Send prompt",
                             )}
                             title={t(
-                              activeTurnId ? "Queue prompt" : "Send prompt",
+                              activeTurnId && conversation.steeringEnabled
+                                ? "Steer prompt"
+                                : activeTurnId
+                                  ? "Queue prompt"
+                                  : "Send prompt",
                             )}
                           >
                             ↑

@@ -164,11 +164,13 @@ export class SessionComposerDrafts {
     this.options.changed();
     return restore.text;
   }
-  enqueue(record: Record, text: string): boolean {
+  enqueue(record: Record, text: string, queueOnly = false): boolean {
     if (!this.options.isRetained(record)) return false;
     const draft = this.get(record);
     const admit = (media: TurnMedia[]) =>
-      record.controller.submitTurn({
+      (queueOnly
+        ? record.controller.enqueueTurn
+        : record.controller.submitTurn)({
         turnId: crypto.randomUUID(),
         text,
         ...(draft.effort ? { reasoningEffort: draft.effort } : {}),

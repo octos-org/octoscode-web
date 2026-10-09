@@ -410,3 +410,38 @@ describe("read-only peer focus edge (a11y review 0800 §1)", () => {
     expect(hint?.props.tabIndex).toBe(-1);
   });
 });
+
+describe("pending input controls", () => {
+  it("Ctrl+X sends pending input without changing a draft; selections keep native cut", () => {
+    const h = mount("unfinished draft");
+    const send = vi.fn();
+    h.commit({ onSendPendingNow: send });
+    expect(h.key("x", { ctrlKey: true }).preventDefault).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(h.target.value).toBe("unfinished draft");
+    h.target.selectionEnd = 4;
+    expect(h.key("x", { ctrlKey: true }).preventDefault).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("does not force-send during IME, a popup, repeats, or Command+X", () => {
+    const h = mount();
+    const send = vi.fn();
+    h.commit({ onSendPendingNow: send });
+    h.key("x", { ctrlKey: true, keyCode: 229 });
+    h.key("x", { ctrlKey: true, repeat: true });
+    h.key("x", { metaKey: true });
+    h.commit({ commandCount: 1 });
+    h.key("x", { ctrlKey: true });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("Tab queues a nonempty active draft without submitting; otherwise keeps navigation", () => {
+    const h = mount("later task");
+    const queue = vi.fn();
+    h.commit({ onQueue: queue });
+    expect(h.key("Tab").preventDefault).toHaveBeenCalled();
+    expect(queue).toHaveBeenCalledTimes(1);
+    expect(h.props().onSubmit).not.toHaveBeenCalled();
+    h.commit({ value: "" });
+    expect(h.key("Tab").preventDefault).not.toHaveBeenCalled();
+  });
+});
