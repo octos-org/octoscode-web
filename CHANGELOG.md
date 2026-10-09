@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Enter now steers a compatible running turn by default instead of queueing:
+  matching reasoning effort remains steerable, while attachments and changed
+  effort queue as before. Tab queues deliberately, and Send now interrupts the
+  active turn and releases pending input after it settles.
+
 ## v0.11.0-rc.2 — 2026-09-24
 
 - Rebuild the 0.11.0 candidate from its tagged source. The rc.1 artifact was
