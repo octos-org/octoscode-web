@@ -1126,13 +1126,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         composerRef.current?.focus();
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
-        console.log("[DBG] Ctrl+F handler fired");
         event.preventDefault();
+        // Search is chat-scoped: pressing it on the Trajectory tab swings
+        // back to Chat so the bar is never silently unreachable.
+        setConversationTab("chat");
         setSearchOpen(true);
-        setTimeout(
-          () => console.log("[DBG] searchOpen after tick — check bar"),
-          100,
-        );
       }
       // `?` (Shift+/) opens the shortcuts help — only outside text
       // inputs and dialogs, matching the sibling handlers' §8 rule.
