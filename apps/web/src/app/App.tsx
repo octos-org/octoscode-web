@@ -3150,14 +3150,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               !draft.trim()
                             }
                             aria-label={t(
-                              activeTurnId && conversation.steeringEnabled
+                              activeTurnId && conversation.canSteerInput
                                 ? "Steer prompt"
                                 : activeTurnId
                                   ? "Queue prompt"
                                   : "Send prompt",
                             )}
                             title={t(
-                              activeTurnId && conversation.steeringEnabled
+                              activeTurnId && conversation.canSteerInput
                                 ? "Steer prompt"
                                 : activeTurnId
                                   ? "Queue prompt"

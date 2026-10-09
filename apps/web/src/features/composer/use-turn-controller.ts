@@ -155,6 +155,7 @@ export interface QueueBackedTurnController {
   submitTurn: (turn: PromptTurn) => boolean;
   setSteeringEnabled: (enabled: boolean) => void;
   steeringEnabled: () => boolean;
+  canSteerText: (reasoningEffort: PromptTurn["reasoningEffort"]) => boolean;
   /**
    * Observe every admitted notification for this Session: returned steering
    * inputs, and server-side turn activity, which proves an unacknowledged
@@ -666,13 +667,15 @@ export function createQueueBackedTurnController(options: {
     );
   }
 
-  const submitTurn = (candidate: PromptTurn): boolean => {
+  const canSteerText = (
+    reasoningEffort: PromptTurn["reasoningEffort"],
+  ): boolean => {
     const current = dependenciesRef.current;
     const snapshot = queue.snapshot();
     const active = snapshot.active;
     const client = current.client();
     const sessionId = current.sessionId();
-    if (
+    return !(
       !steeringEnabled ||
       recovery ||
       !current.steer ||
@@ -686,9 +689,22 @@ export function createQueueBackedTurnController(options: {
       interruptingTurnId ||
       steerInFlight ||
       steerUnknown ||
+      reasoningEffort !== active.reasoningEffort
+    );
+  };
+
+  const submitTurn = (candidate: PromptTurn): boolean => {
+    const current = dependenciesRef.current;
+    const active = queue.snapshot().active;
+    const client = current.client();
+    const sessionId = current.sessionId();
+    if (
+      !active ||
+      !client ||
+      !sessionId ||
       candidate.kind ||
       candidate.media?.length ||
-      candidate.reasoningEffort !== active.reasoningEffort
+      !canSteerText(candidate.reasoningEffort)
     )
       return enqueueTurn(candidate);
     if (
@@ -1357,6 +1373,7 @@ export function createQueueBackedTurnController(options: {
       sync();
     },
     steeringEnabled: () => steeringEnabled,
+    canSteerText,
     observeSteerDropped,
     resumePendingTurn: () => {
       const active = queueOf().snapshot().active;
