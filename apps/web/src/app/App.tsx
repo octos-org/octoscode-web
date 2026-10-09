@@ -1126,8 +1126,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         composerRef.current?.focus();
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
+        console.log("[DBG] Ctrl+F handler fired");
         event.preventDefault();
         setSearchOpen(true);
+        setTimeout(
+          () => console.log("[DBG] searchOpen after tick — check bar"),
+          100,
+        );
       }
       // `?` (Shift+/) opens the shortcuts help — only outside text
       // inputs and dialogs, matching the sibling handlers' §8 rule.
@@ -2603,6 +2608,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         </button>
                       </section>
                     )}
+                  </div>
+                ) : conversationTab === "trajectory" ? (
+                  <SurfaceBoundary
+                    fallback={<DeferredSurface label="Loading trajectory…" />}
+                  >
+                    <SessionTrajectory
+                      state={work.supervision}
+                      onRefresh={() => void work.refresh()}
+                      onOpenTask={(taskId) => void work.openTask(taskId)}
+                      onCancelTask={(taskId) => void work.cancelTask(taskId)}
+                    />
+                  </SurfaceBoundary>
+                ) : (
+                  <>
                     {searchOpen && conversationTab === "chat" ? (
                       <Suspense fallback={null}>
                         <ConversationSearch
@@ -2624,20 +2643,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         />
                       </Suspense>
                     ) : null}
-                  </div>
-                ) : conversationTab === "trajectory" ? (
-                  <SurfaceBoundary
-                    fallback={<DeferredSurface label="Loading trajectory…" />}
-                  >
-                    <SessionTrajectory
-                      state={work.supervision}
-                      onRefresh={() => void work.refresh()}
-                      onOpenTask={(taskId) => void work.openTask(taskId)}
-                      onCancelTask={(taskId) => void work.cancelTask(taskId)}
-                    />
-                  </SurfaceBoundary>
-                ) : (
-                  <>
                     {savedLinkPanel}
                     <SurfaceBoundary
                       key={activeSessionKey ?? undefined}
