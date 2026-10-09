@@ -218,7 +218,8 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
   {
     name: "steer",
     aliases: ["steer-mid-turn", "steermode"],
-    description: "Toggle mid-turn steering; FIFO queueing remains the default",
+    description:
+      "Toggle mid-turn steering (default on); Tab queues a later turn",
     category: "Session",
     intent: "steer",
     implemented: true,

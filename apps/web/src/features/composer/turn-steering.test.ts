@@ -27,7 +27,9 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
-function fixture(options: { preflight?: boolean; start?: Promise<void> } = {}) {
+function fixture(
+  options: { preflight?: boolean; start?: Promise<void>; effort?: "high" } = {},
+) {
   const receipt = deferred<TurnSteerResult>();
   let latest: NativeSteerRequest | null = null;
   const client = {
@@ -58,8 +60,11 @@ function fixture(options: { preflight?: boolean; start?: Promise<void> } = {}) {
     queueRef: { current: new PromptTurnQueue() },
     dependenciesRef: { current: dependencies },
   });
-  controller.enqueueTurn({ turnId: A, text: "original" });
-  controller.setSteeringEnabled(true);
+  controller.enqueueTurn({
+    turnId: A,
+    text: "original",
+    ...(options.effort ? { reasoningEffort: options.effort } : {}),
+  });
   return {
     controller,
     client,
@@ -92,7 +97,112 @@ const tick = async () => {
   await Promise.resolve();
 };
 describe("record-owned native steering", () => {
-  it("queues by default and never changes explicit enqueueTurn semantics", async () => {
+  it("queues directly when the live server cannot steer without attempting dispatch", async () => {
+    const h = fixture();
+    await tick();
+    h.dependencies.canSteer = () => false;
+    expect(h.controller.canSteerText(undefined)).toBe(false);
+    expect(h.submit()).toBe(true);
+    expect(h.dependencies.steer).not.toHaveBeenCalled();
+    expect(
+      h.controller.queueSnapshot().pending.map((turn) => turn.text),
+    ).toEqual(["correction"]);
+    expect(h.timeline().some((item) => item.kind === "system")).toBe(false);
+  });
+
+  it("send now interrupts once, preserves drafts, and waits for terminal before dispatch", async () => {
+    const h = fixture();
+    const restore = vi.fn();
+    h.dependencies.onInterruptPromptRestore = restore;
+    await tick();
+    h.controller.enqueueTurn({
+      turnId: B,
+      text: "next",
+      media: [{ path: "upload/image.png", mime: "image/png", size_bytes: 7 }],
+    });
+    expect(h.controller.canSendPendingNow()).toBe(true);
+    await h.controller.sendPendingNow();
+    await h.controller.sendPendingNow();
+    expect(h.client.interruptTurn).toHaveBeenCalledExactlyOnceWith(
+      "master#peer",
+      A,
+    );
+    expect(h.client.startTurn).toHaveBeenCalledTimes(1);
+    h.controller.settleTurn(A);
+    await tick();
+    expect(h.client.startTurn).toHaveBeenCalledTimes(2);
+    expect(h.controller.snapshot().active?.turnId).toBe(B);
+    expect(restore).not.toHaveBeenCalled();
+  });
+  it("send now supersedes a failed stop's pending prompt restore", async () => {
+    const h = fixture();
+    const restore = vi.fn();
+    h.dependencies.onInterruptPromptRestore = restore;
+    await tick();
+    h.controller.enqueueTurn({ turnId: B, text: "next" });
+    h.client.interruptTurn.mockRejectedValueOnce(new Error("stop rejected"));
+    await h.controller.interrupt();
+    await h.controller.sendPendingNow();
+    h.controller.settleTurn(A);
+    await tick();
+    expect(restore).not.toHaveBeenCalled();
+    expect(h.controller.snapshot().active?.turnId).toBe(B);
+  });
+  it.each([true, false])(
+    "send now replays only server-returned steering (returned=%s)",
+    async (returned) => {
+      const h = fixture();
+      await tick();
+      expect(h.controller.steeringEnabled()).toBe(true);
+      h.submit();
+      expect(h.controller.canSendPendingNow()).toBe(false);
+      h.receipt.resolve({ turn_id: A, steered: true });
+      await tick();
+      expect(h.controller.canSendPendingNow()).toBe(true);
+      await h.controller.sendPendingNow();
+      if (returned) {
+        h.drop();
+        h.drop();
+      }
+      h.controller.settleTurn(A);
+      await tick();
+      expect(h.client.startTurn).toHaveBeenCalledTimes(returned ? 2 : 1);
+      expect(h.controller.snapshot().active?.turnId ?? null).toBe(
+        returned ? S : null,
+      );
+    },
+  );
+  it("send now cannot interrupt an unaccepted start or an unknown steer", async () => {
+    const pending = deferred<void>();
+    const h = fixture({ start: pending.promise });
+    h.controller.enqueueTurn({ turnId: B, text: "next" });
+    await h.controller.sendPendingNow();
+    expect(h.client.interruptTurn).not.toHaveBeenCalled();
+    pending.resolve();
+    await tick();
+    const unknown = fixture();
+    await tick();
+    unknown.submit();
+    unknown.receipt.reject(new Error("connection lost after write"));
+    await tick();
+    await unknown.controller.sendPendingNow();
+    expect(unknown.client.interruptTurn).not.toHaveBeenCalled();
+  });
+
+  it("a persistent thinking preference does not force all new input into the queue", async () => {
+    const h = fixture({ effort: "high" });
+    await tick();
+    h.controller.submitTurn({
+      turnId: S,
+      text: "correction",
+      reasoningEffort: "high",
+    });
+    expect(h.dependencies.steer).toHaveBeenCalledTimes(1);
+    h.receipt.resolve({ turn_id: A, steered: true });
+    await tick();
+    expect(h.controller.snapshot().pending).toEqual([]);
+  });
+  it("respects steering off and never changes explicit enqueueTurn semantics", async () => {
     const h = fixture();
     await tick();
     h.controller.setSteeringEnabled(false);

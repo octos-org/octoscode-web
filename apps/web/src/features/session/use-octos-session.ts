@@ -307,11 +307,14 @@ export interface OctosSessionRuntime {
     continueWithoutTurn: () => void;
     interruptible: boolean;
     interruptingTurnId: string | null;
-    enqueuePrompt: (text: string) => boolean;
+    enqueuePrompt: (text: string, queueOnly?: boolean) => boolean;
+    canSendPendingNow: boolean;
+    sendPendingNow: () => Promise<void>;
     cancelQueuedPrompt: (turnId: string) => boolean;
     btw: LazyBtwController | null;
     askBtw(question: string): BtwAdmission;
     steeringEnabled: boolean;
+    canSteerInput: boolean;
     setSteeringEnabled(value: boolean | "toggle"): void;
     inputError: string | null;
     reasoningEffort: ReasoningEffort | undefined;
@@ -1327,6 +1330,18 @@ export function useOctosSession(): OctosSessionRuntime {
       isFatalSessionError: (reason) =>
         isFatalSessionContractError(errorMessage(reason)),
       controllerDependencies: (scope, recordClient) => ({
+        canSteer: () => {
+          const capabilities = recordManagerRef.current
+            ?.get(scope)
+            ?.runtime.currentAuthority()?.capabilities;
+          return (
+            supportsMethod(capabilities, "turn/steer") &&
+            supportsFeature(
+              capabilities,
+              CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
+            )
+          );
+        },
         steer: async (request) => {
           const record = recordManagerRef.current?.get(scope);
           const authority = record?.runtime.currentAuthority();
@@ -2617,9 +2632,9 @@ export function useOctosSession(): OctosSessionRuntime {
       selectedDispatching !== selectedQueue.active.turnId &&
       selectedRecord()?.controller.interruptibleNow(),
     ),
-    enqueuePrompt: (text: string) => {
+    enqueuePrompt: (text: string, queueOnly = false) => {
       const accepted = viewRecord
-        ? composerDrafts.enqueue(viewRecord, text)
+        ? composerDrafts.enqueue(viewRecord, text, queueOnly)
         : false;
       if (accepted && viewRecord)
         btwControllersRef.current.get(viewRecord)?.clearSettled();
@@ -3496,6 +3511,13 @@ export function useOctosSession(): OctosSessionRuntime {
       interruptible: turnController.interruptible,
       interruptingTurnId: turnController.interruptingTurnId,
       enqueuePrompt: turnController.enqueuePrompt,
+      canSendPendingNow: viewRecord?.controller.canSendPendingNow() ?? false,
+      sendPendingNow: () =>
+        viewRecord &&
+        !viewRecord.closed &&
+        recordManager.get(viewRecord.scope) === viewRecord
+          ? viewRecord.controller.sendPendingNow()
+          : Promise.resolve(),
       cancelQueuedPrompt: turnController.cancelQueuedPrompt,
       btw: viewRecord
         ? (btwControllersRef.current.get(viewRecord) ?? null)
@@ -3523,6 +3545,10 @@ export function useOctosSession(): OctosSessionRuntime {
         return controller.ask(question);
       },
       steeringEnabled: viewRecord?.controller.steeringEnabled() ?? false,
+      canSteerInput: Boolean(
+        viewRecord?.controller.canSteerText(viewDraft?.effort) &&
+        !viewDraft?.images?.getSnapshot().entries.length,
+      ),
       setSteeringEnabled: (value) => {
         if (
           !viewRecord ||

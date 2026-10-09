@@ -40,6 +40,8 @@ interface ComposerInputProps {
   onCommandMove(delta: number): void;
   onCommandDismiss(): void;
   onSubmit(): void;
+  onQueue?(): void;
+  onSendPendingNow?(): void;
   onInterrupt(): void;
 }
 
@@ -179,6 +181,35 @@ export function ComposerInput(props: ComposerInputProps) {
             return;
           }
           const target = event.currentTarget;
+          if (
+            !props.commandCount &&
+            !event.repeat &&
+            !event.metaKey &&
+            !event.altKey &&
+            !event.shiftKey
+          ) {
+            if (
+              event.ctrlKey &&
+              event.key.toLowerCase() === "x" &&
+              target.selectionStart === target.selectionEnd &&
+              props.onSendPendingNow
+            ) {
+              event.preventDefault();
+              props.onSendPendingNow();
+              return;
+            }
+            if (
+              !event.ctrlKey &&
+              event.key === "Tab" &&
+              props.value.trim() &&
+              props.onQueue
+            ) {
+              event.preventDefault();
+              props.onQueue();
+              return;
+            }
+          }
+
           const edit = reduceVimEdit(
             {
               ...mode.current,

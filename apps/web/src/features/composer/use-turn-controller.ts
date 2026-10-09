@@ -63,6 +63,8 @@ export interface TurnControllerDependencies {
     request: NativeReviewStartRequest,
   ) => Promise<ReviewStartResult>;
   steer?: (request: NativeSteerRequest) => Promise<TurnSteerResult>;
+  /** Resolve live server support before entering asynchronous steer dispatch. */
+  canSteer?: () => boolean;
   /**
    * §5.2 composer handover gate (brief 4010 clause b). Called ONCE per user
    * turn, BEFORE any `turn/start` frame. THIS tab holding the driver seat
@@ -155,6 +157,7 @@ export interface QueueBackedTurnController {
   submitTurn: (turn: PromptTurn) => boolean;
   setSteeringEnabled: (enabled: boolean) => void;
   steeringEnabled: () => boolean;
+  canSteerText: (reasoningEffort: PromptTurn["reasoningEffort"]) => boolean;
   /**
    * Observe every admitted notification for this Session: returned steering
    * inputs, and server-side turn activity, which proves an unacknowledged
@@ -166,6 +169,8 @@ export interface QueueBackedTurnController {
   /** Invalidate old RPC completions without dropping any queued turns. */
   suspendTransport: () => void;
   interrupt: () => Promise<void>;
+  canSendPendingNow: () => boolean;
+  sendPendingNow: () => Promise<void>;
   reconcileFromHydrate: (
     hydrated: SessionHydrateResult,
     preserveTransportOwnership?: boolean,
@@ -241,7 +246,7 @@ export function createQueueBackedTurnController(options: {
   const attemptedTurns = new Set<string>();
   // Review loading and control handback happen before a turn crosses the wire.
   let preflightTurnId: string | null = null;
-  let steeringEnabled = false;
+  let steeringEnabled = true;
   let steerEpoch = 0;
   let steerInFlight = false;
   let steerUnknown = false;
@@ -664,16 +669,19 @@ export function createQueueBackedTurnController(options: {
     );
   }
 
-  const submitTurn = (candidate: PromptTurn): boolean => {
+  const canSteerText = (
+    reasoningEffort: PromptTurn["reasoningEffort"],
+  ): boolean => {
     const current = dependenciesRef.current;
     const snapshot = queue.snapshot();
     const active = snapshot.active;
     const client = current.client();
     const sessionId = current.sessionId();
-    if (
+    return !(
       !steeringEnabled ||
       recovery ||
       !current.steer ||
+      current.canSteer?.() === false ||
       !client ||
       !sessionId ||
       !active ||
@@ -684,9 +692,22 @@ export function createQueueBackedTurnController(options: {
       interruptingTurnId ||
       steerInFlight ||
       steerUnknown ||
+      reasoningEffort !== active.reasoningEffort
+    );
+  };
+
+  const submitTurn = (candidate: PromptTurn): boolean => {
+    const current = dependenciesRef.current;
+    const active = queue.snapshot().active;
+    const client = current.client();
+    const sessionId = current.sessionId();
+    if (
+      !active ||
+      !client ||
+      !sessionId ||
       candidate.kind ||
       candidate.media?.length ||
-      candidate.reasoningEffort !== undefined
+      !canSteerText(candidate.reasoningEffort)
     )
       return enqueueTurn(candidate);
     if (
@@ -901,7 +922,36 @@ export function createQueueBackedTurnController(options: {
     restageSteers(returned);
   };
 
-  const interrupt = async () => {
+  const canSendPendingNow = () => {
+    const current = dependenciesRef.current;
+    const { active, pending } = queueOf().snapshot();
+    return Boolean(
+      active &&
+      current.client() &&
+      current.sessionId() &&
+      current.canInterrupt() &&
+      !recovery &&
+      !steerUnknown &&
+      !steerInFlight &&
+      !interruptingTurnId &&
+      dispatchingTurnId !== active.turnId &&
+      (pending.length ||
+        retainedSteers.some(
+          (entry) =>
+            entry.sent &&
+            !entry.returned &&
+            entry.ownerTurnId === active.turnId,
+        )),
+    );
+  };
+
+  // Send-now preserves the current draft. Only the server's dropped-steer
+  // receipt can return accepted input to the queue; the terminal releases it.
+  const sendPendingNow = async () => {
+    if (canSendPendingNow()) await interrupt(false);
+  };
+
+  const interrupt = async (restorePrompt = true) => {
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
@@ -940,8 +990,9 @@ export function createQueueBackedTurnController(options: {
     // returns only when THIS turn's own terminal lands. Keyed by the turn's
     // OWNING session inside the queue, so switching Sessions neither loses nor
     // misapplies a pending restore (one re-armable entry per session).
-    if (activeTurn.text.trim())
+    if (restorePrompt && activeTurn.text.trim())
       queueOf().stashInterruptPrompt(sessionId, activeTurnId, activeTurn.text);
+    else if (!restorePrompt) queueOf().takeInterruptPrompt(activeTurnId);
 
     interruptingTurnId = activeTurnId;
     setInterruptingTurnId(activeTurnId);
@@ -1325,6 +1376,7 @@ export function createQueueBackedTurnController(options: {
       sync();
     },
     steeringEnabled: () => steeringEnabled,
+    canSteerText,
     observeSteerDropped,
     resumePendingTurn: () => {
       const active = queueOf().snapshot().active;
@@ -1362,6 +1414,8 @@ export function createQueueBackedTurnController(options: {
       sync();
     },
     interrupt,
+    canSendPendingNow,
+    sendPendingNow,
     reconcileFromHydrate,
     startTurn,
     settleTurn,

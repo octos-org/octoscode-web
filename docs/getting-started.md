@@ -208,11 +208,14 @@ Changes take effect immediately, but only **Save browser preferences** or
 Vim starts in Insert when enabled or toggled. In the focused composer, Escape
 enters Normal without interrupting. A Normal-mode pending operator is cancelled
 by Escape; a subsequent bare Escape can interrupt that Session's accepted turn.
-Enter still uses the same command/turn admission and FIFO. Clipboard shortcuts,
-IME composition and modal/approval/question focus retain priority. Supported
-operations are `h j k l 0 $ w b e G gg x dd dw cc i a A I o O`; counts, Visual
-mode, macros and registers are not implemented. Pending operators never carry
-into another Session's draft.
+Enter uses the same command/turn admission: compatible text steers an active
+turn by default; `/steer off` restores FIFO. Tab or Queue defers a draft to the
+next turn. Ctrl+X or Send now interrupts and sends pending input after the turn
+settles, preserving the unfinished draft. Clipboard shortcuts, IME composition
+and modal/approval/question focus retain priority. Supported operations are
+`h j k l 0 $ w b e G gg x dd dw cc i a A I o O`; counts, Visual mode, macros and
+registers are not implemented. Pending operators never carry into another
+Session's draft.
 
 With Vim disabled, bare Escape in the composer dismisses an open command palette
 first; otherwise it interrupts the selected Session's accepted turn when
