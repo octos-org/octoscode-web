@@ -1108,7 +1108,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // Cmd/Ctrl+K toggles the command palette (all commands, no draft filter).
   useEffect(() => {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
-      if (shortcutTargetSuppressed(event.target)) return;
+      // §8 suppression exists to keep SINGLE-key shortcuts (like `?`)
+      // out of text controls. Ctrl/Meta chords type nothing, so they are
+      // unambiguous everywhere — including the composer, which is the
+      // default focus after opening a session.
+      if (
+        !event.metaKey &&
+        !event.ctrlKey &&
+        shortcutTargetSuppressed(event.target)
+      ) {
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
         setCommandPaletteDismissed(false);
