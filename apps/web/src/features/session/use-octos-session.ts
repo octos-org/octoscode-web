@@ -1330,6 +1330,18 @@ export function useOctosSession(): OctosSessionRuntime {
       isFatalSessionError: (reason) =>
         isFatalSessionContractError(errorMessage(reason)),
       controllerDependencies: (scope, recordClient) => ({
+        canSteer: () => {
+          const capabilities = recordManagerRef.current
+            ?.get(scope)
+            ?.runtime.currentAuthority()?.capabilities;
+          return (
+            supportsMethod(capabilities, "turn/steer") &&
+            supportsFeature(
+              capabilities,
+              CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
+            )
+          );
+        },
         steer: async (request) => {
           const record = recordManagerRef.current?.get(scope);
           const authority = record?.runtime.currentAuthority();

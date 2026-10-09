@@ -97,6 +97,19 @@ const tick = async () => {
   await Promise.resolve();
 };
 describe("record-owned native steering", () => {
+  it("queues directly when the live server cannot steer without attempting dispatch", async () => {
+    const h = fixture();
+    await tick();
+    h.dependencies.canSteer = () => false;
+    expect(h.controller.canSteerText(undefined)).toBe(false);
+    expect(h.submit()).toBe(true);
+    expect(h.dependencies.steer).not.toHaveBeenCalled();
+    expect(
+      h.controller.queueSnapshot().pending.map((turn) => turn.text),
+    ).toEqual(["correction"]);
+    expect(h.timeline().some((item) => item.kind === "system")).toBe(false);
+  });
+
   it("send now interrupts once, preserves drafts, and waits for terminal before dispatch", async () => {
     const h = fixture();
     const restore = vi.fn();

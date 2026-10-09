@@ -127,7 +127,9 @@ async function submit(page: Page, text: string) {
   if (await page.getByRole("listbox", { name: "Commands" }).isVisible()) {
     await composer.press("Escape");
   }
-  await page.getByRole("button", { name: /^(Send|Queue) prompt$/ }).click();
+  await page
+    .getByRole("button", { name: /^(Send|Queue|Steer) prompt$/ })
+    .click();
 }
 async function nativeControl(
   request: APIRequestContext,

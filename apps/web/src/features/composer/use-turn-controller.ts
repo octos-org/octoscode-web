@@ -63,6 +63,8 @@ export interface TurnControllerDependencies {
     request: NativeReviewStartRequest,
   ) => Promise<ReviewStartResult>;
   steer?: (request: NativeSteerRequest) => Promise<TurnSteerResult>;
+  /** Resolve live server support before entering asynchronous steer dispatch. */
+  canSteer?: () => boolean;
   /**
    * §5.2 composer handover gate (brief 4010 clause b). Called ONCE per user
    * turn, BEFORE any `turn/start` frame. THIS tab holding the driver seat
@@ -679,6 +681,7 @@ export function createQueueBackedTurnController(options: {
       !steeringEnabled ||
       recovery ||
       !current.steer ||
+      current.canSteer?.() === false ||
       !client ||
       !sessionId ||
       !active ||

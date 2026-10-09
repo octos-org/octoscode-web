@@ -766,6 +766,7 @@ label > span {
 
 .composer-footer {
   display: flex;
+  flex-wrap: wrap;
   min-height: 44px;
   align-items: center;
   justify-content: space-between;
@@ -783,8 +784,12 @@ label > span {
 
 .composer-actions {
   display: flex;
+  flex-wrap: wrap;
   flex: none;
+  max-width: 100%;
+  margin-left: auto;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--dsw-space-2);
 }
 
