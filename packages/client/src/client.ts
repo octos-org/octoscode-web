@@ -1,3 +1,4 @@
+import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
@@ -587,6 +588,15 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadCodingResponses()).parsePermissionProfileSetResult(value),
+    );
+  }
+
+  async getWorkspaceDiff(params: {
+    session_id: string;
+    profile_id?: string;
+  }): Promise<DiffPreviewGetResult> {
+    return this.validatedRequest(DIFF_WORKSPACE_GET, params, async (value) =>
+      (await loadCodingResponses()).parseDiffPreviewGetResult(value),
     );
   }
 

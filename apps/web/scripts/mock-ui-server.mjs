@@ -2458,6 +2458,7 @@ const baseCapabilities = {
     "permission/profile/list",
     "permission/profile/set",
     "diff/preview/get",
+    "diff/workspace/get",
     "task/list",
     "task/cancel",
     "task/output/read",
@@ -4584,6 +4585,15 @@ sockets.on("connection", (socket, request) => {
         current: updated,
         applied: true,
       });
+      return;
+    }
+    if (request.method === "diff/workspace/get") {
+      const result = diffPreview(
+        sessionId,
+        "01920000-0000-7000-8000-0000000000f1",
+      );
+      result.preview.title = "Workspace uncommitted changes";
+      reply(socket, request.id, result);
       return;
     }
     if (request.method === "diff/preview/get") {

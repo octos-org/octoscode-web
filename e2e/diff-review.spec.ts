@@ -44,6 +44,9 @@ async function openReview(page: Page, lines: PreviewLine[]) {
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review syntax fixture");
   await composer.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Review changes", exact: true }),
+  ).toHaveAttribute("title", "Session change preview");
   await page
     .getByRole("button", { name: "Review changes", exact: true })
     .click();
@@ -211,4 +214,78 @@ test("a missing optional diff grammar retains original text and word marks", asy
   ).toBeGreaterThan(0);
   await expect(dialog.locator(".shiki-color-keyword")).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("Changes works before a turn and ignores a late workspace reply after changing scope", async ({
+  page,
+}) => {
+  let release: (() => void) | undefined;
+  let reads = 0;
+  let openedProfile = "";
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    const workspaceRequests = new Set<string>();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (request.method === "diff/workspace/get") {
+        expect(Object.keys(request.params).sort()).toEqual([
+          "profile_id",
+          "session_id",
+        ]);
+        expect(openedProfile).not.toBe("");
+        expect(request.params.profile_id).toBe(openedProfile);
+        workspaceRequests.add(request.id);
+        reads++;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const response = JSON.parse(String(message));
+      if (response.result?.opened?.active_profile_id) {
+        openedProfile = response.result.opened.active_profile_id;
+      }
+      if (workspaceRequests.has(response.id) && reads > 1) {
+        release = () => socket.send(message);
+      } else socket.send(message);
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(fixture);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
+  await page.getByRole("button", { name: "Start session" }).click();
+  await page
+    .getByRole("button", { name: "Review changes", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Workspace uncommitted changes" }),
+  ).toBeVisible();
+  await expect(dialog.locator(".diff-file").first()).toBeVisible();
+  await expect(
+    dialog.getByText(
+      "Includes staged, unstaged and untracked files. Changes may come from other sessions.",
+    ),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/changes-workspace.png" });
+  await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await dialog
+    .getByRole("button", { name: "Session change preview", exact: true })
+    .click();
+  await expect(
+    dialog.getByText(
+      "No session change preview yet. Switch to workspace changes.",
+    ),
+  ).toBeVisible();
+  release!();
+  await expect(dialog.locator(".diff-file")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "Session change preview", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });

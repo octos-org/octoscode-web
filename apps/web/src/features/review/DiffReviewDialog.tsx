@@ -20,12 +20,14 @@ interface DiffReviewDialogProps {
   state: DiffReviewRuntimeState;
   onClose: () => void;
   onRefresh: () => void;
+  onScopeChange: (scope: "turn" | "workspace") => void;
 }
 
 export function DiffReviewDialog({
   state,
   onClose,
   onRefresh,
+  onScopeChange,
 }: DiffReviewDialogProps) {
   const t = useUiText();
   const totals = useMemo(() => {
@@ -68,7 +70,13 @@ export function DiffReviewDialog({
     >
       <header className="review-header">
         <div>
-          <span className="eyebrow">{t("Authoritative diff preview")}</span>
+          <span className="eyebrow">
+            {t(
+              state.scope === "workspace"
+                ? "Workspace uncommitted changes"
+                : "Session change preview",
+            )}
+          </span>
           <h2 id="review-title" title={preview?.title}>
             {preview?.title ?? t("Review changes")}
           </h2>
@@ -92,14 +100,36 @@ export function DiffReviewDialog({
           </button>
         </div>
       </header>
-      <div className="review-status">
-        <span>
-          {state.result?.status ?? (state.loading ? "loading" : "error")}
-        </span>
-        {state.result ? <span>{state.result.source}</span> : null}
-        <code>{state.latestPreviewId}</code>
+      <div
+        className="review-status"
+        role="group"
+        aria-label={t("Changes scope")}
+      >
+        <button
+          type="button"
+          aria-pressed={state.scope === "turn"}
+          disabled={!state.available}
+          onClick={() => onScopeChange("turn")}
+        >
+          {t("Session change preview")}
+        </button>
+        <button
+          type="button"
+          aria-pressed={state.scope === "workspace"}
+          disabled={!state.workspaceAvailable}
+          onClick={() => onScopeChange("workspace")}
+        >
+          {t("Workspace uncommitted changes")}
+        </button>
       </div>
       <div className="review-content">
+        {state.scope === "workspace" ? (
+          <p className={styles.plainNotice}>
+            {t(
+              "Includes staged, unstaged and untracked files. Changes may come from other sessions.",
+            )}
+          </p>
+        ) : null}
         {Boolean(preview?.files.length) &&
         !decorations &&
         !state.loading &&
@@ -119,7 +149,11 @@ export function DiffReviewDialog({
           </div>
         ) : !preview?.files.length ? (
           <div className="review-empty">
-            {t("The preview is ready, but it contains no changed files.")}
+            {t(
+              !preview && state.scope === "turn"
+                ? "No session change preview yet. Switch to workspace changes."
+                : "The preview is ready, but it contains no changed files.",
+            )}
           </div>
         ) : (
           preview.files.map((file, index) => (

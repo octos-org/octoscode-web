@@ -555,6 +555,7 @@ test("Diff review keeps long headings and file content inside the narrow viewpor
     name: "Review changes",
     exact: true,
   });
+  await expect(trigger).toHaveAttribute("title", "Session change preview");
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: title });
   await expect(dialog).toBeVisible();
