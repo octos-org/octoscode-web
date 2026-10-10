@@ -45,10 +45,14 @@ second agent loop, plugin host, sandbox, or session store.
   workspace, tab-confirmed Session navigation, and Settings.
 - Concurrent retained Sessions on one pooled WebSocket, with independent prompt
   queues, approvals, questions, and native peer hosting while switching views.
+  Enter steers a compatible running turn by default; Tab queues deliberately,
+  and Send now interrupts the active turn to release pending input.
 - Unread tab counts and opt-in desktop notifications when hidden or background
   responses finish or need attention.
 - Session-local Chat and Trajectory views, safe Markdown/code rendering,
   approvals, questions, plans, tasks, output, artifacts, and diff review.
+- In-conversation search (⌘F/Ctrl+F): live in-place highlighting, match
+  navigation, case-sensitive matching, and two-stage Escape.
 - Server-advertised permission control and effective runtime-model status in the
   composer, plus capability-gated provider, model, route, credential, test,
   discovery, save/delete, and Profile-default management in Settings.
