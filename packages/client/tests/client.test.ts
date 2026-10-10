@@ -689,6 +689,7 @@ describe("OctosUiClient", () => {
       client.getDiffPreview(fixture.diff_preview_get.request),
       client.getWorkspaceDiff({
         session_id: fixture.diff_preview_get.request.session_id,
+        profile_id: "coding",
       }),
       client.listSessions(fixture.session_list.request),
       client.listSessionFiles(fixture.session_files_list.request),
@@ -714,7 +715,10 @@ describe("OctosUiClient", () => {
       },
       {
         method: "diff/workspace/get",
-        params: { session_id: fixture.diff_preview_get.request.session_id },
+        params: {
+          session_id: fixture.diff_preview_get.request.session_id,
+          profile_id: "coding",
+        },
       },
       {
         method: "session/list",

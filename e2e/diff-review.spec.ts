@@ -221,13 +221,19 @@ test("Changes works before a turn and ignores a late workspace reply after chang
 }) => {
   let release: (() => void) | undefined;
   let reads = 0;
+  let openedProfile = "";
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     const server = socket.connectToServer();
     const workspaceRequests = new Set<string>();
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
       if (request.method === "diff/workspace/get") {
-        expect(Object.keys(request.params)).toEqual(["session_id"]);
+        expect(Object.keys(request.params).sort()).toEqual([
+          "profile_id",
+          "session_id",
+        ]);
+        expect(openedProfile).not.toBe("");
+        expect(request.params.profile_id).toBe(openedProfile);
         workspaceRequests.add(request.id);
         reads++;
       }
@@ -235,6 +241,9 @@ test("Changes works before a turn and ignores a late workspace reply after chang
     });
     server.onMessage((message) => {
       const response = JSON.parse(String(message));
+      if (response.result?.opened?.active_profile_id) {
+        openedProfile = response.result.opened.active_profile_id;
+      }
       if (workspaceRequests.has(response.id) && reads > 1) {
         release = () => socket.send(message);
       } else socket.send(message);

@@ -2654,6 +2654,7 @@ export function useOctosSession(): OctosSessionRuntime {
   const codingSafetyController = useCodingSafety({
     client: currentClient,
     sessionId: currentSessionId,
+    profileId: () => activeProfileId(),
     capabilities: currentCapabilities,
     onPermissionApplied: (client) => {
       void supervisionController.refresh(client);

@@ -2515,7 +2515,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       !safety.diffReview.available &&
                       !safety.diffReview.workspaceAvailable
                     }
-                    onClick={() => void safety.openDiffReview()}
+                    onClick={(event) => {
+                      // Safari does not focus buttons on pointer activation.
+                      // Give the dialog a stable focus target to restore.
+                      event.currentTarget.focus();
+                      void safety.openDiffReview();
+                    }}
                   >
                     {compact ? <DiffIcon size={20} /> : t("Changes")}
                   </button>

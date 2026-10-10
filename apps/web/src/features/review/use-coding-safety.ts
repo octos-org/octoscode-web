@@ -60,6 +60,7 @@ const EMPTY_DIFF_REVIEW: DiffReviewRuntimeState = {
 interface CodingSafetyDependencies {
   client: () => OctosUiClient | null;
   sessionId: () => string;
+  profileId: () => string;
   capabilities: () => UiProtocolCapabilities | undefined;
   onPermissionApplied: (client: OctosUiClient) => void;
 }
@@ -325,7 +326,12 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     try {
       const result =
         scope === "workspace"
-          ? await client.getWorkspaceDiff({ session_id: sessionId })
+          ? await client.getWorkspaceDiff({
+              session_id: sessionId,
+              ...(currentDependencies.profileId()
+                ? { profile_id: currentDependencies.profileId() }
+                : {}),
+            })
           : await client.getDiffPreview({
               session_id: sessionId,
               preview_id: previewId!,
