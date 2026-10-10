@@ -6,6 +6,14 @@
   matching reasoning effort remains steerable, while attachments and changed
   effort queue as before. Tab queues deliberately, and Send now interrupts the
   active turn and releases pending input after it settles.
+- Search the current conversation with ⌘F/Ctrl+F: matches highlight in place,
+  Enter walks them, Shift+Enter walks back, and Escape clears the query before
+  closing. Aa toggles case-sensitive matching; the bar also opens on a fresh
+  empty session and swings back from the Trajectory tab.
+- Opening a Session that another browser tab already holds shows a takeover
+  banner; sending stays blocked there until you take over, and the previous tab
+  sees that it lost the session.
+- Press ? outside text inputs to list every global keyboard shortcut.
 
 ## v0.11.0-rc.2 — 2026-09-24
 
