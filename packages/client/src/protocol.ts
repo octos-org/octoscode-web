@@ -1,3 +1,4 @@
+export { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 // Transport-free public protocol surface for render-time consumers.
 export type { OctosUiClient } from "./client.ts";
 export { OctosUiProtocolError } from "./protocol-error.ts";

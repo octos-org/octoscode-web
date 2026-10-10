@@ -361,7 +361,10 @@ export interface OctosSessionRuntime {
     diffReview: DiffReviewRuntimeState;
     refreshPermission: () => Promise<void>;
     updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
-    openDiffReview: (previewId?: string) => Promise<void>;
+    openDiffReview: (
+      previewId?: string,
+      scope?: "turn" | "workspace",
+    ) => Promise<void>;
     closeDiffReview: () => void;
   };
   models: {

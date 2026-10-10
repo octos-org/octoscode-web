@@ -106,3 +106,30 @@
 .code :global(.shiki-underline) {
   text-decoration: underline;
 }
+
+.dialog :global(.review-status) {
+  flex-wrap: wrap;
+}
+
+.dialog :global(.review-status) button[aria-pressed="true"] {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.dialog :global(.review-status) button {
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  padding: 0 12px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dialog :global(.review-status) button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

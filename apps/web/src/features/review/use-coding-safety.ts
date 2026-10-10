@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   CORE_UI_METHODS,
+  DIFF_WORKSPACE_GET,
   isPreviewId,
   notificationDiffPreviewId,
   supportsMethod,
@@ -23,8 +24,12 @@ export interface PermissionRuntimeState {
   error: string | null;
 }
 
+export type DiffScope = "turn" | "workspace";
+
 export interface DiffReviewRuntimeState {
   available: boolean;
+  workspaceAvailable: boolean;
+  scope: DiffScope;
   latestPreviewId: string | null;
   active: boolean;
   loading: boolean;
@@ -43,6 +48,8 @@ const EMPTY_PERMISSION: PermissionRuntimeState = {
 
 const EMPTY_DIFF_REVIEW: DiffReviewRuntimeState = {
   available: false,
+  workspaceAvailable: false,
+  scope: "turn",
   latestPreviewId: null,
   active: false,
   loading: false,
@@ -109,6 +116,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       ...current,
       loading: false,
       available: supportsMethod(capabilities, CORE_UI_METHODS.DIFF_PREVIEW_GET),
+      workspaceAvailable: supportsMethod(capabilities, DIFF_WORKSPACE_GET),
     }));
   };
 
@@ -265,42 +273,67 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     }
   };
 
-  const openDiffReview = async (requestedPreviewId?: string): Promise<void> => {
+  const openDiffReview = async (
+    requestedPreviewId?: string,
+    requestedScope?: DiffScope,
+  ): Promise<void> => {
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
     const previewId = requestedPreviewId ?? diffReview.latestPreviewId;
+    const scope = requestedPreviewId
+      ? "turn"
+      : (requestedScope ??
+        (diffReview.active
+          ? diffReview.scope
+          : previewId
+            ? "turn"
+            : "workspace"));
+    if (!client || !sessionId) return;
+    const method =
+      scope === "workspace"
+        ? DIFF_WORKSPACE_GET
+        : CORE_UI_METHODS.DIFF_PREVIEW_GET;
     if (
-      !client ||
-      !sessionId ||
-      !previewId ||
-      !isPreviewId(previewId) ||
-      !supportsMethod(
-        currentDependencies.capabilities(),
-        CORE_UI_METHODS.DIFF_PREVIEW_GET,
-      )
+      !supportsMethod(currentDependencies.capabilities(), method) ||
+      (scope === "turn" && (!previewId || !isPreviewId(previewId)))
     ) {
+      diffRequestsRef.current.invalidate();
+      setDiffReview((current) => ({
+        ...current,
+        active: true,
+        scope,
+        loading: false,
+        result: null,
+        error: supportsMethod(currentDependencies.capabilities(), method)
+          ? null
+          : "This server does not support this changes view. Update Octos.",
+      }));
       return;
     }
 
     const request = diffRequestsRef.current.begin(client, sessionId);
     setDiffReview((current) => ({
       ...current,
-      latestPreviewId: previewId,
+      latestPreviewId: scope === "turn" ? previewId : current.latestPreviewId,
+      scope,
       active: true,
       loading: true,
       result: null,
       error: null,
     }));
     try {
-      const result = await client.getDiffPreview({
-        session_id: sessionId,
-        preview_id: previewId,
-      });
+      const result =
+        scope === "workspace"
+          ? await client.getWorkspaceDiff({ session_id: sessionId })
+          : await client.getDiffPreview({
+              session_id: sessionId,
+              preview_id: previewId!,
+            });
       if (!requestIsCurrent()) return;
       if (
         result.preview.session_id !== sessionId ||
-        result.preview.preview_id !== previewId
+        (scope === "turn" && result.preview.preview_id !== previewId)
       ) {
         throw new Error("diff/preview/get returned a mismatched preview");
       }

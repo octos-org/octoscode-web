@@ -2499,18 +2499,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 >
                   {t("Browser preferences")}
                 </button>
-                {safety.diffReview.available &&
-                safety.diffReview.latestPreviewId ? (
+                {session.opened ? (
                   <button
                     className={
                       compact ? productStyles.compactReview : "review-chip"
                     }
                     type="button"
                     aria-label="Review changes"
-                    title="Review changes"
+                    title={t(
+                      safety.diffReview.latestPreviewId
+                        ? "Session change preview"
+                        : "Workspace uncommitted changes",
+                    )}
+                    disabled={
+                      !safety.diffReview.available &&
+                      !safety.diffReview.workspaceAvailable
+                    }
                     onClick={() => void safety.openDiffReview()}
                   >
-                    {compact ? <DiffIcon size={20} /> : t("Review changes")}
+                    {compact ? <DiffIcon size={20} /> : t("Changes")}
                   </button>
                 ) : null}
               </div>
@@ -3764,6 +3771,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             state={safety.diffReview}
             onClose={safety.closeDiffReview}
             onRefresh={() => void safety.openDiffReview()}
+            onScopeChange={(scope) =>
+              void safety.openDiffReview(undefined, scope)
+            }
           />
         </SurfaceBoundary>
       ) : null}

@@ -687,6 +687,9 @@ describe("OctosUiClient", () => {
         fixture.permission_profile_set.request as PermissionProfileSetParams,
       ),
       client.getDiffPreview(fixture.diff_preview_get.request),
+      client.getWorkspaceDiff({
+        session_id: fixture.diff_preview_get.request.session_id,
+      }),
       client.listSessions(fixture.session_list.request),
       client.listSessionFiles(fixture.session_files_list.request),
       client.deleteSession(fixture.session_delete.request),
@@ -708,6 +711,10 @@ describe("OctosUiClient", () => {
       {
         method: "diff/preview/get",
         params: fixture.diff_preview_get.request,
+      },
+      {
+        method: "diff/workspace/get",
+        params: { session_id: fixture.diff_preview_get.request.session_id },
       },
       {
         method: "session/list",
@@ -735,6 +742,7 @@ describe("OctosUiClient", () => {
       fixture.permission_profile_list.result,
       fixture.permission_profile_set.result,
       fixture.diff_preview_get.result,
+      fixture.diff_preview_get.result,
       fixture.session_list.result,
       fixture.session_files_list.result,
       fixture.session_delete.result,
@@ -750,7 +758,7 @@ describe("OctosUiClient", () => {
         }),
       } as MessageEvent);
     }
-    await expect(Promise.all(pending)).resolves.toHaveLength(8);
+    await expect(Promise.all(pending)).resolves.toHaveLength(9);
   });
 
   it("emits the exact profile model-management wire contract", async () => {

@@ -587,6 +587,14 @@ const catalog: Readonly<Record<string, string>> = {
   Retry: "重试",
   "Retry Session refresh": "重试刷新会话",
   "Retry opening": "重试打开",
+  Changes: "改动",
+  "Changes scope": "改动范围",
+  "Session change preview": "会话改动预览",
+  "Workspace uncommitted changes": "工作区未提交改动",
+  "Includes staged, unstaged and untracked files. Changes may come from other sessions.":
+    "包含暂存、未暂存和未跟踪文件，也可能包含其他会话的改动。",
+  "No session change preview yet. Switch to workspace changes.":
+    "此会话尚无改动预览，可切换到工作区改动。",
   "Review changes": "审查更改",
   "Review diff": "审查差异",
   "Review installation": "检查安装",
