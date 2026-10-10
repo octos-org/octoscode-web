@@ -217,8 +217,8 @@ assert(
   "Web app manifest identity is invalid",
 );
 assert(
-  webManifest.theme_color === "#1b1b1c" &&
-    webManifest.background_color === "#1b1b1c",
+  webManifest.theme_color === "#243f30" &&
+    webManifest.background_color === "#243f30",
   "Web app manifest colors are invalid",
 );
 assert(
