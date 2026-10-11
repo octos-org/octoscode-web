@@ -79,3 +79,16 @@
   color: var(--dsw-text-muted);
   text-align: right;
 }
+
+.sectionTitle {
+  margin: var(--dsw-space-2) var(--dsw-space-3) 0;
+  font-size: var(--dsw-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-text-muted);
+}
+
+.list + .sectionTitle {
+  margin-top: var(--dsw-space-3);
+}
