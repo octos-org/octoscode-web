@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep Changes is available before the first turn: switch between the session
+  preview and uncommitted workspace changes, refresh the snapshot, and review
+  diffs before asking for the next change.
 - Enter now steers a compatible running turn by default instead of queueing:
   matching reasoning effort remains steerable, while attachments and changed
   effort queue as before. Tab queues deliberately, and Send now interrupts the
