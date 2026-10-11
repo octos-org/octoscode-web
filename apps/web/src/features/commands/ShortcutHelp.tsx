@@ -10,13 +10,19 @@ interface Entry {
   label: string;
 }
 
-const ENTRIES: readonly Entry[] = [
+const GLOBAL_ENTRIES: readonly Entry[] = [
   { keys: "⌘K / Ctrl+K", label: "Command palette" },
   { keys: "⌘F / Ctrl+F", label: "Search conversation" },
   { keys: "Alt+A", label: "Show approval panel" },
   { keys: "Alt+P", label: "Toggle peer dock" },
   { keys: "Alt+D", label: "Focus peer dispatch" },
   { keys: "Esc", label: "Close dialog / search / palette" },
+];
+
+const COMPOSER_ENTRIES: readonly Entry[] = [
+  { keys: "Enter", label: "Steer a running turn (default on)" },
+  { keys: "Tab", label: "Queue the draft for after the turn" },
+  { keys: "Ctrl+X", label: "Send pending input now" },
 ];
 
 /**
@@ -94,7 +100,16 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
           </button>
         </div>
         <dl className={styles.list}>
-          {ENTRIES.map((entry) => (
+          {GLOBAL_ENTRIES.map((entry) => (
+            <div className={styles.row} key={entry.keys}>
+              <dt className={styles.keys}>{entry.keys}</dt>
+              <dd className={styles.label}>{entry.label}</dd>
+            </div>
+          ))}
+        </dl>
+        <h3 className={styles.sectionTitle}>While a turn is running</h3>
+        <dl className={styles.list}>
+          {COMPOSER_ENTRIES.map((entry) => (
             <div className={styles.row} key={entry.keys}>
               <dt className={styles.keys}>{entry.keys}</dt>
               <dd className={styles.label}>{entry.label}</dd>
