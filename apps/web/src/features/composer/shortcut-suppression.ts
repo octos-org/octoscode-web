@@ -24,7 +24,7 @@ export function shortcutSuppressed(facts: ShortcutSuppressionFacts): boolean {
 
 /** Structural selectors the DOM classifier reads (§8; exported for tests). */
 export const TEXT_INPUT_SUPPRESSION_SELECTOR =
-  "input, textarea, select, [contenteditable='true'], [contenteditable='']";
+  "input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only'], [contenteditable='']";
 export const DIALOG_SUPPRESSION_SELECTOR = '[role="dialog"]';
 
 /**
