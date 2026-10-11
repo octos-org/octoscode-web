@@ -16,7 +16,10 @@ const GLOBAL_ENTRIES: readonly Entry[] = [
   { keys: "Alt+A", label: "Show approval panel" },
   { keys: "Alt+P", label: "Toggle peer dock" },
   { keys: "Alt+D", label: "Focus peer dispatch" },
-  { keys: "Esc", label: "Close dialog / search / palette" },
+  {
+    keys: "Esc",
+    label: "Close dialog / palette; clears search query, then closes",
+  },
 ];
 
 const COMPOSER_ENTRIES: readonly Entry[] = [
