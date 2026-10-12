@@ -2972,6 +2972,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           : t(
                               "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
                             )}
+                        {conversation.steerUnknown ? (
+                          <>
+                            {" "}
+                            {t(
+                              "A steering result was inconclusive; queued prompts are paused.",
+                            )}
+                            <button
+                              type="button"
+                              className="field-note-action"
+                              onClick={() => conversation.retrySteerDelivery()}
+                            >
+                              {t("Retry queued delivery")}
+                            </button>
+                          </>
+                        ) : null}
                       </p>
                     ) : null}
                     {conversation.inputError ? (
