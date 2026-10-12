@@ -812,10 +812,14 @@ export function createQueueBackedTurnController(options: {
           );
         } else {
           steerUnknown = true;
+          // Be truthful about the recovery path: there is no in-product
+          // manual recovery control yet — reconnecting (or reloading the
+          // tab) is what clears this latch via the transport suspend/hydrate
+          // paths. Queued prompts stay parked until then (fail-closed).
           reportSteer(
             turn,
             "Steering outcome unknown",
-            "The request may have been consumed or started a new turn. It will not be resent automatically. Recover the Session before continuing. Submitted text: " +
+            "The request may have been consumed or started a new turn. It will not be resent automatically. Reconnect from Settings — or reload the tab — to restore queued prompt delivery. Submitted text: " +
               turn.text,
           );
         }
