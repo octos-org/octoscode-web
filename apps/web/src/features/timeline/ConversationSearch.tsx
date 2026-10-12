@@ -81,7 +81,7 @@ export function ConversationSearch({
       >
         Aa
       </button>
-      <span className={styles.count}>
+      <span className={styles.count} aria-live="polite" aria-atomic="true">
         {matchCount === 0 ? "0" : `${activeIndex + 1}/${matchCount}`}
       </span>
       <button
