@@ -426,6 +426,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // Boolean (not the object) so effect deps stay stable across hydrates.
+  const sessionOpenForShortcuts = Boolean(session.opened);
   const compact = useCompactLayout();
   const [, setMutationRevision] = useState(0);
   const mutationLeases = useRef<ProfileMutationLeases | null>(null);
@@ -1110,15 +1112,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
       // §8 suppression exists to keep SINGLE-key shortcuts (like `?`)
       // out of text controls. Ctrl/Meta chords type nothing, so they are
-      // unambiguous everywhere — including the composer, which is the
-      // default focus after opening a session.
-      if (
-        !event.metaKey &&
-        !event.ctrlKey &&
-        shortcutTargetSuppressed(event.target)
-      ) {
-        return;
-      }
+      // welcome inside text controls (the composer is the default focus
+      // after opening a session) — but they must never yank focus or state
+      // out of a modal dialog, and a held chord must not auto-repeat a
+      // toggle. Search is additionally session-scoped: with no open
+      // session there is nothing to attach the bar to.
+      const inDialog =
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"]') !== null;
+      const isTextInput = shortcutTargetIsTextInput(event.target);
+      if (inDialog) return;
+      if (!event.metaKey && !event.ctrlKey && isTextInput) return;
+      if (event.repeat && (event.metaKey || event.ctrlKey)) return;
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
         setCommandPaletteDismissed(false);
@@ -1127,8 +1132,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
         event.preventDefault();
-        // Search is chat-scoped: pressing it on the Trajectory tab swings
-        // back to Chat so the bar is never silently unreachable.
+        if (!sessionOpenForShortcuts) return;
         setConversationTab("chat");
         setSearchOpen(true);
       }
@@ -1142,7 +1146,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionOpenForShortcuts]);
 
   // and rejects Ctrl/Meta, and matches the physical `code` (macOS Option+P is a
   // dead key). The fold is CONTROLLED shell state — PeerDock only renders it.
