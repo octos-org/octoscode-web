@@ -157,6 +157,7 @@ export interface QueueBackedTurnController {
   submitTurn: (turn: PromptTurn) => boolean;
   setSteeringEnabled: (enabled: boolean) => void;
   steeringEnabled: () => boolean;
+  steerUnknown: () => boolean;
   canSteerText: (reasoningEffort: PromptTurn["reasoningEffort"]) => boolean;
   /**
    * Observe every admitted notification for this Session: returned steering
@@ -166,6 +167,9 @@ export interface QueueBackedTurnController {
   observeSteerDropped: (notification: RpcNotification) => void;
   /** Retry only a never-sent queue head after the record becomes ready. */
   resumePendingTurn: () => void;
+  /** Issue #217: explicit user click clears the outcome-unknown latch and
+   * re-dispatches the queue head. Returns false when not latched. */
+  retrySteerDelivery: () => boolean;
   /** Invalidate old RPC completions without dropping any queued turns. */
   suspendTransport: () => void;
   interrupt: () => Promise<void>;
@@ -1380,11 +1384,25 @@ export function createQueueBackedTurnController(options: {
       sync();
     },
     steeringEnabled: () => steeringEnabled,
+    steerUnknown: () => steerUnknown,
     canSteerText,
     observeSteerDropped,
     resumePendingTurn: () => {
       const active = queueOf().snapshot().active;
       if (active) void startTurn(active);
+    },
+    // Issue #217: the explicit-click exception to the fail-closed latch.
+    // Clears the outcome-unknown latch and re-dispatches the queue head
+    // through the ordinary startTurn gates.
+    retrySteerDelivery: () => {
+      if (!steerUnknown) return false;
+      steerEpoch += 1;
+      steerUnknown = false;
+      steerInFlight = false;
+      sync();
+      const next = queueOf().snapshot().active;
+      if (next && attemptedTurns.has(next.turnId)) void startTurn(next);
+      return true;
     },
     suspendTransport: () => {
       steerEpoch++;

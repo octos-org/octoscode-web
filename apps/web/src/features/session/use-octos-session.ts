@@ -314,6 +314,8 @@ export interface OctosSessionRuntime {
     btw: LazyBtwController | null;
     askBtw(question: string): BtwAdmission;
     steeringEnabled: boolean;
+    steerUnknown: boolean;
+    retrySteerDelivery: () => void;
     canSteerInput: boolean;
     setSteeringEnabled(value: boolean | "toggle"): void;
     inputError: string | null;
@@ -3549,6 +3551,8 @@ export function useOctosSession(): OctosSessionRuntime {
         return controller.ask(question);
       },
       steeringEnabled: viewRecord?.controller.steeringEnabled() ?? false,
+      steerUnknown: viewRecord?.controller.steerUnknown() ?? false,
+      retrySteerDelivery: () => viewRecord?.controller.retrySteerDelivery(),
       canSteerInput: Boolean(
         viewRecord?.controller.canSteerText(viewDraft?.effort) &&
         !viewDraft?.images?.getSnapshot().entries.length,
