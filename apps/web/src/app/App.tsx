@@ -3064,7 +3064,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         {...(activeTurnId
                           ? { onQueue: () => submit(undefined, true) }
                           : {})}
-                        {...(conversation.canSendPendingNow
+                        {...(conversation.canSendPendingNow &&
+                        // #218: interrupting the running turn to flush
+                        // pending input is a dispatch-adjacent action — a
+                        // locked-out tab stays fully locked (same as
+                        // App.submit's held-elsewhere gate).
+                        tabLock.state.kind !== "held-elsewhere"
                           ? {
                               onSendPendingNow: () =>
                                 void conversation.sendPendingNow(),
