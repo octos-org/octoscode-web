@@ -6,7 +6,8 @@ export interface TabLockBannerProps {
 
 /**
  * Advisory banner shown when another tab holds the session lock (#56,
- * first slice). Editing is not gated yet — this only informs.
+ * first slice). App.submit gates dispatch while this is visible; take
+ * over to regain sending.
  */
 export function TabLockBanner({ onTakeOver }: TabLockBannerProps) {
   return (

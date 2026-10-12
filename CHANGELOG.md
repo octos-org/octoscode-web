@@ -16,7 +16,8 @@
 - Opening a Session that another browser tab already holds shows a takeover
   banner; sending stays blocked there until you take over, and the previous tab
   sees that it lost the session.
-- Press ? outside text inputs to list every global keyboard shortcut.
+- Press ? outside text inputs to list global shortcuts plus the
+  mid-turn composer controls.
 
 ## v0.11.0-rc.2 — 2026-09-24
 
