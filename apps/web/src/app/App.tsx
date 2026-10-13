@@ -3141,7 +3141,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           available={conversation.interruptible}
                           onInterrupt={() => void conversation.interrupt()}
                         />
-                        {conversation.canSendPendingNow ? (
+                        {conversation.canSendPendingNow &&
+                        // #218: interrupting the running turn is
+                        // dispatch-adjacent — a locked-out tab stays fully
+                        // locked (same as App.submit's held-elsewhere gate).
+                        tabLock.state.kind !== "held-elsewhere" ? (
                           <button
                             type="button"
                             title={t(
