@@ -816,14 +816,14 @@ export function createQueueBackedTurnController(options: {
           );
         } else {
           steerUnknown = true;
-          // Be truthful about the recovery path: there is no in-product
-          // manual recovery control yet — reconnecting (or reloading the
-          // tab) is what clears this latch via the transport suspend/hydrate
-          // paths. Queued prompts stay parked until then (fail-closed).
+          // Fail-closed: nothing is resent automatically. The steering
+          // notice gains a Retry-queued-delivery button while this latch
+          // is set (#217) — use it, or reconnect/reload to restore queued
+          // delivery.
           reportSteer(
             turn,
             "Steering outcome unknown",
-            "The request may have been consumed or started a new turn. It will not be resent automatically. Reconnect from Settings — or reload the tab — to restore queued prompt delivery. Submitted text: " +
+            "The request may have been consumed or started a new turn. It will not be resent automatically. Use the Retry queued delivery control above — or reconnect from Settings to restore queued prompt delivery. Submitted text: " +
               turn.text,
           );
         }
@@ -1400,8 +1400,12 @@ export function createQueueBackedTurnController(options: {
       steerUnknown = false;
       steerInFlight = false;
       sync();
+      // Unconditional: startTurn's own gates (steerUnknown, attempted,
+      // dispatching) are the authority. The latched+settled case has an
+      // UNattempted head — requiring .has here would silently skip the
+      // dispatch and stall the queue forever (audit v10 P1).
       const next = queueOf().snapshot().active;
-      if (next && attemptedTurns.has(next.turnId)) void startTurn(next);
+      if (next) void startTurn(next);
       return true;
     },
     suspendTransport: () => {
