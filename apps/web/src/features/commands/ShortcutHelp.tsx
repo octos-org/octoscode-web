@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./ShortcutHelp.module.css";
 
 export interface ShortcutHelpProps {
@@ -34,6 +35,7 @@ const COMPOSER_ENTRIES: readonly Entry[] = [
  */
 export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const t = useUiText();
   const restoreFocusRef = useRef<Element | null>(null);
 
   // Escape closes (the shortcut list below advertises this), and focus
@@ -81,7 +83,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
       className={styles.backdrop}
       role="dialog"
       aria-modal="true"
-      aria-label="Keyboard shortcuts"
+      aria-label={t("Keyboard shortcuts")}
       onClick={onClose}
     >
       <div
@@ -92,12 +94,12 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
         tabIndex={-1}
       >
         <div className={styles.header}>
-          <h2 className={styles.title}>Keyboard shortcuts</h2>
+          <h2 className={styles.title}>{t("Keyboard shortcuts")}</h2>
           <button
             type="button"
             className={styles.close}
             onClick={onClose}
-            aria-label="Close shortcuts help"
+            aria-label={t("Close shortcuts help")}
           >
             ✕
           </button>

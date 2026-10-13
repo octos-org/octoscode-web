@@ -1,3 +1,4 @@
+import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./TabLockBanner.module.css";
 
 export interface TabLockBannerProps {
@@ -10,14 +11,16 @@ export interface TabLockBannerProps {
  * over to regain sending.
  */
 export function TabLockBanner({ onTakeOver }: TabLockBannerProps) {
+  const t = useUiText();
   return (
     <div className={styles.banner} role="status">
       <span className={styles.text}>
-        This session is open in another tab. Sending is disabled here until you
-        take over.
+        {t(
+          "This session is open in another tab. Sending is disabled here until you take over.",
+        )}
       </span>
       <button type="button" className={styles.takeOver} onClick={onTakeOver}>
-        Take over here
+        {t("Take over here")}
       </button>
     </div>
   );
