@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./ConversationSearch.module.css";
 
 export interface ConversationSearchProps {
@@ -26,6 +27,7 @@ export function ConversationSearch({
   onClose,
 }: ConversationSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const t = useUiText();
 
   // Focus the input when the bar first mounts (⌘F open).
   useEffect(() => {
@@ -56,7 +58,7 @@ export function ConversationSearch({
         ref={inputRef}
         className={styles.input}
         type="text"
-        placeholder="Search conversation"
+        placeholder={t("Search conversation")}
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
@@ -69,7 +71,7 @@ export function ConversationSearch({
             }
           }
         }}
-        aria-label="Search conversation"
+        aria-label={t("Search conversation")}
       />
       <button
         type="button"
@@ -89,7 +91,7 @@ export function ConversationSearch({
         className={styles.navButton}
         onClick={onPrevious}
         disabled={matchCount === 0}
-        aria-label="Previous match"
+        aria-label={t("Previous match")}
       >
         ↑
       </button>
@@ -98,7 +100,7 @@ export function ConversationSearch({
         className={styles.navButton}
         onClick={onNext}
         disabled={matchCount === 0}
-        aria-label="Next match"
+        aria-label={t("Next match")}
       >
         ↓
       </button>
@@ -106,7 +108,7 @@ export function ConversationSearch({
         type="button"
         className={styles.closeButton}
         onClick={onClose}
-        aria-label="Close search"
+        aria-label={t("Close search")}
       >
         ✕
       </button>

@@ -1344,9 +1344,32 @@ const catalog: Readonly<Record<string, string>> = {
     "该服务器不提供配对链接。请在下方输入它的令牌。",
   "Could not reach that Octos server. Check that it is still running.":
     "无法连接到该 Octos 服务器。请检查它是否仍在运行。",
+  "Search conversation": "搜索对话",
+  "Previous match": "上一个匹配",
+  "Next match": "下一个匹配",
+  "Keyboard shortcuts": "键盘快捷键",
+  "Close shortcuts help": "关闭快捷键帮助",
+  "While a turn is running": "回合运行期间",
+  "Command palette": "命令面板",
+  "Search conversation (palette)": "搜索对话",
+  "Show approval panel": "显示审批面板",
+  "Toggle peer dock": "切换 peer 停靠",
+  "Focus peer dispatch": "聚焦 peer 派发",
+  "Close dialog / palette; clears search query, then closes":
+    "关闭对话框 / 面板；先清空搜索词再关闭",
+  "Steer a running turn (default on)": "转向运行中的回合（默认开启）",
+  "Queue the draft for after the turn": "将草稿排队到回合结束后",
+  "Send pending input now": "立即发送待发输入",
+  "This session is open in another tab. Sending is disabled here until you take over.":
+    "此会话已在另一个标签页中打开。在你接管之前，此处禁止发送。",
+  "Take over here": "在此接管",
+  "A steering result was inconclusive; queued prompts are paused.":
+    "转向结果不确定；排队的提示已暂停。",
+  "Retry queued delivery": "重试排队投递",
+
+  // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 
-// Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 const zh: Readonly<Record<string, string>> = { ...catalog, ...FLEET_ZH_COPY };
 
 export default zh;
