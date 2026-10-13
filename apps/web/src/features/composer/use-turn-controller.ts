@@ -538,9 +538,29 @@ export function createQueueBackedTurnController(options: {
     // Core returns undrained inputs BEFORE terminal. Remaining acknowledged
     // steers were consumed. An in-flight receipt is still needed for fallback.
     if (!steerInFlight) {
-      for (let index = retainedSteers.length - 1; index >= 0; index--)
-        if (retainedSteers[index]!.ownerTurnId === turnId)
-          retainedSteers.splice(index, 1);
+      for (let index = retainedSteers.length - 1; index >= 0; index--) {
+        const entry = retainedSteers[index]!;
+        if (entry.ownerTurnId !== turnId) continue;
+        // Confirmed-consumed steers were already reported as "Steering
+        // accepted" and are silently consumed here. A sent steer with no
+        // drop receipt was INCONCLUSIVE (may or may not have reached the
+        // model) — tell the user instead of silently splicing it out,
+        // mirroring the suspend path (security audit v10 P3). Its own id
+        // namespace avoids upserting the acceptance entry.
+        if (entry.sent && !entry.returned) {
+          dependenciesRef.current.setTimeline((current) =>
+            addSystemMessage(
+              current,
+              `steer-inconclusive:${turnId}:${index}`,
+              "Steering outcome stayed inconclusive",
+              "The turn finished without confirming delivery. This text was not resent automatically: " +
+                entry.turn.text,
+              "error",
+            ),
+          );
+        }
+        retainedSteers.splice(index, 1);
+      }
     }
     if (acceptedOwner?.turnId === turnId) {
       acceptedOwner = {
