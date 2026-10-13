@@ -244,6 +244,16 @@ label > span {
   line-height: 1.55;
 }
 
+.field-note-action {
+  border: none;
+  background: transparent;
+  color: var(--display-accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .field-note {
   margin: 12px 2px 0;
 }

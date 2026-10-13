@@ -538,9 +538,29 @@ export function createQueueBackedTurnController(options: {
     // Core returns undrained inputs BEFORE terminal. Remaining acknowledged
     // steers were consumed. An in-flight receipt is still needed for fallback.
     if (!steerInFlight) {
-      for (let index = retainedSteers.length - 1; index >= 0; index--)
-        if (retainedSteers[index]!.ownerTurnId === turnId)
-          retainedSteers.splice(index, 1);
+      for (let index = retainedSteers.length - 1; index >= 0; index--) {
+        const entry = retainedSteers[index]!;
+        if (entry.ownerTurnId !== turnId) continue;
+        // Confirmed-consumed steers were already reported as "Steering
+        // accepted" and are silently consumed here. A sent steer with no
+        // drop receipt was INCONCLUSIVE (may or may not have reached the
+        // model) — tell the user instead of silently splicing it out,
+        // mirroring the suspend path (security audit v10 P3). Its own id
+        // namespace avoids upserting the acceptance entry.
+        if (entry.sent && !entry.returned) {
+          dependenciesRef.current.setTimeline((current) =>
+            addSystemMessage(
+              current,
+              `steer-inconclusive:${turnId}:${index}`,
+              "Steering outcome stayed inconclusive",
+              "The turn finished without confirming delivery. This text was not resent automatically: " +
+                entry.turn.text,
+              "error",
+            ),
+          );
+        }
+        retainedSteers.splice(index, 1);
+      }
     }
     if (acceptedOwner?.turnId === turnId) {
       acceptedOwner = {
@@ -816,14 +836,14 @@ export function createQueueBackedTurnController(options: {
           );
         } else {
           steerUnknown = true;
-          // Be truthful about the recovery path: there is no in-product
-          // manual recovery control yet — reconnecting (or reloading the
-          // tab) is what clears this latch via the transport suspend/hydrate
-          // paths. Queued prompts stay parked until then (fail-closed).
+          // Fail-closed: nothing is resent automatically. The steering
+          // notice gains a Retry-queued-delivery button while this latch
+          // is set (#217) — use it, or reconnect/reload to restore queued
+          // delivery.
           reportSteer(
             turn,
             "Steering outcome unknown",
-            "The request may have been consumed or started a new turn. It will not be resent automatically. Reconnect from Settings — or reload the tab — to restore queued prompt delivery. Submitted text: " +
+            "The request may have been consumed or started a new turn. It will not be resent automatically. Use the Retry queued delivery control above — or reconnect from Settings to restore queued prompt delivery. Submitted text: " +
               turn.text,
           );
         }
@@ -1400,8 +1420,12 @@ export function createQueueBackedTurnController(options: {
       steerUnknown = false;
       steerInFlight = false;
       sync();
+      // Unconditional: startTurn's own gates (steerUnknown, attempted,
+      // dispatching) are the authority. The latched+settled case has an
+      // UNattempted head — requiring .has here would silently skip the
+      // dispatch and stall the queue forever (audit v10 P1).
       const next = queueOf().snapshot().active;
-      if (next && attemptedTurns.has(next.turnId)) void startTurn(next);
+      if (next) void startTurn(next);
       return true;
     },
     suspendTransport: () => {

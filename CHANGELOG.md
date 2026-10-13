@@ -8,15 +8,17 @@
 - Enter now steers a compatible running turn by default instead of queueing:
   matching reasoning effort remains steerable, while attachments and changed
   effort queue as before. Tab queues deliberately, and Send now interrupts the
-  active turn and releases pending input after it settles.
+  active turn and releases pending input after it settles. When a steering
+  result is inconclusive, queued prompts pause and a Retry-queued-delivery
+  control appears in the steering notice.
 - Search the current conversation with ⌘F/Ctrl+F: matches highlight in place,
   Enter walks them, Shift+Enter walks back, and Escape clears the query before
   closing. Aa toggles case-sensitive matching; match progress is announced to
   screen readers; the bar also opens on a fresh empty session and swings back
   from the Trajectory tab.
 - Opening a Session that another browser tab already holds shows a takeover
-  banner; sending stays blocked there until you take over, and the previous tab
-  sees that it lost the session.
+  banner; sending — including the Send-now interrupt control — stays blocked
+  there until you take over, and the previous tab sees that it lost the session.
 - Press ? outside text inputs to list global shortcuts plus the mid-turn
   composer controls.
 

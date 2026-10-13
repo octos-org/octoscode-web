@@ -106,5 +106,7 @@ function redactSecrets(value: string): string {
     .replace(/([?&]token=)[^&\s)]+/gi, "$1[redacted]")
     .replace(/([?&]auth_token=)[^&\s)]+/gi, "$1[redacted]")
     .replace(/([?&]api_key=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/([?&]access_token=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/([?&]apikey=)[^&\s)]+/gi, "$1[redacted]")
     .replace(/Bearer\s+[^\s)]+/gi, "Bearer [redacted]");
 }
