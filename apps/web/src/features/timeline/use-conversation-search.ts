@@ -8,6 +8,8 @@ import {
   type RefObject,
 } from "react";
 
+const SEARCH_CASE_KEY = "octoscode-web:search-case-sensitive";
+
 /**
  * Conversation text search backed by the CSS Custom Highlights API.
  *
@@ -20,11 +22,27 @@ export function useConversationSearch(
   containerRef: RefObject<HTMLElement | null>,
 ) {
   const [query, setQuery] = useState("");
-  const [caseSensitive, setCaseSensitive] = useState(false);
+  // Display preference: remembered per device across reloads (no
+  // credentials — AGENTS.md browser-state boundary).
+  const [caseSensitive, setCaseSensitive] = useState(() => {
+    try {
+      return window.localStorage.getItem(SEARCH_CASE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [activeIndex, setActiveIndex] = useState(0);
   const rangesRef = useRef<Range[]>([]);
   const [matchCount, setMatchCount] = useState(0);
   const activeRangeRef = useRef<Range | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SEARCH_CASE_KEY, caseSensitive ? "1" : "0");
+    } catch {
+      // Denied/private storage must not break the toggle.
+    }
+  }, [caseSensitive]);
 
   const clearHighlights = useCallback(() => {
     CSS.highlights.delete("conversation-search");
