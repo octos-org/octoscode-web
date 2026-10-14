@@ -24,7 +24,7 @@ const GLOBAL_ENTRIES: readonly Entry[] = [
 ];
 
 const COMPOSER_ENTRIES: readonly Entry[] = [
-  { keys: "Enter", label: "Steer a running turn (default on)" },
+  { keys: "Enter", label: "Steer a compatible running turn" },
   { keys: "Tab", label: "Queue the draft for after the turn" },
   { keys: "Ctrl+X", label: "Send pending input now" },
 ];
