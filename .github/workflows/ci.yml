@@ -88,13 +88,13 @@ jobs:
       - name: Regenerate visual baselines
         if: inputs.update_visual_snapshots == true && matrix.shard == 1
         run: pnpm test:e2e e2e/visual.spec.ts --update-snapshots
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || inputs.update_visual_snapshots == true
         with:
           name: visual-baselines-shard-${{ matrix.shard }}
           path: e2e/visual.spec.ts-snapshots/
           retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
           name: playwright-report-shard-${{ matrix.shard }}
@@ -118,7 +118,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps firefox webkit
       - run: pnpm test:e2e:cross-browser
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
           name: cross-browser-report
