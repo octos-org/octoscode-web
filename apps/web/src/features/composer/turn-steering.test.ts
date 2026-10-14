@@ -366,6 +366,29 @@ describe("record-owned native steering", () => {
     h.controller.resumePendingTurn();
     expect(h.client.startTurn.mock.calls.at(-1)?.[0].turn_id).toBe(B);
   });
+  it("Retry queued delivery clears the latch and dispatches the unattempted head", async () => {
+    // Regression for the audit v10 P1: the retry control's dispatch guard
+    // required attemptedTurns.has — the latched+settled case has an
+    // UNattempted head, so clicking Retry cleared the latch while the
+    // queue stalled forever.
+    const h = fixture();
+    await tick();
+    h.submit();
+    h.controller.enqueueTurn({ turnId: B, text: "later" });
+    h.receipt.reject(new Error("timeout"));
+    await tick();
+    h.controller.settleTurn(A);
+    expect(h.client.startTurn).toHaveBeenCalledTimes(1);
+    expect(
+      h.timeline().some((row) => row.title === "Steering outcome unknown"),
+    ).toBe(true);
+
+    // The retry control (user click) — no resumePendingTurn needed.
+    expect(h.controller.retrySteerDelivery()).toBe(true);
+    await tick();
+    expect(h.client.startTurn.mock.calls.at(-1)?.[0].turn_id).toBe(B);
+    expect(h.controller.retrySteerDelivery()).toBe(false);
+  });
   it("a late confirmed return can resolve a timeout without inventing or duplicating input", async () => {
     const h = fixture();
     await tick();
