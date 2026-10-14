@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.11.0-rc.3 — 2026-10-13
 
 - Keep Changes is available before the first turn: switch between the session
   preview and uncommitted workspace changes, refresh the snapshot, and review
