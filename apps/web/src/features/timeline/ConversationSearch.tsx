@@ -78,8 +78,8 @@ export function ConversationSearch({
         className={`${styles.navButton} ${caseSensitive ? styles.toggleOn : ""}`}
         onClick={() => onCaseSensitiveChange(!caseSensitive)}
         aria-pressed={caseSensitive}
-        aria-label="Match case"
-        title="Match case"
+        aria-label={t("Match case")}
+        title={t("Match case")}
       >
         Aa
       </button>

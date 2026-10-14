@@ -1344,6 +1344,7 @@ const catalog: Readonly<Record<string, string>> = {
     "该服务器不提供配对链接。请在下方输入它的令牌。",
   "Could not reach that Octos server. Check that it is still running.":
     "无法连接到该 Octos 服务器。请检查它是否仍在运行。",
+  "Match case": "区分大小写",
   "Search conversation": "搜索对话",
   "Previous match": "上一个匹配",
   "Next match": "下一个匹配",
