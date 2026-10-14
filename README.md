@@ -53,6 +53,9 @@ second agent loop, plugin host, sandbox, or session store.
   approvals, questions, plans, tasks, output, artifacts, and diff review.
 - In-conversation search (⌘F/Ctrl+F): live in-place highlighting, match
   navigation, case-sensitive matching, and two-stage Escape.
+- Keep Changes before the first turn: review the session change preview and
+  uncommitted workspace changes (with refresh) before asking for the next
+  change.
 - Server-advertised permission control and effective runtime-model status in the
   composer, plus capability-gated provider, model, route, credential, test,
   discovery, save/delete, and Profile-default management in Settings.
