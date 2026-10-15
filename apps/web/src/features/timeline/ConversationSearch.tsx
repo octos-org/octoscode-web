@@ -91,7 +91,12 @@ export function ConversationSearch({
         aria-live="polite"
         aria-atomic="true"
       >
-        {matchCount === 0 ? "0" : `${activeIndex + 1}/${matchCount}`}
+        {/* No count before a query exists — a bare "0" reads as failure. */}
+        {query.trim()
+          ? matchCount === 0
+            ? "0"
+            : `${activeIndex + 1}/${matchCount}`
+          : ""}
       </span>
       <button
         type="button"
