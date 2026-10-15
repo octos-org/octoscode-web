@@ -9,8 +9,8 @@ describe("collectMatchOffsets", () => {
   });
 
   it("finds overlapping-adjacent matches without overlap", () => {
-    // "aa" in "aaa" yields [0,2) then [2,4)? No — [2,4) exceeds length;
-    // the second match starts after the first ends.
+    // "aa" in "aaa": the first match is [0,2); the scan resumes AT its end
+    // (2), and [2,4) would exceed the length — so exactly one match.
     expect(collectMatchOffsets("aaa", "aa", false)).toEqual([[0, 2]]);
   });
 
