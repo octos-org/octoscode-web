@@ -60,6 +60,9 @@ export function ConversationSearch({
         type="text"
         placeholder={t("Search conversation")}
         value={query}
+        enterKeyHint="search"
+        autoComplete="off"
+        spellCheck={false}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
@@ -83,7 +86,11 @@ export function ConversationSearch({
       >
         Aa
       </button>
-      <span className={styles.count} aria-live="polite" aria-atomic="true">
+      <span
+        className={`${styles.count} ${query.trim() && matchCount === 0 ? styles.noMatch : ""}`}
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {matchCount === 0 ? "0" : `${activeIndex + 1}/${matchCount}`}
       </span>
       <button
