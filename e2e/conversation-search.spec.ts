@@ -113,3 +113,30 @@ test("⌘F from the Trajectory tab swings back to Chat", async ({ page }) => {
     "page",
   );
 });
+
+test("the case-sensitive toggle persists across reload", async ({ page }) => {
+  // Locks in the #224 display preference: the Aa state seeds from
+  // localStorage on mount and survives a full reload.
+  await connect(page);
+  await page.keyboard.press("Control+f");
+  const searchbox = page.getByPlaceholder("Search conversation");
+  await expect(searchbox).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Match case" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeVisible();
+  await page.keyboard.press("Control+f");
+  await expect(page.getByPlaceholder("Search conversation")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Match case" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // Toggle back off so the preference does not leak into sibling specs
+  // (localStorage persists for the origin across pages in a worker).
+  await page.getByRole("button", { name: "Match case" }).click();
+  await expect(
+    page.getByRole("button", { name: "Match case" }),
+  ).toHaveAttribute("aria-pressed", "false");
+});
