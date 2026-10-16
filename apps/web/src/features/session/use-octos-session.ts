@@ -3552,7 +3552,17 @@ export function useOctosSession(): OctosSessionRuntime {
       },
       steeringEnabled: viewRecord?.controller.steeringEnabled() ?? false,
       steerUnknown: viewRecord?.controller.steerUnknown() ?? false,
-      retrySteerDelivery: () => viewRecord?.controller.retrySteerDelivery(),
+      retrySteerDelivery: () => {
+        // Same staleness guard as sendPendingNow: a closed record or a
+        // record no longer owned by the manager must not re-dispatch.
+        if (
+          viewRecord &&
+          !viewRecord.closed &&
+          recordManager.get(viewRecord.scope) === viewRecord
+        ) {
+          viewRecord.controller.retrySteerDelivery();
+        }
+      },
       canSteerInput: Boolean(
         viewRecord?.controller.canSteerText(viewDraft?.effort) &&
         !viewDraft?.images?.getSnapshot().entries.length,
