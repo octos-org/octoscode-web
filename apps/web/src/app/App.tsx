@@ -2673,7 +2673,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         value={attachmentAccess}
                       >
                         {tabLock.state.kind === "held-elsewhere" ? (
-                          <TabLockBanner onTakeOver={tabLock.takeOver} />
+                          <TabLockBanner
+                            onTakeOver={() => {
+                              tabLock.takeOver();
+                              // The banner unmounts on the flip; hand
+                              // focus back to the composer instead of
+                              // dropping it on <body>.
+                              requestAnimationFrame(() =>
+                                composerRef.current?.focus(),
+                              );
+                            }}
+                          />
                         ) : null}
                         {shortcutHelpOpen ? (
                           <ShortcutHelp
