@@ -112,7 +112,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
             </div>
           ))}
         </dl>
-        <h3 className={styles.sectionTitle}>While a turn is running</h3>
+        <h3 className={styles.sectionTitle}>{t("While a turn is running")}</h3>
         <dl className={styles.list}>
           {COMPOSER_ENTRIES.map((entry) => (
             <div className={styles.row} key={entry.keys}>
