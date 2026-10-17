@@ -1358,7 +1358,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Focus peer dispatch": "聚焦 peer 派发",
   "Close dialog / palette; clears search query, then closes":
     "关闭对话框 / 面板；先清空搜索词再关闭",
-  "Steer a running turn (default on)": "转向运行中的回合（默认开启）",
+  "Steer a compatible running turn": "转向兼容的运行中回合",
   "Queue the draft for after the turn": "将草稿排队到回合结束后",
   "Send pending input now": "立即发送待发输入",
   "This session is open in another tab. Sending is disabled here until you take over.":
