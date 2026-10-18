@@ -172,6 +172,8 @@ runtime model to match `OCTOSCODE_LIVE_EXPECTED_MODEL` (default
 `glm-5.3-flash`), performs a bounded file edit/read turn, and reloads to prove
 same-tab restore and durable hydrate. It also checks a background turn while a
 sibling Session is selected. It does not change or infer the Profile default.
+Supply an empty workspace for each run: titled Sessions left by earlier runs
+break the sidebar count and title assumptions.
 
 Configure the Profile through Core and restart Octos when required before
 running. Supply the server, trusted origin, token, and workspace explicitly:
