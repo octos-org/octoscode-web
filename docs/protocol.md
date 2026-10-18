@@ -96,8 +96,8 @@ ownership is recorded in
 supersedes ADR 0019's ACK navigation guard and eight retained-owner-socket
 budget. An unresolved turn-recovery state still blocks navigation until checked.
 The downloadable runtime baseline is
-[`core-runtime.json`](../packages/client/core-runtime.json), currently
-`v2.0.3-rc.13`; historical rc.11 testing is separate evidence.
+[`core-runtime.json`](../packages/client/core-runtime.json), currently `v2.0.3`;
+historical rc.11 testing is separate evidence.
 
 Native peer `peer/staged` and `peer/closed` events route to the retained master
 record even while backgrounded. The coordinator binds one peer manager to that

@@ -16,24 +16,28 @@ function productNavigation(page: Page): Locator {
   return page.getByRole("complementary", { name: "Product navigation" });
 }
 
+// Since the composer controls collapsed into the session status strip, the
+// permission selector and runtime model readback live in the Session settings
+// pane. Opens the pane and returns it with the permission trigger visible.
+async function openSessionSettings(page: Page): Promise<Locator> {
+  const settingsButton = page.getByRole("button", { name: "Session settings" });
+  await expect(settingsButton).toBeVisible({ timeout: 30_000 });
+  await settingsButton.click();
+  const dialog = page.getByRole("dialog", { name: "Session settings" });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  return dialog;
+}
+
+async function closeSessionSettings(page: Page): Promise<void> {
+  await page.keyboard.press("Escape");
+}
+
 function modelLabel(modelId: string): string {
   return modelId
     .replace(/([a-z])([0-9])/gi, "$1 $2")
     .replace(/[-_.]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function runtimeModelPattern(modelId: string): RegExp {
-  // The runtime control may render the label as "GLM 5.3 Flash" with or
-  // without punctuation; match the normalized id case-insensitively.
-  const normalized = modelId
-    .split(/[-_.]/)
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("[- .]?");
-  // Anchor the runtime itself: a matching Profile default later in this
-  // accessible label must never satisfy the effective-runtime requirement.
-  return new RegExp(`^Runtime model: ${normalized}(?:\\. |$)`, "i");
 }
 
 test("runs a coding turn with the expected runtime model and restores it after refresh", async ({
@@ -51,11 +55,13 @@ test("runs a coding turn with the expected runtime model and restores it after r
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
   await addWorkspace.getByRole("button", { name: "Start session" }).click();
 
-  const permission = page.getByRole("button", { name: /^Permission:/ });
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
   });
-  await expect(permission.or(onboarding).first()).toBeVisible({
+  const sessionSettings = page.getByRole("button", {
+    name: "Session settings",
+  });
+  await expect(sessionSettings.or(onboarding).first()).toBeVisible({
     timeout: 30_000,
   });
   if (await onboarding.isVisible()) {
@@ -72,7 +78,7 @@ test("runs a coding turn with the expected runtime model and restores it after r
   });
 
   const launchError = page.getByRole("alert").first();
-  await expect(permission.or(launchError).first()).toBeVisible({
+  await expect(sessionSettings.or(launchError).first()).toBeVisible({
     timeout: 30_000,
   });
   if (await launchError.isVisible()) {
@@ -80,6 +86,10 @@ test("runs a coding turn with the expected runtime model and restores it after r
       `The live Session could not open: ${await launchError.innerText()}`,
     );
   }
+
+  const dialog = await openSessionSettings(page);
+  const permission = dialog.getByRole("button", { name: /^Permission:/ });
+  await expect(permission).toBeVisible({ timeout: 30_000 });
   await permission.click();
   const permissionMenu = page.getByRole("menu", { name: "Permission" });
   const workspaceWrite = permissionMenu
@@ -88,17 +98,15 @@ test("runs a coding turn with the expected runtime model and restores it after r
   await expect(workspaceWrite).toBeVisible();
   if ((await workspaceWrite.getAttribute("aria-checked")) !== "true") {
     await workspaceWrite.click();
-    await expect(
-      page.getByRole("button", { name: /^Permission: Write ·/ }),
-    ).toBeVisible();
   } else {
     await page.keyboard.press("Escape");
   }
+  await closeSessionSettings(page);
+  await expect(dialog).toHaveCount(0);
 
-  const runtimeModel = page.getByRole("button", {
-    name: runtimeModelPattern(expectedModel),
-  });
-  await expect(runtimeModel).toBeVisible({ timeout: 30_000 });
+  const statusStrip = page.getByTestId("session-status-strip");
+  await expect(statusStrip).toContainText(expectedModel, { timeout: 30_000 });
+  await expect(statusStrip).toContainText("Workspace write");
 
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
@@ -147,11 +155,10 @@ test("runs a coding turn with the expected runtime model and restores it after r
   await expect(
     page.locator(".entry-assistant").filter({ hasText: MARKER }).last(),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: runtimeModelPattern(expectedModel),
-    }),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("session-status-strip")).toContainText(
+    expectedModel,
+    { timeout: 30_000 },
+  );
 
   const settingsButton = productNavigation(page).getByRole("button", {
     name: "Settings",
@@ -252,11 +259,13 @@ async function openLiveWorkspace(page: Page): Promise<{
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
   await addWorkspace.getByRole("button", { name: "Start session" }).click();
 
-  const permission = page.getByRole("button", { name: /^Permission:/ });
   const onboarding = page.getByRole("dialog", {
     name: "Create your local coding profile",
   });
-  await expect(permission.or(onboarding).first()).toBeVisible({
+  const sessionSettings = page.getByRole("button", {
+    name: "Session settings",
+  });
+  await expect(sessionSettings.or(onboarding).first()).toBeVisible({
     timeout: 30_000,
   });
   if (await onboarding.isVisible()) {
@@ -264,6 +273,10 @@ async function openLiveWorkspace(page: Page): Promise<{
       "The live server requires Profile onboarding; configure it before the GLM gate.",
     );
   }
+
+  const dialog = await openSessionSettings(page);
+  const permission = dialog.getByRole("button", { name: /^Permission:/ });
+  await expect(permission).toBeVisible({ timeout: 30_000 });
   await permission.click();
   const permissionMenu = page.getByRole("menu", { name: "Permission" });
   const workspaceWrite = permissionMenu
@@ -274,12 +287,12 @@ async function openLiveWorkspace(page: Page): Promise<{
   } else {
     await page.keyboard.press("Escape");
   }
+  await closeSessionSettings(page);
+  await expect(dialog).toHaveCount(0);
 
-  await expect(
-    page.getByRole("button", {
-      name: runtimeModelPattern(expectedModel),
-    }),
-  ).toBeVisible({ timeout: 30_000 });
+  const statusStrip = page.getByTestId("session-status-strip");
+  await expect(statusStrip).toContainText(expectedModel, { timeout: 30_000 });
+  await expect(statusStrip).toContainText("Workspace write");
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
   return { navigation, composer };

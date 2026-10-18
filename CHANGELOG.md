@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.11.0 — 2026-10-18
+
+First stable 0.11.0 release, promoting v0.11.0-rc.3 with the hardening that
+landed on main since the candidate. The verified Core runtime and UI Protocol
+contract pins advance from v2.0.3-rc.13 to v2.0.3.
+
+- Interrupting a running turn no longer leaves a stale retry path: the steering
+  delivery view carries a staleness guard, and the Retry-queued-delivery
+  dispatch has a regression test.
+- Taking over a Session held by another tab returns focus to the composer so
+  keyboard users can continue typing immediately.
+- Search input polish with a clearer no-match signal, the match count stays
+  hidden until a query exists, and the case-sensitive toggle persists across
+  reload.
+- Commands and search wording is fully translated, including the zh follow-ups
+  for the reworded steer entry and the commands section title.
+- Redaction tests now cover the access_token and apikey patterns.
+
 ## v0.11.0-rc.3 — 2026-10-13
 
 - Keep Changes is available before the first turn: switch between the session
