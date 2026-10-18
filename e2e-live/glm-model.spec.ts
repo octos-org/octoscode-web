@@ -32,6 +32,20 @@ async function closeSessionSettings(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
+// The strip's FIRST segment is the server-reported runtime model (App feeds it
+// from supervision runtimeStatus), so anchor there: a matching Profile default
+// rendered anywhere else must never satisfy the gate. The visible context span
+// carries "model · permission"; the button's full text also repeats the hidden
+// describedby spans, so match the span, not the button.
+function expectStripRuntimeModel(page: Page, modelId: string) {
+  const escaped = modelId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return expect(
+    page
+      .getByTestId("session-status-strip")
+      .locator('[class*="session-status-strip-context"]'),
+  ).toHaveText(new RegExp(`^${escaped} · `), { timeout: 30_000 });
+}
+
 function modelLabel(modelId: string): string {
   return modelId
     .replace(/([a-z])([0-9])/gi, "$1 $2")
@@ -105,7 +119,7 @@ test("runs a coding turn with the expected runtime model and restores it after r
   await expect(dialog).toHaveCount(0);
 
   const statusStrip = page.getByTestId("session-status-strip");
-  await expect(statusStrip).toContainText(expectedModel, { timeout: 30_000 });
+  await expectStripRuntimeModel(page, expectedModel);
   await expect(statusStrip).toContainText("Workspace write");
 
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
@@ -155,10 +169,7 @@ test("runs a coding turn with the expected runtime model and restores it after r
   await expect(
     page.locator(".entry-assistant").filter({ hasText: MARKER }).last(),
   ).toBeVisible();
-  await expect(page.getByTestId("session-status-strip")).toContainText(
-    expectedModel,
-    { timeout: 30_000 },
-  );
+  await expectStripRuntimeModel(page, expectedModel);
 
   const settingsButton = productNavigation(page).getByRole("button", {
     name: "Settings",
@@ -291,7 +302,7 @@ async function openLiveWorkspace(page: Page): Promise<{
   await expect(dialog).toHaveCount(0);
 
   const statusStrip = page.getByTestId("session-status-strip");
-  await expect(statusStrip).toContainText(expectedModel, { timeout: 30_000 });
+  await expectStripRuntimeModel(page, expectedModel);
   await expect(statusStrip).toContainText("Workspace write");
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeEnabled({ timeout: 30_000 });
