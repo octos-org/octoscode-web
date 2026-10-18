@@ -13,7 +13,7 @@ candidate. This is not a blanket parity or soak-pass claim.
 - Live Core candidate for the historical comparison: `2.0.3-rc.11` (`d51601d`).
   Its released-runtime gate used rc.9. The current baseline is defined
   separately by [`core-runtime.json`](../packages/client/core-runtime.json), now
-  rc.13; updating that pin does not rerun or extend the historical acceptance
+  v2.0.3; updating that pin does not rerun or extend the historical acceptance
   results.
 - Architecture and independent acceptance: Codex GPT-6 Astra.
 - Execution lanes: native Octos peers using Kimi K3, GLM-5.3, and DeepSeek V4

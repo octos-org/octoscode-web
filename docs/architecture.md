@@ -199,7 +199,7 @@ The expanded parity implementation is a candidate. Passing fixtures, unit tests,
 or a baseline runtime smoke is not a full parity or live-soak acceptance; see
 [Feature parity](feature-parity.md) and [Testing](testing.md).
 [`core-runtime.json`](../packages/client/core-runtime.json) defines the
-downloadable runtime baseline (currently `v2.0.3-rc.13`).
+downloadable runtime baseline (currently `v2.0.3`).
 [`contract-source.json`](../packages/client/contract-source.json) separately
 pins the generated vocabulary source. Earlier rc.9/rc.11 audit evidence does not
 certify later changes.

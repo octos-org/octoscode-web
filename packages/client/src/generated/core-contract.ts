@@ -2,8 +2,8 @@
 
 export const CORE_UI_CONTRACT_SOURCE = {
   repository: "https://github.com/octos-org/octos",
-  revision: "423166958caac4bf9317115cc9245a136f367e19",
-  contract_blob: "779e71d64d6efd81dfcdfdb3ea274d53c30a4335",
+  revision: "fca32c45845abefdf6729ddff081c5083553289a",
+  contract_blob: "9560700689f585388a9b60d8fee9b6f33448ea4c",
   path: "crates/octos-core/src/ui_protocol.rs",
 } as const;
 
@@ -35,6 +35,7 @@ export const CORE_UI_FEATURES = {
   REVIEW_START_V1: "review.start.v1",
   CONTEXT_LIFECYCLE_V1: "context.lifecycle.v1",
   CONTEXT_SEMANTIC_CACHE_V1: "context.semantic_cache.v1",
+  CONTEXT_STATE_V1: "context.state.v1",
   HARNESS_TASK_SUPERVISION_INSPECTION_V1:
     "harness.task_supervision_inspection.v1",
   HARNESS_TASK_ARTIFACTS_V1: "harness.task_artifacts.v1",
@@ -47,6 +48,10 @@ export const CORE_UI_FEATURES = {
 } as const;
 
 export const CORE_UI_METHODS = {
+  SERVER_INSTANCE_GET: "server/instance.get",
+  PEER_TEAM_LIST: "peer/team/list",
+  PEER_TEAM_LEADER_SET: "peer/team/leader/set",
+  PEER_TEAM_MESSAGE: "peer/team/message",
   CONFIG_CAPABILITIES_LIST: "config/capabilities/list",
   SESSION_STATUS_READ: "session/status/read",
   PROFILE_LOCAL_CREATE: "profile/local/create",
@@ -163,10 +168,14 @@ export const CORE_UI_METHODS = {
   CONTEXT_COMPACTION_COMPLETED: "context/compaction_completed",
   CONTEXT_COMPACTION_STARTED: "context/compaction_started",
   CONTEXT_NORMALIZATION_REPORTED: "context/normalization_reported",
+  CONTEXT_STATE_REPORTED: "context/state_reported",
   SESSION_ORCHESTRATION: "session/orchestration",
   BACKGROUND_ACTIVITY: "background/activity",
   PEER_STAGED: "peer/staged",
   PEER_CLOSED: "peer/closed",
+  PEER_TOOL_CALL: "peer/tool/call",
+  PEER_TOOL_CANCEL: "peer/tool/cancel",
+  PEER_INPUT: "peer/input",
   SMART_HOME_STATUS_GET: "smart_home/status.get",
   SMART_HOME_DEVICE_LIST: "smart_home/device.list",
   SMART_HOME_DEVICE_COMMAND: "smart_home/device.command",
@@ -195,6 +204,7 @@ export const CORE_UI_KNOWN_FEATURES = [
   "review.start.v1",
   "context.lifecycle.v1",
   "context.semantic_cache.v1",
+  "context.state.v1",
   "harness.task_supervision_inspection.v1",
   "harness.task_artifacts.v1",
   "user_question.v1",
@@ -285,6 +295,7 @@ export const CORE_UI_NOTIFICATION_METHODS = [
   "turn/started",
   "turn/completed",
   "turn/error",
+  "turn/steer_dropped",
   "message/delta",
   "message/reasoning_delta",
   "tool/started",
@@ -327,7 +338,12 @@ export const CORE_UI_NOTIFICATION_METHODS = [
   "context/compaction_completed",
   "context/compaction_started",
   "context/normalization_reported",
+  "context/state_reported",
+  "session/orchestration",
   "peer/staged",
   "peer/closed",
   "background/activity",
+  "peer/tool/call",
+  "peer/tool/cancel",
+  "peer/input",
 ] as const;

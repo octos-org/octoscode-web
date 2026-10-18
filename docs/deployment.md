@@ -155,8 +155,8 @@ in the connection surface.
 The expanded parity work is not a blanket production/parity or live-soak
 acceptance. Historical rc.9/rc.11 evidence is separate from the current
 downloadable runtime baseline in
-[`core-runtime.json`](../packages/client/core-runtime.json), currently
-`v2.0.3-rc.13`; see [Feature parity](feature-parity.md).
+[`core-runtime.json`](../packages/client/core-runtime.json), currently `v2.0.3`;
+see [Feature parity](feature-parity.md).
 
 ## Rollback and health
 
