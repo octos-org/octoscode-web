@@ -125,15 +125,19 @@ Acceptance-row evidence status:
   degraded rendering (Turn stopped notice, prompt kept as local draft) is the
   designed behavior, not a web defect.
 - Navigation and performance: JS/CSS/CLS/LoAF budgets gate CI; settings
-  first-click latency fixed (#132). The rc.11-era long-history reselection probe
-  has not been rerun against v2.0.3 — remaining before any 0.20 declaration.
+  first-click latency fixed (#132). The long-history multi-session acceptance
+  was rerun against real `octos serve` v2.0.3 on 2026-10-18
+  (`e2e-live/long-history-reselect.spec.ts`): three sessions with real-model
+  turns survived 18 reselection cycles and per-session reloads with no
+  reordering, no cross-session marker mixing, and correct selected-session
+  restore.
 - Accessibility: WCAG and axe gates run in CI across Chromium/Firefox/WebKit.
 
 Completion-rule assessment: no known web-side reproducible P0/P1 remains in the
 shipping scope; the one open P1 (#78) is blocked upstream (octos#2831) and
-documented as an upstream limitation. Remaining before a 0.20 declaration: rerun
-the long-history/performance acceptance on v2.0.3, resolve the takeover e2e
-fixture work, and absorb whatever octos#2831 changes on the Core side.
+documented as an upstream limitation. Remaining before a 0.20 declaration:
+resolve the takeover e2e fixture work and absorb whatever octos#2831 changes on
+the Core side.
 
 Synthetic regression tooling stays green (`scripts/soak-fixture-e2e.mjs`, 181
 assertions), which remains fixture-contract evidence only.
