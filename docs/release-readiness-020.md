@@ -8,17 +8,13 @@ tests. Execution follows the [maintenance workflow](maintenance-workflow.md).
 
 ## Current baseline
 
-- Released version: `v0.10.0`.
-- Deployed and main revision at intake: `c79d85b7` (#122, cross-tab-close
-  drafts).
-- Parity candidate: [#105](https://github.com/octos-org/octoscode-web/pull/105),
-  intake head `c5839d09`; collision follow-up:
-  [#112](https://github.com/octos-org/octoscode-web/pull/112), `6061b773`.
-- Both candidate CI runs pass, but #105 skips two chat-handover cases. That
-  evidence does not establish complete parity or release readiness.
-- The local Core source includes typed turn-collision disclosure, but does not
-  advertise the candidate's `session/driver/*` contract. Peer control-seat
-  acceptance must distinguish fixture behavior from the supported live server.
+- Released version: `v0.11.0` (2026-10-18, promoted from `v0.11.0-rc.3`).
+- Core runtime and UI Protocol contract pins: Octos `v2.0.3` (`fca32c4`);
+  verified against real `octos serve` and the GLM live gate (see
+  [core-runtime.json](../packages/client/core-runtime.json)).
+- Deployed service tracks main; deployed build revision `577e3f6` matches main
+  and its build manifest records the `v2.0.3` baseline.
+- Program issue: [#124](https://github.com/octos-org/octoscode-web/issues/124).
 
 ## Acceptance outcomes
 
@@ -89,6 +85,58 @@ rc.11 integration has been deployed.
 The [issue outcome review](020-issue-review.md) separates stale implementation
 proposals, optional UX improvements and real upstream limits. This candidate
 progress is not a 0.20 release declaration.
+
+## Reconciliation — 2026-10-18
+
+The intake tables above are preserved as history. Every intake item has since
+been resolved and shipped through `v0.11.0`; the evidence below is current as of
+main `577e3f6` against real Octos `v2.0.3`.
+
+Intake "confirmed work" outcomes:
+
+1. Pairing bearer storage (#114): fixed via
+   [#130](https://github.com/octos-org/octoscode-web/pull/130); issue closed.
+2. Pairing late-reply and identity-hint retention: fixed in #130.
+3. Stop draft loss (#123): fixed in #130 with real-Core verification; issue
+   closed.
+4. Control-seat handback and consumed draft slot: fixed in #130; the formerly
+   skipped browser scenarios now run — `e2e/` contains zero `test.skip`/
+   `test.fixme`.
+5. #112 collision re-adoption and attachment metadata: addressed in #112/#130;
+   covered by `e2e/peer-control.spec.ts` and the canonical recovery suite.
+6. #122 draft persistence in the shipped shell: shipped; drafts survive refresh
+   and are covered by unit and browser tests.
+7. Redundant test removal: #130 removed 20 redundant test files; the suite has
+   no source-string gates.
+
+Acceptance-row evidence status:
+
+- Core functionality, connection/identity, conversation ownership, verification,
+  delivery: enforced every push by the eight required CI checks (contract,
+  check, 4 e2e shards, cross-browser, real-Core integration); 672 client unit
+  tests; capability gating keeps unsupported controls hidden.
+- Recovery: completed-turn history survives refresh — live-verified against real
+  `octos serve` v2.0.3 by the GLM gate (real-model turn with tools, reload, full
+  restore, background-turn survival). Known upstream limitation: an interrupted
+  **in-flight** turn's rows are dropped by Core's context ledger before the
+  client can reconnect
+  ([octos#2831](https://github.com/octos-org/octos/issues/2831), tracked as
+  [#78](https://github.com/octos-org/octoscode-web/issues/78)); the client's
+  degraded rendering (Turn stopped notice, prompt kept as local draft) is the
+  designed behavior, not a web defect.
+- Navigation and performance: JS/CSS/CLS/LoAF budgets gate CI; settings
+  first-click latency fixed (#132). The rc.11-era long-history reselection probe
+  has not been rerun against v2.0.3 — remaining before any 0.20 declaration.
+- Accessibility: WCAG and axe gates run in CI across Chromium/Firefox/WebKit.
+
+Completion-rule assessment: no known web-side reproducible P0/P1 remains in the
+shipping scope; the one open P1 (#78) is blocked upstream (octos#2831) and
+documented as an upstream limitation. Remaining before a 0.20 declaration: rerun
+the long-history/performance acceptance on v2.0.3, resolve the takeover e2e
+fixture work, and absorb whatever octos#2831 changes on the Core side.
+
+Synthetic regression tooling stays green (`scripts/soak-fixture-e2e.mjs`, 181
+assertions), which remains fixture-contract evidence only.
 
 ## Completion rule
 
