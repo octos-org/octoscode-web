@@ -5,14 +5,16 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # #234: katex is pinned exactly and moves only as a coordinated
+    # double-upgrade with rehype-katex in one reviewed commit — either half
+    # alone trips the single-version policy gate, so Dependabot leaves the
+    # pair alone until that lands deliberately.
+    ignore:
+      - dependency-name: "katex"
+      - dependency-name: "rehype-katex"
     groups:
       production-dependencies:
         dependency-type: production
-        exclude:
-          # #234: katex is pinned exactly and moves only as a coordinated
-          # double-upgrade with rehype-katex in one reviewed commit; the
-          # single-version policy gate rejects mixed resolutions.
-          - dependency-name: "katex"
       development-dependencies:
         dependency-type: development
 
