@@ -118,9 +118,9 @@ DeepSeek Harness UI reference.
 - `parse-entities@4.0.2` — MIT — https://github.com/wooorm/parse-entities
 - `parse5@7.3.0` — MIT — https://parse5.js.org
 - `property-information@7.2.0` — MIT — https://github.com/wooorm/property-information
-- `react-dom@19.3.0` — MIT — https://react.dev/
+- `react-dom@19.3.1` — MIT — https://react.dev/
 - `react-markdown@10.1.0` — MIT — https://github.com/remarkjs/react-markdown
-- `react@19.3.0` — MIT — https://react.dev/
+- `react@19.3.1` — MIT — https://react.dev/
 - `regex-recursion@6.0.2` — MIT — https://github.com/slevithan/regex-recursion
 - `regex-utilities@2.3.0` — MIT — https://github.com/slevithan/regex-utilities
 - `regex@6.1.0` — MIT — https://github.com/slevithan/regex
@@ -1115,8 +1115,8 @@ Applies to:
 
 Applies to:
 
-- `react-dom@19.3.0`
-- `react@19.3.0`
+- `react-dom@19.3.1`
+- `react@19.3.1`
 - `scheduler@0.28.0`
 
     ===== LICENSE =====
