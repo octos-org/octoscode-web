@@ -136,8 +136,9 @@ Acceptance-row evidence status:
 Completion-rule assessment: no known web-side reproducible P0/P1 remains in the
 shipping scope; the one open P1 (#78) is blocked upstream (octos#2831) and
 documented as an upstream limitation. Remaining before a 0.20 declaration:
-resolve the takeover e2e fixture work and absorb whatever octos#2831 changes on
-the Core side.
+absorb whatever octos#2831 changes on the Core side. The takeover lock flow
+gained full browser coverage on 2026-10-19 (`e2e/tab-lock.spec.ts`: second-tab
+banner, dispatch gate, take-over steal and loss notification, both directions).
 
 Synthetic regression tooling stays green (`scripts/soak-fixture-e2e.mjs`, 181
 assertions), which remains fixture-contract evidence only.
