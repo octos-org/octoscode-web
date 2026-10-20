@@ -8,6 +8,11 @@ updates:
     groups:
       production-dependencies:
         dependency-type: production
+        exclude:
+          # #234: katex is pinned exactly and moves only as a coordinated
+          # double-upgrade with rehype-katex in one reviewed commit; the
+          # single-version policy gate rejects mixed resolutions.
+          - dependency-name: "katex"
       development-dependencies:
         dependency-type: development
 
