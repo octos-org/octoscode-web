@@ -31,12 +31,12 @@
     "check": "pnpm format:check && pnpm policy:verify && pnpm licenses:verify && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm deploy:verify"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.64.0",
-    "oxlint": "1.87.0",
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "oxlint": "1.88.0",
     "prettier": "^3.9.10",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "pnpm": {
     "overrides": {
