@@ -300,8 +300,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     await expect(refusal(page)).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);
     const pane = page.getByRole("dialog", {
-      name: "Session settings",
-      exact: true,
+      name: /Session settings/,
     });
     await expect(
       pane.getByRole("alert").filter({ hasText: FENCE_STALE }),

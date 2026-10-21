@@ -15,7 +15,7 @@ const START_METHOD = "turn/start";
 const productNavigation = (page: Page) => page.locator("aside");
 const composer = (page: Page) => page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 const strip = (page: Page) =>
-  page.getByRole("button", { name: "Session settings", exact: true });
+  page.getByRole("button", { name: /Session settings/ });
 
 interface SentFrame {
   readonly method: string | null;
@@ -84,8 +84,7 @@ async function connectAndStartWorkspace(page: Page, workspace: string) {
 async function openAdvanced(page: Page) {
   await strip(page).click();
   const pane = page.getByRole("dialog", {
-    name: "Session settings",
-    exact: true,
+    name: /Session settings/,
   });
   await expect(pane).toBeVisible();
   const advanced = pane.locator("details.session-config-advanced");

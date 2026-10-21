@@ -7,9 +7,7 @@ export async function openSessionController(page: Page): Promise<void> {
     exact: true,
   });
   if (!(await pane.isVisible())) {
-    await page
-      .getByRole("button", { name: "Session settings", exact: true })
-      .click();
+    await page.getByRole("button", { name: /Session settings/ }).click();
   }
   await expect(pane).toBeVisible();
   const advanced = pane.locator("details.session-config-advanced");
