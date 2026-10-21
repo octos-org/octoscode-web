@@ -25,7 +25,9 @@ describe("SessionStatusStrip (§4.1)", () => {
         onOpenPane={() => {}}
       />,
     );
-    expect(html).toMatch(/<button[^>]*aria-label="Session settings"/);
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Session settings: glm-5\.3 · Workspace write · Ready"/,
+    );
     expect(html).toContain("session-status-strip-chevron");
     expect(html).toContain("Model, permissions, sandbox");
   });

@@ -83,7 +83,7 @@ async function settings(page: Page) {
     .click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(
-    dialog.getByRole("button", { name: "Desktop notifications", exact: true }),
+    dialog.getByRole("button", { name: /desktop notifications/ }),
   ).toBeVisible();
   return dialog;
 }
@@ -92,8 +92,7 @@ async function enable(page: Page) {
   const dialog = await settings(page);
   expect(await page.evaluate(() => window.__attentionProbe.requests)).toBe(0);
   const toggle = dialog.getByRole("button", {
-    name: "Desktop notifications",
-    exact: true,
+    name: /desktop notifications/,
   });
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await toggle.click();
@@ -138,11 +137,9 @@ test("desktop notifications require Settings opt-in and stay silent while readin
     [],
   );
   const dialog = await settings(page);
-  await dialog
-    .getByRole("button", { name: "Desktop notifications", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: /desktop notifications/ }).click();
   await expect(
-    dialog.getByRole("button", { name: "Desktop notifications", exact: true }),
+    dialog.getByRole("button", { name: /desktop notifications/ }),
   ).toHaveAttribute("aria-pressed", "false");
   expect(await page.evaluate(() => window.__attentionProbe.requests)).toBe(1);
   expect(
@@ -198,14 +195,12 @@ test("denied desktop permission keeps tab counts working and Disconnect clears a
   const originalTitle = await page.title();
   const dialog = await settings(page);
   expect(await page.evaluate(() => window.__attentionProbe.requests)).toBe(0);
-  await dialog
-    .getByRole("button", { name: "Desktop notifications", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: /desktop notifications/ }).click();
   await expect(dialog.getByRole("alert")).toContainText(
     "Notifications are blocked",
   );
   await expect(
-    dialog.getByRole("button", { name: "Desktop notifications", exact: true }),
+    dialog.getByRole("button", { name: /desktop notifications/ }),
   ).toHaveAttribute("aria-pressed", "false");
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await hidden(page, true);

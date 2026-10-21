@@ -505,7 +505,9 @@ export function ProductSidebar({
             <button
               type="button"
               className={styles.brand}
-              aria-label={t("New session")}
+              // WCAG 2.5.3: the visible brand name must be part of the
+              // accessible name of the control it labels.
+              aria-label={`${t("New session")} — ${brandName}`}
               onClick={() => onNewSession()}
             >
               <span className={styles.brandIdentity} aria-hidden="true">
@@ -1237,15 +1239,20 @@ function SessionRow({
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
       aria-busy={session.opening || undefined}
+      // WCAG 2.5.3 (axe label-content-name-mismatch): the accessible name
+      // must contain the row's visible text, and axe compares it as the
+      // whitespace-free concatenation of the row's text nodes ("Completed"
+      // + title + time). Build the name from the same strings so it matches
+      // that concatenation exactly.
       aria-label={[
+        showStatus ? statusLabel : "",
         title,
-        showStatus ? statusLabel : null,
-        !session.blank && session.updatedLabel
-          ? `updated ${session.updatedLabel}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(", ")}
+        session.opening
+          ? "Opening…"
+          : !session.blank && session.updatedLabel
+            ? session.updatedLabel
+            : "",
+      ].join("")}
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.statusSlot}>

@@ -417,12 +417,9 @@ test("Alt+D focuses Fleet's capability notice; suppressed inside inputs", async 
   // Fleet is routed — so leave Fleet through its own Back affordance first.
   await page.locator('[data-fleet-back="true"]').press("Enter");
   await expect(fleetWrapper).toBeHidden();
-  await page
-    .getByRole("button", { name: "Session settings", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Session settings/ }).click();
   const pane = page.getByRole("dialog", {
-    name: "Session settings",
-    exact: true,
+    name: /Session settings/,
   });
   await expect(pane).toBeVisible();
   await pane.focus();
