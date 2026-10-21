@@ -20,7 +20,7 @@ function productNavigation(page: Page): Locator {
 // permission selector and runtime model readback live in the Session settings
 // pane. Opens the pane and returns it with the permission trigger visible.
 async function openSessionSettings(page: Page): Promise<Locator> {
-  const settingsButton = page.getByRole("button", { name: "Session settings" });
+  const settingsButton = page.getByRole("button", { name: /Session settings/ });
   await expect(settingsButton).toBeVisible({ timeout: 30_000 });
   await settingsButton.click();
   const dialog = page.getByRole("dialog", { name: "Session settings" });
@@ -73,7 +73,7 @@ test("runs a coding turn with the expected runtime model and restores it after r
     name: "Create your local coding profile",
   });
   const sessionSettings = page.getByRole("button", {
-    name: "Session settings",
+    name: /Session settings/,
   });
   await expect(sessionSettings.or(onboarding).first()).toBeVisible({
     timeout: 30_000,
@@ -274,7 +274,7 @@ async function openLiveWorkspace(page: Page): Promise<{
     name: "Create your local coding profile",
   });
   const sessionSettings = page.getByRole("button", {
-    name: "Session settings",
+    name: /Session settings/,
   });
   await expect(sessionSettings.or(onboarding).first()).toBeVisible({
     timeout: 30_000,

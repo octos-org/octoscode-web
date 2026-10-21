@@ -230,7 +230,9 @@ export function GeneralSettingsContent({
           <button
             type="button"
             className={styles.secondaryButton}
-            aria-labelledby="desktop-notifications-title"
+            // WCAG 2.5.3: the visible action word must be part of the
+            // accessible name, with the setting it belongs to.
+            aria-label={`${attentionSettings.pending ? "Enabling…" : attentionSettings.enabled ? "On" : "Enable"} — desktop notifications`}
             aria-describedby="desktop-notifications-description"
             aria-pressed={attentionSettings.enabled}
             disabled={attentionSettings.pending || !attentionSettings.available}

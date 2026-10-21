@@ -101,7 +101,9 @@ export function SessionStatusStrip({
       type="button"
       className={styles["session-status-strip"]}
       data-testid="session-status-strip"
-      aria-label={t("Session settings")}
+      // WCAG 2.5.3: the accessible name must contain the strip's visible
+      // text (model · permission · state), pane name first.
+      aria-label={`${t("Session settings")}: ${text}`}
       aria-describedby={`${tooltipId} ${descriptionId}`}
       title={t("Model, permissions, sandbox")}
       onClick={onOpenPane}
