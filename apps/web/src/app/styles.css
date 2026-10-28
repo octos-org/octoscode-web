@@ -890,18 +890,31 @@ label > span {
 }
 
 .takeover-wrap {
+  position: fixed;
+  inset: 0;
   display: flex;
   width: 100%;
+  align-items: flex-end;
   justify-content: center;
+  padding: var(--dsw-space-4) var(--dsw-space-5)
+    max(var(--dsw-space-4), env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.takeover-wrap > * {
+  pointer-events: auto;
 }
 
 .approval-card {
+  display: flex;
   overflow: hidden;
   width: 100%;
   max-width: var(--dsw-layout-chat);
+  max-height: min(560px, calc(100dvh - 32px));
   border-radius: 20px;
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-shadow-lv2);
+  flex-direction: column;
 }
 
 .approval-card {
@@ -910,6 +923,7 @@ label > span {
 
 .approval-strip {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--dsw-space-2);
   padding: 10px 16px;
@@ -933,6 +947,7 @@ label > span {
 
 .approval-body {
   display: flex;
+  min-height: 0;
   max-height: 240px;
   flex-direction: column;
   gap: 6px;
@@ -968,6 +983,7 @@ label > span {
 
 .approval-actions {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: flex-end;
   gap: var(--dsw-space-2);
@@ -1780,6 +1796,20 @@ kbd {
 
   .conversation {
     min-height: 0;
+  }
+
+  .conversation-header {
+    gap: var(--dsw-space-2);
+    padding: 0 var(--dsw-space-2);
+  }
+
+  .conversation-header .workspace-title {
+    flex: 1;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: var(--dsw-space-1);
   }
 
   .conversation-scroll {

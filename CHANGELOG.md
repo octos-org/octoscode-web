@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Keep approval and question takeovers inside the viewport without scrolling the
+  workspace header out of view. Preserve compact-header button spacing on
+  phones, and cover all three audit viewports with layout, axe, and full-page
+  visual regression checks.
+
 ## v0.20.0 — 2026-10-29
 
 Stabilize the v0.11.0 line for the 0.20 readiness declaration without pulling in
