@@ -303,14 +303,26 @@ function PickerBody({
           ) : null}
         </div>
       ) : view === "browse" && browse ? (
-        <WorkspaceFolderBrowser
-          adapter={browse}
-          initialPath={workspaceBrowseOpenPath(serverPath)}
-          titleId={titleId}
-          disabled={creating}
-          onChoose={onBrowseChoose}
-          onBack={() => onViewChange("add")}
-        />
+        <>
+          <WorkspaceFolderBrowser
+            adapter={browse}
+            initialPath={workspaceBrowseOpenPath(serverPath)}
+            titleId={titleId}
+            disabled={creating}
+            onChoose={onBrowseChoose}
+            onBack={() => onViewChange("add")}
+          />
+          <div className={styles.footer}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={creating}
+              onClick={() => onViewChange("add")}
+            >
+              {t("Enter path manually")}
+            </button>
+          </div>
+        </>
       ) : (
         <form
           className={styles.body}
@@ -468,7 +480,9 @@ export function NewSessionWorkspacePicker({
           !props.workspaces.length &&
           !props.serverWorkingDirectory &&
           !props.loading
-        ? "add"
+        ? props.browse
+          ? "browse"
+          : "add"
         : view;
 
   useEffect(() => {

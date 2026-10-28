@@ -31,6 +31,9 @@
 - Add read-only MCP connector status and existing cron job controls to Settings.
   Cron jobs can be enabled/disabled only when the server permits it;
   add/remove/edit/OAuth and cron creation remain explicitly unavailable.
+- Replace first-run developer fields with a two-step model setup: domestic
+  provider recommendations, generated identity under Advanced, custom
+  OpenAI-compatible endpoints, and a folder-first workspace picker.
 
 ## v0.20.0 — 2026-10-29
 

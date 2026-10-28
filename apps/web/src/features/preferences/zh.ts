@@ -1754,6 +1754,33 @@ const catalog: Readonly<Record<string, string>> = {
   "Schedule and status": "调度与状态",
   "Only the first jobs are shown.": "仅显示部分任务。",
 
+  // First-run setup (T-0017).
+  "Set up your coding assistant": "设置你的编程助手",
+  "Choose a model service, connect it, and start coding in two steps.":
+    "选择模型服务、完成连接，两步即可开始编程。",
+  "Step 1 of 2 · Model service": "第 1/2 步 · 模型服务",
+  "Step 2 of 2 · Connect": "第 2/2 步 · 连接",
+  "Choose a provider": "选择提供商",
+  "DeepSeek 深度求索": "DeepSeek 深度求索",
+  "Kimi 月之暗面": "Kimi 月之暗面",
+  "智谱 AI": "智谱 AI",
+  通义千问: "通义千问",
+  "Reasoning and coding": "擅长推理与编程",
+  "Long context and reasoning": "擅长长文本与推理",
+  "Coding and agents": "擅长编程与智能体",
+  "Multimodal and coding": "擅长多模态与编程",
+  "Fast and cost-efficient": "高效、经济",
+  "OpenAI-compatible provider": "OpenAI 兼容提供商",
+  "An ID and name are generated automatically. Change them only if needed.":
+    "ID 和名称已自动生成，仅在需要时修改。",
+  "Use a custom OpenAI-compatible endpoint": "使用自定义 OpenAI 兼容地址",
+  "Custom OpenAI-compatible base URL": "自定义 OpenAI 兼容基础地址",
+  "Creating your workspace profile": "正在创建工作区配置",
+  "Testing the connection": "正在测试连接",
+  "Saving your provider": "正在保存提供商",
+  "Opening your coding session": "正在打开编程会话",
+  "Enter path manually": "手动输入路径",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

@@ -1775,11 +1775,21 @@ test("onboards an empty solo server from workspace creation", async ({
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
-    name: "Create your local coding profile",
+    name: "Set up your coding assistant",
   });
   await expect(onboarding).toBeVisible();
-  await expect(onboarding.getByLabel("Provider")).toHaveValue("zai");
-  await expect(onboarding.getByLabel("Model")).toHaveValue("glm-5.3-flash");
+  await expect(
+    onboarding.getByRole("radio", { name: /DeepSeek 深度求索/ }),
+  ).toBeChecked();
+  await expect(onboarding.getByLabel("Model")).toHaveValue("deepseek-chat");
+  await expect(onboarding.getByLabel("Profile ID")).toBeHidden();
+  await expect(onboarding.getByText("Route", { exact: true })).toHaveCount(0);
+  await onboarding.getByRole("button", { name: "Continue" }).click();
+  const axeResults = await new AxeBuilder({ page })
+    .include('section[role="dialog"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+    .analyze();
+  expect(axeResults.violations).toEqual([]);
 
   const apiKey = onboarding.getByLabel("API key");
   await apiKey.fill("sk-rejected-secret");
@@ -1822,10 +1832,11 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
-    name: "Create your local coding profile",
+    name: "Set up your coding assistant",
   });
-  await onboarding.getByLabel("Provider").selectOption("ollama");
+  await onboarding.getByRole("radio", { name: /ollama/ }).check();
   await expect(onboarding.getByLabel("Model")).toHaveValue("qwen3");
+  await onboarding.getByRole("button", { name: "Continue" }).click();
   await expect(onboarding.getByText("No API key required")).toBeVisible();
   await expect(onboarding.getByLabel("API key")).toHaveCount(0);
   await onboarding.getByRole("button", { name: "Test, save & open" }).click();
@@ -1833,6 +1844,60 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
     page.getByText("/srv/work/no-profile", { exact: true }),
   ).toBeVisible();
   await expect(onboarding).toBeHidden();
+});
+
+test("tests and saves a custom OpenAI-compatible endpoint in the first-run wizard", async ({
+  page,
+}) => {
+  let testedBaseUrl = "";
+  let savedBaseUrl = "";
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        method?: string;
+        params?: { selection?: { route?: { base_url?: string } } };
+      };
+      if (frame.method === "profile/llm/test") {
+        testedBaseUrl = frame.params?.selection?.route?.base_url ?? "";
+      }
+      if (frame.method === "profile/llm/upsert") {
+        savedBaseUrl = frame.params?.selection?.route?.base_url ?? "";
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/no-profile");
+  const onboarding = page.getByRole("dialog", {
+    name: "Set up your coding assistant",
+  });
+  for (const name of [
+    /DeepSeek 深度求索/,
+    /Kimi 月之暗面/,
+    /智谱 AI/,
+    /通义千问/,
+    /MiniMax/,
+  ]) {
+    await expect(onboarding.getByRole("radio", { name })).toBeVisible();
+  }
+  await onboarding.getByText("Advanced", { exact: true }).click();
+  await expect(onboarding.getByLabel("Profile ID")).toHaveValue("coding");
+  await expect(onboarding.getByLabel("Profile name")).toHaveValue("Coding");
+  await onboarding.getByText("Advanced", { exact: true }).click();
+  await onboarding.getByRole("button", { name: "Continue" }).click();
+  await onboarding
+    .getByLabel("Use a custom OpenAI-compatible endpoint")
+    .check();
+  await onboarding
+    .getByLabel("Custom OpenAI-compatible base URL")
+    .fill("http://127.0.0.1:9091/v1");
+  await onboarding.getByLabel("API key").fill("sk-e2e-valid");
+  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  await expect(onboarding).toBeHidden();
+  expect(testedBaseUrl).toBe("http://127.0.0.1:9091/v1");
+  expect(savedBaseUrl).toBe("http://127.0.0.1:9091/v1");
 });
 
 test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
