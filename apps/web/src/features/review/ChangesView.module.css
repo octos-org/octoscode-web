@@ -1,0 +1,234 @@
+.root {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--dsw-space-3);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dsw-space-2);
+}
+
+.scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.scope button,
+.refresh {
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.scope button[aria-pressed="true"] {
+  border-color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.scope button:hover:not(:disabled),
+.refresh:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.scope button:disabled,
+.refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.changed {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.changed button {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.changed button:hover:not(:disabled),
+.changed button[aria-current="true"] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.changed button[aria-current="true"] strong {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.changed button:disabled {
+  cursor: default;
+}
+
+.changedPath {
+  display: grid;
+  min-width: 0;
+}
+
+.changedPath strong,
+.changedPath small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changedPath strong {
+  color: var(--dsw-alias-label-primary);
+  font: 500 12px/18px var(--dsw-font-family-code);
+}
+
+.changedPath small {
+  color: var(--dsw-alias-label-tertiary);
+  font: 400 var(--dsw-font-size-micro)/16px var(--dsw-font-family-code);
+}
+
+.changed em {
+  margin-left: auto;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  font-style: normal;
+}
+
+.preview {
+  display: grid;
+  min-width: 0;
+  gap: var(--dsw-space-2);
+  padding-top: var(--dsw-space-3);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.previewHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dsw-space-3);
+}
+
+.previewHeader h3 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root :global(.diff-hunk) {
+  min-width: 0;
+}
+
+.root :global(.review-empty) {
+  min-height: 120px;
+}
+
+.root :global(.diff-line) {
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.root :global(.diff-line) > .code {
+  color: var(--dsw-alias-label-primary);
+}
+
+.plainNotice {
+  margin: 0 0 var(--dsw-space-3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.changedWord {
+  border-radius: 2px;
+  box-decoration-break: clone;
+}
+
+:global(.diff-added) .changedWord {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-success-primary) 22%,
+    transparent
+  );
+}
+
+:global(.diff-removed) .changedWord {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-error-primary) 20%,
+    transparent
+  );
+}
+
+.code :global(.shiki-color-foreground) {
+  color: var(--shiki-foreground);
+}
+
+.code :global(.shiki-color-constant) {
+  color: var(--shiki-token-constant);
+}
+
+.code :global(.shiki-color-string),
+.code :global(.shiki-color-string-expression) {
+  color: var(--shiki-token-string);
+}
+
+.code :global(.shiki-color-comment) {
+  color: var(--shiki-token-comment);
+}
+
+.code :global(.shiki-color-keyword) {
+  color: var(--shiki-token-keyword);
+}
+
+.code :global(.shiki-color-parameter) {
+  color: var(--shiki-token-parameter);
+}
+
+.code :global(.shiki-color-function) {
+  color: var(--shiki-token-function);
+}
+
+.code :global(.shiki-color-punctuation) {
+  color: var(--shiki-token-punctuation);
+}
+
+.code :global(.shiki-color-link) {
+  color: var(--shiki-token-link);
+}
+
+.code :global(.shiki-italic) {
+  font-style: italic;
+}
+
+.code :global(.shiki-bold) {
+  font-weight: 600;
+}
+
+.code :global(.shiki-underline) {
+  text-decoration: underline;
+}

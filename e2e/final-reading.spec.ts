@@ -551,15 +551,12 @@ test("Diff review keeps long headings and file content inside the narrow viewpor
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review the final reading fixture");
   await composer.press("Enter");
-  const trigger = page.getByRole("button", {
-    name: "Review changes",
-    exact: true,
-  });
-  await expect(trigger).toHaveAttribute("title", "Session change preview");
+  const trigger = page.getByRole("button", { name: /^Session panel, 1/ });
   await trigger.click();
-  const dialog = page.getByRole("dialog", { name: title });
-  await expect(dialog).toBeVisible();
-  const close = dialog.getByRole("button", { name: "Close review" });
+  const dialog = page.getByRole("dialog", { name: "Session panel" });
+  await dialog.getByRole("tab", { name: /^Changes/ }).click();
+  await expect(dialog.getByRole("heading", { name: title })).toBeVisible();
+  const close = dialog.getByRole("button", { name: "Close session panel" });
   const box = await close.boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(320);

@@ -41,6 +41,7 @@ server does in the chosen folder.
 | Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                      |
 | Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
+| Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.     |
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
 | Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |

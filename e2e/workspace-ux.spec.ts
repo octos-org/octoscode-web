@@ -203,10 +203,7 @@ test("mobile review actions leave room for workspace context after a completed t
   await input.fill("Review the mobile workspace fixture");
   await input.press("Enter");
   await expect(page.getByText("Completed with")).toBeVisible();
-  const review = page.getByRole("button", {
-    name: "Review changes",
-    exact: true,
-  });
+  const review = page.getByRole("button", { name: /^Session panel/ });
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(review).toBeInViewport();
@@ -216,8 +213,10 @@ test("mobile review actions leave room for workspace context after a completed t
     const title = await page.locator(".workspace-title").boundingBox();
     expect(title!.width).toBeGreaterThanOrEqual(width === 390 ? 100 : 40);
     await review.click();
+    const panel = page.getByRole("dialog", { name: "Session panel" });
+    await panel.getByRole("tab", { name: /^Changes/ }).click();
     await expect(
-      page.getByRole("dialog", { name: "Mock coding change" }),
+      panel.getByRole("heading", { name: "Mock coding change" }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(review).toBeFocused();

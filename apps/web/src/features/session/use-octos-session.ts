@@ -176,6 +176,7 @@ export type {
   DiffReviewRuntimeState,
   PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
+import type { SessionFileChange } from "../side-panel/session-changes.ts";
 
 const TURN_RECOVERY_NAVIGATION_MESSAGE =
   "Check the current turn status before switching Sessions, or disconnect in Settings.";
@@ -361,6 +362,8 @@ export interface OctosSessionRuntime {
   safety: {
     permission: PermissionRuntimeState;
     diffReview: DiffReviewRuntimeState;
+    /** Files this Session's tools touched since this view opened it. */
+    changes: readonly SessionFileChange[];
     refreshPermission: () => Promise<void>;
     updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
     openDiffReview: (
@@ -2656,6 +2659,10 @@ export function useOctosSession(): OctosSessionRuntime {
   const codingSafetyController = useCodingSafety({
     client: currentClient,
     sessionId: currentSessionId,
+    workspaceRoot: () =>
+      currentAuthority()?.opened?.workspace_root ??
+      currentAuthority()?.cwd ??
+      "",
     profileId: () => activeProfileId(),
     capabilities: currentCapabilities,
     onPermissionApplied: (client) => {
@@ -3619,6 +3626,7 @@ export function useOctosSession(): OctosSessionRuntime {
     safety: {
       permission,
       diffReview,
+      changes: codingSafetyController.changes,
       refreshPermission: codingSafetyController.refreshPermission,
       updatePermission: codingSafetyController.updatePermission,
       openDiffReview: codingSafetyController.openDiffReview,
