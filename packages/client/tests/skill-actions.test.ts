@@ -120,6 +120,52 @@ describe("skill action protocol", () => {
     ).toBeNull();
   });
 
+  it("keeps same-named actions from different skills distinct", async () => {
+    const request = vi.fn().mockResolvedValue({
+      profile_id: "coding",
+      session_id: "session-1",
+      count: 2,
+      actions: [action, { ...action, skill_id: "other-skill" }],
+    });
+    const commands = createSkillActionCommands(
+      { request },
+      "coding",
+      "session-1",
+      capabilities,
+    );
+    expect((await commands.list()).map((entry) => entry.skillId)).toEqual([
+      "lifecycle-skill",
+      "other-skill",
+    ]);
+  });
+
+  it("accepts legal long synchronous and background output", async () => {
+    const longOutput = "x".repeat(8193);
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        action_id: "document.probe",
+        ok: true,
+        results: [{ success: true, output: longOutput }],
+      })
+      .mockResolvedValueOnce({
+        profile_id: "coding",
+        session_id: "session-1",
+        count: 1,
+        jobs: [{ ...job, output: longOutput, error: longOutput }],
+      });
+    const commands = createSkillActionCommands(
+      { request },
+      "coding",
+      "session-1",
+      capabilities,
+    );
+    expect((await commands.invoke("document.probe")).results[0]?.output).toBe(
+      longOutput,
+    );
+    expect((await commands.listJobs())[0]?.output).toBe(longOutput);
+  });
+
   it("fails closed on wrong scope and missing negotiated features", async () => {
     const request = vi.fn().mockResolvedValue({
       job: { ...job, profile_id: "other" },

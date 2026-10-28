@@ -3,7 +3,8 @@ import type { SkillActionJob } from "@octos-org/octoscode-client/skill-actions";
 
 export interface ActionArgumentField {
   name: string;
-  type: "string" | "number" | "boolean";
+  type: "string" | "number" | "integer" | "boolean" | "json";
+  jsonType?: "array" | "object";
 }
 
 export function actionArgumentFields(schema: unknown): ActionArgumentField[] {
@@ -15,14 +16,19 @@ export function actionArgumentFields(schema: unknown): ActionArgumentField[] {
   return required.map((name) => {
     const definition = properties[name];
     const type = isRecord(definition) ? definition.type : undefined;
+    if (type === "array" || type === "object") {
+      return { name, type: "json", jsonType: type };
+    }
     return {
       name,
       type:
-        type === "number" || type === "integer"
-          ? "number"
-          : type === "boolean"
-            ? "boolean"
-            : "string",
+        type === "integer"
+          ? "integer"
+          : type === "number"
+            ? "number"
+            : type === "boolean"
+              ? "boolean"
+              : "string",
     };
   });
 }
@@ -35,7 +41,11 @@ export function actionArgumentsComplete(
     const value = values[field.name];
     if (field.type === "boolean") return typeof value === "boolean";
     if (typeof value !== "string" || !value.trim()) return false;
-    return field.type !== "number" || Number.isFinite(Number(value));
+    if (field.type === "integer") return Number.isInteger(Number(value));
+    if (field.type === "number") return Number.isFinite(Number(value));
+    if (field.type === "json")
+      return parseJsonField(field, value) !== undefined;
+    return true;
   });
 }
 
@@ -47,10 +57,27 @@ export function actionArguments(
     fields.map((field) => {
       const value = values[field.name];
       if (field.type === "boolean") return [field.name, value === true];
-      if (field.type === "number") return [field.name, Number(value)];
+      if (field.type === "number" || field.type === "integer") {
+        return [field.name, Number(value)];
+      }
+      if (field.type === "json") {
+        return [field.name, parseJsonField(field, String(value))];
+      }
       return [field.name, value ?? ""];
     }),
   );
+}
+
+function parseJsonField(field: ActionArgumentField, value: string): unknown {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (field.jsonType === "array") {
+      return Array.isArray(parsed) ? parsed : undefined;
+    }
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function mergeSkillJobs(

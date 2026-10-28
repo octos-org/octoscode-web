@@ -16,6 +16,7 @@ const fixtureAuthTokens = [
   // serves both the plan card and the feature-absent (no card) case.
   "plan-fixture-e2e-token",
   "plan-absent-e2e-token",
+  "skill-duplicates-e2e-token",
   "remember-this-tab-token",
   "forget-me-token",
   fixtureProfileAuthToken,

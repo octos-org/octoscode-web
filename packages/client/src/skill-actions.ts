@@ -25,6 +25,12 @@ export interface SkillAction {
   unavailableReason?: string | undefined;
 }
 
+export function skillActionKey(
+  action: Pick<SkillAction, "skillId" | "id">,
+): string {
+  return `${action.skillId}/${action.id}`;
+}
+
 export interface SkillActionJob {
   id: string;
   batchId: string;
@@ -56,10 +62,14 @@ const JOB_STATUSES = new Set<SkillActionJobStatus>([
 ]);
 const boundedText = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 8192;
+const bodyText = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= 1_048_576;
 const text = (value: unknown): value is string =>
   boundedText(value) && value.trim().length > 0;
 const nullableText = (value: unknown) =>
   value === undefined || value === null || boundedText(value);
+const nullableBodyText = (value: unknown) =>
+  value === undefined || value === null || bodyText(value);
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
@@ -81,10 +91,13 @@ export function parseSkillActions(
   const result: SkillAction[] = [];
   const ids = new Set<string>();
   for (const row of value.actions) {
+    const qualifiedId = isRecord(row)
+      ? JSON.stringify([row.skill_id, row.id])
+      : "";
     if (
       !isRecord(row) ||
       !text(row.id) ||
-      ids.has(row.id) ||
+      ids.has(qualifiedId) ||
       !text(row.skill_id) ||
       !text(row.label) ||
       !nullableText(row.description) ||
@@ -98,7 +111,7 @@ export function parseSkillActions(
     ) {
       return null;
     }
-    ids.add(row.id);
+    ids.add(qualifiedId);
     result.push({
       id: row.id,
       skillId: row.skill_id,
@@ -129,8 +142,8 @@ export function parseSkillActionJob(
     !text(value.action_id) ||
     !text(value.skill_id) ||
     !JOB_STATUSES.has(value.status as SkillActionJobStatus) ||
-    !nullableText(value.output) ||
-    !nullableText(value.error) ||
+    !nullableBodyText(value.output) ||
+    !nullableBodyText(value.error) ||
     !text(value.created_at) ||
     !text(value.updated_at)
   ) {
@@ -211,7 +224,7 @@ export function parseSkillActionInvocation(
     if (
       !isRecord(row) ||
       typeof row.success !== "boolean" ||
-      !boundedText(row.output)
+      !bodyText(row.output)
     ) {
       return null;
     }

@@ -11,6 +11,7 @@ import {
 import type { InstalledSkill } from "@octos-org/octoscode-client/skills";
 import {
   parseSkillActionJobUpdated,
+  skillActionKey,
   type SkillAction,
   type SkillActionInvocation,
   type SkillActionJob,
@@ -151,9 +152,10 @@ export function SkillsSettingsContent({
   const invoke = async (action: SkillAction) => {
     if (busyAction) return;
     const fields = actionArgumentFields(action.inputSchema);
-    const values = argumentValues[action.id] ?? {};
+    const actionKey = skillActionKey(action);
+    const values = argumentValues[actionKey] ?? {};
     if (!action.available || !actionArgumentsComplete(fields, values)) return;
-    setBusyAction(action.id);
+    setBusyAction(actionKey);
     setError(null);
     try {
       const commands = await client.skillActionCommands(
@@ -237,22 +239,28 @@ export function SkillsSettingsContent({
             <p>{t("No actions are available.")}</p>
           ) : null}
           <div className={styles.rows}>
-            {actions.map((action) => (
-              <ActionCard
-                key={`${action.skillId}/${action.id}`}
-                action={action}
-                values={argumentValues[action.id] ?? {}}
-                busy={busyAction !== null}
-                invoking={busyAction === action.id}
-                onValue={(name, value) =>
-                  setArgumentValues((current) => ({
-                    ...current,
-                    [action.id]: { ...current[action.id], [name]: value },
-                  }))
-                }
-                onInvoke={() => void invoke(action)}
-              />
-            ))}
+            {actions.map((action) => {
+              const actionKey = skillActionKey(action);
+              return (
+                <ActionCard
+                  key={actionKey}
+                  action={action}
+                  values={argumentValues[actionKey] ?? {}}
+                  busy={busyAction !== null}
+                  invoking={busyAction === actionKey}
+                  onValue={(name, value) =>
+                    setArgumentValues((current) => ({
+                      ...current,
+                      [actionKey]: {
+                        ...current[actionKey],
+                        [name]: value,
+                      },
+                    }))
+                  }
+                  onInvoke={() => void invoke(action)}
+                />
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -332,7 +340,7 @@ function ActionCard({
         {action.skillId}/{action.id}
       </small>
       {fields.map((field) => {
-        const id = `skill-action-${action.id}-${field.name}`;
+        const id = `skill-action-${encodeURIComponent(skillActionKey(action))}-${encodeURIComponent(field.name)}`;
         const value = values[field.name];
         if (field.type === "boolean") {
           return (
@@ -351,16 +359,34 @@ function ActionCard({
         return (
           <label key={field.name} htmlFor={id}>
             {field.name}
-            <input
-              id={id}
-              name={field.name}
-              autoComplete="off"
-              type={field.type === "number" ? "number" : "text"}
-              value={typeof value === "string" ? value : ""}
-              disabled={busy}
-              required
-              onChange={(event) => onValue(field.name, event.target.value)}
-            />
+            {field.type === "json" ? (
+              <textarea
+                id={id}
+                name={field.name}
+                rows={3}
+                value={typeof value === "string" ? value : ""}
+                disabled={busy}
+                required
+                placeholder={field.jsonType === "array" ? "[]" : "{}"}
+                onChange={(event) => onValue(field.name, event.target.value)}
+              />
+            ) : (
+              <input
+                id={id}
+                name={field.name}
+                autoComplete="off"
+                type={
+                  field.type === "number" || field.type === "integer"
+                    ? "number"
+                    : "text"
+                }
+                step={field.type === "integer" ? 1 : "any"}
+                value={typeof value === "string" ? value : ""}
+                disabled={busy}
+                required
+                onChange={(event) => onValue(field.name, event.target.value)}
+              />
+            )}
           </label>
         );
       })}

@@ -60,6 +60,8 @@ const planFixtureAuthToken = "plan-fixture-e2e-token";
 const planFixtureSockets = new WeakSet();
 const planAbsentAuthToken = "plan-absent-e2e-token";
 const planAbsentSockets = new WeakSet();
+const skillDuplicatesAuthToken = "skill-duplicates-e2e-token";
+const skillDuplicatesSockets = new WeakSet();
 const PLAN_FEATURE = "plan.todos.v1";
 const PLAN_NOTIFICATION = "plan/updated";
 const PLAN_FIXTURE_PROMPT = "Plan fixture";
@@ -3044,6 +3046,9 @@ sockets.on("connection", (socket, request) => {
   if (connectionAuthToken === planAbsentAuthToken) {
     planAbsentSockets.add(socket);
   }
+  if (connectionAuthToken === skillDuplicatesAuthToken) {
+    skillDuplicatesSockets.add(socket);
+  }
   const connectionProfileId = authenticatedProfileForToken(connectionAuthToken);
   if (connectionProfileId) {
     authenticatedProfileBySocket.set(socket, connectionProfileId);
@@ -4750,9 +4755,10 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "profile/skills/list") {
+      const duplicates = skillDuplicatesSockets.has(socket);
       reply(socket, request.id, {
         profile_id: request.params.profile_id,
-        count: 1,
+        count: duplicates ? 2 : 1,
         skills: [
           {
             name: "lifecycle-skill",
@@ -4760,20 +4766,69 @@ sockets.on("connection", (socket, request) => {
             tool_count: 1,
             source_repo: "fixtures/lifecycle-skill",
           },
+          ...(duplicates
+            ? [
+                {
+                  name: "other-skill",
+                  version: "1.0.0",
+                  tool_count: 1,
+                  source_repo: "fixtures/other-skill",
+                },
+              ]
+            : []),
         ],
       });
       return;
     }
     if (request.method === "skill/action/list") {
+      const duplicates = skillDuplicatesSockets.has(socket);
+      const actions = duplicates
+        ? [
+            {
+              ...skillActionFixture,
+              label: "First probe",
+              execution: "sync",
+              input_schema: {
+                type: "object",
+                properties: { input_path: { type: "string" } },
+                required: ["input_path"],
+              },
+            },
+            {
+              ...skillActionFixture,
+              skill_id: "other-skill",
+              label: "Second probe",
+              execution: "sync",
+              input_schema: {
+                type: "object",
+                properties: { input_path: { type: "string" } },
+                required: ["input_path"],
+              },
+            },
+          ]
+        : [skillActionFixture];
       reply(socket, request.id, {
         profile_id: request.params.profile_id,
         session_id: sessionId,
-        count: 1,
-        actions: [skillActionFixture],
+        count: actions.length,
+        actions,
       });
       return;
     }
     if (request.method === "skill/action/invoke") {
+      if (skillDuplicatesSockets.has(socket)) {
+        reply(socket, request.id, {
+          action_id: "document.probe",
+          ok: true,
+          results: [
+            {
+              success: true,
+              output: `${request.params.action_id}:${request.params.arguments.input_path}`,
+            },
+          ],
+        });
+        return;
+      }
       const job = {
         ...newSkillJob(sessionId),
         profile_id: request.params.profile_id,

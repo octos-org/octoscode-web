@@ -138,16 +138,22 @@
 }
 
 .action input[type="text"],
-.action input[type="number"] {
+.action input[type="number"],
+.action textarea {
   width: 100%;
   min-height: 34px;
   box-sizing: border-box;
-  padding: 0 var(--dsw-space-2);
+  padding: var(--dsw-space-2);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
   font: inherit;
+}
+
+.action textarea {
+  resize: vertical;
+  font-family: var(--dsw-font-family-code);
 }
 
 .checkbox {

@@ -3,12 +3,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
-async function start(page: Page): Promise<string> {
+async function start(
+  page: Page,
+  token = "tab-scoped-e2e-token",
+): Promise<string> {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
   await page
     .getByLabel("Server workspace path")
@@ -70,4 +71,28 @@ test("lists installed skills, invokes an action, and advances its job without ax
     path: testInfo.outputPath("settings-skills-job.png"),
     fullPage: true,
   });
+});
+
+test("keeps same-named actions' arguments independent and invokes the qualified skill", async ({
+  page,
+}) => {
+  await start(page, "skill-duplicates-e2e-token");
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Skills", exact: true }).click();
+  const first = settings.locator("article").filter({ hasText: "First probe" });
+  const second = settings
+    .locator("article")
+    .filter({ hasText: "Second probe" });
+  await first.getByLabel("input_path").fill("first.md");
+  await second.getByLabel("input_path").fill("second.md");
+  await expect(first.getByLabel("input_path")).toHaveValue("first.md");
+  await expect(second.getByLabel("input_path")).toHaveValue("second.md");
+  await second.getByRole("button", { name: "Invoke", exact: true }).click();
+  await expect(
+    settings.getByText("other-skill/document.probe:second.md"),
+  ).toBeVisible();
 });

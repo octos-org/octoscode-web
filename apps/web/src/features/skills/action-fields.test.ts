@@ -22,7 +22,7 @@ describe("skill action arguments", () => {
     const fields = actionArgumentFields(schema);
     expect(fields).toEqual([
       { name: "input_path", type: "string" },
-      { name: "attempts", type: "number" },
+      { name: "attempts", type: "integer" },
       { name: "publish", type: "boolean" },
     ]);
     expect(actionArgumentsComplete(fields, { input_path: "in.txt" })).toBe(
@@ -35,6 +35,29 @@ describe("skill action arguments", () => {
       attempts: 2,
       publish: true,
     });
+    expect(
+      actionArgumentsComplete(fields, { ...values, attempts: "2.5" }),
+    ).toBe(false);
+  });
+
+  it("accepts required arrays and objects only as valid JSON of the advertised type", () => {
+    const fields = actionArgumentFields({
+      type: "object",
+      properties: {
+        paths: { type: "array" },
+        options: { type: "object" },
+      },
+      required: ["paths", "options"],
+    });
+    const values = { paths: '["a.md"]', options: '{"verbose":true}' };
+    expect(actionArgumentsComplete(fields, values)).toBe(true);
+    expect(actionArguments(fields, values)).toEqual({
+      paths: ["a.md"],
+      options: { verbose: true },
+    });
+    expect(
+      actionArgumentsComplete(fields, { ...values, paths: '{"not":"array"}' }),
+    ).toBe(false);
   });
 });
 
