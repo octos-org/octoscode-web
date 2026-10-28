@@ -61,6 +61,30 @@ describe("Timeline", () => {
     expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Download/);
   });
 
+  it("shows an explicitly written file as a downloadable artifact", () => {
+    const html = renderToStaticMarkup(
+      <AttachmentAccessContext.Provider
+        value={{ download: async () => new Blob() }}
+      >
+        <Timeline
+          connected
+          entries={[
+            {
+              id: "tool-write",
+              kind: "tool",
+              title: "write_file",
+              body: "Successfully wrote report.md",
+              status: "complete",
+              artifactPath: "report.md",
+            },
+          ]}
+        />
+      </AttachmentAccessContext.Provider>,
+    );
+    expect(html).toContain('data-attachment="report.md"');
+    expect(html).toContain("Download report.md");
+  });
+
   it("disables downloads when no Session can serve files", () => {
     const html = renderToStaticMarkup(
       <Timeline

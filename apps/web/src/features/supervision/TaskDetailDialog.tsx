@@ -3,6 +3,7 @@ import type { SupervisionRuntimeState } from "./model.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./TaskDetailDialog.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { ArtifactPreview } from "../artifact-preview/ArtifactPreview.tsx";
 
 interface TaskDetailDialogProps {
   state: SupervisionRuntimeState;
@@ -10,6 +11,8 @@ interface TaskDetailDialogProps {
   onLoadMore: () => void;
   onReadArtifact: (artifact: TaskArtifactRecord) => void;
   onLoadMoreArtifact: () => void;
+  loadArtifact?:
+    ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
 }
 
 export function TaskDetailDialog({
@@ -18,6 +21,7 @@ export function TaskDetailDialog({
   onLoadMore,
   onReadArtifact,
   onLoadMoreArtifact,
+  loadArtifact,
 }: TaskDetailDialogProps) {
   const t = useUiText();
   if (!state.detail.active) return null;
@@ -124,24 +128,25 @@ export function TaskDetailDialog({
               <div className="artifact-content">{t("Reading artifact…")}</div>
             ) : selected ? (
               <div className="artifact-content">
-                <strong>{selected.artifact.title}</strong>
-                <pre>
-                  {selected.content ??
-                    selected.artifact.content ??
-                    t("No text content.")}
-                </pre>
-                {selected.has_more ? (
-                  <button
-                    className="task-load-more"
-                    type="button"
-                    disabled={state.detail.artifactLoading}
-                    onClick={onLoadMoreArtifact}
-                  >
-                    {state.detail.artifactLoading
-                      ? t("Loading…")
-                      : t("Load more artifact")}
-                  </button>
-                ) : null}
+                <ArtifactPreview
+                  key={selected.artifact.id}
+                  name={
+                    selected.artifact.path?.split(/[\\/]/).at(-1) ??
+                    selected.artifact.title
+                  }
+                  {...(selected.artifact.path
+                    ? { path: selected.artifact.path }
+                    : {})}
+                  text={selected.content ?? selected.artifact.content}
+                  hasMore={selected.has_more}
+                  onLoadMore={onLoadMoreArtifact}
+                  {...(selected.artifact.path && loadArtifact
+                    ? {
+                        loadBlob: (signal?: AbortSignal) =>
+                          loadArtifact(selected.artifact.path!, signal),
+                      }
+                    : {})}
+                />
               </div>
             ) : null}
           </aside>

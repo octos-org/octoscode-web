@@ -40,6 +40,8 @@ export interface TimelineEntry {
    * handles). Rendered as attachments, never as part of `body`.
    */
   media?: readonly string[];
+  /** Explicit path argument of a successful write_file/edit_file call. */
+  artifactPath?: string;
   /** First-seen wall-clock for a streamed block (duration in fold headers). */
   startedAtMs?: number;
   /** Latest stream time while running; final time once settled. */

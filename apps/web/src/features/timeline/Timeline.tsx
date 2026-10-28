@@ -318,47 +318,52 @@ function ToolBlock(props: FoldableBlockProps) {
       ? Math.max(0, Math.round((entry.endedAtMs - entry.startedAtMs) / 1000))
       : undefined;
   return (
-    <details
-      data-timeline-entry={entry.id}
-      className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
-      data-live={running}
-      {...disclosureProps(props)}
-    >
-      <summary className={styles.toolHeader}>
-        <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
-        <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
-        {running ? (
-          <span className={styles.runningLabel}>{t("Running")}</span>
-        ) : (
-          <span className={styles.toolStatusLabel} data-status={entry.status}>
-            {t(
-              entry.statusLabel ??
-                (entry.status === "complete"
-                  ? "Done"
-                  : entry.status === "error"
-                    ? "Failed"
-                    : "Finished"),
-            )}
-            {seconds === undefined ? null : ` · ${seconds} s`}
-          </span>
-        )}
-        {entry.status === "complete" ? (
-          <CheckIcon size={14} className={styles.completedGlyph} />
-        ) : null}
-        <ChevronDownIcon className={styles.chevron} />
-      </summary>
-      <div className={styles.toolBody}>
-        {entry.body ? (
-          <pre className={styles.toolOutput}>{entry.body}</pre>
-        ) : (
-          <span className="muted">
-            {running
-              ? t("Waiting for tool output…")
-              : t("Finished without text output.")}
-          </span>
-        )}
-      </div>
-    </details>
+    <>
+      <details
+        data-timeline-entry={entry.id}
+        className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
+        data-live={running}
+        {...disclosureProps(props)}
+      >
+        <summary className={styles.toolHeader}>
+          <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
+          <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
+          {running ? (
+            <span className={styles.runningLabel}>{t("Running")}</span>
+          ) : (
+            <span className={styles.toolStatusLabel} data-status={entry.status}>
+              {t(
+                entry.statusLabel ??
+                  (entry.status === "complete"
+                    ? "Done"
+                    : entry.status === "error"
+                      ? "Failed"
+                      : "Finished"),
+              )}
+              {seconds === undefined ? null : ` · ${seconds} s`}
+            </span>
+          )}
+          {entry.status === "complete" ? (
+            <CheckIcon size={14} className={styles.completedGlyph} />
+          ) : null}
+          <ChevronDownIcon className={styles.chevron} />
+        </summary>
+        <div className={styles.toolBody}>
+          {entry.body ? (
+            <pre className={styles.toolOutput}>{entry.body}</pre>
+          ) : (
+            <span className="muted">
+              {running
+                ? t("Waiting for tool output…")
+                : t("Finished without text output.")}
+            </span>
+          )}
+        </div>
+      </details>
+      {entry.status === "complete" && entry.artifactPath ? (
+        <AttachmentList media={[entry.artifactPath]} />
+      ) : null}
+    </>
   );
 }
 

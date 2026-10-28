@@ -1796,4 +1796,51 @@ describe("delivered attachments", () => {
     expect(entries[0]?.body).toBe("shown to model\n\nAttachment: /w/shot.png");
     expect(entries[0]).not.toHaveProperty("media");
   });
+
+  it("keeps an explicit write_file path after the tool result replaces its arguments", () => {
+    const notification = (
+      type: string,
+      data: Record<string, unknown>,
+      seq: number,
+    ) => ({
+      jsonrpc: "2.0" as const,
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq,
+        payload: { type, data },
+      },
+    });
+    const started = foldNotification(
+      [],
+      notification(
+        "tool_start",
+        {
+          tool_call_id: "write-report",
+          name: "write_file",
+          arguments_preview: '{"path":"report.md","content":"# Report"}',
+        },
+        1,
+      ),
+    );
+    const completed = foldNotification(
+      started,
+      notification(
+        "tool_end",
+        {
+          tool_call_id: "write-report",
+          status: "complete",
+          output_preview: "Successfully wrote report.md",
+        },
+        2,
+      ),
+    );
+    expect(completed[0]).toMatchObject({
+      status: "complete",
+      artifactPath: "report.md",
+      body: "Successfully wrote report.md",
+    });
+  });
 });

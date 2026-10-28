@@ -144,3 +144,21 @@ test("memory settings matches baseline", async ({ page }) => {
   await expect(settings.getByText("Protocol memory fixture.")).toBeVisible();
   await expect(settings).toHaveScreenshot("settings-memory.png", SNAPSHOT);
 });
+
+test("artifact preview matches baseline", async ({ page, request }) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  const reference = new URL(page.url()).searchParams.get("s");
+  const sessionId = (JSON.parse(reference!) as string[])[2]!;
+  const response = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=budget.xlsx&valid=1`,
+  );
+  expect(response.ok()).toBe(true);
+  const attachment = page.locator('[data-attachment="budget.xlsx"]');
+  await attachment
+    .getByRole("button", { name: "Preview", exact: true })
+    .click();
+  await expect(attachment.getByRole("cell", { name: "Revenue" })).toBeVisible();
+  await expect(attachment.locator('[class*="fileSize"]')).toHaveText(/\d/);
+  await expect(attachment).toHaveScreenshot("artifact-preview.png", SNAPSHOT);
+});

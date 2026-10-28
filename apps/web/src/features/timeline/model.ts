@@ -14,6 +14,7 @@ import {
   type TimelineKind,
   type TimelineStatus,
 } from "./entry-model.ts";
+import { writtenArtifactPath } from "./artifact-tools.ts";
 
 // The entry shape and the shell-side reducers live in `entry-model.ts` so the
 // app shell can write a system notice without loading the transcript fold.
@@ -535,14 +536,18 @@ function foldProjection(
       // A tool call ends the current reasoning segment: settle any running
       // reasoning entry so it doesn't keep a stale "running" badge.
       const settled = settleReasoning(entries, turnId);
+      const toolName = stringOf(data.name, "Tool");
+      const argumentsJson = stringOf(data.arguments_preview);
+      const artifactPath = writtenArtifactPath(toolName, argumentsJson);
       return startTool(settled, {
         id: `tool:${stringOf(data.tool_call_id, turnId)}`,
         kind: "tool",
-        title: stringOf(data.name, "Tool"),
-        body: stringOf(data.arguments_preview),
+        title: toolName,
+        body: argumentsJson,
         status: "running",
         turnId,
         startedAtMs: Date.now(),
+        ...(artifactPath ? { artifactPath } : {}),
       });
     }
     case "tool_progress":

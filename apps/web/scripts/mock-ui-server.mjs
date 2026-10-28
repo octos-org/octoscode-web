@@ -1265,7 +1265,135 @@ const FIXTURE_PNG = Buffer.from(
   "base64",
 );
 
-const http = createServer((request, response) => {
+async function previewFixture(name) {
+  if (name.endsWith(".pdf")) return fixturePdf();
+  if (name.endsWith(".docx")) {
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
+    zip.file(
+      "[Content_Types].xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+    );
+    zip.file(
+      "_rels/.rels",
+      `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+    );
+    const paragraphs = [
+      "<w:p><w:r><w:t>Quarterly artifact report</w:t></w:r></w:p>",
+      ...Array.from(
+        { length: 110 },
+        (_, index) =>
+          `<w:p><w:r><w:t>Report paragraph ${index + 1}: evidence remains readable.</w:t></w:r></w:p>`,
+      ),
+    ].join("");
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr/></w:body></w:document>`,
+    );
+    return zip.generateAsync({ type: "nodebuffer" });
+  }
+  if (name.endsWith(".xlsx")) {
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Region", "Revenue"],
+        ["North", 1200],
+        ["South", 1400],
+      ]),
+      "Summary",
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([["Notes"], ["Second worksheet"]]),
+      "Notes",
+    );
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  }
+  if (name.endsWith(".csv")) {
+    return Buffer.from(
+      [
+        "name,value",
+        ...Array.from(
+          { length: 125 },
+          (_, index) => `row-${index + 1},${index + 1}`,
+        ),
+      ].join("\n"),
+    );
+  }
+  if (name.endsWith(".html")) {
+    return Buffer.from(
+      `<!doctype html><html><body><h1>Safe HTML artifact</h1><p>Scripts stay inert.</p><a href="/__test__/html-link-leak">Inert artifact link</a><form action="/__test__/html-form-leak"><button>Submit leak</button></form><meta http-equiv="refresh" content="0;url=/__test__/html-meta-leak"><img src="/__test__/html-network-leak"><script>document.body.dataset.scriptExecuted="yes";fetch("/__test__/html-script-leak")</script></body></html>`,
+    );
+  }
+  if (name.endsWith(".svg")) {
+    return Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 200 80"><a xlink:href="/__test__/svg-link-leak"><text x="10" y="40">Safe SVG artifact</text></a><script>document.documentElement.dataset.scriptExecuted="yes"</script><image href="/__test__/svg-network-leak"/></svg>`,
+    );
+  }
+  if (name.endsWith(".md")) {
+    return Buffer.from(
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n",
+    );
+  }
+  if (name.endsWith(".ts")) {
+    return Buffer.from("export const answer = 42;\n");
+  }
+  if (name.endsWith(".txt")) {
+    return Buffer.from("Plain text artifact\nAll 68 checks passed.\n");
+  }
+  return Buffer.from(`fixture ${name}`);
+}
+
+function fixturePdf() {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    pdfTextStream("PDF artifact page one"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>",
+    pdfTextStream("PDF artifact page two"),
+  ];
+  let source = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(source));
+    source += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(source);
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  source += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("");
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(source);
+}
+
+function pdfTextStream(text) {
+  const content = `BT /F1 18 Tf 72 720 Td (${text}) Tj ET\n`;
+  return `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`;
+}
+
+function artifactMime(name) {
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".html")) return "text/html";
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".pptx"))
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (name.endsWith(".xlsx"))
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (name.endsWith(".csv")) return "text/csv";
+  if (name.endsWith(".md")) return "text/markdown";
+  return "application/octet-stream";
+}
+
+const http = createServer(async (request, response) => {
   if (new URL(request.url, "http://fixture").pathname === "/api/files") {
     response.setHeader(
       "Access-Control-Allow-Origin",
@@ -1953,11 +2081,14 @@ const http = createServer((request, response) => {
     }
     // The original workspace path, as Core records it.
     const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
+    const validPreview = url.searchParams.get("valid") === "1";
     deliveredFiles.set(deliveredFileKey(sessionId, path), {
-      type: name.endsWith(".png") ? "image/png" : "application/octet-stream",
-      bytes: name.endsWith(".png")
-        ? FIXTURE_PNG
-        : Buffer.from(`fixture ${name}`),
+      type: artifactMime(name),
+      bytes: validPreview
+        ? await previewFixture(name)
+        : name.endsWith(".png")
+          ? FIXTURE_PNG
+          : Buffer.from(`fixture ${name}`),
     });
     const turnId = randomUUID();
     notify(
@@ -5008,6 +5139,17 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/files.list") {
+      const delivered = [...deliveredFiles.entries()]
+        .filter(([key]) => key.startsWith(`${sessionId}\n`))
+        .map(([key, file]) => {
+          const path = key.slice(sessionId.length + 1);
+          return {
+            filename: path.split("/").at(-1),
+            path,
+            size_bytes: file.bytes.length,
+            modified_at: "2026-10-28T00:00:00Z",
+          };
+        });
       reply(socket, request.id, {
         files: [
           {
@@ -5022,6 +5164,7 @@ sockets.on("connection", (socket, request) => {
             size_bytes: 8100,
             modified_at: "2026-08-25T23:58:00Z",
           },
+          ...delivered,
         ],
       });
       return;

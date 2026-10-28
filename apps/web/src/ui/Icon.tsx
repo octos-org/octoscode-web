@@ -78,6 +78,15 @@ export function ShieldIcon({
   );
 }
 
+export function FileIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M4 1.75h4.5L12 5.25v9H4v-12.5Z" />
+      <path d="M8.5 1.75v3.5H12M6 8h4M6 10.5h4" />
+    </svg>
+  );
+}
+
 export function FolderIcon({ size = 18, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 18 18", className)}>

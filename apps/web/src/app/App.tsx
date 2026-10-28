@@ -227,6 +227,7 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
+import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -786,7 +787,43 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !attachmentProfileId
     )
       return null;
+    let filesPromise:
+      | Promise<{ filename: string; path: string; size_bytes: number }[]>
+      | undefined;
+    const canDescribe = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_LIST,
+    );
+    const listedFile = async (reference: string) => {
+      filesPromise ??= client
+        .listSessionFiles({ session_id: attachmentSessionId })
+        .then((result) => result.files);
+      try {
+        let file = uniqueAttachmentFile(reference, await filesPromise);
+        if (!file) {
+          // A later delivery may postdate the shared listing. Refresh a miss
+          // once for this card; duplicates still stay ambiguous.
+          filesPromise = undefined;
+          filesPromise = client
+            .listSessionFiles({ session_id: attachmentSessionId })
+            .then((result) => result.files);
+          file = uniqueAttachmentFile(reference, await filesPromise);
+        }
+        return file;
+      } catch (reason) {
+        filesPromise = undefined;
+        throw reason;
+      }
+    };
     return {
+      ...(canDescribe
+        ? {
+            async describe(reference: string) {
+              const file = await listedFile(reference);
+              return file ? { sizeBytes: file.size_bytes } : null;
+            },
+          }
+        : {}),
       async download(reference, signal) {
         const commands = await client.mediaCommands(
           attachmentSessionId,
@@ -4417,6 +4454,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onLoadMore={() => void work.loadMoreOutput()}
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
+            loadArtifact={attachmentAccess?.download}
           />
         </SurfaceBoundary>
       ) : null}

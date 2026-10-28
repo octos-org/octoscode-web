@@ -8,6 +8,8 @@ import { createContext } from "react";
  */
 export interface AttachmentAccess {
   download(reference: string, signal?: AbortSignal): Promise<Blob>;
+  /** Optional server-listed metadata; duplicate or unlisted names return null. */
+  describe?: (reference: string) => Promise<{ sizeBytes: number } | null>;
 }
 
 export const AttachmentAccessContext = createContext<AttachmentAccess | null>(

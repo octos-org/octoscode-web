@@ -38,7 +38,7 @@ server does in the chosen folder.
 | Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.     |
 | Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback.  |
 | Conversation  | Session-local Chat with durable transcript, FIFO prompts, interrupt, commands, safe GFM, and highlighted code.              |
-| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                      |
+| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.         |
 | Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
 | Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.     |
@@ -57,6 +57,17 @@ Memory edit and delete controls are not offered because the current protocol has
 no corresponding operations. Remember-this uses the explicit ingest RPC;
 accepted request/promote responses are described as accepted or staged, never as
 completed writes.
+
+Delivered files, supervised-task artifacts, and files explicitly written by
+`write_file`/`edit_file` share an inline preview component. Tool arguments must
+carry the path; result prose is never scraped to invent an artifact. PDF and
+Office formats load their parsers only on demand; PDFs and Office pages,
+spreadsheet rows, and long text are bounded rather than dumped into one DOM.
+HTML, SVG, and converted DOCX previews use opaque-origin frames with scripts,
+forms, external requests, and credential access disabled. Unsupported or
+oversized files fail honestly to Download. File bytes come from the
+authenticated Session blob API, and copy-path/download controls never put the
+server token in a URL.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

@@ -10,9 +10,53 @@ export function attachmentName(reference: string): string {
   );
 }
 
+export interface AttachmentFileMetadata {
+  filename: string;
+  path: string;
+  size_bytes: number;
+}
+
+/** Exact paths win; a basename fallback is allowed only when unambiguous. */
+export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
+  reference: string,
+  files: readonly T[],
+): T | null {
+  const exact = files.filter((file) => file.path === reference);
+  if (exact.length === 1) return exact[0]!;
+  if (exact.length > 1) return null;
+  const name = attachmentName(reference);
+  const matches = files.filter((file) => file.filename === name);
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+export function formatAttachmentSize(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB"] as const;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  }).format(value)} ${units[unit]}`;
+}
+
+/** Keep the type suffix visible when the identifying stem needs truncation. */
+export function attachmentNameParts(reference: string): {
+  stem: string;
+  extension: string;
+} {
+  const name = attachmentName(reference);
+  const dot = name.lastIndexOf(".");
+  return dot > 0
+    ? { stem: name.slice(0, dot), extension: name.slice(dot) }
+    : { stem: name, extension: "" };
+}
+
 /**
- * Raster images shown inline. SVG is left out: a preview of an untrusted
- * document is not worth the scrutiny its markup would need.
+ * Raster images may load beside the message without a click. SVG instead uses
+ * the explicit, offline-sandboxed artifact preview.
  */
 export function isPreviewableImage(name: string): boolean {
   return PREVIEWABLE_IMAGE.test(name);

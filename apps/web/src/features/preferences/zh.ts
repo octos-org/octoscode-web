@@ -1676,6 +1676,51 @@ const catalog: Readonly<Record<string, string>> = {
   "This browser could not show a desktop notification. Tab counts still work.":
     "这个浏览器无法显示桌面通知，标签页计数仍然有效。",
 
+  // Artifact preview (T-0012).
+  Preview: "预览",
+  "Hide preview": "收起预览",
+  "Preview {name}": "预览 {name}",
+  File: "文件",
+  "Show in folder": "在文件夹中显示",
+  "Copy path": "复制路径",
+  "Path copied": "路径已复制",
+  "File path copied to clipboard.": "文件路径已复制到剪贴板。",
+  "Could not copy the path. Select it and copy it manually.":
+    "无法复制路径，请手动选择并复制。",
+  "Loading preview…": "正在加载预览…",
+  "This server can't read the file for preview.":
+    "此服务器无法读取该文件以提供预览。",
+  "This preview could not be loaded. Try again or download the file.":
+    "无法加载预览，请重试或下载文件。",
+  "This file type doesn't have an inline preview.":
+    "此文件类型不支持内联预览。",
+  "Download it to open it in another app.": "下载后可使用其他应用打开。",
+  "This file is too large for safe inline preview. Download it to open it in another app.":
+    "文件过大，无法安全地内联预览。请下载后使用其他应用打开。",
+  "Show more": "显示更多",
+  "Sandboxed preview of {name}": "{name} 的沙箱预览",
+  "Previous page": "上一页",
+  "Next page": "下一页",
+  Page: "页码",
+  "of {count}": "共 {count} 页",
+  "The PDF couldn't be rendered. Download it to open it in another app.":
+    "无法渲染 PDF，请下载后使用其他应用打开。",
+  "Page text": "页面文字",
+  "Document preview of {name}": "{name} 的文档预览",
+  "This document couldn't be previewed. Download it to open it in another app.":
+    "无法预览此文档，请下载后使用其他应用打开。",
+  "No previewable content.": "没有可预览的内容。",
+  Worksheet: "工作表",
+  "Rows {first}–{last} of {total}": "第 {first}–{last} 行，共 {total} 行",
+  "0 rows": "0 行",
+  "This preview is limited to 1,000,000 cells and 200 columns. Download the file for the complete workbook.":
+    "预览最多显示 1,000,000 个单元格和 200 列，请下载文件查看完整工作簿。",
+  "Spreadsheet rows": "电子表格行",
+  "Row number": "行号",
+  "Previous rows": "上一批行",
+  "Next rows": "下一批行",
+  "Page {page} of {count}": "第 {page} 页，共 {count} 页",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

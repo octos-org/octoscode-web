@@ -27,6 +27,7 @@ import { RequestGate } from "../async/request-gate.ts";
 import { terminalTurnId } from "../timeline/entry-model.ts";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { artifactReadsBlob } from "../artifact-preview/artifact-kind.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
@@ -371,6 +372,23 @@ export function useSupervision(
             task_id: taskId,
             artifact,
             content,
+            has_more: false,
+          },
+        },
+      }));
+      return;
+    }
+    if (artifact.path && artifactReadsBlob(artifact.path)) {
+      setState((current) => ({
+        ...current,
+        detail: {
+          ...current.detail,
+          artifactLoading: false,
+          error: null,
+          selectedArtifact: {
+            session_id: sessionId,
+            task_id: taskId,
+            artifact,
             has_more: false,
           },
         },
