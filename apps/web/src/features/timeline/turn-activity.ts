@@ -1,3 +1,5 @@
+import { toolTitle } from "./tool-presentation.ts";
+
 /** The live turn's current step, mirroring the TUI's composer status word. */
 export interface TurnActivity {
   readonly label: string;
@@ -22,7 +24,12 @@ export function initialActivityState(): TurnActivityState {
 export type TurnActivityEvent =
   | { kind: "reasoning-delta"; atMs: number }
   | { kind: "assistant-delta"; atMs: number }
-  | { kind: "tool-start"; atMs: number; toolName: string }
+  | {
+      kind: "tool-start";
+      atMs: number;
+      toolName: string;
+      argumentsJson?: string;
+    }
   | { kind: "tool-end"; atMs: number }
   | { kind: "turn-end"; atMs: number };
 
@@ -43,14 +50,16 @@ export function turnActivity(
         lastAtMs: event.atMs,
       };
     }
-    case "tool-start":
+    case "tool-start": {
+      const title = toolTitle(event.toolName, event.argumentsJson ?? "");
       return {
-        label: `Running ${event.toolName}…`,
-        template: "Running {value0}…",
-        params: { value0: event.toolName },
+        label: title.key || `Running ${event.toolName}…`,
+        template: title.key || "Running {value0}…",
+        params: title.key ? title.params : { value0: event.toolName },
         startedAtMs: state?.startedAtMs ?? event.atMs,
         lastAtMs: event.atMs,
       };
+    }
   }
 }
 

@@ -41,14 +41,13 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("never formats a marker the model has not closed yet", () => {
-    // Mid-stream, `**` has been written but its closer has not: it must stay
-    // literal rather than turning the rest of the reply bold.
+  it("hides an inline marker the model has not closed yet", () => {
     const html = renderToStaticMarkup(
       <MarkdownBody text="**still streaming" streaming />,
     );
 
-    expect(html).toContain("**still streaming");
+    expect(html).toContain("still streaming");
+    expect(html).not.toContain("**");
     expect(html).not.toContain("<strong>");
   });
 

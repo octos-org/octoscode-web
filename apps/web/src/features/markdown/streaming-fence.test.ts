@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeOpenFence } from "./streaming-fence.ts";
+import { closeOpenFence, prepareStreamingMarkdown } from "./streaming-fence.ts";
 
 describe("closeOpenFence", () => {
   it("closes a fence the model has not closed yet", () => {
@@ -32,5 +32,22 @@ describe("closeOpenFence", () => {
 
   it("does not add a blank line when the text already ends in a newline", () => {
     expect(closeOpenFence("```\nx\n")).toBe("```\nx\n```");
+  });
+});
+
+describe("prepareStreamingMarkdown", () => {
+  it("hides an unmatched inline marker while preserving completed markers", () => {
+    expect(prepareStreamingMarkdown("Working on **Markdown")).toBe(
+      "Working on Markdown",
+    );
+    expect(prepareStreamingMarkdown("Working on **Markdown**")).toBe(
+      "Working on **Markdown**",
+    );
+  });
+
+  it("renders escaped emphasis as Markdown instead of raw punctuation", () => {
+    expect(prepareStreamingMarkdown("Working on \\*\\*Markdown\\*\\*…")).toBe(
+      "Working on **Markdown**…",
+    );
   });
 });

@@ -195,6 +195,46 @@ describe("Timeline", () => {
     expect(html).not.toContain("<strong>跟随系统</strong>");
   });
 
+  it("expands failed steps and renders a complete turn summary", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        folds={{}}
+        entries={[
+          {
+            id: "tool:failed",
+            kind: "tool",
+            title: "write_file",
+            body: "permission denied",
+            toolArguments: '{"path":"report.md"}',
+            status: "error",
+            turnId: "turn-1",
+            startedAtMs: 1000,
+            endedAtMs: 2000,
+          },
+          {
+            id: "terminal:turn-1",
+            kind: "system",
+            title: "Turn complete",
+            body: "",
+            status: "complete",
+            turnId: "turn-1",
+            startedAtMs: 1000,
+            endedAtMs: 4000,
+            turnUsage: { input: 12, output: 9 },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Write file report.md");
+    expect(html).toContain("write_file");
+    expect(html).toContain("permission denied");
+    expect(html).toContain("⚠ 1 steps failed");
+    expect(html).toContain("Duration 3s");
+    expect(html).toContain("12 tokens in · 9 tokens out");
+    expect(html).toMatch(/<details[^>]*open/);
+  });
+
   it("announces the timeline via a log landmark (a11y finding 4)", () => {
     const html = renderToStaticMarkup(
       <Timeline

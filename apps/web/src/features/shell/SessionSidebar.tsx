@@ -68,6 +68,12 @@ export function SessionSidebar({
     () => timeline.findLast((entry) => entry.latestTurnOutcome),
     [timeline],
   );
+  const failedSteps = timeline.some(
+    (entry) =>
+      entry.kind === "tool" &&
+      entry.status === "error" &&
+      entry.turnId === terminal?.turnId,
+  );
   const workspaces = useMemo(() => {
     let activeStatus: Pick<ProductSidebarSession, "status" | "statusLabel"> =
       {};
@@ -89,10 +95,16 @@ export function SessionSidebar({
     } else if (terminal) {
       activeStatus = {
         status:
-          terminal.latestTurnOutcome === "completed" ? "completed" : "failed",
+          terminal.latestTurnOutcome === "completed"
+            ? failedSteps
+              ? "attention"
+              : "completed"
+            : "failed",
         statusLabel:
           terminal.latestTurnOutcome === "completed"
-            ? "Completed"
+            ? failedSteps
+              ? t("Completed with failed steps")
+              : t("Completed")
             : terminal.latestTurnOutcome === "interrupted"
               ? "Stopped"
               : "Failed",

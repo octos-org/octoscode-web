@@ -1799,6 +1799,36 @@ const catalog: Readonly<Record<string, string>> = {
   "Switching to write and retrying…": "正在切换到可写并重试…",
   "Current server does not support Fleet yet": "当前服务器还不支持多智能体",
 
+  // Execution transparency (T-0018).
+  "Run a command": "运行命令",
+  "Run command {target}": "运行命令 {target}",
+  "Read a file": "查看文件",
+  "Read file {target}": "查看文件 {target}",
+  "Write a file": "写入文件",
+  "Write file {target}": "写入 {target}",
+  "Edit a file": "编辑文件",
+  "Edit file {target}": "编辑 {target}",
+  "Apply a patch": "应用补丁",
+  "Find files": "查找文件",
+  "Find files {target}": "查找文件 {target}",
+  "Search in files": "在文件中搜索",
+  "Search files for {target}": "在文件中搜索 {target}",
+  "Fetch a web page": "获取网页",
+  "Fetch {target}": "获取 {target}",
+  "Search the web": "搜索网络",
+  "Search the web for {target}": "搜索网络：{target}",
+  "Deliver a file": "交付文件",
+  "Deliver file {target}": "交付文件 {target}",
+  "Turn summary": "本轮汇总",
+  "⚠ {count} steps failed": "⚠ {count} 步失败",
+  "Duration {seconds}s": "用时 {seconds} 秒",
+  "{count} files changed": "改动 {count} 个文件",
+  "{input} tokens in · {output} tokens out":
+    "输入 {input} tokens · 输出 {output} tokens",
+  "Output files: {files}": "产出文件：{files}",
+  "No output files": "无产出文件",
+  "Completed with failed steps": "已完成，但有步骤失败",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

@@ -28,3 +28,34 @@ export function closeOpenFence(text: string): string {
   if (open === null) return text;
   return `${text}${text.endsWith("\n") ? "" : "\n"}${open}`;
 }
+
+/** Hide incomplete inline markers without holding back completed Markdown. */
+export function prepareStreamingMarkdown(text: string): string {
+  let prepared = closeOpenFence(text).replace(/\\([*_~`])/g, "$1");
+  for (const marker of ["**", "__", "~~", "*", "`"]) {
+    prepared = hideOddMarker(prepared, marker);
+  }
+  return prepared;
+}
+
+function hideOddMarker(text: string, marker: string): string {
+  const positions: number[] = [];
+  for (let index = 0; index <= text.length - marker.length; index += 1) {
+    if (text[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (!text.startsWith(marker, index)) continue;
+    if (
+      marker === "*" &&
+      (text[index - 1] === "*" || text[index + 1] === "*")
+    ) {
+      continue;
+    }
+    positions.push(index);
+    index += marker.length - 1;
+  }
+  if (positions.length % 2 === 0) return text;
+  const last = positions.at(-1)!;
+  return text.slice(0, last) + text.slice(last + marker.length);
+}

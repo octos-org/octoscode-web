@@ -659,7 +659,8 @@
     color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
 }
 
-.statusDot[data-status="waiting"] {
+.statusDot[data-status="waiting"],
+.statusDot[data-status="attention"] {
   background: var(--dsw-alias-state-warn-primary);
 }
 

@@ -30,7 +30,7 @@ describe("turn activity state machine", () => {
       atMs: 2_000,
       toolName: "shell",
     });
-    expect(activityLabel(state)).toBe("Running shell…");
+    expect(activityLabel(state)).toBe("Run a command");
     expect(activityGlyph(state)).toBe("spinner");
   });
 
@@ -65,7 +65,7 @@ describe("turn activity state machine", () => {
       atMs: 2_000,
       toolName: "write_file",
     });
-    expect(activityLabel(state)).toBe("Running write_file…");
+    expect(activityLabel(state)).toBe("Write a file");
   });
 
   it("disappears on turn end", () => {

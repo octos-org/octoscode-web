@@ -1,7 +1,7 @@
 import type { TimelineEntry, TimelineStatus } from "./model.ts";
 
 /** Per-block expanded memory. Absent = folded (the default for both kinds). */
-export type FoldState = Readonly<{ [id: string]: true }>;
+export type FoldState = Readonly<{ [id: string]: boolean }>;
 
 export function initialFoldState(): FoldState {
   return {};
@@ -12,10 +12,7 @@ export function isFoldExpanded(folds: FoldState, id: string): boolean {
 }
 
 export function toggleFold(folds: FoldState, id: string): FoldState {
-  const next = { ...folds };
-  if (next[id]) delete next[id];
-  else next[id] = true;
-  return next;
+  return { ...folds, [id]: !folds[id] };
 }
 
 /** Expands exactly the given live ids; ids not listed fold back. */
@@ -138,6 +135,23 @@ export function toolTarget(argumentsJson: string): string {
   try {
     parsed = JSON.parse(argumentsJson);
   } catch {
+    for (const key of TARGET_KEYS) {
+      const match = argumentsJson.match(
+        new RegExp(`(?:^|[,\\s])${key}\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`),
+      );
+      if (!match) continue;
+      try {
+        const value = JSON.parse(`"${match[1]}"`) as unknown;
+        if (typeof value === "string" && value.trim()) {
+          const first = value.trim().split("\n")[0] ?? "";
+          return first.length > TRUNCATED_TARGET_LENGTH
+            ? `${first.slice(0, TRUNCATED_TARGET_LENGTH)}…`
+            : first;
+        }
+      } catch {
+        return "";
+      }
+    }
     return "";
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
