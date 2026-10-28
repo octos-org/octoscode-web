@@ -29,6 +29,7 @@ import {
 } from "react";
 import {
   APPUI_SERVER_METHODS,
+  APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
   supportsFeature,
@@ -301,6 +302,10 @@ const profileExtensionsDialogLoader = () =>
 const ProfileExtensionsDialog = lazyNamed(
   profileExtensionsDialogLoader,
   (module) => module.ProfileExtensionsDialog,
+);
+const SkillsSettingsContent = lazyNamed(
+  () => import("../features/skills/SkillsSettingsContent.tsx"),
+  (module) => module.SkillsSettingsContent,
 );
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
@@ -744,6 +749,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     () => workspaceBrowseAdapter(protocol.client, session.capabilities),
     [protocol.client, session.capabilities],
   );
+  const skillsSettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsMethod(session.capabilities, APPUI_SKILL_METHODS.LIST);
+  const skillsProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   // Downloads for files delivered in the open Session, through the
   // authenticated blob API (`/api/files`) the composer uploads through.
   const attachmentSessionId = session.opened?.session_id ?? "";
@@ -4109,6 +4119,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ),
                   }
                 : {}),
+              ...(skillsSettingsAvailable && protocol.client && session.opened
+                ? {
+                    skills: (
+                      <Suspense
+                        fallback={<DeferredSurface label="Loading skills…" />}
+                      >
+                        <SkillsSettingsContent
+                          client={protocol.client}
+                          profileId={skillsProfileId}
+                          sessionId={session.opened.session_id}
+                          capabilities={session.opened.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
             }}
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
@@ -4445,6 +4471,7 @@ const SETTINGS_LABELS = {
   navigation: "Settings sections",
   general: "General",
   models: "Models",
+  skills: "Skills",
   close: "Close settings",
 } as const;
 

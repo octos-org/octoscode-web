@@ -1368,6 +1368,30 @@ const catalog: Readonly<Record<string, string>> = {
     "转向结果不确定；排队的提示已暂停。",
   "Retry queued delivery": "重试排队投递",
 
+  // Settings skills (T-0023).
+  Skills: "技能",
+  "Installed in server Profile {profileId}":
+    "服务器配置文件 {profileId} 中安装的技能",
+  "Remote one-click install is unavailable while supply-chain safeguards are being reviewed.":
+    "供应链安全审查完成前，暂不支持远程一键安装。",
+  "Description not reported by the server.": "服务器未提供说明。",
+  "Source not reported": "服务器未提供来源",
+  Actions: "操作",
+  "No actions are available.": "没有可用的操作。",
+  Background: "后台执行",
+  Immediate: "立即执行",
+  "This action is unavailable.": "此操作不可用。",
+  "Invoking…": "正在调用…",
+  Invoke: "调用",
+  "Action result": "操作结果",
+  "Action jobs": "操作任务",
+  "No action jobs yet.": "还没有操作任务。",
+  "Result details": "结果详情",
+  Queued: "排队中",
+  Succeeded: "已完成",
+  Cancelled: "已取消",
+  Abandoned: "已中断",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

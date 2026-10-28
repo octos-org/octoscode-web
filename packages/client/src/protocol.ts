@@ -17,7 +17,12 @@ export {
 export { isRecord } from "./rpc.ts";
 export { APPUI_INVENTORY_METHODS } from "./inventory-methods.ts";
 export { APPUI_SERVER_METHODS } from "./server-methods.ts";
-export { APPUI_SKILL_METHODS } from "./skill-methods.ts";
+export {
+  APPUI_SKILL_METHODS,
+  APPUI_SKILL_ACTION_METHODS,
+  SKILL_ACTIONS_UI_FEATURE,
+  SKILL_ACTION_JOBS_UI_FEATURE,
+} from "./skill-methods.ts";
 export { APPUI_RESEARCH_METHODS } from "./research-methods.ts";
 export { APPUI_DIFF_METHODS } from "./diff-methods.ts";
 export {

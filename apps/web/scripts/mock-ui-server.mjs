@@ -12,6 +12,7 @@ let sockets;
 // and completed turns, and pending interaction all live here so one transport
 // may multiplex many Sessions and every transport hydrates the same truth.
 const sessionStateBySessionId = new Map();
+const skillJobsBySessionId = new Map();
 function sessionState(sessionId) {
   let state = sessionStateBySessionId.get(sessionId);
   if (!state) {
@@ -1213,6 +1214,30 @@ function readJsonBody(request, limit = 4_096) {
 // it was delivered in — Core's stored-copy rule; anything else is `403`.
 const deliveredFiles = new Map();
 const deliveredFileKey = (sessionId, path) => `${sessionId}\n${path}`;
+const skillActionFixture = {
+  id: "document.probe",
+  skill_id: "lifecycle-skill",
+  label: "Run document probe",
+  description: "Verify the document pipeline without a model turn.",
+  tags: ["documents"],
+  surfaces: ["settings"],
+  input_schema: { type: "object", properties: {}, required: [] },
+  execution: "background",
+  available: true,
+};
+function newSkillJob(sessionId) {
+  return {
+    job_id: `skill-job-${sessionId}`,
+    batch_id: `skill-batch-${sessionId}`,
+    profile_id: "coding",
+    session_id: sessionId,
+    action_id: "document.probe",
+    skill_id: "lifecycle-skill",
+    status: "queued",
+    created_at: "2026-10-28T00:00:00Z",
+    updated_at: "2026-10-28T00:00:00Z",
+  };
+}
 // 1x1 transparent PNG.
 const FIXTURE_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -1851,6 +1876,37 @@ const http = createServer((request, response) => {
       response.writeHead(409).end("No matching fixture session-list control");
     return;
   }
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname ===
+      "/__test__/skill/job/progress"
+  ) {
+    const url = new URL(request.url, "http://fixture");
+    const sessionId = url.searchParams.get("session_id") ?? "";
+    const job = (skillJobsBySessionId.get(sessionId) ?? [])[0];
+    if (!job) {
+      response.writeHead(409).end("No skill action job to advance");
+      return;
+    }
+    job.status =
+      url.searchParams.get("status") === "running" ? "running" : "succeeded";
+    job.updated_at = "2026-10-28T00:01:00Z";
+    if (job.status === "succeeded") {
+      job.output = "protocol action fixture";
+      job.result = { summary: "protocol action fixture" };
+    }
+    for (const socket of sessionState(sessionId).sockets) {
+      socket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "skill/action/job/updated",
+          params: { profile_id: job.profile_id, session_id: sessionId, job },
+        }),
+      );
+    }
+    response.writeHead(204).end();
+    return;
+  }
   // Deliver a file to a Session the way Core projects a `send_file` row: a
   // persisted assistant message whose media is a downloadable artifact path.
   if (
@@ -2465,6 +2521,11 @@ const baseCapabilities = {
     "task/artifact/list",
     "task/artifact/read",
     "session/status/read",
+    "profile/skills/list",
+    "skill/action/list",
+    "skill/action/invoke",
+    "skill/action/job/list",
+    "skill/action/job/read",
     "session/list",
     "session/delete",
     "session/files.list",
@@ -2478,6 +2539,7 @@ const baseCapabilities = {
     "plan/updated",
     "peer/staged",
     "peer/closed",
+    "skill/action/job/updated",
   ],
   supported_features: [
     "state.session_hydrate.v1",
@@ -2489,6 +2551,8 @@ const baseCapabilities = {
     "harness.task_artifacts.v1",
     "plan.todos.v1",
     "session.workspace_cwd.v1",
+    "skill.actions.v1",
+    "skill.action_jobs.v1",
   ],
 };
 
@@ -4683,6 +4747,67 @@ sockets.on("connection", (socket, request) => {
         sessionStateBySessionId.delete(request.params.session_id);
       }
       reply(socket, request.id, {});
+      return;
+    }
+    if (request.method === "profile/skills/list") {
+      reply(socket, request.id, {
+        profile_id: request.params.profile_id,
+        count: 1,
+        skills: [
+          {
+            name: "lifecycle-skill",
+            version: "1.2.3",
+            tool_count: 1,
+            source_repo: "fixtures/lifecycle-skill",
+          },
+        ],
+      });
+      return;
+    }
+    if (request.method === "skill/action/list") {
+      reply(socket, request.id, {
+        profile_id: request.params.profile_id,
+        session_id: sessionId,
+        count: 1,
+        actions: [skillActionFixture],
+      });
+      return;
+    }
+    if (request.method === "skill/action/invoke") {
+      const job = {
+        ...newSkillJob(sessionId),
+        profile_id: request.params.profile_id,
+      };
+      skillJobsBySessionId.set(sessionId, [job]);
+      reply(socket, request.id, {
+        action_id: "document.probe",
+        ok: true,
+        execution: "background",
+        batch_id: job.batch_id,
+        queued: 1,
+        jobs: [job],
+      });
+      return;
+    }
+    if (request.method === "skill/action/job/list") {
+      const jobs = skillJobsBySessionId.get(sessionId) ?? [];
+      reply(socket, request.id, {
+        profile_id: request.params.profile_id,
+        session_id: sessionId,
+        count: jobs.length,
+        jobs,
+      });
+      return;
+    }
+    if (request.method === "skill/action/job/read") {
+      const job = (skillJobsBySessionId.get(sessionId) ?? []).find(
+        (entry) => entry.job_id === request.params.job_id,
+      );
+      if (!job) {
+        replyError(socket, request.id, -32_004, "No matching skill action job");
+        return;
+      }
+      reply(socket, request.id, { job });
       return;
     }
     if (request.method === "session/files.list") {

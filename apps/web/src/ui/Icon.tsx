@@ -16,6 +16,14 @@ export function GearIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function SkillsIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M3 3.5h4v4H3zM9 8.5h4v4H9zM7 5.5h2M5 7.5v3h4" />
+    </svg>
+  );
+}
+
 export function ModelsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>
