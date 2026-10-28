@@ -767,6 +767,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const memoryProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const [authenticatedMemoryProfileId, setAuthenticatedMemoryProfileId] =
+    useState<string | null>(null);
   // Downloads for files delivered in the open Session, through the
   // authenticated blob API (`/api/files`) the composer uploads through.
   const attachmentSessionId = session.opened?.session_id ?? "";
@@ -911,6 +913,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   }, [session.authenticated]);
 
   useEffect(() => {
+    setAuthenticatedMemoryProfileId(null);
     if (!session.authenticated) return;
     const request = new AbortController();
     principalRequestRef.current = request;
@@ -927,6 +930,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           return;
         }
         const migrateTabDrafts = draftPrincipalRef.current === null;
+        setAuthenticatedMemoryProfileId(principal);
         draftPrincipalRef.current = principal;
         rememberDraftPrincipal(
           browserStorage("sessionStorage"),
@@ -4156,7 +4160,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       >
                         <MemorySettingsContent
                           client={protocol.client}
-                          profileId={memoryProfileId}
+                          authenticatedProfileId={authenticatedMemoryProfileId}
+                          sessionProfileId={memoryProfileId}
                           capabilities={session.capabilities!}
                         />
                       </Suspense>

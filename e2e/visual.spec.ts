@@ -17,13 +17,16 @@ const SNAPSHOT = {
 
 test.use({ channel: "chromium" });
 
-async function connect(page: Page): Promise<void> {
+async function connect(
+  page: Page,
+  token = "tab-scoped-e2e-token",
+): Promise<void> {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token").fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
@@ -130,7 +133,7 @@ test("skills settings matches baseline", async ({ page }) => {
 });
 
 test("memory settings matches baseline", async ({ page }) => {
-  await connect(page);
+  await connect(page, "memory-e2e-token");
   await startDefaultWorkspace(page);
   await page
     .getByRole("complementary", { name: "Product navigation" })

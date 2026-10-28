@@ -1317,7 +1317,15 @@ const http = createServer((request, response) => {
     response.writeHead(200, { "content-type": "application/json" }).end(
       JSON.stringify({
         user: {
-          id: token === "forget-me-token" ? "other-user" : "fixture-user",
+          id:
+            token === "forget-me-token"
+              ? "other-user"
+              : token === "memory-host-e2e-token"
+                ? "admin"
+                : token === "memory-e2e-token" ||
+                    token === "memory-main-e2e-token"
+                  ? "_main"
+                  : "fixture-user",
         },
       }),
     );

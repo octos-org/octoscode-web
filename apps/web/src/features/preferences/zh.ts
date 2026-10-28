@@ -1393,8 +1393,14 @@ const catalog: Readonly<Record<string, string>> = {
   Abandoned: "已中断",
   // Settings memory (T-0024).
   Memory: "记忆",
-  "Read and remember information in server Profile {profileId}":
-    "查看并记住服务器配置文件 {profileId} 中的信息",
+  "Read and remember information in authenticated Profile {profileId}":
+    "查看并记住已认证配置文件 {profileId} 中的信息",
+  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Read and write are disabled.":
+    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。已禁用读写。",
+  unverified: "未验证",
+  "This server cannot load entity details.": "此服务器无法加载实体详情。",
+  "This server cannot load full record details.":
+    "此服务器无法加载完整记录详情。",
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
   Overview: "概览",

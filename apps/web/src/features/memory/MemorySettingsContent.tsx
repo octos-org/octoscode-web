@@ -25,16 +25,24 @@ const MarkdownBody = lazy(() =>
 
 interface MemorySettingsContentProps {
   client: OctosUiClient;
-  profileId: string;
+  authenticatedProfileId: string | null;
+  sessionProfileId: string;
   capabilities: UiProtocolCapabilities;
 }
 
 export function MemorySettingsContent({
   client,
-  profileId,
+  authenticatedProfileId,
+  sessionProfileId,
   capabilities,
 }: MemorySettingsContentProps) {
   const t = useUiText();
+  const scopeVerified =
+    Boolean(authenticatedProfileId) &&
+    authenticatedProfileId === sessionProfileId;
+  const canEntity = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_ENTITY);
+  const canSearch = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_SEARCH);
+  const canLoad = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_LOAD);
   const canIngest = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_INGEST);
   const canRequest = supportsMethod(capabilities, APPUI_MEMORY_REQUEST_METHOD);
   const canPromote = supportsMethod(capabilities, APPUI_MEMORY_PROMOTE_METHOD);
@@ -60,6 +68,10 @@ export function MemorySettingsContent({
     setHits(null);
     setEntity(null);
     setRecord(null);
+    if (!scopeVerified) {
+      setLoading(false);
+      return;
+    }
     void client
       .memoryCommands(capabilities)
       .then(
@@ -88,7 +100,7 @@ export function MemorySettingsContent({
     return () => {
       current = false;
     };
-  }, [client, capabilities]);
+  }, [client, capabilities, scopeVerified]);
 
   const search = async () => {
     if (busy || !query.trim()) return;
@@ -165,7 +177,8 @@ export function MemorySettingsContent({
           unchanged: result.unchanged,
         }),
       );
-      setRecord(await commands.load(id));
+      if (canLoad) setRecord(await commands.load(id));
+      else setRecord(null);
       setEntity(null);
       setTitle("");
       setAbstract("");
@@ -217,15 +230,37 @@ export function MemorySettingsContent({
     }
   };
 
+  if (!scopeVerified) {
+    return (
+      <div className={styles.page}>
+        <header className={styles.heading}>
+          <div>
+            <h2>{t("Memory")}</h2>
+          </div>
+        </header>
+        <p className={styles.notice} role="status">
+          {t(
+            "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Read and write are disabled.",
+            {
+              authenticated: authenticatedProfileId ?? t("unverified"),
+              session: sessionProfileId,
+            },
+          )}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.heading}>
         <div>
           <h2>{t("Memory")}</h2>
           <p>
-            {t("Read and remember information in server Profile {profileId}", {
-              profileId,
-            })}
+            {t(
+              "Read and remember information in authenticated Profile {profileId}",
+              { profileId: authenticatedProfileId },
+            )}
           </p>
         </div>
       </header>
@@ -282,7 +317,7 @@ export function MemorySettingsContent({
                     <button
                       key={item.name}
                       type="button"
-                      disabled={busy}
+                      disabled={busy || !canEntity}
                       onClick={() => void openEntity(item.name)}
                     >
                       <strong>{item.name}</strong>
@@ -290,6 +325,11 @@ export function MemorySettingsContent({
                     </button>
                   ))}
                 </div>
+                {!canEntity ? (
+                  <p className={styles.meta}>
+                    {t("This server cannot load entity details.")}
+                  </p>
+                ) : null}
                 {overview.entitiesTruncated ? (
                   <p className={styles.meta}>
                     {t("Only the first entities are shown.")}
@@ -314,43 +354,50 @@ export function MemorySettingsContent({
               </>
             ) : null}
           </section>
-          <section aria-labelledby="memory-search-heading">
-            <h3 id="memory-search-heading">{t("Search")}</h3>
-            <form
-              className={styles.search}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void search();
-              }}
-            >
-              <label htmlFor="memory-query">{t("Search memories")}</label>
-              <input
-                id="memory-query"
-                name="query"
-                autoComplete="off"
-                value={query}
-                disabled={busy}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              <button type="submit" disabled={busy || !query.trim()}>
-                {t("Search")}
-              </button>
-            </form>
-            {hits?.length === 0 ? <p>{t("No matching memories.")}</p> : null}
-            <div className={styles.list}>
-              {hits?.map((hit) => (
-                <button
-                  key={hit.id}
-                  type="button"
+          {canSearch ? (
+            <section aria-labelledby="memory-search-heading">
+              <h3 id="memory-search-heading">{t("Search")}</h3>
+              <form
+                className={styles.search}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void search();
+                }}
+              >
+                <label htmlFor="memory-query">{t("Search memories")}</label>
+                <input
+                  id="memory-query"
+                  name="query"
+                  autoComplete="off"
+                  value={query}
                   disabled={busy}
-                  onClick={() => void openRecord(hit.id)}
-                >
-                  <strong>{hit.title}</strong>
-                  <span>{hit.abstract}</span>
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <button type="submit" disabled={busy || !query.trim()}>
+                  {t("Search")}
                 </button>
-              ))}
-            </div>
-          </section>
+              </form>
+              {hits?.length === 0 ? <p>{t("No matching memories.")}</p> : null}
+              <div className={styles.list}>
+                {hits?.map((hit) => (
+                  <button
+                    key={hit.id}
+                    type="button"
+                    disabled={busy || !canLoad}
+                    onClick={() => void openRecord(hit.id)}
+                  >
+                    <strong>{hit.title}</strong>
+                    <span>{hit.abstract}</span>
+                  </button>
+                ))}
+              </div>
+              {!canLoad ? (
+                <p className={styles.meta}>
+                  {t("This server cannot load full record details.")}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           {canIngest ? (
             <section aria-labelledby="memory-ingest-heading">
               <h3 id="memory-ingest-heading">{t("Remember this")}</h3>

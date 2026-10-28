@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
-async function start(page: Page, token = "tab-scoped-e2e-token") {
+async function start(page: Page, token = "memory-e2e-token") {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
@@ -17,16 +17,18 @@ async function start(page: Page, token = "tab-scoped-e2e-token") {
   ).toBeEnabled();
 }
 
-async function openMemory(page: Page) {
+async function openMemory(page: Page, expectOverview = true) {
   await page
     .getByRole("complementary", { name: "Product navigation" })
     .getByRole("button", { name: "Settings", exact: true })
     .click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await settings.getByRole("button", { name: "Memory", exact: true }).click();
-  await expect(
-    settings.locator("summary").getByText("Long-term memory"),
-  ).toBeVisible();
+  if (expectOverview) {
+    await expect(
+      settings.locator("summary").getByText("Long-term memory"),
+    ).toBeVisible();
+  }
   return settings;
 }
 
@@ -86,4 +88,26 @@ test("shows request and promote only when the server advertises them", async ({
   await expect(
     settings.getByText(/Promotion staged for 1 record/),
   ).toBeVisible();
+});
+
+test("fails closed when authenticated memory ownership differs from the Session profile", async ({
+  page,
+}) => {
+  const memoryCalls: string[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { method?: string };
+      if (frame.method?.startsWith("memory/")) memoryCalls.push(frame.method);
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  await start(page, "memory-host-e2e-token");
+  const settings = await openMemory(page, false);
+  await expect(
+    settings.getByText(/memory ownership is not confirmed/i),
+  ).toBeVisible();
+  await expect(settings.getByLabel("Memory content")).toHaveCount(0);
+  expect(memoryCalls).toEqual([]);
 });
