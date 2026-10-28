@@ -15,11 +15,16 @@ export interface ConversationViewState {
   anchor: { id: string; offset: number } | null;
 }
 
-/** Follow new output while at the tail; never pull a reader out of history. */
+/**
+ * Follow new output while at the tail; never pull a reader out of history.
+ * `holdTop` keeps a Session's empty-state home at the top instead of
+ * following its tail; output still follows once the transcript starts.
+ */
 export function useConversationScroll(
   identity: object | null,
   sessionKey: string | null,
   view: string,
+  holdTop = false,
 ) {
   // Reading positions live only for this authenticated browser identity.
   const positions = useMemo(
@@ -43,6 +48,8 @@ export function useConversationScroll(
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const holdTopRef = useRef(holdTop);
+  holdTopRef.current = holdTop;
   const previousTop = useRef(0);
   const restoreAfterLayout = useRef(false);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
@@ -119,7 +126,8 @@ export function useConversationScroll(
   const restorePosition = useCallback(() => {
     const element = scrollRef.current;
     if (!element || !element.clientHeight) return;
-    if (following.current) element.scrollTop = element.scrollHeight;
+    if (following.current)
+      element.scrollTop = holdTopRef.current ? 0 : element.scrollHeight;
     else if (viewState) {
       const anchor = viewState.anchor;
       const entry = anchor
@@ -164,6 +172,7 @@ export function useConversationScroll(
         return;
       }
       if (following.current) {
+        if (holdTopRef.current) return;
         element.scrollTop = element.scrollHeight;
         previousTop.current = element.scrollTop;
       } else

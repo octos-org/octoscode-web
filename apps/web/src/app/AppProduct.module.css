@@ -179,9 +179,17 @@
 }
 
 .newSessionHero {
-  display: grid;
+  display: flex;
   min-height: 100%;
-  place-items: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dsw-space-6);
+  padding-block: var(--dsw-space-5);
+}
+
+.heroPickerSlot {
+  display: contents;
 }
 
 .sessionUnavailable {

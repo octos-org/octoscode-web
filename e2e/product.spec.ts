@@ -1808,7 +1808,7 @@ test("onboards an empty solo server from workspace creation", async ({
   );
   await expect(
     page.getByRole("heading", {
-      name: "Ask Octos to work on this repository",
+      name: "What can Octos help with?",
       exact: true,
     }),
   ).toBeVisible();

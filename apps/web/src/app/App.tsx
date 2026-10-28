@@ -157,6 +157,17 @@ import {
   type RecentWorkspace,
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
+import {
+  TaskTemplateHome,
+  ResumeSessionLink,
+  type ResumeTarget,
+  type TemplateNotice,
+} from "../features/templates/TaskTemplateHome.tsx";
+import {
+  findTaskTemplate,
+  firstTemplateBlank,
+  type TaskTemplate,
+} from "../features/templates/task-templates.ts";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
@@ -1765,6 +1776,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     connectionIdentity,
     activeSessionKey,
     conversationTab,
+    // The empty Session's template home reads from the top.
+    conversation.timeline.length === 0,
   );
   const conversationSearch = useConversationSearch(conversationScrollRef);
 
@@ -1773,6 +1786,126 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const frame = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [activeSessionKey, conversationTab, compact]);
+
+  // Starter templates. A template only fills the composer; the user edits
+  // and sends it. Chosen before any Session is open, it waits and fills the
+  // next opened Session, unless that Session already has text or history.
+  const [templateNotice, setTemplateNotice] = useState<
+    | { kind: "pending"; templateId: string }
+    | {
+        kind: "applied";
+        templateId: string;
+        sessionKey: string;
+        text: string;
+        previousDraft: string;
+      }
+    | null
+  >(null);
+  const heroPickerRef = useRef<HTMLDivElement>(null);
+  const applyTemplate = (template: TaskTemplate, sessionKey: string) => {
+    const text = template.copy[preferences.language].prompt;
+    const previousDraft = draftRef.current;
+    draftRef.current = text;
+    setDraft(text);
+    setTemplateNotice({
+      kind: "applied",
+      templateId: template.id,
+      sessionKey,
+      text,
+      previousDraft,
+    });
+    // Land on the first blank so typing replaces it.
+    requestAnimationFrame(() => {
+      const input = composerRef.current;
+      if (!input) return;
+      input.focus();
+      const blank = firstTemplateBlank(text);
+      // Templates keep their first blank near the top; start there so the
+      // selection is not half-scrolled out of the fixed-height box.
+      input.scrollTop = 0;
+      input.setSelectionRange(
+        blank?.start ?? text.length,
+        blank?.end ?? text.length,
+      );
+    });
+  };
+  const chooseTemplate = (template: TaskTemplate) => {
+    if (session.opened && activeSessionKey) {
+      applyTemplate(template, activeSessionKey);
+      return;
+    }
+    setTemplateNotice({ kind: "pending", templateId: template.id });
+    heroPickerRef.current
+      ?.querySelector<HTMLElement>(
+        "input:not([disabled]), button:not([disabled])",
+      )
+      ?.focus();
+  };
+  useEffect(() => {
+    if (
+      templateNotice?.kind !== "pending" ||
+      !session.opened ||
+      !activeSessionKey
+    )
+      return;
+    const template = findTaskTemplate(templateNotice.templateId);
+    if (!template || draftRef.current || conversation.timeline.length > 0) {
+      setTemplateNotice(null);
+      return;
+    }
+    applyTemplate(template, activeSessionKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateNotice, session.opened, activeSessionKey]);
+  const templateHomeNotice: TemplateNotice | null =
+    templateNotice?.kind === "pending"
+      ? {
+          kind: "pending",
+          templateId: templateNotice.templateId,
+          onCancel: () => setTemplateNotice(null),
+        }
+      : templateNotice?.kind === "applied" &&
+          templateNotice.sessionKey === activeSessionKey
+        ? {
+            kind: "applied",
+            templateId: templateNotice.templateId,
+            // Undo only while the box still holds the untouched template.
+            onUndo:
+              draft === templateNotice.text
+                ? () => {
+                    draftRef.current = templateNotice.previousDraft;
+                    setDraft(templateNotice.previousDraft);
+                    setTemplateNotice(null);
+                    composerRef.current?.focus();
+                  }
+                : undefined,
+          }
+        : null;
+  const resumeSession = navigableSessions.reduce<
+    (typeof navigableSessions)[number] | undefined
+  >((latest, ref) => {
+    if (ref.lastOpenedAt <= 0) return latest;
+    if (
+      workspaceSessionKey(ref.workspaceRoot, ref.profileId, ref.sessionId) ===
+      activeSessionKey
+    )
+      return latest;
+    return !latest || ref.lastOpenedAt > latest.lastOpenedAt ? ref : latest;
+  }, undefined);
+  const resumeTarget: ResumeTarget | null =
+    resumeSession && !navigationBlocked
+      ? {
+          workspace: workspaceName(resumeSession.workspaceRoot),
+          lastOpenedAt: resumeSession.lastOpenedAt,
+          onOpen: () =>
+            void moveToProductSession(
+              workspaceSessionKey(
+                resumeSession.workspaceRoot,
+                resumeSession.profileId,
+                resumeSession.sessionId,
+              ),
+            ),
+        }
+      : null;
 
   // Interrupted and unsent inputs return to their owning Session. Wait for
   // newer text and image selections to clear before consuming a saved restore.
@@ -2106,6 +2239,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
+  // A template that edits files offers (never forces) leaving read-only.
+  const appliedTemplate =
+    templateNotice?.kind === "applied" &&
+    templateNotice.sessionKey === activeSessionKey
+      ? findTaskTemplate(templateNotice.templateId)
+      : undefined;
+  const templateWriteProfile =
+    appliedTemplate?.access === "write" &&
+    currentPermission?.mode === "read_only" &&
+    safety.permission.editable
+      ? safety.permission.result?.profiles.find(
+          (profile) =>
+            profile.mode === "workspace_write" &&
+            profile.network === currentPermission.network,
+        )
+      : undefined;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -2576,40 +2725,52 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   savedLinkPanel
                 ) : !session.opened ? (
                   <div className={productStyles.newSessionHero}>
+                    {codingCapabilities.sessionCreationAvailable &&
+                    resumeTarget ? (
+                      <ResumeSessionLink
+                        language={preferences.language}
+                        target={resumeTarget}
+                      />
+                    ) : null}
                     {codingCapabilities.sessionCreationAvailable ? (
-                      <SurfaceBoundary
-                        fallback={
-                          <DeferredSurface label="Loading workspaces…" />
-                        }
+                      <div
+                        ref={heroPickerRef}
+                        className={productStyles.heroPickerSlot}
                       >
-                        <NewSessionWorkspacePicker
-                          presentation="hero"
-                          cancelLabel={t("Change server")}
-                          workspaces={recentWorkspaces.map((workspace) => ({
-                            id: workspace.id,
-                            name: workspace.name,
-                            path: workspace.path,
-                          }))}
-                          {...(serverWorkingDirectory
-                            ? { serverWorkingDirectory }
-                            : {})}
-                          {...(recentWorkspaces[0]
-                            ? { recentWorkspaceId: recentWorkspaces[0].id }
-                            : {})}
-                          {...(workspaceBrowse
-                            ? { browse: workspaceBrowse }
-                            : {})}
-                          error={workspaceProduct.state.error}
-                          creating={
-                            session.status === "connecting" ||
-                            workspaceProduct.transitioning
+                        <SurfaceBoundary
+                          fallback={
+                            <DeferredSurface label="Loading workspaces…" />
                           }
-                          onCancel={disconnect}
-                          onCreate={({ workspacePath }) =>
-                            createSessionInWorkspace(workspacePath)
-                          }
-                        />
-                      </SurfaceBoundary>
+                        >
+                          <NewSessionWorkspacePicker
+                            presentation="hero"
+                            cancelLabel={t("Change server")}
+                            workspaces={recentWorkspaces.map((workspace) => ({
+                              id: workspace.id,
+                              name: workspace.name,
+                              path: workspace.path,
+                            }))}
+                            {...(serverWorkingDirectory
+                              ? { serverWorkingDirectory }
+                              : {})}
+                            {...(recentWorkspaces[0]
+                              ? { recentWorkspaceId: recentWorkspaces[0].id }
+                              : {})}
+                            {...(workspaceBrowse
+                              ? { browse: workspaceBrowse }
+                              : {})}
+                            error={workspaceProduct.state.error}
+                            creating={
+                              session.status === "connecting" ||
+                              workspaceProduct.transitioning
+                            }
+                            onCancel={disconnect}
+                            onCreate={({ workspacePath }) =>
+                              createSessionInWorkspace(workspacePath)
+                            }
+                          />
+                        </SurfaceBoundary>
+                      </div>
                     ) : (
                       <section
                         className={productStyles.sessionUnavailable}
@@ -2626,6 +2787,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         </button>
                       </section>
                     )}
+                    {codingCapabilities.sessionCreationAvailable ? (
+                      <TaskTemplateHome
+                        variant="chooser"
+                        language={preferences.language}
+                        notice={templateHomeNotice}
+                        onUse={chooseTemplate}
+                      />
+                    ) : null}
                   </div>
                 ) : conversationTab === "trajectory" ? (
                   <SurfaceBoundary
@@ -2723,6 +2892,35 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           }
                           onCollapseAll={() =>
                             setTimelineFolds(collapseAll(timelineFolds))
+                          }
+                          emptyState={
+                            conversation.timeline.length === 0 &&
+                            !openingSession &&
+                            session.recovery.phase === "healthy" ? (
+                              <TaskTemplateHome
+                                variant="session"
+                                language={preferences.language}
+                                workspaceName={workspaceName(
+                                  activeWorkspacePath,
+                                )}
+                                resume={resumeTarget}
+                                notice={templateHomeNotice}
+                                writeAccess={
+                                  templateWriteProfile
+                                    ? {
+                                        busy:
+                                          safety.permission.busy ||
+                                          runtimeMutationBlocked,
+                                        onAllow: () =>
+                                          void safety.updatePermission(
+                                            templateWriteProfile,
+                                          ),
+                                      }
+                                    : null
+                                }
+                                onUse={chooseTemplate}
+                              />
+                            ) : undefined
                           }
                         />
                       </AttachmentAccessContext.Provider>

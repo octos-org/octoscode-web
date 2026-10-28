@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
   type SyntheticEvent,
 } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
@@ -44,6 +45,11 @@ interface TimelineProps {
   onCollapseAll?: () => void;
   /** Live turn activity; rendered at the transcript bottom while streaming. */
   activity?: TurnActivity | null;
+  /**
+   * Replaces the default empty state of a connected, empty Session. Pass it
+   * only while the Session is empty so the memoized transcript stays stable.
+   */
+  emptyState?: ReactNode;
 }
 
 export const Timeline = memo(function Timeline({
@@ -57,6 +63,7 @@ export const Timeline = memo(function Timeline({
   onExpandAll,
   onCollapseAll,
   activity = null,
+  emptyState,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -108,6 +115,7 @@ export const Timeline = memo(function Timeline({
     }
   });
   if (renderableEntries.length === 0) {
+    if (connected && emptyState) return <>{emptyState}</>;
     return (
       <div className="empty-state">
         <div className="empty-mark">

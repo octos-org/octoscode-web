@@ -1,8 +1,15 @@
 # Product scope
 
-octoscode-web is the browser sibling of the Octoscode TUI. It gives coding work
-a focused Web workspace while preserving Octoscode's command and state
-semantics. Octos Core remains the runtime and source of durable truth.
+octoscode-web is the browser sibling of the Octoscode TUI. It is a focused Web
+workspace for work an agent does in a server folder: coding, and office
+deliverables such as reports, cleaned-up tables, and slide outlines. A request
+goes in, the agent works in that folder, and the result comes back as files the
+user can check. It preserves Octoscode's command and state semantics; Octos Core
+remains the runtime and source of durable truth.
+
+Office work widens who the product is for, not what the browser owns. The
+browser still runs no agent, tool, or document pipeline; it presents what the
+server does in the chosen folder.
 
 ## Product principles
 
@@ -27,6 +34,7 @@ semantics. Octos Core remains the runtime and source of durable truth.
 | Area          | Current behavior                                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.   |
+| Start         | Empty Session home: code/office templates fill the composer (never sent, never raise permission); last-Session link.        |
 | Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.     |
 | Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback.  |
 | Conversation  | Session-local Chat with durable transcript, FIFO prompts, interrupt, commands, safe GFM, and highlighted code.              |
