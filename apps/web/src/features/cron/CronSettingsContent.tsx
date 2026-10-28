@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CORE_UI_METHODS,
   supportsMethod,
@@ -23,54 +23,50 @@ export function CronSettingsContent({
   const canToggle = supportsMethod(capabilities, CORE_UI_METHODS.CRON_TOGGLE);
   const [state, setState] = useState<CronListResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
   useEffect(() => {
     let current = true;
+    const generation = ++requestGeneration.current;
     setLoading(true);
     setError(null);
     void client
       .cronCommands(capabilities)
-      .then(
-        (commands) => commands.list(),
-        (reason: unknown) => {
-          if (current) {
-            setError(errorMessage(reason));
-            setLoading(false);
-            setRefreshing(false);
-          }
-        },
-      )
+      .then((commands) => commands.list())
       .then(
         (result) => {
-          if (current && result) {
+          if (current && generation === requestGeneration.current) {
             setState(result);
             setLoading(false);
-            setRefreshing(false);
           }
         },
         (reason: unknown) => {
-          if (current) {
+          if (current && generation === requestGeneration.current) {
             setError(errorMessage(reason));
             setLoading(false);
-            setRefreshing(false);
           }
         },
       );
     return () => {
       current = false;
+      if (generation === requestGeneration.current) {
+        requestGeneration.current += 1;
+      }
     };
-  }, [client, capabilities, refreshing]);
+  }, [client, capabilities, refreshToken]);
 
   const toggle = async (job: CronJob) => {
     if (busyJob || state?.gatewayRunning) return;
+    const generation = ++requestGeneration.current;
     setBusyJob(job.id);
     setError(null);
     try {
       const commands = await client.cronCommands(capabilities);
       const updated = await commands.toggle(job.id, !job.enabled);
+      if (generation !== requestGeneration.current) return;
       setState((current) =>
         current
           ? {
@@ -82,9 +78,11 @@ export function CronSettingsContent({
           : current,
       );
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (generation === requestGeneration.current) {
+        setError(errorMessage(reason));
+      }
     } finally {
-      setBusyJob(null);
+      if (generation === requestGeneration.current) setBusyJob(null);
     }
   };
 
@@ -97,8 +95,8 @@ export function CronSettingsContent({
         </div>
         <button
           type="button"
-          disabled={loading || refreshing}
-          onClick={() => setRefreshing(true)}
+          disabled={loading}
+          onClick={() => setRefreshToken((current) => current + 1)}
         >
           {t("Refresh")}
         </button>

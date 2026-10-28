@@ -71,3 +71,44 @@ test("enables and disables an existing cron job without a create control and pas
     .analyze();
   expect(results.violations).toEqual([]);
 });
+
+test("does not let a delayed list response overwrite a confirmed cron toggle", async ({
+  page,
+}) => {
+  let listCalls = 0;
+  let release: (() => void) | undefined;
+  const heldListIds = new Set<string>();
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        id?: string;
+        method?: string;
+      };
+      if (frame.method === "cron/list") {
+        listCalls += 1;
+        if (listCalls > 1 && frame.id) heldListIds.add(frame.id);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { id?: string };
+      if (frame.id && heldListIds.has(frame.id)) {
+        release = () => socket.send(message);
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await start(page);
+  const settings = await openSection(page, "Scheduled tasks");
+  const toggle = settings.getByRole("checkbox");
+  await expect(toggle).not.toBeChecked();
+  await settings.getByRole("button", { name: "Refresh" }).click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  release?.();
+  await expect(toggle).toBeChecked();
+  expect(listCalls).toBe(2);
+});
