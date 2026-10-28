@@ -38,6 +38,11 @@ export interface SessionStatusStripProps {
   state: SessionStripState;
   /** Live turn activity; while responding, its word replaces the third segment. */
   activity?: TurnActivity | null;
+  /**
+   * Show only the live state. The composer's own chips already show the
+   * model and permission; the accessible name still carries all three.
+   */
+  stateOnly?: boolean;
   onOpenPane: () => void;
 }
 
@@ -74,6 +79,7 @@ export function SessionStatusStrip({
   permissionMode,
   state,
   activity = null,
+  stateOnly = false,
   onOpenPane,
 }: SessionStatusStripProps) {
   const t = useUiText();
@@ -115,11 +121,18 @@ export function SessionStatusStrip({
         {text}
       </span>
       <span className={styles["session-status-strip-text"]}>
-        <span className={styles["session-status-strip-context"]}>
-          {segments[0]} · {segments[1]}
-        </span>
+        {stateOnly ? null : (
+          <span className={styles["session-status-strip-context"]}>
+            {segments[0]} · {segments[1]}
+          </span>
+        )}
         <span className={styles["session-status-strip-state"]}>
-          <span className={styles["session-status-strip-separator"]}> · </span>
+          {stateOnly ? null : (
+            <span className={styles["session-status-strip-separator"]}>
+              {" "}
+              ·{" "}
+            </span>
+          )}
           {liveLabel ? (
             <span className="thinking-spinner" aria-hidden="true">
               ◠

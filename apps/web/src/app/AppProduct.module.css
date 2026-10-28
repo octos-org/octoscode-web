@@ -139,10 +139,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.contextUsage {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
+/* A file dragged over the composer: the drop target is the whole box. */
+.composerDropping {
+  border-color: var(--dsw-alias-state-business-primary);
+  border-style: dashed;
 }
 
 .preferencesTrigger {

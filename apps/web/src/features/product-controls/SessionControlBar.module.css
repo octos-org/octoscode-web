@@ -143,6 +143,7 @@
 }
 
 .status {
+  margin: 0;
   padding: 10px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
