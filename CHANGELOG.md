@@ -28,6 +28,9 @@
   HTML/SVG frames use an opaque-origin, script-free offline sandbox without
   weakening the application CSP. Include browser, component, security, and axe
   coverage for the new surface.
+- Add read-only MCP connector status and existing cron job controls to Settings.
+  Cron jobs can be enabled/disabled only when the server permits it;
+  add/remove/edit/OAuth and cron creation remain explicitly unavailable.
 
 ## v0.20.0 — 2026-10-29
 

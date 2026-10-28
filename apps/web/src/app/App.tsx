@@ -48,6 +48,7 @@ import {
   type DragEvent as ReactDragEvent,
 } from "react";
 import {
+  APPUI_INVENTORY_METHODS,
   APPUI_SERVER_METHODS,
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
@@ -342,6 +343,14 @@ const SkillsSettingsContent = lazyNamed(
 const MemorySettingsContent = lazyNamed(
   () => import("../features/memory/MemorySettingsContent.tsx"),
   (module) => module.MemorySettingsContent,
+);
+const ConnectorsSettingsContent = lazyNamed(
+  () => import("../features/connectors/ConnectorsSettingsContent.tsx"),
+  (module) => module.ConnectorsSettingsContent,
+);
+const CronSettingsContent = lazyNamed(
+  () => import("../features/cron/CronSettingsContent.tsx"),
+  (module) => module.CronSettingsContent,
 );
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
@@ -795,9 +804,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
     ) &&
     supportsMethod(session.capabilities, CORE_UI_METHODS.MEMORY_OVERVIEW);
+  const connectorsSettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsMethod(session.capabilities, APPUI_INVENTORY_METHODS.MCP);
+  const scheduledSettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsFeature(
+      session.capabilities,
+      CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+    ) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.CRON_LIST);
   const skillsProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const memoryProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const settingsProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const [authenticatedMemoryProfileId, setAuthenticatedMemoryProfileId] =
     useState<string | null>(null);
@@ -4623,6 +4644,42 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ),
                   }
                 : {}),
+              ...(connectorsSettingsAvailable &&
+              protocol.client &&
+              session.opened
+                ? {
+                    connectors: (
+                      <Suspense
+                        fallback={
+                          <DeferredSurface label="Loading connectors…" />
+                        }
+                      >
+                        <ConnectorsSettingsContent
+                          client={protocol.client}
+                          profileId={settingsProfileId}
+                          sessionId={session.opened.session_id}
+                          capabilities={session.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
+              ...(scheduledSettingsAvailable && protocol.client
+                ? {
+                    scheduled: (
+                      <Suspense
+                        fallback={
+                          <DeferredSurface label="Loading scheduled tasks…" />
+                        }
+                      >
+                        <CronSettingsContent
+                          client={protocol.client}
+                          capabilities={session.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
             }}
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
@@ -5000,6 +5057,8 @@ const SETTINGS_LABELS = {
   models: "Models",
   skills: "Skills",
   memory: "Memory",
+  connectors: "Connectors",
+  scheduled: "Scheduled tasks",
   close: "Close settings",
 } as const;
 

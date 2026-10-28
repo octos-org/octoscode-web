@@ -6,6 +6,8 @@
 import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import {
+  ConnectorsIcon,
+  CronIcon,
   GearIcon,
   MemoryIcon,
   ModelsIcon,
@@ -81,16 +83,22 @@ export function SettingsDialog({
   const modelsId = `${navId}-models`;
   const skillsId = `${navId}-skills`;
   const memoryId = `${navId}-memory`;
+  const connectorsId = `${navId}-connectors`;
+  const scheduledId = `${navId}-scheduled`;
   const closeRef = useRef<HTMLButtonElement>(null);
   if (!open) return null;
 
   const hasModels = slots.models !== undefined;
   const hasSkills = slots.skills !== undefined;
   const hasMemory = slots.memory !== undefined;
+  const hasConnectors = slots.connectors !== undefined;
+  const hasScheduled = slots.scheduled !== undefined;
   const effectiveSection =
     (activeSection === "models" && !hasModels) ||
     (activeSection === "skills" && !hasSkills) ||
-    (activeSection === "memory" && !hasMemory)
+    (activeSection === "memory" && !hasMemory) ||
+    (activeSection === "connectors" && !hasConnectors) ||
+    (activeSection === "scheduled" && !hasScheduled)
       ? "general"
       : activeSection;
 
@@ -105,7 +113,11 @@ export function SettingsDialog({
         ? modelsId
         : effectiveSection === "skills"
           ? skillsId
-          : memoryId;
+          : effectiveSection === "memory"
+            ? memoryId
+            : effectiveSection === "connectors"
+              ? connectorsId
+              : scheduledId;
   const content =
     effectiveSection === "general"
       ? slots.general
@@ -113,7 +125,11 @@ export function SettingsDialog({
         ? slots.models
         : effectiveSection === "skills"
           ? slots.skills
-          : slots.memory;
+          : effectiveSection === "memory"
+            ? slots.memory
+            : effectiveSection === "connectors"
+              ? slots.connectors
+              : slots.scheduled;
 
   return (
     <ModalSurface
@@ -189,6 +205,42 @@ export function SettingsDialog({
             >
               <MemoryIcon />
               <span className={styles.navLabel}>{labels.memory}</span>
+            </button>
+          ) : null}
+          {hasConnectors ? (
+            <button
+              id={connectorsId}
+              type="button"
+              className={
+                effectiveSection === "connectors"
+                  ? `${styles.navCell} ${styles.active}`
+                  : styles.navCell
+              }
+              aria-current={
+                effectiveSection === "connectors" ? "page" : undefined
+              }
+              onClick={() => choose("connectors")}
+            >
+              <ConnectorsIcon />
+              <span className={styles.navLabel}>{labels.connectors}</span>
+            </button>
+          ) : null}
+          {hasScheduled ? (
+            <button
+              id={scheduledId}
+              type="button"
+              className={
+                effectiveSection === "scheduled"
+                  ? `${styles.navCell} ${styles.active}`
+                  : styles.navCell
+              }
+              aria-current={
+                effectiveSection === "scheduled" ? "page" : undefined
+              }
+              onClick={() => choose("scheduled")}
+            >
+              <CronIcon />
+              <span className={styles.navLabel}>{labels.scheduled}</span>
             </button>
           ) : null}
         </div>
