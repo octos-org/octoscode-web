@@ -128,3 +128,16 @@ test("skills settings matches baseline", async ({ page }) => {
   ).toBeVisible();
   await expect(settings).toHaveScreenshot("settings-skills.png", SNAPSHOT);
 });
+
+test("memory settings matches baseline", async ({ page }) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Memory", exact: true }).click();
+  await expect(settings.getByText("Protocol memory fixture.")).toBeVisible();
+  await expect(settings).toHaveScreenshot("settings-memory.png", SNAPSHOT);
+});

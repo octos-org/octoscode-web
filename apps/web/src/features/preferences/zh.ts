@@ -1391,6 +1391,43 @@ const catalog: Readonly<Record<string, string>> = {
   Succeeded: "已完成",
   Cancelled: "已取消",
   Abandoned: "已中断",
+  // Settings memory (T-0024).
+  Memory: "记忆",
+  "Read and remember information in server Profile {profileId}":
+    "查看并记住服务器配置文件 {profileId} 中的信息",
+  "Editing and deleting memories are not available in the current protocol.":
+    "当前协议不支持编辑或删除记忆。",
+  Overview: "概览",
+  "Long-term memory": "长期记忆",
+  Today: "今日",
+  "{count} staging notes · Refresh {refresh}":
+    "{count} 条暂存笔记 · 刷新{refresh}",
+  enabled: "已启用",
+  "(count is a lower bound)": "（数量仅为下限）",
+  Entities: "实体",
+  "No entities yet.": "还没有实体。",
+  "Only the first entities are shown.": "仅显示部分实体。",
+  "Recent notes": "近期笔记",
+  "No recent notes.": "暂无近期笔记。",
+  "Search memories": "搜索记忆",
+  "No matching memories.": "没有匹配的记忆。",
+  "Remember this": "记住这段",
+  Summary: "摘要",
+  "Memory content": "记忆内容",
+  "{inserted} inserted · {updated} updated · {unchanged} unchanged":
+    "新增 {inserted} · 更新 {updated} · 未变化 {unchanged}",
+  "Request memory": "请求记忆",
+  "Memory request accepted: {status}": "记忆请求已接受：{status}",
+  "Promote to Knowledge": "提升为知识",
+  "Promotion staged for {count} record(s); refresh is {refresh}.":
+    "已为 {count} 条记录安排提升，刷新状态：{refresh}。",
+  Detail: "详情",
+  "Trust: {trust}": "信任级别：{trust}",
+  "No record body was reported.": "服务器未提供记录正文。",
+  "Choose an entity or search result to view its contents.":
+    "选择一个实体或搜索结果以查看内容。",
+  "Content is truncated by the server{size}.": "内容已被服务器截断{size}。",
+  "No content yet.": "暂无内容。",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };

@@ -307,6 +307,10 @@ const SkillsSettingsContent = lazyNamed(
   () => import("../features/skills/SkillsSettingsContent.tsx"),
   (module) => module.SkillsSettingsContent,
 );
+const MemorySettingsContent = lazyNamed(
+  () => import("../features/memory/MemorySettingsContent.tsx"),
+  (module) => module.MemorySettingsContent,
+);
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
   (module) => module.ApprovalPanel,
@@ -752,7 +756,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const skillsSettingsAvailable =
     Boolean(protocol.client && session.opened) &&
     supportsMethod(session.capabilities, APPUI_SKILL_METHODS.LIST);
+  const memorySettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsFeature(
+      session.capabilities,
+      CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+    ) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.MEMORY_OVERVIEW);
   const skillsProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const memoryProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   // Downloads for files delivered in the open Session, through the
   // authenticated blob API (`/api/files`) the composer uploads through.
@@ -4135,6 +4148,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ),
                   }
                 : {}),
+              ...(memorySettingsAvailable && protocol.client && session.opened
+                ? {
+                    memory: (
+                      <Suspense
+                        fallback={<DeferredSurface label="Loading memory…" />}
+                      >
+                        <MemorySettingsContent
+                          client={protocol.client}
+                          profileId={memoryProfileId}
+                          capabilities={session.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
             }}
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
@@ -4472,6 +4500,7 @@ const SETTINGS_LABELS = {
   general: "General",
   models: "Models",
   skills: "Skills",
+  memory: "Memory",
   close: "Close settings",
 } as const;
 

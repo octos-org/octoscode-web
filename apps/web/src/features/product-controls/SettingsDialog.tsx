@@ -5,7 +5,12 @@
  */
 import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
-import { GearIcon, ModelsIcon, SkillsIcon } from "../../ui/Icon.tsx";
+import {
+  GearIcon,
+  MemoryIcon,
+  ModelsIcon,
+  SkillsIcon,
+} from "../../ui/Icon.tsx";
 import { CloseButton } from "../../ui/CloseButton.tsx";
 import { settingsNavigationIntent } from "./selection-policy.ts";
 import type {
@@ -75,14 +80,17 @@ export function SettingsDialog({
   const generalId = `${navId}-general`;
   const modelsId = `${navId}-models`;
   const skillsId = `${navId}-skills`;
+  const memoryId = `${navId}-memory`;
   const closeRef = useRef<HTMLButtonElement>(null);
   if (!open) return null;
 
   const hasModels = slots.models !== undefined;
   const hasSkills = slots.skills !== undefined;
+  const hasMemory = slots.memory !== undefined;
   const effectiveSection =
     (activeSection === "models" && !hasModels) ||
-    (activeSection === "skills" && !hasSkills)
+    (activeSection === "skills" && !hasSkills) ||
+    (activeSection === "memory" && !hasMemory)
       ? "general"
       : activeSection;
 
@@ -95,13 +103,17 @@ export function SettingsDialog({
       ? generalId
       : effectiveSection === "models"
         ? modelsId
-        : skillsId;
+        : effectiveSection === "skills"
+          ? skillsId
+          : memoryId;
   const content =
     effectiveSection === "general"
       ? slots.general
       : effectiveSection === "models"
         ? slots.models
-        : slots.skills;
+        : effectiveSection === "skills"
+          ? slots.skills
+          : slots.memory;
 
   return (
     <ModalSurface
@@ -161,6 +173,22 @@ export function SettingsDialog({
             >
               <SkillsIcon />
               <span className={styles.navLabel}>{labels.skills}</span>
+            </button>
+          ) : null}
+          {hasMemory ? (
+            <button
+              id={memoryId}
+              type="button"
+              className={
+                effectiveSection === "memory"
+                  ? `${styles.navCell} ${styles.active}`
+                  : styles.navCell
+              }
+              aria-current={effectiveSection === "memory" ? "page" : undefined}
+              onClick={() => choose("memory")}
+            >
+              <MemoryIcon />
+              <span className={styles.navLabel}>{labels.memory}</span>
             </button>
           ) : null}
         </div>

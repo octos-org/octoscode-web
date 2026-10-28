@@ -13,6 +13,22 @@ let sockets;
 // may multiplex many Sessions and every transport hydrates the same truth.
 const sessionStateBySessionId = new Map();
 const skillJobsBySessionId = new Map();
+const memoryRecords = new Map([
+  [
+    "doc:t0008:1",
+    {
+      id: "doc:t0008:1",
+      kind: "document",
+      source: "t0008",
+      timestamp: "2026-10-28T00:00:00Z",
+      title: "T0008 protocol probe",
+      abstract: "protocol inventory fixture",
+      body: "probe body",
+      visits: 1,
+      trust: "untrusted",
+    },
+  ],
+]);
 function sessionState(sessionId) {
   let state = sessionStateBySessionId.get(sessionId);
   if (!state) {
@@ -62,6 +78,8 @@ const planAbsentAuthToken = "plan-absent-e2e-token";
 const planAbsentSockets = new WeakSet();
 const skillDuplicatesAuthToken = "skill-duplicates-e2e-token";
 const skillDuplicatesSockets = new WeakSet();
+const memoryMainAuthToken = "memory-main-e2e-token";
+const memoryMainSockets = new WeakSet();
 const PLAN_FEATURE = "plan.todos.v1";
 const PLAN_NOTIFICATION = "plan/updated";
 const PLAN_FIXTURE_PROMPT = "Plan fixture";
@@ -2528,6 +2546,11 @@ const baseCapabilities = {
     "skill/action/invoke",
     "skill/action/job/list",
     "skill/action/job/read",
+    "memory/overview",
+    "memory/entity",
+    "memory/search",
+    "memory/load",
+    "memory/ingest",
     "session/list",
     "session/delete",
     "session/files.list",
@@ -2555,6 +2578,7 @@ const baseCapabilities = {
     "session.workspace_cwd.v1",
     "skill.actions.v1",
     "skill.action_jobs.v1",
+    "auxiliary.rest_to_ws.v1",
   ],
 };
 
@@ -2584,6 +2608,16 @@ function capabilitiesFor(socket, state) {
         ],
       }
     : base;
+  const memoryCapabilities = memoryMainSockets.has(socket)
+    ? {
+        ...capabilities,
+        supported_methods: [
+          ...capabilities.supported_methods,
+          "memory/request",
+          "memory/promote",
+        ],
+      }
+    : capabilities;
   const workspaceRoot = state
     ? state.workspaceRoot
     : openedWorkspaceBySocket.get(socket);
@@ -2592,10 +2626,10 @@ function capabilitiesFor(socket, state) {
       workspaceRoot.slice(driverDiscoveryPrefix.length),
     );
     return {
-      ...capabilities,
+      ...memoryCapabilities,
       supported_methods: adverts.method
-        ? [...capabilities.supported_methods, DRIVER_GET_METHOD]
-        : capabilities.supported_methods,
+        ? [...memoryCapabilities.supported_methods, DRIVER_GET_METHOD]
+        : memoryCapabilities.supported_methods,
       supported_features: adverts.feature
         ? [...capabilities.supported_features, DRIVER_FEATURE]
         : capabilities.supported_features,
@@ -2606,26 +2640,29 @@ function capabilitiesFor(socket, state) {
       workspaceRoot.slice(peerControlPrefix.length),
     );
     return {
-      ...capabilities,
+      ...memoryCapabilities,
       supported_methods: adverts.method
         ? [
-            ...capabilities.supported_methods,
+            ...memoryCapabilities.supported_methods,
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : capabilities.supported_methods,
+        : memoryCapabilities.supported_methods,
       supported_features: adverts.feature
-        ? [...capabilities.supported_features, DRIVER_FEATURE]
-        : capabilities.supported_features,
+        ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
+        : memoryCapabilities.supported_features,
     };
   }
   const native = workspaceRoot?.startsWith(nativeWorkspacePrefix) === true;
-  if (!native) return capabilities;
+  if (!native) return memoryCapabilities;
   return {
-    ...capabilities,
-    supported_methods: [...capabilities.supported_methods, ...nativeMethods],
+    ...memoryCapabilities,
+    supported_methods: [
+      ...memoryCapabilities.supported_methods,
+      ...nativeMethods,
+    ],
     supported_features: [
-      ...capabilities.supported_features,
+      ...memoryCapabilities.supported_features,
       "state.thread_graph.v1",
       "state.turn_state_get.v1",
       "event.turn_steer_dropped.v1",
@@ -2636,7 +2673,7 @@ function capabilitiesFor(socket, state) {
       "coding.agent_control.v1",
     ],
     supported_notifications: [
-      ...capabilities.supported_notifications,
+      ...memoryCapabilities.supported_notifications,
       "turn/steer_dropped",
       "session/goal/updated",
       "session/goal/cleared",
@@ -3048,6 +3085,9 @@ sockets.on("connection", (socket, request) => {
   }
   if (connectionAuthToken === skillDuplicatesAuthToken) {
     skillDuplicatesSockets.add(socket);
+  }
+  if (connectionAuthToken === memoryMainAuthToken) {
+    memoryMainSockets.add(socket);
   }
   const connectionProfileId = authenticatedProfileForToken(connectionAuthToken);
   if (connectionProfileId) {
@@ -4863,6 +4903,99 @@ sockets.on("connection", (socket, request) => {
         return;
       }
       reply(socket, request.id, { job });
+      return;
+    }
+    if (request.method === "memory/overview") {
+      reply(socket, request.id, {
+        overview: {
+          long_term: "# Long-term memory\n\nProtocol memory fixture.",
+          long_term_updated_at: "2026-10-28T00:00:00Z",
+          long_term_truncated: false,
+          long_term_total_bytes: 43,
+          today: "Today’s memory note.",
+          today_truncated: false,
+          today_total_bytes: 20,
+          recent: [
+            {
+              date: "2026-10-28",
+              content: "Recent memory note.",
+              content_truncated: false,
+              content_total_bytes: 19,
+            },
+          ],
+          entities: [{ name: "t0008", summary: "Protocol entity fixture." }],
+          entities_truncated: false,
+          staging_notes: 1,
+          staging_truncated: false,
+          refresh_enabled: true,
+        },
+      });
+      return;
+    }
+    if (request.method === "memory/entity") {
+      if (request.params.name !== "t0008") {
+        replyError(socket, request.id, -32_170, "Memory entity not found");
+        return;
+      }
+      reply(socket, request.id, {
+        name: "t0008",
+        content: "# T0008\n\nProtocol entity detail.",
+        content_truncated: false,
+        content_total_bytes: 32,
+      });
+      return;
+    }
+    if (request.method === "memory/search") {
+      const query = String(request.params.query ?? "").toLowerCase();
+      const hits = [...memoryRecords.values()].filter((record) =>
+        `${record.title} ${record.abstract} ${record.body}`
+          .toLowerCase()
+          .includes(query),
+      );
+      reply(socket, request.id, { hits });
+      return;
+    }
+    if (request.method === "memory/load") {
+      const record = memoryRecords.get(request.params.id);
+      if (!record) {
+        replyError(socket, request.id, -32_170, "Memory record not found");
+        return;
+      }
+      record.visits = (record.visits ?? 0) + 1;
+      reply(socket, request.id, { record, page_truncated: false });
+      return;
+    }
+    if (request.method === "memory/ingest") {
+      let inserted = 0;
+      let updated = 0;
+      let unchanged = 0;
+      for (const record of request.params.records ?? []) {
+        if (memoryRecords.has(record.id)) {
+          if (memoryRecords.get(record.id).body === record.body) unchanged += 1;
+          else updated += 1;
+        } else inserted += 1;
+        memoryRecords.set(record.id, record);
+      }
+      reply(socket, request.id, {
+        inserted,
+        updated,
+        unchanged,
+        vectors_stored: 0,
+        embedded: 0,
+      });
+      return;
+    }
+    if (request.method === "memory/request") {
+      reply(socket, request.id, { status: "accepted", refresh_enabled: true });
+      return;
+    }
+    if (request.method === "memory/promote") {
+      const recordIds = [...memoryRecords.keys()].slice(0, 1);
+      reply(socket, request.id, {
+        record_ids: recordIds,
+        count: recordIds.length,
+        refresh_enabled: true,
+      });
       return;
     }
     if (request.method === "session/files.list") {
