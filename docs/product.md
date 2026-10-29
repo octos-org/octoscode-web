@@ -39,7 +39,7 @@ server does in the chosen folder.
 | Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback. |
 | Conversation  | Session-local Chat with durable transcript, FIFO prompts, interrupt, commands, safe GFM, and highlighted code.                  |
 | Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.             |
-| Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                      |
+| Decisions     | Approvals with action/impact/risk, explicit deny/session/once choices, questions, and permission-denied retry.                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.             |
 | Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.         |
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.     |

@@ -1541,6 +1541,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
   }, [fleetBriefFocusRequest, fleetRouteActive]);
 
+  const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
+    string | null
+  >(null);
   const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
@@ -1938,6 +1941,35 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       default:
         return assertNever(intent);
+    }
+  };
+
+  const retryPermissionDenied = async (turnId: string) => {
+    if (permissionRetryBusyTurnId) return;
+    const client = protocol.client;
+    const opened = session.opened;
+    const option = safety.permission.result?.profiles.find(
+      (profile) => profile.mode === "workspace_write",
+    );
+    const prompt = conversation.timeline.find(
+      (entry) =>
+        entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
+    )?.body;
+    if (!client || !opened || !option || !prompt) return;
+    setPermissionRetryBusyTurnId(turnId);
+    try {
+      await client.setPermissionProfile({
+        session_id: opened.session_id,
+        update: { mode: "workspace_write", network: option.network },
+      });
+      await safety.refreshPermission();
+      submit(prompt);
+    } catch (reason) {
+      setCommandError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    } finally {
+      setPermissionRetryBusyTurnId(null);
     }
   };
 
@@ -3484,6 +3516,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
+                          onRetryPermission={(turnId) =>
+                            void retryPermissionDenied(turnId)
+                          }
+                          permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
                       </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>

@@ -1783,6 +1783,21 @@ const catalog: Readonly<Record<string, string>> = {
   "Opening your coding session": "正在打开编程会话",
   "Enter path manually": "手动输入路径",
 
+  // Approval clarity (T-0019).
+  "High risk": "高风险",
+  "Medium risk": "中风险",
+  "Low risk": "低风险",
+  "Impact: {directory} · {network} · {deletion}":
+    "影响范围：{directory} · {network} · {deletion}",
+  "Directory {path}": "目录 {path}",
+  "Network not specified": "未说明是否联网",
+  "May delete files": "可能删除文件",
+  "No deletion indicated": "未要求删除",
+  "Allow for this session": "本会话都允许",
+  "Allow once": "允许一次",
+  "Switch to write and retry": "切换到可写后重试",
+  "Switching to write and retrying…": "正在切换到可写并重试…",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

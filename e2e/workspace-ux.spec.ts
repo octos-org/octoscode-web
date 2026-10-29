@@ -434,7 +434,7 @@ test("finishing approval and question takeovers returns the keyboard to the comp
   await input.fill("Request approval fixture");
   await input.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
-  await approval.getByRole("button", { name: /Yes/ }).click();
+  await approval.getByRole("button", { name: /Allow once/ }).click();
   await expect(approval).toBeHidden();
   await expect(input).toBeFocused();
   await page.keyboard.type("Follow-up after approval");

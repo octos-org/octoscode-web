@@ -8,6 +8,7 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { approvalImpactDetails } from "./approval-presentation.ts";
 
 interface ApprovalPanelProps {
   approval: ApprovalRequested;
@@ -29,6 +30,8 @@ export function ApprovalPanel({
   const t = useUiText();
   const command = approvalCommand(approval.typedDetails);
   const previewId = approvalDiffPreviewId(approval);
+  const impact = approvalImpactDetails(approval);
+  const risk = approval.risk?.toLowerCase();
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (
@@ -69,11 +72,36 @@ export function ApprovalPanel({
         <span className="approval-dot" />
         <span>{t("Approval required")}</span>
         {approval.risk ? (
-          <em>{t("{level} risk", { level: t(approval.risk) })}</em>
+          <em data-risk={risk}>
+            {t(
+              risk === "high" || risk === "critical"
+                ? "High risk"
+                : risk === "medium"
+                  ? "Medium risk"
+                  : "Low risk",
+            )}
+          </em>
         ) : null}
       </div>
       <div className="approval-body">
         <strong id="approval-title">{approval.title}</strong>
+        <p className="approval-impact">
+          {t("Impact: {directory} · {network} · {deletion}", {
+            directory: impact.directory
+              ? t("Directory {path}", { path: impact.directory })
+              : t("Current workspace"),
+            network: t(
+              impact.network === "allowed"
+                ? "Network allowed"
+                : impact.network === "blocked"
+                  ? "Network blocked"
+                  : "Network not specified",
+            ),
+            deletion: t(
+              impact.destructive ? "May delete files" : "No deletion indicated",
+            ),
+          })}
+        </p>
         <p>{approval.body}</p>
         {command ? <code>{command}</code> : null}
         <span className="approval-tool">
@@ -100,7 +128,7 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("deny", "request")}
         >
-          {t("No") + " "}
+          {t("Deny") + " "}
           <kbd>N</kbd>
         </button>
         <button
@@ -109,7 +137,7 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("approve", "session")}
         >
-          {t("This session") + " "}
+          {t("Allow for this session") + " "}
           <kbd>S</kbd>
         </button>
         <button
@@ -118,7 +146,7 @@ export function ApprovalPanel({
           disabled={busy}
           onClick={() => onDecide("approve", "request")}
         >
-          {busy ? t("Sending…") : t("Yes")} <kbd>Y</kbd>
+          {busy ? t("Sending…") : t("Allow once")} <kbd>Y</kbd>
         </button>
       </div>
     </ModalSurface>

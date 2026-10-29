@@ -1601,15 +1601,17 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(approval).toBeFocused();
   await expect(approval).toContainText("pnpm check");
   await page.keyboard.press("Shift+Tab");
-  await expect(approval.getByRole("button", { name: /Yes/ })).toBeFocused();
+  await expect(
+    approval.getByRole("button", { name: /Allow once/ }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(approval.getByRole("button", { name: /No/ })).toBeFocused();
+  await expect(approval.getByRole("button", { name: /Deny/ })).toBeFocused();
   const approvalAccessibility = await new AxeBuilder({ page })
     .include(".approval-card")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(approvalAccessibility.violations).toEqual([]);
-  await approval.getByRole("button", { name: /Yes/ }).click();
+  await approval.getByRole("button", { name: /Allow once/ }).click();
   await expect(approval).toBeHidden();
 
   await composer.fill("Request question fixture");

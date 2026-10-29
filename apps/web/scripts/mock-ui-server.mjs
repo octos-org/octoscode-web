@@ -5376,6 +5376,44 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (text === "Fail a write fixture") {
+    const denied = sessionState(sessionId).permission.mode === "read_only";
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: "write-permission",
+      name: "write_file",
+      arguments_preview: JSON.stringify({ path: "report.md" }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: "write-permission",
+      status: denied ? "error" : "complete",
+      ...(denied
+        ? {
+            error: "write_file is not permitted by read-only filesystem access",
+          }
+        : { output_preview: "report.md written" }),
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      {
+        outcome: "completed",
+        token_usage: { input_tokens: 12, output_tokens: 9 },
+      },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
   // plan.todos.v1: only the plan fixture streams a checklist, so every other
   // spec keeps a composer with nothing pinned above it.
   if (planFixtureSockets.has(socket) && text.startsWith(PLAN_FIXTURE_PROMPT)) {

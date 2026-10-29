@@ -471,7 +471,7 @@ for (const kind of ["approval", "question"] as const) {
     ).toHaveLength(0);
 
     if (kind === "approval")
-      await ownerDialog.getByRole("button", { name: /Yes/ }).click();
+      await ownerDialog.getByRole("button", { name: /Allow once/ }).click();
     else {
       await ownerDialog.getByLabel(/Full/).check();
       await ownerDialog.getByRole("button", { name: "Continue" }).click();
@@ -564,7 +564,7 @@ test("responds to a parked approval from the owning Session with exact ids", asy
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toBeVisible({
     timeout: 10_000,
   });
-  await approvalDialog.getByRole("button", { name: /Yes/ }).click();
+  await approvalDialog.getByRole("button", { name: /Allow once/ }).click();
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
