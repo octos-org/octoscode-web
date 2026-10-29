@@ -61,20 +61,48 @@ function AttachmentItem({
   const [sizeState, setSizeState] = useState<
     "pending" | "ready" | "unavailable"
   >(access?.describe ? "pending" : "unavailable");
+  const [saveAvailable, setSaveAvailable] = useState(true);
+  const [nearViewport, setNearViewport] = useState(false);
   const previewId = useId();
   const itemRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
+    if (!image) return;
+    const node = itemRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (records) => {
+        if (records.some((record) => record.isIntersecting)) {
+          setNearViewport(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [image]);
+
+  useEffect(() => {
     let current = true;
+    const shouldDescribe =
+      workspaceFile || previewOpen || (image && nearViewport);
     setSize(null);
     setSizeBytes(null);
-    setSizeState(access?.describe ? "pending" : "unavailable");
-    if (!access?.describe) return;
+    setSaveAvailable(true);
+    setSizeState(
+      access?.describe && shouldDescribe ? "pending" : "unavailable",
+    );
+    if (!access?.describe || !shouldDescribe) return;
     access.describe(reference, workspaceFile).then(
       (info) => {
         if (!current) return;
         setSizeState("ready");
-        if (info) {
+        setSaveAvailable(info?.saveAvailable !== false);
+        if (info?.sizeBytes !== undefined) {
           setSize(formatAttachmentSize(info.sizeBytes));
           setSizeBytes(info.sizeBytes);
         }
@@ -86,7 +114,7 @@ function AttachmentItem({
     return () => {
       current = false;
     };
-  }, [access, reference, workspaceFile]);
+  }, [access, reference, workspaceFile, previewOpen, image, nearViewport]);
 
   // Load an image preview once it scrolls near the viewport, so a long
   // transcript does not fetch every delivered image up front.
@@ -94,7 +122,9 @@ function AttachmentItem({
     if (
       !image ||
       !access ||
+      !nearViewport ||
       sizeState !== "ready" ||
+      !saveAvailable ||
       sizeBytes === null ||
       sizeBytes > 50 * 1024 * 1024
     ) {
@@ -102,40 +132,32 @@ function AttachmentItem({
     }
     const abort = new AbortController();
     let url: string | null = null;
-    const load = () => {
-      (workspaceFile
-        ? (access.downloadWorkspaceFile ?? access.download)
-        : access.download)(reference, abort.signal).then(
-        (blob) => {
-          if (abort.signal.aborted) return;
-          url = URL.createObjectURL(blob);
-          setPreview(url);
-        },
-        (reason: unknown) => {
-          if (!abort.signal.aborted) setError(errorMessage(reason));
-        },
-      );
-    };
-    const node = itemRef.current;
-    let observer: IntersectionObserver | null = null;
-    if (node && typeof IntersectionObserver !== "undefined") {
-      observer = new IntersectionObserver(
-        (records) => {
-          if (records.some((record) => record.isIntersecting)) {
-            observer?.disconnect();
-            load();
-          }
-        },
-        { rootMargin: "200px" },
-      );
-      observer.observe(node);
-    } else load();
+    (workspaceFile
+      ? (access.downloadWorkspaceFile ?? access.download)
+      : access.download)(reference, abort.signal).then(
+      (blob) => {
+        if (abort.signal.aborted) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+      },
+      (reason: unknown) => {
+        if (!abort.signal.aborted) setError(errorMessage(reason));
+      },
+    );
     return () => {
-      observer?.disconnect();
       abort.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [access, image, reference, sizeState, sizeBytes, workspaceFile]);
+  }, [
+    access,
+    image,
+    reference,
+    sizeState,
+    sizeBytes,
+    saveAvailable,
+    workspaceFile,
+    nearViewport,
+  ]);
 
   const download = async () => {
     if (!access) return;
@@ -191,6 +213,7 @@ function AttachmentItem({
           className={styles.download}
           disabled={
             !access ||
+            !saveAvailable ||
             (workspaceFile
               ? access.previewAvailable === false
               : access.deliveredPreviewAvailable === false)
@@ -204,7 +227,7 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || busy}
+          disabled={!access || busy || !saveAvailable}
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >
@@ -213,6 +236,7 @@ function AttachmentItem({
       </div>
       {previewOpen &&
       access &&
+      saveAvailable &&
       (workspaceFile
         ? access.previewAvailable !== false
         : access.deliveredPreviewAvailable !== false) ? (
@@ -223,6 +247,7 @@ function AttachmentItem({
             workspaceFile={workspaceFile}
             sizeRequired={!workspaceFile}
             sizePending={sizeState === "pending"}
+            downloadAvailable={saveAvailable}
             {...(sizeBytes === null ? {} : { sizeBytes })}
             loadBlob={(signal) =>
               (workspaceFile
@@ -255,6 +280,11 @@ function AttachmentItem({
       {error ? (
         <p className={styles.error} role="status" title={error}>
           {t("This file could not be loaded.")}
+        </p>
+      ) : null}
+      {!saveAvailable ? (
+        <p className={styles.error} role="status">
+          {t("No preview or download route is available for this file.")}
         </p>
       ) : null}
     </li>

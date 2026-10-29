@@ -1699,6 +1699,8 @@ const catalog: Readonly<Record<string, string>> = {
     "文件过大，无法安全地内联预览。请下载后使用其他应用打开。",
   "This file's size couldn't be verified. Download it to open it in another app.":
     "无法确认文件大小。请下载后使用其他应用打开。",
+  "No preview or download route is available for this file.":
+    "此文件没有可用的预览或下载途径。",
   "Show more": "显示更多",
   "Sandboxed preview of {name}": "{name} 的沙箱预览",
   "Previous page": "上一页",

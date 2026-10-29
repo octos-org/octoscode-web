@@ -7,6 +7,7 @@ import styles from "./PdfPreview.module.css";
 
 const MAX_CANVAS_PIXELS = 4_000_000;
 const MAX_CANVAS_EDGE = 2_048;
+const MAX_PAGE_TEXT_CHARACTERS = 48_000;
 
 export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
   const t = useUiText();
@@ -15,6 +16,8 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
   const [pageCount, setPageCount] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageText, setPageText] = useState("");
+  const [textOpen, setTextOpen] = useState(false);
+  const [textLoading, setTextLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(true);
 
@@ -25,6 +28,8 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
     setRendering(true);
     setError(null);
     setPageNumber(1);
+    setTextOpen(false);
+    setPageText("");
     void Promise.all([blob.arrayBuffer(), import("pdfjs-dist")]).then(
       ([buffer, pdfjs]) => {
         if (!current) return;
@@ -74,6 +79,7 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
     let cancel: (() => void) | undefined;
     setRendering(true);
     setError(null);
+    setTextOpen(false);
     setPageText("");
     void document.getPage(pageNumber).then(
       (page) => {
@@ -96,14 +102,9 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
         if (!context) throw new Error("Canvas is unavailable");
         const task = page.render({ canvas, canvasContext: context, viewport });
         cancel = () => task.cancel();
-        void Promise.all([task.promise, page.getTextContent()]).then(
-          ([, text]) => {
+        void task.promise.then(
+          () => {
             if (!current) return;
-            setPageText(
-              text.items
-                .map((item) => ("str" in item ? item.str : ""))
-                .join(" "),
-            );
             setRendering(false);
             page.cleanup();
           },
@@ -127,6 +128,46 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
       cancel?.();
     };
   }, [document, pageNumber]);
+
+  useEffect(() => {
+    if (!document || !textOpen) return;
+    let current = true;
+    setTextLoading(true);
+    setPageText("");
+    void document.getPage(pageNumber).then(
+      (page) => {
+        void page.getTextContent().then(
+          (text) => {
+            if (!current) return;
+            setPageText(
+              text.items
+                .map((item) => ("str" in item ? item.str : ""))
+                .join(" ")
+                .slice(0, MAX_PAGE_TEXT_CHARACTERS),
+            );
+            setTextLoading(false);
+            page.cleanup();
+          },
+          (reason: unknown) => {
+            if (current) {
+              setError(errorMessage(reason));
+              setTextLoading(false);
+              page.cleanup();
+            }
+          },
+        );
+      },
+      (reason: unknown) => {
+        if (current) {
+          setError(errorMessage(reason));
+          setTextLoading(false);
+        }
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [document, pageNumber, textOpen]);
 
   return (
     <div className={styles.pdf} aria-busy={rendering}>
@@ -185,10 +226,17 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
           aria-label={t("Page {page} of {name}", { page: pageNumber, name })}
         />
       </div>
-      {pageText ? (
-        <details className={styles.textAlternative}>
+      {pageCount > 0 ? (
+        <details
+          className={styles.textAlternative}
+          onToggle={(event) => setTextOpen(event.currentTarget.open)}
+        >
           <summary>{t("Page text")}</summary>
-          <pre>{pageText}</pre>
+          <pre>
+            {textLoading
+              ? t("Loading preview…")
+              : pageText || t("No text content.")}
+          </pre>
         </details>
       ) : null}
     </div>

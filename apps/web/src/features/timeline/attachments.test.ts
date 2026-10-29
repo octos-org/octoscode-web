@@ -4,7 +4,6 @@ import {
   attachmentNameParts,
   formatAttachmentSize,
   isPreviewableImage,
-  uniqueAttachmentFile,
 } from "./attachments.ts";
 
 describe("attachment naming", () => {
@@ -29,25 +28,6 @@ describe("attachment naming", () => {
     expect(formatAttachmentSize(999)).toBe("999 B");
     expect(formatAttachmentSize(1536)).toBe("1.5 KiB");
     expect(formatAttachmentSize(2 * 1024 * 1024)).toBe("2 MiB");
-  });
-
-  it("resolves a server file handle only when the match is unique", () => {
-    const files = [
-      { filename: "report.md", path: "pf/coding/report.md", size_bytes: 10 },
-      { filename: "report.md", path: "/other/report.md", size_bytes: 20 },
-    ];
-    expect(uniqueAttachmentFile("pf/coding/report.md", files)).toBe(files[0]);
-    expect(uniqueAttachmentFile("report.md", files)).toBeNull();
-    expect(uniqueAttachmentFile("missing.md", files)).toBeNull();
-    expect(
-      uniqueAttachmentFile("/workspace/report.md", [
-        {
-          filename: "report.md",
-          path: "pf/dXNlcnMvd2ViL3dvcmtzcGFjZS9yZXBvcnQubWQ/report.md",
-          size_bytes: 20,
-        },
-      ]),
-    ).toMatchObject({ size_bytes: 20 });
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {

@@ -1380,7 +1380,12 @@ const http = createServer(async (request, response) => {
       response.writeHead(403).end("access denied");
       return;
     }
-    response.writeHead(200, { "content-type": file.type }).end(file.bytes);
+    response
+      .writeHead(200, {
+        "content-type": file.type,
+        "content-length": file.bytes.length,
+      })
+      .end(request.method === "HEAD" ? undefined : file.bytes);
     return;
   }
   if (request.url === "/api/auth/me") {

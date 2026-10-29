@@ -144,6 +144,30 @@ export function createMediaCommands(options: {
         size_bytes: file.size,
       };
     },
+    async stat(path: string, signal?: AbortSignal): Promise<number> {
+      if (
+        !supportsMethod(
+          options.capabilities,
+          CORE_UI_METHODS.SESSION_FILES_LIST,
+        )
+      )
+        throw new Error("Session files are unavailable on this server");
+      if (!path || path.length > 16384 || /\p{Cc}/u.test(path))
+        throw new Error("Invalid file reference");
+      const url = blobApiUrl(options.endpoint, "files");
+      url.searchParams.set("path", path);
+      url.searchParams.set("session", options.sessionId);
+      const response = await request(url, {
+        method: "HEAD",
+        ...(signal ? { signal } : {}),
+      });
+      const value = response.headers.get("content-length");
+      const sizeBytes = value === null ? NaN : Number(value);
+      if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+        throw new Error("File size is unavailable");
+      }
+      return sizeBytes;
+    },
     async download(path: string, signal?: AbortSignal): Promise<Blob> {
       if (
         !supportsMethod(

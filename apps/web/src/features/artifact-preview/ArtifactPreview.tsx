@@ -66,6 +66,8 @@ export interface ArtifactPreviewProps {
   loadBlob?: (signal?: AbortSignal) => Promise<Blob>;
   /** Optional unbounded save route, separate from the bounded preview reader. */
   downloadBlob?: (signal?: AbortSignal) => Promise<Blob>;
+  /** False only when the actual server route cannot save this file. */
+  downloadAvailable?: boolean | undefined;
   /** Optional host integration; hidden until the server offers a real reveal action. */
   onReveal?: (path: string) => void;
 }
@@ -79,11 +81,14 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       ? "text"
       : artifactKind(reference));
   const textKind = ["markdown", "code", "text"].includes(kind);
+  const documentLimit = ["markdown", "code", "text", "html", "svg"].includes(
+    kind,
+  )
+    ? MAX_TEXT_PREVIEW_BYTES
+    : MAX_AUTOMATIC_PREVIEW_BYTES;
   const previewSizeLimit = props.workspaceFile
-    ? 32 * 1024 * 1024
-    : ["markdown", "code", "text", "html", "svg"].includes(kind)
-      ? MAX_TEXT_PREVIEW_BYTES
-      : MAX_AUTOMATIC_PREVIEW_BYTES;
+    ? Math.min(32 * 1024 * 1024, documentLimit)
+    : documentLimit;
   const oversizedByMetadata =
     props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit;
   const needsBlob =
@@ -181,13 +186,15 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const oversized = error?.includes("workspace_file_too_large") ?? false;
-  const canDownload = props.downloadBlob
-    ? true
-    : oversized
-      ? false
-      : props.loadBlob
-        ? true
-        : textKind && props.text !== undefined && !props.hasMore;
+  const canDownload =
+    props.downloadAvailable !== false &&
+    (props.downloadBlob
+      ? true
+      : oversized
+        ? false
+        : props.loadBlob
+          ? true
+          : textKind && props.text !== undefined && !props.hasMore);
   let content: ReactNode;
   if (loading) {
     content = (

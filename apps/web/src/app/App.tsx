@@ -233,7 +233,6 @@ import {
   readSessionFileSize,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
-import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -794,50 +793,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !attachmentProfileId
     )
       return null;
-    let filesPromise:
-      | Promise<{ filename: string; path: string; size_bytes: number }[]>
-      | undefined;
-    let refreshPromise:
-      | Promise<{ filename: string; path: string; size_bytes: number }[]>
-      | undefined;
-    let refreshUsers = 0;
-    const missingReferences = new Set<string>();
-    const canDescribe = supportsMethod(
+    const canReadWorkspace = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_READ,
+    );
+    const canUseBlob = supportsMethod(
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
-    const listedFile = async (reference: string) => {
-      if (missingReferences.has(reference)) return null;
-      filesPromise ??= client
-        .listSessionFiles({ session_id: attachmentSessionId })
-        .then((result) => result.files);
-      try {
-        let file = uniqueAttachmentFile(reference, await filesPromise);
-        if (!file) {
-          // A later delivery may postdate the shared listing. Refresh a miss
-          // once for this card; duplicates still stay ambiguous.
-          filesPromise = undefined;
-          refreshUsers += 1;
-          try {
-            refreshPromise ??= client
-              .listSessionFiles({ session_id: attachmentSessionId })
-              .then((result) => result.files);
-            filesPromise = refreshPromise;
-            file = uniqueAttachmentFile(reference, await filesPromise);
-          } finally {
-            refreshUsers -= 1;
-            if (refreshUsers === 0) refreshPromise = undefined;
-          }
-          if (!file) missingReferences.add(reference);
-        }
-        return file;
-      } catch (reason) {
-        filesPromise = undefined;
-        throw reason;
-      }
-    };
+    const mediaCommands = () =>
+      client.mediaCommands(
+        attachmentSessionId,
+        attachmentProfileId,
+        capabilities,
+      );
     return {
-      ...(canDescribe
+      ...(canReadWorkspace || canUseBlob
         ? {
             async describe(reference: string, workspaceFile = false) {
               if (workspaceFile) {
@@ -845,15 +816,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   reference,
                   attachmentWorkspaceRoot,
                 );
-                if (
-                  !path ||
-                  !supportsMethod(
-                    capabilities,
-                    CORE_UI_METHODS.SESSION_FILES_READ,
-                  )
-                ) {
-                  return null;
-                }
+                if (!path || !canReadWorkspace) return null;
                 try {
                   return {
                     sizeBytes: await readSessionFileSize(
@@ -863,12 +826,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ),
                   };
                 } catch (reason) {
-                  if (isWorkspaceReadLimitError(reason)) return null;
-                  throw reason;
+                  if (!isWorkspaceReadLimitError(reason)) throw reason;
+                  if (!canUseBlob) return { saveAvailable: false };
+                  try {
+                    return {
+                      sizeBytes: await (await mediaCommands()).stat(path),
+                    };
+                  } catch {
+                    // An approved external workspace is not necessarily
+                    // readable by the profile-contained legacy endpoint.
+                    return { saveAvailable: false };
+                  }
                 }
               }
-              const file = await listedFile(reference);
-              return file ? { sizeBytes: file.size_bytes } : null;
+              if (!canUseBlob) return null;
+              try {
+                return {
+                  sizeBytes: await (await mediaCommands()).stat(reference),
+                };
+              } catch {
+                return null;
+              }
             },
           }
         : {}),
@@ -950,9 +928,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           capabilities,
         );
         // The legacy endpoint authorizes workspace-relative paths against the
-        // same Session. It can save files beyond the preview RPC's 32 MiB cap;
-        // absolute tool paths must first be made workspace-relative.
-        return commands.download(workspacePath ?? reference, signal);
+        // same Session. Verify it can serve this root before offering a large
+        // download; approved external workspaces fail closed here.
+        const saveReference = workspacePath ?? reference;
+        await commands.stat(saveReference, signal);
+        return commands.download(saveReference, signal);
       },
     };
   }, [

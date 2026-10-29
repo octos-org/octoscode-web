@@ -31,14 +31,18 @@ export function writtenArtifactPath(
 }
 
 function validPath(value: unknown): string | null {
-  return typeof value === "string" &&
-    value.trim() &&
-    !/\p{Cc}/u.test(value) &&
-    value.length <= 16_384 &&
-    !value.includes("\\") &&
-    !value.split("/").includes("..") &&
-    !value.startsWith("up/") &&
-    !value.startsWith("pf/")
-    ? value
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    /\p{Cc}/u.test(value) ||
+    value.length > 16_384
+  ) {
+    return null;
+  }
+  const normalized = value.replace(/\\/g, "/");
+  return !normalized.split("/").includes("..") &&
+    !normalized.startsWith("up/") &&
+    !normalized.startsWith("pf/")
+    ? normalized
     : null;
 }

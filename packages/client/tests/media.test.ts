@@ -94,6 +94,26 @@ describe("authenticated blob transport candidate", () => {
     expect(init.redirect).toBe("error");
     expect(init.body).toBeInstanceOf(FormData);
   });
+  it("reads authoritative file size with an authenticated HEAD request", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 200,
+          headers: { "Content-Length": "476" },
+        }),
+    );
+    const commands = createMediaCommands({ ...options, fetch: fetchMock });
+    await expect(commands.stat("report.md")).resolves.toBe(476);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      URL,
+      RequestInit,
+    ];
+    expect(init.method).toBe("HEAD");
+    expect(url.searchParams.get("path")).toBe("report.md");
+    expect(url.searchParams.get("session")).toBe(options.sessionId);
+    expect((init.headers as Headers).get("X-Profile-Id")).toBe("p1");
+  });
+
   it("rejects wrong-owner/malformed responses and never echoes a response body", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify([handle("p2")])),

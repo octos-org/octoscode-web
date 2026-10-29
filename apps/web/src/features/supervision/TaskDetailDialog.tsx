@@ -35,7 +35,14 @@ interface TaskDetailDialogProps {
   workspaceReadAvailable?: boolean;
   profileFileReadAvailable?: boolean;
   describeArtifact?:
-    ((path: string) => Promise<{ sizeBytes: number } | null>) | undefined;
+    | ((
+        path: string,
+        workspaceFile?: boolean,
+      ) => Promise<{
+        sizeBytes?: number;
+        saveAvailable?: boolean;
+      } | null>)
+    | undefined;
   loadArtifact?:
     ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
   downloadArtifact?:
@@ -61,21 +68,27 @@ export function TaskDetailDialog({
     path: string;
     pending: boolean;
     sizeBytes?: number;
+    saveAvailable?: boolean;
   }>();
   useEffect(() => {
-    if (!selectedPath?.startsWith("pf/") || !describeArtifact) {
+    if (!selectedPath || !describeArtifact) {
       setSizeResult(undefined);
       return;
     }
     let current = true;
     setSizeResult({ path: selectedPath, pending: true });
-    describeArtifact(selectedPath).then(
+    describeArtifact(selectedPath, !selectedPath.startsWith("pf/")).then(
       (info) => {
         if (current) {
           setSizeResult({
             path: selectedPath,
             pending: false,
-            ...(info ? { sizeBytes: info.sizeBytes } : {}),
+            ...(info?.sizeBytes !== undefined
+              ? { sizeBytes: info.sizeBytes }
+              : {}),
+            ...(info?.saveAvailable !== undefined
+              ? { saveAvailable: info.saveAvailable }
+              : {}),
           });
         }
       },
@@ -100,14 +113,14 @@ export function TaskDetailDialog({
   );
   const profileFile = selectedPath?.startsWith("pf/") === true;
   const sizePending = Boolean(
-    profileFile &&
+    selectedPath &&
     describeArtifact &&
     (sizeResult?.path !== selectedPath || sizeResult.pending),
   );
-  const sizeBytes =
-    profileFile && sizeResult?.path === selectedPath
-      ? sizeResult.sizeBytes
-      : undefined;
+  const currentSize =
+    sizeResult?.path === selectedPath ? sizeResult : undefined;
+  const sizeBytes = currentSize?.sizeBytes;
+  const saveAvailable = currentSize?.saveAvailable;
 
   return (
     <ModalSurface
@@ -224,6 +237,7 @@ export function TaskDetailDialog({
                   }
                   sizeRequired={profileFile}
                   sizePending={sizePending}
+                  downloadAvailable={saveAvailable}
                   {...(sizeBytes === undefined ? {} : { sizeBytes })}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
