@@ -1367,6 +1367,10 @@ const catalog: Readonly<Record<string, string>> = {
   "A steering result was inconclusive; queued prompts are paused.":
     "插话结果不确定；排队的提示已暂停。",
   "Retry queued delivery": "重试排队投递",
+  "Checking response status": "正在检查回复状态",
+  "Response status uncertain": "回复状态不确定",
+  Stopped: "已停止",
+  "Waiting for approval": "等待审批",
 
   // Settings skills (T-0023).
   Skills: "技能",

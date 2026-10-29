@@ -76,6 +76,24 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
     expect(source).toContain("session-panel-copy.ts");
   });
 
+  it("translates every dynamic sidebar status label", async () => {
+    const { loadChineseCatalog } = await import("./ui-text.tsx");
+    const catalog = await loadChineseCatalog();
+    for (const source of [
+      "Waiting for input",
+      "Checking response status",
+      "Response status uncertain",
+      "Starting",
+      "Working",
+      "Stopped",
+      "Working in background",
+      "Completed in background",
+      "Background turn failed",
+      "Waiting for approval",
+    ])
+      expect(catalog[source], source).toBeTruthy();
+  });
+
   it("no generated key collides with a DIFFERENT zh.ts value", () => {
     for (const [source, translated] of [
       ...Object.entries(REASONING_ZH_COPY),

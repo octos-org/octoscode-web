@@ -979,7 +979,7 @@ export function ProductSidebar({
             className={`${styles.settings} ${fleetActive ? styles.settingsActive : ""}`}
             aria-current={fleetActive ? "page" : undefined}
             aria-label={t(fleetEntry.label)}
-            title={collapsed ? fleetEntry.label : undefined}
+            title={collapsed ? t(fleetEntry.label) : undefined}
             data-fleet-nav="entry"
             onClick={onFleet}
           >
