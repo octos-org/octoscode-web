@@ -192,7 +192,7 @@ for (const storageKind of ["localStorage", "sessionStorage"] as const) {
     // empty state instead of that transcript's "external links" prose.
     await expect(
       page.getByRole("heading", {
-        name: "Ask Octos to work on this repository",
+        name: "What can Octos help with?",
       }),
     ).toBeVisible();
     await composer.fill("Keep this draft while changing the theme.");

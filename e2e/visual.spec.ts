@@ -87,6 +87,18 @@ test("approval takeover matches baseline", async ({ page }) => {
   await expect(page).toHaveScreenshot("approval-card.png", SNAPSHOT);
 });
 
+test("empty session template home matches baseline", async ({ page }) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await expect(
+    page.getByRole("region", { name: "What can Octos help with?" }),
+  ).toBeVisible();
+  await expect(page.locator(".workspace-grid")).toHaveScreenshot(
+    "session-templates.png",
+    SNAPSHOT,
+  );
+});
+
 test("session reply matches baseline", async ({ page }) => {
   await connect(page);
   await startDefaultWorkspace(page);
