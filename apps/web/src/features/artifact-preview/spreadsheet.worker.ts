@@ -80,13 +80,23 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
   });
   let remainingCells = MAX_CELLS;
   return workbook.SheetNames.map((name) => {
-    const source = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name]!, {
+    const worksheet = workbook.Sheets[name]!;
+    const actualRange = XLSX.utils.decode_range(worksheet["!ref"] ?? "A1");
+    const cappedRange = {
+      s: actualRange.s,
+      e: {
+        r: Math.min(actualRange.e.r, actualRange.s.r + 4_999),
+        c: Math.min(actualRange.e.c, actualRange.s.c + MAX_COLUMNS - 1),
+      },
+    };
+    const clipped =
+      actualRange.e.r > cappedRange.e.r || actualRange.e.c > cappedRange.e.c;
+    const source = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
       header: 1,
       raw: false,
       defval: "",
       blankrows: false,
-      // Cap the used range before SheetJS materializes sparse far-right cells.
-      range: "A1:GR5000",
+      range: cappedRange,
     });
     const columns = Math.min(
       MAX_COLUMNS,
@@ -103,6 +113,7 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
       );
     });
     if (
+      clipped ||
       source.length > rows.length ||
       source.some((row) => row.length > columns)
     ) {

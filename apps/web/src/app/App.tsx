@@ -832,9 +832,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             },
           }
         : {}),
-      previewAvailable:
-        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) ||
-        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST),
+      previewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_READ,
+      ),
+      deliveredPreviewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_LIST,
+      ),
       async download(reference, signal) {
         const commands = await client.mediaCommands(
           attachmentSessionId,

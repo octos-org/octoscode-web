@@ -15,8 +15,10 @@ export interface AttachmentAccess {
     reference: string,
     signal?: AbortSignal,
   ) => Promise<Blob>;
-  /** False when neither workspace-read nor legacy blob download is advertised. */
+  /** False when workspace reads are not advertised. */
   previewAvailable?: boolean;
+  /** False when the legacy delivered-file blob method is not advertised. */
+  deliveredPreviewAvailable?: boolean;
   /** Optional server-listed metadata; duplicate or unlisted names return null. */
   describe?: (reference: string) => Promise<{ sizeBytes: number } | null>;
 }

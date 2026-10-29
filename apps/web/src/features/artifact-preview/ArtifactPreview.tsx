@@ -53,6 +53,8 @@ export interface ArtifactPreviewProps {
   path?: string;
   /** Text supplied by task/artifact/read. Binary documents use loadBlob instead. */
   text?: string | undefined;
+  /** Server-listed size, when known; avoids fetching oversized previews. */
+  sizeBytes?: number | undefined;
   hasMore?: boolean;
   onLoadMore?: () => void;
   loadBlob?: (signal?: AbortSignal) => Promise<Blob>;
@@ -67,8 +69,17 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   const reference = props.path ?? props.name;
   const kind = props.kind ?? artifactKind(reference);
   const textKind = ["markdown", "code", "text"].includes(kind);
+  const previewSizeLimit = ["markdown", "code", "text", "html", "svg"].includes(
+    kind,
+  )
+    ? MAX_TEXT_PREVIEW_BYTES
+    : MAX_AUTOMATIC_PREVIEW_BYTES;
+  const oversizedByMetadata =
+    props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit;
   const shouldFetch =
-    kind !== "unsupported" && (!textKind || props.text === undefined);
+    !oversizedByMetadata &&
+    kind !== "unsupported" &&
+    (!textKind || props.text === undefined);
   const [blob, setBlob] = useState<Blob>();
   const [loadedText, setLoadedText] = useState<string>();
   const [loading, setLoading] = useState(shouldFetch);
@@ -81,7 +92,7 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   const hasLoader = Boolean(props.loadBlob);
 
   useEffect(() => {
-    if (!shouldFetch || !hasLoader) {
+    if (oversizedByMetadata || !shouldFetch || !hasLoader) {
       setLoading(false);
       return;
     }
@@ -108,7 +119,7 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       },
     );
     return () => abort.abort();
-  }, [shouldFetch, hasLoader, retry, reference, textKind]);
+  }, [shouldFetch, hasLoader, retry, reference, textKind, oversizedByMetadata]);
 
   const download = async () => {
     if (downloading) return;
@@ -153,6 +164,14 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     content = (
       <div className={styles.message} role="status">
         {t("Loading preview…")}
+      </div>
+    );
+  } else if (oversizedByMetadata) {
+    content = (
+      <div className={styles.message}>
+        {t(
+          "This file is too large for safe inline preview. Download it to open it in another app.",
+        )}
       </div>
     );
   } else if (shouldFetch && !props.loadBlob) {

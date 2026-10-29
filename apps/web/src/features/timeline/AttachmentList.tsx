@@ -171,7 +171,12 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || access.previewAvailable === false}
+          disabled={
+            !access ||
+            (workspaceFile
+              ? access.previewAvailable === false
+              : access.deliveredPreviewAvailable === false)
+          }
           aria-expanded={previewOpen}
           aria-controls={previewId}
           onClick={() => setPreviewOpen((value) => !value)}
@@ -194,11 +199,16 @@ function AttachmentItem({
           {busy ? t("Downloading…") : t("Download")}
         </button>
       </div>
-      {previewOpen && access && access.previewAvailable !== false ? (
+      {previewOpen &&
+      access &&
+      (workspaceFile
+        ? access.previewAvailable !== false
+        : access.deliveredPreviewAvailable !== false) ? (
         <div id={previewId} className={styles.previewPanel}>
           <ArtifactPreview
             name={name}
             path={reference}
+            {...(sizeBytes === null ? {} : { sizeBytes })}
             loadBlob={(signal) =>
               (workspaceFile
                 ? (access.downloadWorkspaceFile ?? access.download)

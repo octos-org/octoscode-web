@@ -4,9 +4,14 @@ import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./TaskDetailDialog.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { ArtifactPreview } from "../artifact-preview/ArtifactPreview.tsx";
-import type { ArtifactKind } from "../artifact-preview/artifact-kind.ts";
+import {
+  artifactKind,
+  type ArtifactKind,
+} from "../artifact-preview/artifact-kind.ts";
 
-function previewKind(kind: string): ArtifactKind | undefined {
+function previewKind(kind: string, path?: string): ArtifactKind | undefined {
+  const byPath = path ? artifactKind(path) : "unsupported";
+  if (byPath !== "unsupported") return byPath;
   if (kind === "markdown") return "markdown";
   if (kind === "json") return "code";
   if (["text", "report", "log"].includes(kind)) return "text";
@@ -143,7 +148,10 @@ export function TaskDetailDialog({
                     selected.artifact.path?.split(/[\\/]/).at(-1) ??
                     selected.artifact.title
                   }
-                  kind={previewKind(selected.artifact.kind)}
+                  kind={previewKind(
+                    selected.artifact.kind,
+                    selected.artifact.path,
+                  )}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
                     : {})}

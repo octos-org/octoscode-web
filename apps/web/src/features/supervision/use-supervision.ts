@@ -27,7 +27,10 @@ import { RequestGate } from "../async/request-gate.ts";
 import { terminalTurnId } from "../timeline/entry-model.ts";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { artifactReadsBlob } from "../artifact-preview/artifact-kind.ts";
+import {
+  artifactKind,
+  artifactReadsBlob,
+} from "../artifact-preview/artifact-kind.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
@@ -378,11 +381,14 @@ export function useSupervision(
       }));
       return;
     }
-    if (
-      !["text", "report", "log", "markdown", "json"].includes(artifact.kind) &&
-      artifact.path &&
-      artifactReadsBlob(artifact.path)
-    ) {
+    const pathKind = artifact.path
+      ? artifactKind(artifact.path)
+      : "unsupported";
+    const textArtifact =
+      pathKind !== "unsupported"
+        ? ["markdown", "code", "text"].includes(pathKind)
+        : ["text", "report", "log", "markdown", "json"].includes(artifact.kind);
+    if (!textArtifact && artifact.path && artifactReadsBlob(artifact.path)) {
       setState((current) => ({
         ...current,
         detail: {
