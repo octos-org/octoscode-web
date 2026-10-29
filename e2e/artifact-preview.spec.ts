@@ -182,6 +182,44 @@ test("verifies a zero file_attached size through the workspace reader", async ({
   await expect(item.locator('[data-artifact-kind="image"] img')).toBeVisible();
 });
 
+test("uses the delivery-time copy when the original source is gone", async ({
+  page,
+}) => {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (
+        request.method === "session/files/read" &&
+        !request.params.path.startsWith(".artifacts/delivered/")
+      ) {
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            error: {
+              code: -32004,
+              message: "workspace file was not found",
+              data: { kind: "workspace_file_not_found" },
+            },
+          }),
+        );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  const sessionId = await openConversation(page);
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=photo.png&valid=1`,
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator('[data-attachment="photo.png"]');
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(item.locator('[data-artifact-kind="image"] img')).toBeVisible();
+});
+
 test("previews delivered images without a replayed size event", async ({
   page,
 }) => {

@@ -1,12 +1,28 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
 import {
+  deliveredArtifactWorkspacePath,
   readSessionFileBlob,
   readSessionFileSize,
   sessionUploadWorkspacePath,
 } from "./session-file-read.ts";
 
 describe("session file blob reader", () => {
+  it("maps delivered references to Core's delivery-time copy path", async () => {
+    const reference = "/external/reports/photo.png";
+    const bucket = createHash("sha256")
+      .update(reference)
+      .digest("hex")
+      .slice(0, 32);
+    await expect(deliveredArtifactWorkspacePath(reference)).resolves.toBe(
+      `.artifacts/delivered/${bucket}/photo.png`,
+    );
+    await expect(
+      deliveredArtifactWorkspacePath("up/encoded/photo.png"),
+    ).resolves.toBeNull();
+  });
+
   it("maps uploaded handles to their materialized workspace path", () => {
     expect(sessionUploadWorkspacePath("up/encoded/photo.png")).toBe(
       "uploads/photo.png",

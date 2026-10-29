@@ -1,6 +1,6 @@
 import { randomUUID } from "../src/shared/uuid.ts";
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
@@ -5120,9 +5120,21 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "session/files/read") {
       const path = request.params.path;
-      const entry = [...deliveredFiles.entries()].find(
-        ([key]) => key.startsWith(`${sessionId}\n`) && key.endsWith(`/${path}`),
-      );
+      const entry = [...deliveredFiles.entries()].find(([key]) => {
+        if (!key.startsWith(`${sessionId}\n`)) return false;
+        if (path.startsWith(".artifacts/delivered/")) {
+          const original = key.slice(sessionId.length + 1);
+          const bucket = createHash("sha256")
+            .update(original)
+            .digest("hex")
+            .slice(0, 32);
+          return (
+            path ===
+            `.artifacts/delivered/${bucket}/${original.split("/").at(-1)}`
+          );
+        }
+        return key.endsWith(`/${path}`);
+      });
       if (!entry) {
         replyError(socket, request.id, -32004, "workspace file was not found", {
           kind: "workspace_file_not_found",

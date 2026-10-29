@@ -18,6 +18,31 @@ export function isWorkspaceRelativePath(value: string): boolean {
   );
 }
 
+/** Core's delivery-time copy path from octos-bus session_artifacts. */
+export async function deliveredArtifactWorkspacePath(
+  reference: string,
+): Promise<string | null> {
+  if (
+    !reference ||
+    reference.startsWith("up/") ||
+    reference.startsWith("pf/")
+  ) {
+    return null;
+  }
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(reference),
+  );
+  const bucket = Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const name = (reference.split(/[\\/]/).at(-1) || "artifact").replace(
+    /[\\/\\\0]/g,
+    "_",
+  );
+  return `.artifacts/delivered/${bucket}/${name}`;
+}
+
 /** Core materializes uploaded handles into this Session's uploads directory. */
 export function sessionUploadWorkspacePath(reference: string): string | null {
   if (!reference.startsWith("up/")) return null;

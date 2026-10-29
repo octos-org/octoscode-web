@@ -228,6 +228,7 @@ import {
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
 import {
+  deliveredArtifactWorkspacePath,
   isWorkspaceReadLimitError,
   readSessionFileBlob,
   readSessionFileSize,
@@ -889,6 +890,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   };
                 } catch {
                   return null;
+                }
+              }
+              const deliveredPath = canReadWorkspace
+                ? await deliveredArtifactWorkspacePath(reference)
+                : null;
+              if (deliveredPath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // Older deliveries may predate the durable copy. Fall back
+                  // to the current workspace source only as a last resort.
                 }
               }
               const workspacePath = workspaceRelativeArtifactPath(
