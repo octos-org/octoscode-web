@@ -138,7 +138,9 @@ export function TaskDetailDialog({
     selected &&
     (selected.content !== undefined || selected.artifact.content !== undefined),
   );
-  const useTextDownload = Boolean(textArtifact && hasTextContent);
+  const useTextDownload = Boolean(
+    textArtifact && hasTextContent && !selected?.has_more,
+  );
   const canDownloadText = Boolean(
     selectedBlobAvailable || !selectedPath || useTextDownload,
   );

@@ -49,6 +49,9 @@ function AttachmentItem({
   workspaceFile: boolean;
 }) {
   const t = useUiText();
+  if (workspaceFile && access?.workspacePathAvailable?.(reference) === false) {
+    return null;
+  }
   const name = attachmentName(reference);
   const nameParts = attachmentNameParts(reference);
   const image = isPreviewableImage(name);

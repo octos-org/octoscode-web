@@ -940,6 +940,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             },
           }
         : {}),
+      workspacePathAvailable(reference) {
+        const path = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        if (path) return canReadWorkspace || canUseBlob;
+        return (
+          canUseBlob &&
+          (reference.startsWith("/") || /^[A-Za-z]:\//.test(reference))
+        );
+      },
       previewAvailable: supportsMethod(
         capabilities,
         CORE_UI_METHODS.SESSION_FILES_READ,

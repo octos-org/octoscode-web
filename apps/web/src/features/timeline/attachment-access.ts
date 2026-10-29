@@ -21,6 +21,8 @@ export interface AttachmentAccess {
     sizeBytes?: number,
     signal?: AbortSignal,
   ) => Promise<Blob>;
+  /** False when this path cannot use any advertised workspace file route. */
+  workspacePathAvailable?: (reference: string) => boolean;
   /** False when workspace reads are not advertised. */
   previewAvailable?: boolean;
   /** False when the legacy delivered-file blob method is not advertised. */
