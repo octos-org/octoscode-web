@@ -26,11 +26,12 @@ export function CronSettingsContent({
   const [refreshToken, setRefreshToken] = useState(0);
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const requestGeneration = useRef(0);
+  const listGeneration = useRef(0);
+  const toggleGeneration = useRef(0);
 
   useEffect(() => {
     let current = true;
-    const generation = ++requestGeneration.current;
+    const generation = ++listGeneration.current;
     setLoading(true);
     setError(null);
     void client
@@ -38,13 +39,13 @@ export function CronSettingsContent({
       .then((commands) => commands.list())
       .then(
         (result) => {
-          if (current && generation === requestGeneration.current) {
+          if (current && generation === listGeneration.current) {
             setState(result);
             setLoading(false);
           }
         },
         (reason: unknown) => {
-          if (current && generation === requestGeneration.current) {
+          if (current && generation === listGeneration.current) {
             setError(errorMessage(reason));
             setLoading(false);
           }
@@ -52,21 +53,27 @@ export function CronSettingsContent({
       );
     return () => {
       current = false;
-      if (generation === requestGeneration.current) {
-        requestGeneration.current += 1;
+      if (generation === listGeneration.current) {
+        listGeneration.current += 1;
       }
     };
   }, [client, capabilities, refreshToken]);
 
   const toggle = async (job: CronJob) => {
     if (busyJob || state?.gatewayRunning) return;
-    const generation = ++requestGeneration.current;
+    const generation = ++toggleGeneration.current;
+    const listVersion = ++listGeneration.current;
+    setLoading(false);
     setBusyJob(job.id);
     setError(null);
     try {
       const commands = await client.cronCommands(capabilities);
       const updated = await commands.toggle(job.id, !job.enabled);
-      if (generation !== requestGeneration.current) return;
+      if (
+        generation !== toggleGeneration.current ||
+        listVersion !== listGeneration.current
+      )
+        return;
       setState((current) =>
         current
           ? {
@@ -78,11 +85,11 @@ export function CronSettingsContent({
           : current,
       );
     } catch (reason) {
-      if (generation === requestGeneration.current) {
+      if (generation === toggleGeneration.current) {
         setError(errorMessage(reason));
       }
     } finally {
-      if (generation === requestGeneration.current) setBusyJob(null);
+      if (generation === toggleGeneration.current) setBusyJob(null);
     }
   };
 

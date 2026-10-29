@@ -110,5 +110,50 @@ test("does not let a delayed list response overwrite a confirmed cron toggle", a
   await expect(toggle).toBeChecked();
   release?.();
   await expect(toggle).toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
   expect(listCalls).toBe(2);
+});
+
+test("a refresh during a pending cron toggle leaves both controls usable", async ({
+  page,
+}) => {
+  let listCalls = 0;
+  const releases: (() => void)[] = [];
+  const heldIds = new Set<string>();
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        id?: string;
+        method?: string;
+      };
+      if (frame.method === "cron/list") {
+        listCalls += 1;
+        if (listCalls > 1 && frame.id) heldIds.add(frame.id);
+      } else if (frame.method === "cron/toggle" && frame.id) {
+        heldIds.add(frame.id);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { id?: string };
+      if (frame.id && heldIds.has(frame.id)) {
+        releases.push(() => socket.send(message));
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await start(page);
+  const settings = await openSection(page, "Scheduled tasks");
+  const toggle = settings.getByRole("checkbox");
+  await toggle.click();
+  await expect.poll(() => releases.length).toBeGreaterThan(0);
+  const refresh = settings.getByRole("button", { name: "Refresh" });
+  await refresh.click();
+  await expect.poll(() => releases.length).toBe(2);
+  for (const release of releases) release();
+  await expect(refresh).toBeEnabled();
+  await expect(toggle).toBeEnabled();
 });
