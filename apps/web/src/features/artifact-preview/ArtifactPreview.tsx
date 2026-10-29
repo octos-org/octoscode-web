@@ -57,6 +57,10 @@ export interface ArtifactPreviewProps {
   text?: string | undefined;
   /** Server-listed size, when known; avoids fetching oversized previews. */
   sizeBytes?: number | undefined;
+  /** Size lookup is still in flight; defer the byte transfer. */
+  sizePending?: boolean;
+  /** Delivered REST blobs must have an authoritative size before preview. */
+  sizeRequired?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;
   loadBlob?: (signal?: AbortSignal) => Promise<Blob>;
@@ -82,13 +86,19 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       : MAX_AUTOMATIC_PREVIEW_BYTES;
   const oversizedByMetadata =
     props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit;
+  const needsBlob =
+    kind !== "unsupported" && (!textKind || props.text === undefined);
+  const waitingForSize = needsBlob && props.sizePending === true;
+  const sizeUnknown =
+    needsBlob &&
+    props.sizeRequired === true &&
+    props.sizeBytes === undefined &&
+    !waitingForSize;
   const shouldFetch =
-    !oversizedByMetadata &&
-    kind !== "unsupported" &&
-    (!textKind || props.text === undefined);
+    needsBlob && !oversizedByMetadata && !waitingForSize && !sizeUnknown;
   const [blob, setBlob] = useState<Blob>();
   const [loadedText, setLoadedText] = useState<string>();
-  const [loading, setLoading] = useState(shouldFetch);
+  const [loading, setLoading] = useState(shouldFetch || waitingForSize);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -98,7 +108,11 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   const hasLoader = Boolean(props.loadBlob);
 
   useEffect(() => {
-    if (oversizedByMetadata || !shouldFetch || !hasLoader) {
+    if (waitingForSize) {
+      setLoading(true);
+      return;
+    }
+    if (oversizedByMetadata || sizeUnknown || !shouldFetch || !hasLoader) {
       setLoading(false);
       return;
     }
@@ -125,7 +139,16 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       },
     );
     return () => abort.abort();
-  }, [shouldFetch, hasLoader, retry, reference, textKind, oversizedByMetadata]);
+  }, [
+    shouldFetch,
+    hasLoader,
+    retry,
+    reference,
+    textKind,
+    oversizedByMetadata,
+    waitingForSize,
+    sizeUnknown,
+  ]);
 
   const download = async () => {
     if (downloading) return;
@@ -177,6 +200,14 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       <div className={styles.message}>
         {t(
           "This file is too large for safe inline preview. Download it to open it in another app.",
+        )}
+      </div>
+    );
+  } else if (sizeUnknown) {
+    content = (
+      <div className={styles.message}>
+        {t(
+          "This file's size couldn't be verified. Download it to open it in another app.",
         )}
       </div>
     );

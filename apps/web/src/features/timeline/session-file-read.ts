@@ -50,6 +50,29 @@ export function workspaceRelativeArtifactPath(
   return isWorkspaceRelativePath(relative) ? relative : null;
 }
 
+/** Read one byte to obtain authoritative size without downloading the file. */
+export async function readSessionFileSize(
+  client: OctosUiClient,
+  sessionId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const chunk = await client.readSessionFile({
+    session_id: sessionId,
+    path,
+    offset: 0,
+    length: 1,
+  });
+  if (chunk.session_id !== sessionId || chunk.path !== path) {
+    throw new Error("Session file read returned a different scope");
+  }
+  if (chunk.offset !== 0 || chunk.size_bytes > MAX_FILE_BYTES) {
+    throw new Error("Session file read returned an invalid offset");
+  }
+  return chunk.size_bytes;
+}
+
 /** Read one session-scoped workspace file using UPCR-2026-057 chunks. */
 export async function readSessionFileBlob(
   client: OctosUiClient,

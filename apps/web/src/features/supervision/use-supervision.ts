@@ -392,10 +392,9 @@ export function useSupervision(
         ? ["markdown", "code", "text"].includes(pathKind)
         : ["text", "report", "log", "markdown", "json"].includes(artifact.kind);
     const capabilities = dependenciesRef.current.capabilities();
-    const canReadBlob =
-      supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) ||
-      (artifact.path?.startsWith("pf/") === true &&
-        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST));
+    const canReadBlob = artifact.path?.startsWith("pf/")
+      ? supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST)
+      : supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ);
     if (
       canReadBlob &&
       !textArtifact &&

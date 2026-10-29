@@ -1,6 +1,10 @@
+import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { create } from "react-test-renderer";
+import { describe, expect, it, vi } from "vitest";
 import { ArtifactPreview } from "./ArtifactPreview.tsx";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("ArtifactPreview", () => {
   it("renders text with path and download actions", () => {
@@ -38,6 +42,40 @@ describe("ArtifactPreview", () => {
     );
     expect(html).toContain("verification passed");
     expect(html).toContain('data-artifact-kind="text"');
+  });
+
+  it("does not transfer a delivered blob before its size is verified", async () => {
+    const loadBlob = vi.fn(async () => new Blob(["pdf"]));
+    let root!: ReturnType<typeof create>;
+    await act(async () => {
+      root = create(
+        <ArtifactPreview
+          name="large.pdf"
+          sizeRequired
+          sizePending
+          loadBlob={loadBlob}
+        />,
+      );
+    });
+    expect(loadBlob).not.toHaveBeenCalled();
+    await act(async () => {
+      root.update(
+        <ArtifactPreview
+          name="large.pdf"
+          sizeRequired
+          sizeBytes={60 * 1024 * 1024}
+          loadBlob={loadBlob}
+        />,
+      );
+    });
+    expect(loadBlob).not.toHaveBeenCalled();
+    await act(async () => {
+      root.update(
+        <ArtifactPreview name="large.pdf" sizeRequired loadBlob={loadBlob} />,
+      );
+    });
+    expect(loadBlob).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
   });
 
   it("pages long plain text instead of putting the whole file in the DOM", () => {

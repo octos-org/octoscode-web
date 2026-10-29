@@ -58,6 +58,9 @@ function AttachmentItem({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [size, setSize] = useState<string | null>(null);
   const [sizeBytes, setSizeBytes] = useState<number | null>(null);
+  const [sizeState, setSizeState] = useState<
+    "pending" | "ready" | "unavailable"
+  >(access?.describe ? "pending" : "unavailable");
   const previewId = useId();
   const itemRef = useRef<HTMLLIElement>(null);
 
@@ -65,27 +68,38 @@ function AttachmentItem({
     let current = true;
     setSize(null);
     setSizeBytes(null);
+    setSizeState(access?.describe ? "pending" : "unavailable");
     if (!access?.describe) return;
     access.describe(reference, workspaceFile).then(
       (info) => {
-        if (current && info) {
+        if (!current) return;
+        setSizeState("ready");
+        if (info) {
           setSize(formatAttachmentSize(info.sizeBytes));
           setSizeBytes(info.sizeBytes);
         }
       },
       () => {
-        // Size is optional metadata; byte preview/download remains authoritative.
+        if (current) setSizeState("unavailable");
       },
     );
     return () => {
       current = false;
     };
-  }, [access, reference]);
+  }, [access, reference, workspaceFile]);
 
   // Load an image preview once it scrolls near the viewport, so a long
   // transcript does not fetch every delivered image up front.
   useEffect(() => {
-    if (!image || !access) return;
+    if (
+      !image ||
+      !access ||
+      sizeState !== "ready" ||
+      sizeBytes === null ||
+      sizeBytes > 50 * 1024 * 1024
+    ) {
+      return;
+    }
     const abort = new AbortController();
     let url: string | null = null;
     const load = () => {
@@ -121,7 +135,7 @@ function AttachmentItem({
       abort.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [access, image, reference]);
+  }, [access, image, reference, sizeState, sizeBytes, workspaceFile]);
 
   const download = async () => {
     if (!access) return;
@@ -207,6 +221,8 @@ function AttachmentItem({
             name={name}
             path={reference}
             workspaceFile={workspaceFile}
+            sizeRequired={!workspaceFile}
+            sizePending={sizeState === "pending"}
             {...(sizeBytes === null ? {} : { sizeBytes })}
             loadBlob={(signal) =>
               (workspaceFile

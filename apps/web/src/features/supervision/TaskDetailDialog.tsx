@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { TaskArtifactRecord } from "@octos-org/octoscode-client/protocol";
 import type { SupervisionRuntimeState } from "./model.ts";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
@@ -33,6 +34,8 @@ interface TaskDetailDialogProps {
   onLoadMoreArtifact: () => void;
   workspaceReadAvailable?: boolean;
   profileFileReadAvailable?: boolean;
+  describeArtifact?:
+    ((path: string) => Promise<{ sizeBytes: number } | null>) | undefined;
   loadArtifact?:
     ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
   downloadArtifact?:
@@ -47,16 +50,47 @@ export function TaskDetailDialog({
   onLoadMoreArtifact,
   workspaceReadAvailable = false,
   profileFileReadAvailable = false,
+  describeArtifact,
   loadArtifact,
   downloadArtifact,
 }: TaskDetailDialogProps) {
   const t = useUiText();
+  const selected = state.detail.selectedArtifact;
+  const selectedPath = selected?.artifact.path;
+  const [sizeResult, setSizeResult] = useState<{
+    path: string;
+    pending: boolean;
+    sizeBytes?: number;
+  }>();
+  useEffect(() => {
+    if (!selectedPath?.startsWith("pf/") || !describeArtifact) {
+      setSizeResult(undefined);
+      return;
+    }
+    let current = true;
+    setSizeResult({ path: selectedPath, pending: true });
+    describeArtifact(selectedPath).then(
+      (info) => {
+        if (current) {
+          setSizeResult({
+            path: selectedPath,
+            pending: false,
+            ...(info ? { sizeBytes: info.sizeBytes } : {}),
+          });
+        }
+      },
+      () => {
+        if (current) setSizeResult({ path: selectedPath, pending: false });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [selectedPath, describeArtifact]);
   if (!state.detail.active) return null;
   const task = state.tasks.find(
     (candidate) => candidate.id === state.detail.taskId,
   );
-  const selected = state.detail.selectedArtifact;
-  const selectedPath = selected?.artifact.path;
   const selectedBlobAvailable = Boolean(
     selectedPath &&
     loadArtifact &&
@@ -64,6 +98,16 @@ export function TaskDetailDialog({
       ? profileFileReadAvailable
       : workspaceReadAvailable),
   );
+  const profileFile = selectedPath?.startsWith("pf/") === true;
+  const sizePending = Boolean(
+    profileFile &&
+    describeArtifact &&
+    (sizeResult?.path !== selectedPath || sizeResult.pending),
+  );
+  const sizeBytes =
+    profileFile && sizeResult?.path === selectedPath
+      ? sizeResult.sizeBytes
+      : undefined;
 
   return (
     <ModalSurface
@@ -178,6 +222,9 @@ export function TaskDetailDialog({
                     workspaceReadAvailable &&
                     !selectedPath!.startsWith("pf/")
                   }
+                  sizeRequired={profileFile}
+                  sizePending={sizePending}
+                  {...(sizeBytes === undefined ? {} : { sizeBytes })}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
                     : {})}
