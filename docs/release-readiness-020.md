@@ -9,6 +9,7 @@ tests. Execution follows the [maintenance workflow](maintenance-workflow.md).
 ## Current baseline
 
 - Released version: `v0.11.0` (2026-10-18, promoted from `v0.11.0-rc.3`).
+- Release candidate: `v0.20.0` (main `8241a61` plus the release PR only).
 - Core runtime and UI Protocol contract pins: Octos `v2.0.3` (`fca32c4`);
   verified against real `octos serve` and the GLM live gate (see
   [core-runtime.json](../packages/client/core-runtime.json)).
@@ -142,6 +143,27 @@ banner, dispatch gate, take-over steal and loss notification, both directions).
 
 Synthetic regression tooling stays green (`scripts/soak-fixture-e2e.mjs`, 181
 assertions), which remains fixture-contract evidence only.
+
+## Release verification — 2026-10-29
+
+The 0.20 candidate is main `8241a61` plus the release PR; next-version feature
+PRs are excluded. The readiness rows are closed as follows:
+
+- Core functionality, identity, conversation ownership, recovery, accessibility,
+  performance and delivery are enforced by the exact-head required CI matrix,
+  real-Core integration and deployment verification.
+- The real-model live gate and long-history reselection acceptance remain green
+  on the pinned Core. Browser coverage includes keyboard, mobile, dark mode,
+  approval, settings and multi-Session recovery, with zero skipped critical
+  journeys.
+- Post-stop interrupted-prompt durability was verified twice against
+  `octos-main-ce2c99bc`: stop the turn, refresh, and the user prompt remains in
+  the timeline. The live-refresh variant intentionally remains `test.fixme`
+  pending [octos#2881](https://github.com/octos-org/octos/issues/2881); #78
+  stays open for that remaining disconnect-path defect and is not counted as
+  shipped.
+- Manifest versions and changelog are `0.20.0`. The release is published only
+  after the release PR's required checks pass and its merge commit is tagged.
 
 ## Completion rule
 

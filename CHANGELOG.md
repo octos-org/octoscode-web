@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.20.0 — 2026-10-29
+
+Stabilize the v0.11.0 line for the 0.20 readiness declaration without pulling in
+next-version feature work.
+
+- Upgrade the development toolchain and Playwright coverage, and close the
+  remaining accessibility label/name and keyboard-focus regressions.
+- Reconfirm long-history, multi-Session selection and real-Core recovery
+  acceptance, including the real-model live gate and exact deployed artifact
+  checks.
+- Add an interrupted-turn durability probe. The post-stop refresh variant passes
+  twice against `octos-main-ce2c99bc` with octos#2849 included.
+
+Known issues:
+
+- Post-stop refresh durability requires a Core containing octos#2849. The
+  still-running refresh variant remains `test.fixme` pending octos#2881, because
+  the disconnect path can drop the dispatched prompt; #78 stays open for that
+  remaining Core work. No client-side data recovery is claimed.
+
 ## v0.11.0 — 2026-10-18
 
 First stable 0.11.0 release, promoting v0.11.0-rc.3 with the hardening that

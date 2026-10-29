@@ -5,11 +5,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // real provider. The acceptance standard for the core-side ledger fix — the
 // client has nothing to recover with when the row is dropped server-side.
 //
-// Both variants below FAILED on core v2.0.3 (2026-10-26, clean workspace):
-// the reload reconnects and renders the timeline, but the user's prompt row
-// is gone — the server dropped the uncommitted ledger line (serve log
-// `dropped=1`). They stay `test.fixme` until the core fix lands; remove the
-// fixme to run them against a fixed build.
+// Both variants FAILED on core v2.0.3 (2026-10-26, clean workspace).
+// The post-stop variant is enabled against a Core containing octos#2849.
+// The still-running variant remains fixme pending octos#2881: disconnect abort
+// must also persist the dispatched prompt instead of ending with only
+// connection_closed.
 const endpoint = `http://127.0.0.1:${process.env.OCTOSCODE_LIVE_WEB_PORT ?? "4174"}`;
 const token = required("OCTOSCODE_LIVE_TOKEN");
 const cwd = required("OCTOSCODE_LIVE_WORKSPACE");
@@ -64,7 +64,7 @@ test.fixme("the prompt survives a refresh while the turn is still running", asyn
   ).toBeVisible({ timeout: 30_000 });
 });
 
-test.fixme("the prompt survives a refresh after stopping the turn", async ({
+test("the prompt survives a refresh after stopping the turn", async ({
   page,
 }) => {
   const marker = `DURABILITY_PROBE_STOPPED_${Date.now()}`;
