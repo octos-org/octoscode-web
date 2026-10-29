@@ -29,9 +29,43 @@ export function closeOpenFence(text: string): string {
   return `${text}${text.endsWith("\n") ? "" : "\n"}${open}`;
 }
 
-/** Hide incomplete inline markers without holding back completed Markdown. */
+/** Hide incomplete inline markers without changing code or escapes. */
 export function prepareStreamingMarkdown(text: string): string {
-  let prepared = closeOpenFence(text).replace(/\\([*_~`])/g, "$1");
+  let plain = "";
+  let rendered = "";
+  let open: string | null = null;
+  for (const line of closeOpenFence(text).split(/(?<=\n)/)) {
+    const marker = FENCE.exec(line)?.[1];
+    if (open) {
+      rendered += line;
+      if (marker && marker[0] === open[0] && marker.length >= open.length)
+        open = null;
+    } else if (marker) {
+      rendered += prepareInline(plain);
+      plain = "";
+      rendered += line;
+      open = marker;
+    } else {
+      plain += line;
+    }
+  }
+  return rendered + prepareInline(plain);
+}
+
+function prepareInline(text: string): string {
+  let rendered = "";
+  let consumed = 0;
+  for (const match of text.matchAll(/(`+)([^`\n]*?)\1/g)) {
+    const start = match.index;
+    rendered += preparePlain(text.slice(consumed, start));
+    rendered += match[0];
+    consumed = start + match[0].length;
+  }
+  return rendered + preparePlain(text.slice(consumed));
+}
+
+function preparePlain(text: string): string {
+  let prepared = text;
   for (const marker of ["**", "__", "~~", "*", "`"]) {
     prepared = hideOddMarker(prepared, marker);
   }

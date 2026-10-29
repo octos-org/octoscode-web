@@ -3,6 +3,8 @@ import type { TimelineEntry, TimelineStatus } from "./model.ts";
 /** Per-block expanded memory. Absent = folded (the default for both kinds). */
 export type FoldState = Readonly<{ [id: string]: boolean }>;
 
+export const COLLAPSED_ALL = "__collapsed_all__";
+
 export function initialFoldState(): FoldState {
   return {};
 }
@@ -23,9 +25,9 @@ export function expandAll(
   return Object.fromEntries(ids.map((id) => [id, true] as const)) as FoldState;
 }
 
-/** Back to the all-folded default; per-block memory is discarded. */
+/** Explicit all-folded state, distinct from the unset error-auto-open default. */
 export function collapseAll(_folds: FoldState): FoldState {
-  return {};
+  return { [COLLAPSED_ALL]: false };
 }
 
 /** Drops memory for blocks that left the bounded transcript window. */
@@ -129,8 +131,8 @@ const TARGET_KEYS = [
   "name",
 ] as const;
 
-/** Best-effort single-line target from a tool call's arguments JSON. */
-export function toolTarget(argumentsJson: string): string {
+/** Best-effort untruncated single-line target for identity and aggregation. */
+export function toolTargetFull(argumentsJson: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(argumentsJson);
@@ -144,9 +146,7 @@ export function toolTarget(argumentsJson: string): string {
         const value = JSON.parse(`"${match[1]}"`) as unknown;
         if (typeof value === "string" && value.trim()) {
           const first = value.trim().split("\n")[0] ?? "";
-          return first.length > TRUNCATED_TARGET_LENGTH
-            ? `${first.slice(0, TRUNCATED_TARGET_LENGTH)}…`
-            : first;
+          return first;
         }
       } catch {
         return "";
@@ -160,12 +160,17 @@ export function toolTarget(argumentsJson: string): string {
     const value = row[key];
     if (typeof value === "string" && value.trim()) {
       const first = value.trim().split("\n")[0] ?? "";
-      return first.length > TRUNCATED_TARGET_LENGTH
-        ? `${first.slice(0, TRUNCATED_TARGET_LENGTH)}…`
-        : first;
+      return first;
     }
   }
   return "";
+}
+
+export function toolTarget(argumentsJson: string): string {
+  const first = toolTargetFull(argumentsJson);
+  return first.length > TRUNCATED_TARGET_LENGTH
+    ? `${first.slice(0, TRUNCATED_TARGET_LENGTH)}…`
+    : first;
 }
 
 export function toolHeaderLine(entry: {

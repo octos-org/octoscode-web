@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Timeline } from "./Timeline.tsx";
 import { timelineFromHydrate } from "./model.ts";
 import { AttachmentAccessContext } from "./attachment-access.ts";
+import { collapseAll } from "./folds.ts";
 
 describe("Timeline", () => {
   it("omits empty assistant rows without hiding useful system messages", () => {
@@ -233,6 +234,27 @@ describe("Timeline", () => {
     expect(html).toContain("Duration 3s");
     expect(html).toContain("12 tokens in · 9 tokens out");
     expect(html).toMatch(/<details[^>]*open/);
+  });
+
+  it("Collapse all folds failed steps too", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        folds={collapseAll({})}
+        entries={[
+          {
+            id: "tool:failed",
+            kind: "tool",
+            title: "write_file",
+            body: "permission denied",
+            toolArguments: '{"path":"report.md"}',
+            status: "error",
+            turnId: "turn-1",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toMatch(/<details[^>]*open/);
   });
 
   it("announces the timeline via a log landmark (a11y finding 4)", () => {

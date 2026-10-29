@@ -45,9 +45,19 @@ describe("prepareStreamingMarkdown", () => {
     );
   });
 
-  it("renders escaped emphasis as Markdown instead of raw punctuation", () => {
+  it("preserves escaped emphasis instead of rewriting the source", () => {
     expect(prepareStreamingMarkdown("Working on \\*\\*Markdown\\*\\*…")).toBe(
-      "Working on **Markdown**…",
+      "Working on \\*\\*Markdown\\*\\*…",
+    );
+  });
+
+  it("preserves fenced and inline code while hiding unmatched prose markers", () => {
+    expect(
+      prepareStreamingMarkdown(
+        "Before **draft\n```ts\nprint(2 ** 3)\nconst s = '**not emphasis**';\n```\n`2 ** 3` and **open",
+      ),
+    ).toBe(
+      "Before draft\n```ts\nprint(2 ** 3)\nconst s = '**not emphasis**';\n```\n`2 ** 3` and open",
     );
   });
 });

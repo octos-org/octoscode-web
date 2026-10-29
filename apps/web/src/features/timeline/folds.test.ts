@@ -49,7 +49,7 @@ describe("transcript fold model", () => {
     folds = collapseAll(folds);
     expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
     expect(isFoldExpanded(folds, "tool:call-2")).toBe(false);
-    expect(folds).toEqual({});
+    expect(folds).toEqual({ __collapsed_all__: false });
   });
 
   it("pruneFolds drops memory for blocks no longer in the transcript", () => {

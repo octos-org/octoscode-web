@@ -45,4 +45,18 @@ describe("turn summary", () => {
       usage: { input: 12, output: 9 },
     });
   });
+
+  it("counts distinct long paths before truncating display targets", () => {
+    const first = "src/components/shared/very-long-directory/first.ts";
+    const second = "src/components/shared/very-long-directory/second.ts";
+    const summary = summarizeTurn(
+      [
+        tool("write_file", first, "complete", 1000),
+        tool("write_file", second, "complete", 2000),
+      ],
+      "turn-1",
+    );
+    expect(summary.changedFiles).toEqual([first, second]);
+    expect(summary.outputFiles).toEqual([first, second]);
+  });
 });

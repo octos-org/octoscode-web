@@ -1,5 +1,5 @@
 import type { TimelineEntry } from "./entry-model.ts";
-import { toolTarget } from "./folds.ts";
+import { toolTargetFull } from "./folds.ts";
 
 export interface TurnSummaryData {
   seconds?: number | undefined;
@@ -23,7 +23,7 @@ export function summarizeTurn(
     if (entry.kind !== "tool") continue;
     if (entry.status === "error") failedSteps += 1;
     const name = entry.title.toLowerCase();
-    const target = toolTarget(entry.toolArguments ?? entry.body);
+    const target = toolTargetFull(entry.toolArguments ?? entry.body);
     if (
       entry.status === "complete" &&
       (name === "write_file" || name === "edit_file" || name === "apply_patch")

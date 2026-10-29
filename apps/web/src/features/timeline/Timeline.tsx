@@ -15,7 +15,11 @@ import styles from "./Timeline.module.css";
 import type { TimelineEntry } from "./model.ts";
 import { toolKind, type ToolKind } from "./tool-kind.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
-import { thinkingSummaryParts, type FoldState } from "./folds.ts";
+import {
+  COLLAPSED_ALL,
+  thinkingSummaryParts,
+  type FoldState,
+} from "./folds.ts";
 import { toolTitle } from "./tool-presentation.ts";
 import { TurnSummary } from "./TurnSummary.tsx";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
@@ -215,7 +219,9 @@ export const Timeline = memo(function Timeline({
               entry={entry}
               expanded={
                 folds
-                  ? (folds[entry.id] ?? entry.status === "error")
+                  ? (folds[entry.id] ??
+                    folds[COLLAPSED_ALL] ??
+                    entry.status === "error")
                   : undefined
               }
               onToggleFold={toggleFold}
