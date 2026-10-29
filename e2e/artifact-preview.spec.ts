@@ -49,6 +49,8 @@ test("previews and pages PDF artifacts", async ({ page }) => {
   await expect(
     pdf.preview.getByRole("spinbutton", { name: "Page" }),
   ).toHaveValue("2");
+  await pdf.preview.getByText("Page text").click();
+  await expect(pdf.preview.getByText("PDF artifact page two")).toBeVisible();
 });
 
 test("previews and pages large CSV files", async ({ page }) => {

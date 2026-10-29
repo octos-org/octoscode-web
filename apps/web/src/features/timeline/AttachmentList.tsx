@@ -127,7 +127,10 @@ function AttachmentItem({
         }
       },
       () => {
-        if (current) setSizeState("unavailable");
+        if (current) {
+          descriptionRef.current = null;
+          setSizeState("unavailable");
+        }
       },
     );
     return () => {

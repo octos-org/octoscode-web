@@ -229,6 +229,7 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
       {pageCount > 0 ? (
         <details
           className={styles.textAlternative}
+          open={textOpen}
           onToggle={(event) => setTextOpen(event.currentTarget.open)}
         >
           <summary>{t("Page text")}</summary>
