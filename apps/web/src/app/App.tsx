@@ -1,3 +1,4 @@
+import { randomUUID } from "../shared/uuid.ts";
 import { ModelsSettingsContent } from "../features/product-settings/ModelsSettingsContent.tsx";
 import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
 import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
@@ -1309,7 +1310,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     // optional report formatting. It never submits work or rebinds to selection.
     const showLocalReport = (report: LocalReport) => {
       const append = conversation.setTimeline;
-      const id = `${report.kind}:${crypto.randomUUID()}`;
+      const id = `${report.kind}:${randomUUID()}`;
       void import("../features/commands/local-report.ts")
         .then(({ localCommandReport }) => {
           const message = localCommandReport(report, t);
@@ -1392,7 +1393,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `inspection:${crypto.randomUUID()}`,
+                `inspection:${randomUUID()}`,
                 t("Inspection unavailable"),
                 t(
                   "The Session authority changed. Reopen its thread or turn inspector.",
@@ -1418,7 +1419,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `resume:${crypto.randomUUID()}`,
+                `resume:${randomUUID()}`,
                 t("History browsing unavailable"),
                 t("The Session authority changed. Reopen the history picker."),
                 "error",
@@ -1470,7 +1471,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `gather:${crypto.randomUUID()}`,
+                `gather:${randomUUID()}`,
                 t("Peer gather"),
                 outcome === "empty"
                   ? t("No peers staged on the blackboard.")
@@ -1485,7 +1486,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `gather:${crypto.randomUUID()}`,
+                `gather:${randomUUID()}`,
                 t("Peer gather unavailable"),
                 t(
                   "No synthesis was queued. Retry from the current Session connection.",
@@ -1537,7 +1538,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `history-unavailable:${crypto.randomUUID()}`,
+                `history-unavailable:${randomUUID()}`,
                 t("History unavailable"),
                 t(
                   "The Session authority changed. Reopen history from its current connection.",
@@ -1563,7 +1564,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `review-unavailable:${crypto.randomUUID()}`,
+                `review-unavailable:${randomUUID()}`,
                 t("Review unavailable"),
                 t(
                   "The Session authority changed. Reopen native review from its current connection.",

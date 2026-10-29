@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
   APPUI_MEMORY_PROMOTE_METHOD,
@@ -157,7 +158,7 @@ export function MemorySettingsContent({
     setNotice(null);
     setIngestResult(null);
     try {
-      const id = `doc:octoscode-web:${crypto.randomUUID()}`;
+      const id = `doc:octoscode-web:${randomUUID()}`;
       const commands = await client.memoryCommands(capabilities);
       const result = await commands.ingest([
         {
@@ -196,10 +197,7 @@ export function MemorySettingsContent({
     setError(null);
     try {
       const commands = await client.memoryCommands(capabilities);
-      const result = await commands.request(
-        `web:${crypto.randomUUID()}`,
-        body.trim(),
-      );
+      const result = await commands.request(`web:${randomUUID()}`, body.trim());
       setNotice(
         t("Memory request accepted: {status}", { status: result.status }),
       );

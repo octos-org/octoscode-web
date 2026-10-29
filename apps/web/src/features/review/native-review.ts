@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -165,7 +166,7 @@ export function createNativeReviewBinding({
       if (blocked) throw new Error(blocked);
       // TUI review_start_command: one UUID, optional trimmed prompt, idle only.
       // No fabricated default prompt, media, target, instructions, or reasoning.
-      const turnId = crypto.randomUUID();
+      const turnId = randomUUID();
       if (
         !record.controller.enqueueTurn({
           kind: "review",

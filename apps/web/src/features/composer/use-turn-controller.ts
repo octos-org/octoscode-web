@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_METHODS,
   isProtocolUuid,
@@ -664,7 +665,7 @@ export function createQueueBackedTurnController(options: {
     // made when it was typed, not a later re-selection.
     const reasoningEffort = dependenciesRef.current.reasoningEffort?.();
     const turn: PromptTurn = {
-      turnId: crypto.randomUUID(),
+      turnId: randomUUID(),
       text: text.trim(),
       ...(reasoningEffort ? { reasoningEffort } : {}),
     };
@@ -989,7 +990,7 @@ export function createQueueBackedTurnController(options: {
       currentDependencies.setTimeline((current) =>
         addSystemMessage(
           current,
-          `nothing-to-stop:${crypto.randomUUID()}`,
+          `nothing-to-stop:${randomUUID()}`,
           "Nothing to stop",
           "There is no active foreground turn, so no server command was sent.",
         ),

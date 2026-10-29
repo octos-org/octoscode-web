@@ -163,9 +163,10 @@ export function OnboardingPanel({
             <span>{t("Use as the default local profile")}</span>
           </label>
           <div className={styles.fields}>
-            <label>
+            <label htmlFor="onboarding-provider">
               <span>{t("Provider")}</span>
               <select
+                id="onboarding-provider"
                 name="provider"
                 value={familyId}
                 disabled={busy}
@@ -186,9 +187,10 @@ export function OnboardingPanel({
                 ))}
               </select>
             </label>
-            <label>
+            <label htmlFor="onboarding-model">
               <span>{t("Model")}</span>
               <select
+                id="onboarding-model"
                 name="model"
                 value={modelId}
                 disabled={busy}
@@ -204,9 +206,10 @@ export function OnboardingPanel({
                 ))}
               </select>
             </label>
-            <label>
+            <label htmlFor="onboarding-route">
               <span>{t("Route")}</span>
               <select
+                id="onboarding-route"
                 name="route"
                 value={routeId}
                 disabled={busy}

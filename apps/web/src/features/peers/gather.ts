@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
 import type { PeerGatherResult } from "@octos-org/octoscode-client/peers";
 import type { ActiveSessionAuthority } from "../session/active-session-runtime.ts";
@@ -126,7 +127,7 @@ export function gatherFromRecord(
       // Reading is permitted without write capability; synthesis is ordinary input.
       if (!request.canSubmit()) return "blocked";
       return record.controller.enqueueTurn({
-        turnId: crypto.randomUUID(),
+        turnId: randomUUID(),
         text,
         ...(request.reasoningEffort
           ? { reasoningEffort: request.reasoningEffort }

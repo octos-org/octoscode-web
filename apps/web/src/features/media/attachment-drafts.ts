@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   uploadedHandleForProfile,
   type TurnMedia,
@@ -141,7 +142,7 @@ export class AttachmentDraftStore {
       if (seen.has(key)) continue;
       seen.add(key);
       added = true;
-      const id = crypto.randomUUID();
+      const id = randomUUID();
       this.#entries.set(id, {
         draft: Object.freeze({
           id,
@@ -295,7 +296,7 @@ export class AttachmentDraftStore {
     )
       throw new Error("Attachments belong to another Profile.");
     for (const item of media) {
-      const id = crypto.randomUUID();
+      const id = randomUUID();
       this.#entries.set(id, {
         draft: Object.freeze({
           id,

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Support plain-http LAN origins by generating UUIDs through a shared
+  `crypto.randomUUID`/`getRandomValues` fallback, guarded by an oxlint rule.
+  Associate provider, model, and route selects with labels in first-run setup.
 - Keep approval and question takeovers inside the viewport without scrolling the
   workspace header out of view. Preserve compact-header button spacing on
   phones, and cover all three audit viewports with layout, axe, and full-page

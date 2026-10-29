@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 const WEB_SESSION_PREFIX = "web-";
 
 /**
@@ -8,7 +9,7 @@ const WEB_SESSION_PREFIX = "web-";
  * session-scope validation.
  */
 export function freshWebSessionId(): string {
-  return `${WEB_SESSION_PREFIX}${crypto.randomUUID()}`;
+  return `${WEB_SESSION_PREFIX}${randomUUID()}`;
 }
 
 /**

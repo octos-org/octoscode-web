@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_METHODS,
   supportsMethod,
@@ -36,7 +37,7 @@ export function admitAgentSpawn(
   // The controller rechecks its record's write/history lease. Neither the
   // composer's current text nor attachment handles are borrowed by this form.
   return record.controller.enqueueTurn({
-    turnId: crypto.randomUUID(),
+    turnId: randomUUID(),
     text: text.trim(),
     ...(reasoningEffort ? { reasoningEffort } : {}),
   });

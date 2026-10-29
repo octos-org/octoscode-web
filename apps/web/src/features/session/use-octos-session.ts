@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   useEffect,
   useRef,
@@ -538,7 +539,7 @@ function readStoredPeerDriverId(
  */
 export function stablePeerDriverId(
   storage: PeerDriverIdStorage | null,
-  randomUuid: () => string = () => crypto.randomUUID(),
+  randomUuid: () => string = () => randomUUID(),
 ): string {
   const stored = readStoredPeerDriverId(storage);
   if (stored !== null) return stored;
@@ -1893,7 +1894,7 @@ export function useOctosSession(): OctosSessionRuntime {
       const tracked = peerControlTargetFor({
         acquire: held.view,
         turnId: controlTurnId,
-        newOperationId: () => crypto.randomUUID(),
+        newOperationId: () => randomUUID(),
       });
       if (
         tracked !== null &&
@@ -1932,7 +1933,7 @@ export function useOctosSession(): OctosSessionRuntime {
         view,
         commands,
         turnId: controlTurnId,
-        newOperationId: () => crypto.randomUUID(),
+        newOperationId: () => randomUUID(),
       });
       if (seat === null) {
         controlHoldRef.current = null;
@@ -2462,7 +2463,7 @@ export function useOctosSession(): OctosSessionRuntime {
     if (acquired === null) return;
     const target = buildPeerRowControlTarget({
       row,
-      newOperationId: () => crypto.randomUUID(),
+      newOperationId: () => randomUUID(),
     });
     // No accepted operation id / adopted turn ⇒ NO frame at all (fail closed);
     // the encoder would reject it offline and the operator would see nothing.
@@ -2584,7 +2585,7 @@ export function useOctosSession(): OctosSessionRuntime {
       acquire: acquired.view,
       entry,
       decision,
-      newOperationId: () => crypto.randomUUID(),
+      newOperationId: () => randomUUID(),
     }).then((state) => {
       if (state !== null) settleControlState(state);
     });
