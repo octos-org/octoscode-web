@@ -236,15 +236,18 @@
 }
 
 @media (max-width: 760px) {
+  /* Settings remains available from the session drawer; keep the compact
+     header to navigation, workspace context, tabs, and Review. */
   .preferencesTrigger {
-    width: 32px;
-    padding: 0;
-    font-size: 0;
+    display: none;
   }
 
-  .preferencesTrigger::before {
-    content: "⚙︎";
-    font-size: 18px;
+  .conversationTabs {
+    flex: none;
+  }
+
+  .conversationTabs button {
+    padding: 0 6px;
   }
 
   .sidebarFallback {

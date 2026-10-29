@@ -83,7 +83,8 @@ test("approval takeover matches baseline", async ({ page }) => {
   await page.getByRole("button", { name: "Send prompt" }).click();
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
   await expect(approval).toBeVisible();
-  await expect(approval).toHaveScreenshot("approval-card.png", SNAPSHOT);
+  // Capture the whole page: a takeover must not push the header out of view.
+  await expect(page).toHaveScreenshot("approval-card.png", SNAPSHOT);
 });
 
 test("session reply matches baseline", async ({ page }) => {
