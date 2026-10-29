@@ -42,6 +42,20 @@ export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   return matches.length === 1 ? matches[0]! : null;
 }
 
+/** Match a canonical profile handle by its full workspace-relative path. */
+export function uniqueProfileFileForWorkspacePath<
+  T extends AttachmentFileMetadata,
+>(workspacePath: string, files: readonly T[]): T | null {
+  const matches = files.filter((file) => {
+    const decoded = profileHandlePath(file.path)?.replace(/\\/g, "/");
+    return (
+      decoded === workspacePath ||
+      (decoded !== undefined && decoded.endsWith(`/${workspacePath}`))
+    );
+  });
+  return matches.length === 1 ? matches[0]! : null;
+}
+
 function profileHandlePath(value: string): string | null {
   if (!value.startsWith("pf/")) return null;
   const encoded = value.split("/")[1];

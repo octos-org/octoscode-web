@@ -251,6 +251,7 @@ export function TaskDetailDialog({
                     workspaceReadAvailable &&
                     !selectedPath!.startsWith("pf/")
                   }
+                  sizeRequired={selectedBlobAvailable}
                   sizePending={sizePending}
                   downloadAvailable={
                     saveAvailable === false ? false : canDownloadText

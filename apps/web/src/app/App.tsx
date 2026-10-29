@@ -234,7 +234,10 @@ import {
   readSessionFileSize,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
-import { uniqueWorkspaceAttachmentFile } from "../features/timeline/attachments.ts";
+import {
+  uniqueProfileFileForWorkspacePath,
+  uniqueWorkspaceAttachmentFile,
+} from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -915,6 +918,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 const result = await client.listSessionFiles({
                   session_id: attachmentSessionId,
                 });
+                const deliveredCopy = deliveredPath
+                  ? uniqueProfileFileForWorkspacePath(
+                      deliveredPath,
+                      result.files,
+                    )
+                  : null;
+                if (deliveredCopy) {
+                  return { sizeBytes: deliveredCopy.size_bytes };
+                }
                 const exact = result.files.filter(
                   (file) => file.path === reference,
                 );

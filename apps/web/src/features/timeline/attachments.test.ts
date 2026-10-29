@@ -4,6 +4,7 @@ import {
   attachmentNameParts,
   formatAttachmentSize,
   isPreviewableImage,
+  uniqueProfileFileForWorkspacePath,
   uniqueWorkspaceAttachmentFile,
 } from "./attachments.ts";
 
@@ -80,6 +81,25 @@ describe("attachment naming", () => {
         [profiled],
       ),
     ).toBe(profiled);
+  });
+
+  it("matches delivered copies by their full workspace-relative path", () => {
+    const copy = {
+      filename: "photo.png",
+      path: `pf/${btoa("users/session/workspace/.artifacts/delivered/hash/photo.png")}/photo.png`,
+      size_bytes: 42,
+    };
+    expect(
+      uniqueProfileFileForWorkspacePath(".artifacts/delivered/hash/photo.png", [
+        copy,
+      ]),
+    ).toBe(copy);
+    expect(
+      uniqueProfileFileForWorkspacePath(
+        ".artifacts/delivered/other/photo.png",
+        [copy],
+      ),
+    ).toBeNull();
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {
