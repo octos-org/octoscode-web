@@ -379,7 +379,7 @@ export function useSupervision(
       return;
     }
     if (
-      artifact.kind !== "text" &&
+      !["text", "report", "log", "markdown", "json"].includes(artifact.kind) &&
       artifact.path &&
       artifactReadsBlob(artifact.path)
     ) {

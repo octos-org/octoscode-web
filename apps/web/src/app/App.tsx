@@ -848,6 +848,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return commands.download(reference, signal);
       },
       async downloadForSave(reference, signal) {
+        if (
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
+          isWorkspaceRelativePath(reference)
+        ) {
+          try {
+            return await readSessionFileBlob(
+              client,
+              attachmentSessionId,
+              reference,
+              signal,
+            );
+          } catch (reason) {
+            if (
+              !(reason instanceof Error) ||
+              !reason.message.includes("workspace_file_too_large")
+            )
+              throw reason;
+          }
+        }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
@@ -4481,8 +4500,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onLoadMore={() => void work.loadMoreOutput()}
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
-            loadArtifact={attachmentAccess?.download}
-            downloadArtifact={attachmentAccess?.downloadForSave}
+            loadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? attachmentAccess?.download
+                : undefined
+            }
+            downloadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? attachmentAccess?.downloadForSave
+                : undefined
+            }
           />
         </SurfaceBoundary>
       ) : null}

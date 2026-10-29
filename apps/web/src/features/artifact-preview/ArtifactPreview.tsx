@@ -117,7 +117,7 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     try {
       const saveLoader = props.downloadBlob ?? props.loadBlob;
       const value =
-        props.hasMore && saveLoader
+        saveLoader && (props.hasMore || !textKind)
           ? await saveLoader()
           : (blob ??
             (props.text !== undefined
@@ -143,8 +143,9 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const canDownload =
-    (props.text !== undefined && !props.hasMore) ||
-    Boolean(props.downloadBlob ?? props.loadBlob);
+    (props.downloadBlob ?? props.loadBlob)
+      ? true
+      : textKind && props.text !== undefined && !props.hasMore;
   let content: ReactNode;
   if (loading) {
     content = (
