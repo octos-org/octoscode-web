@@ -221,7 +221,7 @@ test("a missing optional diff grammar retains original text and word marks", asy
     },
   );
   const dialog = await openReview(page, replacement);
-  expect(rejected).toBe(true);
+  await expect.poll(() => rejected).toBe(true);
   expect(await dialog.locator(".diff-line > code").allTextContents()).toEqual(
     replacement.map((line) => line.content),
   );
