@@ -17,7 +17,11 @@ function previewKind(
   blobAvailable = false,
 ): ArtifactKind | undefined {
   const byPath = path ? artifactKind(path) : "unsupported";
-  if (content !== undefined && !blobAvailable) return "text";
+  if (content !== undefined && !blobAvailable) {
+    if (kind === "markdown") return "markdown";
+    if (kind === "json") return "code";
+    return "text";
+  }
   if (byPath !== "unsupported") return byPath;
   if (content !== undefined) return "text";
   if (kind === "markdown") return "markdown";

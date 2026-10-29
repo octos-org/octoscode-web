@@ -789,7 +789,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
   const attachmentSizeMetadataRef = useRef(new Map<string, number>());
-  const attachmentSizeMetadata = useMemo(() => {
+  useMemo(() => {
     const sizes = new Map<string, number>();
     for (const entry of conversation.timeline) {
       for (const [path, sizeBytes] of Object.entries(
@@ -875,7 +875,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 }
               }
               if (!canUseBlob) return null;
-              const sizeBytes = attachmentSizeMetadata.get(reference);
+              const sizeBytes =
+                attachmentSizeMetadataRef.current.get(reference);
               if (sizeBytes !== undefined && sizeBytes > 0) {
                 return { sizeBytes };
               }
@@ -1022,7 +1023,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     attachmentSessionId,
     attachmentProfileId,
     attachmentWorkspaceRoot,
-    attachmentSizeMetadata,
   ]);
   const autonomyAvailable = commandSuggestions(
     "/",
