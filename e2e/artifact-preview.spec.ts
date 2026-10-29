@@ -38,7 +38,7 @@ async function deliver(page: Page, sessionId: string, name: string) {
   return { item, preview };
 }
 
-test("previews and pages PDF and DOCX artifacts", async ({ page }) => {
+test("previews and pages PDF artifacts", async ({ page }) => {
   const sessionId = await openConversation(page);
 
   const pdf = await deliver(page, sessionId, "report.pdf");
@@ -49,25 +49,10 @@ test("previews and pages PDF and DOCX artifacts", async ({ page }) => {
   await expect(
     pdf.preview.getByRole("spinbutton", { name: "Page" }),
   ).toHaveValue("2");
-
-  const docx = await deliver(page, sessionId, "report.docx");
-  const docxFrame = docx.preview.frameLocator("iframe");
-  await expect(docxFrame.locator("body")).toContainText(
-    "Quarterly artifact report",
-  );
-  await docx.preview.getByRole("button", { name: "Next page" }).click();
-  await expect(docxFrame.locator("body")).toContainText("Report paragraph 109");
 });
 
-test("previews worksheets and pages large CSV files", async ({ page }) => {
+test("previews and pages large CSV files", async ({ page }) => {
   const sessionId = await openConversation(page);
-  const workbook = await deliver(page, sessionId, "budget.xlsx");
-  await expect(
-    workbook.preview.getByRole("cell", { name: "Revenue" }),
-  ).toBeVisible();
-  await workbook.preview.getByLabel("Worksheet").selectOption("1");
-  await expect(workbook.preview.getByText("Second worksheet")).toBeVisible();
-
   const csv = await deliver(page, sessionId, "large.csv");
   await expect(csv.preview.getByText("Rows 1–100 of 126")).toBeVisible();
   await csv.preview.getByRole("button", { name: "Next rows" }).click();
@@ -151,13 +136,17 @@ test("previews Markdown, code, and text and offers download for unknown types", 
       .last(),
   ).toBeEnabled();
 
-  const deck = await deliver(page, sessionId, "pilot.pptx");
-  await expect(
-    deck.preview.getByText("This file type doesn't have an inline preview."),
-  ).toBeVisible();
-  await expect(
-    deck.preview.getByRole("button", { name: "Download", exact: true }),
-  ).toBeEnabled();
+  for (const name of ["report.docx", "budget.xlsx", "pilot.pptx"]) {
+    const office = await deliver(page, sessionId, name);
+    await expect(
+      office.preview.getByText(
+        "This file type doesn't have an inline preview.",
+      ),
+    ).toBeVisible();
+    await expect(
+      office.preview.getByRole("button", { name: "Download", exact: true }),
+    ).toBeEnabled();
+  }
 });
 
 test("retries an unsupported file with Download after a failed request", async ({

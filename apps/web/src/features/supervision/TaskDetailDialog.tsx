@@ -9,9 +9,14 @@ import {
   type ArtifactKind,
 } from "../artifact-preview/artifact-kind.ts";
 
-function previewKind(kind: string, path?: string): ArtifactKind | undefined {
+function previewKind(
+  kind: string,
+  path?: string,
+  content?: string,
+): ArtifactKind | undefined {
   const byPath = path ? artifactKind(path) : "unsupported";
   if (byPath !== "unsupported") return byPath;
+  if (content !== undefined) return "text";
   if (kind === "markdown") return "markdown";
   if (kind === "json") return "code";
   if (["text", "report", "log"].includes(kind)) return "text";
@@ -151,6 +156,7 @@ export function TaskDetailDialog({
                   kind={previewKind(
                     selected.artifact.kind,
                     selected.artifact.path,
+                    selected.content ?? selected.artifact.content,
                   )}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }

@@ -33,7 +33,6 @@ import {
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
-  OctosUiProtocolError,
   supportsFeature,
   supportsMethod,
   type PlanUpdated,
@@ -229,6 +228,7 @@ import {
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
 import {
+  isWorkspaceReadLimitError,
   readSessionFileBlob,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
@@ -917,12 +917,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               signal,
             );
           } catch (reason) {
-            if (
-              !(reason instanceof OctosUiProtocolError) ||
-              (reason.data as { kind?: unknown } | undefined)?.kind !==
-                "workspace_file_too_large"
-            )
-              throw reason;
+            if (!isWorkspaceReadLimitError(reason)) throw reason;
             const listed = canDescribe
               ? await listedFile(reference, false)
               : null;

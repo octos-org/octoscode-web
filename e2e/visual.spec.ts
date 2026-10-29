@@ -151,14 +151,16 @@ test("artifact preview matches baseline", async ({ page, request }) => {
   const reference = new URL(page.url()).searchParams.get("s");
   const sessionId = (JSON.parse(reference!) as string[])[2]!;
   const response = await request.post(
-    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=budget.xlsx&valid=1`,
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=large.csv&valid=1`,
   );
   expect(response.ok()).toBe(true);
-  const attachment = page.locator('[data-attachment="budget.xlsx"]');
+  const attachment = page.locator('[data-attachment="large.csv"]');
   await attachment
     .getByRole("button", { name: "Preview", exact: true })
     .click();
-  await expect(attachment.getByRole("cell", { name: "Revenue" })).toBeVisible();
+  await expect(
+    attachment.getByRole("cell", { name: "row-1", exact: true }),
+  ).toBeVisible();
   await expect(attachment.locator('[class*="fileSize"]')).toHaveText(/\d/);
   await expect(attachment).toHaveScreenshot("artifact-preview.png", SNAPSHOT);
 });

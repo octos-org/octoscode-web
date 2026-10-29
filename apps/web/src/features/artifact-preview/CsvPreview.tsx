@@ -1,95 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
-import { type ArtifactKind } from "./artifact-kind.ts";
-import { sandboxDocument } from "./sandbox-document.ts";
-import { sanitizeSandboxMarkup } from "./sandbox-markup.ts";
 import {
   PreviewWorkerClient,
   type PreviewWorkerMessage,
 } from "./worker-client.ts";
-import styles from "./OfficePreview.module.css";
+import styles from "./CsvPreview.module.css";
 
-const DOCX_PAGE_ELEMENTS = 100;
-const DOCX_PAGE_CHARACTERS = 200_000;
 const SHEET_PAGE_ROWS = 100;
-
-interface OfficePreviewProps {
-  kind: Extract<ArtifactKind, "docx" | "spreadsheet">;
-  blob: Blob;
-  name: string;
-  extension: string;
-}
-
-export function OfficePreview({
-  kind,
-  blob,
-  name,
-  extension,
-}: OfficePreviewProps) {
-  if (kind === "docx") return <DocxPreview blob={blob} name={name} />;
-  return <SpreadsheetPreview blob={blob} csv={extension === "csv"} />;
-}
-
-function DocxPreview({ blob, name }: { blob: Blob; name: string }) {
-  const t = useUiText();
-  const [pages, setPages] = useState<string[]>([]);
-  const [page, setPage] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    const client = new PreviewWorkerClient(
-      new Worker(new URL("./docx.worker.ts", import.meta.url), {
-        type: "module",
-      }),
-    );
-    void blob
-      .arrayBuffer()
-      .then(
-        (buffer) =>
-          client.request<PreviewWorkerMessage & { html: string }>(
-            { type: "docx", buffer },
-            [buffer],
-          ),
-        (reason: unknown) => {
-          throw reason;
-        },
-      )
-      .then(
-        (message) => {
-          if (!current) return;
-          const sanitized = sanitizeSandboxMarkup(message.html);
-          setPages(paginateDocument(sanitized));
-          setPage(0);
-        },
-        (reason: unknown) => {
-          if (current) setError(errorMessage(reason));
-        },
-      );
-    return () => {
-      current = false;
-      client.destroy();
-    };
-  }, [blob]);
-
-  if (error) return <PreviewError error={error} />;
-  if (!pages.length) return <LoadingPreview />;
-  return (
-    <div>
-      {pages.length > 1 ? (
-        <PageControls page={page} pageCount={pages.length} onPage={setPage} />
-      ) : null}
-      <iframe
-        className={styles.document}
-        title={t("Document preview of {name}", { name })}
-        srcDoc={sandboxDocument(pages[page] ?? "")}
-        sandbox=""
-        referrerPolicy="no-referrer"
-      />
-    </div>
-  );
-}
 
 interface SheetInfo {
   name: string;
@@ -110,7 +28,7 @@ interface WorkbookMessage extends PreviewWorkerMessage {
   truncated: boolean;
 }
 
-function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
+export function CsvPreview({ blob }: { blob: Blob }) {
   const t = useUiText();
   const clientRef = useRef<PreviewWorkerClient | undefined>(undefined);
   const [sheets, setSheets] = useState<SheetInfo[]>([]);
@@ -138,7 +56,7 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
   useEffect(() => {
     let current = true;
     const client = new PreviewWorkerClient(
-      new Worker(new URL("./spreadsheet.worker.ts", import.meta.url), {
+      new Worker(new URL("./csv.worker.ts", import.meta.url), {
         type: "module",
       }),
     );
@@ -146,9 +64,7 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
     void blob
       .arrayBuffer()
       .then((buffer) =>
-        client.request<WorkbookMessage>({ type: "open", buffer, csv }, [
-          buffer,
-        ]),
+        client.request<WorkbookMessage>({ type: "open", buffer }, [buffer]),
       )
       .then(
         (message) => {
@@ -185,7 +101,7 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
       client.destroy();
       clientRef.current = undefined;
     };
-  }, [blob, csv]);
+  }, [blob]);
 
   const loadPage = (nextSheet: number, nextPage: number) => {
     setLoading(true);
@@ -303,69 +219,6 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
       ) : null}
     </div>
   );
-}
-
-function PageControls({
-  page,
-  pageCount,
-  onPage,
-}: {
-  page: number;
-  pageCount: number;
-  onPage: (page: number) => void;
-}) {
-  const t = useUiText();
-  return (
-    <div className={styles.pages}>
-      <button
-        type="button"
-        disabled={page === 0}
-        onClick={() => onPage(Math.max(0, page - 1))}
-      >
-        {t("Previous page")}
-      </button>
-      <span aria-live="polite">
-        {t("Page {page} of {count}", { page: page + 1, count: pageCount })}
-      </span>
-      <button
-        type="button"
-        disabled={page >= pageCount - 1}
-        onClick={() => onPage(Math.min(pageCount - 1, page + 1))}
-      >
-        {t("Next page")}
-      </button>
-    </div>
-  );
-}
-
-function paginateDocument(html: string): string[] {
-  const document = new DOMParser().parseFromString(html, "text/html");
-  const pages: string[] = [];
-  let current: string[] = [];
-  let characters = 0;
-  for (const element of Array.from(document.body.children)) {
-    const source = element.outerHTML;
-    for (
-      let offset = 0;
-      offset < source.length;
-      offset += DOCX_PAGE_CHARACTERS
-    ) {
-      const part = source.slice(offset, offset + DOCX_PAGE_CHARACTERS);
-      if (
-        current.length &&
-        (current.length >= DOCX_PAGE_ELEMENTS ||
-          characters + part.length > DOCX_PAGE_CHARACTERS)
-      ) {
-        pages.push(current.join(""));
-        current = [];
-        characters = 0;
-      }
-      current.push(part);
-      characters += part.length;
-    }
-  }
-  if (current.length) pages.push(current.join(""));
-  return pages.length ? pages : [document.body.textContent ?? ""];
 }
 
 function columnName(index: number): string {

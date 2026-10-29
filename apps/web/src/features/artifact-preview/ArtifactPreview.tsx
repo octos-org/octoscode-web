@@ -30,9 +30,9 @@ const PdfPreview = lazy(() =>
     default: module.PdfPreview,
   })),
 );
-const OfficePreview = lazy(() =>
-  import("./OfficePreview.tsx").then((module) => ({
-    default: module.OfficePreview,
+const CsvPreview = lazy(() =>
+  import("./CsvPreview.tsx").then((module) => ({
+    default: module.CsvPreview,
   })),
 );
 const SandboxPreview = lazy(() =>
@@ -158,11 +158,13 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const oversized = error?.includes("workspace_file_too_large") ?? false;
-  const canDownload = oversized
-    ? false
-    : (props.downloadBlob ?? props.loadBlob)
-      ? true
-      : textKind && props.text !== undefined && !props.hasMore;
+  const canDownload = props.downloadBlob
+    ? true
+    : oversized
+      ? false
+      : props.loadBlob
+        ? true
+        : textKind && props.text !== undefined && !props.hasMore;
   let content: ReactNode;
   if (loading) {
     content = (
@@ -312,16 +314,7 @@ function ArtifactBody({
     );
   }
   if (kind === "pdf" && blob) return <PdfPreview blob={blob} name={name} />;
-  if ((kind === "docx" || kind === "spreadsheet") && blob) {
-    return (
-      <OfficePreview
-        kind={kind}
-        blob={blob}
-        name={name}
-        extension={extension}
-      />
-    );
-  }
+  if (kind === "csv" && blob) return <CsvPreview blob={blob} />;
   if (kind === "image" && blob) return <ImagePreview blob={blob} name={name} />;
   if ((kind === "html" || kind === "svg") && blob) {
     return <SandboxPreview blob={blob} name={name} svg={kind === "svg"} />;

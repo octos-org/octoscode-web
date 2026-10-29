@@ -4,9 +4,9 @@ import { artifactKind, artifactReadsBlob } from "./artifact-kind.ts";
 describe("artifact preview type detection", () => {
   it.each([
     ["report.PDF", "pdf"],
-    ["report.docx", "docx"],
-    ["budget.xlsx", "spreadsheet"],
-    ["budget.csv", "spreadsheet"],
+    ["report.docx", "unsupported"],
+    ["budget.xlsx", "unsupported"],
+    ["budget.csv", "csv"],
     ["deck.pptx", "unsupported"],
     ["diagram.svg", "svg"],
     ["photo.webp", "image"],

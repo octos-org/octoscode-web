@@ -1,7 +1,6 @@
 export type ArtifactKind =
   | "pdf"
-  | "docx"
-  | "spreadsheet"
+  | "csv"
   | "image"
   | "svg"
   | "html"
@@ -70,8 +69,7 @@ export function artifactExtension(reference: string): string {
 export function artifactKind(reference: string): ArtifactKind {
   const extension = artifactExtension(reference);
   if (extension === "pdf") return "pdf";
-  if (extension === "docx") return "docx";
-  if (extension === "xlsx" || extension === "csv") return "spreadsheet";
+  if (extension === "csv") return "csv";
   if (IMAGE_EXTENSIONS.has(extension)) return "image";
   if (extension === "svg") return "svg";
   if (extension === "html" || extension === "htm") return "html";

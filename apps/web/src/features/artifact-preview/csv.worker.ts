@@ -1,5 +1,4 @@
 /// <reference lib="webworker" />
-import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
 const MAX_ROWS = 100_000;
@@ -22,7 +21,6 @@ self.onmessage = async (
     requestId: number;
     type: "open" | "page";
     buffer?: ArrayBuffer;
-    csv?: boolean;
     sheet?: number;
     start?: number;
     limit?: number;
@@ -31,10 +29,8 @@ self.onmessage = async (
   const message = event.data;
   try {
     if (message.type === "open") {
-      if (!message.buffer) throw new Error("Missing workbook data");
-      sheets = message.csv
-        ? await readCsv(message.buffer)
-        : readWorkbook(message.buffer);
+      if (!message.buffer) throw new Error("Missing CSV data");
+      sheets = await readCsv(message.buffer);
       self.postMessage({
         requestId: message.requestId,
         type: "open",
@@ -66,79 +62,10 @@ self.onmessage = async (
     self.postMessage({
       requestId: message.requestId,
       type: "error",
-      error:
-        reason instanceof Error
-          ? reason.message
-          : "Spreadsheet conversion failed",
+      error: reason instanceof Error ? reason.message : "CSV conversion failed",
     });
   }
 };
-
-function readWorkbook(buffer: ArrayBuffer): Sheet[] {
-  truncated = false;
-  const workbook = XLSX.read(new Uint8Array(buffer), {
-    type: "array",
-    dense: true,
-    sheetRows: MAX_ROWS + 1,
-    cellFormula: false,
-    cellHTML: false,
-    bookVBA: false,
-  });
-  let remainingCells = MAX_CELLS;
-  return workbook.SheetNames.map((name) => {
-    const worksheet = workbook.Sheets[name]!;
-    const actualRange = XLSX.utils.decode_range(worksheet["!ref"] ?? "A1");
-    const width = Math.max(1, actualRange.e.c - actualRange.s.c + 1);
-    const rowBudget = Math.min(
-      MAX_ROWS,
-      Math.max(1, Math.floor(MAX_CELLS / width)),
-    );
-    const cappedRange = {
-      s: actualRange.s,
-      e: {
-        r: Math.min(actualRange.e.r, actualRange.s.r + rowBudget - 1),
-        c: Math.min(actualRange.e.c, actualRange.s.c + MAX_COLUMNS - 1),
-      },
-    };
-    const clipped =
-      actualRange.e.r > cappedRange.e.r || actualRange.e.c > cappedRange.e.c;
-    const source = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-      header: 1,
-      raw: false,
-      defval: "",
-      blankrows: true,
-      range: cappedRange,
-    });
-    const columns = Math.min(
-      MAX_COLUMNS,
-      source.reduce((width, row) => Math.max(width, row.length), 0),
-    );
-    const rowLimit = Math.min(
-      MAX_ROWS,
-      columns > 0 ? Math.floor(remainingCells / columns) : MAX_ROWS,
-    );
-    const rows = source.slice(0, Math.max(0, rowLimit)).map((row) => {
-      const boundedRow = row.slice(0, MAX_COLUMNS);
-      return Array.from({ length: columns }, (_, index) =>
-        cell(boundedRow[index]),
-      );
-    });
-    if (
-      clipped ||
-      source.length > rows.length ||
-      source.some((row) => row.length > columns)
-    ) {
-      truncated = true;
-    }
-    remainingCells = Math.max(0, remainingCells - rows.length * columns);
-    return {
-      name,
-      rows,
-      rowOffset: cappedRange.s.r,
-      columnOffset: cappedRange.s.c,
-    };
-  });
-}
 
 async function readCsv(buffer: ArrayBuffer): Promise<Sheet[]> {
   truncated = false;

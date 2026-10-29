@@ -60,14 +60,13 @@ completed writes.
 
 Delivered files, supervised-task artifacts, and files explicitly written by
 `write_file`/`edit_file` share an inline preview component. Tool arguments must
-carry the path; result prose is never scraped to invent an artifact. PDF and
-Office formats load their parsers only on demand; PDFs and Office pages,
-spreadsheet rows, and long text are bounded rather than dumped into one DOM.
-HTML, SVG, and converted DOCX previews use opaque-origin frames with scripts,
-forms, external requests, and credential access disabled. Unsupported or
-oversized files fail honestly to Download. File bytes come from the
-authenticated Session blob API, and copy-path/download controls never put the
-server token in a URL.
+carry the path; result prose is never scraped to invent an artifact. PDF and CSV
+parsers load only on demand; PDF pages, CSV rows, and long text are bounded
+rather than dumped into one DOM. HTML and SVG previews use opaque-origin frames
+with scripts, forms, external requests, and credential access disabled. DOCX,
+XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
+File bytes come from the authenticated Session blob API, and copy-path/download
+controls never put the server token in a URL.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

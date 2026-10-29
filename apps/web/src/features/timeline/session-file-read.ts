@@ -1,4 +1,7 @@
-import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
+import {
+  OctosUiProtocolError,
+  type OctosUiClient,
+} from "@octos-org/octoscode-client/protocol";
 
 const CHUNK_SIZE = 512 * 1024;
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
@@ -12,6 +15,21 @@ export function isWorkspaceRelativePath(value: string): boolean {
     !value.startsWith("pf/") &&
     !value.includes("\\") &&
     !value.split("/").includes("..")
+  );
+}
+
+export function isWorkspaceReadLimitError(reason: unknown): boolean {
+  if (
+    reason instanceof OctosUiProtocolError &&
+    (reason.data as { kind?: unknown } | undefined)?.kind ===
+      "workspace_file_too_large"
+  ) {
+    return true;
+  }
+  return (
+    reason instanceof Error &&
+    (reason.message === "Session file read returned an invalid offset" ||
+      reason.message === "Session file read returned an oversized chunk")
   );
 }
 

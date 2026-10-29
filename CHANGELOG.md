@@ -19,16 +19,15 @@
   Promote controls appear only when the server advertises those methods, and the
   page explicitly notes that edit/delete are not available in the protocol.
 - Add a reusable, localized artifact preview for delivered files, supervised
-  task artifacts, and explicit write/edit-file results. PDF, DOCX, XLSX/CSV,
-  images, HTML/SVG, Markdown, code, and plain text render inline; PPTX and other
-  unsupported or oversized files retain a clear download path. Path copy and
-  download actions sit beside the preview. File cards retain the extension and
-  show a type icon and server-reported size when available.
-- Parse Office files in bounded, on-demand workers, paginate large documents and
-  spreadsheets, and render one PDF page at a time. HTML/SVG and converted DOCX
-  frames use an opaque-origin, script-free offline sandbox without weakening the
-  application CSP. Include browser, component, security, and axe coverage for
-  the new surface.
+  task artifacts, and explicit write/edit-file results. PDF, CSV, images,
+  HTML/SVG, Markdown, code, and plain text render inline; DOCX, XLSX, PPTX, and
+  other unsupported or oversized files retain a clear download path. Path copy
+  and download actions sit beside the preview. File cards retain the extension
+  and show a type icon and server-reported size when available.
+- Parse CSV in a bounded, on-demand worker and render one PDF page at a time.
+  HTML/SVG frames use an opaque-origin, script-free offline sandbox without
+  weakening the application CSP. Include browser, component, security, and axe
+  coverage for the new surface.
 
 ## v0.20.0 — 2026-10-29
 
