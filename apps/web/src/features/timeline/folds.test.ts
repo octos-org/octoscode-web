@@ -104,7 +104,11 @@ describe("thinking one-line summary", () => {
     // 12 characters plus one Latin word; the comma counts as neither.
     expect(
       thinkingSummaryParts({ body: "先看一下工作区，再读 sales.csv 的数据" }),
-    ).toMatchObject({ words: 22, unit: "characters" });
+    ).toMatchObject({ words: 20, unit: "characters" });
+    expect(thinkingSummaryParts({ body: "你好，世界！" })).toMatchObject({
+      words: 4,
+      unit: "characters",
+    });
   });
 });
 

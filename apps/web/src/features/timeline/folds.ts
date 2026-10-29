@@ -53,7 +53,9 @@ function countWords(body: string): number {
   const trimmed = body.trim();
   if (!trimmed) return 0;
   if (CJK_SINGLE.test(trimmed)) {
-    return Array.from(trimmed.replace(/\s/g, "")).length;
+    return Array.from(trimmed.replace(/\s/g, "")).filter((character) =>
+      /[\p{L}\p{N}]/u.test(character),
+    ).length;
   }
   return trimmed.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word))
     .length;
