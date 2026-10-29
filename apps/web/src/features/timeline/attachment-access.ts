@@ -15,6 +15,12 @@ export interface AttachmentAccess {
     reference: string,
     signal?: AbortSignal,
   ) => Promise<Blob>;
+  /** Save a workspace file, using an unbounded legacy route when appropriate. */
+  saveWorkspaceFile?: (
+    reference: string,
+    sizeBytes?: number,
+    signal?: AbortSignal,
+  ) => Promise<Blob>;
   /** False when workspace reads are not advertised. */
   previewAvailable?: boolean;
   /** False when the legacy delivered-file blob method is not advertised. */

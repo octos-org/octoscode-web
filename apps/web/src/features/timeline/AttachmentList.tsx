@@ -89,7 +89,9 @@ function AttachmentItem({
     const abort = new AbortController();
     let url: string | null = null;
     const load = () => {
-      access.download(reference, abort.signal).then(
+      (workspaceFile
+        ? (access.downloadWorkspaceFile ?? access.download)
+        : access.download)(reference, abort.signal).then(
         (blob) => {
           if (abort.signal.aborted) return;
           url = URL.createObjectURL(blob);
@@ -127,7 +129,9 @@ function AttachmentItem({
     setError(null);
     try {
       const value = workspaceFile
-        ? await (access.downloadWorkspaceFile ?? access.download)(reference)
+        ? access.saveWorkspaceFile
+          ? await access.saveWorkspaceFile(reference, sizeBytes ?? undefined)
+          : await (access.downloadWorkspaceFile ?? access.download)(reference)
         : await (access.downloadForSave ?? access.download)(reference);
       const url = URL.createObjectURL(value);
       const anchor = document.createElement("a");
@@ -186,13 +190,7 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={
-            !access ||
-            busy ||
-            (workspaceFile &&
-              sizeBytes !== null &&
-              sizeBytes > 32 * 1024 * 1024)
-          }
+          disabled={!access || busy}
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >
@@ -217,10 +215,16 @@ function AttachmentItem({
             {...(workspaceFile
               ? {
                   downloadBlob: (signal: AbortSignal | undefined) =>
-                    (access.downloadWorkspaceFile ?? access.download)(
-                      reference,
-                      signal,
-                    ),
+                    access.saveWorkspaceFile
+                      ? access.saveWorkspaceFile(
+                          reference,
+                          sizeBytes ?? undefined,
+                          signal,
+                        )
+                      : (access.downloadWorkspaceFile ?? access.download)(
+                          reference,
+                          signal,
+                        ),
                 }
               : access.downloadForSave
                 ? {

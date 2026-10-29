@@ -879,6 +879,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         );
         return commands.download(reference, signal);
       },
+      async saveWorkspaceFile(reference, sizeBytes, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        if (
+          workspacePath &&
+          sizeBytes !== undefined &&
+          sizeBytes <= 32 * 1024 * 1024 &&
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
+        ) {
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
+        }
+        const commands = await client.mediaCommands(
+          attachmentSessionId,
+          attachmentProfileId,
+          capabilities,
+        );
+        return commands.download(reference, signal);
+      },
     };
   }, [
     protocol.client,

@@ -24,10 +24,38 @@ export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
   const exact = files.filter((file) => file.path === reference);
   if (exact.length === 1) return exact[0]!;
   if (exact.length > 1) return null;
-  if (reference.includes("/") || reference.includes("\\")) return null;
+  const compatible = files.filter((file) => {
+    const decoded = profileHandlePath(file.path);
+    return decoded !== null && pathSuffix(decoded) === pathSuffix(reference);
+  });
+  if (compatible.length === 1) return compatible[0]!;
+  if (
+    compatible.length > 1 ||
+    reference.includes("/") ||
+    reference.includes("\\")
+  )
+    return null;
   const name = attachmentName(reference);
   const matches = files.filter((file) => file.filename === name);
   return matches.length === 1 ? matches[0]! : null;
+}
+
+function pathSuffix(value: string): string {
+  return value.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+}
+
+function profileHandlePath(value: string): string | null {
+  if (!value.startsWith("pf/")) return null;
+  const encoded = value.split("/")[1];
+  if (!encoded) return null;
+  try {
+    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    return new TextDecoder().decode(
+      Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)),
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function formatAttachmentSize(bytes: number): string {

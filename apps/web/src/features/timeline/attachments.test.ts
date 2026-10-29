@@ -39,6 +39,15 @@ describe("attachment naming", () => {
     expect(uniqueAttachmentFile("pf/coding/report.md", files)).toBe(files[0]);
     expect(uniqueAttachmentFile("report.md", files)).toBeNull();
     expect(uniqueAttachmentFile("missing.md", files)).toBeNull();
+    expect(
+      uniqueAttachmentFile("/workspace/report.md", [
+        {
+          filename: "report.md",
+          path: "pf/dXNlcnMvd2ViL3dvcmtzcGFjZS9yZXBvcnQubWQ/report.md",
+          size_bytes: 20,
+        },
+      ]),
+    ).toMatchObject({ size_bytes: 20 });
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {
