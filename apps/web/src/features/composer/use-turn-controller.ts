@@ -339,7 +339,7 @@ export function createQueueBackedTurnController(options: {
             "Native code review",
             turn.text || "Review requested for current project changes.",
           )
-        : addOptimisticUser(current, turn.turnId, turn.text),
+        : addOptimisticUser(current, turn.turnId, turn.text, turn.media),
     );
     // §5.2: a user prompt crosses the driver seam FIRST. Await the seat
     // release (or its refusal) BEFORE any turn/start frame is written.

@@ -4,6 +4,7 @@ import {
   parseProjectionEnvelope,
   type RpcNotification,
   type SessionHydrateResult,
+  type TurnMedia,
 } from "@octos-org/octoscode-client/protocol";
 import {
   addSystemMessage,
@@ -238,6 +239,30 @@ export function timelineFromHydrate(
         : entry;
     });
   }
+  const previousAttachmentSizes = new Map<string, number>();
+  for (const entry of identities.previous ?? []) {
+    for (const [path, sizeBytes] of Object.entries(
+      entry.attachmentSizes ?? {},
+    )) {
+      previousAttachmentSizes.set(path, sizeBytes);
+    }
+  }
+  if (previousAttachmentSizes.size) {
+    entries = entries.map((entry) => {
+      const retained = Object.fromEntries(
+        (entry.media ?? []).flatMap((path) => {
+          const sizeBytes = previousAttachmentSizes.get(path);
+          return sizeBytes === undefined ? [] : [[path, sizeBytes] as const];
+        }),
+      );
+      return Object.keys(retained).length
+        ? {
+            ...entry,
+            attachmentSizes: { ...retained, ...entry.attachmentSizes },
+          }
+        : entry;
+    });
+  }
   const terminalTurns = new Map(
     (result.turns ?? [])
       .filter((turn) =>
@@ -325,6 +350,7 @@ export function addOptimisticUser(
   entries: readonly TimelineEntry[],
   turnId: string,
   text: string,
+  media: readonly TurnMedia[] = [],
 ): TimelineEntry[] {
   return upsertUser(entries, {
     id: `user:${turnId}`,
@@ -333,6 +359,13 @@ export function addOptimisticUser(
     body: text,
     status: "complete",
     turnId,
+    ...(media.length
+      ? {
+          attachmentSizes: Object.fromEntries(
+            media.map((item) => [item.path, item.size_bytes]),
+          ),
+        }
+      : {}),
   });
 }
 
@@ -632,7 +665,7 @@ function foldProjection(
       const fileName = filePath.split("/").pop() || filePath || "unknown";
       const sizeBytes = data.size_bytes;
       return upsert(entries, {
-        id: `file-attached:${turnId}:${fileName}`,
+        id: `file-attached:${turnId}:${filePath}`,
         kind: "system",
         title: "File attached",
         body: fileName,
@@ -1048,6 +1081,9 @@ function upsertCanonicalUser(
     status: "complete",
     turnId,
     streamId: eventId,
+    ...(optimistic?.attachmentSizes
+      ? { attachmentSizes: optimistic.attachmentSizes }
+      : {}),
   };
   // A drained steer can precede persistence of the original prompt. Match an
   // optimistic prompt by its text; never replace it with an unrelated input.
@@ -1060,18 +1096,23 @@ function upsertUser(
   user: TimelineEntry,
 ): TimelineEntry[] {
   const existing = entries.findIndex((entry) => entry.id === user.id);
+  const previous = existing >= 0 ? entries[existing] : undefined;
+  const nextUser =
+    previous?.attachmentSizes && !user.attachmentSizes
+      ? { ...user, attachmentSizes: previous.attachmentSizes }
+      : user;
   const firstReply = entries.findIndex(
     (entry) =>
       entry.turnId === user.turnId &&
       ["reasoning", "tool", "assistant"].includes(entry.kind),
   );
   if (firstReply < 0 || (existing >= 0 && existing < firstReply)) {
-    return upsert(entries, user);
+    return upsert(entries, nextUser);
   }
   // Canonical user_message can arrive after streaming replies. Place only its
   // display row before that turn's activity; retain every other row's order.
   const next = entries.filter((entry) => entry.id !== user.id);
-  next.splice(firstReply, 0, user);
+  next.splice(firstReply, 0, nextUser);
   return next;
 }
 

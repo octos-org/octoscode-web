@@ -4,6 +4,7 @@ import {
   attachmentNameParts,
   formatAttachmentSize,
   isPreviewableImage,
+  uniqueWorkspaceAttachmentFile,
 } from "./attachments.ts";
 
 describe("attachment naming", () => {
@@ -28,6 +29,38 @@ describe("attachment naming", () => {
     expect(formatAttachmentSize(999)).toBe("999 B");
     expect(formatAttachmentSize(1536)).toBe("1.5 KiB");
     expect(formatAttachmentSize(2 * 1024 * 1024)).toBe("2 MiB");
+  });
+
+  it("matches oversized workspace files by full relative path", () => {
+    const workspace = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/session/workspace/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    const unrelated = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/session/workspace/other/result.pdf")}/result.pdf`,
+      size_bytes: 50,
+    };
+    expect(
+      uniqueWorkspaceAttachmentFile("result.pdf", "/srv/project", [
+        unrelated,
+        workspace,
+      ]),
+    ).toBeNull();
+    expect(
+      uniqueWorkspaceAttachmentFile("reports/result.pdf", "/srv/project", [
+        unrelated,
+        workspace,
+      ]),
+    ).toBe(workspace);
+    expect(
+      uniqueWorkspaceAttachmentFile("result.pdf", "/srv/project", [
+        unrelated,
+        workspace,
+        { ...workspace, path: workspace.path.replace("users/", "backup/") },
+      ]),
+    ).toBeNull();
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {

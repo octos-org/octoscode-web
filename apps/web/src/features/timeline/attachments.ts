@@ -1,3 +1,5 @@
+import { workspaceRelativeArtifactPath } from "./session-file-read.ts";
+
 const PREVIEWABLE_IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 /**
@@ -8,6 +10,48 @@ export function attachmentName(reference: string): string {
   return (
     reference.split(/[\\/]/).filter(Boolean).at(-1) ?? (reference || "file")
   );
+}
+
+export interface AttachmentFileMetadata {
+  filename: string;
+  path: string;
+  size_bytes: number;
+}
+
+/** Match a full workspace-relative path, never a basename or workspace root name. */
+export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
+  reference: string,
+  workspaceRoot: string,
+  files: readonly T[],
+): T | null {
+  if (reference.startsWith("pf/")) {
+    const exact = files.filter((file) => file.path === reference);
+    return exact.length === 1 ? exact[0]! : null;
+  }
+  const relative = workspaceRelativeArtifactPath(reference, workspaceRoot);
+  if (!relative) return null;
+  const matches = files.filter((file) => {
+    const decoded = profileHandlePath(file.path)?.replace(/\\/g, "/");
+    return (
+      decoded === relative ||
+      (decoded !== undefined && decoded.endsWith(`/${relative}`))
+    );
+  });
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+function profileHandlePath(value: string): string | null {
+  if (!value.startsWith("pf/")) return null;
+  const encoded = value.split("/")[1];
+  if (!encoded) return null;
+  try {
+    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    return new TextDecoder().decode(
+      Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)),
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function formatAttachmentSize(bytes: number): string {

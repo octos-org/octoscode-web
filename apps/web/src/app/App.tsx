@@ -233,6 +233,7 @@ import {
   readSessionFileSize,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
+import { uniqueWorkspaceAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -783,6 +784,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const attachmentProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
+  const attachmentSizeMetadataRef = useRef(new Map<string, number>());
   const attachmentSizeMetadata = useMemo(() => {
     const sizes = new Map<string, number>();
     for (const entry of conversation.timeline) {
@@ -792,6 +794,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         sizes.set(path, sizeBytes);
       }
     }
+    const previous = attachmentSizeMetadataRef.current;
+    if (
+      previous.size === sizes.size &&
+      [...sizes].every(([path, size]) => previous.get(path) === size)
+    ) {
+      return previous;
+    }
+    attachmentSizeMetadataRef.current = sizes;
     return sizes;
   }, [conversation.timeline]);
   const attachmentAccess = useMemo((): AttachmentAccess | null => {
@@ -812,6 +822,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
+    const listedWorkspaceFile = async (reference: string) => {
+      if (!canUseBlob) return null;
+      const result = await client.listSessionFiles({
+        session_id: attachmentSessionId,
+      });
+      return uniqueWorkspaceAttachmentFile(
+        reference,
+        attachmentWorkspaceRoot,
+        result.files,
+      );
+    };
     return {
       ...(canReadWorkspace || canUseBlob
         ? {
@@ -832,10 +853,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   };
                 } catch (reason) {
                   if (!isWorkspaceReadLimitError(reason)) throw reason;
-                  // There is no metadata-only size lookup for oversized
-                  // workspace files. Fail honestly instead of reading the
-                  // whole file through the legacy endpoint just to stat it.
-                  return { saveAvailable: false };
+                  const listed = await listedWorkspaceFile(reference);
+                  // Listing is metadata-only and scoped to this Session. A
+                  // unique full-path handle preserves large tenant-contained
+                  // downloads; external files without one fail closed.
+                  return listed
+                    ? { sizeBytes: listed.size_bytes }
+                    : { saveAvailable: false };
                 }
               }
               if (!canUseBlob) return null;
@@ -900,18 +924,33 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           capabilities,
           CORE_UI_METHODS.SESSION_FILES_READ,
         );
+        let limitError: unknown;
         if (workspacePath && canReadWorkspace) {
           if (sizeBytes !== undefined && sizeBytes > 32 * 1024 * 1024) {
-            throw new Error(
+            limitError = new Error(
               "workspace_file_too_large: session file exceeds the read limit",
             );
+          } else {
+            try {
+              return await readSessionFileBlob(
+                client,
+                attachmentSessionId,
+                workspacePath,
+                signal,
+              );
+            } catch (reason) {
+              if (!isWorkspaceReadLimitError(reason)) throw reason;
+              limitError = reason;
+            }
           }
-          return readSessionFileBlob(
-            client,
+          const listed = await listedWorkspaceFile(reference);
+          if (!listed) throw limitError;
+          const commands = await client.mediaCommands(
             attachmentSessionId,
-            workspacePath,
-            signal,
+            attachmentProfileId,
+            capabilities,
           );
+          return commands.download(listed.path, signal);
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,

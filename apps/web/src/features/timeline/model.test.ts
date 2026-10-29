@@ -1923,4 +1923,58 @@ describe("delivered attachments", () => {
     expect(entries[0]?.media).toBeUndefined();
     expect(entries[0]?.attachmentSizes).toEqual({ "/work/report.pdf": 123 });
   });
+
+  it("keeps same-basename attachment sizes distinct", () => {
+    const attached = (path: string, seq: number) => ({
+      jsonrpc: "2.0" as const,
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq,
+        payload: {
+          type: "file_attached",
+          data: {
+            path,
+            mime: "application/pdf",
+            size_bytes: seq * 100,
+            attachment_owner: { assistant_segment_id: "segment-1" },
+          },
+        },
+      },
+    });
+    const first = foldNotification([], attached("/work/a/result.pdf", 1));
+    const entries = foldNotification(first, attached("/work/b/result.pdf", 2));
+    expect(entries).toHaveLength(2);
+    expect(entries.map((entry) => entry.attachmentSizes)).toEqual([
+      { "/work/a/result.pdf": 100 },
+      { "/work/b/result.pdf": 200 },
+    ]);
+  });
+
+  it("retains uploaded sizes through canonical user upsert", () => {
+    const media = [
+      {
+        path: "up/coding/image.png/image.png",
+        mime: "image/png",
+        size_bytes: 42,
+      },
+    ];
+    const optimistic = addOptimisticUser([], "turn-1", "Inspect", media);
+    const entries = foldNotification(optimistic, {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: { type: "user_message", data: { text: "Inspect" } },
+      },
+    });
+    expect(entries[0]?.attachmentSizes).toEqual({
+      "up/coding/image.png/image.png": 42,
+    });
+  });
 });
