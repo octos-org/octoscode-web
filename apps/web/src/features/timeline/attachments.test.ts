@@ -43,23 +43,36 @@ describe("attachment naming", () => {
       size_bytes: 50,
     };
     expect(
-      uniqueWorkspaceAttachmentFile("result.pdf", "/srv/project", [
-        unrelated,
-        workspace,
-      ]),
+      uniqueWorkspaceAttachmentFile(
+        "result.pdf",
+        "/data/users/session/workspace",
+        "session",
+        [unrelated, workspace],
+      ),
     ).toBeNull();
     expect(
-      uniqueWorkspaceAttachmentFile("reports/result.pdf", "/srv/project", [
-        unrelated,
-        workspace,
-      ]),
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/data/users/session/workspace",
+        "session",
+        [unrelated, workspace],
+      ),
     ).toBe(workspace);
     expect(
-      uniqueWorkspaceAttachmentFile("result.pdf", "/srv/project", [
-        unrelated,
-        workspace,
-        { ...workspace, path: workspace.path.replace("users/", "backup/") },
-      ]),
+      uniqueWorkspaceAttachmentFile(
+        "result.pdf",
+        "/data/users/session/workspace",
+        "session",
+        [unrelated, workspace, { ...workspace }],
+      ),
+    ).toBeNull();
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/external/project",
+        "session",
+        [workspace],
+      ),
     ).toBeNull();
   });
 

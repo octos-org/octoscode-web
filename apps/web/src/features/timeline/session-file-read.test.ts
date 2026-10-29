@@ -3,9 +3,17 @@ import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
 import {
   readSessionFileBlob,
   readSessionFileSize,
+  sessionUploadWorkspacePath,
 } from "./session-file-read.ts";
 
 describe("session file blob reader", () => {
+  it("maps uploaded handles to their materialized workspace path", () => {
+    expect(sessionUploadWorkspacePath("up/encoded/photo.png")).toBe(
+      "uploads/photo.png",
+    );
+    expect(sessionUploadWorkspacePath("report.md")).toBeNull();
+  });
+
   it("joins ordered chunks and preserves the server MIME type", async () => {
     let calls = 0;
     const client = {

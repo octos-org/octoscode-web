@@ -95,7 +95,8 @@ function AttachmentItem({
     if (
       descriptionRef.current?.access === access &&
       descriptionRef.current.reference === reference &&
-      sizeState === "ready"
+      sizeState === "ready" &&
+      (sizeBytes !== null || saveAvailable === false)
     ) {
       return;
     }

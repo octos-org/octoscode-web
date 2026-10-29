@@ -231,6 +231,7 @@ import {
   isWorkspaceReadLimitError,
   readSessionFileBlob,
   readSessionFileSize,
+  sessionUploadWorkspacePath,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
 import { uniqueWorkspaceAttachmentFile } from "../features/timeline/attachments.ts";
@@ -830,6 +831,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       return uniqueWorkspaceAttachmentFile(
         reference,
         attachmentWorkspaceRoot,
+        attachmentSessionId,
         result.files,
       );
     };
@@ -873,6 +875,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               if (!canUseBlob) return null;
               const sizeBytes = attachmentSizeMetadata.get(reference);
               if (sizeBytes !== undefined) return { sizeBytes };
+              if (reference.startsWith("up/") && canReadWorkspace) {
+                const uploadPath = sessionUploadWorkspacePath(reference);
+                if (!uploadPath) return null;
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      uploadPath,
+                    ),
+                  };
+                } catch {
+                  return null;
+                }
+              }
               try {
                 const result = await client.listSessionFiles({
                   session_id: attachmentSessionId,
