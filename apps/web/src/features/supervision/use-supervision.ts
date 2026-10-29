@@ -416,7 +416,12 @@ export function useSupervision(
     }
     setState((current) => ({
       ...current,
-      detail: { ...current.detail, artifactLoading: true, error: null },
+      detail: {
+        ...current.detail,
+        artifactLoading: true,
+        error: null,
+        selectedArtifact: null,
+      },
     }));
     try {
       const result = await client.readTaskArtifact({

@@ -7,6 +7,7 @@ export function isWorkspaceRelativePath(value: string): boolean {
   return (
     value.length > 0 &&
     !value.startsWith("/") &&
+    !/^[A-Za-z]:\//.test(value) &&
     !value.startsWith("up/") &&
     !value.startsWith("pf/") &&
     !value.includes("\\") &&
@@ -18,10 +19,15 @@ export function workspaceRelativeArtifactPath(
   reference: string,
   workspaceRoot: string,
 ): string | null {
-  if (isWorkspaceRelativePath(reference)) return reference;
-  const root = workspaceRoot.replace(/\/+$/, "");
-  if (!root || !reference.startsWith(`${root}/`)) return null;
-  const relative = reference.slice(root.length + 1);
+  const normalizedReference = reference.replace(/\\/g, "/");
+  if (isWorkspaceRelativePath(normalizedReference)) return normalizedReference;
+  const root = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (
+    !root ||
+    !normalizedReference.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+  )
+    return null;
+  const relative = normalizedReference.slice(root.length + 1);
   return isWorkspaceRelativePath(relative) ? relative : null;
 }
 

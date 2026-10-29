@@ -74,6 +74,7 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
     let cancel: (() => void) | undefined;
     setRendering(true);
     setError(null);
+    setPageText("");
     void document.getPage(pageNumber).then(
       (page) => {
         if (!current || !canvasRef.current) {
