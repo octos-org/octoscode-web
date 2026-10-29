@@ -378,7 +378,11 @@ export function useSupervision(
       }));
       return;
     }
-    if (artifact.path && artifactReadsBlob(artifact.path)) {
+    if (
+      artifact.kind !== "text" &&
+      artifact.path &&
+      artifactReadsBlob(artifact.path)
+    ) {
       setState((current) => ({
         ...current,
         detail: {

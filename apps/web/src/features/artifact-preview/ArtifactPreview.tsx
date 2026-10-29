@@ -113,10 +113,12 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     setError(null);
     try {
       const value =
-        blob ??
-        (props.text !== undefined
-          ? new Blob([props.text], { type: "text/plain;charset=utf-8" })
-          : await props.loadBlob?.());
+        props.hasMore && props.loadBlob
+          ? await props.loadBlob()
+          : (blob ??
+            (props.text !== undefined
+              ? new Blob([props.text], { type: "text/plain;charset=utf-8" })
+              : await props.loadBlob?.()));
       if (!value) return;
       saveArtifact(value, props.name);
     } catch (reason) {
@@ -136,7 +138,8 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     }
   };
 
-  const canDownload = props.text !== undefined || Boolean(props.loadBlob);
+  const canDownload =
+    (props.text !== undefined && !props.hasMore) || Boolean(props.loadBlob);
   let content: ReactNode;
   if (loading) {
     content = (

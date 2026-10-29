@@ -227,7 +227,10 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
-import { readSessionFileBlob } from "../features/timeline/session-file-read.ts";
+import {
+  isWorkspaceRelativePath,
+  readSessionFileBlob,
+} from "../features/timeline/session-file-read.ts";
 import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
@@ -828,7 +831,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       async download(reference, signal) {
         if (
           supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
-          !reference.startsWith("up/")
+          isWorkspaceRelativePath(reference)
         ) {
           return readSessionFileBlob(
             client,
@@ -3088,6 +3091,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 )
                           }
                           connected={session.connected}
+                          workspaceFileReadAvailable={supportsMethod(
+                            session.capabilities,
+                            CORE_UI_METHODS.SESSION_FILES_READ,
+                          )}
                           showThinking={conversation.showReasoning}
                           folds={timelineFolds}
                           onToggleFold={(id) =>

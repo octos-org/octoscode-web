@@ -3,6 +3,16 @@ import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
 const CHUNK_SIZE = 512 * 1024;
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
 
+export function isWorkspaceRelativePath(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !value.startsWith("/") &&
+    !value.startsWith("up/") &&
+    !value.includes("\\") &&
+    !value.split("/").includes("..")
+  );
+}
+
 /** Read one session-scoped workspace file using UPCR-2026-057 chunks. */
 export async function readSessionFileBlob(
   client: OctosUiClient,

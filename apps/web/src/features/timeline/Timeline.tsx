@@ -45,6 +45,7 @@ interface TimelineProps {
   onCollapseAll?: () => void;
   /** Live turn activity; rendered at the transcript bottom while streaming. */
   activity?: TurnActivity | null;
+  workspaceFileReadAvailable?: boolean;
   /**
    * Replaces the default empty state of a connected, empty Session. Pass it
    * only while the Session is empty so the memoized transcript stays stable.
@@ -63,6 +64,7 @@ export const Timeline = memo(function Timeline({
   onExpandAll,
   onCollapseAll,
   activity = null,
+  workspaceFileReadAvailable = false,
   emptyState,
 }: TimelineProps) {
   const t = useUiText();
@@ -197,6 +199,7 @@ export const Timeline = memo(function Timeline({
           entry={entry}
           expanded={folds ? folds[entry.id] === true : undefined}
           onToggleFold={toggleFold}
+          workspaceFileReadAvailable={workspaceFileReadAvailable}
         />
       ))}
       <TurnActivityIndicator activity={activity} />
@@ -213,10 +216,12 @@ const TimelineEntryView = memo(function TimelineEntryView({
   entry,
   expanded,
   onToggleFold,
+  workspaceFileReadAvailable,
 }: {
   entry: TimelineEntry;
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
+  workspaceFileReadAvailable: boolean;
 }) {
   switch (entry.kind) {
     case "reasoning":
@@ -233,6 +238,7 @@ const TimelineEntryView = memo(function TimelineEntryView({
           entry={entry}
           expanded={expanded}
           onToggleFold={onToggleFold}
+          workspaceFileReadAvailable={workspaceFileReadAvailable}
         />
       );
     default:
@@ -308,7 +314,9 @@ function ReasoningBlock(props: FoldableBlockProps) {
 }
 
 /** Tool details stay available without pushing the response down as output arrives. */
-function ToolBlock(props: FoldableBlockProps) {
+function ToolBlock(
+  props: FoldableBlockProps & { workspaceFileReadAvailable: boolean },
+) {
   const { entry } = props;
   const t = useUiText();
   const running = entry.status === "running";
@@ -360,7 +368,9 @@ function ToolBlock(props: FoldableBlockProps) {
           )}
         </div>
       </details>
-      {entry.status === "complete" && entry.artifactPath ? (
+      {entry.status === "complete" &&
+      entry.artifactPath &&
+      props.workspaceFileReadAvailable ? (
         <AttachmentList media={[entry.artifactPath]} />
       ) : null}
     </>

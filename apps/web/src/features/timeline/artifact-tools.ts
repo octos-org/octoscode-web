@@ -1,3 +1,5 @@
+import { isWorkspaceRelativePath } from "./session-file-read.ts";
+
 /** A file path explicitly written by a tool; never inferred from result prose. */
 export function writtenArtifactPath(
   toolName: string,
@@ -34,7 +36,8 @@ function validPath(value: unknown): string | null {
   return typeof value === "string" &&
     value.trim() &&
     !/\p{Cc}/u.test(value) &&
-    value.length <= 16_384
+    value.length <= 16_384 &&
+    isWorkspaceRelativePath(value)
     ? value
     : null;
 }

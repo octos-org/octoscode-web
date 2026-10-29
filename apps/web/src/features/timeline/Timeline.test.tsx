@@ -68,6 +68,7 @@ describe("Timeline", () => {
       >
         <Timeline
           connected
+          workspaceFileReadAvailable
           entries={[
             {
               id: "tool-write",
@@ -83,6 +84,25 @@ describe("Timeline", () => {
     );
     expect(html).toContain('data-attachment="report.md"');
     expect(html).toContain("Download report.md");
+  });
+
+  it("does not offer workspace artifacts without the read capability", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={[
+          {
+            id: "tool-write",
+            kind: "tool",
+            title: "write_file",
+            body: "Successfully wrote report.md",
+            status: "complete",
+            artifactPath: "report.md",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toContain('data-attachment="report.md"');
   });
 
   it("disables downloads when no Session can serve files", () => {

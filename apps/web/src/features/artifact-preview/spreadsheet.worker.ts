@@ -94,13 +94,12 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
       MAX_ROWS,
       columns > 0 ? Math.floor(remainingCells / columns) : MAX_ROWS,
     );
-    const rows = source
-      .slice(0, Math.max(0, rowLimit))
-      .map((row) =>
-        Array.from({ length: columns }, (_, index) =>
-          cell(row.slice(0, MAX_COLUMNS)[index]),
-        ),
+    const rows = source.slice(0, Math.max(0, rowLimit)).map((row) => {
+      const boundedRow = row.slice(0, MAX_COLUMNS);
+      return Array.from({ length: columns }, (_, index) =>
+        cell(boundedRow[index]),
       );
+    });
     if (
       source.length > rows.length ||
       source.some((row) => row.length > columns)
