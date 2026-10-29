@@ -169,11 +169,6 @@ test("previews delivered images without a replayed size event", async ({
       socket.send(JSON.stringify(frame));
     });
   });
-  let requests = 0;
-  await page.route("**/api/files**", (route) => {
-    requests += 1;
-    return route.continue();
-  });
   const sessionId = await openConversation(page);
   const response = await page.request.post(
     `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=photo.png&valid=1`,
@@ -183,7 +178,6 @@ test("previews delivered images without a replayed size event", async ({
   await expect(item.getByRole("img", { name: "photo.png" })).toBeVisible();
   await item.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(item.locator('[data-artifact-kind="image"] img')).toBeVisible();
-  expect(requests).toBe(1);
 });
 
 test("retries an unsupported file with Download after a failed request", async ({

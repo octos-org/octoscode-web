@@ -833,35 +833,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         result.files,
       );
     };
-    const deliveredBlobs = new Map<string, Promise<Blob>>();
-    const loadDeliveredBlob = (reference: string, signal?: AbortSignal) => {
-      const existing = deliveredBlobs.get(reference);
-      if (existing) return existing;
-      const pending = (async () => {
-        const commands = await client.mediaCommands(
-          attachmentSessionId,
-          attachmentProfileId,
-          capabilities,
-        );
-        return commands.download(reference, signal);
-      })();
-      deliveredBlobs.set(reference, pending);
-      pending.then(
-        (blob) => {
-          if (blob.size > 50 * 1024 * 1024) {
-            deliveredBlobs.delete(reference);
-            return;
-          }
-          if (deliveredBlobs.size > 4) {
-            const oldest = deliveredBlobs.keys().next().value;
-            if (oldest) deliveredBlobs.delete(oldest);
-          }
-        },
-        () => {
-          deliveredBlobs.delete(reference);
-        },
+    const downloadBlob = async (reference: string, signal?: AbortSignal) => {
+      const commands = await client.mediaCommands(
+        attachmentSessionId,
+        attachmentProfileId,
+        capabilities,
       );
-      return pending;
+      return commands.download(reference, signal);
     };
     return {
       ...(canReadWorkspace || canUseBlob
@@ -896,13 +874,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               const sizeBytes = attachmentSizeMetadata.get(reference);
               if (sizeBytes !== undefined) return { sizeBytes };
               try {
-                // Older hydrate rows have no size event. Fetch once and let
-                // every preview action reuse these exact bytes.
-                const blob = await loadDeliveredBlob(reference);
-                return {
-                  sizeBytes: blob.size,
-                  ...(blob.size <= 50 * 1024 * 1024 ? { blob } : {}),
-                };
+                const result = await client.listSessionFiles({
+                  session_id: attachmentSessionId,
+                });
+                const exact = result.files.filter(
+                  (file) => file.path === reference,
+                );
+                return exact.length === 1
+                  ? { sizeBytes: exact[0]!.size_bytes }
+                  : null;
               } catch {
                 return null;
               }
@@ -918,10 +898,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         CORE_UI_METHODS.SESSION_FILES_LIST,
       ),
       async download(reference, signal) {
-        return loadDeliveredBlob(reference, signal);
+        return downloadBlob(reference, signal);
       },
       async downloadForSave(reference, signal) {
-        return loadDeliveredBlob(reference, signal);
+        return downloadBlob(reference, signal);
       },
       async downloadWorkspaceFile(reference, signal) {
         const workspacePath = workspaceRelativeArtifactPath(
@@ -939,7 +919,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             signal,
           );
         }
-        return loadDeliveredBlob(reference, signal);
+        return downloadBlob(reference, signal);
       },
       async saveWorkspaceFile(reference, sizeBytes, signal) {
         const workspacePath = workspaceRelativeArtifactPath(

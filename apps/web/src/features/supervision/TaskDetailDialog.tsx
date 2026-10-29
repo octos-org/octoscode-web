@@ -41,7 +41,6 @@ interface TaskDetailDialogProps {
       ) => Promise<{
         sizeBytes?: number;
         saveAvailable?: boolean;
-        blob?: Blob;
       } | null>)
     | undefined;
   loadArtifact?:
@@ -70,7 +69,6 @@ export function TaskDetailDialog({
     pending: boolean;
     sizeBytes?: number;
     saveAvailable?: boolean;
-    blob?: Blob;
   }>();
   useEffect(() => {
     if (!selectedPath || !describeArtifact) {
@@ -91,7 +89,6 @@ export function TaskDetailDialog({
             ...(info?.saveAvailable !== undefined
               ? { saveAvailable: info.saveAvailable }
               : {}),
-            ...(info?.blob ? { blob: info.blob } : {}),
           });
         }
       },
@@ -123,7 +120,6 @@ export function TaskDetailDialog({
   const currentSize =
     sizeResult?.path === selectedPath ? sizeResult : undefined;
   const sizeBytes = currentSize?.sizeBytes;
-  const previewBlob = currentSize?.blob;
   const saveAvailable = currentSize?.saveAvailable;
   const canDownloadText = Boolean(
     selectedBlobAvailable ||
@@ -256,22 +252,18 @@ export function TaskDetailDialog({
                   text={selected.content ?? selected.artifact.content}
                   hasMore={selected.has_more}
                   onLoadMore={onLoadMoreArtifact}
-                  {...(previewBlob
-                    ? { loadBlob: async () => previewBlob }
-                    : selectedBlobAvailable && loadArtifact
-                      ? {
-                          loadBlob: (signal?: AbortSignal) =>
-                            loadArtifact(selectedPath!, signal),
-                        }
-                      : {})}
-                  {...(previewBlob
-                    ? { downloadBlob: async () => previewBlob }
-                    : selectedBlobAvailable && downloadArtifact
-                      ? {
-                          downloadBlob: (signal?: AbortSignal) =>
-                            downloadArtifact(selected.artifact.path!, signal),
-                        }
-                      : {})}
+                  {...(selectedBlobAvailable && loadArtifact
+                    ? {
+                        loadBlob: (signal?: AbortSignal) =>
+                          loadArtifact(selectedPath!, signal),
+                      }
+                    : {})}
+                  {...(selectedBlobAvailable && downloadArtifact
+                    ? {
+                        downloadBlob: (signal?: AbortSignal) =>
+                          downloadArtifact(selected.artifact.path!, signal),
+                      }
+                    : {})}
                 />
                 {state.detail.artifactLoading ? (
                   <div role="status">{t("Reading artifact…")}</div>

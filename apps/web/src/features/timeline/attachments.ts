@@ -30,11 +30,12 @@ export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   }
   const relative = workspaceRelativeArtifactPath(reference, workspaceRoot);
   if (!relative) return null;
+  const expected = `workspace/${relative}`;
   const matches = files.filter((file) => {
     const decoded = profileHandlePath(file.path)?.replace(/\\/g, "/");
     return (
-      decoded === relative ||
-      (decoded !== undefined && decoded.endsWith(`/${relative}`))
+      decoded === expected ||
+      (decoded !== undefined && decoded.endsWith(`/${expected}`))
     );
   });
   return matches.length === 1 ? matches[0]! : null;
