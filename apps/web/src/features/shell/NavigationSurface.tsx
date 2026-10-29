@@ -17,8 +17,8 @@ export function NavigationSurface({
   onClose: () => void;
   children: ReactNode;
 }) {
-  if (!compact) return children;
   const t = useUiText();
+  if (!compact) return children;
   if (!open) return null;
   return (
     <Suspense fallback={null}>

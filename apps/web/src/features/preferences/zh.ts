@@ -1616,11 +1616,21 @@ const catalog: Readonly<Record<string, string>> = {
   on: "开启",
   "{action} — desktop notifications": "{action} — 桌面通知",
   "{name} unavailable": "{name}无法显示",
-  "{seconds} s · {words} words": "{seconds} 秒 · {words} 字",
+  "{seconds} s · {words} words": "{seconds} 秒 · {words} 个词",
+  "{seconds} s · {words} characters": "{seconds} 秒 · {words} 字",
   "{value0} — {value1}": "{value0} — {value1}",
   "{value0}. The browser cannot distinguish an unavailable server from a rejected token. If these are correct, check allowed Web origins and WebSocket proxy forwarding.":
     "{value0}。浏览器无法区分服务器不可用和访问令牌被拒绝。如果这两项都没问题，请检查允许的网页来源和 WebSocket 代理转发。",
-  "{words} words": "{words} 字",
+  "{words} words": "{words} 个词",
+  "{words} characters": "{words} 字",
+  Thinking: "思考中",
+  "Thinking · {words} words": "思考 · {words} 个词",
+  "Thinking · {words} characters": "思考 · {words} 字",
+  "Thinking · {seconds} s · {words} words":
+    "思考 · {seconds} 秒 · {words} 个词",
+  "Thinking · {seconds} s · {words} characters":
+    "思考 · {seconds} 秒 · {words} 字",
+  "{seconds} s": "{seconds} 秒",
 
   now: "刚刚",
   Connected: "已连接",

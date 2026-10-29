@@ -20,17 +20,28 @@ export function CopySessionLinkButton({
   const t = useUiText();
   const [copied, setCopied] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const generation = useRef(0);
+  const referenceKey = JSON.stringify(reference);
+  useEffect(() => {
+    generation.current += 1;
+    setCopied(false);
+    window.clearTimeout(timer.current);
+  }, [referenceKey]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const copy = async () => {
+    const requestGeneration = generation.current;
     try {
       await navigator.clipboard.writeText(
         createSavedSessionUrl(window.location.href, reference),
       );
     } catch {
-      onClipboardUnavailable();
+      if (shouldPublishCopyConfirmation(requestGeneration, generation.current))
+        onClipboardUnavailable();
       return;
     }
+    if (!shouldPublishCopyConfirmation(requestGeneration, generation.current))
+      return;
     setCopied(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setCopied(false), 2000);
@@ -53,4 +64,11 @@ export function CopySessionLinkButton({
       </span>
     </>
   );
+}
+
+export function shouldPublishCopyConfirmation(
+  requestGeneration: number,
+  currentGeneration: number,
+): boolean {
+  return requestGeneration === currentGeneration;
 }

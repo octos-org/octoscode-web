@@ -271,11 +271,12 @@ function ReasoningBlock(props: FoldableBlockProps) {
   const { entry } = props;
   const t = useUiText();
   const running = entry.status === "running";
-  const { seconds, words } = thinkingSummaryParts({
+  const { seconds, words, unit } = thinkingSummaryParts({
     body: entry.body,
     startedAtMs: entry.startedAtMs,
     endedAtMs: entry.endedAtMs,
   });
+  const countLabel = t(`{words} ${unit}`, { words });
   return (
     <details
       data-timeline-entry={entry.id}
@@ -289,8 +290,8 @@ function ReasoningBlock(props: FoldableBlockProps) {
         {words > 0 ? (
           <span className={styles.toolStatusLabel}>
             {seconds === undefined
-              ? t("{words} words", { words })
-              : t("{seconds} s · {words} words", { seconds, words })}
+              ? countLabel
+              : `${t("{seconds} s", { seconds })} · ${countLabel}`}
           </span>
         ) : null}
         <ChevronDownIcon className={styles.chevron} />

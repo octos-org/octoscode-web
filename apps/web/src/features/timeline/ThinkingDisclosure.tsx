@@ -18,7 +18,7 @@ export function ThinkingDisclosure({
 }: ThinkingDisclosureProps) {
   const t = useUiText();
   const bodyId = useId();
-  const { seconds, words } = thinkingSummaryParts({
+  const { seconds, words, unit } = thinkingSummaryParts({
     body: entry.body,
     startedAtMs: entry.startedAtMs,
     endedAtMs: entry.endedAtMs,
@@ -27,8 +27,8 @@ export function ThinkingDisclosure({
   // both catalogs carry it; the model's prose stays untranslated.
   const summary =
     seconds === undefined
-      ? t("Thinking · {words} words", { words })
-      : t("Thinking · {seconds} s · {words} words", { seconds, words });
+      ? t(`Thinking · {words} ${unit}`, { words })
+      : t(`Thinking · {seconds} s · {words} ${unit}`, { seconds, words });
   return (
     <div className="entry-content">
       <button

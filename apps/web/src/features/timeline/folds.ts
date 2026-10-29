@@ -48,6 +48,8 @@ const TRUNCATED_TARGET_LENGTH = 24;
 // their characters counts as one, the way a CJK reader counts length.
 const CJK =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+const CJK_SINGLE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 function countWords(body: string): number {
   const characters = body.match(CJK)?.length ?? 0;
@@ -78,13 +80,16 @@ export interface ThinkingSummaryInput {
 export function thinkingSummaryParts(input: ThinkingSummaryInput): {
   seconds: number | undefined;
   words: number;
+  unit: "words" | "characters";
 } {
+  const cjk = CJK_SINGLE.test(input.body);
   return {
     seconds: durationSeconds(
       input.startedAtMs,
       input.endedAtMs ?? input.updatedAtMs,
     ),
     words: countWords(input.body),
+    unit: cjk ? "characters" : "words",
   };
 }
 
