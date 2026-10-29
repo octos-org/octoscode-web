@@ -33,6 +33,7 @@ import {
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
+  OctosUiProtocolError,
   supportsFeature,
   supportsMethod,
   type PlanUpdated,
@@ -798,6 +799,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     let refreshPromise:
       | Promise<{ filename: string; path: string; size_bytes: number }[]>
       | undefined;
+    let refreshUsers = 0;
     const missingReferences = new Set<string>();
     const canDescribe = supportsMethod(
       capabilities,
@@ -814,11 +816,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           // A later delivery may postdate the shared listing. Refresh a miss
           // once for this card; duplicates still stay ambiguous.
           filesPromise = undefined;
+          refreshUsers += 1;
           refreshPromise ??= client
             .listSessionFiles({ session_id: attachmentSessionId })
             .then((result) => result.files);
           filesPromise = refreshPromise;
           file = uniqueAttachmentFile(reference, await filesPromise);
+          refreshUsers -= 1;
+          if (refreshUsers === 0) refreshPromise = undefined;
           if (!file) missingReferences.add(reference);
         }
         return file;
@@ -893,12 +898,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024) &&
           supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
         ) {
-          return readSessionFileBlob(
-            client,
-            attachmentSessionId,
-            workspacePath,
-            signal,
-          );
+          try {
+            return await readSessionFileBlob(
+              client,
+              attachmentSessionId,
+              workspacePath,
+              signal,
+            );
+          } catch (reason) {
+            if (
+              !(reason instanceof OctosUiProtocolError) ||
+              (reason.data as { kind?: unknown } | undefined)?.kind !==
+                "workspace_file_too_large"
+            )
+              throw reason;
+          }
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,
@@ -4555,7 +4569,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_LIST,
               )
-                ? attachmentAccess?.downloadWorkspaceFile
+                ? (path: string, signal?: AbortSignal) =>
+                    attachmentAccess!.saveWorkspaceFile!(
+                      path,
+                      undefined,
+                      signal,
+                    )
                 : undefined
             }
           />
