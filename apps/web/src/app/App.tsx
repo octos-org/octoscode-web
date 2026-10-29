@@ -830,13 +830,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           // once for this card; duplicates still stay ambiguous.
           filesPromise = undefined;
           refreshUsers += 1;
-          refreshPromise ??= client
-            .listSessionFiles({ session_id: attachmentSessionId })
-            .then((result) => result.files);
-          filesPromise = refreshPromise;
-          file = findFile(await filesPromise);
-          refreshUsers -= 1;
-          if (refreshUsers === 0) refreshPromise = undefined;
+          try {
+            refreshPromise ??= client
+              .listSessionFiles({ session_id: attachmentSessionId })
+              .then((result) => result.files);
+            filesPromise = refreshPromise;
+            file = findFile(await filesPromise);
+          } finally {
+            refreshUsers -= 1;
+            if (refreshUsers === 0) refreshPromise = undefined;
+          }
           if (!file) missingReferences.add(reference);
         }
         return file;
@@ -4582,6 +4585,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             workspaceReadAvailable={supportsMethod(
               session.capabilities,
               CORE_UI_METHODS.SESSION_FILES_READ,
+            )}
+            profileFileReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_LIST,
             )}
             loadArtifact={
               supportsMethod(

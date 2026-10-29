@@ -371,6 +371,8 @@ export function useSupervision(
         ...current,
         detail: {
           ...current.detail,
+          artifactLoading: false,
+          error: null,
           selectedArtifact: {
             session_id: sessionId,
             task_id: taskId,
@@ -449,7 +451,12 @@ export function useSupervision(
         },
       }));
     } catch (reason) {
-      if (dependenciesRef.current.client() !== client) return;
+      if (
+        dependenciesRef.current.client() !== client ||
+        !detailRequestsRef.current.isCurrent(request)
+      ) {
+        return;
+      }
       setState((current) => ({
         ...current,
         detail: {

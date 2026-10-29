@@ -32,6 +32,7 @@ interface TaskDetailDialogProps {
   onReadArtifact: (artifact: TaskArtifactRecord) => void;
   onLoadMoreArtifact: () => void;
   workspaceReadAvailable?: boolean;
+  profileFileReadAvailable?: boolean;
   loadArtifact?:
     ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
   downloadArtifact?:
@@ -45,6 +46,7 @@ export function TaskDetailDialog({
   onReadArtifact,
   onLoadMoreArtifact,
   workspaceReadAvailable = false,
+  profileFileReadAvailable = false,
   loadArtifact,
   downloadArtifact,
 }: TaskDetailDialogProps) {
@@ -58,7 +60,9 @@ export function TaskDetailDialog({
   const selectedBlobAvailable = Boolean(
     selectedPath &&
     loadArtifact &&
-    (workspaceReadAvailable || selectedPath.startsWith("pf/")),
+    (selectedPath.startsWith("pf/")
+      ? profileFileReadAvailable
+      : workspaceReadAvailable),
   );
 
   return (

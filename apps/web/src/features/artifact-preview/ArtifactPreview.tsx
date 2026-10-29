@@ -132,14 +132,12 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     setDownloading(true);
     setError(null);
     try {
-      const saveLoader = props.downloadBlob ?? props.loadBlob;
-      const value =
-        saveLoader && (props.hasMore || !textKind)
-          ? await saveLoader()
-          : (blob ??
-            (props.text !== undefined
-              ? new Blob([props.text], { type: "text/plain;charset=utf-8" })
-              : await saveLoader?.()));
+      const value = props.downloadBlob
+        ? await props.downloadBlob()
+        : (blob ??
+          (props.text !== undefined && !props.hasMore
+            ? new Blob([props.text], { type: "text/plain;charset=utf-8" })
+            : await props.loadBlob?.()));
       if (!value) return;
       saveArtifact(value, props.name);
     } catch (reason) {
