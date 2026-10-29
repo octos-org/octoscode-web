@@ -912,6 +912,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 "workspace_file_too_large"
             )
               throw reason;
+            const listed = canDescribe ? await listedFile(reference) : null;
+            if (!listed) throw reason;
           }
         }
         const commands = await client.mediaCommands(
@@ -4552,10 +4554,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               supportsMethod(
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_READ,
-              ) ||
-              supportsMethod(
-                session.capabilities,
-                CORE_UI_METHODS.SESSION_FILES_LIST,
               )
                 ? attachmentAccess?.downloadWorkspaceFile
                 : undefined
@@ -4564,10 +4562,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               supportsMethod(
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_READ,
-              ) ||
-              supportsMethod(
-                session.capabilities,
-                CORE_UI_METHODS.SESSION_FILES_LIST,
               )
                 ? (path: string, signal?: AbortSignal) =>
                     attachmentAccess!.saveWorkspaceFile!(

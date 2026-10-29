@@ -67,7 +67,11 @@ export interface ArtifactPreviewProps {
 export function ArtifactPreview(props: ArtifactPreviewProps) {
   const t = useUiText();
   const reference = props.path ?? props.name;
-  const kind = props.kind ?? artifactKind(reference);
+  const kind =
+    props.kind ??
+    (artifactExtension(reference) === "" && props.text !== undefined
+      ? "text"
+      : artifactKind(reference));
   const textKind = ["markdown", "code", "text"].includes(kind);
   const previewSizeLimit = ["markdown", "code", "text", "html", "svg"].includes(
     kind,
@@ -154,11 +158,13 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const oversized = error?.includes("workspace_file_too_large") ?? false;
-  const canDownload = oversized
-    ? false
-    : (props.downloadBlob ?? props.loadBlob)
-      ? true
-      : textKind && props.text !== undefined && !props.hasMore;
+  const canDownload = props.downloadBlob
+    ? true
+    : oversized
+      ? false
+      : props.loadBlob
+        ? true
+        : textKind && props.text !== undefined && !props.hasMore;
   let content: ReactNode;
   if (loading) {
     content = (
