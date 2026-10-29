@@ -875,6 +875,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 }
               }
               if (!canUseBlob) return null;
+              const workspacePath = workspaceRelativeArtifactPath(
+                reference,
+                attachmentWorkspaceRoot,
+              );
+              if (workspacePath && canReadWorkspace) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      workspacePath,
+                    ),
+                  };
+                } catch {
+                  // Fall back to delivery-time metadata when the current
+                  // source cannot be read through the workspace route.
+                }
+              }
               const sizeBytes =
                 attachmentSizeMetadataRef.current.get(reference);
               if (sizeBytes !== undefined && sizeBytes > 0) {
@@ -895,24 +913,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 } catch {
                   // Older deliveries may predate the durable copy. Fall back
                   // to the current workspace source only as a last resort.
-                }
-              }
-              const workspacePath = workspaceRelativeArtifactPath(
-                reference,
-                attachmentWorkspaceRoot,
-              );
-              if (workspacePath && canReadWorkspace) {
-                try {
-                  return {
-                    sizeBytes: await readSessionFileSize(
-                      client,
-                      attachmentSessionId,
-                      workspacePath,
-                    ),
-                  };
-                } catch {
-                  // A delivered copy may exist even when the original
-                  // workspace-relative path is gone. Fall back to list metadata.
                 }
               }
               try {
@@ -4662,6 +4662,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               session.capabilities,
               CORE_UI_METHODS.SESSION_FILES_LIST,
             )}
+            artifactPathAvailable={attachmentAccess?.workspacePathAvailable}
             describeArtifact={attachmentAccess?.describe}
             loadArtifact={
               supportsMethod(

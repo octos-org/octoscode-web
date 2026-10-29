@@ -38,6 +38,7 @@ interface TaskDetailDialogProps {
   onLoadMoreArtifact: () => void;
   workspaceReadAvailable?: boolean;
   profileFileReadAvailable?: boolean;
+  artifactPathAvailable?: ((path: string) => boolean) | undefined;
   describeArtifact?:
     | ((
         path: string,
@@ -61,6 +62,7 @@ export function TaskDetailDialog({
   onLoadMoreArtifact,
   workspaceReadAvailable = false,
   profileFileReadAvailable = false,
+  artifactPathAvailable,
   describeArtifact,
   loadArtifact,
   downloadArtifact,
@@ -113,7 +115,8 @@ export function TaskDetailDialog({
     loadArtifact &&
     (selectedPath.startsWith("pf/")
       ? profileFileReadAvailable
-      : workspaceReadAvailable),
+      : workspaceReadAvailable &&
+        (artifactPathAvailable?.(selectedPath) ?? true)),
   );
   const sizePending = Boolean(
     selectedPath &&
