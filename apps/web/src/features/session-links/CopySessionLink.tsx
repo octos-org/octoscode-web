@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createSavedSessionUrl } from "./create-saved-session-url.ts";
 import type { SavedSessionReference } from "./saved-session-link.ts";
 import styles from "./CopySessionLink.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 type CopyState =
   | { phase: "idle" | "copying" | "copied" }
@@ -16,6 +17,7 @@ export function CopySessionLink({
   disabled?: boolean;
 }) {
   const [state, setState] = useState<CopyState>({ phase: "idle" });
+  const t = useUiText();
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
   const requestRef = useRef(0);
   useEffect(() => {
@@ -58,24 +60,24 @@ export function CopySessionLink({
         onClick={() => void copy()}
       >
         {state.phase === "copied"
-          ? "Copied"
+          ? t("Copied")
           : state.phase === "copying"
-            ? "Copying…"
-            : "Copy conversation link"}
+            ? t("Copying…")
+            : t("Copy conversation link")}
       </button>
       {state.phase === "copied" ? (
         <span className="sr-only" role="status">
-          Conversation link copied.
+          {t("Conversation link copied.")}
         </span>
       ) : null}
       {state.phase === "fallback" ? (
         <div className={styles.fallback}>
           <p role="status">
-            Clipboard unavailable. Select and copy the link below.
+            {t("Clipboard unavailable. Select and copy the link below.")}
           </p>
           <textarea
             ref={fallbackRef}
-            aria-label="Conversation link"
+            aria-label={t("Conversation link")}
             readOnly
             rows={3}
             value={state.url}
@@ -85,7 +87,7 @@ export function CopySessionLink({
       ) : null}
       {state.phase === "error" ? (
         <p className={styles.error} role="alert">
-          This conversation does not have a complete saved reference yet.
+          {t("This conversation does not have a complete saved reference yet.")}
         </p>
       ) : null}
     </div>

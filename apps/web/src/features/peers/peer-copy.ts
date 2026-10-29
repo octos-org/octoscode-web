@@ -11,11 +11,11 @@ export function peerClearAnnouncement(count: number): string {
  * Same convention as features/fleet/fleet-copy.ts: English source key →
  * Simplified Chinese value; `features/preferences/zh.ts` (another owner)
  * merges this via `{ ...catalog, ...FLEET_ZH_COPY, ...PEER_ZH_COPY }`. No
- * protocol vocabulary in any value (slug → 同侪 name, ids hidden).
+ * protocol vocabulary in any value (slug → 协作者 name, ids hidden).
  */
 export const PEER_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
-  "Hide peers": "隐藏同侪",
-  "Show peers": "显示同侪",
+  "Hide peers": "隐藏协作者",
+  "Show peers": "显示协作者",
   "needs you": "需要你",
   streaming: "正在输出",
   done: "已完成",
@@ -23,12 +23,12 @@ export const PEER_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Approve for this session": "本次会话内批准",
   "Approve {value0} for this session": "本次会话内批准 {value0}",
   "Answer {value0}": "回答 {value0}",
-  "Steer {value0}": "引导 {value0}",
+  "Steer {value0}": "插话 {value0}",
   "Stop {value0}": "停止 {value0}",
-  "Peer started a new turn": "同侪开始了新的回合",
-  "Enter steering text": "输入引导文字",
-  "Sends this answer and resumes the peer": "发送此回答并让同侪继续",
-  "Peer {value0}": "同侪 {value0}",
+  "Peer started a new turn": "协作者开始了新的一轮",
+  "Enter steering text": "输入插话内容",
+  "Sends this answer and resumes the peer": "发送此回答并让协作者继续",
+  "Peer {value0}": "协作者 {value0}",
   "Approve once": "仅此一次批准",
   "Approve {value0} once": "仅此一次批准 {value0}",
   "asks to run": "请求运行",

@@ -271,11 +271,12 @@ function ReasoningBlock(props: FoldableBlockProps) {
   const { entry } = props;
   const t = useUiText();
   const running = entry.status === "running";
-  const { seconds, words } = thinkingSummaryParts({
+  const { seconds, words, unit } = thinkingSummaryParts({
     body: entry.body,
     startedAtMs: entry.startedAtMs,
     endedAtMs: entry.endedAtMs,
   });
+  const countLabel = t(`{words} ${unit}`, { words });
   return (
     <details
       data-timeline-entry={entry.id}
@@ -289,8 +290,8 @@ function ReasoningBlock(props: FoldableBlockProps) {
         {words > 0 ? (
           <span className={styles.toolStatusLabel}>
             {seconds === undefined
-              ? t("{words} words", { words })
-              : t("{seconds} s · {words} words", { seconds, words })}
+              ? countLabel
+              : `${t("{seconds} s", { seconds })} · ${countLabel}`}
           </span>
         ) : null}
         <ChevronDownIcon className={styles.chevron} />
@@ -387,6 +388,13 @@ function ActivityGlyph({
   );
 }
 
+const SYSTEM_NOTICE_TITLES = new Set([
+  "Turn complete",
+  "Turn stopped",
+  "Turn failed",
+  "Turn rate limited",
+]);
+
 /** Assistant and user messages: full markdown rendering. */
 function DefaultEntry({ entry }: { entry: TimelineEntry }) {
   const t = useUiText();
@@ -404,7 +412,12 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
       <div className="entry-content">
         {entry.kind !== "assistant" ? (
           <div className="entry-heading">
-            <strong>{entry.title}</strong>
+            {/* System rows carry the client's own notices; translate those. */}
+            <strong>
+              {entry.kind === "system" && SYSTEM_NOTICE_TITLES.has(entry.title)
+                ? t(entry.title)
+                : entry.title}
+            </strong>
             {entry.status === "running" ? (
               <span className="running-label">{t("running")}</span>
             ) : null}

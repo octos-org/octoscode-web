@@ -48,7 +48,7 @@ describe("generated transcript labels render localized (judge #8)", () => {
         onToggle={() => {}}
       />,
     );
-    expect(html).toContain("思考 · 12 秒 · 6 词");
+    expect(html).toContain("思考 · 12 秒 · 6 个词");
     expect(html).not.toContain("Thinking · ");
   });
 
@@ -62,7 +62,7 @@ describe("generated transcript labels render localized (judge #8)", () => {
         onToggle={() => {}}
       />,
     );
-    expect(html).toContain("思考 · 6 词");
+    expect(html).toContain("思考 · 6 个词");
   });
 
   it("TurnActivityIndicator announces the zh status word", () => {

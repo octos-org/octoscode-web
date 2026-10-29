@@ -23,13 +23,13 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     "No plan yet. When Octos plans a task, its steps and progress show here.":
       "还没有计划。Octos 规划任务后，步骤和进度会显示在这里。",
     // Files
-    "Workspace folder": "工作文件夹",
+    "Workspace folder": "工作区",
     "Loading folders…": "正在加载文件夹…",
     "More folders here than the server lists at once.":
       "这里的文件夹比服务器一次能列出的多。",
     "No folders here.": "这里没有文件夹。",
     "Nothing changed here yet.": "这里还没有改动。",
-    "Outside this folder": "工作文件夹之外",
+    "Outside this folder": "工作区之外",
     "{count} changed": "{count} 个有改动",
     "Show the change to {name}": "查看 {name} 的改动",
     "Shows folders, and the files Octos changed in this session. The server can't list or open other files yet.":
@@ -49,7 +49,7 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     // Outputs
     "Nothing yet. Files Octos writes or sends in this session show here.":
       "还没有产物。本会话里 Octos 写出或发给你的文件会显示在这里。",
-    "Written in this folder": "写在工作文件夹里",
+    "Written in this folder": "写在工作区里",
     "Sent to you": "发给你的",
     "From background tasks": "后台任务产出",
     "All outputs": "全部产物",

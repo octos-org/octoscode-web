@@ -6,6 +6,7 @@ import {
   type ProductSidebarProps,
 } from "./ProductSidebar.tsx";
 import type { PeerRosterEntry } from "../peers/peer-manager.ts";
+import { UiTextProvider } from "../preferences/ui-text.tsx";
 
 const baseProps: ProductSidebarProps = {
   collapsed: false,
@@ -366,5 +367,19 @@ describe("ProductSidebar peer dock mount (dock plan §1)", () => {
     );
 
     expect(html).not.toContain("data-row-action=");
+  });
+
+  it("localizes the collapsed Fleet tooltip", () => {
+    const html = renderToStaticMarkup(
+      <UiTextProvider language="zh" catalog={{ Fleet: "多智能体" }}>
+        <ProductSidebar
+          {...baseProps}
+          collapsed
+          fleetEntry={{ label: "Fleet", icon: "F" }}
+          onFleet={vi.fn()}
+        />
+      </UiTextProvider>,
+    );
+    expect(html).toContain('title="多智能体"');
   });
 });

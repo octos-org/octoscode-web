@@ -115,6 +115,11 @@ export function GeneralSettingsContent({
   onStopServer,
 }: GeneralSettingsContentProps) {
   const t = useUiText();
+  const attentionAction = attentionSettings?.pending
+    ? t("Enabling…")
+    : attentionSettings?.enabled
+      ? t("On")
+      : t("Enable");
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState(false);
   const connectionBusy = connectionStatus === "connecting";
@@ -196,10 +201,11 @@ export function GeneralSettingsContent({
       {sessionReference ? (
         <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
           <div className={styles.settingCopy}>
-            <div className={styles.settingTitle}>Conversation link</div>
+            <div className={styles.settingTitle}>{t("Conversation link")}</div>
             <div className={styles.settingDescription}>
-              Save this link to open the conversation in another browser. You
-              will need access to the same Octos server.
+              {t(
+                "Save this link to open the conversation in another browser. You will need access to the same Octos server.",
+              )}
             </div>
           </div>
           <CopySessionLink
@@ -217,14 +223,14 @@ export function GeneralSettingsContent({
               className={styles.settingTitle}
               id="desktop-notifications-title"
             >
-              Desktop notifications
+              {t("Desktop notifications")}
             </div>
             <div
               className={styles.settingDescription}
               id="desktop-notifications-description"
               role={attentionSettings.error ? "alert" : "status"}
             >
-              {attentionSettings.message}
+              {t(attentionSettings.message)}
             </div>
           </div>
           <button
@@ -232,17 +238,15 @@ export function GeneralSettingsContent({
             className={styles.secondaryButton}
             // WCAG 2.5.3: the visible action word must be part of the
             // accessible name, with the setting it belongs to.
-            aria-label={`${attentionSettings.pending ? "Enabling…" : attentionSettings.enabled ? "On" : "Enable"} — desktop notifications`}
+            aria-label={t("{action} — desktop notifications", {
+              action: attentionAction,
+            })}
             aria-describedby="desktop-notifications-description"
             aria-pressed={attentionSettings.enabled}
             disabled={attentionSettings.pending || !attentionSettings.available}
             onClick={attentionSettings.onToggle}
           >
-            {attentionSettings.pending
-              ? "Enabling…"
-              : attentionSettings.enabled
-                ? "On"
-                : "Enable"}
+            {attentionAction}
           </button>
         </div>
       ) : null}
@@ -250,10 +254,11 @@ export function GeneralSettingsContent({
       {onCopyDiagnostics ? (
         <div className={`${styles.settingRow} ${styles.connectionActionsRow}`}>
           <div className={styles.settingCopy}>
-            <div className={styles.settingTitle}>Diagnostics</div>
+            <div className={styles.settingTitle}>{t("Diagnostics")}</div>
             <div className={styles.settingDescription}>
-              Copies a redacted snapshot: connection status, recovery detail,
-              and app identity. No credentials.
+              {t(
+                "Copies a redacted snapshot: connection status, recovery detail, and app identity. No credentials.",
+              )}
             </div>
           </div>
           <div className={styles.actionGroup}>
@@ -273,12 +278,13 @@ export function GeneralSettingsContent({
                 }
               }}
             >
-              {diagnosticsCopied ? "Copied" : "Copy diagnostics"}
+              {diagnosticsCopied ? t("Copied") : t("Copy diagnostics")}
             </button>
             {diagnosticsError ? (
               <span role="alert">
-                Could not copy diagnostics. Check clipboard access and try
-                again.
+                {t(
+                  "Could not copy diagnostics. Check clipboard access and try again.",
+                )}
               </span>
             ) : null}
           </div>

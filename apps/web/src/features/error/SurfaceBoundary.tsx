@@ -2,6 +2,7 @@ import { Component, Suspense, useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./SurfaceBoundary.module.css";
 import settingsShell from "../../ui/SettingsSurface.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 interface SurfaceBoundaryProps {
   children: ReactNode;
@@ -49,39 +50,44 @@ function UnavailableSurface({
   loading = false,
   loadingSize,
 }: SurfaceBoundaryProps & { loading?: boolean }) {
+  const t = useUiText();
   const settingsLoading = loading && loadingSize === "settings";
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const content = (
     <>
       <h2 id={titleId}>
-        {loading ? `Loading ${name.toLowerCase()}…` : `${name} unavailable`}
+        {loading
+          ? t("Loading {name}…", { name: t(name).toLowerCase() })
+          : t("{name} unavailable", { name: t(name) })}
       </h2>
       {loading ? (
         fallback
       ) : (
         <div role="alert">
           <p>
-            This view could not be displayed. Other parts of the app remain
-            available.
+            {t(
+              "This view could not be displayed. Other parts of the app remain available.",
+            )}
           </p>
           <p>
-            Reload the page to try again. Reloading may stop running work and
-            discard drafts and queued messages.
+            {t(
+              "Reload the page to try again. Reloading may stop running work and discard drafts and queued messages.",
+            )}
           </p>
         </div>
       )}
       <div className={styles.actions}>
         {onDismiss ? (
           <button ref={closeRef} type="button" onClick={onDismiss}>
-            {loading ? "Cancel" : "Close"}
+            {loading ? t("Cancel") : t("Close")}
           </button>
         ) : null}
         {!loading ? (
           <>
             {actions}
             <button type="button" onClick={() => window.location.reload()}>
-              Reload app
+              {t("Reload app")}
             </button>
           </>
         ) : null}

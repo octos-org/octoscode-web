@@ -44,9 +44,9 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
     expect(FLEET_ZH_COPY["Approve for {value0}"]).toBe("为 {value0} 批准");
     expect(FLEET_ZH_COPY["Deny for {value0}"]).toBe("为 {value0} 拒绝");
     expect(FLEET_ZH_COPY["Stop {value0}"]).toBe("停止 {value0}");
-    expect(FLEET_ZH_COPY["Steer {value0}"]).toBe("引导 {value0}");
+    expect(FLEET_ZH_COPY["Steer {value0}"]).toBe("插话 {value0}");
     expect(FLEET_ZH_COPY["Only while the peer is running"]).toBe(
-      "仅在同侪运行时可用",
+      "仅在协作者运行时可用",
     );
   });
 
@@ -74,6 +74,24 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
     expect(source).toContain("reasoning-copy.ts");
     expect(source).toContain("session-config-copy.ts");
     expect(source).toContain("session-panel-copy.ts");
+  });
+
+  it("translates every dynamic sidebar status label", async () => {
+    const { loadChineseCatalog } = await import("./ui-text.tsx");
+    const catalog = await loadChineseCatalog();
+    for (const source of [
+      "Waiting for input",
+      "Checking response status",
+      "Response status uncertain",
+      "Starting",
+      "Working",
+      "Stopped",
+      "Working in background",
+      "Completed in background",
+      "Background turn failed",
+      "Waiting for approval",
+    ])
+      expect(catalog[source], source).toBeTruthy();
   });
 
   it("no generated key collides with a DIFFERENT zh.ts value", () => {

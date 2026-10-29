@@ -81,6 +81,26 @@ describe("Timeline", () => {
     expect(html).toMatch(/<button[^>]*disabled[^>]*>Download/);
   });
 
+  it("does not translate a hydrated system role as a theme label", () => {
+    const html = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={[
+          {
+            id: "system:hydrated",
+            kind: "system",
+            title: "system",
+            body: "Hydrated notice",
+            status: "complete",
+            turnId: "turn-1",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("<strong>system</strong>");
+    expect(html).not.toContain("<strong>跟随系统</strong>");
+  });
+
   it("announces the timeline via a log landmark (a11y finding 4)", () => {
     const html = renderToStaticMarkup(
       <Timeline

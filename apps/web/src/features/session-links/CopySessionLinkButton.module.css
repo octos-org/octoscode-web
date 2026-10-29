@@ -1,0 +1,36 @@
+.button {
+  display: inline-grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.fallback {
+  max-width: 560px;
+  padding: 16px;
+}
+
+.fallback textarea {
+  display: block;
+  width: 100%;
+  margin: 8px 0 12px;
+  font-family: var(--dsw-font-family-code);
+  resize: vertical;
+}

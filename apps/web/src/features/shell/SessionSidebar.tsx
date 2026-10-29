@@ -17,6 +17,7 @@ import {
   type ProductSidebarSession,
   type ProductSidebarWorkspace,
 } from "./ProductSidebar.tsx";
+import { useUiText, type UiText } from "../preferences/ui-text.tsx";
 
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   recentWorkspaces: readonly RecentWorkspace[];
@@ -62,6 +63,7 @@ export function SessionSidebar({
   selectedSessionId,
   ...sidebarProps
 }: SessionSidebarProps) {
+  const t = useUiText();
   const terminal = useMemo(
     () => timeline.findLast((entry) => entry.latestTurnOutcome),
     [timeline],
@@ -119,7 +121,7 @@ export function SessionSidebar({
       ).map((item) => ({
         sessionId: item.sessionId,
         profileId: item.profileId,
-        title: item.title ?? knownSessionTitle(item.sessionId),
+        title: item.title ?? knownSessionTitle(item.sessionId, t),
         updatedAt: item.updatedAt,
       }));
       if (
@@ -134,7 +136,7 @@ export function SessionSidebar({
         sourceSessions.unshift({
           sessionId: opened.session_id,
           profileId: opened.active_profile_id ?? "",
-          title: knownSessionTitle(opened.session_id),
+          title: knownSessionTitle(opened.session_id, t),
           updatedAt: Date.now(),
         });
       }
@@ -194,6 +196,7 @@ export function SessionSidebar({
     opened,
     terminal,
     openingSessionId,
+    t,
   ]);
 
   return (
@@ -242,10 +245,10 @@ function knownSessionWorkspaces(
   return [...projected.values()];
 }
 
-function knownSessionTitle(sessionId: string): string {
+function knownSessionTitle(sessionId: string, t: UiText): string {
   const wireLeaf = sessionId.split(":").at(-1)?.trim() || sessionId.trim();
   const compact = wireLeaf.length > 10 ? wireLeaf.slice(-8) : wireLeaf;
-  return `Session ${compact || "unknown"}`;
+  return t("Session {id}", { id: compact || t("unknown") });
 }
 
 function backgroundSessionStatus(

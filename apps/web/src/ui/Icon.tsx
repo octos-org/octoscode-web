@@ -127,3 +127,12 @@ export function FileIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+export function LinkIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M6.75 9.25a2.75 2.75 0 0 0 3.9 0l2.1-2.1a2.75 2.75 0 0 0-3.9-3.9l-.7.7" />
+      <path d="M9.25 6.75a2.75 2.75 0 0 0-3.9 0l-2.1 2.1a2.75 2.75 0 0 0 3.9 3.9l.7-.7" />
+    </svg>
+  );
+}

@@ -25,8 +25,8 @@ describe("zh catalog loads the Fleet translations", () => {
     // dock; the Fleet rows list uses the same key and fleet-02's value is the
     // round-2 vocabulary.
     expect(zh["Session peers"]).toBe(FLEET_ZH_COPY["Session peers"]);
-    expect(zh["No peers yet"]).toBe("还没有同侪");
-    expect(zh["Peer {value0}"]).toBe("同侪 {value0}");
+    expect(zh["No peers yet"]).toBe("还没有协作者");
+    expect(zh["Peer {value0}"]).toBe("协作者 {value0}");
   });
 
   it("preserves placeholder parity across the merged catalog", () => {

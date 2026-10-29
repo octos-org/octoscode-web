@@ -97,7 +97,18 @@ describe("thinking one-line summary", () => {
         startedAtMs: 0,
         endedAtMs: 12_400,
       }),
-    ).toEqual({ seconds: 12, words: 340 });
+    ).toEqual({ seconds: 12, words: 340, unit: "words" });
+  });
+
+  it("counts Chinese by characters, since it has no spaces between words", () => {
+    // 12 characters plus one Latin word; the comma counts as neither.
+    expect(
+      thinkingSummaryParts({ body: "先看一下工作区，再读 sales.csv 的数据" }),
+    ).toMatchObject({ words: 20, unit: "characters" });
+    expect(thinkingSummaryParts({ body: "你好，世界！" })).toMatchObject({
+      words: 4,
+      unit: "characters",
+    });
   });
 });
 

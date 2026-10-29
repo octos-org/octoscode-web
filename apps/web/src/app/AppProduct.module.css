@@ -598,3 +598,11 @@
     }
   }
 }
+
+/* The workspace title and its copy-link action read as one unit. */
+.titleGroup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}

@@ -730,7 +730,7 @@ export function commandSuggestions(
     return [];
   }
   const query = invocation.name.toLowerCase();
-  return WEB_COMMANDS.filter((command) => {
+  const matches = WEB_COMMANDS.filter((command) => {
     if (
       command.menuHidden ||
       !commandAvailability(command, capabilities).available
@@ -742,4 +742,21 @@ export function commandSuggestions(
       command.aliases.some((alias) => alias.startsWith(query))
     );
   });
+  // A bare "/" lists what acts on the task first and browser settings last
+  // (audit C2). Presentation only: within a group the octoscode registry
+  // order holds, and a typed prefix keeps that order outright.
+  return query
+    ? matches
+    : [...matches].sort(
+        (left, right) =>
+          MENU_GROUP_ORDER.indexOf(left.category) -
+          MENU_GROUP_ORDER.indexOf(right.category),
+      );
 }
+
+const MENU_GROUP_ORDER: readonly CommandCategory[] = [
+  "Session",
+  "Runtime",
+  "Help",
+  "Settings",
+];

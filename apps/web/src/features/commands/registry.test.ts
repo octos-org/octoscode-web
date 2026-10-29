@@ -158,18 +158,19 @@ describe("octoscode command registry slice", () => {
     expect(
       commandSuggestions("/", capabilities([])).map(({ name }) => name),
     ).toEqual([
-      "theme",
-      "lang",
-      "vimmode",
-      "saveconfig",
+      // Task commands first, browser settings last; registry order within.
       "steer",
+      "sessions",
       "ps",
-      "help",
       "activity",
       "copy",
       "status",
       "cost",
-      "sessions",
+      "help",
+      "theme",
+      "lang",
+      "vimmode",
+      "saveconfig",
     ]);
     expect(
       commandSuggestions("/st", capabilities([])).map(({ name }) => name),

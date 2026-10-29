@@ -6,16 +6,16 @@
  * A NEW file per the brief: `features/preferences/zh.ts` belongs to another
  * owner. English is the source key (the t() convention); this file carries
  * ONLY the fleet additions. No protocol vocabulary appears in any value
- * (lane → 模型, slug → 同侪/对等节点 name, operation ids hidden) — the catalog
+ * (lane → 模型, slug → 协作者/对等节点 name, operation ids hidden) — the catalog
  * test rejects seat/epoch/lane/slug/fence/operation id/binding.
  */
 
 /** English source key → Simplified Chinese copy. */
 export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
-  Fleet: "舰队",
-  "Back to Fleet": "返回舰队",
-  "No peers yet": "还没有同侪",
-  "Start a peer": "启动一个同侪",
+  Fleet: "多智能体",
+  "Back to Fleet": "返回多智能体",
+  "No peers yet": "还没有协作者",
+  "Start a peer": "启动一个协作者",
   Model: "模型",
   Brief: "任务简报",
   Session: "会话",
@@ -25,17 +25,17 @@ export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Settings › Providers": "设置 › 提供商",
   Approve: "批准",
   Deny: "拒绝",
-  Steer: "引导",
-  "Steer {value0}": "引导 {value0}",
+  Steer: "插话",
+  "Steer {value0}": "插话 {value0}",
   "Approve for {value0}": "为 {value0} 批准",
   "Deny for {value0}": "为 {value0} 拒绝",
   "Stop {value0}": "停止 {value0}",
-  "Only while the peer is running": "仅在同侪运行时可用",
-  "Fleet live region": "舰队实时区域",
+  "Only while the peer is running": "仅在协作者运行时可用",
+  "Fleet live region": "多智能体实时区域",
   Stop: "停止",
   Send: "发送",
   Advanced: "高级",
-  Peers: "同侪",
+  Peers: "协作者",
   Requested: "已请求",
   Starting: "正在启动",
   "Still starting…": "仍在启动…",
@@ -49,20 +49,20 @@ export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   Sent: "已发送",
   "Stop requested": "已请求停止",
   "Already handled": "已被处理",
-  "Peer started a new turn": "同侪开始了新的回合",
+  "Peer started a new turn": "协作者开始了新的一轮",
   "Take control of {value0} to do this": "需要先取得 {value0} 的控制权",
-  "Couldn't restore this peer": "无法恢复这个同侪",
+  "Couldn't restore this peer": "无法恢复这个协作者",
   Retry: "重试",
   "Restoring…": "正在恢复…",
-  "Peer started {value0}": "同侪启动于 {value0}",
+  "Peer started {value0}": "协作者启动于 {value0}",
   "Finished ({value0})": "已完成（{value0}）",
-  "Loading peers for {value0} sessions": "正在为 {value0} 个会话加载同侪",
+  "Loading peers for {value0} sessions": "正在为 {value0} 个会话加载协作者",
   "This server does not support remote control of peers":
-    "此服务器不支持远程控制同侪",
-  "This server does not support starting peers": "此服务器不支持启动同侪",
-  "Peer controls are not ready": "同侪控制尚未就绪",
+    "此服务器不支持远程控制协作者",
+  "This server does not support starting peers": "此服务器不支持启动协作者",
+  "Peer controls are not ready": "协作者控制尚未就绪",
   "No peer models are configured — add one under Settings › Providers":
-    "尚未配置同侪模型 — 请在 设置 › 提供商 中添加",
+    "尚未配置协作者模型 — 请在 设置 › 提供商 中添加",
   "Open a project first": "请先打开一个项目",
   "Loading models…": "正在加载模型…",
   "Not sure it started — Retry resends the same request.":
@@ -71,14 +71,14 @@ export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Only while waiting for approval": "仅在等待批准时可用",
   "Only while waiting for your answer": "仅在等待你的回答时可用",
   "Only while working": "仅在工作中可用",
-  "Enter steering text": "输入引导文字",
+  "Enter steering text": "输入插话内容",
   "{value0} is waiting for your approval": "{value0} 正在等待你的批准",
   "{value0} is waiting for your answer": "{value0} 正在等待你的回答",
   "{value0} finished": "{value0} 已完成",
   "{value0} stopped": "{value0} 已停止",
   "{value0} failed": "{value0} 已失败",
-  "Peer {value0}": "同侪 {value0}",
-  "Session peers": "会话同侪",
+  "Peer {value0}": "协作者 {value0}",
+  "Session peers": "会话协作者",
   "Goal {value0}": "目标 {value0}",
 });
 

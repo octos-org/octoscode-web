@@ -44,10 +44,21 @@ export function pruneFolds(
 
 const TRUNCATED_TARGET_LENGTH = 24;
 
+// Chinese, Japanese and Korean write without spaces between words: each of
+// their characters counts as one, the way a CJK reader counts length.
+const CJK_SINGLE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
 function countWords(body: string): number {
   const trimmed = body.trim();
   if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
+  if (CJK_SINGLE.test(trimmed)) {
+    return Array.from(trimmed.replace(/\s/g, "")).filter((character) =>
+      /[\p{L}\p{N}]/u.test(character),
+    ).length;
+  }
+  return trimmed.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word))
+    .length;
 }
 
 function durationSeconds(
@@ -70,13 +81,16 @@ export interface ThinkingSummaryInput {
 export function thinkingSummaryParts(input: ThinkingSummaryInput): {
   seconds: number | undefined;
   words: number;
+  unit: "words" | "characters";
 } {
+  const cjk = CJK_SINGLE.test(input.body);
   return {
     seconds: durationSeconds(
       input.startedAtMs,
       input.endedAtMs ?? input.updatedAtMs,
     ),
     words: countWords(input.body),
+    unit: cjk ? "characters" : "words",
   };
 }
 

@@ -39,7 +39,8 @@ export function createUiText(
 const UiTextContext = createContext<UiText>(createUiText());
 let chineseCatalog: Promise<UiCatalog> | undefined;
 
-function loadChineseCatalog(): Promise<UiCatalog> {
+/** Every zh table merged, as the app loads it; exported for the coverage test. */
+export function loadChineseCatalog(): Promise<UiCatalog> {
   // Round 3 judge #8: generated labels and live-region announcements must be
   // translated too. The generated tables live beside their features (one
   // writer per file); they merge HERE so the loaded catalog carries every
