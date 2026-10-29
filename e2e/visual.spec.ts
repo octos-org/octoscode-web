@@ -17,13 +17,16 @@ const SNAPSHOT = {
 
 test.use({ channel: "chromium" });
 
-async function connect(page: Page): Promise<void> {
+async function connect(
+  page: Page,
+  token = "tab-scoped-e2e-token",
+): Promise<void> {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token").fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
@@ -127,4 +130,17 @@ test("skills settings matches baseline", async ({ page }) => {
     settings.getByText("lifecycle-skill", { exact: true }),
   ).toBeVisible();
   await expect(settings).toHaveScreenshot("settings-skills.png", SNAPSHOT);
+});
+
+test("memory settings matches baseline", async ({ page }) => {
+  await connect(page, "memory-e2e-token");
+  await startDefaultWorkspace(page);
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Memory", exact: true }).click();
+  await expect(settings.getByText("Protocol memory fixture.")).toBeVisible();
+  await expect(settings).toHaveScreenshot("settings-memory.png", SNAPSHOT);
 });

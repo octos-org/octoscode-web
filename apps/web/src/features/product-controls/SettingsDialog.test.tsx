@@ -8,11 +8,12 @@ const labels = {
   general: "General",
   models: "Models",
   skills: "Skills",
+  memory: "Memory",
   close: "Close settings",
 };
 
-describe("SettingsDialog skills section", () => {
-  it("hides the section without a capability-backed slot", () => {
+describe("SettingsDialog optional sections", () => {
+  it("hides Skills and Memory without capability-backed slots", () => {
     const html = renderToStaticMarkup(
       <SettingsDialog
         open
@@ -25,6 +26,7 @@ describe("SettingsDialog skills section", () => {
     );
     expect(html).toContain("General");
     expect(html).not.toContain("Skills");
+    expect(html).not.toContain("Memory");
   });
 
   it("renders and labels a capability-backed skills panel", () => {
@@ -41,5 +43,21 @@ describe("SettingsDialog skills section", () => {
     expect(html).toContain("Skill content");
     expect(html).toContain('data-settings-section="skills"');
     expect(html).toContain("Skills");
+  });
+
+  it("renders and labels a capability-backed memory panel", () => {
+    const html = renderToStaticMarkup(
+      <SettingsDialog
+        open
+        activeSection="memory"
+        labels={labels}
+        slots={{ general: <p>General</p>, memory: <p>Memory content</p> }}
+        onSectionChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Memory content");
+    expect(html).toContain('data-settings-section="memory"');
+    expect(html).toContain("Memory");
   });
 });

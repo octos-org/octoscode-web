@@ -17,6 +17,10 @@ const fixtureAuthTokens = [
   "plan-fixture-e2e-token",
   "plan-absent-e2e-token",
   "skill-duplicates-e2e-token",
+  // memory/request and memory/promote are enabled only for this main-mode token.
+  "memory-main-e2e-token",
+  "memory-e2e-token",
+  "memory-host-e2e-token",
   "remember-this-tab-token",
   "forget-me-token",
   fixtureProfileAuthToken,

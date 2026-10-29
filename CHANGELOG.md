@@ -11,6 +11,10 @@
   arguments, and show live background job progress/results. Negotiate
   `skill.actions.v1` and `skill.action_jobs.v1`, and keep remote one-click
   installation explicitly unavailable while its supply-chain review is open.
+- Add a capability-gated Memory section to Settings: overview, entity pages,
+  search/result details, and an optional Remember-this ingest form. Request and
+  Promote controls appear only when the server advertises those methods, and the
+  page explicitly notes that edit/delete are not available in the protocol.
 
 ## v0.20.0 — 2026-10-29
 

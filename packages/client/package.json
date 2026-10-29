@@ -16,6 +16,7 @@
     "./skill-actions": "./src/skill-actions.ts",
     "./research": "./src/research.ts",
     "./media": "./src/media.ts",
+    "./memory": "./src/memory.ts",
     "./peers": "./src/peers.ts",
     "./peer-protocol": "./src/peer-protocol.ts",
     "./autonomy": "./src/autonomy.ts",

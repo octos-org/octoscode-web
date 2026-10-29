@@ -291,6 +291,11 @@ export class OctosUiClient {
     );
   }
 
+  async memoryCommands(capabilities: UiProtocolCapabilities) {
+    const { createMemoryCommands } = await import("./memory.ts");
+    return createMemoryCommands(this.invoke, capabilities);
+  }
+
   async researchCommands(
     profileId: string,
     capabilities: UiProtocolCapabilities,

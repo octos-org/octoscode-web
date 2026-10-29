@@ -24,6 +24,14 @@ export function SkillsIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function MemoryIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M4 2.5h8v11H4zM6 5h4M6 7h4M6 9h2" />
+    </svg>
+  );
+}
+
 export function ModelsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>
