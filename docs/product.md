@@ -43,9 +43,14 @@ server does in the chosen folder.
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
 | Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.     |
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
+| Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.            |
 | Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.  |
+
+Remote one-click skill installation is not part of the Settings Skills section:
+its supply-chain review is still open. Existing skills are read from the active
+server Profile; the browser does not install executable tools or dependencies.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

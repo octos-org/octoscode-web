@@ -81,17 +81,19 @@ export interface ModelControlLabels {
   retry: string;
 }
 
-export type SettingsSectionId = "general" | "models";
+export type SettingsSectionId = "general" | "models" | "skills";
 
 export interface SettingsLabels {
   title: string;
   navigation: string;
   general: string;
   models: string;
+  skills: string;
   close: string;
 }
 
 export interface SettingsSlots {
   general: ReactNode;
   models?: ReactNode;
+  skills?: ReactNode;
 }

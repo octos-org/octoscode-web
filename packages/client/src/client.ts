@@ -1,4 +1,8 @@
 import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
+import {
+  SKILL_ACTIONS_UI_FEATURE,
+  SKILL_ACTION_JOBS_UI_FEATURE,
+} from "./skill-methods.ts";
 import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
@@ -125,6 +129,8 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.CODING_GOAL_RUNTIME_V1,
   CORE_UI_FEATURES.CODING_LOOP_RUNTIME_V1,
   CORE_UI_FEATURES.CODING_MONITOR_RUNTIME_V1,
+  SKILL_ACTIONS_UI_FEATURE,
+  SKILL_ACTION_JOBS_UI_FEATURE,
   EXTERNAL_DRIVER_V1_UI_FEATURE,
 ] as const;
 
@@ -269,6 +275,20 @@ export class OctosUiClient {
   async skillCommands(profileId: string, capabilities: UiProtocolCapabilities) {
     const { createSkillCommands } = await import("./skills.ts");
     return createSkillCommands(this.invoke, profileId, capabilities);
+  }
+
+  async skillActionCommands(
+    profileId: string,
+    sessionId: string,
+    capabilities: UiProtocolCapabilities,
+  ) {
+    const { createSkillActionCommands } = await import("./skill-actions.ts");
+    return createSkillActionCommands(
+      this.invoke,
+      profileId,
+      sessionId,
+      capabilities,
+    );
   }
 
   async researchCommands(

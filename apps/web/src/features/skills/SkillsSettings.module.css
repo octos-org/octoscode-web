@@ -1,0 +1,200 @@
+.page {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading,
+.skillHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dsw-space-3);
+}
+
+.heading {
+  align-items: center;
+  margin-bottom: var(--dsw-space-3);
+}
+
+.heading h2,
+.heading p,
+.skill p,
+.action p,
+.job p {
+  margin: 0;
+}
+
+.heading h2 {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.heading p,
+.skill p,
+.action p,
+.job small,
+.action small,
+.notice {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.heading button,
+.action button {
+  min-height: 32px;
+  padding: 0 var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.heading button:hover:not(:disabled),
+.action button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.heading button:disabled,
+.action button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.notice {
+  margin: 0 0 var(--dsw-space-4);
+  padding: var(--dsw-space-3);
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.notice a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.page section {
+  margin-top: var(--dsw-space-5);
+}
+
+.page h3 {
+  margin: 0 0 var(--dsw-space-3);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.rows {
+  display: grid;
+  gap: var(--dsw-space-3);
+}
+
+.skill,
+.action,
+.job {
+  display: grid;
+  min-width: 0;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow-wrap: anywhere;
+}
+
+.skillHeading strong {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.skillHeading span {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.skillHeading span[data-job-status="succeeded"] {
+  color: var(--dsw-alias-state-success-text);
+}
+
+.skillHeading span[data-job-status="failed"],
+.skillHeading span[data-job-status="abandoned"] {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.action label:not(.checkbox) {
+  display: grid;
+  gap: var(--dsw-space-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.action input[type="text"],
+.action input[type="number"],
+.action textarea {
+  width: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: var(--dsw-space-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.action textarea {
+  resize: vertical;
+  font-family: var(--dsw-font-family-code);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.action button {
+  width: fit-content;
+}
+
+.output {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  padding: var(--dsw-space-2);
+  border-radius: 6px;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-secondary);
+  font: 400 12px/1.55 var(--dsw-font-family-code);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.error {
+  color: var(--dsw-alias-state-error-text);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

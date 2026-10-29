@@ -6,6 +6,11 @@
   workspace header out of view. Preserve compact-header button spacing on
   phones, and cover all three audit viewports with layout, axe, and full-page
   visual regression checks.
+- Add a capability-gated Skills section to Settings. List installed Profile
+  skills and their source/version, invoke typed skill actions with required
+  arguments, and show live background job progress/results. Negotiate
+  `skill.actions.v1` and `skill.action_jobs.v1`, and keep remote one-click
+  installation explicitly unavailable while its supply-chain review is open.
 
 ## v0.20.0 — 2026-10-29
 

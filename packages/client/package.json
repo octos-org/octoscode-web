@@ -13,6 +13,7 @@
     "./steer": "./src/steer.ts",
     "./inventory": "./src/inventory.ts",
     "./skills": "./src/skills.ts",
+    "./skill-actions": "./src/skill-actions.ts",
     "./research": "./src/research.ts",
     "./media": "./src/media.ts",
     "./peers": "./src/peers.ts",

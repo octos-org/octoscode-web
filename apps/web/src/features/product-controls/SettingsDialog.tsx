@@ -5,7 +5,7 @@
  */
 import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
-import { GearIcon, ModelsIcon } from "../../ui/Icon.tsx";
+import { GearIcon, ModelsIcon, SkillsIcon } from "../../ui/Icon.tsx";
 import { CloseButton } from "../../ui/CloseButton.tsx";
 import { settingsNavigationIntent } from "./selection-policy.ts";
 import type {
@@ -74,19 +74,34 @@ export function SettingsDialog({
   const navId = useId();
   const generalId = `${navId}-general`;
   const modelsId = `${navId}-models`;
+  const skillsId = `${navId}-skills`;
   const closeRef = useRef<HTMLButtonElement>(null);
   if (!open) return null;
 
   const hasModels = slots.models !== undefined;
+  const hasSkills = slots.skills !== undefined;
   const effectiveSection =
-    activeSection === "models" && !hasModels ? "general" : activeSection;
+    (activeSection === "models" && !hasModels) ||
+    (activeSection === "skills" && !hasSkills)
+      ? "general"
+      : activeSection;
 
   const choose = (next: SettingsSectionId) => {
     const intent = settingsNavigationIntent(activeSection, next);
     if (intent !== null) onSectionChange(intent);
   };
-  const activeButtonId = effectiveSection === "general" ? generalId : modelsId;
-  const content = effectiveSection === "general" ? slots.general : slots.models;
+  const activeButtonId =
+    effectiveSection === "general"
+      ? generalId
+      : effectiveSection === "models"
+        ? modelsId
+        : skillsId;
+  const content =
+    effectiveSection === "general"
+      ? slots.general
+      : effectiveSection === "models"
+        ? slots.models
+        : slots.skills;
 
   return (
     <ModalSurface
@@ -130,6 +145,22 @@ export function SettingsDialog({
             >
               <ModelsIcon />
               <span className={styles.navLabel}>{labels.models}</span>
+            </button>
+          ) : null}
+          {hasSkills ? (
+            <button
+              id={skillsId}
+              type="button"
+              className={
+                effectiveSection === "skills"
+                  ? `${styles.navCell} ${styles.active}`
+                  : styles.navCell
+              }
+              aria-current={effectiveSection === "skills" ? "page" : undefined}
+              onClick={() => choose("skills")}
+            >
+              <SkillsIcon />
+              <span className={styles.navLabel}>{labels.skills}</span>
             </button>
           ) : null}
         </div>
