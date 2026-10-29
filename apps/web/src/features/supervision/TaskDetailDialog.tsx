@@ -31,6 +31,7 @@ interface TaskDetailDialogProps {
   onLoadMore: () => void;
   onReadArtifact: (artifact: TaskArtifactRecord) => void;
   onLoadMoreArtifact: () => void;
+  workspaceReadAvailable?: boolean;
   loadArtifact?:
     ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
   downloadArtifact?:
@@ -43,6 +44,7 @@ export function TaskDetailDialog({
   onLoadMore,
   onReadArtifact,
   onLoadMoreArtifact,
+  workspaceReadAvailable = false,
   loadArtifact,
   downloadArtifact,
 }: TaskDetailDialogProps) {
@@ -52,6 +54,12 @@ export function TaskDetailDialog({
     (candidate) => candidate.id === state.detail.taskId,
   );
   const selected = state.detail.selectedArtifact;
+  const selectedPath = selected?.artifact.path;
+  const selectedBlobAvailable = Boolean(
+    selectedPath &&
+    loadArtifact &&
+    (workspaceReadAvailable || selectedPath.startsWith("pf/")),
+  );
 
   return (
     <ModalSurface
@@ -159,22 +167,26 @@ export function TaskDetailDialog({
                     selected.artifact.kind,
                     selected.artifact.path,
                     selected.content ?? selected.artifact.content,
-                    Boolean(loadArtifact),
+                    selectedBlobAvailable,
                   )}
-                  workspaceFile={Boolean(loadArtifact)}
+                  workspaceFile={
+                    selectedBlobAvailable &&
+                    workspaceReadAvailable &&
+                    !selectedPath!.startsWith("pf/")
+                  }
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
                     : {})}
                   text={selected.content ?? selected.artifact.content}
                   hasMore={selected.has_more}
                   onLoadMore={onLoadMoreArtifact}
-                  {...(selected.artifact.path && loadArtifact
+                  {...(selectedBlobAvailable && loadArtifact
                     ? {
                         loadBlob: (signal?: AbortSignal) =>
-                          loadArtifact(selected.artifact.path!, signal),
+                          loadArtifact(selectedPath!, signal),
                       }
                     : {})}
-                  {...(selected.artifact.path && downloadArtifact
+                  {...(selectedBlobAvailable && downloadArtifact
                     ? {
                         downloadBlob: (signal?: AbortSignal) =>
                           downloadArtifact(selected.artifact.path!, signal),

@@ -70,28 +70,26 @@ self.onmessage = async (
 async function readCsv(buffer: ArrayBuffer): Promise<Sheet[]> {
   truncated = false;
   const text = await new Blob([buffer]).text();
-  const result = Papa.parse<unknown[]>(text, {
-    preview: MAX_ROWS + 1,
+  const rows: Cell[][] = [];
+  let cells = 0;
+  Papa.parse<unknown[]>(text, {
     skipEmptyLines: "greedy",
     worker: false,
+    step(result, parser) {
+      if (result.errors.some((error) => error.code === "TooManyFields")) {
+        truncated = true;
+      }
+      const width = Math.min(MAX_COLUMNS, result.data.length);
+      if (result.data.length > MAX_COLUMNS) truncated = true;
+      if (rows.length >= MAX_ROWS || cells + width > MAX_CELLS) {
+        truncated = true;
+        parser.abort();
+        return;
+      }
+      rows.push(result.data.slice(0, width).map(cell));
+      cells += width;
+    },
   });
-  const columns = Math.min(
-    MAX_COLUMNS,
-    result.data.reduce((width, row) => Math.max(width, row.length), 0),
-  );
-  const rowLimit = Math.min(
-    MAX_ROWS,
-    columns > 0 ? Math.floor(MAX_CELLS / columns) : MAX_ROWS,
-  );
-  const rows = result.data
-    .slice(0, Math.max(0, rowLimit))
-    .map((row) =>
-      Array.from({ length: columns }, (_, index) => cell(row[index])),
-    );
-  truncated =
-    result.data.length > rows.length ||
-    result.data.some((row) => row.length > columns) ||
-    result.errors.some((error) => error.code === "TooManyFields");
   return [{ name: "CSV", rows, rowOffset: 0, columnOffset: 0 }];
 }
 

@@ -378,7 +378,7 @@ function PaginatedText({
             else onLoadMore?.();
           }}
         >
-          {t("Show more")}
+          {localMore ? t("Show more") : t("Load more artifact")}
         </button>
       ) : null}
     </div>

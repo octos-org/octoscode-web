@@ -5,6 +5,7 @@ import {
   formatAttachmentSize,
   isPreviewableImage,
   uniqueAttachmentFile,
+  uniqueWorkspaceAttachmentFile,
 } from "./attachments.ts";
 
 describe("attachment naming", () => {
@@ -48,6 +49,33 @@ describe("attachment naming", () => {
         },
       ]),
     ).toMatchObject({ size_bytes: 20 });
+  });
+
+  it("resolves workspace downloads only inside the opened workspace", () => {
+    const workspace = {
+      filename: "report.md",
+      path: `pf/${btoa("/workspace/report.md")}/report.md`,
+      size_bytes: 20,
+    };
+    const unrelated = {
+      filename: "report.md",
+      path: `pf/${btoa("/other/report.md")}/report.md`,
+      size_bytes: 30,
+    };
+    const files = [unrelated, workspace];
+    expect(
+      uniqueWorkspaceAttachmentFile("report.md", "/workspace", files),
+    ).toBe(workspace);
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "/workspace/report.md",
+        "/workspace",
+        files,
+      ),
+    ).toBe(workspace);
+    expect(uniqueWorkspaceAttachmentFile("report.md", "/other", files)).toBe(
+      unrelated,
+    );
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {

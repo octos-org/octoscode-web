@@ -232,7 +232,10 @@ import {
   readSessionFileBlob,
   workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
-import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
+import {
+  uniqueAttachmentFile,
+  uniqueWorkspaceAttachmentFile,
+} from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -805,20 +808,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
-    const listedFile = async (
-      reference: string,
-      allowBasenameFallback = true,
-    ) => {
+    const listedFile = async (reference: string, workspaceFile = false) => {
       if (missingReferences.has(reference)) return null;
+      const findFile = (
+        files: { filename: string; path: string; size_bytes: number }[],
+      ) =>
+        workspaceFile
+          ? uniqueWorkspaceAttachmentFile(
+              reference,
+              attachmentWorkspaceRoot,
+              files,
+            )
+          : uniqueAttachmentFile(reference, files);
       filesPromise ??= client
         .listSessionFiles({ session_id: attachmentSessionId })
         .then((result) => result.files);
       try {
-        let file = uniqueAttachmentFile(
-          reference,
-          await filesPromise,
-          allowBasenameFallback,
-        );
+        let file = findFile(await filesPromise);
         if (!file) {
           // A later delivery may postdate the shared listing. Refresh a miss
           // once for this card; duplicates still stay ambiguous.
@@ -828,11 +834,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             .listSessionFiles({ session_id: attachmentSessionId })
             .then((result) => result.files);
           filesPromise = refreshPromise;
-          file = uniqueAttachmentFile(
-            reference,
-            await filesPromise,
-            allowBasenameFallback,
-          );
+          file = findFile(await filesPromise);
           refreshUsers -= 1;
           if (refreshUsers === 0) refreshPromise = undefined;
           if (!file) missingReferences.add(reference);
@@ -847,7 +849,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       ...(canDescribe
         ? {
             async describe(reference: string, workspaceFile = false) {
-              const file = await listedFile(reference, !workspaceFile);
+              const file = await listedFile(reference, workspaceFile);
               return file ? { sizeBytes: file.size_bytes } : null;
             },
           }
@@ -904,10 +906,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           reference,
           attachmentWorkspaceRoot,
         );
+        const canReadWorkspace = supportsMethod(
+          capabilities,
+          CORE_UI_METHODS.SESSION_FILES_READ,
+        );
+        let saveReference = reference;
+        let limitError: unknown;
         if (
           workspacePath &&
-          (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024) &&
-          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
+          canReadWorkspace &&
+          (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024)
         ) {
           try {
             return await readSessionFileBlob(
@@ -918,18 +926,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             );
           } catch (reason) {
             if (!isWorkspaceReadLimitError(reason)) throw reason;
-            const listed = canDescribe
-              ? await listedFile(reference, false)
-              : null;
-            if (!listed) throw reason;
+            limitError = reason;
           }
+        }
+        if (
+          workspacePath &&
+          canReadWorkspace &&
+          (limitError || (sizeBytes ?? 0) > 32 * 1024 * 1024)
+        ) {
+          const listed = canDescribe ? await listedFile(reference, true) : null;
+          if (!listed) {
+            throw (
+              limitError ??
+              new Error(
+                "workspace_file_too_large: no authorized download handle",
+              )
+            );
+          }
+          saveReference = listed.path;
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
           capabilities,
         );
-        return commands.download(reference, signal);
+        return commands.download(saveReference, signal);
       },
     };
   }, [
@@ -4558,10 +4579,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onLoadMore={() => void work.loadMoreOutput()}
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
+            workspaceReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_READ,
+            )}
             loadArtifact={
               supportsMethod(
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
               )
                 ? attachmentAccess?.downloadWorkspaceFile
                 : undefined
@@ -4570,6 +4599,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               supportsMethod(
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
               )
                 ? (path: string, signal?: AbortSignal) =>
                     attachmentAccess!.saveWorkspaceFile!(

@@ -46,6 +46,42 @@ export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
   return matches.length === 1 ? matches[0]! : null;
 }
 
+/** Resolve a tool path to its authorized profile handle within this workspace. */
+export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
+  reference: string,
+  workspaceRoot: string,
+  files: readonly T[],
+): T | null {
+  const exact = files.filter((file) => file.path === reference);
+  if (exact.length === 1) return exact[0]!;
+  if (exact.length > 1) return null;
+  const normalizedReference = reference.replace(/\\/g, "/");
+  const root = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!root) return null;
+  const windowsRoot = /^[A-Za-z]:\//.test(root);
+  const absoluteReference =
+    normalizedReference.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalizedReference)
+      ? normalizedReference
+      : `${root}/${normalizedReference}`;
+  const candidate = windowsRoot
+    ? absoluteReference.toLowerCase()
+    : absoluteReference;
+  const expectedRoot = windowsRoot ? root.toLowerCase() : root;
+  if (
+    !candidate.startsWith(`${expectedRoot}/`) ||
+    absoluteReference.split("/").includes("..")
+  ) {
+    return null;
+  }
+  const matches = files.filter((file) => {
+    const decoded = profileHandlePath(file.path)?.replace(/\\/g, "/");
+    if (!decoded) return false;
+    return (windowsRoot ? decoded.toLowerCase() : decoded) === candidate;
+  });
+  return matches.length === 1 ? matches[0]! : null;
+}
+
 function pathSuffix(value: string): string {
   return value.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
 }
