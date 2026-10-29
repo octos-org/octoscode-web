@@ -8,6 +8,7 @@ export function isWorkspaceRelativePath(value: string): boolean {
     value.length > 0 &&
     !value.startsWith("/") &&
     !value.startsWith("up/") &&
+    !value.startsWith("pf/") &&
     !value.includes("\\") &&
     !value.split("/").includes("..")
   );

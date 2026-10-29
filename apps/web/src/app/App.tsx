@@ -847,6 +847,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         );
         return commands.download(reference, signal);
       },
+      async downloadForSave(reference, signal) {
+        const commands = await client.mediaCommands(
+          attachmentSessionId,
+          attachmentProfileId,
+          capabilities,
+        );
+        return commands.download(reference, signal);
+      },
     };
   }, [
     protocol.client,
@@ -4474,6 +4482,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
             loadArtifact={attachmentAccess?.download}
+            downloadArtifact={attachmentAccess?.downloadForSave}
           />
         </SurfaceBoundary>
       ) : null}

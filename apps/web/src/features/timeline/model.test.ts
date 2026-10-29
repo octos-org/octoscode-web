@@ -1837,6 +1837,17 @@ describe("delivered attachments", () => {
         2,
       ),
     );
+    const full = foldNotification([], {
+      jsonrpc: "2.0",
+      method: "tool/started",
+      params: {
+        turn_id: "turn-1",
+        tool_call_id: "write-large",
+        tool_name: "write_file",
+        arguments: { content: "x".repeat(2_000), path: "report.md" },
+      },
+    });
+    expect(full[0]?.artifactPath).toBe("report.md");
     expect(completed[0]).toMatchObject({
       status: "complete",
       artifactPath: "report.md",

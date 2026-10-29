@@ -4,6 +4,14 @@ import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./TaskDetailDialog.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { ArtifactPreview } from "../artifact-preview/ArtifactPreview.tsx";
+import type { ArtifactKind } from "../artifact-preview/artifact-kind.ts";
+
+function previewKind(kind: string): ArtifactKind | undefined {
+  if (kind === "markdown") return "markdown";
+  if (kind === "json") return "code";
+  if (["text", "report", "log"].includes(kind)) return "text";
+  return undefined;
+}
 
 interface TaskDetailDialogProps {
   state: SupervisionRuntimeState;
@@ -12,6 +20,8 @@ interface TaskDetailDialogProps {
   onReadArtifact: (artifact: TaskArtifactRecord) => void;
   onLoadMoreArtifact: () => void;
   loadArtifact?:
+    ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
+  downloadArtifact?:
     ((path: string, signal?: AbortSignal) => Promise<Blob>) | undefined;
 }
 
@@ -22,6 +32,7 @@ export function TaskDetailDialog({
   onReadArtifact,
   onLoadMoreArtifact,
   loadArtifact,
+  downloadArtifact,
 }: TaskDetailDialogProps) {
   const t = useUiText();
   if (!state.detail.active) return null;
@@ -134,6 +145,7 @@ export function TaskDetailDialog({
                     selected.artifact.path?.split(/[\\/]/).at(-1) ??
                     selected.artifact.title
                   }
+                  kind={previewKind(selected.artifact.kind)}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
                     : {})}
@@ -144,6 +156,12 @@ export function TaskDetailDialog({
                     ? {
                         loadBlob: (signal?: AbortSignal) =>
                           loadArtifact(selected.artifact.path!, signal),
+                      }
+                    : {})}
+                  {...(selected.artifact.path && downloadArtifact
+                    ? {
+                        downloadBlob: (signal?: AbortSignal) =>
+                          downloadArtifact(selected.artifact.path!, signal),
                       }
                     : {})}
                 />

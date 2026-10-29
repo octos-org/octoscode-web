@@ -28,6 +28,18 @@ describe("ArtifactPreview", () => {
     expect(html).not.toContain("not the archive bytes");
   });
 
+  it("uses a server-reported text kind when the title has no extension", () => {
+    const html = renderToStaticMarkup(
+      <ArtifactPreview
+        name="Native verification report"
+        kind="text"
+        text="verification passed"
+      />,
+    );
+    expect(html).toContain("verification passed");
+    expect(html).toContain('data-artifact-kind="text"');
+  });
+
   it("pages long plain text instead of putting the whole file in the DOM", () => {
     const html = renderToStaticMarkup(
       <ArtifactPreview name="large.log" text={"x".repeat(60_000)} />,

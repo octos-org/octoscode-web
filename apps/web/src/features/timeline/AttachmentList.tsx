@@ -112,7 +112,10 @@ function AttachmentItem({
     setBusy(true);
     setError(null);
     try {
-      const url = URL.createObjectURL(await access.download(reference));
+      const value = access.downloadForSave
+        ? await access.downloadForSave(reference)
+        : await access.download(reference);
+      const url = URL.createObjectURL(value);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = name;
@@ -177,6 +180,12 @@ function AttachmentItem({
             name={name}
             path={reference}
             loadBlob={(signal) => access.download(reference, signal)}
+            {...(access.downloadForSave
+              ? {
+                  downloadBlob: (signal: AbortSignal | undefined) =>
+                    access.downloadForSave!(reference, signal),
+                }
+              : {})}
           />
         </div>
       ) : null}

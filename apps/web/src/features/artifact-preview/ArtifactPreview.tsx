@@ -48,6 +48,7 @@ const MAX_TEXT_PREVIEW_BYTES = 10 * 1024 * 1024;
 export interface ArtifactPreviewProps {
   /** Display name and download filename. */
   name: string;
+  kind?: ArtifactKind | undefined;
   /** Authenticated server path, when the artifact has one. */
   path?: string;
   /** Text supplied by task/artifact/read. Binary documents use loadBlob instead. */
@@ -55,6 +56,8 @@ export interface ArtifactPreviewProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   loadBlob?: (signal?: AbortSignal) => Promise<Blob>;
+  /** Optional unbounded save route, separate from the bounded preview reader. */
+  downloadBlob?: (signal?: AbortSignal) => Promise<Blob>;
   /** Optional host integration; hidden until the server offers a real reveal action. */
   onReveal?: (path: string) => void;
 }
@@ -62,7 +65,7 @@ export interface ArtifactPreviewProps {
 export function ArtifactPreview(props: ArtifactPreviewProps) {
   const t = useUiText();
   const reference = props.path ?? props.name;
-  const kind = artifactKind(reference);
+  const kind = props.kind ?? artifactKind(reference);
   const textKind = ["markdown", "code", "text"].includes(kind);
   const shouldFetch =
     kind !== "unsupported" && (!textKind || props.text === undefined);
@@ -112,13 +115,14 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     setDownloading(true);
     setError(null);
     try {
+      const saveLoader = props.downloadBlob ?? props.loadBlob;
       const value =
-        props.hasMore && props.loadBlob
-          ? await props.loadBlob()
+        props.hasMore && saveLoader
+          ? await saveLoader()
           : (blob ??
             (props.text !== undefined
               ? new Blob([props.text], { type: "text/plain;charset=utf-8" })
-              : await props.loadBlob?.()));
+              : await saveLoader?.()));
       if (!value) return;
       saveArtifact(value, props.name);
     } catch (reason) {
@@ -139,7 +143,8 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const canDownload =
-    (props.text !== undefined && !props.hasMore) || Boolean(props.loadBlob);
+    (props.text !== undefined && !props.hasMore) ||
+    Boolean(props.downloadBlob ?? props.loadBlob);
   let content: ReactNode;
   if (loading) {
     content = (

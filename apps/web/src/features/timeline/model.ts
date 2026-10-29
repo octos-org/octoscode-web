@@ -390,16 +390,23 @@ export function foldNotification(
         params.text,
         turnId,
       );
-    case CORE_UI_METHODS.TOOL_STARTED:
+    case CORE_UI_METHODS.TOOL_STARTED: {
+      const toolName = stringOf(params.tool_name, "Tool");
+      const artifactPath = writtenArtifactPath(
+        toolName,
+        pretty(params.arguments),
+      );
       return startTool(settleReasoning(entries, turnId), {
         id: `tool:${stringOf(params.tool_call_id, turnId)}`,
         kind: "tool",
-        title: stringOf(params.tool_name, "Tool"),
+        title: toolName,
         body: pretty(params.arguments),
         status: "running",
         turnId,
         startedAtMs: Date.now(),
+        ...(artifactPath ? { artifactPath } : {}),
       });
+    }
     case CORE_UI_METHODS.TOOL_PROGRESS:
       return progressTool(
         entries,
