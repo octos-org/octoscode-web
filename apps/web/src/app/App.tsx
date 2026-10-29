@@ -33,7 +33,6 @@ import {
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
-  OctosUiProtocolError,
   supportsFeature,
   supportsMethod,
   type PlanUpdated,
@@ -229,8 +228,8 @@ import {
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
 import {
-  isWorkspaceRelativePath,
   readSessionFileBlob,
+  workspaceRelativeArtifactPath,
 } from "../features/timeline/session-file-read.ts";
 import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
@@ -782,6 +781,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const attachmentSessionId = session.opened?.session_id ?? "";
   const attachmentProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
   const attachmentAccess = useMemo((): AttachmentAccess | null => {
     const client = protocol.client;
     const capabilities = session.capabilities;
@@ -795,11 +795,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     let filesPromise:
       | Promise<{ filename: string; path: string; size_bytes: number }[]>
       | undefined;
+    const missingReferences = new Set<string>();
     const canDescribe = supportsMethod(
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
     const listedFile = async (reference: string) => {
+      if (missingReferences.has(reference)) return null;
       filesPromise ??= client
         .listSessionFiles({ session_id: attachmentSessionId })
         .then((result) => result.files);
@@ -813,6 +815,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             .listSessionFiles({ session_id: attachmentSessionId })
             .then((result) => result.files);
           file = uniqueAttachmentFile(reference, await filesPromise);
+          if (!file) missingReferences.add(reference);
         }
         return file;
       } catch (reason) {
@@ -833,14 +836,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) ||
         supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST),
       async download(reference, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
         if (
-          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
-          isWorkspaceRelativePath(reference)
+          workspacePath &&
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
         ) {
           return readSessionFileBlob(
             client,
             attachmentSessionId,
-            reference,
+            workspacePath,
             signal,
           );
         }
@@ -852,25 +859,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return commands.download(reference, signal);
       },
       async downloadForSave(reference, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
         if (
-          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
-          isWorkspaceRelativePath(reference)
+          workspacePath &&
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
         ) {
-          try {
-            return await readSessionFileBlob(
-              client,
-              attachmentSessionId,
-              reference,
-              signal,
-            );
-          } catch (reason) {
-            if (
-              !(reason instanceof OctosUiProtocolError) ||
-              (reason.data as { kind?: unknown } | undefined)?.kind !==
-                "workspace_file_too_large"
-            )
-              throw reason;
-          }
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,
@@ -885,6 +887,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.capabilities,
     attachmentSessionId,
     attachmentProfileId,
+    attachmentWorkspaceRoot,
   ]);
   const autonomyAvailable = commandSuggestions(
     "/",

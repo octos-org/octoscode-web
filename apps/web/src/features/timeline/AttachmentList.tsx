@@ -48,16 +48,21 @@ function AttachmentItem({
   const [busy, setBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [size, setSize] = useState<string | null>(null);
+  const [sizeBytes, setSizeBytes] = useState<number | null>(null);
   const previewId = useId();
   const itemRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     let current = true;
     setSize(null);
+    setSizeBytes(null);
     if (!access?.describe) return;
     access.describe(reference).then(
       (info) => {
-        if (current && info) setSize(formatAttachmentSize(info.sizeBytes));
+        if (current && info) {
+          setSize(formatAttachmentSize(info.sizeBytes));
+          setSizeBytes(info.sizeBytes);
+        }
       },
       () => {
         // Size is optional metadata; byte preview/download remains authoritative.
@@ -167,7 +172,11 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || busy}
+          disabled={
+            !access ||
+            busy ||
+            (sizeBytes !== null && sizeBytes > 32 * 1024 * 1024)
+          }
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >

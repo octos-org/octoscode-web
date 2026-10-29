@@ -14,6 +14,17 @@ export function isWorkspaceRelativePath(value: string): boolean {
   );
 }
 
+export function workspaceRelativeArtifactPath(
+  reference: string,
+  workspaceRoot: string,
+): string | null {
+  if (isWorkspaceRelativePath(reference)) return reference;
+  const root = workspaceRoot.replace(/\/+$/, "");
+  if (!root || !reference.startsWith(`${root}/`)) return null;
+  const relative = reference.slice(root.length + 1);
+  return isWorkspaceRelativePath(relative) ? relative : null;
+}
+
 /** Read one session-scoped workspace file using UPCR-2026-057 chunks. */
 export async function readSessionFileBlob(
   client: OctosUiClient,
@@ -39,9 +50,16 @@ export async function readSessionFileBlob(
     if (chunk.offset !== offset || chunk.size_bytes > MAX_FILE_BYTES) {
       throw new Error("Session file read returned an invalid offset");
     }
+    if (chunk.content_base64.length > Math.ceil(CHUNK_SIZE / 3) * 4) {
+      throw new Error("Session file read returned an oversized response");
+    }
     mimeType = chunk.mime_type;
     const bytes = decodeBase64(chunk.content_base64);
-    if (bytes.length > CHUNK_SIZE) {
+    if (
+      bytes.length > CHUNK_SIZE ||
+      totalBytes + bytes.length > chunk.size_bytes ||
+      totalBytes + bytes.length > MAX_FILE_BYTES
+    ) {
       throw new Error("Session file read returned an oversized chunk");
     }
     parts.push(bytes);

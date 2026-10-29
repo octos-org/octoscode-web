@@ -21,13 +21,15 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
   useEffect(() => {
     let current = true;
     let task: PDFDocumentLoadingTask | undefined;
+    let port: Worker | undefined;
     setRendering(true);
     setError(null);
     setPageNumber(1);
     void Promise.all([blob.arrayBuffer(), import("pdfjs-dist")]).then(
       ([buffer, pdfjs]) => {
         if (!current) return;
-        const worker = pdfjs.PDFWorker.create({ port: new PdfWorker() });
+        port = new PdfWorker();
+        const worker = pdfjs.PDFWorker.create({ port });
         task = pdfjs.getDocument({
           data: new Uint8Array(buffer),
           worker,
@@ -62,6 +64,7 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
     return () => {
       current = false;
       if (task) void task.destroy();
+      port?.terminate();
     };
   }, [blob]);
 
