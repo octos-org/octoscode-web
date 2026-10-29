@@ -57,27 +57,39 @@ export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   if (exact.length > 1) return null;
   const normalizedReference = reference.replace(/\\/g, "/");
   const root = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!root) return null;
+  const rootName = root.split("/").filter(Boolean).at(-1);
+  if (!rootName) return null;
   const windowsRoot = /^[A-Za-z]:\//.test(root);
-  const absoluteReference =
+  let relative = normalizedReference;
+  if (
     normalizedReference.startsWith("/") ||
     /^[A-Za-z]:\//.test(normalizedReference)
-      ? normalizedReference
-      : `${root}/${normalizedReference}`;
-  const candidate = windowsRoot
-    ? absoluteReference.toLowerCase()
-    : absoluteReference;
-  const expectedRoot = windowsRoot ? root.toLowerCase() : root;
+  ) {
+    const candidate = windowsRoot
+      ? normalizedReference.toLowerCase()
+      : normalizedReference;
+    const expectedRoot = windowsRoot ? root.toLowerCase() : root;
+    if (!candidate.startsWith(`${expectedRoot}/`)) return null;
+    relative = normalizedReference.slice(root.length + 1);
+  }
   if (
-    !candidate.startsWith(`${expectedRoot}/`) ||
-    absoluteReference.split("/").includes("..")
+    !relative ||
+    relative.startsWith("up/") ||
+    relative.startsWith("pf/") ||
+    relative.split("/").includes("..")
   ) {
     return null;
   }
+  // Profile handles encode a path relative to the profile data dir, not an
+  // absolute host path. Session files are listed only for this workspace, so
+  // its basename plus the tool-relative path is the unambiguous suffix.
+  const suffix = `${rootName}/${relative}`;
   const matches = files.filter((file) => {
     const decoded = profileHandlePath(file.path)?.replace(/\\/g, "/");
     if (!decoded) return false;
-    return (windowsRoot ? decoded.toLowerCase() : decoded) === candidate;
+    const candidate = windowsRoot ? decoded.toLowerCase() : decoded;
+    const expected = windowsRoot ? suffix.toLowerCase() : suffix;
+    return candidate === expected || candidate.endsWith(`/${expected}`);
   });
   return matches.length === 1 ? matches[0]! : null;
 }

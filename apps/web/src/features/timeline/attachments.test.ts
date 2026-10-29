@@ -54,12 +54,12 @@ describe("attachment naming", () => {
   it("resolves workspace downloads only inside the opened workspace", () => {
     const workspace = {
       filename: "report.md",
-      path: `pf/${btoa("/workspace/report.md")}/report.md`,
+      path: `pf/${btoa("profiles/coding/workspace/report.md")}/report.md`,
       size_bytes: 20,
     };
     const unrelated = {
       filename: "report.md",
-      path: `pf/${btoa("/other/report.md")}/report.md`,
+      path: `pf/${btoa("profiles/coding/other/report.md")}/report.md`,
       size_bytes: 30,
     };
     const files = [unrelated, workspace];
