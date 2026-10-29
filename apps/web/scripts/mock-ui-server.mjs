@@ -1266,6 +1266,7 @@ const FIXTURE_PNG = Buffer.from(
 );
 
 async function previewFixture(name) {
+  if (name.endsWith(".png")) return FIXTURE_PNG;
   if (name.endsWith(".pdf")) return fixturePdf();
   if (name.endsWith(".csv")) {
     return Buffer.from(

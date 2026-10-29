@@ -152,6 +152,40 @@ test("previews Markdown, code, and text and offers download for unknown types", 
   }
 });
 
+test("previews delivered images without a replayed size event", async ({
+  page,
+}) => {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (
+        frame.method === "projection/envelope" &&
+        frame.params?.payload?.type === "file_attached"
+      ) {
+        return;
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  let requests = 0;
+  await page.route("**/api/files**", (route) => {
+    requests += 1;
+    return route.continue();
+  });
+  const sessionId = await openConversation(page);
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=photo.png&valid=1`,
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator('[data-attachment="photo.png"]');
+  await expect(item.getByRole("img", { name: "photo.png" })).toBeVisible();
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(item.locator('[data-artifact-kind="image"] img')).toBeVisible();
+  expect(requests).toBe(1);
+});
+
 test("retries an unsupported file with Download after a failed request", async ({
   page,
 }) => {

@@ -32,6 +32,8 @@ export interface AttachmentAccess {
   ) => Promise<{
     sizeBytes?: number;
     saveAvailable?: boolean;
+    /** Delivered bytes fetched once when no replayed size event exists. */
+    blob?: Blob;
   } | null>;
 }
 

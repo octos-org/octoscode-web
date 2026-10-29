@@ -62,9 +62,15 @@ function AttachmentItem({
     "pending" | "ready" | "unavailable"
   >(access?.describe ? "pending" : "unavailable");
   const [saveAvailable, setSaveAvailable] = useState(true);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [nearViewport, setNearViewport] = useState(false);
   const previewId = useId();
   const itemRef = useRef<HTMLLIElement>(null);
+  const descriptionRef = useRef<{
+    access: AttachmentAccess;
+    reference: string;
+    promise: ReturnType<NonNullable<AttachmentAccess["describe"]>>;
+  } | null>(null);
 
   useEffect(() => {
     if (!image) return;
@@ -87,21 +93,36 @@ function AttachmentItem({
   }, [image]);
 
   useEffect(() => {
+    if (
+      descriptionRef.current?.access === access &&
+      descriptionRef.current.reference === reference &&
+      sizeState === "ready"
+    ) {
+      return;
+    }
     let current = true;
     const shouldDescribe =
       workspaceFile || previewOpen || (image && nearViewport);
     setSize(null);
     setSizeBytes(null);
+    setPreviewBlob(null);
     setSaveAvailable(true);
     setSizeState(
       access?.describe && shouldDescribe ? "pending" : "unavailable",
     );
     if (!access?.describe || !shouldDescribe) return;
-    access.describe(reference, workspaceFile).then(
+    const pending =
+      descriptionRef.current?.access === access &&
+      descriptionRef.current.reference === reference
+        ? descriptionRef.current.promise
+        : access.describe(reference, workspaceFile);
+    descriptionRef.current = { access, reference, promise: pending };
+    pending.then(
       (info) => {
         if (!current) return;
         setSizeState("ready");
         setSaveAvailable(info?.saveAvailable !== false);
+        if (info?.blob) setPreviewBlob(info.blob);
         if (info?.sizeBytes !== undefined) {
           setSize(formatAttachmentSize(info.sizeBytes));
           setSizeBytes(info.sizeBytes);
@@ -132,9 +153,12 @@ function AttachmentItem({
     }
     const abort = new AbortController();
     let url: string | null = null;
-    (workspaceFile
-      ? (access.downloadWorkspaceFile ?? access.download)
-      : access.download)(reference, abort.signal).then(
+    const source = previewBlob
+      ? Promise.resolve(previewBlob)
+      : (workspaceFile
+          ? (access.downloadWorkspaceFile ?? access.download)
+          : access.download)(reference, abort.signal);
+    source.then(
       (blob) => {
         if (abort.signal.aborted) return;
         url = URL.createObjectURL(blob);
@@ -157,6 +181,7 @@ function AttachmentItem({
     saveAvailable,
     workspaceFile,
     nearViewport,
+    previewBlob,
   ]);
 
   const download = async () => {
@@ -168,7 +193,8 @@ function AttachmentItem({
         ? access.saveWorkspaceFile
           ? await access.saveWorkspaceFile(reference, sizeBytes ?? undefined)
           : await (access.downloadWorkspaceFile ?? access.download)(reference)
-        : await (access.downloadForSave ?? access.download)(reference);
+        : (previewBlob ??
+          (await (access.downloadForSave ?? access.download)(reference)));
       const url = URL.createObjectURL(value);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -250,9 +276,11 @@ function AttachmentItem({
             downloadAvailable={saveAvailable}
             {...(sizeBytes === null ? {} : { sizeBytes })}
             loadBlob={(signal) =>
-              (workspaceFile
-                ? (access.downloadWorkspaceFile ?? access.download)
-                : access.download)(reference, signal)
+              previewBlob
+                ? Promise.resolve(previewBlob)
+                : (workspaceFile
+                    ? (access.downloadWorkspaceFile ?? access.download)
+                    : access.download)(reference, signal)
             }
             {...(workspaceFile
               ? {
