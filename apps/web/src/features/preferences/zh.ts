@@ -1491,6 +1491,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Copies a redacted snapshot: connection status, recovery detail, and app identity. No credentials.":
     "复制一份脱敏快照：连接状态、恢复详情和应用标识，不含任何凭据。",
   "Copy conversation link": "复制对话链接",
+  "This conversation cannot be linked from this browser.":
+    "这个会话无法从当前浏览器复制链接。",
   "Copy this conversation as Markdown": "把这段对话复制为 Markdown",
   "Copying…": "正在复制…",
   "Could not copy diagnostics. Check clipboard access and try again.":

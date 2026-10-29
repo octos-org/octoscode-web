@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { CheckIcon, LinkIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { createSavedSessionUrl } from "./create-saved-session-url.ts";
@@ -18,6 +19,8 @@ export function CopySessionLinkButton({
   const t = useUiText();
   const [copied, setCopied] = useState(false);
   const [manualUrl, setManualUrl] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  const titleId = useId();
   const timer = useRef<number | undefined>(undefined);
   const generation = useRef(0);
   const referenceKey = JSON.stringify(reference);
@@ -25,6 +28,7 @@ export function CopySessionLinkButton({
     generation.current += 1;
     setCopied(false);
     setManualUrl(null);
+    setCopyError(false);
     window.clearTimeout(timer.current);
   }, [referenceKey]);
   useEffect(
@@ -38,7 +42,14 @@ export function CopySessionLinkButton({
   const copy = async () => {
     const requestGeneration = ++generation.current;
     setManualUrl(null);
-    const url = createSavedSessionUrl(window.location.href, reference);
+    setCopyError(false);
+    let url: string;
+    try {
+      url = createSavedSessionUrl(window.location.href, reference);
+    } catch {
+      setCopyError(true);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -69,18 +80,35 @@ export function CopySessionLinkButton({
         {copied ? t("Conversation link copied.") : ""}
       </span>
       {manualUrl ? (
-        <div>
-          <p role="status">
-            {t("Clipboard unavailable. Select and copy the link below.")}
-          </p>
-          <textarea
-            aria-label={t("Conversation link")}
-            readOnly
-            rows={3}
-            value={manualUrl}
-            onFocus={(event) => event.currentTarget.select()}
-          />
-        </div>
+        <ModalSurface
+          backdropClassName="review-backdrop"
+          dialogClassName="review-dialog"
+          labelledBy={titleId}
+          onEscape={() => setManualUrl(null)}
+          closeOnBackdrop
+        >
+          <div className={styles.fallback}>
+            <h2 id={titleId}>{t("Conversation link")}</h2>
+            <p role="status">
+              {t("Clipboard unavailable. Select and copy the link below.")}
+            </p>
+            <textarea
+              aria-label={t("Conversation link")}
+              readOnly
+              rows={3}
+              value={manualUrl}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <button type="button" onClick={() => setManualUrl(null)}>
+              {t("Close")}
+            </button>
+          </div>
+        </ModalSurface>
+      ) : null}
+      {copyError ? (
+        <p role="alert">
+          {t("This conversation cannot be linked from this browser.")}
+        </p>
       ) : null}
     </>
   );
