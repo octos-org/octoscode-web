@@ -141,7 +141,7 @@ function AttachmentItem({
   const legacyUnmeasuredImage =
     image &&
     !workspaceFile &&
-    access?.previewAvailable === false &&
+    (access?.previewAvailable === false || reference.startsWith("up/")) &&
     sizeBytes === null;
 
   // Load an image preview once it scrolls near the viewport, so a long
@@ -282,7 +282,7 @@ function AttachmentItem({
             name={name}
             path={reference}
             workspaceFile={workspaceFile}
-            sizeRequired={!workspaceFile}
+            sizeRequired={!workspaceFile && !reference.startsWith("up/")}
             sizePending={sizeState === "pending"}
             downloadAvailable={saveAvailable}
             {...(sizeBytes === null ? {} : { sizeBytes })}

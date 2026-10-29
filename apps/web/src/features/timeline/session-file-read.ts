@@ -43,15 +43,6 @@ export async function deliveredArtifactWorkspacePath(
   return `.artifacts/delivered/${bucket}/${name}`;
 }
 
-/** Core materializes uploaded handles into this Session's uploads directory. */
-export function sessionUploadWorkspacePath(reference: string): string | null {
-  if (!reference.startsWith("up/")) return null;
-  const name = reference.split("/").at(-1);
-  return name && name !== "." && name !== ".." && !name.includes("\\")
-    ? `uploads/${name}`
-    : null;
-}
-
 export function isWorkspaceReadLimitError(reason: unknown): boolean {
   if (
     reason instanceof OctosUiProtocolError &&

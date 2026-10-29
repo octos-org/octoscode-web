@@ -111,7 +111,6 @@ export function TaskDetailDialog({
       ? profileFileReadAvailable
       : workspaceReadAvailable),
   );
-  const profileFile = selectedPath?.startsWith("pf/") === true;
   const sizePending = Boolean(
     selectedPath &&
     describeArtifact &&
@@ -121,10 +120,22 @@ export function TaskDetailDialog({
     sizeResult?.path === selectedPath ? sizeResult : undefined;
   const sizeBytes = currentSize?.sizeBytes;
   const saveAvailable = currentSize?.saveAvailable;
+  const selectedPathKind = selectedPath
+    ? artifactKind(selectedPath)
+    : "unsupported";
+  const textArtifact =
+    ["markdown", "code", "text"].includes(selectedPathKind) ||
+    (selectedPathKind === "unsupported" &&
+      selected &&
+      ["text", "report", "log", "markdown", "json"].includes(
+        selected.artifact.kind,
+      ));
   const canDownloadText = Boolean(
     selectedBlobAvailable ||
     !selectedPath ||
-    ["markdown", "code", "text"].includes(artifactKind(selectedPath)),
+    (textArtifact &&
+      (selected.content !== undefined ||
+        selected.artifact.content !== undefined)),
   );
 
   return (
@@ -240,7 +251,6 @@ export function TaskDetailDialog({
                     workspaceReadAvailable &&
                     !selectedPath!.startsWith("pf/")
                   }
-                  sizeRequired={profileFile}
                   sizePending={sizePending}
                   downloadAvailable={
                     saveAvailable === false ? false : canDownloadText

@@ -52,4 +52,52 @@ describe("TaskDetailDialog", () => {
     expect(artifactOnly).toContain("Artifacts");
     expect(artifactOnly).toContain("No artifacts were reported.");
   });
+
+  it("allows downloading complete text artifacts without an extension", () => {
+    const taskId = "00000000-0000-4000-8000-000000000099";
+    const html = renderToStaticMarkup(
+      <TaskDetailDialog
+        state={{
+          ...EMPTY_SUPERVISION,
+          artifactsAvailable: true,
+          tasks: [
+            {
+              id: taskId,
+              title: "Inspect evidence",
+              toolName: "spawn_agent",
+              state: "completed",
+              status: "completed",
+              artifactCount: 1,
+              outputFiles: ["reports/checks"],
+            },
+          ],
+          detail: {
+            ...EMPTY_SUPERVISION.detail,
+            active: true,
+            taskId,
+            selectedArtifact: {
+              session_id: "session-1",
+              task_id: taskId,
+              artifact: {
+                id: "checks",
+                title: "Checks",
+                kind: "report",
+                status: "ready",
+                path: "reports/checks",
+              },
+              content: "All checks passed",
+              has_more: false,
+            },
+          },
+        }}
+        onClose={vi.fn()}
+        onLoadMore={vi.fn()}
+        onReadArtifact={vi.fn()}
+        onLoadMoreArtifact={vi.fn()}
+      />,
+    );
+    expect(html).toContain("All checks passed");
+    expect(html).toMatch(/<button[^>]*>Download<\/button>/);
+    expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Download<\/button>/);
+  });
 });

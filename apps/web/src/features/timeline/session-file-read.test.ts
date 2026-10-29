@@ -5,7 +5,6 @@ import {
   deliveredArtifactWorkspacePath,
   readSessionFileBlob,
   readSessionFileSize,
-  sessionUploadWorkspacePath,
 } from "./session-file-read.ts";
 
 describe("session file blob reader", () => {
@@ -21,13 +20,6 @@ describe("session file blob reader", () => {
     await expect(
       deliveredArtifactWorkspacePath("up/encoded/photo.png"),
     ).resolves.toBeNull();
-  });
-
-  it("maps uploaded handles to their materialized workspace path", () => {
-    expect(sessionUploadWorkspacePath("up/encoded/photo.png")).toBe(
-      "uploads/photo.png",
-    );
-    expect(sessionUploadWorkspacePath("report.md")).toBeNull();
   });
 
   it("joins ordered chunks and preserves the server MIME type", async () => {
