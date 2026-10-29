@@ -795,6 +795,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     let filesPromise:
       | Promise<{ filename: string; path: string; size_bytes: number }[]>
       | undefined;
+    let refreshPromise:
+      | Promise<{ filename: string; path: string; size_bytes: number }[]>
+      | undefined;
     const missingReferences = new Set<string>();
     const canDescribe = supportsMethod(
       capabilities,
@@ -811,9 +814,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           // A later delivery may postdate the shared listing. Refresh a miss
           // once for this card; duplicates still stay ambiguous.
           filesPromise = undefined;
-          filesPromise = client
+          refreshPromise ??= client
             .listSessionFiles({ session_id: attachmentSessionId })
             .then((result) => result.files);
+          filesPromise = refreshPromise;
           file = uniqueAttachmentFile(reference, await filesPromise);
           if (!file) missingReferences.add(reference);
         }
@@ -886,8 +890,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         );
         if (
           workspacePath &&
-          sizeBytes !== undefined &&
-          sizeBytes <= 32 * 1024 * 1024 &&
+          (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024) &&
           supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
         ) {
           return readSessionFileBlob(

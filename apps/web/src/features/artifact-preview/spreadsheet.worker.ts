@@ -82,10 +82,15 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
   return workbook.SheetNames.map((name) => {
     const worksheet = workbook.Sheets[name]!;
     const actualRange = XLSX.utils.decode_range(worksheet["!ref"] ?? "A1");
+    const width = Math.max(1, actualRange.e.c - actualRange.s.c + 1);
+    const rowBudget = Math.min(
+      MAX_ROWS,
+      Math.max(1, Math.floor(MAX_CELLS / width)),
+    );
     const cappedRange = {
       s: actualRange.s,
       e: {
-        r: Math.min(actualRange.e.r, actualRange.s.r + 4_999),
+        r: Math.min(actualRange.e.r, actualRange.s.r + rowBudget - 1),
         c: Math.min(actualRange.e.c, actualRange.s.c + MAX_COLUMNS - 1),
       },
     };
