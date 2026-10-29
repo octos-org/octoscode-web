@@ -139,7 +139,7 @@ export function ComposerInput(props: ComposerInputProps) {
         value={props.value}
         disabled={props.disabled || readOnlyPeerSlug !== null}
         placeholder={props.placeholder}
-        aria-label="Message Octos"
+        aria-label={t("Message Octos")}
         data-vim-mode={vimMode ? mode.current.mode : "off"}
         onChange={(event) => props.onChange(event.currentTarget.value)}
         onFocus={() => {

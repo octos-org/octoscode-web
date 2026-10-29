@@ -174,6 +174,7 @@ import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
 import { PanelRightIcon } from "../ui/Icon.tsx";
+import { CopySessionLinkButton } from "../features/session-links/CopySessionLinkButton.tsx";
 import {
   readPanelLayout,
   writePanelLayout,
@@ -2221,13 +2222,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       </SurfaceBoundary>
     ) : (
       <section className={productStyles.sessionUnavailable} role="alert">
-        <strong>This conversation link is invalid</strong>
+        <strong>{t("This conversation link is invalid")}</strong>
         <p>
-          It does not contain a complete server workspace and conversation
-          reference.
+          {t(
+            "It does not contain a complete server workspace and conversation reference.",
+          )}
         </p>
         <button type="button" onClick={dismissSavedLink}>
-          Dismiss link
+          {t("Dismiss link")}
         </button>
       </section>
     )
@@ -2513,7 +2515,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
 
   const recoveryStop = conversation.interruptible ? (
     <button type="button" onClick={() => void conversation.interrupt()}>
-      Stop
+      {t("Stop")}
     </button>
   ) : null;
 
@@ -2609,7 +2611,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         </SurfaceBoundary>
       ) : null}
       <a className={productStyles.skipLink} href="#workspace-main">
-        Skip to content
+        {t("Skip to content")}
       </a>
       <div className="workspace-grid">
         <NavigationSurface
@@ -2713,13 +2715,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           tabIndex={-1}
         >
           <section className="conversation" hidden={fleetRouteActive}>
-            <h1 className="sr-only">Octoscode coding workspace</h1>
+            <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
               {compact ? (
                 <button
                   type="button"
                   className={productStyles.navigationTrigger}
-                  aria-label="Open sessions"
+                  aria-label={t("Open sessions")}
                   aria-haspopup="dialog"
                   aria-expanded={!sidebarCollapsed}
                   onClick={() => setSidebarCollapsed(false)}
@@ -2727,11 +2729,29 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   <MenuIcon size={20} />
                 </button>
               ) : null}
-              <div className="workspace-title">
-                <span>
-                  {workspaceName(activeWorkspacePath || t("Workspace"))}
-                </span>
-                <small>{activeWorkspacePath || t("Choose a workspace")}</small>
+              <div className={productStyles.titleGroup}>
+                <div className="workspace-title">
+                  <span>
+                    {workspaceName(activeWorkspacePath || t("Workspace"))}
+                  </span>
+                  <small>
+                    {activeWorkspacePath || t("Choose a workspace")}
+                  </small>
+                </div>
+                {session.opened?.active_profile_id &&
+                session.opened.workspace_root ? (
+                  <CopySessionLinkButton
+                    reference={{
+                      workspaceRoot: session.opened.workspace_root,
+                      profileId: session.opened.active_profile_id,
+                      sessionId: session.opened.session_id,
+                    }}
+                    onClipboardUnavailable={() => {
+                      setSettingsSection("general");
+                      setSettingsOpen(true);
+                    }}
+                  />
+                ) : null}
               </div>
               {session.opened &&
               (work.supervision.planAvailable ||
@@ -3101,7 +3121,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           className={productStyles.thinkingOctopus}
                         />
                         <span>
-                          {turnStarting ? "Starting…" : activityLabel}
+                          {turnStarting ? t("Starting…") : activityLabel}
                         </span>
                       </div>
                     ) : null}
@@ -3118,7 +3138,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   className={productStyles.jumpLatest}
                   onClick={jumpToLatest}
                 >
-                  Back to latest ↓
+                  {t("Back to latest ↓")}
                 </button>
               ) : null}
               {/* The agent's checklist rides the sticky composer rather than the
@@ -3138,10 +3158,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               {session.opened && openingSession ? (
                 <div className={productStyles.pendingNavigation} role="status">
                   <span className={productStyles.pendingNavigationCopy}>
-                    <strong>Opening conversation…</strong>
+                    <strong>{t("Opening conversation…")}</strong>
                   </span>
                   <button type="button" onClick={workspaceProduct.cancelLaunch}>
-                    Cancel
+                    {t("Cancel")}
                   </button>
                 </div>
               ) : null}
@@ -3154,24 +3174,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   <span className={productStyles.pendingNavigationCopy}>
                     <strong>
                       {navigationPending.phase === "restoring"
-                        ? "Finishing recovery before navigation"
+                        ? t("Finishing recovery before navigation")
                         : navigationPending.kind === "new-session"
-                          ? "New Session opens next"
-                          : "Session switch runs next"}
+                          ? t("New Session opens next")
+                          : t("Session switch runs next")}
                     </strong>
                     <small title={navigationPending.cwd}>
-                      {navigationPending.phase === "restoring"
-                        ? "Octos accepted the turn. Durable state is syncing before this action continues in "
-                        : "Octos is accepting the current turn. This action will continue automatically in "}
-                      {workspaceName(navigationPending.cwd)}.
+                      {t(
+                        navigationPending.phase === "restoring"
+                          ? "Octos accepted the turn. Durable state is syncing before this action continues in {workspace}."
+                          : "Octos is accepting the current turn. This action will continue automatically in {workspace}.",
+                        { workspace: workspaceName(navigationPending.cwd) },
+                      )}
                     </small>
                   </span>
                   <button
                     type="button"
-                    aria-label="Cancel pending Session navigation"
+                    aria-label={t("Cancel pending Session navigation")}
                     onClick={workspaceProduct.cancelPendingNavigation}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </button>
                 </div>
               ) : null}
@@ -3300,15 +3322,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   {commandError ? <p role="alert">{commandError}</p> : null}
                   {draftCapacityBlocked ? (
                     <p role="status">
-                      This tab already keeps 50 unsent drafts. Send or clear
-                      this input before switching conversations. Copy it first
-                      if you want to keep it elsewhere.
+                      {t(
+                        "This tab already keeps 50 unsent drafts. Send or clear this input before switching conversations. Copy it first if you want to keep it elsewhere.",
+                      )}
                     </p>
                   ) : !draftSaved ? (
                     <p role="status">
-                      Draft changes could not be saved on this device. Copy your
-                      text before closing this tab; an older draft may be
-                      restored.
+                      {t(
+                        "Draft changes could not be saved on this device. Copy your text before closing this tab; an older draft may be restored.",
+                      )}
                     </p>
                   ) : null}
                   <QueuedPrompts
@@ -3576,7 +3598,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       type="button"
                       onClick={jumpToLatest}
                     >
-                      Sending paused · View response status
+                      {t("Sending paused · View response status")}
                     </button>
                   ) : null}
                 </>

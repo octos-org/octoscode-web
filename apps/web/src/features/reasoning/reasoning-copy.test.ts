@@ -27,7 +27,7 @@ describe("show-thinking preference copy", () => {
     ).toBe("Thinking · 12 s · 340 words");
     expect(
       reasoningCopyFor("zh")("thinkingSummary", { seconds: 12, words: 340 }),
-    ).toBe("思考 · 12 秒 · 340 词");
+    ).toBe("思考 · 12 秒 · 340 字");
   });
 
   it("keeps every placeholder identical across languages", () => {

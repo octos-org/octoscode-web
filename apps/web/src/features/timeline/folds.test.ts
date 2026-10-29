@@ -99,6 +99,14 @@ describe("thinking one-line summary", () => {
       }),
     ).toEqual({ seconds: 12, words: 340 });
   });
+
+  it("counts Chinese by characters, since it has no spaces between words", () => {
+    // 12 characters plus one Latin word; the comma counts as neither.
+    expect(
+      thinkingSummaryParts({ body: "先看一下工作区，再读 sales.csv 的数据" })
+        .words,
+    ).toBe(13);
+  });
 });
 
 describe("tool call header line", () => {

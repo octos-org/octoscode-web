@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { SavedSessionReference } from "./saved-session-link.ts";
 import styles from "./SavedSessionLinkPanel.module.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 export interface SavedSessionLinkPanelProps {
   reference: SavedSessionReference;
@@ -22,6 +23,7 @@ export function SavedSessionLinkPanel({
 }: SavedSessionLinkPanelProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const t = useUiText();
   return (
     <section
       className={styles.panel}
@@ -29,37 +31,39 @@ export function SavedSessionLinkPanel({
       aria-describedby={descriptionId}
       aria-busy={opening}
     >
-      <h2 id={titleId}>Open saved conversation</h2>
+      <h2 id={titleId}>{t("Open saved conversation")}</h2>
       <p id={descriptionId} className={styles.description}>
-        Open this conversation on the connected server. Check that the server
-        and workspace match the link you saved.
+        {t(
+          "Open this conversation on the connected server. Check that the server and workspace match the link you saved.",
+        )}
       </p>
       <dl className={styles.destination}>
         <div>
-          <dt>Server</dt>
+          <dt>{t("Server")}</dt>
           <dd>{serverOrigin}</dd>
         </div>
         <div>
-          <dt>Workspace</dt>
+          <dt>{t("Workspace")}</dt>
           <dd>{reference.workspaceRoot}</dd>
         </div>
       </dl>
       <details className={styles.details}>
-        <summary>Conversation details</summary>
+        <summary>{t("Conversation details")}</summary>
         <dl className={styles.destination}>
           <div>
-            <dt>Profile</dt>
+            <dt>{t("Profile")}</dt>
             <dd>{reference.profileId}</dd>
           </div>
           <div>
-            <dt>Session</dt>
+            <dt>{t("Session")}</dt>
             <dd>{reference.sessionId}</dd>
           </div>
         </dl>
       </details>
       <p className={styles.note}>
-        If the conversation no longer exists, the server may open an empty
-        session. Opening the link does not send a message.
+        {t(
+          "If the conversation no longer exists, the server may open an empty session. Opening the link does not send a message.",
+        )}
       </p>
       {error ? (
         <p className={styles.error} role="alert">
@@ -68,7 +72,7 @@ export function SavedSessionLinkPanel({
       ) : null}
       <div className={styles.actions}>
         <button type="button" disabled={opening} onClick={onDismiss}>
-          Dismiss link
+          {t("Dismiss link")}
         </button>
         <button
           type="button"
@@ -76,12 +80,12 @@ export function SavedSessionLinkPanel({
           disabled={opening}
           onClick={onOpen}
         >
-          {opening ? "Opening conversation…" : "Open conversation"}
+          {opening ? t("Opening conversation…") : t("Open conversation")}
         </button>
       </div>
       {opening ? (
         <span className="sr-only" role="status">
-          Checking the session and loading its conversation.
+          {t("Checking the session and loading its conversation.")}
         </span>
       ) : null}
     </section>

@@ -20,8 +20,8 @@ export const REASONING_COPY = {
   zh: {
     paneRow: "显示思考",
     paneHint: "思考会显示在此会话的记录中，默认折叠。",
-    thinkingSummary: "思考 · {seconds} 秒 · {words} 词",
-    thinkingSummaryNoTime: "思考 · {words} 词",
+    thinkingSummary: "思考 · {seconds} 秒 · {words} 字",
+    thinkingSummaryNoTime: "思考 · {words} 字",
     expandAll: "全部展开",
     collapseAll: "全部折叠",
     thinkingExpanded: "思考已展开",
@@ -44,8 +44,8 @@ export const REASONING_ZH_COPY: Readonly<Record<string, string>> =
     "Writing…": "正在撰写…",
     "Running {value0}…": "正在运行 {value0}…",
     "Thinking · {seconds} s · {words} words":
-      "思考 · {seconds} 秒 · {words} 词",
-    "Thinking · {words} words": "思考 · {words} 词",
+      "思考 · {seconds} 秒 · {words} 字",
+    "Thinking · {words} words": "思考 · {words} 字",
   });
 
 export type ReasoningCopyKey = keyof (typeof REASONING_COPY)["en"];

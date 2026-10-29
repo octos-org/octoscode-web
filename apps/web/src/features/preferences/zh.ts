@@ -27,7 +27,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Activity status": "活动状态",
   "Add & Start": "添加并启动",
   "Add a provider route to make a model available to Core.":
-    "添加提供商路由，让 Core 可以使用该模型。",
+    "添加提供商路由，让 Octos 可以使用该模型。",
   "Add model provider": "添加模型提供商",
   "Add or replace a lane": "添加或替换通道",
   "Add provider": "添加提供商",
@@ -55,7 +55,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Artifacts —": "产物 —",
   "Aside — /btw": "旁问 — /btw",
   "Ask Octos to work on this repository": "让 Octos 处理此代码仓库",
-  "Auth token": "认证令牌",
+  "Auth token": "访问令牌",
   "Authoritative diff preview": "服务器确认的差异预览",
   "Automatic snapshots are disabled. Existing snapshots remain available.":
     "自动快照已禁用。现有快照仍可使用。",
@@ -137,7 +137,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Configuration changes are paused while known Profile work is running.":
     "此配置档案有已知任务运行时，暂停更改配置。",
   "Configure one Core model identity, endpoint route, and write-only credential.":
-    "配置一个 Core 模型身份、服务端路由和只写凭据。",
+    "配置一个 Octos 模型身份、服务端路由和只写凭据。",
   "Configured profile models": "配置档案中的模型",
   "Configured providers": "已配置提供商",
   "Configured. Enter a value only to replace it; the stored key is never read back.":
@@ -186,9 +186,9 @@ const catalog: Readonly<Record<string, string>> = {
   "Copy the conversation into a new session in the same workspace. This does not create a Git worktree or a workspace copy.":
     "将对话复制到同一工作区的新会话。这不会创建 Git 工作树或工作区副本。",
   "Core saves the choice when the next user turn starts. Profile default clears the Session override at that point. Providers may ignore effort for models without reasoning controls.":
-    "Core 在下一轮用户请求开始时保存此选择。选择配置档案默认值会在那时清除会话覆盖设置。不支持推理控制的模型可能忽略此设置。",
+    "Octos 在下一轮用户请求开始时保存此选择。选择配置档案默认值会在那时清除会话覆盖设置。不支持推理控制的模型可能忽略此设置。",
   "Core stores the write-only key under this environment-name reference; the value itself is never read back.":
-    "Core 以此环境变量名称存储只写密钥；密钥值本身绝不会回读。",
+    "Octos 以此环境变量名称存储只写密钥；密钥值本身绝不会回读。",
   Cost: "费用",
   "Could not connect": "连接失败",
   "Could not delete this provider. The configuration was kept; try again.":
@@ -256,10 +256,10 @@ const catalog: Readonly<Record<string, string>> = {
   "Forget server": "忘记服务器",
   "Stop server": "停止服务器",
   "Stops octos serve on this computer, like Ctrl+C in its terminal. Every connected client is disconnected and running turns are cancelled. Start it again from a terminal.":
-    "停止本机上的 octos serve，效果等同于在其终端按 Ctrl+C。所有已连接的客户端都会断开，正在运行的回合会被取消。需要时请在终端中重新启动。",
+    "停止本机上的 octos serve，效果等同于在其终端按 Ctrl+C。所有已连接的客户端都会断开，正在运行的那一轮会被取消。需要时请在终端中重新启动。",
   "Stop the Octos server?": "停止 Octos 服务器？",
   "Every client connected to this server — this tab, other tabs, the terminal — is disconnected, and any running turn is cancelled. Conversations are kept on disk. To use Octos again, start octos serve from a terminal.":
-    "连接到此服务器的所有客户端（本标签页、其他标签页、终端）都会断开，正在运行的回合会被取消。会话保存在磁盘上，不会丢失。要再次使用 Octos，请在终端中启动 octos serve。",
+    "连接到此服务器的所有客户端（本标签页、其他标签页、终端）都会断开，正在运行的那一轮会被取消。会话保存在磁盘上，不会丢失。要再次使用 Octos，请在终端中启动 octos serve。",
   "Shutdown was not confirmed. Check the server before trying again.":
     "未能确认服务器是否已停止。请先检查服务器状态，再决定是否重试。",
   "Fork:": "分支：",
@@ -420,7 +420,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Not reported by this server": "此服务器未报告",
   Objective: "目标内容",
   "Octos Core currently stores model identity, route, and credential only. Request parameters are read-only guidance here until Core advertises a writable parameter schema.":
-    "Octos Core 当前只存储模型身份、路由和凭据。在 Core 声明可写参数格式之前，此处的请求参数仅作为只读参考。",
+    "Octos 当前只存储模型身份、路由和凭据。在 Octos 声明可写参数格式之前，此处的请求参数仅作为只读参考。",
   "Octos needs input": "Octos 需要输入",
   "Octos server": "Octos 服务器",
   "Octoscode Web stopped rendering": "Octoscode Web 渲染已停止",
@@ -460,8 +460,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Approve {value0}": "批准 {value0}",
   Deny: "拒绝",
   "Deny {value0}": "拒绝 {value0}",
-  Steer: "引导",
-  "Steer {value0}": "引导 {value0}",
+  Steer: "插话",
+  "Steer {value0}": "插话 {value0}",
   Interrupt: "中断",
   "Interrupt {value0}": "中断 {value0}",
   Worker: "工作会话",
@@ -804,7 +804,7 @@ const catalog: Readonly<Record<string, string>> = {
   Workspaces: "工作区",
   "Workspaces and sessions": "工作区与会话",
   "Write-only. Sent to Core only when you test, fetch, or save.":
-    "仅写入。仅在测试、获取或保存时发送至 Core。",
+    "仅写入。仅在测试、获取或保存时发送至 Octos。",
   Yes: "是",
   "Z.AI requires thinking to stay enabled for this model and recommends preserving thinking across coding turns.":
     "Z.AI 要求此模型保持思考功能开启，并建议在编程轮次间保留思考内容。",
@@ -827,7 +827,7 @@ const catalog: Readonly<Record<string, string>> = {
   "image slots used": "个图片位置已用",
   "in ·": "输入 ·",
   is: "为",
-  "is marked keyless by the Core catalog.": "在 Core 目录中被标记为无需密钥。",
+  "is marked keyless by the Core catalog.": "在 Octos 目录中被标记为无需密钥。",
   items: "项",
   "items ·": "项 ·",
   "its current runtime model": "其当前运行时模型",
@@ -954,9 +954,9 @@ const catalog: Readonly<Record<string, string>> = {
   "Prompts are paused until the durable projection is synchronized.":
     "持久化投影同步前，提示发送已暂停。",
   "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.":
-    "此会话已启用引导。符合条件的轮中输入将发送到当前轮次，其他输入仍会排队。",
+    "此会话已启用插话。符合条件的轮中输入将发送到当前轮次，其他输入仍会排队。",
   "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.":
-    "已启用引导，但此服务器不支持安全引导。输入仍会排队。",
+    "已启用插话，但此服务器不支持安全插话。输入仍会排队。",
   "{count} image(s) attached · inspect": "已附加 {count} 张图片 · 检查",
   "{count} queued": "{count} 条排队中",
   "This server cannot start coding turns": "此服务器无法启动编程轮次",
@@ -1033,7 +1033,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Inspect native state for the active or specified turn":
     "检查当前或指定轮次的原生状态",
   "Toggle mid-turn steering (default on); Tab queues a later turn":
-    "切换轮中引导（默认开启）；Tab 将任务排到下一轮",
+    "切换轮中插话（默认开启）；Tab 将任务排到下一轮",
   "Inspect remembered decisions; Session controls set approval mode":
     "检查已记住的决策；通过会话控制设置批准模式",
   "Gather peer results into this Session’s prompt queue":
@@ -1084,7 +1084,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Waiting for your approval": "等待你的批准",
   "Waiting for your answer": "等待你的回答",
   Responding: "正在回复",
-  "Peers running ({count})": "正在运行的同侪（{count} 个）",
+  "Peers running ({count})": "正在运行的协作者（{count} 个）",
   "Another app is using this session": "另一个应用正在使用此会话",
   "Busy — another client is working in this session":
     "忙碌 — 另一个客户端正在此会话中工作",
@@ -1142,7 +1142,7 @@ const catalog: Readonly<Record<string, string>> = {
   "This session can't be controlled from here": "无法从这里控制此会话",
   "This session needs recovery on the server": "此会话需要在服务器上恢复",
   "That action was refused.": "该操作被拒绝。",
-  "Couldn't start that peer.": "无法启动该同侪。",
+  "Couldn't start that peer.": "无法启动该协作者。",
   Disconnected: "已断开",
   "Connection error": "连接错误",
   Sandbox: "沙箱",
@@ -1320,7 +1320,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Sending your answer…": "正在发送你的回答…",
   // Owned by features/peers/peer-copy.ts, which nothing merges into the
   // loaded catalog; carry it here so the consequence line is translated.
-  "Sends this answer and resumes the peer": "发送此回答并让同侪继续",
+  "Sends this answer and resumes the peer": "发送此回答并让协作者继续",
 
   // WEB-PAIRING-CONTRACT-5100 — the pairing link and
   // the bounded copy for every refusal kind.
@@ -1350,22 +1350,22 @@ const catalog: Readonly<Record<string, string>> = {
   "Next match": "下一个匹配",
   "Keyboard shortcuts": "键盘快捷键",
   "Close shortcuts help": "关闭快捷键帮助",
-  "While a turn is running": "回合运行期间",
+  "While a turn is running": "这一轮运行期间",
   "Command palette": "命令面板",
   "Search conversation (palette)": "搜索对话",
   "Show approval panel": "显示审批面板",
-  "Toggle peer dock": "切换 peer 停靠",
-  "Focus peer dispatch": "聚焦 peer 派发",
+  "Toggle peer dock": "切换协作者面板",
+  "Focus peer dispatch": "聚焦协作者派发",
   "Close dialog / palette; clears search query, then closes":
     "关闭对话框 / 面板；先清空搜索词再关闭",
-  "Steer a compatible running turn": "转向兼容的运行中回合",
-  "Queue the draft for after the turn": "将草稿排队到回合结束后",
+  "Steer a compatible running turn": "向运行中的一轮插话",
+  "Queue the draft for after the turn": "将草稿排到这一轮结束后",
   "Send pending input now": "立即发送待发输入",
   "This session is open in another tab. Sending is disabled here until you take over.":
     "此会话已在另一个标签页中打开。在你接管之前，此处禁止发送。",
   "Take over here": "在此接管",
   "A steering result was inconclusive; queued prompts are paused.":
-    "转向结果不确定；排队的提示已暂停。",
+    "插话结果不确定；排队的提示已暂停。",
   "Retry queued delivery": "重试排队投递",
 
   // Settings skills (T-0023).
@@ -1434,6 +1434,222 @@ const catalog: Readonly<Record<string, string>> = {
     "选择一个实体或搜索结果以查看内容。",
   "Content is truncated by the server{size}.": "内容已被服务器截断{size}。",
   "No content yet.": "暂无内容。",
+
+  // T-0016: copy pass (audit W1). Terms follow docs/glossary-zh.md.
+  "(none)": "（无）",
+  "Memory detail": "记忆详情",
+  Search: "搜索",
+  "Hide peers": "隐藏协作者",
+  "A peer you started is using this session": "你启动的协作者正在使用这个会话",
+  "Assistant response": "Octos 的回复",
+  Back: "返回",
+  "Back to latest ↓": "回到最新 ↓",
+  "Cancel pending Session navigation": "取消等待中的会话切换",
+  "Check status": "检查状态",
+  "Check that your server is running and your token is current.":
+    "请确认服务器正在运行，并且访问令牌仍然有效。",
+  "Check that your server is running. If it requires authentication, enter its token above.":
+    "请确认服务器正在运行。如果它需要认证，请在上方填写访问令牌。",
+  "Checking status…": "正在检查状态…",
+  "Checking the last response": "正在检查上一条回复",
+  "Checking the session and loading its conversation.":
+    "正在核对会话并加载对话。",
+  "Checking whether Octos is still working or has finished. Your message will not be sent again.":
+    "正在确认 Octos 还在处理还是已经完成。你的消息不会被重复发送。",
+  "Choose a project folder to start your coding session.":
+    "选一个工作文件夹，开始一个会话。",
+  "Clear search": "清除搜索",
+  "Client view unavailable": "界面无法显示",
+  "Clipboard unavailable. Select and copy the link below.":
+    "无法使用剪贴板。请选中下面的链接手动复制。",
+  "Command unavailable. Nothing was sent. Try the command again when the connection is stable.":
+    "命令暂时不可用，什么都没有发送。连接稳定后再试一次。",
+  "Connect to your server to open a repository and start working.":
+    "连接服务器后，选一个工作文件夹开始工作。",
+  "Connect your server, then open a project to start coding.":
+    "先连接服务器，再选一个工作文件夹开始工作。",
+  "Connecting to your server…": "正在连接服务器…",
+  "Connection details": "连接详情",
+  "Continue without it": "不等了，继续",
+  "Conversation copied as Markdown.": "已把对话复制为 Markdown。",
+  "Conversation details": "对话详情",
+  "Conversation link": "对话链接",
+  "Conversation link copied.": "已复制对话链接。",
+  "Copies a redacted snapshot: connection status, recovery detail, and app identity. No credentials.":
+    "复制一份脱敏快照：连接状态、恢复详情和应用标识，不含任何凭据。",
+  "Copy conversation link": "复制对话链接",
+  "Copy this conversation as Markdown": "把这段对话复制为 Markdown",
+  "Copying…": "正在复制…",
+  "Could not copy diagnostics. Check clipboard access and try again.":
+    "没能复制诊断信息。请检查剪贴板权限后重试。",
+  "Could not copy. Select the code to copy it, or try again.":
+    "没能复制。请选中代码手动复制，或者重试。",
+  "Current and background work may stop when this connection closes. Queued messages will be discarded.":
+    "断开连接后，当前和后台的工作可能会停止，排队的消息会被丢弃。",
+  Dark: "深色",
+  "Delete {name}": "删除 {name}",
+  "Desktop notifications": "桌面通知",
+  Diagnostics: "诊断",
+  "Disconnect from Octos?": "断开与 Octos 的连接？",
+  "Dismiss link": "忽略这个链接",
+  "Draft changes could not be saved on this device. Copy your text before closing this tab; an older draft may be restored.":
+    "草稿没能保存在这台设备上。关闭标签页前请先复制你的文字；下次可能会恢复较早的草稿。",
+  "Edit {name}": "编辑 {name}",
+  Enable: "开启",
+  "Enabling…": "正在开启…",
+  "Enter a path on the Octos server, for example /home/you/projects/my-app.":
+    "输入 Octos 服务器上的路径，例如 /home/you/projects/my-app。",
+  "Failed: {value0}": "失败：{value0}",
+  "Finished without text output.": "已完成，没有文字输出。",
+  "Finishing recovery before navigation": "正在完成恢复，之后再切换",
+  "Fixed order": "固定顺序",
+  "Forget this server?": "忘记这个服务器？",
+  Hide: "隐藏",
+  "Hide token": "隐藏访问令牌",
+  "If the conversation no longer exists, the server may open an empty session. Opening the link does not send a message.":
+    "如果这段对话已经不存在，服务器可能会打开一个空会话。打开链接不会发送任何消息。",
+  "If the response was lost, for example because the server restarted, continue without confirming its outcome. This does not stop or resend it; queued messages send next.":
+    "如果这条回复丢了（比如服务器重启过），可以不等结果直接继续。这样不会停止也不会重发它；排队的消息会接着发送。",
+  "It does not contain a complete server workspace and conversation reference.":
+    "链接里缺少完整的服务器工作区和对话信息。",
+  "It keeps running while you chat. Chat sends hand control back first.":
+    "你聊天时它会继续运行；你一发消息，控制权会先交还给你。",
+  "Large preview shown as plain text. All lines are included.":
+    "预览较大，以纯文本显示，内容完整。",
+  "Last opened": "最近打开",
+  "Least recently opened": "最早打开",
+  Light: "浅色",
+  "Loading {name}…": "正在加载{name}…",
+  "Message Octos": "给 Octos 发消息",
+  "Network: {value0}": "网络：{value0}",
+  "Never ask": "从不询问",
+  "New Session opens next": "接下来打开新会话",
+  "New session with…": "用这些设置开新会话…",
+  "No approval is waiting in this Session.": "这个会话里没有等待审批的请求。",
+  "No sessions match “{query}”.": "没有和“{query}”匹配的会话。",
+  "Octos has not confirmed whether the last response is still running or has finished. Sending is paused so the same work is not started twice.":
+    "Octos 还没确认上一条回复是在运行还是已经完成。为了不重复开始同一项工作，发送暂停了。",
+  "Octoscode workspace": "Octoscode 工作台",
+  On: "已开启",
+  "On request": "按需询问",
+  "Open conversation": "打开对话",
+  "Open saved conversation": "打开保存的对话",
+  "Open sessions": "打开会话列表",
+  "Open this conversation on the connected server. Check that the server and workspace match the link you saved.":
+    "在已连接的服务器上打开这段对话。请确认服务器和工作区与你保存的链接一致。",
+  "Opening conversation": "正在打开对话",
+  "Opening conversation…": "正在打开对话…",
+  "Opening…": "正在打开…",
+  Operation: "操作",
+  "Paste your server token": "粘贴服务器的访问令牌",
+  "Peer control": "协作者控制",
+  "Queued messages remain here. You can remove them below.":
+    "排队的消息还在，可以在下方移除。",
+  "Queued prompts": "排队的消息",
+  "Read paths:": "可读路径：",
+  "Read paths: {value0}": "可读路径：{value0}",
+  "Reload the page to try again. Reloading may stop running work and discard drafts and queued messages.":
+    "重新加载页面再试一次。重新加载可能会停止正在运行的工作，并丢弃草稿和排队的消息。",
+  "Remove from queue": "移出队列",
+  "Remove queued prompt {index}": "移除排队的第 {index} 条消息",
+  "Required only if your server uses authentication.":
+    "只有服务器开启了认证才需要填写。",
+  "Response status is uncertain": "回复状态不确定",
+  Running: "运行中",
+  "Sandbox: {value0}": "沙箱：{value0}",
+  "Save this link to open the conversation in another browser. You will need access to the same Octos server.":
+    "保存这个链接，就能在别的浏览器里打开这段对话。前提是能访问同一台 Octos 服务器。",
+  "Search includes sessions confirmed in this tab. The server cannot list older sessions.":
+    "只能搜到在这个标签页里确认过的会话；服务器还不能列出更早的会话。",
+  "Sending paused · View response status": "发送已暂停 · 查看回复状态",
+  "Sending {command}…": "正在发送 {command}…",
+  "Sent in order after the current response": "当前回复结束后按顺序发送",
+  Server: "服务器",
+  "Session switch runs next": "接下来切换会话",
+  "Sessions and workspaces": "会话和工作区",
+  "Show token": "显示访问令牌",
+  "Show {count} earlier messages": "显示更早的 {count} 条消息",
+  "Skip to content": "跳到主要内容",
+  "Sort by": "排序方式",
+  "Sort sessions by": "会话排序方式",
+  "Start session": "开始会话",
+  "Starting your session…": "正在开始会话…",
+  System: "跟随系统",
+  "The client could not recover this view. Closing its connection may have stopped running work. Octos keeps persisted history; unsent drafts and queued messages may be lost when you reload.":
+    "界面没能恢复。关闭它的连接可能已经停止了正在运行的工作。Octos 会保留已保存的历史；重新加载时，未发送的草稿和排队的消息可能会丢失。",
+  "The control command could not be confirmed.": "没能确认控制命令的结果。",
+  "The dispatch could not be confirmed.": "没能确认派发结果。",
+  "The peer dispatch was accepted.": "协作者已接收派发。",
+  "The server stays remembered so you can reconnect later.":
+    "服务器地址会保留，之后可以重新连接。",
+  "The status check failed. You can try again.": "状态检查失败，可以再试一次。",
+  "Theme: {value0}": "主题：{value0}",
+  "This also removes the saved server address and this tab’s sign-in details.":
+    "同时会删除保存的服务器地址和这个标签页的登录信息。",
+  "This conversation does not have a complete saved reference yet.":
+    "这段对话还没有完整的保存信息。",
+  "This conversation link is invalid": "这个对话链接无效",
+  "This input has not been saved. Copy it before leaving this conversation.":
+    "这段输入还没保存。离开这段对话前请先复制。",
+  "This server does not support checking response status. You can copy your text and manage the connection in Settings.":
+    "这个服务器不支持检查回复状态。你可以先复制文字，再到设置里管理连接。",
+  "This tab already keeps 50 unsent drafts. Send or clear this input before switching conversations. Copy it first if you want to keep it elsewhere.":
+    "这个标签页已经存了 50 份未发送的草稿。切换对话前请先发送或清空这段输入；想留着的话先复制下来。",
+  "This view could not be displayed. Other parts of the app remain available.":
+    "这个界面没能显示，应用的其他部分仍可使用。",
+  "Thought process": "思考过程",
+  "Use this page": "使用当前页面",
+  "Usually the address of this page. Change it to use another server.":
+    "通常就是当前页面的地址。要连接别的服务器时再修改。",
+  "Waiting for tool output…": "正在等待工具输出…",
+  "Your session is reconnecting. Queued messages will wait until it is ready.":
+    "会话正在重新连接，排队的消息会等连上后再发送。",
+  allowed: "允许",
+  "asks to run": "请求运行",
+  blocked: "已阻止",
+  "needs your answer": "需要你的回答",
+  off: "关闭",
+  on: "开启",
+  "{action} — desktop notifications": "{action} — 桌面通知",
+  "{name} unavailable": "{name}无法显示",
+  "{seconds} s · {words} words": "{seconds} 秒 · {words} 字",
+  "{value0} — {value1}": "{value0} — {value1}",
+  "{value0}. The browser cannot distinguish an unavailable server from a rejected token. If these are correct, check allowed Web origins and WebSocket proxy forwarding.":
+    "{value0}。浏览器无法区分服务器不可用和访问令牌被拒绝。如果这两项都没问题，请检查允许的网页来源和 WebSocket 代理转发。",
+  "{words} words": "{words} 字",
+
+  now: "刚刚",
+  Connected: "已连接",
+  "Connecting…": "正在连接…",
+  "Turn complete": "本轮完成",
+  "Turn stopped": "本轮已停止",
+  "Turn failed": "本轮失败",
+  "Turn rate limited": "本轮被限流",
+  "Copy as Markdown": "复制为 Markdown",
+  system: "跟随系统",
+  dark: "深色",
+  light: "浅色",
+  low: "低",
+  medium: "中",
+  high: "高",
+  "{level} risk": "{level}风险",
+  command: "命令",
+  "Notify when a background response finishes or needs input. Tab counts are always on.":
+    "后台回复完成或需要你回应时发通知。标签页上的计数一直有效。",
+  "Desktop notifications are unavailable here. Tab counts still work.":
+    "这里无法使用桌面通知，标签页计数仍然有效。",
+  "Desktop notifications are on. Tab counts remain available.":
+    "桌面通知已开启，标签页计数仍然有效。",
+  "Notifications are blocked. Allow them in browser site settings to enable them here. Tab counts still work.":
+    "通知被浏览器拦截了。在浏览器的网站设置里允许后，才能在这里开启。标签页计数仍然有效。",
+  "Permission was not granted. You can enable notifications later. Tab counts still work.":
+    "没有获得通知权限，之后可以再开启。标签页计数仍然有效。",
+  "Could not enable desktop notifications. Tab counts still work; try again when browser permissions are available.":
+    "没能开启桌面通知。标签页计数仍然有效；等浏览器权限可用后再试。",
+  "Notification permission changed. Tab counts still work.":
+    "通知权限有变化，标签页计数仍然有效。",
+  "This browser could not show a desktop notification. Tab counts still work.":
+    "这个浏览器无法显示桌面通知，标签页计数仍然有效。",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };

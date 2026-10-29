@@ -1365,7 +1365,9 @@ export function ModelManagementSection({
                             type="button"
                             className={styles.secondaryButton}
                             disabled={locked || Boolean(editor)}
-                            aria-label={"Edit " + providerName(provider)}
+                            aria-label={t("Edit {name}", {
+                              name: providerName(provider),
+                            })}
                             onClick={() => openEdit(provider)}
                           >
                             {t("Edit")}
@@ -1376,7 +1378,9 @@ export function ModelManagementSection({
                             type="button"
                             className={styles.dangerButton}
                             disabled={locked || Boolean(editor)}
-                            aria-label={"Delete " + providerName(provider)}
+                            aria-label={t("Delete {name}", {
+                              name: providerName(provider),
+                            })}
                             onClick={() => {
                               setDeleteConfirmation({
                                 provider,

@@ -175,7 +175,7 @@ export function ChangesView({
         !state.loading &&
         !state.error ? (
           <p className={styles.plainNotice}>
-            Large preview shown as plain text. All lines are included.
+            {t("Large preview shown as plain text. All lines are included.")}
           </p>
         ) : null}
         {state.loading ? (

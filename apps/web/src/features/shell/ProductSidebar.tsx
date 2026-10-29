@@ -900,7 +900,11 @@ export function ProductSidebar({
                 <>
                   {searchResults.length === 0 ? (
                     <div className={styles.emptyState}>
-                      <p>No sessions match “{query.trim()}”.</p>
+                      <p>
+                        {t("No sessions match “{query}”.", {
+                          query: query.trim(),
+                        })}
+                      </p>
                       <button
                         type="button"
                         onClick={() => {
@@ -908,7 +912,7 @@ export function ProductSidebar({
                           searchInput.current?.focus();
                         }}
                       >
-                        Clear search
+                        {t("Clear search")}
                       </button>
                     </div>
                   ) : null}
@@ -974,22 +978,22 @@ export function ProductSidebar({
             type="button"
             className={`${styles.settings} ${fleetActive ? styles.settingsActive : ""}`}
             aria-current={fleetActive ? "page" : undefined}
-            aria-label={fleetEntry.label}
+            aria-label={t(fleetEntry.label)}
             title={collapsed ? fleetEntry.label : undefined}
             data-fleet-nav="entry"
             onClick={onFleet}
           >
             <span aria-hidden="true">{fleetEntry.icon}</span>
-            {!collapsed ? <span>{fleetEntry.label}</span> : null}
+            {!collapsed ? <span>{t(fleetEntry.label)}</span> : null}
           </button>
         ) : null}
         {onThemeToggle ? (
           <button
             type="button"
             className={styles.settings}
-            aria-label={t("Theme: {value0}", { value0: theme })}
+            aria-label={t("Theme: {value0}", { value0: t(theme) })}
             title={
-              collapsed ? t("Theme: {value0}", { value0: theme }) : undefined
+              collapsed ? t("Theme: {value0}", { value0: t(theme) }) : undefined
             }
             onClick={onThemeToggle}
           >
@@ -1121,9 +1125,9 @@ export function ProductSidebarViewOptionsMenu(
         </button>
       </div>
       <div className={styles.viewOptionsLabel} role="presentation">
-        Sort by
+        {t("Sort by")}
       </div>
-      <div role="group" aria-label="Sort sessions by">
+      <div role="group" aria-label={t("Sort sessions by")}>
         {(["manual", "updated", "oldest"] as const).map((order) => (
           <button
             key={order}
@@ -1138,10 +1142,10 @@ export function ProductSidebarViewOptionsMenu(
           >
             <span>
               {order === "manual"
-                ? "Fixed order"
+                ? t("Fixed order")
                 : order === "updated"
-                  ? "Last opened"
-                  : "Least recently opened"}
+                  ? t("Last opened")
+                  : t("Least recently opened")}
             </span>
             {orderMode === order ? <CheckIcon /> : null}
           </button>
@@ -1222,12 +1226,15 @@ function SessionRow({
   id?: string;
   active?: boolean;
 }) {
-  const title = session.blank ? "New session" : session.title;
+  const t = useUiText();
+  const title = session.blank ? t("New session") : session.title;
   const status = session.opening ? "running" : (session.status ?? "idle");
   const statusLabel = session.opening
-    ? "Opening conversation"
-    : session.statusLabel;
+    ? t("Opening conversation")
+    : session.statusLabel && t(session.statusLabel);
   const showStatus = status !== "idle";
+  // "now" reads as a word; "5m"/"2h" stay compact in every language.
+  const updated = session.updatedLabel && t(session.updatedLabel);
 
   return (
     <button
@@ -1248,9 +1255,9 @@ function SessionRow({
         showStatus ? statusLabel : "",
         title,
         session.opening
-          ? "Opening…"
-          : !session.blank && session.updatedLabel
-            ? session.updatedLabel
+          ? t("Opening…")
+          : !session.blank && updated
+            ? updated
             : "",
       ].join("")}
       onClick={() => onSelect(session.id)}
@@ -1260,9 +1267,9 @@ function SessionRow({
       </span>
       <span className={styles.sessionTitle}>{title}</span>
       {session.opening ? (
-        <span className={styles.sessionTime}>Opening…</span>
-      ) : !session.blank && session.updatedLabel ? (
-        <span className={styles.sessionTime}>{session.updatedLabel}</span>
+        <span className={styles.sessionTime}>{t("Opening…")}</span>
+      ) : !session.blank && updated ? (
+        <span className={styles.sessionTime}>{updated}</span>
       ) : null}
     </button>
   );
@@ -1303,7 +1310,9 @@ function SearchSessionRow({
             <StatusDot
               status={status}
               label={
-                session.opening ? "Opening conversation" : session.statusLabel
+                session.opening
+                  ? t("Opening conversation")
+                  : session.statusLabel && t(session.statusLabel)
               }
             />
           ) : null}
@@ -1313,7 +1322,7 @@ function SearchSessionRow({
         </span>
       </span>
       <span className={styles.searchResultMeta}>
-        {session.opening ? "Opening…" : workspace.label}
+        {session.opening ? t("Opening…") : workspace.label}
       </span>
     </button>
   );
@@ -1326,7 +1335,8 @@ function StatusDot({
   status: ProductSessionStatus;
   label?: string | undefined;
 }) {
-  const accessibleLabel = label ?? defaultStatusLabel(status);
+  const t = useUiText();
+  const accessibleLabel = label ?? t(defaultStatusLabel(status));
   return (
     <>
       <span

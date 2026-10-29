@@ -404,7 +404,10 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
       <div className="entry-content">
         {entry.kind !== "assistant" ? (
           <div className="entry-heading">
-            <strong>{entry.title}</strong>
+            {/* System rows carry the client's own notices; translate those. */}
+            <strong>
+              {entry.kind === "system" ? t(entry.title) : entry.title}
+            </strong>
             {entry.status === "running" ? (
               <span className="running-label">{t("running")}</span>
             ) : null}

@@ -69,10 +69,7 @@ export function ApprovalPanel({
         <span className="approval-dot" />
         <span>{t("Approval required")}</span>
         {approval.risk ? (
-          <em>
-            {approval.risk}
-            {" " + t("risk")}
-          </em>
+          <em>{t("{level} risk", { level: t(approval.risk) })}</em>
         ) : null}
       </div>
       <div className="approval-body">
@@ -81,7 +78,7 @@ export function ApprovalPanel({
         {command ? <code>{command}</code> : null}
         <span className="approval-tool">
           {approval.toolName}
-          {approval.approvalKind ? ` · ${approval.approvalKind}` : ""}
+          {approval.approvalKind ? ` · ${t(approval.approvalKind)}` : ""}
         </span>
         {error ? <span className="takeover-error">{error}</span> : null}
       </div>

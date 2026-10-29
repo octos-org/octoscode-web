@@ -63,7 +63,7 @@ describe("Chinese browser feature presentation", () => {
       />,
     );
     expect(html).toContain("连接 Octos");
-    expect(html).toContain("认证令牌");
+    expect(html).toContain("访问令牌");
     expect(html).toContain('value="https://server.invalid"');
     expect(html).toContain('value="synthetic-only"');
     expect(html).toContain("Native server rejected connection");

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useDeferredValue } from "react";
+import { lazy, Suspense, useDeferredValue, type ComponentProps } from "react";
 import { hasMath } from "./math.ts";
 import { closeOpenFence } from "./streaming-fence.ts";
 import ReactMarkdown, {
@@ -7,6 +7,7 @@ import ReactMarkdown, {
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./markdown.css";
+import { useUiText } from "../preferences/ui-text.tsx";
 
 const CodeBlock = lazy(() =>
   import("./CodeBlock.tsx").then((module) => ({ default: module.CodeBlock })),
@@ -46,19 +47,12 @@ export const markdownComponents: Components = {
     );
   },
   img({ src, alt }) {
-    if (!src) return <span className="md-image-alt">{alt ?? "Image"}</span>;
+    if (!src) return <ImageAlt alt={alt} />;
     return <img src={src} alt={alt ?? ""} loading="lazy" />;
   },
   input({ type, checked, ...props }) {
     if (type !== "checkbox") return <input type={type} {...props} />;
-    return (
-      <input
-        type="checkbox"
-        checked={checked}
-        {...props}
-        aria-label={checked ? "Completed task" : "Incomplete task"}
-      />
-    );
+    return <TaskCheckbox checked={checked} {...props} />;
   },
   pre({ children }) {
     return <>{children}</>;
@@ -97,6 +91,23 @@ export const markdownComponents: Components = {
  * doing that on every streamed token is the expensive part of live rendering.
  * The finished reply is highlighted once, when the turn completes.
  */
+function ImageAlt({ alt }: { alt?: string | undefined }) {
+  const t = useUiText();
+  return <span className="md-image-alt">{alt ?? t("Image")}</span>;
+}
+
+function TaskCheckbox({ checked, ...props }: ComponentProps<"input">) {
+  const t = useUiText();
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      {...props}
+      aria-label={checked ? t("Completed task") : t("Incomplete task")}
+    />
+  );
+}
+
 const streamingComponents: Components = {
   ...markdownComponents,
   code({ className, children }) {
