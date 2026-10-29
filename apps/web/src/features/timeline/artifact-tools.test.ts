@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  writtenArtifactPath,
-  writtenArtifactResultPath,
-} from "./artifact-tools.ts";
+import { writtenArtifactPath } from "./artifact-tools.ts";
 
 describe("written artifact paths", () => {
   it("accepts only explicit write/edit path arguments", () => {
@@ -11,11 +8,8 @@ describe("written artifact paths", () => {
     );
     expect(
       writtenArtifactPath("edit_file", '{"file_path":"/work/report.md"}'),
-    ).toBe("");
+    ).toBe("/work/report.md");
     expect(writtenArtifactPath("read_file", '{"path":"report.md"}')).toBe("");
-    expect(
-      writtenArtifactResultPath("write_file", "Successfully wrote report.md"),
-    ).toBe("report.md");
     expect(writtenArtifactPath("write_file", '{"filePath":"report.md"}')).toBe(
       "report.md",
     );

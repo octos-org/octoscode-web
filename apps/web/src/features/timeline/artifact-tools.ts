@@ -1,5 +1,3 @@
-import { isWorkspaceRelativePath } from "./session-file-read.ts";
-
 /** A file path explicitly written by a tool; never inferred from result prose. */
 export function writtenArtifactPath(
   toolName: string,
@@ -32,23 +30,15 @@ export function writtenArtifactPath(
   return "";
 }
 
-export function writtenArtifactResultPath(
-  toolName: string,
-  outputPreview: string,
-): string {
-  if (!["write_file", "edit_file"].includes(toolName)) return "";
-  const match = /^(?:Successfully wrote|Updated|Created|Edited)\s+(.+)$/i.exec(
-    outputPreview.trim(),
-  );
-  return match ? (validPath(match[1]) ?? "") : "";
-}
-
 function validPath(value: unknown): string | null {
   return typeof value === "string" &&
     value.trim() &&
     !/\p{Cc}/u.test(value) &&
     value.length <= 16_384 &&
-    isWorkspaceRelativePath(value)
+    !value.includes("\\") &&
+    !value.split("/").includes("..") &&
+    !value.startsWith("up/") &&
+    !value.startsWith("pf/")
     ? value
     : null;
 }

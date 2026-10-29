@@ -388,7 +388,21 @@ export function useSupervision(
       pathKind !== "unsupported"
         ? ["markdown", "code", "text"].includes(pathKind)
         : ["text", "report", "log", "markdown", "json"].includes(artifact.kind);
-    if (!textArtifact && artifact.path && artifactReadsBlob(artifact.path)) {
+    const canReadBlob =
+      supportsMethod(
+        dependenciesRef.current.capabilities(),
+        CORE_UI_METHODS.SESSION_FILES_READ,
+      ) ||
+      supportsMethod(
+        dependenciesRef.current.capabilities(),
+        CORE_UI_METHODS.SESSION_FILES_LIST,
+      );
+    if (
+      canReadBlob &&
+      !textArtifact &&
+      artifact.path &&
+      artifactReadsBlob(artifact.path)
+    ) {
       setState((current) => ({
         ...current,
         detail: {

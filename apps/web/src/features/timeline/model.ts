@@ -14,10 +14,7 @@ import {
   type TimelineKind,
   type TimelineStatus,
 } from "./entry-model.ts";
-import {
-  writtenArtifactPath,
-  writtenArtifactResultPath,
-} from "./artifact-tools.ts";
+import { writtenArtifactPath } from "./artifact-tools.ts";
 
 // The entry shape and the shell-side reducers live in `entry-model.ts` so the
 // app shell can write a system notice without loading the transcript fold.
@@ -864,11 +861,6 @@ function completeTool(
     return entries.slice();
   const id = `tool:${toolCallId}`;
   const existing = entries.find((entry) => entry.id === id);
-  const artifactPath =
-    existing?.artifactPath ??
-    (existing?.title && result.body
-      ? writtenArtifactResultPath(existing.title, result.body)
-      : "");
   return upsert(entries, {
     ...(existing ?? {
       id,
@@ -877,7 +869,6 @@ function completeTool(
       body: "",
       turnId,
     }),
-    ...(artifactPath ? { artifactPath } : {}),
     ...result,
     ...(existing?.startedAtMs !== undefined ? { endedAtMs: Date.now() } : {}),
     toolSettled: true,
