@@ -22,7 +22,6 @@ export interface AttachmentFileMetadata {
 export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   reference: string,
   workspaceRoot: string,
-  sessionId: string,
   files: readonly T[],
 ): T | null {
   if (reference.startsWith("pf/")) {
@@ -31,27 +30,16 @@ export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   }
   const relative = workspaceRelativeArtifactPath(reference, workspaceRoot);
   if (!relative) return null;
-  const sessionBase = sessionId.split("#")[0]!;
-  const canonicalRoot = `users/${encodePathComponent(sessionBase)}/workspace`;
   const normalizedRoot = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!normalizedRoot.endsWith(`/${canonicalRoot}`)) return null;
+  const canonicalRoot = /(?:^|\/)(users\/[^/]+\/workspace)$/.exec(
+    normalizedRoot,
+  )?.[1];
+  if (!canonicalRoot) return null;
   const expected = `${canonicalRoot}/${relative}`;
   const matches = files.filter(
     (file) => profileHandlePath(file.path)?.replace(/\\/g, "/") === expected,
   );
   return matches.length === 1 ? matches[0]! : null;
-}
-
-function encodePathComponent(value: string): string {
-  return Array.from(new TextEncoder().encode(value), (byte) =>
-    (byte >= 65 && byte <= 90) ||
-    (byte >= 97 && byte <= 122) ||
-    (byte >= 48 && byte <= 57) ||
-    byte === 45 ||
-    byte === 95
-      ? String.fromCharCode(byte)
-      : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`,
-  ).join("");
 }
 
 function profileHandlePath(value: string): string | null {

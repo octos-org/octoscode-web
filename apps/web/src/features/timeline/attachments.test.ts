@@ -46,7 +46,6 @@ describe("attachment naming", () => {
       uniqueWorkspaceAttachmentFile(
         "result.pdf",
         "/data/users/session/workspace",
-        "session",
         [unrelated, workspace],
       ),
     ).toBeNull();
@@ -54,7 +53,6 @@ describe("attachment naming", () => {
       uniqueWorkspaceAttachmentFile(
         "reports/result.pdf",
         "/data/users/session/workspace",
-        "session",
         [unrelated, workspace],
       ),
     ).toBe(workspace);
@@ -62,18 +60,26 @@ describe("attachment naming", () => {
       uniqueWorkspaceAttachmentFile(
         "result.pdf",
         "/data/users/session/workspace",
-        "session",
         [unrelated, workspace, { ...workspace }],
       ),
     ).toBeNull();
     expect(
+      uniqueWorkspaceAttachmentFile("reports/result.pdf", "/external/project", [
+        workspace,
+      ]),
+    ).toBeNull();
+    const profiled = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/coding%3Aapi%3Asession/workspace/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    expect(
       uniqueWorkspaceAttachmentFile(
         "reports/result.pdf",
-        "/external/project",
-        "session",
-        [workspace],
+        "/data/users/coding%3Aapi%3Asession/workspace",
+        [profiled],
       ),
-    ).toBeNull();
+    ).toBe(profiled);
   });
 
   it("keeps the extension separate so truncation cannot hide the file type", () => {

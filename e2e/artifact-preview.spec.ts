@@ -152,6 +152,34 @@ test("previews Markdown, code, and text and offers download for unknown types", 
   }
 });
 
+test("verifies a zero file_attached size through the workspace reader", async ({
+  page,
+}) => {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (
+        frame.method === "projection/envelope" &&
+        frame.params?.payload?.type === "file_attached"
+      ) {
+        frame.params.payload.data.size_bytes = 0;
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  const sessionId = await openConversation(page);
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=photo.png&valid=1`,
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator('[data-attachment="photo.png"]');
+  await expect(item.getByRole("img", { name: "photo.png" })).toBeVisible();
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(item.locator('[data-artifact-kind="image"] img')).toBeVisible();
+});
+
 test("previews delivered images without a replayed size event", async ({
   page,
 }) => {

@@ -5118,6 +5118,33 @@ sockets.on("connection", (socket, request) => {
       });
       return;
     }
+    if (request.method === "session/files/read") {
+      const path = request.params.path;
+      const entry = [...deliveredFiles.entries()].find(
+        ([key]) => key.startsWith(`${sessionId}\n`) && key.endsWith(`/${path}`),
+      );
+      if (!entry) {
+        replyError(socket, request.id, -32004, "workspace file was not found", {
+          kind: "workspace_file_not_found",
+        });
+        return;
+      }
+      const file = entry[1];
+      const offset = request.params.offset ?? 0;
+      const length = Math.min(request.params.length ?? 512 * 1024, 512 * 1024);
+      const bytes = file.bytes.subarray(offset, offset + length);
+      reply(socket, request.id, {
+        session_id: sessionId,
+        path,
+        size_bytes: file.bytes.length,
+        offset,
+        eof: offset + bytes.length >= file.bytes.length,
+        mime_type: file.type,
+        encoding: "base64",
+        content_base64: bytes.toString("base64"),
+      });
+      return;
+    }
     if (request.method === "session/files.list") {
       const delivered = [...deliveredFiles.entries()]
         .filter(([key]) => key.startsWith(`${sessionId}\n`))

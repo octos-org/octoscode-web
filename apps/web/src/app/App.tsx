@@ -831,7 +831,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       return uniqueWorkspaceAttachmentFile(
         reference,
         attachmentWorkspaceRoot,
-        attachmentSessionId,
         result.files,
       );
     };
@@ -874,7 +873,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               }
               if (!canUseBlob) return null;
               const sizeBytes = attachmentSizeMetadata.get(reference);
-              if (sizeBytes !== undefined) return { sizeBytes };
+              if (sizeBytes !== undefined && sizeBytes > 0) {
+                return { sizeBytes };
+              }
               if (reference.startsWith("up/") && canReadWorkspace) {
                 const uploadPath = sessionUploadWorkspacePath(reference);
                 if (!uploadPath) return null;
@@ -888,6 +889,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   };
                 } catch {
                   return null;
+                }
+              }
+              const workspacePath = workspaceRelativeArtifactPath(
+                reference,
+                attachmentWorkspaceRoot,
+              );
+              if (workspacePath && canReadWorkspace) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      workspacePath,
+                    ),
+                  };
+                } catch {
+                  // A delivered copy may exist even when the original
+                  // workspace-relative path is gone. Fall back to list metadata.
                 }
               }
               try {
