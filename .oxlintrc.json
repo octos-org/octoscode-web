@@ -2,5 +2,21 @@
   "categories": {
     "correctness": "error"
   },
-  "ignorePatterns": ["dist/**", "coverage/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "coverage/**",
+    "e2e/**",
+    "e2e-live/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ],
+  "rules": {
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "crypto",
+        "property": "randomUUID"
+      }
+    ]
+  }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "../src/shared/uuid.ts";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
@@ -904,7 +905,7 @@ function isPeerSessionId(sessionId) {
 function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = crypto.randomUUID();
+    const slug = randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,
@@ -955,7 +956,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
   if (kind === "turn")
     send("turn/started", {
       session_id: peerSessionId,
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
       // Core `TurnStartedEvent` declares `timestamp` NON-Option (wire-parity
       // finding 2360); the client never reads it, but a Core-strict
       // deserializer would reject the frame without it.
@@ -965,7 +966,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
     send("approval/requested", {
       session_id: peerSessionId,
       approval_id: peerApprovalId(slug),
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
       tool_name: "shell",
       title: "Peer requests to run checks",
       body: "A staged peer wants to run the repository checks.",
@@ -981,7 +982,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
   else if (kind === "complete")
     send("turn/completed", {
       session_id: peerSessionId,
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
     });
   return true;
 }
@@ -1457,18 +1458,18 @@ const http = createServer((request, response) => {
     if (url.pathname === "/__test__/native/seed-history") {
       const entries = [
         {
-          id: `bare-${crypto.randomUUID()}`,
+          id: `bare-${randomUUID()}`,
           title: "Unscoped native history (not resumable)",
           message_count: 2,
         },
       ];
       for (const label of ["A", "B"]) {
-        const id = `${state.profileId}:local:native-history-${crypto.randomUUID()}`;
+        const id = `${state.profileId}:local:native-history-${randomUUID()}`;
         const historical = sessionState(id);
         historical.profileId = state.profileId;
         historical.workspaceRoot = state.workspaceRoot;
         forkedSessions.add(id);
-        const turnId = crypto.randomUUID();
+        const turnId = randomUUID();
         const frames = [
           {
             type: "user_message",
@@ -1958,7 +1959,7 @@ const http = createServer((request, response) => {
         ? FIXTURE_PNG
         : Buffer.from(`fixture ${name}`),
     });
-    const turnId = crypto.randomUUID();
+    const turnId = randomUUID();
     notify(
       socket,
       sessionId,
@@ -2797,7 +2798,7 @@ function handleNativeRequest(socket, request, state) {
     }
     native.goal = {
       ...native.goal,
-      goal_id: native.goal?.goal_id ?? crypto.randomUUID(),
+      goal_id: native.goal?.goal_id ?? randomUUID(),
       objective: params.objective,
       status: params.status,
       token_budget: params.token_budget ?? native.goal?.token_budget ?? 50_000,
@@ -2835,7 +2836,7 @@ function handleNativeRequest(socket, request, state) {
     }
     const loop = {
       ...owner,
-      loop_id: crypto.randomUUID(),
+      loop_id: randomUUID(),
       mode: params.mode,
       prompt: params.prompt?.trim() || "run maintenance checks",
       status: "active",
@@ -2950,7 +2951,7 @@ function handleNativeRequest(socket, request, state) {
     const mode = params.mode === "stream" ? "stream" : "poll";
     const monitor = {
       ...owner,
-      monitor_id: crypto.randomUUID(),
+      monitor_id: randomUUID(),
       name: params.name.trim(),
       argv: params.argv,
       filter_regex: params.filter_regex ?? null,

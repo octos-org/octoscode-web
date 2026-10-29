@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_METHODS,
   approvalResolutionId,
@@ -668,7 +669,7 @@ export class SessionPeerCoordinator<
     // and REUSE it on every retry, so a lost-ack replay dedupes server-side.
     let operationId = binding.operations.get(request.turnId);
     if (!operationId) {
-      operationId = crypto.randomUUID();
+      operationId = randomUUID();
       binding.operations.set(request.turnId, operationId);
     }
     let started: PeerDispatchStart<Record>;

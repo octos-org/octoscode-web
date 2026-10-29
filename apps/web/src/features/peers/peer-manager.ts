@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   PEER_METHODS,
   PeerCapabilityError,
@@ -542,7 +543,7 @@ export class PeerManager {
       );
     const epoch = this.#epoch;
     const abort = new AbortController();
-    const turnId = crypto.randomUUID();
+    const turnId = randomUUID();
     const request: PeerOpenRequest = Object.freeze({
       scope: commands.scope,
       sessionId: identity,
