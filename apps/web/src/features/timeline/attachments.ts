@@ -20,14 +20,19 @@ export interface AttachmentFileMetadata {
 export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
   reference: string,
   files: readonly T[],
+  allowBasenameFallback = true,
 ): T | null {
   const exact = files.filter((file) => file.path === reference);
   if (exact.length === 1) return exact[0]!;
   if (exact.length > 1) return null;
-  const compatible = files.filter((file) => {
-    const decoded = profileHandlePath(file.path);
-    return decoded !== null && pathSuffix(decoded) === pathSuffix(reference);
-  });
+  const compatible = allowBasenameFallback
+    ? files.filter((file) => {
+        const decoded = profileHandlePath(file.path);
+        return (
+          decoded !== null && pathSuffix(decoded) === pathSuffix(reference)
+        );
+      })
+    : [];
   if (compatible.length === 1) return compatible[0]!;
   if (
     compatible.length > 1 ||
@@ -35,6 +40,7 @@ export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
     reference.includes("\\")
   )
     return null;
+  if (!allowBasenameFallback) return null;
   const name = attachmentName(reference);
   const matches = files.filter((file) => file.filename === name);
   return matches.length === 1 ? matches[0]! : null;

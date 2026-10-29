@@ -360,6 +360,7 @@ export function useSupervision(
   };
 
   const readTaskArtifact = async (artifact: TaskArtifactRecord) => {
+    const request = detailRequestsRef.current.begin();
     const client = dependenciesRef.current.client();
     const sessionId = dependenciesRef.current.sessionId();
     const taskId = state.detail.taskId;
@@ -432,6 +433,7 @@ export function useSupervision(
       });
       if (
         dependenciesRef.current.client() !== client ||
+        !detailRequestsRef.current.isCurrent(request) ||
         result.session_id !== sessionId ||
         result.task_id !== taskId
       ) {

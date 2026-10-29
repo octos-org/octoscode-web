@@ -805,13 +805,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
-    const listedFile = async (reference: string) => {
+    const listedFile = async (
+      reference: string,
+      allowBasenameFallback = true,
+    ) => {
       if (missingReferences.has(reference)) return null;
       filesPromise ??= client
         .listSessionFiles({ session_id: attachmentSessionId })
         .then((result) => result.files);
       try {
-        let file = uniqueAttachmentFile(reference, await filesPromise);
+        let file = uniqueAttachmentFile(
+          reference,
+          await filesPromise,
+          allowBasenameFallback,
+        );
         if (!file) {
           // A later delivery may postdate the shared listing. Refresh a miss
           // once for this card; duplicates still stay ambiguous.
@@ -821,7 +828,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             .listSessionFiles({ session_id: attachmentSessionId })
             .then((result) => result.files);
           filesPromise = refreshPromise;
-          file = uniqueAttachmentFile(reference, await filesPromise);
+          file = uniqueAttachmentFile(
+            reference,
+            await filesPromise,
+            allowBasenameFallback,
+          );
           refreshUsers -= 1;
           if (refreshUsers === 0) refreshPromise = undefined;
           if (!file) missingReferences.add(reference);
@@ -835,8 +846,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return {
       ...(canDescribe
         ? {
-            async describe(reference: string) {
-              const file = await listedFile(reference);
+            async describe(reference: string, workspaceFile = false) {
+              const file = await listedFile(reference, !workspaceFile);
               return file ? { sizeBytes: file.size_bytes } : null;
             },
           }
@@ -912,7 +923,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 "workspace_file_too_large"
             )
               throw reason;
-            const listed = canDescribe ? await listedFile(reference) : null;
+            const listed = canDescribe
+              ? await listedFile(reference, false)
+              : null;
             if (!listed) throw reason;
           }
         }

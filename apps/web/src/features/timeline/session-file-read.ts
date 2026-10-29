@@ -22,11 +22,12 @@ export function workspaceRelativeArtifactPath(
   const normalizedReference = reference.replace(/\\/g, "/");
   if (isWorkspaceRelativePath(normalizedReference)) return normalizedReference;
   const root = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (
-    !root ||
-    !normalizedReference.toLowerCase().startsWith(`${root.toLowerCase()}/`)
-  )
-    return null;
+  const windowsRoot = /^[A-Za-z]:\//.test(root);
+  const candidate = windowsRoot
+    ? normalizedReference.toLowerCase()
+    : normalizedReference;
+  const expectedRoot = windowsRoot ? root.toLowerCase() : root;
+  if (!root || !candidate.startsWith(`${expectedRoot}/`)) return null;
   const relative = normalizedReference.slice(root.length + 1);
   return isWorkspaceRelativePath(relative) ? relative : null;
 }

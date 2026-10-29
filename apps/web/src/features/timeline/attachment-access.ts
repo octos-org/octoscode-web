@@ -26,7 +26,10 @@ export interface AttachmentAccess {
   /** False when the legacy delivered-file blob method is not advertised. */
   deliveredPreviewAvailable?: boolean;
   /** Optional server-listed metadata; duplicate or unlisted names return null. */
-  describe?: (reference: string) => Promise<{ sizeBytes: number } | null>;
+  describe?: (
+    reference: string,
+    workspaceFile?: boolean,
+  ) => Promise<{ sizeBytes: number } | null>;
 }
 
 export const AttachmentAccessContext = createContext<AttachmentAccess | null>(

@@ -66,7 +66,7 @@ function AttachmentItem({
     setSize(null);
     setSizeBytes(null);
     if (!access?.describe) return;
-    access.describe(reference).then(
+    access.describe(reference, workspaceFile).then(
       (info) => {
         if (current && info) {
           setSize(formatAttachmentSize(info.sizeBytes));
@@ -190,7 +190,13 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || busy}
+          disabled={
+            !access ||
+            busy ||
+            (workspaceFile &&
+              sizeBytes !== null &&
+              sizeBytes > 32 * 1024 * 1024)
+          }
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >

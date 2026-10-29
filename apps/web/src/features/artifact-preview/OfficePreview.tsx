@@ -345,17 +345,24 @@ function paginateDocument(html: string): string[] {
   let characters = 0;
   for (const element of Array.from(document.body.children)) {
     const source = element.outerHTML;
-    if (
-      current.length &&
-      (current.length >= DOCX_PAGE_ELEMENTS ||
-        characters + source.length > DOCX_PAGE_CHARACTERS)
+    for (
+      let offset = 0;
+      offset < source.length;
+      offset += DOCX_PAGE_CHARACTERS
     ) {
-      pages.push(current.join(""));
-      current = [];
-      characters = 0;
+      const part = source.slice(offset, offset + DOCX_PAGE_CHARACTERS);
+      if (
+        current.length &&
+        (current.length >= DOCX_PAGE_ELEMENTS ||
+          characters + part.length > DOCX_PAGE_CHARACTERS)
+      ) {
+        pages.push(current.join(""));
+        current = [];
+        characters = 0;
+      }
+      current.push(part);
+      characters += part.length;
     }
-    current.push(source);
-    characters += source.length;
   }
   if (current.length) pages.push(current.join(""));
   return pages.length ? pages : [document.body.textContent ?? ""];
