@@ -1847,7 +1847,15 @@ describe("delivered attachments", () => {
         arguments: { content: "x".repeat(2_000), path: "report.md" },
       },
     });
-    expect(full[0]?.artifactPath).toBe("report.md");
+    const hydrated = foldNotification(
+      full,
+      notification(
+        "tool_start",
+        { tool_call_id: "write-large", name: "write_file" },
+        3,
+      ),
+    );
+    expect(hydrated[0]?.artifactPath).toBe("report.md");
     expect(completed[0]).toMatchObject({
       status: "complete",
       artifactPath: "report.md",

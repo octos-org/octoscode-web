@@ -16,7 +16,13 @@ import { FileIcon } from "../../ui/Icon.tsx";
 import styles from "./AttachmentList.module.css";
 
 /** A message's delivered files: name, download, and an image preview. */
-export function AttachmentList({ media }: { media: readonly string[] }) {
+export function AttachmentList({
+  media,
+  workspaceFile = false,
+}: {
+  media: readonly string[];
+  workspaceFile?: boolean;
+}) {
   const t = useUiText();
   const access = useContext(AttachmentAccessContext);
   return (
@@ -26,6 +32,7 @@ export function AttachmentList({ media }: { media: readonly string[] }) {
           key={`${index}:${reference}`}
           reference={reference}
           access={access}
+          workspaceFile={workspaceFile}
         />
       ))}
     </ul>
@@ -35,9 +42,11 @@ export function AttachmentList({ media }: { media: readonly string[] }) {
 function AttachmentItem({
   reference,
   access,
+  workspaceFile,
 }: {
   reference: string;
   access: AttachmentAccess | null;
+  workspaceFile: boolean;
 }) {
   const t = useUiText();
   const name = attachmentName(reference);
@@ -117,9 +126,9 @@ function AttachmentItem({
     setBusy(true);
     setError(null);
     try {
-      const value = access.downloadForSave
-        ? await access.downloadForSave(reference)
-        : await access.download(reference);
+      const value = workspaceFile
+        ? await (access.downloadWorkspaceFile ?? access.download)(reference)
+        : await (access.downloadForSave ?? access.download)(reference);
       const url = URL.createObjectURL(value);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -175,7 +184,9 @@ function AttachmentItem({
           disabled={
             !access ||
             busy ||
-            (sizeBytes !== null && sizeBytes > 32 * 1024 * 1024)
+            (workspaceFile &&
+              sizeBytes !== null &&
+              sizeBytes > 32 * 1024 * 1024)
           }
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
@@ -188,13 +199,25 @@ function AttachmentItem({
           <ArtifactPreview
             name={name}
             path={reference}
-            loadBlob={(signal) => access.download(reference, signal)}
-            {...(access.downloadForSave
+            loadBlob={(signal) =>
+              (workspaceFile
+                ? (access.downloadWorkspaceFile ?? access.download)
+                : access.download)(reference, signal)
+            }
+            {...(workspaceFile
               ? {
                   downloadBlob: (signal: AbortSignal | undefined) =>
-                    access.downloadForSave!(reference, signal),
+                    (access.downloadWorkspaceFile ?? access.download)(
+                      reference,
+                      signal,
+                    ),
                 }
-              : {})}
+              : access.downloadForSave
+                ? {
+                    downloadBlob: (signal: AbortSignal | undefined) =>
+                      access.downloadForSave!(reference, signal),
+                  }
+                : {})}
           />
         </div>
       ) : null}

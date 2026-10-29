@@ -814,16 +814,21 @@ function startTool(
   if (entries.find((current) => current.id === entry.id)?.toolSettled) {
     return entries.slice();
   }
+  const previous = entries.find((current) => current.id === entry.id);
+  const next =
+    previous?.artifactPath && !entry.artifactPath
+      ? { ...entry, artifactPath: previous.artifactPath }
+      : entry;
   return upsert(
     entries,
-    entry.turnId && hasTerminal(entries, entry.turnId)
+    next.turnId && hasTerminal(entries, next.turnId)
       ? {
-          ...entry,
+          ...next,
           status: "info",
           statusLabel: "Background",
           turnSettled: true,
         }
-      : entry,
+      : next,
   );
 }
 

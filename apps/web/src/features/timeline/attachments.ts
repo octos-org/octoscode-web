@@ -24,6 +24,7 @@ export function uniqueAttachmentFile<T extends AttachmentFileMetadata>(
   const exact = files.filter((file) => file.path === reference);
   if (exact.length === 1) return exact[0]!;
   if (exact.length > 1) return null;
+  if (reference.includes("/") || reference.includes("\\")) return null;
   const name = attachmentName(reference);
   const matches = files.filter((file) => file.filename === name);
   return matches.length === 1 ? matches[0]! : null;

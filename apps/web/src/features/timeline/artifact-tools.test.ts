@@ -10,6 +10,9 @@ describe("written artifact paths", () => {
       writtenArtifactPath("edit_file", '{"file_path":"/work/report.md"}'),
     ).toBe("");
     expect(writtenArtifactPath("read_file", '{"path":"report.md"}')).toBe("");
+    expect(writtenArtifactPath("write_file", '{"filePath":"report.md"}')).toBe(
+      "report.md",
+    );
     expect(
       writtenArtifactPath(
         "write_file",

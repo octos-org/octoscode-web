@@ -11,7 +11,7 @@ export function writtenArtifactPath(
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
       return "";
     const row = parsed as Record<string, unknown>;
-    for (const key of ["path", "file_path", "filepath", "file"]) {
+    for (const key of ["path", "file_path", "filepath", "filePath", "file"]) {
       const value = validPath(row[key]);
       if (value) return value;
     }
@@ -19,7 +19,7 @@ export function writtenArtifactPath(
     // Core's arguments_preview may be a key/value rendering or a truncated
     // large write body. Decode only the explicit field, never result prose.
     const field =
-      /(?:^|[,{]\s*)"?(?:path|file_path|filepath|file)"?\s*:\s*("(?:\\.|[^"\\])*")/.exec(
+      /(?:^|[,{]\s*)"?(?:path|file_path|filepath|filePath|file)"?\s*:\s*("(?:\\.|[^"\\])*")/.exec(
         argumentsJson,
       );
     if (!field) return "";

@@ -371,7 +371,7 @@ function ToolBlock(
       {entry.status === "complete" &&
       entry.artifactPath &&
       props.workspaceFileReadAvailable ? (
-        <AttachmentList media={[entry.artifactPath]} />
+        <AttachmentList media={[entry.artifactPath]} workspaceFile />
       ) : null}
     </>
   );

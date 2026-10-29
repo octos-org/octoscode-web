@@ -836,21 +836,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) ||
         supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST),
       async download(reference, signal) {
-        const workspacePath = workspaceRelativeArtifactPath(
-          reference,
-          attachmentWorkspaceRoot,
-        );
-        if (
-          workspacePath &&
-          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
-        ) {
-          return readSessionFileBlob(
-            client,
-            attachmentSessionId,
-            workspacePath,
-            signal,
-          );
-        }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
@@ -859,6 +844,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return commands.download(reference, signal);
       },
       async downloadForSave(reference, signal) {
+        const commands = await client.mediaCommands(
+          attachmentSessionId,
+          attachmentProfileId,
+          capabilities,
+        );
+        return commands.download(reference, signal);
+      },
+      async downloadWorkspaceFile(reference, signal) {
         const workspacePath = workspaceRelativeArtifactPath(
           reference,
           attachmentWorkspaceRoot,
@@ -4517,7 +4510,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_LIST,
               )
-                ? attachmentAccess?.download
+                ? attachmentAccess?.downloadWorkspaceFile
                 : undefined
             }
             downloadArtifact={
@@ -4529,7 +4522,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 session.capabilities,
                 CORE_UI_METHODS.SESSION_FILES_LIST,
               )
-                ? attachmentAccess?.downloadForSave
+                ? attachmentAccess?.downloadWorkspaceFile
                 : undefined
             }
           />

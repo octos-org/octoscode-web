@@ -10,6 +10,11 @@ export interface AttachmentAccess {
   download(reference: string, signal?: AbortSignal): Promise<Blob>;
   /** Unbounded save route for files larger than the preview RPC limit. */
   downloadForSave?: (reference: string, signal?: AbortSignal) => Promise<Blob>;
+  /** Workspace-only reader for tool-written files, never delivered media. */
+  downloadWorkspaceFile?: (
+    reference: string,
+    signal?: AbortSignal,
+  ) => Promise<Blob>;
   /** False when neither workspace-read nor legacy blob download is advertised. */
   previewAvailable?: boolean;
   /** Optional server-listed metadata; duplicate or unlisted names return null. */

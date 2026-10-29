@@ -85,6 +85,8 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
       raw: false,
       defval: "",
       blankrows: false,
+      // Cap the used range before SheetJS materializes sparse far-right cells.
+      range: "A1:GR5000",
     });
     const columns = Math.min(
       MAX_COLUMNS,
