@@ -35,6 +35,19 @@ const toggle = (page: Page) =>
 const panel = (page: Page) =>
   page.getByRole("complementary", { name: "Session panel" });
 
+async function createWorkspace(page: Page, path: string) {
+  await page.getByRole("button", { name: "New session", exact: true }).click();
+  const picker = page.getByRole("dialog");
+  await picker
+    .getByRole("button", { name: "Add workspace", exact: true })
+    .click();
+  await picker.getByLabel("Server workspace path").fill(path);
+  await picker.getByLabel("Server workspace path").press("Enter");
+  await expect(
+    page.locator("main").getByText(path, { exact: true }).first(),
+  ).toBeVisible();
+}
+
 test("the panel sits beside the chat and remembers its tab and width", async ({
   page,
 }) => {
@@ -220,4 +233,111 @@ test("Outputs previews a file Octos sent", async ({ page, request }) => {
   await expect(outputs.getByRole("button", { name: "Download" })).toBeVisible();
   await outputs.getByRole("button", { name: "All outputs" }).click();
   await expect(outputs).toContainText("Sent to you");
+});
+
+test("Files loads the new workspace root after switching Sessions", async ({
+  page,
+}) => {
+  await start(page, "/srv/fixture/Projects", "workspace-browse-e2e-token");
+  await createWorkspace(page, "/");
+  await toggle(page).click();
+  await panel(page).getByRole("tab", { name: "Files" }).click();
+  const files = panel(page).getByRole("tabpanel");
+  await files.getByRole("button", { name: "srv", exact: true }).click();
+  await files.getByRole("button", { name: "fixture", exact: true }).click();
+  await expect(
+    files.getByRole("button", { name: "archive", exact: true }),
+  ).toBeVisible();
+});
+
+test("Files ignores a late listing from the previous workspace root", async ({
+  page,
+}) => {
+  let release: (() => void) | undefined;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        result?: { canonical_path?: string };
+      };
+      if (frame.result?.canonical_path === "/srv/fixture/Projects") {
+        release = () => socket.send(message);
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await start(page, "/srv/fixture/Projects", "workspace-browse-e2e-token");
+  await toggle(page).click();
+  await panel(page).getByRole("tab", { name: "Files" }).click();
+  await createWorkspace(page, "/");
+  const files = panel(page).getByRole("tabpanel");
+  await files.getByRole("button", { name: "srv", exact: true }).click();
+  await files.getByRole("button", { name: "fixture", exact: true }).click();
+  await expect(
+    files.getByRole("button", { name: "archive", exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  release?.();
+  await expect(
+    files.getByRole("button", { name: "archive", exact: true }),
+  ).toBeVisible();
+  await expect(
+    files.getByRole("button", { name: "notes", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("Outputs clears the selected file and preview when switching Sessions", async ({
+  page,
+  request,
+}) => {
+  const navigation = page.getByRole("complementary", {
+    name: "Product navigation",
+  });
+  await start(page, "/workspace/review-output-a");
+  const firstTitle = await navigation
+    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  await createWorkspace(page, "/workspace/review-output-b");
+  const secondTitle = await navigation
+    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[class*="sessionTitle"]')
+    .textContent();
+  await navigation
+    .locator('button[role="treeitem"]')
+    .filter({ hasText: firstTitle! })
+    .click();
+  const reference = new URL(page.url()).searchParams.get("s");
+  const sessionId = (JSON.parse(reference!) as string[])[2]!;
+  expect(
+    (
+      await request.post(
+        `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=summary.md`,
+      )
+    ).ok(),
+  ).toBe(true);
+  await toggle(page).click();
+  await panel(page)
+    .getByRole("tab", { name: /^Outputs/ })
+    .click();
+  await panel(page)
+    .getByRole("button", { name: /summary\.md/ })
+    .click();
+  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await navigation
+    .locator('button[role="treeitem"]')
+    .filter({ hasText: secondTitle! })
+    .click();
+  if ((await toggle(page).getAttribute("aria-expanded")) === "false") {
+    await toggle(page).click();
+  }
+  await panel(page)
+    .getByRole("tab", { name: /^Outputs/ })
+    .click();
+  await expect(
+    panel(page).getByRole("button", { name: /summary\.md/ }),
+  ).toHaveCount(0);
+  await expect(panel(page).locator("pre")).toHaveCount(0);
 });

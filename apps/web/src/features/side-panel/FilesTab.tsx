@@ -52,14 +52,25 @@ export function FilesTab({
   const [expanded, setExpanded] = useState(() => new Set<string>([""]));
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
+  const generation = useRef(0);
 
   useEffect(() => {
-    setFolders(new Map([["", { absolute: root }]]));
+    const fresh = new Map([["", { absolute: root }]]);
+    generation.current += 1;
+    foldersRef.current = fresh;
+    setFolders(fresh);
     setExpanded(new Set([""]));
-  }, [root]);
+    void load("");
+    return () => {
+      generation.current += 1;
+    };
+    // `load` reads through a ref; reload only for a new root or browser.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root, browse]);
 
   const load = async (path: string) => {
     if (!browse) return;
+    const requestGeneration = generation.current;
     const current = foldersRef.current.get(path) ?? {
       absolute: joinWorkspace(foldersRef.current.get("")!.absolute, path),
     };
@@ -68,6 +79,7 @@ export function FilesTab({
       setFolders((map) => new Map(map).set(path, next));
     update({ ...current, loading: true });
     const outcome = await browse.list(current.absolute);
+    if (requestGeneration !== generation.current) return;
     if (outcome.status === "failed") {
       update({ absolute: current.absolute, failure: outcome.failure });
       return;
@@ -88,12 +100,6 @@ export function FilesTab({
       return next;
     });
   };
-
-  useEffect(() => {
-    void load("");
-    // `load` reads through a ref; reload only for a new root or browser.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [root, browse]);
 
   const listings = new Map<string, readonly string[]>();
   for (const [path, folder] of folders)

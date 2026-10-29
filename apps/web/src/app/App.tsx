@@ -1755,6 +1755,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   }, [panelLayout.width]);
   const sessionPanel = (presentation: "column" | "drawer") => (
     <SessionPanelHost
+      key={`${protocol.authorityKey}:${session.opened?.session_id ?? ""}`}
       presentation={presentation}
       className={productStyles.panelSlot}
       tab={panelLayout.tab}
