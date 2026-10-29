@@ -27,7 +27,13 @@ export function CopySessionLinkButton({
     setCopied(false);
     window.clearTimeout(timer.current);
   }, [referenceKey]);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(
+    () => () => {
+      generation.current += 1;
+      window.clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const copy = async () => {
     const requestGeneration = generation.current;

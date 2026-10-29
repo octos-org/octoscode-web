@@ -161,6 +161,15 @@ const catalog: Readonly<Record<string, string>> = {
   "Connect to inspect accepted server features.":
     "连接后可查看服务器支持的功能。",
   Connection: "连接",
+  View: "视图",
+  "Session panel": "会话面板",
+  Task: "任务",
+  Notifications: "通知",
+  Approval: "审批",
+  Question: "问题",
+  "Message input": "消息输入框",
+  "Model management": "模型管理",
+  "Connection confirmation": "连接确认",
   "Context and cache": "上下文与缓存",
   "Context changes are available when this session is idle.":
     "会话空闲时可以更改上下文。",
