@@ -2741,14 +2741,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 {session.opened?.active_profile_id &&
                 session.opened.workspace_root ? (
                   <CopySessionLinkButton
+                    key={session.opened.session_id}
                     reference={{
                       workspaceRoot: session.opened.workspace_root,
                       profileId: session.opened.active_profile_id,
                       sessionId: session.opened.session_id,
-                    }}
-                    onClipboardUnavailable={() => {
-                      setSettingsSection("general");
-                      setSettingsOpen(true);
                     }}
                   />
                 ) : null}

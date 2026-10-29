@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CheckIcon, LinkIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { createSavedSessionUrl } from "./create-saved-session-url.ts";
@@ -12,19 +12,19 @@ import styles from "./CopySessionLinkButton.module.css";
  */
 export function CopySessionLinkButton({
   reference,
-  onClipboardUnavailable,
 }: {
   reference: SavedSessionReference;
-  onClipboardUnavailable: () => void;
 }) {
   const t = useUiText();
   const [copied, setCopied] = useState(false);
+  const [manualUrl, setManualUrl] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const generation = useRef(0);
   const referenceKey = JSON.stringify(reference);
-  useEffect(() => {
+  useLayoutEffect(() => {
     generation.current += 1;
     setCopied(false);
+    setManualUrl(null);
     window.clearTimeout(timer.current);
   }, [referenceKey]);
   useEffect(
@@ -36,14 +36,14 @@ export function CopySessionLinkButton({
   );
 
   const copy = async () => {
-    const requestGeneration = generation.current;
+    const requestGeneration = ++generation.current;
+    setManualUrl(null);
+    const url = createSavedSessionUrl(window.location.href, reference);
     try {
-      await navigator.clipboard.writeText(
-        createSavedSessionUrl(window.location.href, reference),
-      );
+      await navigator.clipboard.writeText(url);
     } catch {
       if (shouldPublishCopyConfirmation(requestGeneration, generation.current))
-        onClipboardUnavailable();
+        setManualUrl(url);
       return;
     }
     if (!shouldPublishCopyConfirmation(requestGeneration, generation.current))
@@ -68,6 +68,20 @@ export function CopySessionLinkButton({
       <span className="sr-only" role="status">
         {copied ? t("Conversation link copied.") : ""}
       </span>
+      {manualUrl ? (
+        <div>
+          <p role="status">
+            {t("Clipboard unavailable. Select and copy the link below.")}
+          </p>
+          <textarea
+            aria-label={t("Conversation link")}
+            readOnly
+            rows={3}
+            value={manualUrl}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        </div>
+      ) : null}
     </>
   );
 }
