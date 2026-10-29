@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a capability-gated Automation tab to the Session panel for goals, loops,
+  monitors, and agents. Reuse the session-scoped autonomy controller for
+  controls and live updates, hide the tab on unsupported connections, and show
+  the remaining goal-ledger and monitor-sandbox limitations.
 - Keep approval and question takeovers inside the viewport without scrolling the
   workspace header out of view. Preserve compact-header button spacing on
   phones, and cover all three audit viewports with layout, axe, and full-page

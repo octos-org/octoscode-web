@@ -1729,6 +1729,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     writePanelLayout(browserLocalStorage(), panelLayout);
   }, [panelLayout]);
   const panelOpen = compact ? panelDrawerOpen : panelLayout.open;
+  useEffect(() => {
+    if (panelLayout.tab === "automation" && !autonomyAvailable) {
+      setPanelLayout((current) => ({ ...current, tab: "overview" }));
+    }
+  }, [autonomyAvailable, panelLayout.tab]);
   const showPanel = (tab: SessionPanelTab, overlay = compact) => {
     setPanelLayout((current) => ({
       ...current,
@@ -1817,6 +1822,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
       delivered={deliveredFiles}
       access={attachmentAccess}
+      automation={
+        protocol.client &&
+        session.opened &&
+        session.opened.capabilities &&
+        autonomyAvailable
+          ? {
+              client: protocol.client,
+              sessionId: session.opened.session_id,
+              capabilities: session.opened.capabilities,
+              authorityKey: protocol.authorityKey,
+            }
+          : null
+      }
     />
   );
 

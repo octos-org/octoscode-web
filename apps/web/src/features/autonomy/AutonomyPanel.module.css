@@ -146,7 +146,7 @@
 
 .danger {
   border-color: var(--dsw-alias-state-error-secondary) !important;
-  color: var(--dsw-alias-state-error-primary) !important;
+  color: var(--dsw-alias-state-error-text) !important;
 }
 
 .form {

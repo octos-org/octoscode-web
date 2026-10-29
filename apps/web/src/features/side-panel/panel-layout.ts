@@ -8,6 +8,7 @@ export const SESSION_PANEL_TABS = [
   "files",
   "changes",
   "outputs",
+  "automation",
 ] as const;
 export type SessionPanelTab = (typeof SESSION_PANEL_TABS)[number];
 
