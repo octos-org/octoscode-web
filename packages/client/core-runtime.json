@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "repository": "https://github.com/octos-org/octos",
-  "tag": "main",
-  "revision": "9d8a96e739ccfc2be3f572bbd18403af0f2b51b1",
+  "tag": "v2.0.3",
+  "revision": "fca32c45845abefdf6729ddff081c5083553289a",
   "version": "2.0.3",
   "required_web_methods": [
     "config/capabilities/list",
@@ -28,8 +28,7 @@
     "plan.todos.v1",
     "projection.envelope.v2",
     "harness.task_control.v1",
-    "harness.task_artifacts.v1",
-    "session.files.read.v1"
+    "harness.task_artifacts.v1"
   ],
   "required_solo_onboarding_methods": [
     "profile/local/create",
@@ -40,8 +39,7 @@
   "forward_compatible_methods": [
     "session/list",
     "session/delete",
-    "session/files.list",
-    "session/files/read"
+    "session/files.list"
   ],
   "assets": {
     "linux-x64": {
