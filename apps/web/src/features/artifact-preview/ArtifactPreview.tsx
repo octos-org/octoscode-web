@@ -49,6 +49,8 @@ export interface ArtifactPreviewProps {
   /** Display name and download filename. */
   name: string;
   kind?: ArtifactKind | undefined;
+  /** Tool-written workspace files use the 32 MiB session reader limit. */
+  workspaceFile?: boolean;
   /** Authenticated server path, when the artifact has one. */
   path?: string;
   /** Text supplied by task/artifact/read. Binary documents use loadBlob instead. */
@@ -73,11 +75,11 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
       ? "text"
       : artifactKind(reference));
   const textKind = ["markdown", "code", "text"].includes(kind);
-  const previewSizeLimit = ["markdown", "code", "text", "html", "svg"].includes(
-    kind,
-  )
-    ? MAX_TEXT_PREVIEW_BYTES
-    : MAX_AUTOMATIC_PREVIEW_BYTES;
+  const previewSizeLimit = props.workspaceFile
+    ? 32 * 1024 * 1024
+    : ["markdown", "code", "text", "html", "svg"].includes(kind)
+      ? MAX_TEXT_PREVIEW_BYTES
+      : MAX_AUTOMATIC_PREVIEW_BYTES;
   const oversizedByMetadata =
     props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit;
   const shouldFetch =
@@ -172,7 +174,7 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
         {t("Loading preview…")}
       </div>
     );
-  } else if (oversizedByMetadata) {
+  } else if (oversizedByMetadata || oversized) {
     content = (
       <div className={styles.message}>
         {t(

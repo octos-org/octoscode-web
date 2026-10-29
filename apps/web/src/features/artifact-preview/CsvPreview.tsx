@@ -222,6 +222,7 @@ export function CsvPreview({ blob }: { blob: Blob }) {
 }
 
 function columnName(index: number): string {
+  // Zero-based cell indexes map to one-based spreadsheet letters.
   let value = index + 1;
   let name = "";
   while (value > 0) {

@@ -54,6 +54,9 @@ test("previews and pages PDF artifacts", async ({ page }) => {
 test("previews and pages large CSV files", async ({ page }) => {
   const sessionId = await openConversation(page);
   const csv = await deliver(page, sessionId, "large.csv");
+  await expect(
+    csv.preview.getByRole("columnheader", { name: "A", exact: true }),
+  ).toBeVisible();
   await expect(csv.preview.getByText("Rows 1–100 of 126")).toBeVisible();
   await csv.preview.getByRole("button", { name: "Next rows" }).click();
   await expect(csv.preview.getByText("row-125", { exact: true })).toBeVisible();

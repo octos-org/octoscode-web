@@ -206,6 +206,7 @@ function AttachmentItem({
           <ArtifactPreview
             name={name}
             path={reference}
+            workspaceFile={workspaceFile}
             {...(sizeBytes === null ? {} : { sizeBytes })}
             loadBlob={(signal) =>
               (workspaceFile

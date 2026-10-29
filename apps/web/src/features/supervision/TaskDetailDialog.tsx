@@ -13,8 +13,10 @@ function previewKind(
   kind: string,
   path?: string,
   content?: string,
+  blobAvailable = false,
 ): ArtifactKind | undefined {
   const byPath = path ? artifactKind(path) : "unsupported";
+  if (content !== undefined && !blobAvailable) return "text";
   if (byPath !== "unsupported") return byPath;
   if (content !== undefined) return "text";
   if (kind === "markdown") return "markdown";
@@ -157,7 +159,9 @@ export function TaskDetailDialog({
                     selected.artifact.kind,
                     selected.artifact.path,
                     selected.content ?? selected.artifact.content,
+                    Boolean(loadArtifact),
                   )}
+                  workspaceFile={Boolean(loadArtifact)}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }
                     : {})}
