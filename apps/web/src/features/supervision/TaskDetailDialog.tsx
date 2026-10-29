@@ -121,6 +121,11 @@ export function TaskDetailDialog({
     sizeResult?.path === selectedPath ? sizeResult : undefined;
   const sizeBytes = currentSize?.sizeBytes;
   const saveAvailable = currentSize?.saveAvailable;
+  const canDownloadText = Boolean(
+    selectedBlobAvailable ||
+    !selectedPath ||
+    ["markdown", "code", "text"].includes(artifactKind(selectedPath)),
+  );
 
   return (
     <ModalSurface
@@ -237,7 +242,9 @@ export function TaskDetailDialog({
                   }
                   sizeRequired={profileFile}
                   sizePending={sizePending}
-                  downloadAvailable={saveAvailable}
+                  downloadAvailable={
+                    saveAvailable === false ? false : canDownloadText
+                  }
                   {...(sizeBytes === undefined ? {} : { sizeBytes })}
                   {...(selected.artifact.path
                     ? { path: selected.artifact.path }

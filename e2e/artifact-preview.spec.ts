@@ -158,7 +158,6 @@ test("retries an unsupported file with Download after a failed request", async (
   const sessionId = await openConversation(page);
   let requests = 0;
   await page.route("**/api/files**", (route) => {
-    if (route.request().method() === "HEAD") return route.continue();
     requests += 1;
     return requests === 1 ? route.abort() : route.continue();
   });

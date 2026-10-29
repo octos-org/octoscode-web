@@ -205,6 +205,7 @@ export function timelineFromHydrate(
             "tool_start",
             "tool_progress",
             "tool_end",
+            "file_attached",
             "background/spawn_complete",
           ].includes(event.payload.type),
         ),
@@ -224,6 +225,19 @@ export function timelineFromHydrate(
     });
   }
   entries = coalesceHydratedTools(entries, replayed);
+  const previousArtifactPaths = new Map(
+    (identities.previous ?? [])
+      .filter((entry) => entry.artifactPath)
+      .map((entry) => [entry.id, entry.artifactPath!] as const),
+  );
+  if (previousArtifactPaths.size) {
+    entries = entries.map((entry) => {
+      const artifactPath = previousArtifactPaths.get(entry.id);
+      return artifactPath && !entry.artifactPath
+        ? { ...entry, artifactPath }
+        : entry;
+    });
+  }
   const terminalTurns = new Map(
     (result.turns ?? [])
       .filter((turn) =>
@@ -616,13 +630,21 @@ function foldProjection(
     case "file_attached": {
       const filePath = stringOf(data.path, "");
       const fileName = filePath.split("/").pop() || filePath || "unknown";
-      return addSystemMessage(
-        entries,
-        `file-attached:${turnId}:${fileName}`,
-        "File attached",
-        fileName,
-        "info",
-      );
+      const sizeBytes = data.size_bytes;
+      return upsert(entries, {
+        id: `file-attached:${turnId}:${fileName}`,
+        kind: "system",
+        title: "File attached",
+        body: fileName,
+        status: "info",
+        turnId,
+        ...(filePath &&
+        typeof sizeBytes === "number" &&
+        Number.isSafeInteger(sizeBytes) &&
+        sizeBytes >= 0
+          ? { attachmentSizes: { [filePath]: sizeBytes } }
+          : {}),
+      });
     }
     default:
       return entries.slice();

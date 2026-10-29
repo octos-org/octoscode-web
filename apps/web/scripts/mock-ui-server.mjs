@@ -2043,14 +2043,15 @@ const http = createServer(async (request, response) => {
     // The original workspace path, as Core records it.
     const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
     const validPreview = url.searchParams.get("valid") === "1";
-    deliveredFiles.set(deliveredFileKey(sessionId, path), {
+    const deliveredFile = {
       type: artifactMime(name),
       bytes: validPreview
         ? await previewFixture(name)
         : name.endsWith(".png")
           ? FIXTURE_PNG
           : Buffer.from(`fixture ${name}`),
-    });
+    };
+    deliveredFiles.set(deliveredFileKey(sessionId, path), deliveredFile);
     const turnId = randomUUID();
     notify(
       socket,
@@ -2076,6 +2077,23 @@ const http = createServer(async (request, response) => {
       turnId,
       turnId,
       2,
+      state.log.seq + 1,
+      "file_attached",
+      {
+        path,
+        mime: deliveredFile.type,
+        size_bytes: deliveredFile.bytes.length,
+        attachment_owner: {
+          assistant_segment_id: `${turnId}:assistant:delivery`,
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      turnId,
+      turnId,
+      3,
       state.log.seq + 1,
       "turn_terminal",
       {

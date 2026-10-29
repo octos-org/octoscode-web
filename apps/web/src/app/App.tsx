@@ -783,6 +783,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const attachmentProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
+  const attachmentSizeMetadata = useMemo(() => {
+    const sizes = new Map<string, number>();
+    for (const entry of conversation.timeline) {
+      for (const [path, sizeBytes] of Object.entries(
+        entry.attachmentSizes ?? {},
+      )) {
+        sizes.set(path, sizeBytes);
+      }
+    }
+    return sizes;
+  }, [conversation.timeline]);
   const attachmentAccess = useMemo((): AttachmentAccess | null => {
     const client = protocol.client;
     const capabilities = session.capabilities;
@@ -801,12 +812,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       capabilities,
       CORE_UI_METHODS.SESSION_FILES_LIST,
     );
-    const mediaCommands = () =>
-      client.mediaCommands(
-        attachmentSessionId,
-        attachmentProfileId,
-        capabilities,
-      );
     return {
       ...(canReadWorkspace || canUseBlob
         ? {
@@ -827,26 +832,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   };
                 } catch (reason) {
                   if (!isWorkspaceReadLimitError(reason)) throw reason;
-                  if (!canUseBlob) return { saveAvailable: false };
-                  try {
-                    return {
-                      sizeBytes: await (await mediaCommands()).stat(path),
-                    };
-                  } catch {
-                    // An approved external workspace is not necessarily
-                    // readable by the profile-contained legacy endpoint.
-                    return { saveAvailable: false };
-                  }
+                  // There is no metadata-only size lookup for oversized
+                  // workspace files. Fail honestly instead of reading the
+                  // whole file through the legacy endpoint just to stat it.
+                  return { saveAvailable: false };
                 }
               }
               if (!canUseBlob) return null;
-              try {
-                return {
-                  sizeBytes: await (await mediaCommands()).stat(reference),
-                };
-              } catch {
-                return null;
-              }
+              const sizeBytes = attachmentSizeMetadata.get(reference);
+              return sizeBytes === undefined ? null : { sizeBytes };
             },
           }
         : {}),
@@ -906,33 +900,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           capabilities,
           CORE_UI_METHODS.SESSION_FILES_READ,
         );
-        if (
-          workspacePath &&
-          canReadWorkspace &&
-          (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024)
-        ) {
-          try {
-            return await readSessionFileBlob(
-              client,
-              attachmentSessionId,
-              workspacePath,
-              signal,
+        if (workspacePath && canReadWorkspace) {
+          if (sizeBytes !== undefined && sizeBytes > 32 * 1024 * 1024) {
+            throw new Error(
+              "workspace_file_too_large: session file exceeds the read limit",
             );
-          } catch (reason) {
-            if (!isWorkspaceReadLimitError(reason)) throw reason;
           }
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
           capabilities,
         );
-        // The legacy endpoint authorizes workspace-relative paths against the
-        // same Session. Verify it can serve this root before offering a large
-        // download; approved external workspaces fail closed here.
-        const saveReference = workspacePath ?? reference;
-        await commands.stat(saveReference, signal);
-        return commands.download(saveReference, signal);
+        return commands.download(reference, signal);
       },
     };
   }, [
@@ -941,6 +927,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     attachmentSessionId,
     attachmentProfileId,
     attachmentWorkspaceRoot,
+    attachmentSizeMetadata,
   ]);
   const autonomyAvailable = commandSuggestions(
     "/",

@@ -126,7 +126,7 @@ function AttachmentItem({
       sizeState !== "ready" ||
       !saveAvailable ||
       sizeBytes === null ||
-      sizeBytes > 50 * 1024 * 1024
+      sizeBytes > (workspaceFile ? 32 : 50) * 1024 * 1024
     ) {
       return;
     }

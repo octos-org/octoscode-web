@@ -1862,4 +1862,65 @@ describe("delivered attachments", () => {
       body: "Successfully wrote report.md",
     });
   });
+
+  it("preserves an explicit tool path when hydrate truncates its preview", () => {
+    const previous = [
+      {
+        id: "tool:write-large",
+        kind: "tool" as const,
+        title: "write_file",
+        body: "full arguments",
+        status: "complete" as const,
+        artifactPath: "report.md",
+      },
+    ];
+    const entries = timelineFromHydrate(
+      {
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 1 },
+        replayed_projection_envelopes: [
+          {
+            session_id: "coding:local:main",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            seq: 1,
+            payload: {
+              type: "tool_start",
+              data: {
+                tool_call_id: "write-large",
+                name: "write_file",
+                arguments_preview: 'content: "truncated…',
+              },
+            },
+          },
+        ],
+      },
+      { previous },
+    );
+    expect(entries[0]?.artifactPath).toBe("report.md");
+  });
+
+  it("retains authoritative delivered file sizes from file_attached", () => {
+    const entries = foldNotification([], {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: {
+          type: "file_attached",
+          data: {
+            path: "/work/report.pdf",
+            mime: "application/pdf",
+            size_bytes: 123,
+            attachment_owner: { assistant_segment_id: "segment-1" },
+          },
+        },
+      },
+    });
+    expect(entries[0]?.media).toBeUndefined();
+    expect(entries[0]?.attachmentSizes).toEqual({ "/work/report.pdf": 123 });
+  });
 });
