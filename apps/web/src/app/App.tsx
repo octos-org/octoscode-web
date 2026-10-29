@@ -33,7 +33,6 @@ import {
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
-  OctosUiProtocolError,
   supportsFeature,
   supportsMethod,
   type PlanUpdated,
@@ -898,21 +897,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           (sizeBytes === undefined || sizeBytes <= 32 * 1024 * 1024) &&
           supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
         ) {
-          try {
-            return await readSessionFileBlob(
-              client,
-              attachmentSessionId,
-              workspacePath,
-              signal,
-            );
-          } catch (reason) {
-            if (
-              !(reason instanceof OctosUiProtocolError) ||
-              (reason.data as { kind?: unknown } | undefined)?.kind !==
-                "workspace_file_too_large"
-            )
-              throw reason;
-          }
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
         }
         const commands = await client.mediaCommands(
           attachmentSessionId,

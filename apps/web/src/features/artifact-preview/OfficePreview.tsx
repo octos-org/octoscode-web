@@ -94,12 +94,16 @@ function DocxPreview({ blob, name }: { blob: Blob; name: string }) {
 interface SheetInfo {
   name: string;
   rows: number;
+  rowOffset?: number;
+  columnOffset?: number;
 }
 interface SheetPageMessage extends PreviewWorkerMessage {
   rows: (string | number | boolean)[][];
   start: number;
   total: number;
   truncated: boolean;
+  rowOffset?: number;
+  columnOffset?: number;
 }
 interface WorkbookMessage extends PreviewWorkerMessage {
   sheets: SheetInfo[];
@@ -116,6 +120,8 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
   const [start, setStart] = useState(0);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
+  const [rowOffset, setRowOffset] = useState(0);
+  const [columnOffset, setColumnOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,6 +130,8 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
     setStart(message.start);
     setTotal(message.total);
     setTruncated(message.truncated);
+    setRowOffset(message.rowOffset ?? 0);
+    setColumnOffset(message.columnOffset ?? 0);
     setLoading(false);
   };
 
@@ -250,7 +258,7 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
                 <th aria-label={t("Row number")} />
                 {Array.from({ length: columns }, (_, index) => (
                   <th key={index} scope="col">
-                    {columnName(index)}
+                    {columnName(index + columnOffset)}
                   </th>
                 ))}
               </tr>
@@ -258,7 +266,7 @@ function SpreadsheetPreview({ blob, csv }: { blob: Blob; csv: boolean }) {
             <tbody>
               {rows.map((row, rowIndex) => (
                 <tr key={start + rowIndex}>
-                  <th scope="row">{start + rowIndex + 1}</th>
+                  <th scope="row">{start + rowIndex + 1 + rowOffset}</th>
                   {Array.from({ length: columns }, (_, column) => (
                     <td key={column} title={String(row[column] ?? "")}>
                       {row[column] ?? ""}

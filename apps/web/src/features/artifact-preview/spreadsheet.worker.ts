@@ -10,6 +10,8 @@ type Cell = string | number | boolean;
 interface Sheet {
   name: string;
   rows: Cell[][];
+  rowOffset: number;
+  columnOffset: number;
 }
 
 let sheets: Sheet[] = [];
@@ -39,6 +41,8 @@ self.onmessage = async (
         sheets: sheets.map((sheet) => ({
           name: sheet.name,
           rows: sheet.rows.length,
+          rowOffset: sheet.rowOffset,
+          columnOffset: sheet.columnOffset,
         })),
         truncated,
       });
@@ -55,6 +59,8 @@ self.onmessage = async (
       start,
       total: sheet.rows.length,
       truncated,
+      rowOffset: sheet.rowOffset,
+      columnOffset: sheet.columnOffset,
     });
   } catch (reason) {
     self.postMessage({
@@ -100,7 +106,7 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
       header: 1,
       raw: false,
       defval: "",
-      blankrows: false,
+      blankrows: true,
       range: cappedRange,
     });
     const columns = Math.min(
@@ -125,7 +131,12 @@ function readWorkbook(buffer: ArrayBuffer): Sheet[] {
       truncated = true;
     }
     remainingCells = Math.max(0, remainingCells - rows.length * columns);
-    return { name, rows };
+    return {
+      name,
+      rows,
+      rowOffset: cappedRange.s.r,
+      columnOffset: cappedRange.s.c,
+    };
   });
 }
 
@@ -154,7 +165,7 @@ async function readCsv(buffer: ArrayBuffer): Promise<Sheet[]> {
     result.data.length > rows.length ||
     result.data.some((row) => row.length > columns) ||
     result.errors.some((error) => error.code === "TooManyFields");
-  return [{ name: "CSV", rows }];
+  return [{ name: "CSV", rows, rowOffset: 0, columnOffset: 0 }];
 }
 
 function cell(value: unknown): Cell {

@@ -190,7 +190,13 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || busy}
+          disabled={
+            !access ||
+            busy ||
+            (workspaceFile &&
+              sizeBytes !== null &&
+              sizeBytes > 32 * 1024 * 1024)
+          }
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >

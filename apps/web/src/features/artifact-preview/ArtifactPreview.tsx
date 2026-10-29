@@ -154,13 +154,11 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   };
 
   const oversized = error?.includes("workspace_file_too_large") ?? false;
-  const canDownload = props.downloadBlob
-    ? true
-    : oversized
-      ? false
-      : props.loadBlob
-        ? true
-        : textKind && props.text !== undefined && !props.hasMore;
+  const canDownload = oversized
+    ? false
+    : (props.downloadBlob ?? props.loadBlob)
+      ? true
+      : textKind && props.text !== undefined && !props.hasMore;
   let content: ReactNode;
   if (loading) {
     content = (
