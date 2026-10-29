@@ -14,9 +14,14 @@ const PROVIDERS = [
     tag: "Long context and reasoning",
   },
   {
-    aliases: ["zai", "zhipu"],
+    aliases: ["zai"],
+    name: "Z.ai",
+    tag: "GLM coding and agents",
+  },
+  {
+    aliases: ["zhipu"],
     name: "智谱 AI",
-    tag: "Coding and agents",
+    tag: "GLM coding and agents",
   },
   {
     aliases: ["dashscope", "qwen"],
@@ -37,14 +42,7 @@ export function orderedProviderFamilies(
     const difference = providerRank(left.id) - providerRank(right.id);
     return difference || left.id.localeCompare(right.id);
   });
-  const seen = new Set<number>();
-  return sorted.filter((family) => {
-    const rank = providerRank(family.id);
-    if (rank === PROVIDERS.length) return true;
-    if (seen.has(rank)) return false;
-    seen.add(rank);
-    return true;
-  });
+  return sorted;
 }
 
 export function providerPresentation(familyId: string) {

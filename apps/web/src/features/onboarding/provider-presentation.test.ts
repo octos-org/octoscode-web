@@ -6,6 +6,7 @@ import {
 } from "./provider-presentation.ts";
 import {
   CUSTOM_OPENAI_ROUTE,
+  OFFICIAL_ROUTE,
   selectionFromCatalog,
 } from "./onboarding-submission.ts";
 
@@ -52,9 +53,37 @@ const catalog: LlmCatalogResult = {
 describe("first-run provider presentation", () => {
   it("puts the five domestic providers first in the recommended order", () => {
     expect(orderedProviderFamilies(catalog).map((family) => family.id)).toEqual(
-      ["deepseek", "moonshot", "zai", "dashscope", "minimax", "anthropic"],
+      [
+        "deepseek",
+        "moonshot",
+        "zai",
+        "zhipu",
+        "dashscope",
+        "minimax",
+        "anthropic",
+      ],
     );
     expect(providerPresentation("moonshot").name).toBe("Kimi 月之暗面");
+  });
+
+  it("keeps Z.ai and Zhipu official family, model and route identities", () => {
+    for (const [familyId, modelId, apiKeyEnv] of [
+      ["zai", "glm-5.3", "ZAI_API_KEY"],
+      ["zhipu", "glm-4-plus", "ZHIPU_API_KEY"],
+    ] as const) {
+      expect(
+        selectionFromCatalog(catalog, {
+          familyId,
+          modelId,
+          routeId: OFFICIAL_ROUTE,
+        }),
+      ).toMatchObject({
+        family_id: familyId,
+        model_id: modelId,
+        route: { route_id: familyId, api_key_env: apiKeyEnv },
+      });
+    }
+    expect(providerPresentation("zhipu").name).toBe("智谱 AI");
   });
 
   it("sends the custom OpenAI-compatible URL without embedding credentials", () => {

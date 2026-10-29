@@ -1876,7 +1876,7 @@ test("tests and saves a custom OpenAI-compatible endpoint in the first-run wizar
   for (const name of [
     /DeepSeek 深度求索/,
     /Kimi 月之暗面/,
-    /智谱 AI/,
+    /Z.ai/,
     /通义千问/,
     /MiniMax/,
   ]) {
