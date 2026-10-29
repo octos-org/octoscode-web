@@ -135,9 +135,7 @@ export function TaskDetailDialog({
                 <p>{t("No artifacts were reported.")}</p>
               ) : null}
             </div>
-            {state.detail.artifactLoading ? (
-              <div className="artifact-content">{t("Reading artifact…")}</div>
-            ) : selected ? (
+            {selected ? (
               <div className="artifact-content">
                 <ArtifactPreview
                   key={selected.artifact.id}
@@ -165,7 +163,12 @@ export function TaskDetailDialog({
                       }
                     : {})}
                 />
+                {state.detail.artifactLoading ? (
+                  <div role="status">{t("Reading artifact…")}</div>
+                ) : null}
               </div>
+            ) : state.detail.artifactLoading ? (
+              <div className="artifact-content">{t("Reading artifact…")}</div>
             ) : null}
           </aside>
         ) : null}

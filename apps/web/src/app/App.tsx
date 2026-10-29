@@ -33,6 +33,7 @@ import {
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
+  OctosUiProtocolError,
   supportsFeature,
   supportsMethod,
   type PlanUpdated,
@@ -828,6 +829,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             },
           }
         : {}),
+      previewAvailable:
+        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) ||
+        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST),
       async download(reference, signal) {
         if (
           supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
@@ -861,8 +865,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             );
           } catch (reason) {
             if (
-              !(reason instanceof Error) ||
-              !reason.message.includes("workspace_file_too_large")
+              !(reason instanceof OctosUiProtocolError) ||
+              (reason.data as { kind?: unknown } | undefined)?.kind !==
+                "workspace_file_too_large"
             )
               throw reason;
           }

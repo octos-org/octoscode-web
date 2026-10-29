@@ -157,7 +157,7 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access}
+          disabled={!access || access.previewAvailable === false}
           aria-expanded={previewOpen}
           aria-controls={previewId}
           onClick={() => setPreviewOpen((value) => !value)}
@@ -174,7 +174,7 @@ function AttachmentItem({
           {busy ? t("Downloading…") : t("Download")}
         </button>
       </div>
-      {previewOpen && access ? (
+      {previewOpen && access && access.previewAvailable !== false ? (
         <div id={previewId} className={styles.previewPanel}>
           <ArtifactPreview
             name={name}
