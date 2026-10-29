@@ -2654,6 +2654,10 @@ export function useOctosSession(): OctosSessionRuntime {
   const supervisionController = useSupervision({
     client: currentClient,
     sessionId: currentSessionId,
+    workspaceRoot: () =>
+      currentAuthority()?.opened?.workspace_root ??
+      currentAuthority()?.cwd ??
+      "",
     capabilities: currentCapabilities,
   });
   const supervision = supervisionController.state;

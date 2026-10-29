@@ -134,12 +134,13 @@ export function TaskDetailDialog({
       ["text", "report", "log", "markdown", "json"].includes(
         selected.artifact.kind,
       ));
+  const hasTextContent = Boolean(
+    selected &&
+    (selected.content !== undefined || selected.artifact.content !== undefined),
+  );
+  const useTextDownload = Boolean(textArtifact && hasTextContent);
   const canDownloadText = Boolean(
-    selectedBlobAvailable ||
-    !selectedPath ||
-    (textArtifact &&
-      (selected.content !== undefined ||
-        selected.artifact.content !== undefined)),
+    selectedBlobAvailable || !selectedPath || useTextDownload,
   );
 
   return (
@@ -273,7 +274,9 @@ export function TaskDetailDialog({
                           loadArtifact(selectedPath!, signal),
                       }
                     : {})}
-                  {...(selectedBlobAvailable && downloadArtifact
+                  {...(selectedBlobAvailable &&
+                  downloadArtifact &&
+                  !useTextDownload
                     ? {
                         downloadBlob: (signal?: AbortSignal) =>
                           downloadArtifact(selected.artifact.path!, signal),

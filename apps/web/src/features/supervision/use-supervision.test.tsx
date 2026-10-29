@@ -60,6 +60,7 @@ describe("useSupervision artifact selection", () => {
       controller = useSupervision({
         client: () => client,
         sessionId: () => "session-1",
+        workspaceRoot: () => "/workspace",
         capabilities: () => capabilities,
       });
       return null;

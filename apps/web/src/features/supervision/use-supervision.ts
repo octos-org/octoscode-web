@@ -31,11 +31,12 @@ import {
   artifactKind,
   artifactReadsBlob,
 } from "../artifact-preview/artifact-kind.ts";
-import { isWorkspaceRelativePath } from "../timeline/session-file-read.ts";
+import { workspaceRelativeArtifactPath } from "../timeline/session-file-read.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
   sessionId: () => string;
+  workspaceRoot: () => string;
   capabilities: () => UiProtocolCapabilities | undefined;
 }
 
@@ -393,10 +394,15 @@ export function useSupervision(
         ? ["markdown", "code", "text"].includes(pathKind)
         : ["text", "report", "log", "markdown", "json"].includes(artifact.kind);
     const capabilities = dependenciesRef.current.capabilities();
+    const workspacePath = artifact.path
+      ? workspaceRelativeArtifactPath(
+          artifact.path,
+          dependenciesRef.current.workspaceRoot(),
+        )
+      : null;
     const canReadBlob = artifact.path?.startsWith("pf/")
       ? supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST)
-      : artifact.path !== undefined &&
-        isWorkspaceRelativePath(artifact.path) &&
+      : workspacePath !== null &&
         supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ);
     if (
       canReadBlob &&
