@@ -138,6 +138,12 @@ function AttachmentItem({
     };
   }, [access, reference, workspaceFile, previewOpen, image, nearViewport]);
 
+  const legacyUnmeasuredImage =
+    image &&
+    !workspaceFile &&
+    access?.previewAvailable === false &&
+    sizeBytes === null;
+
   // Load an image preview once it scrolls near the viewport, so a long
   // transcript does not fetch every delivered image up front.
   useEffect(() => {
@@ -147,8 +153,9 @@ function AttachmentItem({
       !nearViewport ||
       sizeState !== "ready" ||
       !saveAvailable ||
-      sizeBytes === null ||
-      sizeBytes > (workspaceFile ? 32 : 50) * 1024 * 1024
+      (sizeBytes === null && !legacyUnmeasuredImage) ||
+      (sizeBytes !== null &&
+        sizeBytes > (workspaceFile ? 32 : 50) * 1024 * 1024)
     ) {
       return;
     }
