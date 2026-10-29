@@ -1956,14 +1956,28 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
     )?.body;
     if (!client || !opened || !option || !prompt) return;
+    const retryKey = activeSessionKey;
+    const ownerIsCurrent = () =>
+      activeSessionClientRef.current === client &&
+      openedSessionIdRef.current === opened.session_id &&
+      activeSessionKeyRef.current === retryKey;
     setPermissionRetryBusyTurnId(turnId);
     try {
-      await client.setPermissionProfile({
+      const result = await client.setPermissionProfile({
         session_id: opened.session_id,
         update: { mode: "workspace_write", network: option.network },
       });
+      if (
+        !result.applied ||
+        result.session_id !== opened.session_id ||
+        result.current.mode !== "workspace_write"
+      ) {
+        throw new Error("The server did not apply workspace write permission.");
+      }
+      if (!ownerIsCurrent()) return;
       await safety.refreshPermission();
-      submit(prompt);
+      if (!ownerIsCurrent()) return;
+      conversation.enqueuePrompt(prompt);
     } catch (reason) {
       setCommandError(
         reason instanceof Error ? reason.message : String(reason),
@@ -2030,6 +2044,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     previousActiveSessionKeyRef.current,
     historyView !== null,
   );
+  const activeSessionKeyRef = useRef(activeSessionKey);
+  const activeSessionClientRef = useRef(protocol.client);
+  const openedSessionIdRef = useRef(session.opened?.session_id);
+  activeSessionKeyRef.current = activeSessionKey;
+  activeSessionClientRef.current = protocol.client;
+  openedSessionIdRef.current = session.opened?.session_id;
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
