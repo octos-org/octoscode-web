@@ -4,6 +4,7 @@ import zh from "./zh.ts";
 import { REASONING_ZH_COPY } from "../reasoning/reasoning-copy.ts";
 import { SESSION_CONFIG_ZH_COPY } from "../session-config/session-config-copy.ts";
 import { FLEET_ZH_COPY } from "../fleet/fleet-copy.ts";
+import { SESSION_PANEL_ZH_COPY } from "../side-panel/session-panel-copy.ts";
 
 /**
  * Judge r2 #8 (round 3, WEB-UX-ROUND3-INTEGRATION-4600): generated labels
@@ -54,6 +55,7 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
       [REASONING_ZH_COPY, "reasoning"],
       [SESSION_CONFIG_ZH_COPY, "session-config"],
       [FLEET_ZH_COPY, "fleet"],
+      [SESSION_PANEL_ZH_COPY, "session-panel"],
     ] as const) {
       for (const [source, translated] of Object.entries(table)) {
         expect(
@@ -71,6 +73,7 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
     );
     expect(source).toContain("reasoning-copy.ts");
     expect(source).toContain("session-config-copy.ts");
+    expect(source).toContain("session-panel-copy.ts");
   });
 
   it("no generated key collides with a DIFFERENT zh.ts value", () => {
@@ -78,6 +81,7 @@ describe("generated copy reaches the loaded Chinese catalog", () => {
       ...Object.entries(REASONING_ZH_COPY),
       ...Object.entries(SESSION_CONFIG_ZH_COPY),
       ...Object.entries(FLEET_ZH_COPY),
+      ...Object.entries(SESSION_PANEL_ZH_COPY),
     ]) {
       if (zh[source] === undefined) continue;
       expect(zh[source], source).toBe(translated);

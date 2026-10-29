@@ -44,17 +44,23 @@ async function openReview(page: Page, lines: PreviewLine[]) {
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review syntax fixture");
   await composer.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Review changes", exact: true }),
-  ).toHaveAttribute("title", "Session change preview");
-  await page
-    .getByRole("button", { name: "Review changes", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", {
-    name: "Review precise code changes",
-  });
-  await expect(dialog).toBeVisible();
-  return dialog;
+  // The turn's file mutation counts on the toggle before anything opens.
+  await expect(panelToggle(page)).toHaveAccessibleName(
+    "Session panel, 1 changed",
+  );
+  return openChanges(page);
+}
+
+const panelToggle = (page: Page) =>
+  page.getByRole("button", { name: /^Session panel/ });
+
+/** Opens the session panel on its Changes tab: the diff sits beside the chat. */
+async function openChanges(page: Page) {
+  await panelToggle(page).click();
+  await page.getByRole("tab", { name: /^Changes/ }).click();
+  const changes = page.getByRole("tabpanel", { name: /^Changes/ });
+  await expect(changes).toBeVisible();
+  return changes;
 }
 
 const replacement: PreviewLine[] = [
@@ -126,21 +132,15 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
         .first()
         .evaluate((element) => getComputedStyle(element).backgroundColor),
     ).not.toBe("rgba(0, 0, 0, 0)");
-    await page.setViewportSize({
-      width: colorScheme === "dark" ? 320 : 1280,
-      height: colorScheme === "dark" ? 480 : 800,
-    });
-    const close = await dialog
-      .getByRole("button", { name: "Close review" })
-      .boundingBox();
-    expect(close!.x + close!.width).toBeLessThanOrEqual(
-      page.viewportSize()!.width,
-    );
     await page.screenshot({
       path: test.info().outputPath(`diff-review-${colorScheme}.png`),
     });
   }
   expect(palettes[0]).not.toBe(palettes[1]);
+  // The conversation stays readable beside the open diff.
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeInViewport();
   const selected = await codes.nth(2).evaluate((element) => {
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -157,10 +157,26 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
   expect(await hunk.evaluate((element) => element.scrollLeft)).toBeGreaterThan(
     0,
   );
-  await dialog.getByRole("button", { name: "Close review" }).click();
-  await expect(
-    page.getByRole("button", { name: "Review changes", exact: true }),
-  ).toBeFocused();
+  await page.getByRole("button", { name: "Close session panel" }).click();
+  await expect(dialog).toBeHidden();
+  // On a phone the same tab opens as a drawer that fits the screen.
+  await page.setViewportSize({ width: 320, height: 480 });
+  await panelToggle(page).click();
+  const drawer = page.getByRole("dialog", { name: "Session panel" });
+  await expect(drawer.getByRole("tab", { name: /^Changes/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const close = await drawer
+    .getByRole("button", { name: "Close session panel" })
+    .boundingBox();
+  expect(close!.x + close!.width).toBeLessThanOrEqual(320);
+  await page.screenshot({
+    path: test.info().outputPath("diff-review-phone.png"),
+  });
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(panelToggle(page)).toBeFocused();
   expect(errors).toEqual([]);
 });
 
@@ -184,7 +200,7 @@ test("large previews remain complete and use the plain-text performance fallback
   await expect(dialog.locator('[class*="shiki-color"]')).toHaveCount(0);
   await dialog.locator("summary").click();
   await expect(dialog.locator("details")).not.toHaveAttribute("open");
-  await dialog.getByRole("button", { name: "Close review" }).click();
+  await page.getByRole("button", { name: "Close session panel" }).click();
   await expect(dialog).toBeHidden();
 });
 
@@ -205,7 +221,7 @@ test("a missing optional diff grammar retains original text and word marks", asy
     },
   );
   const dialog = await openReview(page, replacement);
-  expect(rejected).toBe(true);
+  await expect.poll(() => rejected).toBe(true);
   expect(await dialog.locator(".diff-line > code").allTextContents()).toEqual(
     replacement.map((line) => line.content),
   );
@@ -257,10 +273,7 @@ test("Changes works before a turn and ignores a late workspace reply after chang
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
   await page.getByRole("button", { name: "Start session" }).click();
-  await page
-    .getByRole("button", { name: "Review changes", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = await openChanges(page);
   await expect(
     dialog.getByRole("heading", { name: "Workspace uncommitted changes" }),
   ).toBeVisible();
@@ -274,7 +287,7 @@ test("Changes works before a turn and ignores a late workspace reply after chang
   await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
   await dialog
-    .getByRole("button", { name: "Session change preview", exact: true })
+    .getByRole("button", { name: "This session", exact: true })
     .click();
   await expect(
     dialog.getByText(
@@ -284,8 +297,8 @@ test("Changes works before a turn and ignores a late workspace reply after chang
   release!();
   await expect(dialog.locator(".diff-file")).toHaveCount(0);
   await expect(
-    dialog.getByRole("button", { name: "Session change preview", exact: true }),
+    dialog.getByRole("button", { name: "This session", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Close session panel" }).click();
   await expect(dialog).toHaveCount(0);
 });

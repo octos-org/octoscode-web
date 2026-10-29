@@ -119,6 +119,65 @@ export function notificationDiffPreviewId(
   return progressPreviewId(data);
 }
 
+/** One file a tool wrote, edited or deleted, as Core reports it. */
+export interface FileMutationNotice {
+  sessionId: string | null;
+  turnId: string | null;
+  /** As the tool named it: relative to the Session's workspace, or absolute. */
+  path: string;
+  operation: "create" | "write" | "modify" | "delete";
+  previewId: string | null;
+  bytesWritten: number | null;
+}
+
+const FILE_MUTATION_OPERATIONS = ["create", "write", "modify", "delete"];
+
+/**
+ * The `file_mutation` progress notice, live or inside a projection envelope.
+ * An operation this build does not know reads as Core's own default, modify.
+ */
+export function parseFileMutationNotice(
+  notification: RpcNotification,
+): FileMutationNotice | null {
+  let scope: unknown;
+  let data: unknown;
+  if (notification.method === CORE_UI_METHODS.PROGRESS_UPDATED) {
+    scope = notification.params;
+    data = notification.params;
+  } else if (notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) {
+    scope = notification.params;
+    data =
+      isRecord(scope) && isRecord(scope.payload) ? scope.payload.data : null;
+  } else return null;
+  if (!isRecord(data)) return null;
+  const metadata = isRecord(data.metadata) ? data.metadata : data;
+  const mutation = metadata.file_mutation;
+  if (!isRecord(mutation) || typeof mutation.path !== "string") return null;
+  const path = mutation.path.trim();
+  if (!path || path.length > 4_096 || /\p{Cc}/u.test(path)) return null;
+  const operation = FILE_MUTATION_OPERATIONS.includes(
+    mutation.operation as string,
+  )
+    ? (mutation.operation as FileMutationNotice["operation"])
+    : "modify";
+  const text = (value: unknown) =>
+    typeof value === "string" && value ? value : null;
+  const record = isRecord(scope) ? scope : {};
+  return {
+    sessionId: text(record.session_id),
+    turnId: text(record.turn_id),
+    path,
+    operation,
+    previewId: isPreviewId(mutation.preview_id) ? mutation.preview_id : null,
+    bytesWritten:
+      typeof mutation.bytes_written === "number" &&
+      Number.isSafeInteger(mutation.bytes_written) &&
+      mutation.bytes_written >= 0
+        ? mutation.bytes_written
+        : null,
+  };
+}
+
 function progressPreviewId(value: unknown): string | null {
   if (!isRecord(value)) return null;
   const metadata = isRecord(value.metadata) ? value.metadata : value;

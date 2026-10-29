@@ -125,12 +125,14 @@ export {
   approvalResolutionId,
   notificationDiffPreviewId,
   parseApprovalRequested,
+  parseFileMutationNotice,
   parseApprovalRespondResult,
   parseUserQuestionRequested,
   parseUserQuestionRespondResult,
   supportsFeature,
   supportsMethod,
 } from "./interaction.ts";
+export type { FileMutationNotice } from "./interaction.ts";
 export type {
   ApprovalDecision,
   ApprovalRequested,

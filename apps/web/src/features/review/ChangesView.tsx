@@ -1,7 +1,6 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useId, useMemo, useSyncExternalStore } from "react";
 import type { DiffPreviewLine } from "@octos-org/octoscode-client/protocol";
 import type { DiffReviewRuntimeState } from "./use-coding-safety.ts";
-import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import {
   grammarLoadCount,
   subscribeGrammarLoaded,
@@ -13,23 +12,32 @@ import {
   diffLanguage,
   type DiffToken,
 } from "./diff-presentation.ts";
-import styles from "./DiffReviewDialog.module.css";
+import styles from "./ChangesView.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
+import type { SessionFileChange } from "../side-panel/session-changes.ts";
 
-interface DiffReviewDialogProps {
+interface ChangesViewProps {
   state: DiffReviewRuntimeState;
-  onClose: () => void;
+  /** Files this Session's tools touched, newest first. */
+  changes: readonly SessionFileChange[];
+  onOpenPreview: (previewId: string) => void;
   onRefresh: () => void;
   onScopeChange: (scope: "turn" | "workspace") => void;
 }
 
-export function DiffReviewDialog({
+/**
+ * The session panel's Changes tab: what this Session changed and the diff
+ * Core kept for it, beside the conversation rather than over it.
+ */
+export function ChangesView({
   state,
-  onClose,
+  changes,
+  onOpenPreview,
   onRefresh,
   onScopeChange,
-}: DiffReviewDialogProps) {
+}: ChangesViewProps) {
   const t = useUiText();
+  const titleId = useId();
   const totals = useMemo(() => {
     let additions = 0;
     let deletions = 0;
@@ -50,86 +58,118 @@ export function DiffReviewDialog({
   );
   const decorations = useMemo(() => {
     const files = state.result?.preview.files;
-    if (!state.active || !files || !canDecorateDiff(files)) return undefined;
+    if (!files || !canDecorateDiff(files)) return undefined;
     return files.map((file) =>
       file.hunks.map((hunk) =>
         decorateDiffHunk(hunk.lines, diffLanguage(file.path)),
       ),
     );
-  }, [state.active, state.result, grammarVersion]);
+  }, [state.result, grammarVersion]);
 
-  if (!state.active) return null;
   const preview = state.result?.preview;
+  const shownPreview = state.scope === "turn" ? preview?.preview_id : null;
 
   return (
-    <ModalSurface
-      backdropClassName="review-backdrop"
-      dialogClassName={`review-dialog ${styles.dialog}`}
-      labelledBy="review-title"
-      onEscape={onClose}
-    >
-      <header className="review-header">
-        <div>
-          <span className="eyebrow">
-            {t(
-              state.scope === "workspace"
-                ? "Workspace uncommitted changes"
-                : "Session change preview",
-            )}
-          </span>
-          <h2 id="review-title" title={preview?.title}>
-            {preview?.title ?? t("Review changes")}
-          </h2>
+    <div className={styles.root}>
+      <div className={styles.toolbar}>
+        <div
+          className={styles.scope}
+          role="group"
+          aria-label={t("Changes scope")}
+        >
+          <button
+            type="button"
+            aria-pressed={state.scope === "turn"}
+            disabled={!state.available}
+            onClick={() => onScopeChange("turn")}
+          >
+            {t("This session")}
+          </button>
+          <button
+            type="button"
+            aria-pressed={state.scope === "workspace"}
+            disabled={!state.workspaceAvailable}
+            title={t("Workspace uncommitted changes")}
+            onClick={() => onScopeChange("workspace")}
+          >
+            {t("Uncommitted (Git)")}
+          </button>
         </div>
-        <div className="review-header-actions">
+        <button
+          type="button"
+          className={styles.refresh}
+          onClick={onRefresh}
+          disabled={state.loading}
+        >
+          {t("Refresh")}
+        </button>
+      </div>
+      {state.scope === "turn" ? (
+        changes.length ? (
+          <ul
+            className={styles.changed}
+            aria-label={t("Changed in this session")}
+          >
+            {changes.map((change) => (
+              <li key={change.path}>
+                <button
+                  type="button"
+                  aria-current={
+                    change.previewId && change.previewId === shownPreview
+                      ? "true"
+                      : undefined
+                  }
+                  disabled={!change.previewId || !state.available}
+                  title={
+                    change.previewId
+                      ? change.path
+                      : t("Core kept no diff for this change.")
+                  }
+                  onClick={() =>
+                    change.previewId && onOpenPreview(change.previewId)
+                  }
+                >
+                  <span
+                    className={`file-status status-${operationStatus(change.operation)}`}
+                    aria-hidden="true"
+                  >
+                    {operationMark(change.operation)}
+                  </span>
+                  <span className={styles.changedPath}>
+                    <strong>{baseName(change.path)}</strong>
+                    {folderName(change.path) ? (
+                      <small>{folderName(change.path)}</small>
+                    ) : null}
+                  </span>
+                  <em>{t(operationLabel(change.operation))}</em>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.plainNotice}>
+            {t("Files Octos changes in this session show here.")}
+          </p>
+        )
+      ) : (
+        <p className={styles.plainNotice}>
+          {t(
+            "Includes staged, unstaged and untracked files. Changes may come from other sessions.",
+          )}
+        </p>
+      )}
+      <section className={styles.preview} aria-labelledby={titleId}>
+        <header className={styles.previewHeader}>
+          <h3 id={titleId} title={preview?.title}>
+            {preview?.title ?? t("Review changes")}
+          </h3>
           {state.result ? (
             <span className="diff-totals">
               <strong>+{totals.additions}</strong>
               <em>−{totals.deletions}</em>
             </span>
           ) : null}
-          <button type="button" onClick={onRefresh} disabled={state.loading}>
-            {t("Refresh")}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("Close review")}
-          >
-            ×
-          </button>
-        </div>
-      </header>
-      <div
-        className="review-status"
-        role="group"
-        aria-label={t("Changes scope")}
-      >
-        <button
-          type="button"
-          aria-pressed={state.scope === "turn"}
-          disabled={!state.available}
-          onClick={() => onScopeChange("turn")}
-        >
-          {t("Session change preview")}
-        </button>
-        <button
-          type="button"
-          aria-pressed={state.scope === "workspace"}
-          disabled={!state.workspaceAvailable}
-          onClick={() => onScopeChange("workspace")}
-        >
-          {t("Workspace uncommitted changes")}
-        </button>
-      </div>
-      <div className="review-content">
-        {state.scope === "workspace" ? (
-          <p className={styles.plainNotice}>
-            {t(
-              "Includes staged, unstaged and untracked files. Changes may come from other sessions.",
-            )}
-          </p>
-        ) : null}
+        </header>
         {Boolean(preview?.files.length) &&
         !decorations &&
         !state.loading &&
@@ -139,7 +179,7 @@ export function DiffReviewDialog({
           </p>
         ) : null}
         {state.loading ? (
-          <div className="review-empty">
+          <div className="review-empty" role="status">
             {t("Loading the server snapshot…")}
           </div>
         ) : state.error ? (
@@ -171,7 +211,7 @@ export function DiffReviewDialog({
                     {file.old_path}
                   </small>
                 ) : null}
-                <em>{file.status}</em>
+                <em>{t(diffStatusLabel(file.status))}</em>
               </summary>
               {file.hunks.length ? (
                 file.hunks.map((hunk, hunkIndex) => (
@@ -211,8 +251,8 @@ export function DiffReviewDialog({
             </details>
           ))
         )}
-      </div>
-    </ModalSurface>
+      </section>
+    </div>
   );
 }
 
@@ -262,4 +302,52 @@ function fileStatusMark(status: string) {
     default:
       return "M";
   }
+}
+
+/** English source text for a diff file's status, for `useUiText`. */
+function diffStatusLabel(status: string) {
+  switch (status) {
+    case "added":
+      return "New";
+    case "deleted":
+      return "Deleted";
+    case "renamed":
+      return "Renamed";
+    default:
+      return "Edited";
+  }
+}
+
+function operationLabel(operation: SessionFileChange["operation"]) {
+  switch (operation) {
+    case "create":
+      return "New";
+    case "write":
+      return "Written";
+    case "delete":
+      return "Deleted";
+    default:
+      return "Edited";
+  }
+}
+
+function operationStatus(operation: SessionFileChange["operation"]) {
+  return operation === "create"
+    ? "added"
+    : operation === "delete"
+      ? "deleted"
+      : "modified";
+}
+
+function operationMark(operation: SessionFileChange["operation"]) {
+  return fileStatusMark(operationStatus(operation));
+}
+
+function baseName(path: string) {
+  return path.split("/").filter(Boolean).at(-1) ?? path;
+}
+
+function folderName(path: string) {
+  const slash = path.replace(/\/+$/, "").lastIndexOf("/");
+  return slash > 0 ? path.slice(0, slash) : "";
 }

@@ -1,0 +1,142 @@
+/* Beside the conversation: same 52px header line, one hairline between. */
+.column {
+  position: relative;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  z-index: 2;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  content: "";
+  transition: background-color 120ms ease-out;
+}
+
+.resizer:hover::after,
+.resizer:active::after,
+.resizer:focus-visible::after {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.resizer:focus-visible {
+  outline: none;
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  padding: 0 10px 0 6px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.tabs {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tabs button:hover,
+.tabs button[aria-selected="true"] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabs button[aria-selected="true"]::after {
+  position: absolute;
+  right: 9px;
+  bottom: 0;
+  left: 9px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-state-business-primary);
+  content: "";
+}
+
+.tabs button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -4px;
+  border-radius: 8px;
+}
+
+.count {
+  min-width: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: center;
+}
+
+.body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--dsw-space-4);
+  outline: none;
+}
+
+.body:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--dsw-alias-state-business-primary);
+}
+
+/* Phones: a drawer from the right, like Session settings. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+.drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  width: min(440px, 92vw);
+  height: 100dvh;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv3);
+  outline: none;
+}

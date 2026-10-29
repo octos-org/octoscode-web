@@ -52,8 +52,12 @@ for (const viewport of [
     const approval = page.getByRole("dialog", { name: "Run product checks?" });
     const reviewTrigger = approval.getByRole("button", { name: /Review diff/ });
     await reviewTrigger.click();
-    const review = page.getByRole("dialog", { name: "Mock coding change" });
-    await expect(review).toBeVisible();
+    // The session panel opens on Changes as a drawer stacked above the
+    // approval, at every width: the approval keeps the keyboard otherwise.
+    const review = page.getByRole("dialog", { name: "Session panel" });
+    await expect(
+      review.getByRole("heading", { name: "Mock coding change" }),
+    ).toBeVisible();
     // Each surface mounts at document.body through its own portal, so the
     // review is not nested in the approval that opened it. Safari does not
     // anchor a position:fixed dialog to the viewport once an ancestor scrolls
@@ -86,7 +90,8 @@ for (const viewport of [
     const summary = review.locator("summary").last();
     await summary.click();
     await expect(summary.locator("..")).not.toHaveAttribute("open");
-    await review.getByRole("button", { name: "Refresh", exact: true }).focus();
+    // Shift+Tab from the first control wraps to it.
+    await review.getByRole("tab", { selected: true }).focus();
     await page.keyboard.press("Shift+Tab");
     await expect(summary).toBeFocused();
     await page.keyboard.press("Escape");

@@ -93,3 +93,21 @@ export function ArrowUpIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+export function PanelRightIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <rect x="2" y="2.75" width="12" height="10.5" rx="1.75" />
+      <path d="M10 2.75v10.5" />
+    </svg>
+  );
+}
+
+export function FileIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M4.25 1.75h4.5l3 3v8.5c0 .55-.45 1-1 1h-6.5c-.55 0-1-.45-1-1V2.75c0-.55.45-1 1-1Z" />
+      <path d="M8.75 1.75v3h3" />
+    </svg>
+  );
+}

@@ -6,6 +6,7 @@ import {
   CORE_UI_PROTOCOL,
   isPreviewId,
   notificationDiffPreviewId,
+  parseFileMutationNotice,
   parseDiffPreviewGetResult,
   parsePermissionProfileListResult,
   parsePermissionProfileSetResult,
@@ -157,5 +158,74 @@ describe("diff preview discovery", () => {
         params: { message: `preview_id ${previewId}` },
       }),
     ).toBeNull();
+  });
+});
+
+describe("file mutation notices", () => {
+  const previewId = "00000000-0000-4000-8000-000000000042";
+
+  it("reads the live and enveloped notice with its Session scope", () => {
+    expect(
+      parseFileMutationNotice({
+        jsonrpc: "2.0",
+        method: "progress/updated",
+        params: {
+          session_id: "s1",
+          turn_id: "t1",
+          metadata: {
+            kind: "file_mutation",
+            file_mutation: {
+              path: "report.md",
+              operation: "create",
+              preview_id: previewId,
+              bytes_written: 412,
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      sessionId: "s1",
+      turnId: "t1",
+      path: "report.md",
+      operation: "create",
+      previewId,
+      bytesWritten: 412,
+    });
+    expect(
+      parseFileMutationNotice({
+        jsonrpc: "2.0",
+        method: "projection/envelope",
+        params: {
+          session_id: "s1",
+          turn_id: "t2",
+          payload: {
+            type: "progress",
+            data: {
+              metadata: {
+                file_mutation: { path: "/srv/w/a.ts", operation: "rename" },
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "s1",
+      turnId: "t2",
+      path: "/srv/w/a.ts",
+      operation: "modify",
+      previewId: null,
+      bytesWritten: null,
+    });
+  });
+
+  it("refuses notices without a usable path", () => {
+    for (const file_mutation of [{}, { path: "" }, { path: "a\u0000b" }])
+      expect(
+        parseFileMutationNotice({
+          jsonrpc: "2.0",
+          method: "progress/updated",
+          params: { metadata: { file_mutation } },
+        }),
+      ).toBeNull();
   });
 });

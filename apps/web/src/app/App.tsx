@@ -33,6 +33,7 @@ import {
   CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
+  type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
 import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
 import {
@@ -170,7 +171,13 @@ import {
 } from "../features/templates/task-templates.ts";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
-import { RefreshIcon, MenuIcon, DiffIcon } from "../ui/ShellIcons.tsx";
+import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
+import { PanelRightIcon } from "../ui/Icon.tsx";
+import {
+  readPanelLayout,
+  writePanelLayout,
+  type SessionPanelTab,
+} from "../features/side-panel/panel-layout.ts";
 import { CopyConversationButton } from "../features/transcript-export/CopyConversationButton.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
@@ -319,9 +326,9 @@ const ModelManagementSettings = lazyNamed(
   modelManagementSettingsLoader,
   (module) => module.ModelManagementSettings,
 );
-const DiffReviewDialog = lazyNamed(
-  () => import("../features/review/DiffReviewDialog.tsx"),
-  (module) => module.DiffReviewDialog,
+const SessionPanelHost = lazyNamed(
+  () => import("../features/side-panel/SessionPanelHost.tsx"),
+  (module) => module.SessionPanelHost,
 );
 const TaskDetailDialog = lazyNamed(
   () => import("../features/supervision/TaskDetailDialog.tsx"),
@@ -1682,6 +1689,109 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
+  // The session panel (T-0011). Desktop keeps it as a column whose open state,
+  // tab and width are a display preference. The drawer is its overlay form:
+  // phones always use it, and a review asked for from a modal (an approval)
+  // uses it everywhere so it stacks above that modal. It starts closed.
+  const [panelLayout, setPanelLayout] = useState(() =>
+    readPanelLayout(browserLocalStorage()),
+  );
+  const [panelDrawerOpen, setPanelDrawerOpen] = useState(false);
+  useEffect(() => {
+    writePanelLayout(browserLocalStorage(), panelLayout);
+  }, [panelLayout]);
+  const panelOpen = compact ? panelDrawerOpen : panelLayout.open;
+  const showPanel = (tab: SessionPanelTab, overlay = compact) => {
+    setPanelLayout((current) => ({
+      ...current,
+      tab,
+      open: overlay ? current.open : true,
+    }));
+    if (overlay) setPanelDrawerOpen(true);
+  };
+  const closePanelColumn = () =>
+    setPanelLayout((current) => ({ ...current, open: false }));
+  const closePanelDrawer = () => setPanelDrawerOpen(false);
+  const openChangePreview = (previewId?: string | null, overlay = compact) => {
+    showPanel("changes", overlay);
+    if (previewId) void safety.openDiffReview(previewId);
+  };
+  // A plan is dropped when its turn ends; the Overview keeps showing the last
+  // one this view saw, marked as ended, until a new plan replaces it.
+  const livePlan = work.supervision.plan;
+  const [lastPlan, setLastPlan] = useState<{
+    key: string | null;
+    plan: PlanUpdated;
+  } | null>(null);
+  useEffect(() => {
+    if (livePlan) setLastPlan({ key: activeSessionKey, plan: livePlan });
+  }, [livePlan, activeSessionKey]);
+  const finishedPlan =
+    !livePlan && lastPlan?.key === activeSessionKey ? lastPlan.plan : null;
+  // Files Octos sent with its replies (user uploads are inputs, not outputs).
+  const deliveredFiles = useMemo(
+    () => [
+      ...new Set(
+        conversation.timeline.flatMap((entry) =>
+          entry.kind === "assistant" ? (entry.media ?? []) : [],
+        ),
+      ),
+    ],
+    [conversation.timeline],
+  );
+  const panelColumn =
+    !compact &&
+    panelLayout.open &&
+    Boolean(session.opened) &&
+    !fleetRouteActive;
+  // The column's width lives in CSS (AppProduct.module.css); only the
+  // remembered value is handed over, as a custom property on the grid.
+  const workspaceMainRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    workspaceMainRef.current?.style.setProperty(
+      "--session-panel-width",
+      `${panelLayout.width}px`,
+    );
+  }, [panelLayout.width]);
+  const sessionPanel = (presentation: "column" | "drawer") => (
+    <SessionPanelHost
+      key={`${protocol.authorityKey}:${session.opened?.session_id ?? ""}`}
+      presentation={presentation}
+      className={productStyles.panelSlot}
+      tab={panelLayout.tab}
+      width={panelLayout.width}
+      availableWidth={() =>
+        workspaceMainRef.current?.clientWidth ?? window.innerWidth
+      }
+      onTabChange={(tab) => setPanelLayout((current) => ({ ...current, tab }))}
+      onWidthChange={(width) =>
+        setPanelLayout((current) => ({ ...current, width }))
+      }
+      onClose={presentation === "drawer" ? closePanelDrawer : closePanelColumn}
+      workspaceRoot={activeWorkspacePath}
+      browse={workspaceBrowse}
+      changes={safety.changes}
+      diffReview={safety.diffReview}
+      onOpenPreview={(previewId) => void safety.openDiffReview(previewId)}
+      onRefreshChanges={() => void safety.openDiffReview()}
+      onChangesScope={(scope) => void safety.openDiffReview(undefined, scope)}
+      onOpenChange={(change) => openChangePreview(change.previewId)}
+      planAvailable={work.supervision.planAvailable}
+      plan={livePlan}
+      finishedPlan={finishedPlan}
+      taskListAvailable={work.supervision.taskListAvailable}
+      tasks={work.supervision.tasks}
+      onOpenTask={
+        work.supervision.taskOutputAvailable ||
+        work.supervision.artifactsAvailable
+          ? (taskId) => void work.openTask(taskId)
+          : undefined
+      }
+      delivered={deliveredFiles}
+      access={attachmentAccess}
+    />
+  );
+
   // #131: settings panels are code-split; the first click otherwise waits
   // on the chunk fetch. Pull the settings-surface chunks in during idle
   // (capped, so it never competes with real interaction work).
@@ -2571,7 +2681,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
 
         <main
           id="workspace-main"
-          className={productStyles.workspaceMain}
+          ref={workspaceMainRef}
+          className={`${productStyles.workspaceMain} ${panelColumn ? productStyles.workspaceMainWithPanel : ""}`}
           tabIndex={-1}
         >
           <section className="conversation" hidden={fleetRouteActive}>
@@ -2656,27 +2767,39 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 {session.opened ? (
                   <button
                     className={
-                      compact ? productStyles.compactReview : "review-chip"
+                      compact
+                        ? productStyles.compactReview
+                        : productStyles.panelToggle
                     }
                     type="button"
-                    aria-label="Review changes"
-                    title={t(
-                      safety.diffReview.latestPreviewId
-                        ? "Session change preview"
-                        : "Workspace uncommitted changes",
-                    )}
-                    disabled={
-                      !safety.diffReview.available &&
-                      !safety.diffReview.workspaceAvailable
+                    aria-label={
+                      safety.changes.length
+                        ? t("Session panel, {count} changed", {
+                            count: safety.changes.length,
+                          })
+                        : t("Session panel")
                     }
+                    aria-expanded={panelOpen}
+                    title={t("Session panel")}
                     onClick={(event) => {
                       // Safari does not focus buttons on pointer activation.
-                      // Give the dialog a stable focus target to restore.
+                      // Give the drawer a stable focus target to restore.
                       event.currentTarget.focus();
-                      void safety.openDiffReview();
+                      if (!panelOpen) showPanel(panelLayout.tab);
+                      else if (compact) closePanelDrawer();
+                      else closePanelColumn();
                     }}
                   >
-                    {compact ? <DiffIcon size={20} /> : t("Changes")}
+                    <PanelRightIcon size={compact ? 20 : 16} />
+                    {compact ? null : t("Panel")}
+                    {safety.changes.length ? (
+                      <span
+                        className={productStyles.panelBadge}
+                        aria-hidden="true"
+                      >
+                        {safety.changes.length}
+                      </span>
+                    ) : null}
                   </button>
                 ) : null}
               </div>
@@ -3089,7 +3212,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       ? { onInterrupt: () => void conversation.interrupt() }
                       : {})}
                     onReviewDiff={(previewId) =>
-                      void safety.openDiffReview(previewId)
+                      // Above the approval, which keeps the keyboard otherwise.
+                      openChangePreview(previewId, true)
                     }
                   />
                 </SurfaceBoundary>
@@ -3521,6 +3645,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               </div>
             )}
           </div>
+          {panelColumn ? (
+            <SurfaceBoundary
+              name="Session panel"
+              onDismiss={closePanelColumn}
+              fallback={<DeferredSurface label="Loading session panel…" />}
+            >
+              {sessionPanel("column")}
+            </SurfaceBoundary>
+          ) : null}
         </main>
       </div>
       {session.opened && sessionConfigOpen ? (
@@ -4003,20 +4136,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           />
         </SurfaceBoundary>
       ) : null}
-      {safety.diffReview.active ? (
+      {panelDrawerOpen && session.opened ? (
         <SurfaceBoundary
-          name="Review"
-          onDismiss={safety.closeDiffReview}
-          fallback={<DeferredSurface label="Loading review…" />}
+          name="Session panel"
+          onDismiss={closePanelDrawer}
+          fallback={<DeferredSurface label="Loading session panel…" />}
         >
-          <DiffReviewDialog
-            state={safety.diffReview}
-            onClose={safety.closeDiffReview}
-            onRefresh={() => void safety.openDiffReview()}
-            onScopeChange={(scope) =>
-              void safety.openDiffReview(undefined, scope)
-            }
-          />
+          {sessionPanel("drawer")}
         </SurfaceBoundary>
       ) : null}
       {activityOpen ? (

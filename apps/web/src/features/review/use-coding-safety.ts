@@ -4,6 +4,7 @@ import {
   DIFF_WORKSPACE_GET,
   isPreviewId,
   notificationDiffPreviewId,
+  parseFileMutationNotice,
   supportsMethod,
   type DiffPreviewGetResult,
   type OctosUiClient,
@@ -14,6 +15,10 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import {
+  applyFileMutation,
+  type SessionFileChange,
+} from "../side-panel/session-changes.ts";
 
 export interface PermissionRuntimeState {
   available: boolean;
@@ -60,6 +65,8 @@ const EMPTY_DIFF_REVIEW: DiffReviewRuntimeState = {
 interface CodingSafetyDependencies {
   client: () => OctosUiClient | null;
   sessionId: () => string;
+  /** The Session's workspace, so tool paths fold to one row per file. */
+  workspaceRoot: () => string;
   profileId: () => string;
   capabilities: () => UiProtocolCapabilities | undefined;
   onPermissionApplied: (client: OctosUiClient) => void;
@@ -80,6 +87,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     useState<PermissionRuntimeState>(EMPTY_PERMISSION);
   const [diffReview, setDiffReview] =
     useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
+  const [changes, setChanges] = useState<readonly SessionFileChange[]>([]);
 
   const reset = () => {
     permissionBusyRef.current = false;
@@ -88,6 +96,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     permissionMutationRef.current.invalidate();
     setPermission(EMPTY_PERMISSION);
     setDiffReview(EMPTY_DIFF_REVIEW);
+    setChanges([]);
   };
 
   const configureCapabilities = (
@@ -385,6 +394,15 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   };
 
   const observeNotification = (notification: RpcNotification) => {
+    const mutation = parseFileMutationNotice(notification);
+    const latest = dependenciesRef.current;
+    if (
+      mutation &&
+      (!mutation.sessionId || mutation.sessionId === latest.sessionId())
+    ) {
+      const root = latest.workspaceRoot();
+      setChanges((current) => applyFileMutation(current, mutation, root));
+    }
     const previewId = notificationDiffPreviewId(notification);
     if (!previewId) return;
     setDiffReview((current) => ({
@@ -396,6 +414,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   return {
     permission,
     diffReview,
+    changes,
     reset,
     configureCapabilities,
     refreshPermission,

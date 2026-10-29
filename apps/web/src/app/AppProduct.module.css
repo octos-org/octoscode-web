@@ -172,6 +172,70 @@
   overflow: hidden;
 }
 
+/* The session panel takes a second column. Its width is the remembered
+   preference, held back so the conversation keeps at least 380px. */
+.workspaceMainWithPanel {
+  grid-template-columns:
+    minmax(0, 1fr)
+    clamp(
+      300px,
+      var(--session-panel-width, 380px),
+      max(300px, calc(100% - 380px))
+    );
+}
+
+.workspaceMainWithPanel > * {
+  grid-area: 1 / 1;
+}
+
+.workspaceMainWithPanel > .panelSlot {
+  grid-area: 1 / 2;
+}
+
+.panelToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 0 10px 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panelToggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.panelToggle[aria-expanded="true"] {
+  border-color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.panelBadge {
+  min-width: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-bg-base);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.compactReview .panelBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+}
+
 .sessionControlsFallback {
   flex: 1;
   min-width: 0;
@@ -227,6 +291,7 @@
 }
 
 .compactReview {
+  position: relative;
   display: grid;
   place-items: center;
   width: 44px;
