@@ -2,8 +2,8 @@
 
 export const CORE_UI_CONTRACT_SOURCE = {
   repository: "https://github.com/octos-org/octos",
-  revision: "fca32c45845abefdf6729ddff081c5083553289a",
-  contract_blob: "9560700689f585388a9b60d8fee9b6f33448ea4c",
+  revision: "9d8a96e739ccfc2be3f572bbd18403af0f2b51b1",
+  contract_blob: "6c6a2cdfadb6dbc6a3e01564ad6c230d246ca6d2",
   path: "crates/octos-core/src/ui_protocol.rs",
 } as const;
 
@@ -18,7 +18,6 @@ export const CORE_UI_FEATURES = {
   APPROVAL_TYPED_V1: "approval.typed.v1",
   PANE_SNAPSHOTS_V1: "pane.snapshots.v1",
   SESSION_WORKSPACE_CWD_V1: "session.workspace_cwd.v1",
-  SESSION_FILES_READ_V1: "session.files.read.v1",
   SESSION_SANDBOX_V1: "session.sandbox.v1",
   HARNESS_TASK_CONTROL_V1: "harness.task_control.v1",
   SESSION_HYDRATE_V1: "state.session_hydrate.v1",
@@ -28,6 +27,7 @@ export const CORE_UI_FEATURES = {
   FILE_ATTACHED_V1: "event.file_attached.v1",
   PROJECTION_ENVELOPE_V2: "projection.envelope.v2",
   AUXILIARY_REST_TO_WS_V1: "auxiliary.rest_to_ws.v1",
+  SESSION_FILES_READ_V1: "session.files.read.v1",
   CODING_AUTONOMY_V1: "coding.autonomy.v1",
   CODING_AGENT_CONTROL_V1: "coding.agent_control.v1",
   CODING_GOAL_RUNTIME_V1: "coding.goal_runtime.v1",
@@ -46,6 +46,9 @@ export const CORE_UI_FEATURES = {
   TURN_STEER_DROPPED_V1: "event.turn_steer_dropped.v1",
   PLAN_TODOS_V1: "plan.todos.v1",
   SMART_HOME_V1: "smart_home.v1",
+  SESSION_APPEND_FULL_HISTORY_RETRY_V1:
+    "session.append_message.full_history_retry.v1",
+  SESSION_APPEND_PARTICIPANT_V1: "session.append_message.participant.v1",
 } as const;
 
 export const CORE_UI_METHODS = {
@@ -75,6 +78,7 @@ export const CORE_UI_METHODS = {
   THREAD_GRAPH_GET: "thread/graph/get",
   TURN_STATE_GET: "turn/state/get",
   SESSION_BTW: "session/btw",
+  SESSION_APPEND_MESSAGE: "session/append_message",
   AGENT_LIST: "agent/list",
   AGENT_STATUS_READ: "agent/status/read",
   AGENT_OUTPUT_READ: "agent/output/read",
@@ -149,6 +153,8 @@ export const CORE_UI_METHODS = {
   MEMORY_SEARCH: "memory/search",
   MEMORY_LOAD: "memory/load",
   MEMORY_INGEST: "memory/ingest",
+  MEMORY_REQUEST: "memory/request",
+  MEMORY_PROMOTE: "memory/promote",
   CRON_LIST: "cron/list",
   CRON_TOGGLE: "cron/toggle",
   LAUNCH_RESOLVE: "launch/resolve",
@@ -198,6 +204,7 @@ export const CORE_UI_KNOWN_FEATURES = [
   "event.file_attached.v1",
   "projection.envelope.v2",
   "auxiliary.rest_to_ws.v1",
+  "session.files.read.v1",
   "coding.autonomy.v1",
   "coding.agent_control.v1",
   "coding.goal_runtime.v1",
@@ -215,6 +222,8 @@ export const CORE_UI_KNOWN_FEATURES = [
   "event.background_activity.v1",
   "event.turn_steer_dropped.v1",
   "smart_home.v1",
+  "session.append_message.full_history_retry.v1",
+  "session.append_message.participant.v1",
 ] as const;
 
 export const CORE_UI_SERVER_METHODS = [
@@ -224,6 +233,7 @@ export const CORE_UI_SERVER_METHODS = [
   "approval/respond",
   "approval/scopes/list",
   "session/btw",
+  "session/append_message",
   "user_question/respond",
   "permission/profile/list",
   "permission/profile/set",
@@ -267,6 +277,7 @@ export const CORE_UI_SERVER_METHODS = [
   "session/messages_page",
   "session/status.get",
   "session/files.list",
+  "session/files/read",
   "session/tasks.list",
   "session/workspace.get",
   "session/title.set",
@@ -280,6 +291,8 @@ export const CORE_UI_SERVER_METHODS = [
   "memory/search",
   "memory/load",
   "memory/ingest",
+  "memory/request",
+  "memory/promote",
   "cron/list",
   "cron/toggle",
   "router/set_mode",
