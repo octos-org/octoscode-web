@@ -89,10 +89,12 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
   const previewSizeLimit = props.workspaceFile
     ? Math.min(32 * 1024 * 1024, documentLimit)
     : documentLimit;
-  const oversizedByMetadata =
-    props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit;
   const needsBlob =
     kind !== "unsupported" && (!textKind || props.text === undefined);
+  const oversizedByMetadata =
+    needsBlob &&
+    props.sizeBytes !== undefined &&
+    props.sizeBytes > previewSizeLimit;
   const waitingForSize = needsBlob && props.sizePending === true;
   const sizeUnknown =
     needsBlob &&

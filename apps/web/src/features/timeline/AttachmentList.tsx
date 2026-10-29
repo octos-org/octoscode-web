@@ -249,7 +249,12 @@ function AttachmentItem({
         <button
           type="button"
           className={styles.download}
-          disabled={!access || busy || !saveAvailable}
+          disabled={
+            !access ||
+            busy ||
+            !saveAvailable ||
+            (!workspaceFile && access.deliveredPreviewAvailable === false)
+          }
           aria-label={t("Download {name}", { name })}
           onClick={() => void download()}
         >

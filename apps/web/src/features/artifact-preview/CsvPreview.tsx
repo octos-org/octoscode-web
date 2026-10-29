@@ -222,13 +222,12 @@ export function CsvPreview({ blob }: { blob: Blob }) {
 }
 
 function columnName(index: number): string {
-  // Zero-based cell indexes map to one-based spreadsheet letters.
-  let value = index + 1;
+  let value = index;
   let name = "";
-  while (value > 0) {
-    name = String.fromCharCode(65 + ((value - 1) % 26)) + name;
-    value = Math.floor((value - 1) / 26);
-  }
+  do {
+    name = String.fromCharCode(65 + (value % 26)) + name;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
   return name;
 }
 

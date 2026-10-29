@@ -78,6 +78,20 @@ describe("ArtifactPreview", () => {
     await act(async () => root.unmount());
   });
 
+  it("keeps supplied paginated text visible above the blob size limit", () => {
+    const html = renderToStaticMarkup(
+      <ArtifactPreview
+        name="large.log"
+        text="bounded server page"
+        sizeBytes={11 * 1024 * 1024}
+        hasMore
+        onLoadMore={() => {}}
+      />,
+    );
+    expect(html).toContain("bounded server page");
+    expect(html).toContain("Load more artifact");
+  });
+
   it("pages long plain text instead of putting the whole file in the DOM", () => {
     const html = renderToStaticMarkup(
       <ArtifactPreview name="large.log" text={"x".repeat(60_000)} />,
