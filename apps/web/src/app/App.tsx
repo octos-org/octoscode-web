@@ -227,6 +227,7 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
+import { readSessionFileBlob } from "../features/timeline/session-file-read.ts";
 import { uniqueAttachmentFile } from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
@@ -825,6 +826,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           }
         : {}),
       async download(reference, signal) {
+        if (
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ) &&
+          !reference.startsWith("up/")
+        ) {
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            reference,
+            signal,
+          );
+        }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,

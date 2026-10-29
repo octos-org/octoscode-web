@@ -1720,6 +1720,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Previous rows": "上一批行",
   "Next rows": "下一批行",
   "Page {page} of {count}": "第 {page} 页，共 {count} 页",
+  "Page {page} of {name}": "{name} · 第 {page} 页",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };

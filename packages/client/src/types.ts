@@ -481,6 +481,24 @@ export interface SessionFilesListResult {
   files: SessionFileInfo[];
 }
 
+export interface SessionFileReadParams {
+  session_id: string;
+  path: string;
+  offset?: number;
+  length?: number;
+}
+
+export interface SessionFileReadResult {
+  session_id: string;
+  path: string;
+  size_bytes: number;
+  offset: number;
+  eof: boolean;
+  mime_type: string;
+  encoding: "base64";
+  content_base64: string;
+}
+
 export interface SessionOpenParams {
   session_id: string;
   topic?: string;
