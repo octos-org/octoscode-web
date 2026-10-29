@@ -3,8 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const modelManagementModule =
   /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
-const reviewModule =
-  /\/(?:assets\/DiffReviewDialog-[^/]+\.js|src\/features\/review\/DiffReviewDialog\.tsx)(?:\?.*)?$/;
 
 async function start(page: Page) {
   await page.goto("/");
@@ -152,6 +150,16 @@ test("Escape from a failed review returns to approval without interrupting", asy
       const frame = JSON.parse(String(message));
       if (frame.method === "turn/interrupt")
         interrupts.push(frame.params.turn_id);
+      if (frame.method === "diff/preview/get") {
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: frame.id,
+            error: { code: -32_000, message: "Preview unavailable" },
+          }),
+        );
+        return;
+      }
       server.send(message);
     });
     server.onMessage((message) => {
@@ -165,20 +173,15 @@ test("Escape from a failed review returns to approval without interrupting", asy
     });
   });
   await start(page);
-  await page.route(reviewModule, (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: "text/plain",
-      body: "Resource unavailable",
-    }),
-  );
   const composer = composerInput(page);
   await composer.fill("Request approval fixture");
   await composer.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
   const reviewTrigger = approval.getByRole("button", { name: /Review diff/ });
   await reviewTrigger.click();
-  const error = page.getByRole("dialog", { name: "Review unavailable" });
+  const error = page.getByRole("alert").filter({
+    hasText: "Preview unavailable",
+  });
   await expect(error).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(error).toBeHidden();
