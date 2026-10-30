@@ -68,6 +68,17 @@ describe("MarkdownBody", () => {
     expect(html).toContain("<table>");
   });
 
+  it("keeps multiline inline and indented code exact while streaming", () => {
+    const inline = "Code: `first\n2 ** 3`";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={inline} streaming />),
+    ).toContain("first 2 ** 3");
+    const indented = "    print(2 ** 3)\n";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={indented} streaming />),
+    ).toContain("print(2 ** 3)");
+  });
+
   it("shows an unfinished code block as code, unhighlighted, while streaming", () => {
     const html = renderToStaticMarkup(
       <MarkdownBody text={"Here:\n\n```ts\nconst x = 1;"} streaming />,

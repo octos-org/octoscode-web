@@ -51,6 +51,17 @@ describe("prepareStreamingMarkdown", () => {
     );
   });
 
+  it("preserves multiline inline code", () => {
+    const text = "Code: `first\n2 ** 3`";
+    expect(prepareStreamingMarkdown(text)).toBe(text);
+  });
+
+  it("preserves indented code while hiding unmatched prose markers", () => {
+    expect(
+      prepareStreamingMarkdown("Before **draft\n\n    print(2 ** 3)\n"),
+    ).toBe("Before draft\n\n    print(2 ** 3)\n");
+  });
+
   it("preserves fenced and inline code while hiding unmatched prose markers", () => {
     expect(
       prepareStreamingMarkdown(

@@ -55,13 +55,38 @@ export function prepareStreamingMarkdown(text: string): string {
 function prepareInline(text: string): string {
   let rendered = "";
   let consumed = 0;
-  for (const match of text.matchAll(/(`+)([^`\n]*?)\1/g)) {
+  for (const match of text.matchAll(/(`+)([\s\S]*?)\1/g)) {
     const start = match.index;
-    rendered += preparePlain(text.slice(consumed, start));
+    rendered += prepareIndented(text.slice(consumed, start));
     rendered += match[0];
     consumed = start + match[0].length;
   }
-  return rendered + preparePlain(text.slice(consumed));
+  return rendered + prepareIndented(text.slice(consumed));
+}
+
+function prepareIndented(text: string): string {
+  let rendered = "";
+  let indentedCode = false;
+  let previousBlank = true;
+  for (const line of text.split(/(?<=\n)/)) {
+    const indented = /^(?: {4}|\t)/.test(line);
+    const blank = /^\s*$/.test(line);
+    if (indented && (indentedCode || previousBlank)) {
+      indentedCode = true;
+      rendered += line;
+      previousBlank = blank;
+      continue;
+    }
+    if (indentedCode && (indented || blank)) {
+      rendered += line;
+      previousBlank = blank;
+      continue;
+    }
+    indentedCode = false;
+    rendered += preparePlain(line);
+    previousBlank = blank;
+  }
+  return rendered;
 }
 
 function preparePlain(text: string): string {
