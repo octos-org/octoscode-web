@@ -46,7 +46,7 @@ async function selectedTitle(page: Page) {
   // that ignores aria-hidden so the title stays readable under an open dialog.
   const value = await page
     .locator(
-      'aside[aria-label="Product navigation"] button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+      'aside[aria-label="Product navigation"] [role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
     )
     .textContent();
   if (!value) throw new Error("A confirmed selected Session is required");
@@ -54,7 +54,7 @@ async function selectedTitle(page: Page) {
 }
 async function selectSession(page: Page, title: string) {
   await sidebar(page)
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: title })
     .click();
   await expect.poll(() => selectedTitle(page)).toBe(title);

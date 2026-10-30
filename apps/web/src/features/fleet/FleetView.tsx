@@ -59,6 +59,9 @@ export interface FleetSessionOption {
   readonly name: string;
 }
 
+export type FleetGatherState =
+  "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed";
+
 export interface FleetViewProps {
   /**
    * The SAME `peerController` value App already derives — the roster rows,
@@ -77,6 +80,14 @@ export interface FleetViewProps {
         readonly fleetPeers?: readonly FleetRosterPeer[] | undefined;
       })
     | null;
+  /** Native peer/prepare + ordinary session/turn startup. */
+  readonly nativeStartAvailable?: boolean | undefined;
+  /** Native turn/approval controls, independent of external-driver. */
+  readonly nativeControlsAvailable?: boolean | undefined;
+  /** Native roster; remains visible when no external controller exists. */
+  readonly fleetPeers?: readonly FleetRosterPeer[] | undefined;
+  readonly onGather?: (() => void) | undefined;
+  readonly gatherState?: FleetGatherState | undefined;
   /** The sessions in the tree, for row session names and the Start target. */
   readonly sessions: readonly FleetSessionOption[];
   /**
@@ -180,6 +191,11 @@ export function FleetView({
   previousPeers,
   selectedSessionId,
   laneReadStatus,
+  nativeStartAvailable = false,
+  nativeControlsAvailable = false,
+  fleetPeers: nativeFleetPeers,
+  onGather,
+  gatherState = "idle",
 }: FleetViewProps) {
   const t = useUiText();
   // The Start draft: kept in memory per tab (§3 — returning keeps the draft).
@@ -239,12 +255,15 @@ export function FleetView({
     peerController !== null &&
     peerControlAdmitted(peerController.capabilities) &&
     peerDispatchAdmitted(peerController.capabilities);
-  const controlSupported =
+  const externalControlSupported =
     controlAdvertised && peerController?.readiness === "ready";
+  const startSupported = nativeStartAvailable || externalControlSupported;
+  const rowControlSupported =
+    nativeControlsAvailable || externalControlSupported;
 
-  // Rows: the caller projects the roster into fleet rows (fleet-model.ts) and
-  // rides them on the same controller value (one seam, one writer).
-  const peers = peerController?.fleetPeers ?? [];
+  // Rows: the caller projects the roster into fleet rows (fleet-model.ts).
+  // Native peers stay visible without an external-driver controller.
+  const peers = nativeFleetPeers ?? peerController?.fleetPeers ?? [];
   const groups = fleetGroupPeers(peers);
   // §8: the polite region CARRIES the announcement text (judge: "Fleet live
   // region actually announces"). First observation (no previousPeers) treats
@@ -256,10 +275,11 @@ export function FleetView({
   // `seatHeld &&` term kept Start disabled in every product surface
   // (walkthrough 4200 step 8; mock run 20's 8 peer-controller reds).
   const startAdmitted =
-    lanePicker.kind === "ready" &&
-    lanePicker.keys.includes(model) &&
     brief.trim() !== "" &&
-    controlSupported;
+    (nativeStartAvailable ||
+      (lanePicker.kind === "ready" &&
+        lanePicker.keys.includes(model) &&
+        externalControlSupported));
   // Fixes 4220: triage the lane read BEFORE rendering the form. With NO
   // session the session-scoped read cannot even start, so "not configured"
   // would be a LIE (walkthrough 4200b/02+08: the form blamed Providers while
@@ -271,13 +291,15 @@ export function FleetView({
     (selectedSessionId ?? "").trim() !== "" || peerController !== null;
   const laneStatus: "no-session" | "loading" | "empty" | "ready" = !sessionOpen
     ? "no-session"
-    : lanePicker.kind === "ready"
+    : nativeStartAvailable
       ? "ready"
-      : laneReadStatus === "loading"
-        ? "loading"
-        : laneReadStatus === "ready"
-          ? "ready"
-          : "empty";
+      : lanePicker.kind === "ready"
+        ? "ready"
+        : laneReadStatus === "loading"
+          ? "loading"
+          : laneReadStatus === "ready"
+            ? "ready"
+            : "empty";
 
   return (
     <section className={styles.fleet} aria-label={t("Fleet")}>
@@ -292,7 +314,7 @@ export function FleetView({
         <p className={styles.empty} data-fleet-empty="true">
           {t("Open a project first")}
         </p>
-      ) : !controlAdvertised ? (
+      ) : !controlAdvertised && !nativeStartAvailable ? (
         <p
           className={styles.formNote}
           data-fleet-start-unavailable="true"
@@ -300,7 +322,7 @@ export function FleetView({
         >
           {t("This server does not support starting peers")}
         </p>
-      ) : !controlSupported ? (
+      ) : !startSupported ? (
         <p
           className={styles.formNote}
           role="status"
@@ -331,33 +353,35 @@ export function FleetView({
               </button>
             </p>
           ) : null}
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>{t("Model")}</span>
-            <select
-              className={styles.select}
-              data-fleet-field="model"
-              aria-label={t("Model")}
-              value={model}
-              onChange={(event) => {
-                setModel(event.target.value);
-                releaseSettledStart();
-              }}
-              disabled={lanePicker.kind === "disabled"}
-            >
-              <option value="" hidden />
-              {lanePicker.kind === "ready"
-                ? // Fixes 4210 (§4.3): model NAMES, with the lane key only as a
-                  // muted-suffix disambiguator when two lanes share a name.
-                  fleetModelOptions(lanePicker.keys, modelNames).map(
-                    (option) => (
-                      <option key={option.laneKey} value={option.laneKey}>
-                        {option.label}
-                      </option>
-                    ),
-                  )
-                : null}
-            </select>
-          </label>
+          {!nativeStartAvailable ? (
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>{t("Model")}</span>
+              <select
+                className={styles.select}
+                data-fleet-field="model"
+                aria-label={t("Model")}
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  releaseSettledStart();
+                }}
+                disabled={lanePicker.kind === "disabled"}
+              >
+                <option value="" hidden />
+                {lanePicker.kind === "ready"
+                  ? // Fixes 4210 (§4.3): model NAMES, with the lane key only as a
+                    // muted-suffix disambiguator when two lanes share a name.
+                    fleetModelOptions(lanePicker.keys, modelNames).map(
+                      (option) => (
+                        <option key={option.laneKey} value={option.laneKey}>
+                          {option.label}
+                        </option>
+                      ),
+                    )
+                  : null}
+              </select>
+            </label>
+          ) : null}
           <label className={styles.field}>
             <span className={styles.fieldLabel}>{t("Brief")}</span>
             <textarea
@@ -371,7 +395,7 @@ export function FleetView({
               }}
             />
           </label>
-          {sessions.length > 0 ? (
+          {!nativeStartAvailable && sessions.length > 0 ? (
             <label className={styles.field}>
               <span className={styles.fieldLabel}>{t("Session")}</span>
               <select
@@ -405,7 +429,11 @@ export function FleetView({
             }
             onClick={() => {
               if (!startAdmitted) return;
-              const next = fleetStartBegin(startMachine, model, brief);
+              const next = fleetStartBegin(
+                startMachine,
+                nativeStartAvailable ? "native" : model,
+                brief,
+              );
               if (next === startMachine) return;
               setStart(next);
               if (next.kind === "requesting")
@@ -474,6 +502,27 @@ export function FleetView({
         </form>
       )}
 
+      {onGather && peers.length > 0 ? (
+        <div className={styles.formNote}>
+          <button
+            type="button"
+            className={styles.action}
+            data-fleet-action="gather"
+            disabled={gatherState === "busy"}
+            onClick={onGather}
+          >
+            {gatherState === "busy" ? t("Gathering…") : t("Gather results")}
+          </button>
+          {gatherState === "queued" ? (
+            <p role="status">{t("Gather queued in this Session")}</p>
+          ) : gatherState === "empty" ? (
+            <p role="status">{t("No peer results yet")}</p>
+          ) : ["failed", "stale", "blocked"].includes(gatherState) ? (
+            <p role="status">{t("Gather could not be queued")}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {peers.length === 0 && laneStatus !== "no-session" ? (
         <p className={styles.empty} data-fleet-empty="true">
           {t("No peers yet")}
@@ -501,7 +550,8 @@ export function FleetView({
                   renderFleetRow({
                     peer,
                     sessionName: sessionNameFor(sessions, peer),
-                    controlSupported: controlSupported && peer.controlSupported,
+                    controlSupported:
+                      rowControlSupported && peer.controlSupported,
                     steerText: steerDrafts[peer.slug] ?? "",
                     onSteerText: (value) =>
                       setSteerDrafts((current) => ({
@@ -553,7 +603,7 @@ export function FleetView({
 
       {/* §4.3 footer: the protocol console, unchanged, behind a compact
           native details/summary disclosure (Round 4 C3: no tall empty box). */}
-      {peerController && controlSupported ? (
+      {peerController && externalControlSupported ? (
         <details
           className={styles.advanced}
           data-fleet-advanced="true"

@@ -23,6 +23,12 @@ import {
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import { ThemeIcon } from "../../ui/ThemeIcon.tsx";
 import styles from "./ProductSidebar.module.css";
+import {
+  DeleteSessionDialog,
+  SessionActionsMenu,
+  SessionRenameField,
+  type SessionRowActions,
+} from "./SessionActions.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
   PeerDock,
@@ -97,6 +103,18 @@ export interface ProductSidebarProps {
     ((orderMode: ProductSidebarOrderMode) => void) | undefined;
   onWorkspaceExpandedChange: (workspaceId: string, expanded: boolean) => void;
   onSessionSelect: (sessionId: string) => void;
+  /**
+   * Renames a session row. Resolves to the error to show beside the field,
+   * or null once the server accepted the title. Absent: no Rename action.
+   */
+  onSessionRename?:
+    ((sessionId: string, title: string) => Promise<string | null>) | undefined;
+  /**
+   * Deletes a session row after the user confirmed. Resolves to the error to
+   * show in the dialog, or null once the server deleted it. Absent: no
+   * Delete action.
+   */
+  onSessionDelete?: ((sessionId: string) => Promise<string | null>) | undefined;
   onSettings: () => void;
   theme?: "system" | "light" | "dark";
   onThemeToggle?: () => void;
@@ -169,6 +187,8 @@ export function ProductSidebar({
   onOrderModeChange,
   onWorkspaceExpandedChange,
   onSessionSelect,
+  onSessionRename,
+  onSessionDelete,
   onSettings,
   theme = "system",
   onThemeToggle,
@@ -203,6 +223,30 @@ export function ProductSidebar({
   // Roving focus via aria-activedescendant: the tree container keeps DOM
   // focus while Arrow keys move the active row (WAI-ARIA tree pattern).
   const [activeTreeItemId, setActiveTreeItemId] = useState<string | null>(null);
+  const treeBodyRef = useRef<HTMLDivElement>(null);
+  const sessionMenuId = useId();
+  const [sessionMenu, setSessionMenu] = useState<{
+    sessionId: string;
+    anchor: HTMLElement;
+    trigger: HTMLElement | null;
+  } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    sessionId: string;
+    rowId: string;
+    saving: boolean;
+    error: string | null;
+  } | null>(null);
+  const [deleting, setDeleting] = useState<{
+    sessionId: string;
+    rowId: string;
+    title: string;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
+  // A saved title shows at once; the server's list catches up on refresh.
+  const [titleOverrides, setTitleOverrides] = useState<
+    ReadonlyMap<string, string>
+  >(() => new Map());
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleSessionLimit = Math.max(1, Math.floor(sessionLimit));
   const viewMode = controlledViewMode ?? uncontrolledViewMode;
@@ -230,12 +274,187 @@ export function ProductSidebar({
       const workspaceMatches = [workspace.label, workspace.path].some((value) =>
         value?.toLocaleLowerCase().includes(normalizedQuery),
       );
+      const title = titleOverrides.get(session.id) ?? session.title;
       return (
-        workspaceMatches ||
-        session.title.toLocaleLowerCase().includes(normalizedQuery)
+        workspaceMatches || title.toLocaleLowerCase().includes(normalizedQuery)
       );
     });
-  }, [flatSessions, normalizedQuery]);
+  }, [flatSessions, normalizedQuery, titleOverrides]);
+  const sessionsById = useMemo(
+    () =>
+      new Map(
+        workspaces.flatMap((workspace) =>
+          workspace.sessions.map((session) => [session.id, session] as const),
+        ),
+      ),
+    [workspaces],
+  );
+  useEffect(() => {
+    setTitleOverrides((current) => {
+      const stale = [...current].filter(
+        ([sessionId, title]) => sessionsById.get(sessionId)?.title !== title,
+      );
+      if (stale.length === current.size) return current;
+      return new Map(stale);
+    });
+  }, [sessionsById]);
+  const displayTitle = (session: ProductSidebarSession) =>
+    titleOverrides.get(session.id) ?? session.title;
+  const rowActions = (
+    session: ProductSidebarSession,
+  ): SessionRowActions | null => {
+    if (session.blank || (!onSessionRename && !onSessionDelete)) return null;
+    const status = session.opening ? "running" : session.status;
+    return {
+      rename: Boolean(onSessionRename),
+      delete: !onSessionDelete
+        ? null
+        : session.id === selectedSessionId
+          ? "open"
+          : status === "running" || status === "waiting"
+            ? "running"
+            : "available",
+    };
+  };
+
+  /** Puts keyboard focus back on the tree with `rowId` as its active row. */
+  const focusTreeRow = (rowId: string | null) => {
+    if (rowId && document.getElementById(rowId)) setActiveTreeItemId(rowId);
+    treeRef.current?.focus();
+  };
+
+  const openSessionMenu = (
+    sessionId: string,
+    anchor: HTMLElement,
+    trigger: HTMLElement | null,
+  ) => {
+    if (sessionMenu?.sessionId === sessionId && sessionMenu.anchor === anchor) {
+      setSessionMenu(null);
+      return;
+    }
+    setActiveTreeItemId(anchor.id);
+    setSessionMenu({ sessionId, anchor, trigger });
+  };
+
+  const closeSessionMenu = (restoreFocus: boolean) => {
+    const menu = sessionMenu;
+    setSessionMenu(null);
+    if (!restoreFocus || !menu) return;
+    if (menu.trigger?.isConnected && menu.trigger.offsetParent !== null) {
+      menu.trigger.focus();
+    } else {
+      focusTreeRow(menu.anchor.id);
+    }
+  };
+
+  const startRename = (sessionId: string, rowId: string) => {
+    setSessionMenu(null);
+    setActiveTreeItemId(rowId);
+    setRenaming({ sessionId, rowId, saving: false, error: null });
+  };
+
+  /** Focus returns to the tree only if the field still had it. */
+  const finishRename = (rowId: string) => {
+    const row = document.getElementById(rowId);
+    const hadFocus = Boolean(row?.contains(document.activeElement));
+    setRenaming(null);
+    if (hadFocus) focusTreeRow(rowId);
+  };
+
+  const saveRename = async (sessionId: string, title: string) => {
+    if (!onSessionRename || !renaming) return;
+    const { rowId } = renaming;
+    setRenaming({ sessionId, rowId, saving: true, error: null });
+    let error: string | null;
+    try {
+      error = await onSessionRename(sessionId, title);
+    } catch {
+      error = t("Could not rename this session.");
+    }
+    if (error) {
+      setRenaming({ sessionId, rowId, saving: false, error });
+      return;
+    }
+    setTitleOverrides((current) => new Map(current).set(sessionId, title));
+    finishRename(rowId);
+  };
+
+  const startDelete = (sessionId: string, rowId: string) => {
+    const session = sessionsById.get(sessionId);
+    if (!session) return;
+    setSessionMenu(null);
+    setDeleting({
+      sessionId,
+      rowId,
+      title: displayTitle(session),
+      busy: false,
+      error: null,
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!onSessionDelete || !deleting || deleting.busy) return;
+    const target = deleting;
+    setDeleting({ ...target, busy: true, error: null });
+    let error: string | null;
+    try {
+      error = await onSessionDelete(target.sessionId);
+    } catch {
+      error = t("Could not delete this session.");
+    }
+    if (error) {
+      setDeleting({ ...target, busy: false, error });
+      return;
+    }
+    setDeleting(null);
+    // The row is gone; keep the keyboard in the list.
+    requestAnimationFrame(() => focusTreeRow(null));
+  };
+
+  const cancelDelete = () => {
+    const rowId = deleting?.rowId ?? null;
+    setDeleting(null);
+    requestAnimationFrame(() => focusTreeRow(rowId));
+  };
+
+  const renderSessionRow = (
+    session: ProductSidebarSession,
+    rowId: string,
+    meta?: string,
+  ) => {
+    const actions = rowActions(session);
+    return (
+      <SessionRow
+        key={rowId}
+        id={rowId}
+        active={activeTreeItemId === rowId}
+        session={session}
+        title={displayTitle(session)}
+        {...(meta === undefined ? {} : { meta })}
+        selected={session.id === selectedSessionId}
+        onSelect={onSessionSelect}
+        actions={actions}
+        menuOpen={
+          sessionMenu?.sessionId === session.id &&
+          sessionMenu.anchor.id === rowId
+        }
+        menuId={sessionMenuId}
+        onMenu={openSessionMenu}
+        rename={
+          renaming?.sessionId === session.id && renaming.rowId === rowId ? (
+            <SessionRenameField
+              initialTitle={displayTitle(session)}
+              saving={renaming.saving}
+              error={renaming.error}
+              onSave={(title) => void saveRename(session.id, title)}
+              onCancel={() => finishRename(rowId)}
+            />
+          ) : null
+        }
+      />
+    );
+  };
+
   const catalogProgress = useMemo(() => {
     let pending = 0;
     let failed = 0;
@@ -343,19 +562,55 @@ export function ProductSidebar({
     );
 
   const moveTreeActive = (next: HTMLElement) => {
+    // Hand focus from a clicked row back to the tree, which tracks the
+    // active row from here on.
+    if (document.activeElement?.getAttribute("role") === "treeitem")
+      treeRef.current?.focus();
     setActiveTreeItemId(next.id);
-    next.scrollIntoView({ block: "nearest" });
+    next.scrollIntoView({ block: "nearest", inline: "start" });
   };
 
   const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    // The tree owns its roving focus keys. Nested buttons keep their native
-    // keyboard activation (for example New session and Show more).
+    // The tree owns its roving focus keys. Nested buttons and the rename
+    // field keep their own keys (New session, Show more, row actions). A row
+    // that took focus from a click is not a button any more, so its keys are
+    // the tree's too, acting on that row.
+    const focusedRow =
+      event.target instanceof HTMLElement &&
+      event.target !== event.currentTarget &&
+      event.target.getAttribute("role") === "treeitem" &&
+      event.target.id
+        ? event.target
+        : null;
     if (
-      event.target !== event.currentTarget ||
+      (event.target !== event.currentTarget && !focusedRow) ||
       event.nativeEvent.isComposing ||
       event.nativeEvent.keyCode === 229
     )
       return;
+    const activeId = focusedRow?.id ?? activeTreeItemId;
+    if (
+      event.key === "F2" ||
+      event.key === "Delete" ||
+      event.key === "ContextMenu" ||
+      (event.key === "F10" && event.shiftKey)
+    ) {
+      const row = activeId ? document.getElementById(activeId) : null;
+      const sessionId = row?.getAttribute("data-session-id");
+      const session = sessionId ? sessionsById.get(sessionId) : undefined;
+      const actions = session ? rowActions(session) : null;
+      if (!row || !session || !actions) return;
+      event.preventDefault();
+      if (event.key === "F2") {
+        if (actions.rename) startRename(session.id, row.id);
+      } else if (event.key === "Delete" && actions.delete === "available") {
+        startDelete(session.id, row.id);
+      } else {
+        // The menu also explains why Delete is unavailable.
+        openSessionMenu(session.id, row, null);
+      }
+      return;
+    }
     const keys = [
       "ArrowDown",
       "ArrowUp",
@@ -371,13 +626,11 @@ export function ProductSidebar({
     if (!first) return;
     // With no active row yet, the first ArrowDown/ArrowUp activates the
     // first/last item instead of skipping past it.
-    const currentIndex = activeTreeItemId
-      ? items.findIndex((el) => el.id === activeTreeItemId)
+    const currentIndex = activeId
+      ? items.findIndex((el) => el.id === activeId)
       : -1;
     const activeElement =
-      (activeTreeItemId
-        ? document.getElementById(activeTreeItemId)
-        : undefined) ?? first;
+      (activeId ? document.getElementById(activeId) : undefined) ?? first;
 
     const focusNext = (nextIndex: number) => {
       const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
@@ -420,9 +673,12 @@ export function ProductSidebar({
           event.preventDefault();
           onWorkspaceExpandedChange(workspaceId, true);
         } else if (activeElement.getAttribute("aria-expanded") === "true") {
-          const child = activeElement.querySelector<HTMLElement>(
-            '[role="group"] [role="treeitem"]',
-          );
+          const owned = activeElement.getAttribute("aria-owns");
+          const child = owned
+            ? document
+                .getElementById(owned)
+                ?.querySelector<HTMLElement>('[role="treeitem"]')
+            : null;
           if (child) {
             event.preventDefault();
             moveTreeActive(child);
@@ -440,9 +696,10 @@ export function ProductSidebar({
           onWorkspaceExpandedChange(workspaceId, false);
           return;
         }
-        const parent = activeElement
-          .closest('[role="group"]')
-          ?.closest('[role="treeitem"]');
+        const groupId = activeElement.closest('[role="group"][id]')?.id;
+        const parent = groupId
+          ? items.find((item) => item.getAttribute("aria-owns") === groupId)
+          : undefined;
         if (parent instanceof HTMLElement) {
           event.preventDefault();
           moveTreeActive(parent);
@@ -693,6 +950,7 @@ export function ProductSidebar({
             ) : null}
 
             <div
+              ref={treeBodyRef}
               className={styles.treeBody}
               aria-busy={loading || catalogProgress.pending > 0}
             >
@@ -733,19 +991,13 @@ export function ProductSidebar({
                 {!error && !loading && normalizedQuery ? (
                   searchResults.length > 0 ? (
                     <div className={styles.searchResults}>
-                      {searchResults.map(({ session, workspace }) => (
-                        <SearchSessionRow
-                          key={`${workspace.id}:${session.id}`}
-                          id={`tree-search-${session.id}`}
-                          active={
-                            activeTreeItemId === `tree-search-${session.id}`
-                          }
-                          session={session}
-                          workspace={workspace}
-                          selected={session.id === selectedSessionId}
-                          onSelect={onSessionSelect}
-                        />
-                      ))}
+                      {searchResults.map(({ session, workspace }) =>
+                        renderSessionRow(
+                          session,
+                          `tree-search-${session.id}`,
+                          workspace.label,
+                        ),
+                      )}
                     </div>
                   ) : null
                 ) : null}
@@ -772,17 +1024,31 @@ export function ProductSidebar({
                         orderedSessions.length - visibleSessions.length;
 
                       return (
+                        // The workspace row is the treeitem and owns its session
+                        // group through aria-owns rather than DOM nesting: a
+                        // treeitem that contained the rows would carry all of
+                        // their text, which its short name cannot match
+                        // (axe label-content-name-mismatch, WCAG 2.5.3).
                         <div
                           key={workspace.id}
-                          id={`tree-workspace-${workspace.id}`}
                           data-workspace-id={workspace.id}
-                          className={`${styles.workspaceGroup} ${activeTreeItemId === `tree-workspace-${workspace.id}` ? styles.treeActive : ""}`}
-                          role="treeitem"
-                          tabIndex={-1}
-                          aria-label={workspace.label}
-                          aria-expanded={expanded}
+                          className={styles.workspaceGroup}
+                          role="group"
                         >
-                          <div className={styles.workspaceRow}>
+                          <div
+                            id={`tree-workspace-${workspace.id}`}
+                            data-workspace-id={workspace.id}
+                            className={`${styles.workspaceRow} ${activeTreeItemId === `tree-workspace-${workspace.id}` ? styles.treeActive : ""}`}
+                            role="treeitem"
+                            tabIndex={-1}
+                            aria-label={workspace.label}
+                            aria-expanded={expanded}
+                            aria-owns={
+                              expanded
+                                ? `tree-group-${workspace.id}`
+                                : undefined
+                            }
+                          >
                             <button
                               type="button"
                               className={styles.workspaceToggle}
@@ -825,20 +1091,17 @@ export function ProductSidebar({
                           </div>
 
                           {expanded ? (
-                            <div className={styles.sessionRun} role="group">
-                              {visibleSessions.map((session) => (
-                                <SessionRow
-                                  key={session.id}
-                                  id={`tree-session-${session.id}`}
-                                  active={
-                                    activeTreeItemId ===
-                                    `tree-session-${session.id}`
-                                  }
-                                  session={session}
-                                  selected={session.id === selectedSessionId}
-                                  onSelect={onSessionSelect}
-                                />
-                              ))}
+                            <div
+                              id={`tree-group-${workspace.id}`}
+                              className={styles.sessionRun}
+                              role="group"
+                            >
+                              {visibleSessions.map((session) =>
+                                renderSessionRow(
+                                  session,
+                                  `tree-session-${session.id}`,
+                                ),
+                              )}
                               {orderedSessions.length === 0 ? (
                                 <p className={styles.emptyWorkspace}>
                                   {workspace.sessionCatalogStatus === "loading"
@@ -889,18 +1152,9 @@ export function ProductSidebar({
                 workspaces.length > 0 &&
                 flatSessions.length > 0 ? (
                   <div className={styles.flatSessionList} role="group">
-                    {flatSessions.map(({ session, workspace }) => (
-                      <SessionRow
-                        key={`${workspace.id}:${session.id}`}
-                        id={`tree-session-${session.id}`}
-                        active={
-                          activeTreeItemId === `tree-session-${session.id}`
-                        }
-                        session={session}
-                        selected={session.id === selectedSessionId}
-                        onSelect={onSessionSelect}
-                      />
-                    ))}
+                    {flatSessions.map(({ session }) =>
+                      renderSessionRow(session, `tree-session-${session.id}`),
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -966,6 +1220,38 @@ export function ProductSidebar({
                 </div>
               ) : null}
               <div className={styles.fade} aria-hidden="true" />
+              {sessionMenu && treeBodyRef.current ? (
+                <SessionActionsMenu
+                  id={sessionMenuId}
+                  anchor={sessionMenu.anchor}
+                  container={treeBodyRef.current}
+                  actions={
+                    rowActions(
+                      sessionsById.get(sessionMenu.sessionId) ?? {
+                        id: sessionMenu.sessionId,
+                        title: "",
+                        blank: true,
+                      },
+                    ) ?? { rename: false, delete: null }
+                  }
+                  onRename={() =>
+                    startRename(sessionMenu.sessionId, sessionMenu.anchor.id)
+                  }
+                  onDelete={() =>
+                    startDelete(sessionMenu.sessionId, sessionMenu.anchor.id)
+                  }
+                  onClose={closeSessionMenu}
+                />
+              ) : null}
+              {deleting ? (
+                <DeleteSessionDialog
+                  title={deleting.title}
+                  deleting={deleting.busy}
+                  error={deleting.error}
+                  onCancel={cancelDelete}
+                  onConfirm={() => void confirmDelete()}
+                />
+              ) : null}
             </div>
           </>
         )}
@@ -1239,21 +1525,46 @@ function normalizedTimestamp(
     : undefined;
 }
 
+/**
+ * One session in the tree, in the list or as a search result (`meta` adds the
+ * workspace line). Both truncate the same way: status and the start of the
+ * title stay put and the full title is the tooltip. The row is a treeitem,
+ * not a button, so it can hold the actions button and the rename field.
+ */
 function SessionRow({
   session,
+  title,
+  meta,
   selected,
   onSelect,
   id,
   active,
+  actions,
+  menuOpen,
+  menuId,
+  onMenu,
+  rename,
 }: {
   session: ProductSidebarSession;
+  title: string;
+  meta?: string;
   selected: boolean;
   onSelect: (sessionId: string) => void;
-  id?: string;
+  id: string;
   active?: boolean;
+  actions: SessionRowActions | null;
+  menuOpen: boolean;
+  menuId: string;
+  onMenu: (
+    sessionId: string,
+    anchor: HTMLElement,
+    trigger: HTMLElement | null,
+  ) => void;
+  rename: ReactNode;
 }) {
   const t = useUiText();
-  const title = session.blank ? t("New session") : session.title;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const label = session.blank ? t("New session") : title;
   const status = session.opening ? "running" : (session.status ?? "idle");
   const statusLabel = session.opening
     ? t("Opening conversation")
@@ -1261,12 +1572,63 @@ function SessionRow({
   const showStatus = status !== "idle";
   // "now" reads as a word; "5m"/"2h" stay compact in every language.
   const updated = session.updatedLabel && t(session.updatedLabel);
+  const time = session.opening
+    ? t("Opening…")
+    : !session.blank && updated
+      ? updated
+      : "";
+  const search = meta !== undefined;
+  const className = [
+    search ? styles.searchResultRow : styles.sessionRow,
+    selected ? styles.selected : "",
+    active ? styles.treeActive : "",
+    actions ? styles.hasActions : "",
+    menuOpen ? styles.menuOpen : "",
+    rename ? styles.renaming : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const statusSlot = (
+    <span className={styles.statusSlot}>
+      {showStatus ? <StatusDot status={status} label={statusLabel} /> : null}
+    </span>
+  );
+  const titleText = rename ?? (
+    <span
+      className={search ? styles.searchResultTitle : styles.sessionTitle}
+      title={label}
+    >
+      {label}
+    </span>
+  );
+  const menuButton =
+    actions && !rename ? (
+      <button
+        type="button"
+        className={styles.rowMenuButton}
+        aria-label={t("More actions for {title}", { title: label })}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-controls={menuOpen ? menuId : undefined}
+        // One Tab stop: only the open or keyboard-active row's button.
+        tabIndex={selected || active ? 0 : -1}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (rowRef.current)
+            onMenu(session.id, rowRef.current, event.currentTarget);
+        }}
+      >
+        <MoreIcon />
+      </button>
+    ) : null;
 
   return (
-    <button
-      type="button"
+    <div
+      ref={rowRef}
       id={id}
-      className={`${styles.sessionRow} ${selected ? styles.selected : ""} ${active ? styles.treeActive : ""}`}
+      data-session-id={session.id}
+      className={className}
       role="treeitem"
       tabIndex={-1}
       aria-current={selected ? "page" : undefined}
@@ -1276,81 +1638,46 @@ function SessionRow({
       // must contain the row's visible text, and axe compares it as the
       // whitespace-free concatenation of the row's text nodes ("Completed"
       // + title + time). Build the name from the same strings so it matches
-      // that concatenation exactly.
-      aria-label={[
-        showStatus ? statusLabel : "",
-        title,
-        session.opening
-          ? t("Opening…")
-          : !session.blank && updated
-            ? updated
-            : "",
-      ].join("")}
-      onClick={() => onSelect(session.id)}
+      // that concatenation exactly. Search rows are named by their content.
+      aria-label={
+        search
+          ? undefined
+          : [showStatus ? statusLabel : "", label, time].join("")
+      }
+      onClick={() => {
+        if (!rename) onSelect(session.id);
+      }}
+      onContextMenu={
+        actions && !rename
+          ? (event) => {
+              event.preventDefault();
+              if (rowRef.current) onMenu(session.id, rowRef.current, null);
+            }
+          : undefined
+      }
     >
-      <span className={styles.statusSlot}>
-        {showStatus ? <StatusDot status={status} label={statusLabel} /> : null}
-      </span>
-      <span className={styles.sessionTitle}>{title}</span>
-      {session.opening ? (
-        <span className={styles.sessionTime}>{t("Opening…")}</span>
-      ) : !session.blank && updated ? (
-        <span className={styles.sessionTime}>{updated}</span>
-      ) : null}
-    </button>
-  );
-}
-
-function SearchSessionRow({
-  session,
-  workspace,
-  selected,
-  onSelect,
-  id,
-  active,
-}: {
-  session: ProductSidebarSession;
-  workspace: ProductSidebarWorkspace;
-  selected: boolean;
-  onSelect: (sessionId: string) => void;
-  id?: string;
-  active?: boolean;
-}) {
-  const t = useUiText();
-  const status = session.opening ? "running" : (session.status ?? "idle");
-  return (
-    <button
-      type="button"
-      id={id}
-      className={`${styles.searchResultRow} ${selected ? styles.selected : ""} ${active ? styles.treeActive : ""}`}
-      role="treeitem"
-      tabIndex={-1}
-      aria-current={selected ? "page" : undefined}
-      aria-selected={selected}
-      aria-busy={session.opening || undefined}
-      onClick={() => onSelect(session.id)}
-    >
-      <span className={styles.searchResultHeading}>
-        <span className={styles.statusSlot}>
-          {status !== "idle" ? (
-            <StatusDot
-              status={status}
-              label={
-                session.opening
-                  ? t("Opening conversation")
-                  : session.statusLabel && t(session.statusLabel)
-              }
-            />
+      {search ? (
+        <>
+          <span className={styles.searchResultHeading}>
+            {statusSlot}
+            {titleText}
+            {menuButton}
+          </span>
+          <span className={styles.searchResultMeta}>
+            {session.opening ? t("Opening…") : meta}
+          </span>
+        </>
+      ) : (
+        <>
+          {statusSlot}
+          {titleText}
+          {!rename && time ? (
+            <span className={styles.sessionTime}>{time}</span>
           ) : null}
-        </span>
-        <span className={styles.searchResultTitle}>
-          {session.blank ? t("New session") : session.title}
-        </span>
-      </span>
-      <span className={styles.searchResultMeta}>
-        {session.opening ? t("Opening…") : workspace.label}
-      </span>
-    </button>
+          {menuButton}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1496,6 +1823,16 @@ function ChevronIcon({ className }: IconProps) {
   return (
     <SvgIcon className={`${styles.chevronIcon} ${className ?? ""}`}>
       <path d="m9 6 6 6-6 6" />
+    </SvgIcon>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <SvgIcon>
+      <circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none" />
     </SvgIcon>
   );
 }

@@ -325,7 +325,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
   test("unsupported Fleet capability disables the entry and explains why", async ({
     page,
   }) => {
-    await connectAndStartWorkspace(page, cwd("no-method"));
+    await connectAndStartWorkspace(page, cwd("no-fleet"));
     await expect(fleetEntry(page)).toBeDisabled();
     await expect(
       productNavigation(page).getByText(

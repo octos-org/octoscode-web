@@ -331,10 +331,10 @@ test("sidebar sort controls reorder sessions and track which Session was last op
   const sidebar = page.getByRole("complementary", {
     name: "Product navigation",
   });
-  const sessions = sidebar.locator('button[role="treeitem"]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   const titles = sessions.locator('[class*="sessionTitle"]');
   const selectedTitle = sidebar.locator(
-    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
   );
   await expect(sessions).toHaveCount(1);
   const openedTitles = [await selectedTitle.innerText()];

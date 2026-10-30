@@ -4,6 +4,7 @@ import {
   approvalResolutionId,
   isRecord,
   parseApprovalRequested,
+  parseProjectionEnvelope,
   parseTokenCostUpdate,
   parseUserQuestionRequested,
   type RpcNotification,
@@ -145,6 +146,41 @@ export function peerSessionEventFor(
   opened: ReadonlyMap<string, { scope: { sessionId: string } }>,
 ): PeerSessionEvent | null {
   const frame = notification as RpcNotification;
+  if (notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) {
+    const envelope = parseProjectionEnvelope(notification.params);
+    if (
+      !envelope ||
+      envelope.payload.type !== "turn_terminal" ||
+      !isRecord(envelope.payload.data)
+    )
+      return null;
+    const projectedSessionId =
+      envelope.cursor?.stream.split("\0", 1)[0] ?? envelope.session_id;
+    // Real peer projections are emitted on the MASTER with a peer topic and
+    // the peer's exact cursor stream. Direct peer envelopes keep the legacy
+    // direct-notification path (and must not be claimed a second time here).
+    if (!envelope.topic || projectedSessionId === envelope.session_id)
+      return null;
+    let key: string | null = null;
+    for (const [staging, peer] of opened)
+      if (peer.scope.sessionId === projectedSessionId) key = staging;
+    if (!key) return null;
+    const outcome = envelope.payload.data.outcome;
+    const error = isRecord(envelope.payload.data.error)
+      ? envelope.payload.data.error.message
+      : undefined;
+    return {
+      sessionId: key,
+      kind: "turn-terminal",
+      outcome:
+        outcome === "interrupted"
+          ? "interrupted"
+          : outcome === "completed" || outcome === "finished"
+            ? "finished"
+            : "failed",
+      ...(typeof error === "string" ? { error } : {}),
+    };
+  }
   if (!isRecord(notification.params)) return null;
   const sessionId = notification.params.session_id;
   if (typeof sessionId !== "string") return null;

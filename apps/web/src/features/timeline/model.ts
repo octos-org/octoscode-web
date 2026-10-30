@@ -444,7 +444,7 @@ export function foldNotification(
         pretty(params.arguments),
       );
       return startTool(settleReasoning(entries, turnId), {
-        id: `tool:${stringOf(params.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, params.tool_call_id),
         kind: "tool",
         title: toolName,
         body: pretty(params.arguments),
@@ -455,13 +455,9 @@ export function foldNotification(
       });
     }
     case CORE_UI_METHODS.TOOL_PROGRESS:
-      return progressTool(
-        entries,
-        `tool:${stringOf(params.tool_call_id, turnId)}`,
-        {
-          body: typeof params.message === "string" ? params.message : undefined,
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, params.tool_call_id), {
+        body: typeof params.message === "string" ? params.message : undefined,
+      });
     case CORE_UI_METHODS.TOOL_COMPLETED:
       return completeTool(entries, turnId, params.tool_call_id, {
         ...(typeof params.output_preview === "string"
@@ -597,7 +593,7 @@ function foldProjection(
       // versions omit it: do not resurrect truncated-argument path guessing.
       const artifactPath = structuredWritePath(toolName, data.write_path);
       return startTool(settled, {
-        id: `tool:${stringOf(data.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, data.tool_call_id),
         kind: "tool",
         title: toolName,
         body: argumentsJson,
@@ -608,13 +604,9 @@ function foldProjection(
       });
     }
     case "tool_progress":
-      return progressTool(
-        entries,
-        `tool:${stringOf(data.tool_call_id, turnId)}`,
-        {
-          body: typeof data.message === "string" ? data.message : "",
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, data.tool_call_id), {
+        body: typeof data.message === "string" ? data.message : "",
+      });
     case "tool_end": {
       const raw = stringOf(data.output_preview ?? data.error ?? data.reason);
       return completeTool(entries, turnId, data.tool_call_id, {
@@ -919,6 +911,11 @@ function progressTool(
   });
 }
 
+/** Tool call ids are only unique within a turn; retries may reuse them. */
+function toolEntryId(turnId: string, toolCallId: unknown): string {
+  return `tool:${turnId}:${stringOf(toolCallId, turnId)}`;
+}
+
 function completeTool(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -929,7 +926,7 @@ function completeTool(
   // using its server-provided call identity; never invent an unscoped tool.
   if (typeof toolCallId !== "string" || !toolCallId.trim())
     return entries.slice();
-  const id = `tool:${toolCallId}`;
+  const id = toolEntryId(turnId, toolCallId);
   const existing = entries.find((entry) => entry.id === id);
   return upsert(entries, {
     ...(existing ?? {
@@ -962,7 +959,7 @@ function coalesceHydratedTools(
       isRecord(data) &&
       typeof data.tool_call_id === "string"
     ) {
-      const id = `tool:${data.tool_call_id}`;
+      const id = toolEntryId(envelope.turn_id, data.tool_call_id);
       const previous = starts.get(id);
       starts.set(
         id,
@@ -982,7 +979,7 @@ function coalesceHydratedTools(
     const preview = data.output_preview.trim();
     if (!preview) continue;
     const truncatedPrefix = toolPreviewPrefix(data.output_preview);
-    const toolId = `tool:${stringOf(data.tool_call_id, envelope.turn_id)}`;
+    const toolId = toolEntryId(envelope.turn_id, data.tool_call_id);
     const card = entries.find((entry) => entry.id === toolId);
     if (!card) continue;
     const candidates = entries.filter(

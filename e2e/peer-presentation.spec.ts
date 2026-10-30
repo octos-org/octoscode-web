@@ -6,7 +6,7 @@ const token = "tab-scoped-e2e-token";
 const composer = (page: Page) => page.locator(".composer textarea");
 const navigation = (page: Page) => page.locator("aside");
 const sessionRows = (page: Page) =>
-  navigation(page).locator('button[role="treeitem"]');
+  navigation(page).locator('[role="treeitem"][data-session-id]');
 const status = (page: Page) =>
   page.locator('[role="status"][class*="peerReadonly"]');
 const SNAPSHOT = {

@@ -45,7 +45,7 @@ const hint = (page: Page) =>
 const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
-  productNavigation(page).locator('button[role="treeitem"]');
+  productNavigation(page).locator('[role="treeitem"][data-session-id]');
 
 type Frame = { method?: string; params?: Record<string, unknown> };
 function wire(page: Page) {

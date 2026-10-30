@@ -538,8 +538,9 @@ function effectivePeerControlVariant(state) {
 }
 function peerControlAdverts(variant) {
   return {
-    method: variant !== "no-method",
-    feature: variant !== "no-feature",
+    method: variant !== "no-method" && variant !== "no-fleet",
+    feature: variant !== "no-feature" && variant !== "no-fleet",
+    native: variant !== "no-fleet",
   };
 }
 const peerControlCalls = new Map(); // sessionId -> [kind, ...]
@@ -2759,6 +2760,7 @@ const baseCapabilities = {
     "cron/toggle",
     "session/list",
     "session/delete",
+    "session/title.set",
     "session/files.list",
     "session/files/read",
     "peer/prepare",
@@ -2872,7 +2874,11 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods,
+        : adverts.native
+          ? memoryCapabilities.supported_methods
+          : memoryCapabilities.supported_methods.filter(
+              (method) => method !== "peer/prepare" && method !== "peer/gather",
+            ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,
@@ -5029,6 +5035,28 @@ sockets.on("connection", (socket, request) => {
         sessionStateBySessionId.delete(request.params.session_id);
       }
       reply(socket, request.id, {});
+      return;
+    }
+    if (request.method === "session/title.set") {
+      const title = request.params?.title?.trim();
+      if (!title || [...title].length > 200) {
+        replyError(socket, request.id, -32602, "Invalid session title");
+        return;
+      }
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.map((session) =>
+            session.id === request.params.session_id
+              ? { ...session, title }
+              : session,
+          ),
+        );
+      }
+      reply(socket, request.id, {
+        session_id: request.params.session_id,
+        title,
+      });
       return;
     }
     if (request.method === "profile/skills/list") {

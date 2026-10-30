@@ -30,6 +30,8 @@ import type {
   SessionOpenResult,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
   SessionFileReadParams,
   SessionFileReadResult,
   SessionFilesListParams,
@@ -892,6 +894,17 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseSessionDeleteResult(value),
+    );
+  }
+
+  async setSessionTitle(
+    params: SessionTitleSetParams,
+  ): Promise<SessionTitleSetResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_TITLE_SET,
+      params,
+      async (value) =>
+        (await loadWorkspaceResults()).parseSessionTitleSetResult(value),
     );
   }
 

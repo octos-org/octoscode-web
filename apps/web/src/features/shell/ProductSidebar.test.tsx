@@ -229,6 +229,41 @@ describe("ProductSidebar", () => {
     },
   );
 
+  it("offers row actions only when the server can rename or delete sessions", () => {
+    expect(
+      renderToStaticMarkup(<ProductSidebar {...baseProps} />),
+    ).not.toContain("More actions for");
+    const html = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        onSessionRename={async () => null}
+        onSessionDelete={async () => null}
+      />,
+    );
+    expect(html).toContain(
+      'aria-label="More actions for Ship the product shell"',
+    );
+    expect(html).toContain('aria-label="More actions for Review the sidebar"');
+    // Only the open row's button is a Tab stop; the tree's arrows reach the rest.
+    expect(
+      html.match(/aria-haspopup="menu" aria-expanded="false" tabindex="0"/g),
+    ).toHaveLength(1);
+    // A truncated title stays readable as the tooltip.
+    expect(html).toContain('title="Review the sidebar"');
+  });
+
+  it("gives search results the list's truncation and actions", () => {
+    const html = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        onSessionRename={async () => null}
+        onSessionDelete={async () => null}
+      />,
+    );
+    expect(html).toContain('data-session-id="session-review"');
+    expect(html).not.toContain('<button type="button" id="tree-session');
+  });
+
   it("renders accessible grouping choices from the controlled view mode", () => {
     const onViewModeChange = vi.fn();
     const onSelectComplete = vi.fn();
