@@ -142,6 +142,105 @@ test("a late permission retry never starts in or clears another Session", async 
   expect(starts).toBe(before);
 });
 
+test("permission retry is hidden without the SET capability", async ({
+  page,
+}) => {
+  let hideSet = false;
+  let blockedWrites = 0;
+  const withoutSet = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(withoutSet);
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        key === "supported_methods" && Array.isArray(entry)
+          ? entry.filter((method) => method !== "permission/profile/set")
+          : withoutSet(entry),
+      ]),
+    );
+  };
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (hideSet && frame.method === "permission/profile/set") {
+        blockedWrites += 1;
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: frame.id,
+            error: {
+              code: -32601,
+              message: "permission/profile/set not supported",
+            },
+          }),
+        );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) =>
+      socket.send(
+        hideSet
+          ? JSON.stringify(withoutSet(JSON.parse(String(message))))
+          : message,
+      ),
+    );
+  });
+  await prepareDeniedWrite(page);
+  hideSet = true;
+  await page.reload();
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
+  await page
+    .locator("details")
+    .filter({ hasText: "write_file" })
+    .locator("summary")
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Switch to write and retry" }),
+  ).toHaveCount(0);
+  expect(blockedWrites).toBe(0);
+});
+
+test("permission retry preserves the current network policy when profiles are reordered", async ({
+  page,
+}) => {
+  let armed = false;
+  let update: { mode: string; network: string } | null = null;
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (armed && frame.method === "permission/profile/set") {
+        update = frame.params.update;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (Array.isArray(frame.result?.profiles)) {
+        frame.result.profiles.sort(
+          (
+            left: { mode: string; network: string },
+            right: { mode: string; network: string },
+          ) =>
+            Number(
+              right.mode === "workspace_write" && right.network === "allow",
+            ) -
+            Number(left.mode === "workspace_write" && left.network === "allow"),
+        );
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  const { retry } = await prepareDeniedWrite(page);
+  armed = true;
+  await retry.click();
+  await expect.poll(() => update).not.toBeNull();
+  expect(update).toEqual({ mode: "workspace_write", network: "deny" });
+});
+
 test("permission retry requires an applied workspace-write response", async ({
   page,
 }) => {

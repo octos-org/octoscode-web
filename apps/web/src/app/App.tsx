@@ -1945,12 +1945,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const retryPermissionDenied = async (turnId: string) => {
-    if (permissionRetryBusyTurnId) return;
+    if (permissionRetryBusyTurnId || !safety.permission.editable) return;
     const client = protocol.client;
     const opened = session.opened;
-    const option = safety.permission.result?.profiles.find(
-      (profile) => profile.mode === "workspace_write",
-    );
+    const option = permissionRetryProfile;
     const prompt = conversation.timeline.find(
       (entry) =>
         entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
@@ -2774,6 +2772,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             profile.network === currentPermission.network,
         )
       : undefined;
+  const permissionRetryProfile = safety.permission.editable
+    ? safety.permission.result?.profiles.find(
+        (profile) =>
+          profile.mode === "workspace_write" &&
+          profile.network === currentPermission?.network,
+      )
+    : undefined;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -3536,8 +3541,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
-                          onRetryPermission={(turnId) =>
-                            void retryPermissionDenied(turnId)
+                          onRetryPermission={
+                            permissionRetryProfile
+                              ? (turnId) => void retryPermissionDenied(turnId)
+                              : undefined
                           }
                           permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
