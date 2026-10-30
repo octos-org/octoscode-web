@@ -100,13 +100,13 @@ async function openSettings(page: Page): Promise<Locator> {
 
 function sessionRowById(sidebar: Locator, sessionId: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
   );
 }
 
 function sessionRowsExcept(sidebar: Locator, sessionId: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id]:not([data-session-id=${JSON.stringify(sessionId)}])`,
+    `[role="treeitem"][data-session-id]:not([data-session-id=${JSON.stringify(sessionId)}])`,
   );
 }
 
@@ -350,9 +350,7 @@ test("keeps confirmed Sessions and reselects healthy records without reopening",
     '[data-workspace-name="per-workspace-session"]',
   );
   await expect(workspace).toBeVisible();
-  const openSessions = sidebar.locator(
-    'button[role="treeitem"][data-session-id]',
-  );
+  const openSessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(openSessions).toHaveCount(1);
   const originalSessionId = await openSessions
     .first()
@@ -383,7 +381,7 @@ test("keeps confirmed Sessions and reselects healthy records without reopening",
 
   await page.reload();
   const restoredSessions = productNavigation(page).locator(
-    'button[role="treeitem"][data-session-id]',
+    '[role="treeitem"][data-session-id]',
   );
   await expect(restoredSessions).toHaveCount(2);
   await expect(
@@ -417,7 +415,7 @@ test("keeps a server-accepted turn and sibling records on the same pooled socket
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   const originalSessionId = await sessions
     .first()
     .getAttribute("data-session-id");
@@ -487,7 +485,7 @@ test("selects a New Session before the source turn/start acknowledgement arrives
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const originalSessionId = await sessions
     .first()
@@ -558,7 +556,7 @@ test("keeps B selected when A's unacknowledged start is rejected", async ({
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const originalSessionId = await sessions
     .first()
@@ -745,7 +743,7 @@ test("recovers A's held start after B is already selected without reopening B", 
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   await holdNextTurnStart(request);
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
@@ -806,7 +804,7 @@ test("parks a recovery-admitted approval as Waiting, not Working", async ({
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const originalSessionId = await sessions
     .first()
@@ -872,9 +870,7 @@ for (const scenario of [
     await connectAndStartWorkspace(page, cwd);
 
     const sidebar = productNavigation(page);
-    const sessions = sidebar.locator(
-      'button[role="treeitem"][data-session-id]',
-    );
+    const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
     await expect(sessions).toHaveCount(1);
     const originalSessionId = await sessions
       .first()
@@ -923,7 +919,7 @@ test("returns to A before acknowledgement without cancelling its held start", as
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const originalSessionId = await sessions
     .first()
@@ -991,7 +987,7 @@ test("selects each retained target immediately while A's acknowledgement remains
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   const workspace = sidebar.locator(
     '[data-workspace-name="delayed-turn-start-latest-target"]',
   );
@@ -999,9 +995,7 @@ test("selects each retained target immediately while A's acknowledgement remains
     name: "New session in delayed-turn-start-latest-target",
   });
   const selectedSession = () =>
-    sidebar.locator(
-      'button[role="treeitem"][data-session-id][aria-current="page"]',
-    );
+    sidebar.locator('[role="treeitem"][data-session-id][aria-current="page"]');
   const selectedSessionId = async () => {
     const sessionId = await selectedSession().getAttribute("data-session-id");
     if (!sessionId) throw new Error("Expected a selected Session id");
@@ -1084,7 +1078,7 @@ test("keeps A's held start and socket intact when B's candidate open fails", asy
   await connectAndStartWorkspace(page, cwd);
 
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   const originalSessionId = await sessions
     .first()
     .getAttribute("data-session-id");
@@ -1170,7 +1164,7 @@ test("does not project ambiguous legacy Session rows into a Workspace", async ({
     sidebar.getByRole("treeitem", { name: /Review protocol drift/ }),
   ).toHaveCount(0);
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(1);
   await expect(
     sidebar.getByText("Only the open session is shown.", { exact: true }),
@@ -1196,10 +1190,12 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
     // can tell it about A's Session.
     const tabB = await fresh.newPage();
     await connectAndStartWorkspace(tabB, cwd);
-    const sessions = productNavigation(tabB).locator('button[role="treeitem"]');
+    const sessions = productNavigation(tabB).locator(
+      '[role="treeitem"][data-session-id]',
+    );
     await expect(sessions).toHaveCount(2);
     const history = productNavigation(tabB).locator(
-      'button[role="treeitem"]:not([aria-current="page"])',
+      '[role="treeitem"][data-session-id]:not([aria-current="page"])',
     );
     await expect(history).toHaveCount(1);
     const historyId = await history.getAttribute("id");
@@ -1265,7 +1261,7 @@ test("restores the origin, tab credential, session, and workspace after refresh"
     page.locator("main").getByText(cwd, { exact: true }).first(),
   ).toBeVisible();
   await expect(
-    restoredNavigation.locator('button[role="treeitem"][data-session-id]'),
+    restoredNavigation.locator('[role="treeitem"][data-session-id]'),
   ).toHaveAttribute("aria-current", "page");
   const settings = await openSettings(page);
   await settings.getByRole("button", { name: "Disconnect" }).click();
@@ -1612,15 +1608,17 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(approval).toBeFocused();
   await expect(approval).toContainText("pnpm check");
   await page.keyboard.press("Shift+Tab");
-  await expect(approval.getByRole("button", { name: /Yes/ })).toBeFocused();
+  await expect(
+    approval.getByRole("button", { name: /Allow once/ }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(approval.getByRole("button", { name: /No/ })).toBeFocused();
+  await expect(approval.getByRole("button", { name: /Deny/ })).toBeFocused();
   const approvalAccessibility = await new AxeBuilder({ page })
     .include(".approval-card")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(approvalAccessibility.violations).toEqual([]);
-  await approval.getByRole("button", { name: /Yes/ }).click();
+  await approval.getByRole("button", { name: /Allow once/ }).click();
   await expect(approval).toBeHidden();
 
   await composer.fill("Request question fixture");
@@ -1823,7 +1821,7 @@ test("onboards an empty solo server from workspace creation", async ({
   // A newly created Session must not inherit the static demo transcript.
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
   await expect(
-    productNavigation(page).locator('button[role="treeitem"][data-session-id]'),
+    productNavigation(page).locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(1);
   expect(openedSessions).toHaveLength(1);
   expect(openedSessions[0]!.sessionId).toMatch(

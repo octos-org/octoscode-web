@@ -124,3 +124,42 @@ describe("memory protocol", () => {
     expect(request).not.toHaveBeenCalled();
   });
 });
+
+describe("session memory scope", () => {
+  it("rejects unsupported scope before sending a request", () => {
+    const request = vi.fn();
+    expect(() =>
+      createMemoryCommands({ request }, capabilities, "web-coding"),
+    ).toThrow(/memory.session_scope/);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("sends the selected session on every read and mutation", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("server refusal"));
+    const commands = createMemoryCommands(
+      { request },
+      {
+        ...capabilities,
+        supported_features: [
+          ...capabilities.supported_features!,
+          "memory.session_scope.v1",
+        ],
+      },
+      "web-coding",
+    );
+    for (const call of [
+      () => commands.overview(),
+      () => commands.entity("topic"),
+      () => commands.search("topic"),
+      () => commands.load(record.id),
+      () => commands.ingest([record]),
+      () => commands.request("remember", "text"),
+      () => commands.promote("t0008"),
+    ]) {
+      await expect(call()).rejects.toThrow("server refusal");
+    }
+    expect(request).toHaveBeenCalledTimes(7);
+    for (const [, params] of request.mock.calls)
+      expect(params.session_id).toBe("web-coding");
+  });
+});

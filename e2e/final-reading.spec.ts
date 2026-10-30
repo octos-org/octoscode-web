@@ -135,7 +135,7 @@ test("sidebar native buttons keep Enter behavior and search Escape restores its 
   await add.focus();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("tree").locator('button[role="treeitem"][data-session-id]'),
+    page.getByRole("tree").locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   const searchButton = page.getByRole("button", {
     name: "Search sessions",
@@ -282,14 +282,12 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   const selectedTitle = page.locator(
-    'button[role="treeitem"][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
   const sessionA = (await selectedTitle.getAttribute("data-session-id"))!;
   const selectSession = async (title: string) => {
     await page
-      .locator(
-        `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
-      )
+      .locator(`[role="treeitem"][data-session-id=${JSON.stringify(title)}]`)
       .click();
     await expect(selectedTitle).toHaveAttribute("data-session-id", title);
   };

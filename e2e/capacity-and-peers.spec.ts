@@ -13,7 +13,7 @@ function productNavigation(page: Page): Locator {
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
@@ -21,7 +21,7 @@ async function selectedSessionTitle(sidebar: Locator): Promise<string> {
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
   );
 }
 
@@ -134,7 +134,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
       const showMore = workspace.locator('button[class*="showMore"]');
       if (await showMore.isVisible()) await showMore.click();
       await expect(
-        sidebar.locator('button[role="treeitem"][data-session-id]'),
+        sidebar.locator('[role="treeitem"][data-session-id]'),
       ).toHaveCount(index + 2);
     }
     const masterTitle = await selectedSessionTitle(sidebar);
@@ -289,11 +289,11 @@ test("holds twelve browser turns and three browser-started native peers on one p
     // is a read-only tombstone, not a resumable background execution record.
     const peer = peers[0]!;
     const peerId = String(peer.profile_id) + ":local:tui#" + String(peer.topic);
-    const peerRow = sidebar.locator(
-      `button[role="treeitem"][data-session-id*=${JSON.stringify(peerId)}]`,
+    const peerRow = page.locator(
+      `button[data-peer-slug="${String(peer.slug)}"]`,
     );
     await peerRow.click();
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
     expect(
       (
@@ -310,9 +310,9 @@ test("holds twelve browser turns and three browser-started native peers on one p
         { exact: true },
       ),
     ).toBeVisible();
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-    await expect(page.locator(".composer textarea")).toBeDisabled();
+    await expect(page.locator(".composer textarea")).toHaveCount(0);
     await expect(page.locator('h1:text-is("Connect to Octos")')).toHaveCount(0);
     const opensBeforeLoss = protocol.sent.filter(
       (frame) => frame.method === "session/open",
@@ -337,9 +337,9 @@ test("holds twelve browser turns and three browser-started native peers on one p
       ),
     ).toHaveLength(1);
     expect(starts()).toHaveLength(15);
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-    await expect(page.locator(".composer textarea")).toBeDisabled();
+    await expect(page.locator(".composer textarea")).toHaveCount(0);
   } finally {
     await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
   }

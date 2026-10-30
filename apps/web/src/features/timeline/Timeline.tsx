@@ -15,8 +15,15 @@ import styles from "./Timeline.module.css";
 import type { TimelineEntry } from "./model.ts";
 import { toolKind, type ToolKind } from "./tool-kind.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
-import { thinkingSummaryParts, toolTarget, type FoldState } from "./folds.ts";
+import {
+  COLLAPSED_ALL,
+  thinkingSummaryParts,
+  type FoldState,
+} from "./folds.ts";
+import { toolTitle } from "./tool-presentation.ts";
+import { TurnSummary } from "./TurnSummary.tsx";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
+import { permissionDeniedReason } from "../approval/approval-presentation.ts";
 import type { TurnActivity } from "./turn-activity.ts";
 import { AttachmentList } from "./AttachmentList.tsx";
 import foldStyles from "./TimelineFolds.module.css";
@@ -51,6 +58,8 @@ interface TimelineProps {
    * only while the Session is empty so the memoized transcript stays stable.
    */
   emptyState?: ReactNode;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  permissionRetryBusyTurnId?: string | null | undefined;
 }
 
 export const Timeline = memo(function Timeline({
@@ -66,6 +75,8 @@ export const Timeline = memo(function Timeline({
   activity = null,
   workspaceFileReadAvailable = false,
   emptyState,
+  onRetryPermission,
+  permissionRetryBusyTurnId = null,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -193,15 +204,33 @@ export const Timeline = memo(function Timeline({
           })}
         </button>
       ) : null}
-      {visibleEntries.slice(startIndex).map((entry) => (
-        <TimelineEntryView
-          key={entry.id}
-          entry={entry}
-          expanded={folds ? folds[entry.id] === true : undefined}
-          onToggleFold={toggleFold}
-          workspaceFileReadAvailable={workspaceFileReadAvailable}
-        />
-      ))}
+      {visibleEntries
+        .slice(startIndex)
+        .map((entry) =>
+          entry.kind === "system" && entry.id.startsWith("terminal:") ? (
+            <TurnSummary
+              key={entry.id}
+              turnId={entry.id.slice("terminal:".length)}
+              entries={visibleEntries}
+            />
+          ) : (
+            <TimelineEntryView
+              key={entry.id}
+              entry={entry}
+              expanded={
+                folds
+                  ? (folds[entry.id] ??
+                    folds[COLLAPSED_ALL] ??
+                    entry.status === "error")
+                  : undefined
+              }
+              onToggleFold={toggleFold}
+              workspaceFileReadAvailable={workspaceFileReadAvailable}
+              onRetryPermission={onRetryPermission}
+              retryBusy={permissionRetryBusyTurnId === entry.turnId}
+            />
+          ),
+        )}
       <TurnActivityIndicator activity={activity} />
     </div>
   );
@@ -217,11 +246,15 @@ const TimelineEntryView = memo(function TimelineEntryView({
   expanded,
   onToggleFold,
   workspaceFileReadAvailable,
+  onRetryPermission,
+  retryBusy,
 }: {
   entry: TimelineEntry;
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
   workspaceFileReadAvailable: boolean;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy: boolean;
 }) {
   switch (entry.kind) {
     case "reasoning":
@@ -239,6 +272,8 @@ const TimelineEntryView = memo(function TimelineEntryView({
           expanded={expanded}
           onToggleFold={onToggleFold}
           workspaceFileReadAvailable={workspaceFileReadAvailable}
+          onRetryPermission={onRetryPermission}
+          retryBusy={retryBusy}
         />
       );
     default:
@@ -251,6 +286,8 @@ interface FoldableBlockProps {
   /** undefined = reader-controlled native disclosure; boolean = folds state. */
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy?: boolean;
 }
 
 /**
@@ -263,7 +300,9 @@ function disclosureProps({
   expanded,
   onToggleFold,
 }: FoldableBlockProps) {
-  if (expanded === undefined) return {};
+  if (expanded === undefined) {
+    return entry.status === "error" ? { defaultOpen: true } : {};
+  }
   return {
     open: expanded,
     onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => {
@@ -317,10 +356,13 @@ function ReasoningBlock(props: FoldableBlockProps) {
 function ToolBlock(
   props: FoldableBlockProps & { workspaceFileReadAvailable: boolean },
 ) {
-  const { entry } = props;
+  const { entry, onRetryPermission, retryBusy = false } = props;
   const t = useUiText();
   const running = entry.status === "running";
-  const target = toolTarget(entry.body);
+  const presentation = toolTitle(
+    entry.title,
+    entry.toolArguments ?? entry.body,
+  );
   const seconds =
     entry.startedAtMs !== undefined && entry.endedAtMs !== undefined
       ? Math.max(0, Math.round((entry.endedAtMs - entry.startedAtMs) / 1000))
@@ -335,7 +377,11 @@ function ToolBlock(
       >
         <summary className={styles.toolHeader}>
           <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
-          <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
+          <strong>
+            {presentation.key
+              ? t(presentation.key, presentation.params)
+              : entry.title}
+          </strong>
           {running ? (
             <span className={styles.runningLabel}>{t("Running")}</span>
           ) : (
@@ -357,6 +403,22 @@ function ToolBlock(
           <ChevronDownIcon className={styles.chevron} />
         </summary>
         <div className={styles.toolBody}>
+          {entry.turnId &&
+          onRetryPermission &&
+          permissionDeniedReason(entry.status, entry.body) ? (
+            <button
+              type="button"
+              disabled={retryBusy}
+              onClick={() => onRetryPermission(entry.turnId!)}
+            >
+              {retryBusy
+                ? t("Switching to write and retrying…")
+                : t("Switch to write and retry")}
+            </button>
+          ) : null}
+          <div className="muted">
+            {t("Tool")}: <code>{entry.title}</code>
+          </div>
           {entry.body ? (
             <pre className={styles.toolOutput}>{entry.body}</pre>
           ) : (

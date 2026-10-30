@@ -6,6 +6,8 @@
    SessionConfig.module.css and PeerDock.module.css. */
 .fleet {
   display: grid;
+  align-self: start;
+  align-content: start;
   gap: 8px;
   padding: 16px 20px;
   max-width: 720px;

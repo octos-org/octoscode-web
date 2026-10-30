@@ -78,7 +78,7 @@ test("names a session from its first prompt instead of exposing its id", async (
     `/workspace/first-look-name-${Date.now()}`,
   );
   const selectedTitle = page.locator(
-    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
   );
   await page.screenshot({
     path: testInfo.outputPath("session-name.png"),

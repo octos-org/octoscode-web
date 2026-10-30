@@ -29,10 +29,12 @@ import {
   timelineActivity,
 } from "../features/timeline/entry-model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
+import { waitingFeedback } from "../features/session/waiting-feedback.ts";
 import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { peerReadonlySlug } from "../features/composer/peer-readonly.ts";
 import { planCardVisible } from "../features/supervision/plan.ts";
 import {
   type ComponentType,
@@ -116,9 +118,13 @@ import {
   saveDurableDraft,
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
-import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
+import {
+  useWorkspaceSessionCatalog,
+  type WorkspaceSessionCatalogSnapshot,
+} from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
+  forgetKnownSession,
   loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
@@ -142,6 +148,8 @@ import {
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
+import { peerControlAdmitted } from "../features/control/peer-control-commands.ts";
+import { peerDispatchAdmitted } from "../features/control/peer-dispatch-commands.ts";
 import {
   loadSessionDefaults,
   saveSessionDefaults,
@@ -607,6 +615,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // when the seat proof lands.
   const [fleetStartPending, setFleetStartPending] =
     useState<FleetStartSequencerState>({ kind: "idle" });
+  const [nativeFleetStartState, setNativeFleetStartState] = useState<
+    FleetStartState | undefined
+  >(undefined);
+  const [fleetGatherState, setFleetGatherState] = useState<
+    "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed"
+  >("idle");
   const [showThinkingPreference] = useState(() =>
     parseShowThinking(
       browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null,
@@ -637,6 +651,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   kind: "tool-start",
                   atMs: Date.now(),
                   toolName: last.title,
+                  argumentsJson: last.toolArguments ?? last.body,
                 } as const)
               : ({ kind: "tool-end", atMs: Date.now() } as const)
             : ({ kind: "assistant-delta", atMs: Date.now() } as const);
@@ -787,6 +802,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
+  const nativeFleetSupported =
+    supportsMethod(session.capabilities, "peer/prepare") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.SESSION_OPEN) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_START);
+  const nativeFleetControlsSupported =
+    supportsMethod(session.capabilities, "turn/steer") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_INTERRUPT) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.APPROVAL_RESPOND);
+  const nativeFleetGatherSupported = supportsMethod(
+    session.capabilities,
+    "peer/gather",
+  );
+  const externalFleetSupported =
+    peerControlAdmitted(session.capabilities) &&
+    peerDispatchAdmitted(session.capabilities);
+  const nativeFleetActive = nativeFleetSupported && !externalFleetSupported;
+  const fleetSupported = nativeFleetSupported || externalFleetSupported;
   // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
   // advertises `onboarding.workspace_browse.v1`, and the picker shows no
   // browsing affordance at all without an adapter.
@@ -1089,6 +1121,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     "/",
     session.opened?.capabilities,
   ).some((command) => command.intent === "autonomy");
+  const [deletedSessionIds, setDeletedSessionIds] = useState<readonly string[]>(
+    [],
+  );
+  const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  useEffect(() => {
+    const reopened = session.opened?.session_id;
+    if (!reopened) return;
+    setDeletedSessionIds((current) =>
+      current.filter((sessionId) => sessionId !== reopened),
+    );
+  }, [session.opened?.session_id]);
   // The server's per-workspace history (`session/list { cwd, profile_id }`),
   // re-listed when the active session changes or a turn finishes so a new
   // conversation or a retitled one shows up without a reload. It is keyed to
@@ -1103,17 +1146,41 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
     refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
       conversation.queue.active?.turnId ?? ""
-    }`,
+    }\n${catalogRefreshNonce}`,
   });
+  // Deleted rows stay hidden while the catalog re-lists, so the old listing
+  // cannot flash them back into the sidebar.
+  const visibleCatalog = useMemo<WorkspaceSessionCatalogSnapshot>(
+    () =>
+      deletedSessionIds.length === 0
+        ? sessionCatalog
+        : new Map(
+            [...sessionCatalog].map(([path, workspace]) => [
+              path,
+              {
+                ...workspace,
+                sessions: workspace.sessions.filter(
+                  (row) => !deletedSessionIds.includes(row.sessionId),
+                ),
+              },
+            ]),
+          ),
+    [deletedSessionIds, sessionCatalog],
+  );
   const navigableSessions = useMemo(() => {
-    const catalogRefs = [...sessionCatalog.values()].flatMap(
+    const catalogRefs = [...visibleCatalog.values()].flatMap(
       (workspace) => workspace.sessions,
     );
     return mergeConfirmedRetainedSessions(knownSessions, [
       ...workspaceProduct.backgroundTurns,
       ...catalogRefs,
-    ]);
-  }, [knownSessions, sessionCatalog, workspaceProduct.backgroundTurns]);
+    ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
+  }, [
+    knownSessions,
+    visibleCatalog,
+    workspaceProduct.backgroundTurns,
+    deletedSessionIds,
+  ]);
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -1502,6 +1569,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (matchKeyboardParityShortcut(event)?.id !== "focus-dispatch") return;
       // §8: never steal a chord a text control or dialog owns.
       if (shortcutTargetSuppressed(event.target)) return;
+      if (!fleetSupported) return;
       event.preventDefault();
       setFleetRouteActive(true);
       // The Fleet pane is `hidden` until the route is active and a HIDDEN
@@ -1512,7 +1580,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
     window.addEventListener("keydown", onFocusDispatchKeyDown);
     return () => window.removeEventListener("keydown", onFocusDispatchKeyDown);
-  }, []);
+  }, [fleetSupported]);
   // Wait only for the lazy Fleet surface to mount. An unavailable Start form
   // has an immediate focus target, so it does not exhaust the frame retries.
   useEffect(() => {
@@ -1541,6 +1609,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
   }, [fleetBriefFocusRequest, fleetRouteActive]);
 
+  const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
+    string | null
+  >(null);
+  const readOnlyPeer =
+    peerReadonlySlug(
+      peers.manager?.snapshot().peers ?? [],
+      session.opened?.session_id ?? null,
+    ) !== null;
   const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
@@ -1551,6 +1627,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (
       !session.connected ||
       !opened ||
+      readOnlyPeer ||
       !text ||
       // #56: another tab owns this session's lock — dispatching here
       // would interleave with it. Take over (banner button) to regain.
@@ -1941,11 +2018,99 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
 
+  const retryPermissionDenied = async (turnId: string) => {
+    if (
+      readOnlyPeer ||
+      permissionRetryBusyTurnId ||
+      !safety.permission.editable
+    )
+      return;
+    const client = protocol.client;
+    const opened = session.opened;
+    const option = permissionRetryProfile;
+    const prompt = conversation.timeline.find(
+      (entry) =>
+        entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
+    )?.body;
+    if (!client || !opened || !option || !prompt) return;
+    const retryKey = activeSessionKey;
+    const ownerIsCurrent = () =>
+      activeSessionClientRef.current === client &&
+      openedSessionIdRef.current === opened.session_id &&
+      activeSessionKeyRef.current === retryKey;
+    setPermissionRetryBusyTurnId(turnId);
+    try {
+      const result = await client.setPermissionProfile({
+        session_id: opened.session_id,
+        update: { mode: "workspace_write", network: option.network },
+      });
+      if (
+        !result.applied ||
+        result.session_id !== opened.session_id ||
+        result.current.mode !== "workspace_write" ||
+        result.current.network !== option.network
+      ) {
+        throw new Error("The server did not apply workspace write permission.");
+      }
+      if (!ownerIsCurrent()) return;
+      await safety.refreshPermission();
+      if (!ownerIsCurrent()) return;
+      conversation.enqueuePrompt(prompt);
+    } catch (reason) {
+      setCommandError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    } finally {
+      setPermissionRetryBusyTurnId(null);
+    }
+  };
+
   const activeTurnId = conversation.queue.active?.turnId ?? null;
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
   const activityLabel = timelineActivity(conversation.timeline, activeTurnId);
+  const activeTurnWaitRef = useRef<{
+    turnId: string;
+    startedAtMs: number;
+  } | null>(null);
+  const [waitNow, setWaitNow] = useState(() => Date.now());
+  if (activeTurnId) {
+    if (activeTurnWaitRef.current?.turnId !== activeTurnId)
+      activeTurnWaitRef.current = {
+        turnId: activeTurnId,
+        startedAtMs: Date.now(),
+      };
+  } else activeTurnWaitRef.current = null;
+  useEffect(() => {
+    if (!activeTurnId) return;
+    const timer = window.setInterval(() => setWaitNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [activeTurnId]);
+  const longWait = activityLabel
+    ? waitingFeedback({
+        activityLabel,
+        turnStarting,
+        elapsedMs: activeTurnWaitRef.current
+          ? waitNow - activeTurnWaitRef.current.startedAtMs
+          : 0,
+      })
+    : null;
+  const localizedActivityLabel = activityLabel
+    ? activityLabel.startsWith("Running ") && activityLabel.endsWith("…")
+      ? t("Running {value0}…", {
+          value0: activityLabel.slice("Running ".length, -1),
+        })
+      : t(activityLabel)
+    : null;
+  const waitDuration = longWait
+    ? longWait.elapsedSeconds >= 60
+      ? t("{value0}m {value1}s", {
+          value0: Math.floor(longWait.elapsedSeconds / 60),
+          value1: longWait.elapsedSeconds % 60,
+        })
+      : t("{value0}s", { value0: longWait.elapsedSeconds })
+    : "";
   const hasUnfinishedWork = Boolean(
     activeTurnId ||
     conversation.queue.pending.length ||
@@ -1998,6 +2163,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     previousActiveSessionKeyRef.current,
     historyView !== null,
   );
+  const activeSessionKeyRef = useRef(activeSessionKey);
+  const activeSessionClientRef = useRef(protocol.client);
+  const openedSessionIdRef = useRef(session.opened?.session_id);
+  activeSessionKeyRef.current = activeSessionKey;
+  activeSessionClientRef.current = protocol.client;
+  openedSessionIdRef.current = session.opened?.session_id;
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
@@ -2399,6 +2570,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const moveToProductSession = async (productSessionId: string) => {
+    setFleetRouteActive(false);
     const target = navigableSessions.find(
       (item) =>
         workspaceSessionKey(
@@ -2722,6 +2894,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             profile.network === currentPermission.network,
         )
       : undefined;
+  const permissionRetryProfile = safety.permission.editable
+    ? safety.permission.result?.profiles.find(
+        (profile) =>
+          profile.mode === "workspace_write" &&
+          profile.network === currentPermission?.network,
+      )
+    : undefined;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -2788,6 +2967,36 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         session.opened.workspace_root !== undefined,
       )
     : null;
+  // Fleet is a transient destination, not a second session route. Any real
+  // navigation state change (including browser history and settings/pickers)
+  // returns to that destination; moveToProductSession also covers selecting
+  // the already-active session, whose key does not change.
+  useEffect(() => {
+    setFleetRouteActive(false);
+  }, [activeSessionKey, fleetSupported]);
+  useEffect(() => {
+    if (
+      settingsOpen ||
+      workspacePicker.open ||
+      inspectionView ||
+      resumeView ||
+      nativeReview ||
+      profileExtensionsMode ||
+      inventoryMode ||
+      savedLink
+    ) {
+      setFleetRouteActive(false);
+    }
+  }, [
+    settingsOpen,
+    workspacePicker.open,
+    inspectionView,
+    resumeView,
+    nativeReview,
+    profileExtensionsMode,
+    inventoryMode,
+    savedLink,
+  ]);
   const fleetSessions = navigableSessions.map((ref) => ({
     sessionId: ref.sessionId,
     name: knownSessionTitle(ref.sessionId, t),
@@ -2803,6 +3012,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
    * only the settled kind (plus the bounded refusal kind) off this value.
    */
   const fleetStartSettle = ((): FleetStartState | undefined => {
+    if (nativeFleetActive) return nativeFleetStartState;
     const state = session.peerController?.state;
     if (state === undefined) return undefined;
     if (state.kind === "accepted")
@@ -3026,7 +3236,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               collapsed={sidebarCollapsed}
               recentWorkspaces={recentWorkspaces}
               knownSessions={navigableSessions}
-              sessionCatalog={sessionCatalog}
+              sessionCatalog={visibleCatalog}
               activeWorkspacePath={activeWorkspacePath}
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}
@@ -3045,15 +3255,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
               selectedSessionId={activeSessionKey}
+              peerRoster={peers.roster}
+              peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
               error={workspaceProduct.state.error}
               settingsActive={settingsOpen}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
+              fleetAvailable={fleetSupported}
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              onPeerDockSelect={(peer) => {
+                if (draftCapacityBlocked) return;
+                void workspaceProduct
+                  .openSession({
+                    sessionId: peer.identity,
+                    cwd: peer.cwd,
+                    profileId: peer.profileId,
+                    resolveLaunch: false,
+                  })
+                  .then((outcome) => {
+                    if (outcome === "opened" && compact)
+                      setSidebarCollapsed(true);
+                  });
+              }}
               peerDockCollapsed={peerDockCollapsed}
               onPeerDockToggle={() =>
                 setPeerDockCollapsed((collapsed) => !collapsed)
@@ -3081,11 +3308,73 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 });
               }}
               onSessionSelect={moveToProductSession}
+              onSessionRename={
+                workspaceProduct.state.renameAvailable
+                  ? async (rowKey, title) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not rename this session.");
+                      const outcome = await workspaceProduct.renameSession(
+                        reference.sessionId,
+                        title,
+                      );
+                      if (outcome.kind === "done") {
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not rename this session.");
+                    }
+                  : undefined
+              }
+              onSessionDelete={
+                workspaceProduct.state.deleteAvailable
+                  ? async (rowKey) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not delete this session.");
+                      const sessionId = reference.sessionId;
+                      // Another tab or client may be running it; the server
+                      // would keep writing to a conversation shown as gone.
+                      const running = [...sessionCatalog.values()].some(
+                        (workspace) =>
+                          workspace.sessions.some(
+                            (row) =>
+                              row.sessionId === sessionId && row.activeTurn,
+                          ),
+                      );
+                      if (running) return t("Stop this session’s work first.");
+                      const outcome =
+                        await workspaceProduct.deleteSession(sessionId);
+                      if (outcome.kind === "done") {
+                        setKnownSessions(
+                          forgetKnownSession(
+                            browserStorage("sessionStorage"),
+                            connection,
+                            sessionId,
+                          ),
+                        );
+                        setDeletedSessionIds((current) =>
+                          current.includes(sessionId)
+                            ? current
+                            : [...current, sessionId],
+                        );
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not delete this session.");
+                    }
+                  : undefined
+              }
               onSettings={() => {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);
               }}
               onFleet={() => {
+                if (!fleetSupported) return;
                 if (compact) setSidebarCollapsed(true);
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
@@ -3480,6 +3769,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
+                          onRetryPermission={
+                            permissionRetryProfile && !readOnlyPeer
+                              ? (turnId) => void retryPermissionDenied(turnId)
+                              : undefined
+                          }
+                          permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
                       </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>
@@ -3509,7 +3804,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           className={productStyles.thinkingOctopus}
                         />
                         <span>
-                          {turnStarting ? t("Starting…") : activityLabel}
+                          {turnStarting
+                            ? t("Starting…")
+                            : localizedActivityLabel}
+                          {longWait ? (
+                            <small data-waiting-feedback="true">
+                              <br />
+                              {t(longWait.phase)} ·{" "}
+                              {t("Elapsed {value0}", { value0: waitDuration })}
+                              <br />
+                              {t(
+                                "You can stop this turn, check the connection, or retry.",
+                              )}
+                            </small>
+                          ) : null}
                         </span>
                       </div>
                     ) : null}
@@ -3844,6 +4152,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                         peerRoster={peers.manager?.snapshot().peers ?? []}
                         peerSessionId={session.opened?.session_id ?? null}
+                        onReturnToMaster={() => {
+                          if (draftCapacityBlocked) return;
+                          void peers.returnToMaster().then((outcome) => {
+                            if (outcome !== "opened") return;
+                            if (compact) setSidebarCollapsed(true);
+                            requestAnimationFrame(() =>
+                              composerRef.current?.focus(),
+                            );
+                          });
+                        }}
                         value={draft}
                         onChange={(value) => {
                           draftRef.current = value;
@@ -3981,6 +4299,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onInterrupt={() => void conversation.interrupt()}
                         />
                         {conversation.canSendPendingNow &&
+                        !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
                         // locked (same as App.submit's held-elsewhere gate).
@@ -3995,7 +4314,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
-                        {activeTurnId && draft.trim() ? (
+                        {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
                             disabled={
@@ -4013,7 +4332,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Queue")}
                           </button>
                         ) : null}
-                        {!activeTurnId || draft.trim() ? (
+                        {(!activeTurnId || draft.trim()) && !readOnlyPeer ? (
                           <button
                             className="send-button"
                             type="button"
@@ -4084,10 +4403,63 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   sessions={fleetSessions}
                   selectedSessionId={session.opened?.session_id ?? ""}
                   startState={fleetStartSettle}
+                  nativeStartAvailable={nativeFleetActive}
+                  nativeControlsAvailable={
+                    nativeFleetActive && nativeFleetControlsSupported
+                  }
                   onStart={(submit) => {
-                    // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
-                    // peer/dispatch. With no seat held, the FIRST call goes to
-                    // acquire and the dispatch is deferred to the effect below.
+                    if (nativeFleetActive) {
+                      const brief = submit.brief;
+                      const operationId = submit.operationId ?? randomUUID();
+                      const manager = peers.manager;
+                      setNativeFleetStartState(undefined);
+                      if (!manager) {
+                        setNativeFleetStartState({
+                          kind: "failed",
+                          laneKey: "native",
+                          brief,
+                          operationId,
+                          refusalKind: "peer_control_refused",
+                        });
+                        return;
+                      }
+                      void manager
+                        .kickoff({
+                          brief,
+                          n: 1,
+                          title: brief.split("\n", 1)[0]!.slice(0, 60),
+                        })
+                        .then((result) => {
+                          setNativeFleetStartState(
+                            result
+                              ? {
+                                  kind: "accepted",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  slug: result.peers[0]?.slug ?? result.slug,
+                                }
+                              : {
+                                  kind: "failed",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  refusalKind: "peer_control_refused",
+                                },
+                          );
+                        })
+                        .catch(() => {
+                          setNativeFleetStartState({
+                            kind: "failed",
+                            laneKey: "native",
+                            brief,
+                            operationId,
+                            refusalKind: "peer_control_refused",
+                          });
+                        });
+                      return;
+                    }
+                    // External-driver remains an optional fallback only.
                     const next = fleetStartOnSubmit({
                       state: fleetStartPending,
                       seatHeld: session.peerController?.seatHeld === true,
@@ -4107,7 +4479,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     });
                     if (next !== null) setFleetStartPending(next);
                   }}
-                  {...(session.peerController?.onRowAction
+                  {...(nativeFleetActive && nativeFleetGatherSupported
+                    ? {
+                        onGather: () => {
+                          setFleetGatherState("busy");
+                          void peers
+                            .gather(undefined, () => !navigationBlocked)
+                            .then(setFleetGatherState)
+                            .catch(() => setFleetGatherState("failed"));
+                        },
+                        gatherState: fleetGatherState,
+                      }
+                    : {})}
+                  {...(session.peerController?.onRowAction ||
+                  (nativeFleetActive && nativeFleetControlsSupported)
                     ? {
                         onRowAction: (row, action, steerText) => {
                           // Judge r2 #4 (H4): bind the row's REAL pending ids —
@@ -4118,6 +4503,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               (candidate) => candidate.slug === row.slug,
                             );
                           if (!entry) return;
+                          if (
+                            nativeFleetActive &&
+                            nativeFleetControlsSupported
+                          ) {
+                            peers.rowAction(entry, action, steerText ?? "");
+                            return;
+                          }
                           if (
                             entry.activity === "blocked" &&
                             entry.requestKind === "question"
@@ -4631,6 +5023,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         fallback={<DeferredSurface label="Loading memory…" />}
                       >
                         <MemorySettingsContent
+                          key={`${session.opened.session_id}:${memoryProfileId}`}
+                          sessionId={session.opened.session_id}
                           client={protocol.client}
                           authenticatedProfileId={authenticatedMemoryProfileId}
                           sessionProfileId={memoryProfileId}

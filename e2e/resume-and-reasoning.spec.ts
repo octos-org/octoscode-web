@@ -6,7 +6,7 @@ const composer = (page: Page) =>
 const sidebar = (page: Page) => page.locator("aside");
 const selectedRow = (page: Page) =>
   sidebar(page).locator(
-    'button[role="treeitem"][data-session-id][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
 const historyDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Resume historical conversation" });
@@ -90,7 +90,7 @@ async function title(page: Page) {
 }
 const row = (page: Page, sessionId: string) =>
   sidebar(page).locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
   );
 const control = (name: string, sessionId: string, method?: string) =>
   `${origin}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;

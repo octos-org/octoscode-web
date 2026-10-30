@@ -38,6 +38,26 @@ async function deliver(page: Page, sessionId: string, name: string) {
   return { item, preview };
 }
 
+test("keeps a structured write artifact and its preview after reload", async ({
+  page,
+}) => {
+  await openConversation(page);
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Write an artifact fixture");
+  await composer.press("Enter");
+  const item = page.locator('[data-attachment="report.md"]');
+  await expect(item).toBeVisible();
+  await page.reload();
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = item
+    .locator(".artifact-preview, [data-artifact-kind]")
+    .last();
+  await expect(preview).toBeVisible();
+  await expect(preview.getByText("Markdown artifact")).toBeVisible();
+  await expect(preview.getByText("Formatted safely")).toBeVisible();
+});
+
 test("previews and pages PDF artifacts", async ({ page }) => {
   const sessionId = await openConversation(page);
 

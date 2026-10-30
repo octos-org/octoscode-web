@@ -49,7 +49,7 @@ describe("transcript fold model", () => {
     folds = collapseAll(folds);
     expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
     expect(isFoldExpanded(folds, "tool:call-2")).toBe(false);
-    expect(folds).toEqual({});
+    expect(folds).toEqual({ __collapsed_all__: false });
   });
 
   it("pruneFolds drops memory for blocks no longer in the transcript", () => {
@@ -148,6 +148,7 @@ describe("tool call header line", () => {
     expect(toolTarget('{"path": "/src/main.rs", "q": 1}')).toBe("/src/main.rs");
     expect(toolTarget('{"file_path": "/a/b.rs"}')).toBe("/a/b.rs");
     expect(toolTarget('{"query": "spinner"}')).toBe("spinner");
+    expect(toolTarget('path: "report.md", content: …')).toBe("report.md");
     expect(toolTarget("not json")).toBe("");
   });
 

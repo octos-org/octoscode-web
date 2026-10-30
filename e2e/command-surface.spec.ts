@@ -236,7 +236,7 @@ test("keeps /sessions refocus stable on the active Session via sidebar search", 
 
   const sidebar = productNavigation(page);
   const selected = sidebar.locator(
-    'button[role="treeitem"][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
   const selectedTitle = await selected
     .locator('[class*="sessionTitle"]')
@@ -276,7 +276,7 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
   const sourceOpen = protocol.requests("session/open")[0]!;
   const sourceId = String(sourceOpen.params!.session_id);
   const selected = productNavigation(page).locator(
-    'button[role="treeitem"][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
   const sourceKey = await selected.getAttribute("data-session-id");
   const prompt = "Persist the source conversation before its fixture fork";
@@ -351,10 +351,10 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
     .getByRole("button", { name: "Close history", exact: true })
     .click();
   await expect(
-    productNavigation(page).locator('button[role="treeitem"][data-session-id]'),
+    productNavigation(page).locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   const childRow = productNavigation(page).locator(
-    `button[role="treeitem"][data-session-id*=${JSON.stringify(childId)}]`,
+    `[role="treeitem"][data-session-id*=${JSON.stringify(childId)}]`,
   );
   await childRow.click();
   await expect(childRow).toHaveAttribute("aria-current", "page");
@@ -500,10 +500,10 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   const sourceOpen = protocol.requests("session/open")[0]!;
   const sessionId = String(sourceOpen.params!.session_id);
   const aKey = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   const a = sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(aKey)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(aKey)}]`,
   );
   const brief = "Gather this exact peer receipt";
   await sendSlashCommand(page, "/peer");
@@ -586,15 +586,19 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
       exact: true,
     })
     .click();
+  // Two Session rows; the peer lives in the dock, not in the Session list.
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
-  ).toHaveCount(3);
+    sidebar.locator('[role="treeitem"][data-session-id]'),
+  ).toHaveCount(2);
+  await expect(sidebar.locator(`button[data-peer-slug="${slug}"]`)).toHaveCount(
+    1,
+  );
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const bKey = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   const b = sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(bKey)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(bKey)}]`,
   );
   expect(
     (

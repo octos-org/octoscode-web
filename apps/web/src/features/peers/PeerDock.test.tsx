@@ -240,13 +240,24 @@ describe("PeerDock expanded dock", () => {
     expect(markup).toContain("opening");
   });
 
-  it("gives every row button an accessible name that names the activity", () => {
-    // Round 2 (judge #4): names carry the PEER label, never a raw slug.
-    expect(markup).toContain("Peer 1 — needs you");
-    expect(markup).toContain("Peer 2 — streaming");
-    expect(markup).toContain("Peer 3 — done");
-    expect(markup).toContain("Peer 4 — idle");
+  it("includes each row's activity in its content-derived accessible name", () => {
+    expect(markup).toContain('class="sr-only">needs you</span>');
+    expect(markup).toContain('class="sr-only">streaming</span>');
+    expect(markup).toContain('class="sr-only">done</span>');
+    expect(markup).toContain('class="sr-only">idle</span>');
     expect(markup).toContain('aria-expanded="true"');
+  });
+
+  it("falls back to the positional role label only for an empty slug", () => {
+    const withoutSlug = renderToStaticMarkup(
+      <PeerDock
+        manager={managerFor([
+          entry({ slug: "", model: "glm-5.3", topic: "dispatch prompt" }),
+        ])}
+      />,
+    );
+    expect(withoutSlug).toContain(">Peer 1 · glm-5.3</span>");
+    expect(withoutSlug).not.toContain(">dispatch prompt</span>");
   });
 });
 
@@ -413,10 +424,14 @@ function interactive(
 }
 
 describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
-  function mount(peers: readonly PeerRosterEntry[]) {
+  function mount(
+    peers: readonly PeerRosterEntry[],
+    actionRoster?: readonly PeerRosterEntry[],
+  ) {
     const onApprovalRespond = vi.fn();
     const tree = PeerDock({
       manager: managerFor(peers),
+      actionRoster,
       onApprovalRespond,
     }) as ReactElement;
     const nodes = interactive(tree);
@@ -502,6 +517,15 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
     );
   });
 
+  it("ignores approval shortcuts on a foreign retained peer", () => {
+    const dock = mount([APPROVAL_ROW], []);
+    const row = dock.row("fence-approve");
+    row?.props.onKeyDown?.(keyEvent("y", { altKey: true }));
+    row?.props.onKeyDown?.(keyEvent("n", { altKey: true }));
+    expect(dock.onApprovalRespond).not.toHaveBeenCalled();
+    expect(dock.actions).toHaveLength(0);
+  });
+
   it("Alt+N on the focused approval row responds deny once", () => {
     const dock = mount(ROSTERED);
     dock
@@ -559,6 +583,24 @@ describe("PeerDock approval row-action seam (console plan §3-§5)", () => {
   });
 });
 
+describe("PeerDock row selection", () => {
+  it("forwards the exact roster entry from the activated row", () => {
+    const onSelect = vi.fn();
+    const tree = PeerDock({
+      manager: managerFor(ROSTER),
+      onSelect,
+    }) as ReactElement;
+    const row = interactive(tree).find(
+      (node) => node.props["data-peer-slug"] === "fence-c",
+    );
+
+    row?.props.onClick?.({});
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(ROSTER[2]);
+  });
+});
+
 describe("formatPeerTokens (web gap 4b)", () => {
   it("prefixes the TUI output arrow and compacts k / M", () => {
     expect(formatPeerTokens(0)).toBe("↓ 0");
@@ -586,8 +628,11 @@ describe("PeerDock output-token segment (web gap 4b)", () => {
     );
     expect(markup).toContain("data-peer-tokens");
     expect(markup).toContain("↓ 1.2k");
+    expect(markup).toContain('title="Output tokens"');
+    expect(markup).toContain("Output 1234 tokens");
     // The token segment rides the SAME row as the elapsed segment.
     expect(markup).toContain("data-peer-elapsed");
+    expect(markup).toContain('title="Peer run time"');
   });
 
   it("omits the token segment until the row reports usage", () => {

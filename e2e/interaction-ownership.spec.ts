@@ -28,13 +28,13 @@ function productNavigation(page: Page): Locator {
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
   );
 }
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
@@ -202,7 +202,7 @@ async function createSiblingSession(
     .locator(`button[aria-label="New session in ${workspaceName}"]`)
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   return selectedSessionTitle(sidebar);
 }
@@ -219,7 +219,7 @@ async function createSiblingSessionExpecting(
     .locator(`button[aria-label="New session in ${workspaceName}"]`)
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(expectedCount);
   return selectedSessionTitle(sidebar);
 }
@@ -468,7 +468,7 @@ for (const kind of ["approval", "question"] as const) {
     ).toHaveLength(0);
 
     if (kind === "approval")
-      await ownerDialog.getByRole("button", { name: /Yes/ }).click();
+      await ownerDialog.getByRole("button", { name: /Allow once/ }).click();
     else {
       await ownerDialog.getByLabel(/Full/).check();
       await ownerDialog.getByRole("button", { name: "Continue" }).click();
@@ -535,7 +535,7 @@ test("responds to a parked approval from the owning Session with exact ids", asy
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
@@ -561,7 +561,7 @@ test("responds to a parked approval from the owning Session with exact ids", asy
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toBeVisible({
     timeout: 10_000,
   });
-  await approvalDialog.getByRole("button", { name: /Yes/ }).click();
+  await approvalDialog.getByRole("button", { name: /Allow once/ }).click();
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
@@ -602,7 +602,7 @@ test("restores and resolves a parked question on its owning Session with exact i
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
@@ -679,7 +679,7 @@ test("keeps three concurrent parked questions bound to their Sessions and resolv
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const questionDialog = page.getByRole("dialog", { name: QUESTION_TITLE });
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);

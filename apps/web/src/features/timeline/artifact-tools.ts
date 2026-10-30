@@ -1,4 +1,11 @@
-/** A file path explicitly written by a tool; never inferred from result prose. */
+/** Core's bounded, redacted v2 replay path; absent on older Core versions. */
+export function structuredWritePath(toolName: string, value: unknown): string {
+  return ["write_file", "edit_file"].includes(toolName)
+    ? (validPath(value) ?? "")
+    : "";
+}
+
+/** A file path explicitly written by a live tool; never inferred from result prose. */
 export function writtenArtifactPath(
   toolName: string,
   argumentsJson: string,

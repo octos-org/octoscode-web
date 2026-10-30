@@ -25,7 +25,7 @@ const promptQueue = (page: Page) =>
   page.getByRole("region", { name: "Queued prompts" });
 const row = (page: Page, sessionId: string) =>
   page.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
   );
 type Frame = {
   id?: string;
@@ -94,7 +94,7 @@ async function connect(page: Page, workspace: string) {
 }
 async function title(page: Page) {
   const sessionId = await page
-    .locator('button[role="treeitem"][data-session-id][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   if (!sessionId) throw new Error("Expected a selected Session id");
   return sessionId;
@@ -433,7 +433,9 @@ for (const kind of ["approval", "question"] as const) {
     expect(request).toBeDefined();
     if (kind === "approval") {
       await expect(dialog.getByText("需要批准", { exact: true })).toBeVisible();
-      await expect(dialog.getByRole("button", { name: /^是/ })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /^允许一次/ }),
+      ).toBeVisible();
       await expect(
         dialog.getByText("The agent wants to run the repository checks.", {
           exact: true,
@@ -462,7 +464,7 @@ for (const kind of ["approval", "question"] as const) {
       await expect(
         dialog.getByText("Approval required", { exact: true }),
       ).toBeVisible();
-      await dialog.getByRole("button", { name: /^Yes/ }).click();
+      await dialog.getByRole("button", { name: /^Allow once/ }).click();
     } else {
       await dialog.getByLabel(/Full/).check();
       await dialog

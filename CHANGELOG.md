@@ -34,6 +34,12 @@
 - Replace first-run developer fields with a two-step model setup: domestic
   provider recommendations, generated identity under Advanced, custom
   OpenAI-compatible endpoints, and a folder-first workspace picker.
+- Clarify approval actions with directory/network/deletion impact and localized
+  risk labels; use Deny / Allow for this session / Allow once while retaining
+  shortcuts. Permission-denied tools can switch to workspace-write and retry.
+- Make execution legible: human-readable tool titles with raw names in details,
+  per-turn duration/file/token summaries, expanded failure reasons and amber
+  sidebar attention, plus streaming Markdown without raw incomplete markers.
 
 ## v0.20.0 — 2026-10-29
 

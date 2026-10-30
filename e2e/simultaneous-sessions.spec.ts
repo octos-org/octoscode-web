@@ -20,7 +20,7 @@ function conversation(page: Page): Locator {
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
   );
 }
 
@@ -54,7 +54,7 @@ async function connectAndStartWorkspace(
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
@@ -157,7 +157,7 @@ test("isolates independent turns across rapid Session switches", async ({
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
@@ -333,7 +333,7 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
     .getByRole("button", { name: "New session in busy-loss-fifo" })
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));
@@ -420,7 +420,7 @@ test("drains a queued A2 after a released A1 terminal while B stays selected", a
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
@@ -515,7 +515,7 @@ test("keeps per-Session transcripts distinct and restores the pre-reload Session
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('button[role="treeitem"][data-session-id]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const firstTitle = await selectedSessionTitle(sidebar);
   const firstSession = sessionRowByTitle(sidebar, firstTitle);
@@ -608,7 +608,7 @@ test("preserves native persisted segment finality across late deltas and the nex
   );
   const sidebar = productNavigation(page);
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const a = sessionRowByTitle(sidebar, aTitle);
@@ -633,7 +633,7 @@ test("preserves native persisted segment finality across late deltas and the nex
     })
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"][data-session-id]'),
+    sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));

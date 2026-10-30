@@ -233,9 +233,7 @@ test("a background Session completing while another is selected signals and ackn
   const navigation = page.getByRole("complementary", {
     name: "Product navigation",
   });
-  const sessions = navigation.locator(
-    'button[role="treeitem"][data-session-id]',
-  );
+  const sessions = navigation.locator('[role="treeitem"][data-session-id]');
   const originalSessionTitle = await sessions
     .first()
     .getAttribute("data-session-id");
@@ -264,7 +262,7 @@ test("a background Session completing while another is selected signals and ackn
     await page.evaluate(() => window.__attentionProbe.notices),
   ).toHaveLength(1);
   const original = navigation.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(originalSessionTitle)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(originalSessionTitle)}]`,
   );
   await original.click();
   await expect(original).toHaveAttribute("aria-current", "page");

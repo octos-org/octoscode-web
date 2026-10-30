@@ -46,7 +46,7 @@ async function selectedSessionId(page: Page) {
   // that ignores aria-hidden so the ID stays readable under an open dialog.
   const value = await page
     .locator(
-      'aside[aria-label="Product navigation"] button[role="treeitem"][aria-current="page"]',
+      'aside[aria-label="Product navigation"] [role="treeitem"][data-session-id][aria-current="page"]',
     )
     .getAttribute("data-session-id");
   if (!value) throw new Error("A confirmed selected Session is required");
@@ -54,9 +54,7 @@ async function selectedSessionId(page: Page) {
 }
 async function selectSession(page: Page, sessionId: string) {
   await sidebar(page)
-    .locator(
-      `button[role="treeitem"][data-session-id*=${JSON.stringify(sessionId)}]`,
-    )
+    .locator(`[role="treeitem"][data-session-id*=${JSON.stringify(sessionId)}]`)
     .click();
   await expect.poll(() => selectedSessionId(page)).toContain(sessionId);
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();

@@ -44,7 +44,7 @@ function productNavigation(page: Page): Locator {
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
   return sidebar.locator(
-    `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
   );
 }
 
@@ -63,7 +63,7 @@ function peerDockRows(page: Page): Locator {
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;

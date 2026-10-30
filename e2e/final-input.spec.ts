@@ -106,7 +106,7 @@ test("long approval remains readable and actionable in a short phone viewport", 
       body.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
     )
     .toBeLessThan(2);
-  await approval.getByRole("button", { name: /^No/ }).click();
+  await approval.getByRole("button", { name: /^Deny/ }).click();
   await expect(approval).toBeHidden();
 });
 

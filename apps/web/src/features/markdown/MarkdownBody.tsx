@@ -1,6 +1,6 @@
 import { lazy, Suspense, useDeferredValue, type ComponentProps } from "react";
 import { hasMath } from "./math.ts";
-import { closeOpenFence } from "./streaming-fence.ts";
+import { prepareStreamingMarkdown } from "./streaming-fence.ts";
 import ReactMarkdown, {
   type Components,
   type UrlTransform,
@@ -158,13 +158,13 @@ export function MarkdownBody({ text, streaming = false }: MarkdownBodyProps) {
     // Rendered as markdown as it arrives, not held back as raw text until the
     // turn ends. Two things wait for the finished reply: math, since a
     // half-written `$…` cannot be typeset, and syntax highlighting (see
-    // streamingComponents). An unclosed inline marker such as `**` stays
-    // literal until its closer arrives, as CommonMark specifies, so nothing is
-    // formatted before the model has actually written it.
+    // streamingComponents). An unclosed inline marker such as a trailing `**`
+    // is hidden until its closer arrives, so raw Markdown punctuation never
+    // flashes in the response.
     return (
       <div className="markdown-body">
         <PlainMarkdown
-          text={closeOpenFence(deferredText)}
+          text={prepareStreamingMarkdown(deferredText)}
           components={streamingComponents}
         />
       </div>

@@ -256,6 +256,105 @@ test.describe("Fleet view (migrated console semantics)", () => {
     expect(w.calls(ACQUIRE_METHOD)).toHaveLength(0);
   });
 
+  test("sidebar Session selection and browser Back leave Fleet", async ({
+    page,
+  }) => {
+    const workspaceCwd = cwd("nav");
+    await connectAndStartWorkspace(page, workspaceCwd);
+    const sidebar = productNavigation(page);
+    const workspace = sidebar.locator(
+      '[role="treeitem"][aria-label="peer-control-nav"]',
+    );
+    await workspace
+      .getByRole("button", { name: "peer-control-nav", exact: true })
+      .hover();
+    await sidebar
+      .getByRole("button", { name: "New session in peer-control-nav" })
+      .click();
+    await expect(
+      sidebar.getByRole("treeitem", { name: /Session / }),
+    ).toHaveCount(2);
+    await openFleet(page);
+    await sidebar
+      .getByRole("treeitem", { name: /Session / })
+      .first()
+      .click();
+    await expect(page.locator("section.conversation")).toBeVisible();
+    await expect(composer(page)).toBeEnabled();
+    await expect(fleet(page)).toBeHidden();
+    await page.goBack();
+    await expect(fleet(page)).toBeHidden();
+  });
+
+  test("New Session leaves Fleet and opens the conversation", async ({
+    page,
+  }) => {
+    await connectAndStartWorkspace(page, cwd("new-session"));
+    const sidebar = productNavigation(page);
+    await openFleet(page);
+    const workspace = sidebar.locator(
+      '[role="treeitem"][aria-label="peer-control-new-session"]',
+    );
+    await workspace
+      .getByRole("button", { name: "peer-control-new-session", exact: true })
+      .hover();
+    await sidebar
+      .getByRole("button", { name: "New session in peer-control-new-session" })
+      .click();
+    await expect(composer(page)).toBeEnabled();
+    await expect(fleet(page)).toBeHidden();
+    await expect(
+      sidebar.getByRole("treeitem", { name: /Session / }),
+    ).toHaveCount(2);
+  });
+
+  test("Settings navigation leaves Fleet and can return", async ({ page }) => {
+    await connectAndStartWorkspace(page, cwd("settings"));
+    await openFleet(page);
+    await productNavigation(page)
+      .getByRole("button", { name: "Settings", exact: true })
+      .click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await expect(fleet(page)).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+    await openFleet(page);
+    await expect(fleet(page)).toBeVisible();
+  });
+
+  test("unsupported Fleet capability disables the entry and explains why", async ({
+    page,
+  }) => {
+    await connectAndStartWorkspace(page, cwd("no-fleet"));
+    await expect(fleetEntry(page)).toBeDisabled();
+    await expect(
+      productNavigation(page).getByText(
+        "Current server does not support Fleet yet",
+      ),
+    ).toBeVisible();
+  });
+
+  test("Fleet empty state stays top-aligned on desktop and mobile", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await connectAndStartWorkspace(page, cwd(""));
+    await openFleet(page);
+    const dynamicSession = fleet(page)
+      .locator("label")
+      .filter({ hasText: "Session" })
+      .locator("select");
+    await expect(page.locator(".fleet-pane")).toHaveScreenshot(
+      "fleet-empty-desktop.png",
+      { mask: [dynamicSession] },
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator(".fleet-pane")).toHaveScreenshot(
+      "fleet-empty-mobile.png",
+      { mask: [dynamicSession] },
+    );
+  });
+
   // ------------------------------------------ the Start gate (3-way)
   test("Start stays disabled until a model is chosen and a brief is typed", async ({
     page,

@@ -479,8 +479,9 @@ function effectivePeerControlVariant(state) {
 }
 function peerControlAdverts(variant) {
   return {
-    method: variant !== "no-method",
-    feature: variant !== "no-feature",
+    method: variant !== "no-method" && variant !== "no-fleet",
+    feature: variant !== "no-feature" && variant !== "no-fleet",
+    native: variant !== "no-fleet",
   };
 }
 const peerControlCalls = new Map(); // sessionId -> [kind, ...]
@@ -919,7 +920,9 @@ function isPeerSessionId(sessionId) {
 function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = randomUUID();
+    const slug = workspaceRoot.includes("peer-presentation")
+      ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+      : randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,
@@ -2690,6 +2693,7 @@ const baseCapabilities = {
     "cron/toggle",
     "session/list",
     "session/delete",
+    "session/title.set",
     "session/files.list",
     "session/files/read",
     "peer/prepare",
@@ -2750,6 +2754,10 @@ function capabilitiesFor(socket, state) {
   const memoryCapabilities = memoryMainSockets.has(socket)
     ? {
         ...capabilities,
+        supported_features: [
+          ...capabilities.supported_features,
+          "memory.session_scope.v1",
+        ],
         supported_methods: [
           ...capabilities.supported_methods,
           "memory/request",
@@ -2786,7 +2794,11 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods,
+        : adverts.native
+          ? memoryCapabilities.supported_methods
+          : memoryCapabilities.supported_methods.filter(
+              (method) => method !== "peer/prepare" && method !== "peer/gather",
+            ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,
@@ -4945,6 +4957,28 @@ sockets.on("connection", (socket, request) => {
       reply(socket, request.id, {});
       return;
     }
+    if (request.method === "session/title.set") {
+      const title = request.params?.title?.trim();
+      if (!title || [...title].length > 200) {
+        replyError(socket, request.id, -32602, "Invalid session title");
+        return;
+      }
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.map((session) =>
+            session.id === request.params.session_id
+              ? { ...session, title }
+              : session,
+          ),
+        );
+      }
+      reply(socket, request.id, {
+        session_id: request.params.session_id,
+        title,
+      });
+      return;
+    }
     if (request.method === "profile/skills/list") {
       const duplicates = skillDuplicatesSockets.has(socket);
       reply(socket, request.id, {
@@ -5376,6 +5410,91 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (text === "Write an artifact fixture") {
+    const content =
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n";
+    deliveredFiles.set(deliveredFileKey(sessionId, "/workspace/report.md"), {
+      type: "text/markdown",
+      bytes: Buffer.from(content),
+    });
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: "write-artifact",
+      name: "write_file",
+      write_path: "report.md",
+      arguments_preview: JSON.stringify({ content: "x".repeat(2_000) }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: "write-artifact",
+      status: "complete",
+      output_preview: "report.md written",
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      { outcome: "completed" },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
+  const unconditionalWriteFailure =
+    text === "Fail a write fixture unconditionally";
+  if (text === "Fail a write fixture" || unconditionalWriteFailure) {
+    const permissionDenied =
+      sessionState(sessionId).permission.mode === "read_only";
+    const denied = permissionDenied || unconditionalWriteFailure;
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
+      name: "write_file",
+      arguments_preview: JSON.stringify({ path: "report.md" }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
+      status: denied ? "error" : "complete",
+      ...(denied
+        ? {
+            error: permissionDenied
+              ? "write_file is not permitted by read-only filesystem access"
+              : "permission denied: read-only workspace",
+          }
+        : { output_preview: "report.md written" }),
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      {
+        outcome: "completed",
+        token_usage: { input_tokens: 12, output_tokens: 9 },
+      },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
   // plan.todos.v1: only the plan fixture streams a checklist, so every other
   // spec keeps a composer with nothing pinned above it.
   if (planFixtureSockets.has(socket) && text.startsWith(PLAN_FIXTURE_PROMPT)) {

@@ -465,6 +465,7 @@
   margin-left: -4px;
   padding: 0 4px 16px 4px;
   overflow-y: auto;
+  overflow-x: clip;
   scrollbar-gutter: stable;
   scrollbar-color: var(--dsw-alias-border-l3) transparent;
 }
@@ -615,6 +616,8 @@
 
 .sessionRow {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   width: 100%;
   height: 32px;
@@ -635,6 +638,28 @@
 .searchResultRow:hover,
 .searchResultRow.selected {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rowMenuButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.rowMenuButton:hover,
+.rowMenuButton:focus-visible,
+.menuOpen .rowMenuButton {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .statusSlot {
@@ -659,7 +684,8 @@
     color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
 }
 
-.statusDot[data-status="waiting"] {
+.statusDot[data-status="waiting"],
+.statusDot[data-status="attention"] {
   background: var(--dsw-alias-state-warn-primary);
 }
 
@@ -797,11 +823,15 @@
 
 .searchResults {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 2px;
 }
 
 .searchResultRow {
   display: flex;
+  min-width: 0;
+  overflow: hidden;
   flex-direction: column;
   align-items: stretch;
   width: 100%;
@@ -824,6 +854,7 @@
 }
 
 .searchResultTitle {
+  flex: 1;
   min-width: 0;
   margin-left: 4px;
   overflow: hidden;
@@ -867,10 +898,22 @@
   cursor: pointer;
 }
 
-.settings:hover,
+.settings:hover:not(:disabled),
 .settingsActive {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.settings:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.fleetUnavailable {
+  padding: 0 10px 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .collapsed .footer {

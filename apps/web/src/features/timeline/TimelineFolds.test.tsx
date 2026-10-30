@@ -86,11 +86,11 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    // Folded by default; the header line carries tool name, target, status
+    // Folded by default; the header line carries a human title, status
     // mark (check glyph + label) and duration.
     expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
     const summary = summaryOf(html);
-    expect(summary).toContain("shell · cargo test");
+    expect(summary).toContain("Run command cargo test");
     expect(summary).toMatch(/completedGlyph/);
     expect(summary).toMatch(/data-status="complete"[^>]*>Done · 3 s</);
     expect(summary).not.toContain("<pre");
@@ -111,7 +111,7 @@ describe("Timeline foldable rendering", () => {
     const tools = html.indexOf("Expand all");
     expect(tools).toBeGreaterThanOrEqual(0);
     expect(html.indexOf("Expand all")).toBeLessThan(
-      html.indexOf("shell · cargo test"),
+      html.indexOf("Run command cargo test"),
     );
     expect(html).toContain("Collapse all");
   });
@@ -129,9 +129,9 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
+    expect(html).toMatch(/<details[^>]*toolBlock[^>]*open/);
     const summary = summaryOf(html);
-    expect(summary).toContain("shell · cargo test");
+    expect(summary).toContain("Run command cargo test");
     expect(summary).toMatch(/data-status="error"[^>]*aria-hidden="true"/);
     expect(summary).toMatch(/data-status="error"[^>]*>Failed · 3 s</);
     expect(summary).not.toMatch(/completedGlyph/);
