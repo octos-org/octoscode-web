@@ -479,8 +479,9 @@ function effectivePeerControlVariant(state) {
 }
 function peerControlAdverts(variant) {
   return {
-    method: variant !== "no-method",
-    feature: variant !== "no-feature",
+    method: variant !== "no-method" && variant !== "no-fleet",
+    feature: variant !== "no-feature" && variant !== "no-fleet",
+    native: variant !== "no-fleet",
   };
 }
 const peerControlCalls = new Map(); // sessionId -> [kind, ...]
@@ -2786,9 +2787,11 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods.filter(
-            (method) => method !== "peer/prepare" && method !== "peer/gather",
-          ),
+        : adverts.native
+          ? memoryCapabilities.supported_methods
+          : memoryCapabilities.supported_methods.filter(
+              (method) => method !== "peer/prepare" && method !== "peer/gather",
+            ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,

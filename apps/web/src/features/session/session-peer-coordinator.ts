@@ -154,6 +154,11 @@ export function peerSessionEventFor(
       return null;
     const projectedSessionId =
       envelope.cursor?.stream.split("\0", 1)[0] ?? envelope.session_id;
+    // Real peer projections are emitted on the MASTER with a peer topic and
+    // the peer's exact cursor stream. Direct peer envelopes keep the legacy
+    // direct-notification path (and must not be claimed a second time here).
+    if (!envelope.topic || projectedSessionId === envelope.session_id)
+      return null;
     let key: string | null = null;
     for (const [staging, peer] of opened)
       if (peer.scope.sessionId === projectedSessionId) key = staging;

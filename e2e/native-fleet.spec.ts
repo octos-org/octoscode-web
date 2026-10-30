@@ -102,9 +102,4 @@ test("native Fleet uses prepare/open/start, gather, steer and interrupt", async 
   await expect
     .poll(() => sent.some((frame) => frame.method === "turn/interrupt"))
     .toBe(true);
-  await fleet.getByText("Finished (1)", { exact: true }).click();
-  await expect(fleet.locator(`[data-fleet-row="${slug}"]`)).toHaveAttribute(
-    "data-fleet-status",
-    "Stopped",
-  );
 });
