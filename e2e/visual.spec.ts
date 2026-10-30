@@ -128,7 +128,10 @@ test("session header actions align with a panel badge on desktop and mobile", as
 
   const actions = page.locator(".header-actions");
   const panelButton = page.getByRole("button", { name: /^Session panel/ });
-  const menuButton = page.getByRole("button", { name: "More actions" });
+  const menuButton = page.getByRole("button", {
+    name: "More actions",
+    exact: true,
+  });
   await expect(panelButton).toContainText("1");
   const expectAligned = async () => {
     const [panel, menu] = await Promise.all([
