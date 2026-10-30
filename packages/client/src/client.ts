@@ -4,6 +4,7 @@ import {
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
 } from "./skill-methods.ts";
+import { MCP_CONNECTOR_MANAGE_V1 } from "./inventory-methods.ts";
 import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
@@ -29,6 +30,8 @@ import type {
   SessionOpenResult,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
   SessionFileReadParams,
   SessionFileReadResult,
   SessionFilesListParams,
@@ -137,6 +140,7 @@ export const DEFAULT_UI_FEATURES = [
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
   EXTERNAL_DRIVER_V1_UI_FEATURE,
+  MCP_CONNECTOR_MANAGE_V1,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -890,6 +894,17 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseSessionDeleteResult(value),
+    );
+  }
+
+  async setSessionTitle(
+    params: SessionTitleSetParams,
+  ): Promise<SessionTitleSetResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_TITLE_SET,
+      params,
+      async (value) =>
+        (await loadWorkspaceResults()).parseSessionTitleSetResult(value),
     );
   }
 

@@ -33,7 +33,9 @@ import {
 } from "./background-session-status.ts";
 import type { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
 import type { PeerRosterEntry } from "../peers/peer-manager.ts";
+import { peerReadonlySlug } from "../composer/peer-readonly.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
+import type { PeerRowAction } from "../control/peer-row-command.ts";
 import {
   sessionRuntimeScopeKey,
   type SessionRuntimeScope,
@@ -156,7 +158,10 @@ import type { SessionRecordRecoveryResult } from "./session-record-manager.ts";
 import { type SupervisionRuntimeState } from "../supervision/model.ts";
 import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
-import { useWorkspaceProduct } from "../workspace/use-workspace-product.ts";
+import {
+  useWorkspaceProduct,
+  type SessionMutationOutcome,
+} from "../workspace/use-workspace-product.ts";
 import {
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
@@ -218,6 +223,8 @@ export interface BackgroundSessionSnapshot {
 export interface OctosSessionRuntime {
   peers: {
     manager: LazyPeerManager | null;
+    roster: readonly PeerRosterEntry[];
+    returnToMaster(): Promise<WorkspaceOpenOutcome>;
     error: string | null;
     /**
      * `/peer clear` (TUI parity 2500 §2): prune the ACTIVE record's FINISHED
@@ -242,6 +249,12 @@ export interface OctosSessionRuntime {
       slugs: readonly string[] | undefined,
       canSubmit: () => boolean,
     ): Promise<GatherOutcome>;
+    /** Native peer controls: turn/steer, turn/interrupt, approval/respond. */
+    rowAction(
+      entry: PeerRosterEntry,
+      action: PeerRowAction,
+      steerText?: string,
+    ): void;
     /**
      * Gap 6b approval sink: answer ONE blocked roster row's pending approval.
      * Present ONLY when a control capability is acquired — the dock renders its
@@ -424,7 +437,11 @@ export interface OctosSessionRuntime {
     openSession: (
       input: WorkspaceSessionOpenInput,
     ) => Promise<WorkspaceOpenOutcome>;
-    deleteSession: (sessionId: string) => Promise<void>;
+    deleteSession: (sessionId: string) => Promise<SessionMutationOutcome>;
+    renameSession: (
+      sessionId: string,
+      title: string,
+    ) => Promise<SessionMutationOutcome>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
     cancelLaunch: () => void;
     retryOnboarding: () => Promise<void>;
@@ -2260,6 +2277,15 @@ export function useOctosSession(): OctosSessionRuntime {
     readonly prompt: string | null;
   }> => {
     const record = viewRecord;
+    if (
+      record &&
+      peerReadonlySlug(
+        peerCoordinator.get(record)?.snapshot().peers ?? [],
+        record.scope.sessionId,
+      ) !== null
+    ) {
+      return { sent: false, message: null, prompt: null };
+    }
     const authority = record?.runtime.currentAuthority() ?? null;
     const client = authority?.client ?? null;
     const sessionId = authority?.sessionId ?? null;
@@ -2357,7 +2383,7 @@ export function useOctosSession(): OctosSessionRuntime {
     await recordManager.engineFor(record)?.refreshDriverInventory(record.scope);
     if (!isCurrent()) return { sent: false, message: null, prompt: null };
     if (!prompt.trim()) return { sent: true, message: null, prompt: null };
-    const accepted = composerDrafts.enqueue(record, prompt);
+    const accepted = turnController.enqueuePrompt(prompt);
     return { sent: accepted, message: null, prompt };
   };
 
@@ -2568,6 +2594,43 @@ export function useOctosSession(): OctosSessionRuntime {
     onRowAction: (row, command) => sendPeerRowControl(row, command),
   });
 
+  // Native peer controls use the peer's OWN retained record. `submitTurn`
+  // selects turn/steer when eligible (FIFO otherwise); interrupt and approval
+  // stay on the same record authority. No external-driver seat is required.
+  const nativePeerRowAction = (
+    entry: PeerRosterEntry,
+    action: PeerRowAction,
+    steerText = "",
+  ) => {
+    const record = recordManager
+      .records()
+      .find((candidate) => candidate.scope.sessionId === entry.identity);
+    if (!record || record.closed) return;
+    if (action === "steer") {
+      const text = steerText.trim();
+      if (text) record.controller.submitTurn({ turnId: randomUUID(), text });
+      return;
+    }
+    if (action === "stop") {
+      void record.controller.interrupt();
+      return;
+    }
+    if (!["approve", "approve_session", "deny"].includes(action)) return;
+    const authority = record.runtime.currentAuthority();
+    if (!authority || entry.requestKind !== "approval" || !entry.requestId)
+      return;
+    void authority.client
+      .respondApproval({
+        session_id: record.scope.sessionId,
+        approval_id: entry.requestId,
+        decision: action === "deny" ? "deny" : "approve",
+        ...(action === "approve_session"
+          ? { approval_scope: "session" as const }
+          : {}),
+      })
+      .catch(() => undefined);
+  };
+
   // Gap 6b: answer a BLOCKED peer's pending approval straight from its roster
   // row. Fail-closed exactly like the seat: no acquired control capability (or
   // no leaf) ⇒ no action is offered at all; a row that cannot form a target
@@ -2642,9 +2705,16 @@ export function useOctosSession(): OctosSessionRuntime {
       selectedRecord()?.controller.interruptibleNow(),
     ),
     enqueuePrompt: (text: string, queueOnly = false) => {
-      const accepted = viewRecord
-        ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+      const readOnlyPeer = viewRecord
+        ? peerReadonlySlug(
+            peerCoordinator.get(viewRecord)?.snapshot().peers ?? [],
+            viewRecord.scope.sessionId,
+          ) !== null
         : false;
+      const accepted =
+        viewRecord && !readOnlyPeer
+          ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+          : false;
       if (accepted && viewRecord)
         btwControllersRef.current.get(viewRecord)?.clearSettled();
       return accepted;
@@ -3427,6 +3497,19 @@ export function useOctosSession(): OctosSessionRuntime {
   return {
     peers: {
       manager: viewRecord ? peerCoordinator.get(viewRecord) : null,
+      roster: peerCoordinator.roster(),
+      returnToMaster: () => {
+        const master = viewRecord
+          ? peerCoordinator.getMaster(viewRecord)
+          : null;
+        if (!master) return Promise.resolve("failed");
+        return openWorkspaceSession({
+          sessionId: master.scope.sessionId,
+          cwd: master.scope.workspaceRoot,
+          profileId: master.scope.profileId,
+          resolveLaunch: false,
+        });
+      },
       error: viewRecord ? peerCoordinator.getError(viewRecord) : null,
       /**
        * `/peer clear` (TUI parity 2500 §2): the coordinator prune for the ACTIVE
@@ -3480,6 +3563,7 @@ export function useOctosSession(): OctosSessionRuntime {
           pooledClient: () => activeRuntime.currentAuthority()?.client ?? null,
         });
       },
+      rowAction: nativePeerRowAction,
       // Fail-closed: with no acquired control capability there is no sink, so
       // the dock keeps its row actions unmounted (`onApprovalRespond && …`).
       ...(controlAcquire === null ? {} : { approvalRespond }),
@@ -3688,6 +3772,7 @@ export function useOctosSession(): OctosSessionRuntime {
       switchSession,
       openSession: openWorkspaceSession,
       deleteSession: workspaceController.deleteSession,
+      renameSession: workspaceController.renameSession,
       chooseLaunchProfile,
       cancelLaunch,
       retryOnboarding: onboardingController.prepare,

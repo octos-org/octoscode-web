@@ -36,7 +36,7 @@ const palette = (page: Page) => page.locator(".command-palette");
 const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
-  productNavigation(page).locator('button[role="treeitem"]');
+  productNavigation(page).locator('[role="treeitem"][data-session-id]');
 /** v0.10.0's sidebar is an aria-activedescendant TREE: the container owns the
  *  single tab stop and the items carry tabindex=-1, so "keyboard order" is the
  *  tree's roving order, not the document tab order. */
@@ -376,7 +376,7 @@ test("Alt+A focuses the pending approval panel and announces when none waits", a
 test("Alt+D stays closed without Fleet capability; suppressed inside inputs", async ({
   page,
 }) => {
-  await connectAndStartWorkspace(page, "keyboard-fleet");
+  await connectAndStartWorkspace(page, "peer-control-no-fleet");
 
   // §8 suppression half: focus inside the composer's textarea (a text input)
   // must NOT fire — no focus steal, the chat view stays mounted (routed Fleet

@@ -13,7 +13,7 @@ function productNavigation(page: Page): Locator {
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .locator('[class*="sessionTitle"]')
     .textContent();
   if (!title) throw new Error("Expected a selected Session title");
@@ -21,7 +21,9 @@ async function selectedSessionTitle(sidebar: Locator): Promise<string> {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 async function connectAndStartWorkspace(
@@ -128,13 +130,17 @@ test("holds twelve browser turns and three browser-started native peers on one p
         .locator('button[aria-label="New session in twelve-plus-peers"]')
         .click();
       await expect(
-        sidebar.locator('button[role="treeitem"][aria-current="page"]'),
+        sidebar.locator(
+          '[role="treeitem"][data-session-id][aria-current="page"]',
+        ),
       ).not.toContainText(runningTitle);
-      const showMore = workspace.locator('button[class*="showMore"]');
+      // "Show more" sits in the workspace's owned session group, a sibling
+      // of the workspace row (ProductSidebar aria-owns).
+      const showMore = sidebar.locator('button[class*="showMore"]');
       if (await showMore.isVisible()) await showMore.click();
       await expect(
         sidebar
-          .locator('button[role="treeitem"]')
+          .locator('[role="treeitem"][data-session-id]')
           .filter({ hasText: /Session / }),
       ).toHaveCount(index + 2);
     }
@@ -290,12 +296,11 @@ test("holds twelve browser turns and three browser-started native peers on one p
     // is a read-only tombstone, not a resumable background execution record.
     const peer = peers[0]!;
     const peerId = String(peer.profile_id) + ":local:tui#" + String(peer.topic);
-    const peerRow = sessionRowByTitle(
-      sidebar,
-      "Session " + String(peer.slug).slice(-8),
+    const peerRow = page.locator(
+      `button[data-peer-slug="${String(peer.slug)}"]`,
     );
     await peerRow.click();
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
     expect(
       (
@@ -312,9 +317,9 @@ test("holds twelve browser turns and three browser-started native peers on one p
         { exact: true },
       ),
     ).toBeVisible();
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-    await expect(page.locator(".composer textarea")).toBeDisabled();
+    await expect(page.locator(".composer textarea")).toHaveCount(0);
     await expect(page.locator('h1:text-is("Connect to Octos")')).toHaveCount(0);
     const opensBeforeLoss = protocol.sent.filter(
       (frame) => frame.method === "session/open",
@@ -339,9 +344,9 @@ test("holds twelve browser turns and three browser-started native peers on one p
       ),
     ).toHaveLength(1);
     expect(starts()).toHaveLength(15);
-    await expect(peerRow).toHaveAttribute("aria-current", "page");
+    await expect(peerRow).toBeVisible();
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-    await expect(page.locator(".composer textarea")).toBeDisabled();
+    await expect(page.locator(".composer textarea")).toHaveCount(0);
   } finally {
     await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
   }

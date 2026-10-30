@@ -44,6 +44,65 @@ const cronJobs = [
     timezone: "UTC",
   },
 ];
+const MCP_CONNECTOR_FEATURE = "mcp.connector.manage.v1";
+const MCP_CONNECTOR_METHODS = [
+  "mcp/connector/create",
+  "mcp/connector/update",
+  "mcp/connector/delete",
+  "mcp/connector/set_enabled",
+  "mcp/connector/reconnect",
+];
+const connectorRowsByWorkspace = new Map();
+function connectorRows(workspaceRoot) {
+  if (!connectorRowsByWorkspace.has(workspaceRoot)) {
+    connectorRowsByWorkspace.set(workspaceRoot, [
+      {
+        id: "docs",
+        display_name: "Documentation MCP",
+        transport: "stdio",
+        enabled: true,
+        status: "connected",
+        tool_count: 2,
+        tools: ["search", "read"],
+      },
+      {
+        id: "legacy",
+        display_name: "Legacy HTTP",
+        transport: "http",
+        enabled: true,
+        status: "failed",
+        tool_count: 0,
+        tools: [],
+        error: "connection refused",
+        url: "https://legacy.example.test/mcp",
+      },
+    ]);
+  }
+  return connectorRowsByWorkspace.get(workspaceRoot);
+}
+function connectorPayload(sessionId, profileId, workspaceRoot) {
+  const rows = connectorRows(workspaceRoot);
+  return {
+    session_id: sessionId,
+    profile_id: profileId,
+    servers: rows.map((row) => ({
+      id: row.id,
+      display_name: row.display_name,
+      transport: row.transport,
+      enabled: row.enabled,
+      status: row.status,
+      tool_count: row.tool_count,
+      tools: row.tools,
+      ...(row.error ? { error: row.error } : {}),
+    })),
+    summary: {
+      connected: rows.filter((row) => row.status === "connected").length,
+      connecting: rows.filter((row) => row.status === "connecting").length,
+      failed: rows.filter((row) => row.status === "failed").length,
+      disabled: rows.filter((row) => !row.enabled).length,
+    },
+  };
+}
 function sessionState(sessionId) {
   let state = sessionStateBySessionId.get(sessionId);
   if (!state) {
@@ -479,8 +538,9 @@ function effectivePeerControlVariant(state) {
 }
 function peerControlAdverts(variant) {
   return {
-    method: variant !== "no-method",
-    feature: variant !== "no-feature",
+    method: variant !== "no-method" && variant !== "no-fleet",
+    feature: variant !== "no-feature" && variant !== "no-fleet",
+    native: variant !== "no-fleet",
   };
 }
 const peerControlCalls = new Map(); // sessionId -> [kind, ...]
@@ -919,7 +979,9 @@ function isPeerSessionId(sessionId) {
 function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = randomUUID();
+    const slug = workspaceRoot.includes("peer-presentation")
+      ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+      : randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,
@@ -2283,6 +2345,20 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  // Profile model state is shared by every test on this fixture. A test that
+  // changes the Profile default resets it first, so a retry (or a later test)
+  // starts from the same configured models.
+  if (request.method === "POST" && request.url === "/__test__/models/reset") {
+    configuredModelsByProfile.clear();
+    configuredModelsByProfile.set(
+      defaultProfileId,
+      cloneConfiguredModels(initialProfileModels),
+    );
+    effectiveRuntimeModelByProfile.clear();
+    effectiveRuntimeModelByProfile.set(defaultProfileId, defaultRuntimeModel);
+    response.writeHead(204).end();
+    return;
+  }
   if (
     request.method === "POST" &&
     request.url === "/__test__/session-open/reset"
@@ -2368,6 +2444,14 @@ const http = createServer(async (request, response) => {
     ).searchParams.get("session_id");
     if (armedSessionId) peerHoldNextSessions.add(armedSessionId);
     else holdPeerNextTurn += 1;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/connectors/reset"
+  ) {
+    connectorRowsByWorkspace.clear();
     response.writeHead(204).end();
     return;
   }
@@ -2690,6 +2774,7 @@ const baseCapabilities = {
     "cron/toggle",
     "session/list",
     "session/delete",
+    "session/title.set",
     "session/files.list",
     "session/files/read",
     "peer/prepare",
@@ -2764,6 +2849,19 @@ function capabilitiesFor(socket, state) {
   const workspaceRoot = state
     ? state.workspaceRoot
     : openedWorkspaceBySocket.get(socket);
+  if (workspaceRoot?.includes("connector-management")) {
+    return {
+      ...memoryCapabilities,
+      supported_methods: [
+        ...memoryCapabilities.supported_methods,
+        ...MCP_CONNECTOR_METHODS,
+      ],
+      supported_features: [
+        ...memoryCapabilities.supported_features,
+        MCP_CONNECTOR_FEATURE,
+      ],
+    };
+  }
   if (workspaceRoot?.startsWith(driverDiscoveryPrefix)) {
     const adverts = driverAdverts(
       workspaceRoot.slice(driverDiscoveryPrefix.length),
@@ -2790,7 +2888,11 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods,
+        : adverts.native
+          ? memoryCapabilities.supported_methods
+          : memoryCapabilities.supported_methods.filter(
+              (method) => method !== "peer/prepare" && method !== "peer/gather",
+            ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,
@@ -4949,6 +5051,28 @@ sockets.on("connection", (socket, request) => {
       reply(socket, request.id, {});
       return;
     }
+    if (request.method === "session/title.set") {
+      const title = request.params?.title?.trim();
+      if (!title || [...title].length > 200) {
+        replyError(socket, request.id, -32602, "Invalid session title");
+        return;
+      }
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.map((session) =>
+            session.id === request.params.session_id
+              ? { ...session, title }
+              : session,
+          ),
+        );
+      }
+      reply(socket, request.id, {
+        session_id: request.params.session_id,
+        title,
+      });
+      return;
+    }
     if (request.method === "profile/skills/list") {
       const duplicates = skillDuplicatesSockets.has(socket);
       reply(socket, request.id, {
@@ -5192,7 +5316,84 @@ sockets.on("connection", (socket, request) => {
       });
       return;
     }
+    if (request.method.startsWith("mcp/connector/")) {
+      const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
+      if (workspaceRoot.includes("connector-management-denied")) {
+        replyError(
+          socket,
+          request.id,
+          -32003,
+          "forbidden: session access cannot manage profile connectors",
+          { kind: "forbidden" },
+        );
+        return;
+      }
+      const rows = connectorRows(workspaceRoot);
+      const connectorId = request.params.connector_id;
+      let row = rows.find((item) => item.id === connectorId);
+      if (request.method === "mcp/connector/create") {
+        const input = request.params.connector;
+        row = {
+          id: `http-${rows.length + 1}`,
+          display_name: input.name,
+          transport: "http",
+          enabled: true,
+          status: "connected",
+          tool_count: 1,
+          tools: ["fetch"],
+          url: input.url,
+        };
+        rows.push(row);
+      } else if (request.method === "mcp/connector/delete") {
+        const index = rows.findIndex((item) => item.id === connectorId);
+        if (index >= 0) rows.splice(index, 1);
+      } else if (!row) {
+        replyError(socket, request.id, -32004, "connector was not found", {
+          kind: "resource_not_found",
+        });
+        return;
+      } else if (request.method === "mcp/connector/update") {
+        if (request.params.patch.name)
+          row.display_name = request.params.patch.name;
+        if (request.params.patch.url) row.url = request.params.patch.url;
+      } else if (request.method === "mcp/connector/set_enabled") {
+        row.enabled = request.params.enabled === true;
+        row.status = row.enabled ? "connected" : "disabled";
+        if (row.enabled) delete row.error;
+      } else if (request.method === "mcp/connector/reconnect") {
+        row.status = row.enabled ? "connected" : "disabled";
+        if (row.enabled) delete row.error;
+      }
+      const status = connectorPayload(
+        sessionId,
+        request.params.profile_id ??
+          profileIdFromSessionId(sessionId) ??
+          defaultProfileId,
+        workspaceRoot,
+      );
+      reply(socket, request.id, {
+        connector: row
+          ? {
+              id: row.id,
+              display_name: row.display_name,
+              transport: row.transport,
+              enabled: row.enabled,
+            }
+          : { id: connectorId },
+        status: status.servers.find((server) => server.id === row?.id) ?? null,
+      });
+      return;
+    }
     if (request.method === "mcp/status/list") {
+      const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
+      if (workspaceRoot.includes("connector-management")) {
+        reply(
+          socket,
+          request.id,
+          connectorPayload(sessionId, request.params.profile_id, workspaceRoot),
+        );
+        return;
+      }
       reply(socket, request.id, {
         session_id: sessionId,
         profile_id: request.params.profile_id,

@@ -140,26 +140,16 @@ test("peer dock shows the staged roster and keeps approval actions fail-closed",
     const slugs = [...new Set(frames.staged.map((p) => String(p.slug)))];
     expect(slugs).toHaveLength(PEER_COUNT);
     for (const slug of slugs) {
-      // Round-2 (judge #4 "no raw slugs") removed the slug from the row's
-      // visible text, so the row is resolved by its identity HOOK — the same
-      // fact the next assertion pins — not by text that must not be there.
       const row = peerDock(page).locator(`button[data-peer-slug="${slug}"]`);
       await expect(row).toHaveCount(1);
       await expect(row).toHaveAttribute("data-peer-slug", slug);
-      // The slug is an identity hook only: it never leaks into the row copy.
-      await expect(row).not.toContainText(slug);
+      await expect(row).toContainText(slug);
       // The glyph half is `data-activity` on an aria-hidden span (:249-255).
       const glyph = row.locator("[data-activity]");
       await expect(glyph).toHaveCount(1);
       expect(ACTIVITIES).toContain(await glyph.getAttribute("data-activity"));
       expect(GLYPHS).toContain((await glyph.textContent())?.trim());
-      // Round-2 (judge #4 "no raw slugs"): the accessible name is
-      // "Peer N — {activity word}" (PeerDock.tsx:94 peerRowLabel); the slug
-      // remains only as the data-peer-slug identity hook.
-      await expect(row).toHaveAttribute(
-        "aria-label",
-        new RegExp("^Peer \\d+ — "),
-      );
+      await expect(row).toHaveAccessibleName(new RegExp(`^${slug} `));
     }
 
     // Group B' — the counts/landed pill is NOT rendered while App leaves the

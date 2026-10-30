@@ -99,7 +99,9 @@ async function openSettings(page: Page): Promise<Locator> {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 interface ObservedSessionOpen {
@@ -999,7 +1001,7 @@ test("selects each retained target immediately while A's acknowledgement remains
     name: "New session in delayed-turn-start-latest-target",
   });
   const selectedSession = () =>
-    sidebar.locator('button[role="treeitem"][aria-current="page"]');
+    sidebar.locator('[role="treeitem"][data-session-id][aria-current="page"]');
   const selectedTitle = async () => {
     const title = await selectedSession()
       .locator('[class*="sessionTitle"]')
@@ -1203,10 +1205,12 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
     // can tell it about A's Session.
     const tabB = await fresh.newPage();
     await connectAndStartWorkspace(tabB, cwd);
-    const sessions = productNavigation(tabB).locator('button[role="treeitem"]');
+    const sessions = productNavigation(tabB).locator(
+      '[role="treeitem"][data-session-id]',
+    );
     await expect(sessions).toHaveCount(2);
     const history = productNavigation(tabB).locator(
-      'button[role="treeitem"]:not([aria-current="page"])',
+      '[role="treeitem"][data-session-id]:not([aria-current="page"])',
     );
     await expect(history).toHaveCount(1);
     const historyId = await history.getAttribute("id");
@@ -1345,7 +1349,22 @@ test("offers whole permission presets and confirms full access", async ({
 
 test("separates the Session runtime from the Profile default model", async ({
   page,
+  request,
 }) => {
+  // This test saves a new Profile default on the shared fixture. Start every
+  // attempt (retries included) from the fixture's configured models, and put
+  // them back afterwards for later tests.
+  const resetModels = () =>
+    request.post(`${FIXTURE_ORIGIN}/__test__/models/reset`);
+  expect((await resetModels()).status()).toBe(204);
+  try {
+    await checkSessionRuntimeAndProfileDefault(page);
+  } finally {
+    await resetModels();
+  }
+});
+
+async function checkSessionRuntimeAndProfileDefault(page: Page) {
   await connectAndStartWorkspace(page);
 
   // Round-2 surface: the runtime model moved into the Session settings pane's
@@ -1407,15 +1426,46 @@ test("separates the Session runtime from the Profile default model", async ({
   });
   const glm = models.getByRole("radio", { name: /GLM 5\.3 Flash/ });
   await expect(glm).toHaveAttribute("aria-checked", "true");
+  // The provider list below loads on its own; let it settle so the only
+  // status left to read is the one this choice produces.
+  const providersLoading = settings.getByText("Loading model providers…");
+  await expect(settings.getByText("Loading model management…")).toHaveCount(0);
+  await expect(
+    settings.getByRole("heading", { name: "Model providers" }),
+  ).toBeVisible();
+  await expect(providersLoading).toHaveCount(0);
+  // Record whether the provider list ever drops back to its loading notice
+  // after the choice (it used to blank while it re-read the configuration).
+  await settings.evaluate((dialog) => {
+    const flags = window as unknown as { providersBlanked?: boolean };
+    flags.providersBlanked = false;
+    new MutationObserver(() => {
+      if (dialog.textContent?.includes("Loading model providers…"))
+        flags.providersBlanked = true;
+    }).observe(dialog, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
   const deepseek = models.getByRole("radio", { name: /DeepSeek V4 Pro/ });
   await deepseek.click();
   await expect(deepseek).toHaveAttribute("aria-checked", "true");
-  await expect(settings.getByRole("status")).toContainText(
+  const restartNotice = settings
+    .getByRole("status")
+    .filter({ hasText: "Profile default is" });
+  await expect(restartNotice).toContainText(
     "Profile default is DeepSeek V4 Pro",
   );
-  await expect(settings.getByRole("status")).toContainText(
-    "still serving DeepSeek V4",
-  );
+  await expect(restartNotice).toContainText("still serving DeepSeek V4");
+  // Re-reading the providers for the new default keeps the list on screen.
+  await expect(providersLoading).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as { providersBlanked?: boolean }).providersBlanked,
+    ),
+  ).toBe(false);
   await settings.getByRole("button", { name: "Close settings" }).click();
   // Round-2: the restart notice lives in the PANE's Model section (the old
   // control-bar trigger that carried the pending-restart aria-label is gone).
@@ -1426,7 +1476,7 @@ test("separates the Session runtime from the Profile default model", async ({
   ).toContainText(/pending an Octos restart|keeps running DeepSeek V4/);
   await pane.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("menu", { name: "Model" })).toHaveCount(0);
-});
+}
 
 test("keeps server connection actions in General settings", async ({
   page,

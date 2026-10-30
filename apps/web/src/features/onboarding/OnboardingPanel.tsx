@@ -300,7 +300,7 @@ export function OnboardingPanel({
             </>
           )}
           <div className={`launch-actions ${styles.actions}`}>
-            <span>{status}</span>
+            <span>{t(status)}</span>
             <div>
               {step === "connect" ? (
                 <button

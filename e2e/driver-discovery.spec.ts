@@ -205,7 +205,7 @@ function factRow(page: Page, label: string) {
 
 async function selectedTitle(page: Page): Promise<string> {
   const value = await sidebar(page)
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .locator('[class*="sessionTitle"]')
     .textContent();
   if (!value) throw new Error("A confirmed selected Session is required");
@@ -216,7 +216,7 @@ async function selectedTitle(page: Page): Promise<string> {
 async function selectSession(page: Page, title: string) {
   await closeSessionController(page);
   await sidebar(page)
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: title })
     .click();
   await expect.poll(() => selectedTitle(page)).toBe(title);

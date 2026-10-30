@@ -91,10 +91,14 @@ test("switches a permission-denied write to workspace-write and retries it", asy
 }) => {
   const { retry } = await prepareDeniedWrite(page);
   await retry.click();
-  const completedWrite = page.locator("details").filter({
+  const writes = page.locator("details").filter({
     hasText: "Write file report.md",
   });
-  await expect(completedWrite).toContainText("report.md written");
+  await expect(writes).toHaveCount(2);
+  await expect(writes.first()).toContainText(
+    "write_file is not permitted by read-only filesystem access",
+  );
+  await expect(writes.last()).toContainText("report.md written");
   await expect(
     page.getByRole("button", { name: "Switch to write and retry" }),
   ).toHaveCount(0);

@@ -618,11 +618,15 @@ describe("record-owned native peer coordinator", () => {
     // (absent) binding would hand the composer an EMPTY roster.
     expect(h.coordinator.get(peer)).toBe(h.manager);
     expect(h.coordinator.get(peer)?.snapshot().peers).toHaveLength(1);
+    expect(h.coordinator.roster()).toEqual(h.manager.snapshot().peers);
+    expect(h.coordinator.getMaster(peer)).toBe(h.master);
     // A master still resolves its OWN manager.
     expect(h.coordinator.get(h.master)).toBe(h.manager);
+    expect(h.coordinator.getMaster(h.master)).toBe(h.master);
     // A foreign/unknown record resolves nothing (fail-closed).
     const unknown = record(h.client, "unknown:session", h.emit);
     expect(h.coordinator.get(unknown)).toBeNull();
+    expect(h.coordinator.getMaster(unknown)).toBeNull();
   });
 
   it("resolves the ACTIVE record's manager for the console sink exactly as the seat's Steer does (P2g 3030)", async () => {
@@ -793,7 +797,16 @@ describe("peer dispatch adoption (build 1230)", () => {
     h.master.setReadiness("ready");
     h.send(stage());
     await until(() => expect(h.dispatched).toHaveLength(1));
-    expect(h.opened[0]?.scope.sessionId).toBe("dev:local:tui#peer-adopted");
+    const peer = h.opened[0]!;
+    expect(peer.scope.sessionId).toBe("dev:local:tui#peer-adopted");
+    await until(() =>
+      expect(h.manager.snapshot().peers[0]?.identity).toBe(
+        "dev:local:tui#peer-adopted",
+      ),
+    );
+    expect(h.manager.snapshot().peers[0]?.rowKey).toBe(identity);
+    expect(h.coordinator.getMaster(peer)).toBe(h.master);
+    expect(h.coordinator.get(peer)).toBe(h.manager);
   });
   it("renders a typed refusal as a retryable failure and REUSES the minted operationId", async () => {
     const h = setup({ dispatchFails: 1 });

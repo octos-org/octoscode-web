@@ -3,6 +3,7 @@ import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import {
   clearConnectionPreferences,
   clearKnownSessions,
+  forgetKnownSession,
   loadAutoConnect,
   loadConnectionPreferences,
   loadComposerDrafts,
@@ -267,6 +268,40 @@ describe("connection preferences", () => {
       [],
     );
     expect([...tab.values.keys()]).toEqual(["octoscode-web.tab-connection.v3"]);
+  });
+
+  it("forgets one deleted Session and keeps the rest of the registry", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = { endpoint: "https://octos.example", token: "token-a" };
+    saveConnectionPreferences({ ...defaults, ...identity }, durable, tab);
+    for (const [name, at] of [
+      ["one", 41],
+      ["two", 42],
+    ] as const) {
+      rememberKnownSession(
+        tab,
+        identity,
+        {
+          session_id: `coding:api:web-${name}`,
+          active_profile_id: "coding",
+          workspace_root: "/srv/work",
+        },
+        at,
+      );
+    }
+
+    expect(
+      forgetKnownSession(tab, { ...identity, token: "token-b" }, "x"),
+    ).toEqual([]);
+    expect(
+      forgetKnownSession(tab, identity, "coding:api:web-one").map(
+        (entry) => entry.sessionId,
+      ),
+    ).toEqual(["coding:api:web-two"]);
+    expect(
+      loadKnownSessions(tab, identity).map((entry) => entry.sessionId),
+    ).toEqual(["coding:api:web-two"]);
   });
 
   it("atomically drops the registry when endpoint or token identity changes", () => {

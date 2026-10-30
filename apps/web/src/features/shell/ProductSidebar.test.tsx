@@ -229,6 +229,41 @@ describe("ProductSidebar", () => {
     },
   );
 
+  it("offers row actions only when the server can rename or delete sessions", () => {
+    expect(
+      renderToStaticMarkup(<ProductSidebar {...baseProps} />),
+    ).not.toContain("More actions for");
+    const html = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        onSessionRename={async () => null}
+        onSessionDelete={async () => null}
+      />,
+    );
+    expect(html).toContain(
+      'aria-label="More actions for Ship the product shell"',
+    );
+    expect(html).toContain('aria-label="More actions for Review the sidebar"');
+    // Only the open row's button is a Tab stop; the tree's arrows reach the rest.
+    expect(
+      html.match(/aria-haspopup="menu" aria-expanded="false" tabindex="0"/g),
+    ).toHaveLength(1);
+    // A truncated title stays readable as the tooltip.
+    expect(html).toContain('title="Review the sidebar"');
+  });
+
+  it("gives search results the list's truncation and actions", () => {
+    const html = renderToStaticMarkup(
+      <ProductSidebar
+        {...baseProps}
+        onSessionRename={async () => null}
+        onSessionDelete={async () => null}
+      />,
+    );
+    expect(html).toContain('data-session-id="session-review"');
+    expect(html).not.toContain('<button type="button" id="tree-session');
+  });
+
   it("renders accessible grouping choices from the controlled view mode", () => {
     const onViewModeChange = vi.fn();
     const onSelectComplete = vi.fn();
@@ -319,9 +354,8 @@ describe("ProductSidebar peer dock mount (dock plan §1)", () => {
     expect(tree).toBeGreaterThanOrEqual(0);
     expect(dock).toBeGreaterThan(tree);
     expect(settings).toBeGreaterThan(dock);
-    // Triage 4510 P2: the row body shows "Peer N · model", never the raw slug
-    // (the slug survives only as the data-peer-slug diagnostic attribute).
-    expect(html).toContain(">Peer 1<");
+    // The row body names the real peer instead of the generated dispatch prompt.
+    expect(html).toContain(">review<");
     expect(html).toContain('data-peer-slug="review"');
     expect(html).toContain(">started<");
   });

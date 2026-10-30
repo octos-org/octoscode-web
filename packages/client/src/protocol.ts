@@ -90,6 +90,7 @@ export {
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
+  parseSessionTitleSetResult,
   parseTokenCostUpdate,
   parseUiProtocolCapabilities,
 } from "./workspace.ts";
@@ -176,6 +177,8 @@ export type {
   SessionCursorStatus,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
   SessionFileInfo,
   SessionFilesListParams,
   SessionFilesListResult,
