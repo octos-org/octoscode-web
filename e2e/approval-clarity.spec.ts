@@ -25,12 +25,17 @@ async function prepareDeniedWrite(page: Page) {
     .getByRole("button", { name: /Session settings|Workspace write/ })
     .first()
     .click();
-  await page
+  const settings = page.getByRole("dialog", { name: "Session settings" });
+  await settings
     .locator('button[aria-haspopup="menu"]')
     .filter({ hasText: /Write|Read/ })
     .first()
     .click();
   await page.getByRole("menuitemradio", { name: /^Read/ }).click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Session settings" })).toHaveCount(
+    0,
+  );
   await page.reload();
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
