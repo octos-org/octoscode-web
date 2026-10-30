@@ -1758,6 +1758,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Set up your coding assistant": "设置你的编程助手",
   "Choose a model service, connect it, and start coding in two steps.":
     "选择模型服务、完成连接，两步即可开始编程。",
+  "Loading model providers from your server…": "正在从服务器加载模型提供商…",
+  "Model setup could not be loaded": "无法加载模型设置",
   "Step 1 of 2 · Model service": "第 1/2 步 · 模型服务",
   "Step 2 of 2 · Connect": "第 2/2 步 · 连接",
   "Choose a provider": "选择提供商",
