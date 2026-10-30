@@ -2,6 +2,8 @@ import { randomUUID } from "../../shared/uuid.ts";
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
   APPUI_MEMORY_PROMOTE_METHOD,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
+  supportsFeature,
   APPUI_MEMORY_REQUEST_METHOD,
   CORE_UI_METHODS,
   supportsMethod,
@@ -28,6 +30,7 @@ interface MemorySettingsContentProps {
   client: OctosUiClient;
   authenticatedProfileId: string | null;
   sessionProfileId: string;
+  sessionId: string;
   capabilities: UiProtocolCapabilities;
 }
 
@@ -35,12 +38,19 @@ export function MemorySettingsContent({
   client,
   authenticatedProfileId,
   sessionProfileId,
+  sessionId,
   capabilities,
 }: MemorySettingsContentProps) {
   const t = useUiText();
+  const sessionScoped = supportsFeature(
+    capabilities,
+    APPUI_MEMORY_SESSION_SCOPE_FEATURE,
+  );
+  const memorySessionId = sessionScoped ? sessionId : undefined;
   const scopeVerified =
-    Boolean(authenticatedProfileId) &&
-    authenticatedProfileId === sessionProfileId;
+    sessionScoped ||
+    (Boolean(authenticatedProfileId) &&
+      authenticatedProfileId === sessionProfileId);
   const canEntity = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_ENTITY);
   const canSearch = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_SEARCH);
   const canLoad = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_LOAD);
@@ -74,7 +84,7 @@ export function MemorySettingsContent({
       return;
     }
     void client
-      .memoryCommands(capabilities)
+      .memoryCommands(capabilities, memorySessionId)
       .then(
         (commands) => commands.overview(),
         (reason: unknown) => {
@@ -101,7 +111,7 @@ export function MemorySettingsContent({
     return () => {
       current = false;
     };
-  }, [client, capabilities, scopeVerified]);
+  }, [client, capabilities, scopeVerified, memorySessionId]);
 
   const search = async () => {
     if (busy || !query.trim()) return;
@@ -109,7 +119,10 @@ export function MemorySettingsContent({
     setError(null);
     setNotice(null);
     try {
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       const result = await commands.search(query.trim(), 20);
       setHits(result);
       setRecord(null);
@@ -126,7 +139,10 @@ export function MemorySettingsContent({
     setBusy(true);
     setError(null);
     try {
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       setEntity(await commands.entity(name));
       setRecord(null);
     } catch (reason) {
@@ -141,7 +157,10 @@ export function MemorySettingsContent({
     setBusy(true);
     setError(null);
     try {
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       setRecord(await commands.load(id));
       setEntity(null);
     } catch (reason) {
@@ -159,7 +178,10 @@ export function MemorySettingsContent({
     setIngestResult(null);
     try {
       const id = `doc:octoscode-web:${randomUUID()}`;
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       const result = await commands.ingest([
         {
           id,
@@ -196,7 +218,10 @@ export function MemorySettingsContent({
     setBusy(true);
     setError(null);
     try {
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       const result = await commands.request(`web:${randomUUID()}`, body.trim());
       setNotice(
         t("Memory request accepted: {status}", { status: result.status }),
@@ -213,7 +238,10 @@ export function MemorySettingsContent({
     setBusy(true);
     setError(null);
     try {
-      const commands = await client.memoryCommands(capabilities);
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
       const result = await commands.promote("octoscode-web");
       setNotice(
         t("Promotion staged for {count} record(s); refresh is {refresh}.", {
@@ -238,7 +266,7 @@ export function MemorySettingsContent({
         </header>
         <p className={styles.notice} role="status">
           {t(
-            "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Read and write are disabled.",
+            "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Update the Octos server to use this Session’s memory. Read and write are disabled.",
             {
               authenticated: authenticatedProfileId ?? t("unverified"),
               session: sessionProfileId,
@@ -255,10 +283,9 @@ export function MemorySettingsContent({
         <div>
           <h2>{t("Memory")}</h2>
           <p>
-            {t(
-              "Read and remember information in authenticated Profile {profileId}",
-              { profileId: authenticatedProfileId },
-            )}
+            {t("Read and remember information in Session Profile {profileId}", {
+              profileId: sessionProfileId,
+            })}
           </p>
         </div>
       </header>

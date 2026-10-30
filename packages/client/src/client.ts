@@ -1,3 +1,4 @@
+import { APPUI_MEMORY_SESSION_SCOPE_FEATURE } from "./memory-methods.ts";
 import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 import {
   SKILL_ACTIONS_UI_FEATURE,
@@ -116,6 +117,7 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
   CORE_UI_FEATURES.SESSION_FILES_READ_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
   CORE_UI_FEATURES.THREAD_GRAPH_V1,
   CORE_UI_FEATURES.TURN_STATE_GET_V1,
@@ -294,9 +296,12 @@ export class OctosUiClient {
     );
   }
 
-  async memoryCommands(capabilities: UiProtocolCapabilities) {
+  async memoryCommands(
+    capabilities: UiProtocolCapabilities,
+    sessionId?: string,
+  ) {
     const { createMemoryCommands } = await import("./memory.ts");
-    return createMemoryCommands(this.invoke, capabilities);
+    return createMemoryCommands(this.invoke, capabilities, sessionId);
   }
 
   async cronCommands(capabilities: UiProtocolCapabilities) {

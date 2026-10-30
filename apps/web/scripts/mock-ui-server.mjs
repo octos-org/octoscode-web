@@ -2750,6 +2750,10 @@ function capabilitiesFor(socket, state) {
   const memoryCapabilities = memoryMainSockets.has(socket)
     ? {
         ...capabilities,
+        supported_features: [
+          ...capabilities.supported_features,
+          "memory.session_scope.v1",
+        ],
         supported_methods: [
           ...capabilities.supported_methods,
           "memory/request",
