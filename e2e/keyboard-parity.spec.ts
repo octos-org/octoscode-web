@@ -36,7 +36,7 @@ const palette = (page: Page) => page.locator(".command-palette");
 const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
-  productNavigation(page).locator('button[role="treeitem"]');
+  productNavigation(page).locator('[role="treeitem"][data-session-id]');
 /** v0.10.0's sidebar is an aria-activedescendant TREE: the container owns the
  *  single tab stop and the items carry tabindex=-1, so "keyboard order" is the
  *  tree's roving order, not the document tab order. */

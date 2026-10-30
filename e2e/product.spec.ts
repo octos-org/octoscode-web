@@ -99,7 +99,9 @@ async function openSettings(page: Page): Promise<Locator> {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 interface ObservedSessionOpen {
@@ -999,7 +1001,7 @@ test("selects each retained target immediately while A's acknowledgement remains
     name: "New session in delayed-turn-start-latest-target",
   });
   const selectedSession = () =>
-    sidebar.locator('button[role="treeitem"][aria-current="page"]');
+    sidebar.locator('[role="treeitem"][data-session-id][aria-current="page"]');
   const selectedTitle = async () => {
     const title = await selectedSession()
       .locator('[class*="sessionTitle"]')
@@ -1203,10 +1205,12 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
     // can tell it about A's Session.
     const tabB = await fresh.newPage();
     await connectAndStartWorkspace(tabB, cwd);
-    const sessions = productNavigation(tabB).locator('button[role="treeitem"]');
+    const sessions = productNavigation(tabB).locator(
+      '[role="treeitem"][data-session-id]',
+    );
     await expect(sessions).toHaveCount(2);
     const history = productNavigation(tabB).locator(
-      'button[role="treeitem"]:not([aria-current="page"])',
+      '[role="treeitem"][data-session-id]:not([aria-current="page"])',
     );
     await expect(history).toHaveCount(1);
     const historyId = await history.getAttribute("id");

@@ -14,6 +14,14 @@ import {
   type WorkspaceProductState,
 } from "./model.ts";
 
+/**
+ * How a sidebar rename or delete ended. `skipped` means nothing was sent
+ * (unsupported, not connected, the open session, or another request in
+ * flight); `failed` carries the server's reason for the row or dialog.
+ */
+export type SessionMutationOutcome =
+  { kind: "done" } | { kind: "skipped" } | { kind: "failed"; error: string };
+
 interface WorkspaceConnectionConfig {
   cwd: string;
 }
@@ -33,7 +41,11 @@ export interface WorkspaceProductController {
   ) => void;
   refresh: (client?: OctosUiClient | null) => Promise<void>;
   listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<SessionMutationOutcome>;
+  renameSession: (
+    sessionId: string,
+    title: string,
+  ) => Promise<SessionMutationOutcome>;
   setError: (message: string | null) => void;
   observeTokenCost: (update: TokenCostUpdate) => void;
 }
@@ -43,12 +55,14 @@ export function useWorkspaceProduct(
   dependencies: WorkspaceProductDependencies,
 ): WorkspaceProductController {
   const deletingSessionRef = useRef<string | null>(null);
+  const renamingSessionRef = useRef<string | null>(null);
   const [state, setState] = useState<WorkspaceProductState>(
     EMPTY_WORKSPACE_PRODUCT,
   );
 
   const reset = () => {
     deletingSessionRef.current = null;
+    renamingSessionRef.current = null;
     setState(EMPTY_WORKSPACE_PRODUCT);
   };
 
@@ -64,6 +78,10 @@ export function useWorkspaceProduct(
       deleteAvailable: supportsMethod(
         capabilities,
         CORE_UI_METHODS.SESSION_DELETE,
+      ),
+      renameAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_TITLE_SET,
       ),
       // The workspace catalog is deliberately backed by one authoritative
       // request. Files and task activity are session-scoped views, not catalog
@@ -93,7 +111,11 @@ export function useWorkspaceProduct(
     }));
   };
 
-  const deleteSession = async (sessionId: string) => {
+  // The failure is returned to the confirming dialog rather than written to
+  // `state.error`, which the sidebar shows as a catalog-load failure.
+  const deleteSession = async (
+    sessionId: string,
+  ): Promise<SessionMutationOutcome> => {
     const client = dependencies.client();
     if (
       !client ||
@@ -104,17 +126,13 @@ export function useWorkspaceProduct(
       ) ||
       deletingSessionRef.current
     ) {
-      return;
+      return { kind: "skipped" };
     }
     deletingSessionRef.current = sessionId;
-    setState((current) => ({
-      ...current,
-      deletingSessionId: sessionId,
-      error: null,
-    }));
+    setState((current) => ({ ...current, deletingSessionId: sessionId }));
     try {
       await client.deleteSession({ session_id: sessionId });
-      if (dependencies.client() !== client) return;
+      if (dependencies.client() !== client) return { kind: "skipped" };
       setState((current) => ({
         ...current,
         deletingSessionId: null,
@@ -122,16 +140,47 @@ export function useWorkspaceProduct(
           (session) => session.id !== sessionId,
         ),
       }));
+      return { kind: "done" };
     } catch (reason) {
-      if (dependencies.client() !== client) return;
-      setState((current) => ({
-        ...current,
-        deletingSessionId: null,
-        error: errorMessage(reason),
-      }));
+      if (dependencies.client() !== client) return { kind: "skipped" };
+      setState((current) => ({ ...current, deletingSessionId: null }));
+      return { kind: "failed", error: errorMessage(reason) };
     } finally {
       if (deletingSessionRef.current === sessionId) {
         deletingSessionRef.current = null;
+      }
+    }
+  };
+
+  const renameSession = async (
+    sessionId: string,
+    title: string,
+  ): Promise<SessionMutationOutcome> => {
+    const client = dependencies.client();
+    if (
+      !client ||
+      !title.trim() ||
+      !supportsMethod(
+        dependencies.capabilities(),
+        CORE_UI_METHODS.SESSION_TITLE_SET,
+      ) ||
+      renamingSessionRef.current
+    ) {
+      return { kind: "skipped" };
+    }
+    renamingSessionRef.current = sessionId;
+    setState((current) => ({ ...current, renamingSessionId: sessionId }));
+    try {
+      await client.setSessionTitle({ session_id: sessionId, title });
+      if (dependencies.client() !== client) return { kind: "skipped" };
+      return { kind: "done" };
+    } catch (reason) {
+      if (dependencies.client() !== client) return { kind: "skipped" };
+      return { kind: "failed", error: errorMessage(reason) };
+    } finally {
+      if (renamingSessionRef.current === sessionId) {
+        renamingSessionRef.current = null;
+        setState((current) => ({ ...current, renamingSessionId: null }));
       }
     }
   };
@@ -156,6 +205,7 @@ export function useWorkspaceProduct(
     refresh,
     listWorkspaceSessions,
     deleteSession,
+    renameSession,
     setError: (message) =>
       setState((current) => ({ ...current, error: message })),
     observeTokenCost: (update) =>

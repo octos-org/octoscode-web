@@ -158,7 +158,10 @@ import type { SessionRecordRecoveryResult } from "./session-record-manager.ts";
 import { type SupervisionRuntimeState } from "../supervision/model.ts";
 import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
-import { useWorkspaceProduct } from "../workspace/use-workspace-product.ts";
+import {
+  useWorkspaceProduct,
+  type SessionMutationOutcome,
+} from "../workspace/use-workspace-product.ts";
 import {
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
@@ -434,7 +437,11 @@ export interface OctosSessionRuntime {
     openSession: (
       input: WorkspaceSessionOpenInput,
     ) => Promise<WorkspaceOpenOutcome>;
-    deleteSession: (sessionId: string) => Promise<void>;
+    deleteSession: (sessionId: string) => Promise<SessionMutationOutcome>;
+    renameSession: (
+      sessionId: string,
+      title: string,
+    ) => Promise<SessionMutationOutcome>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
     cancelLaunch: () => void;
     retryOnboarding: () => Promise<void>;
@@ -3765,6 +3772,7 @@ export function useOctosSession(): OctosSessionRuntime {
       switchSession,
       openSession: openWorkspaceSession,
       deleteSession: workspaceController.deleteSession,
+      renameSession: workspaceController.renameSession,
       chooseLaunchProfile,
       cancelLaunch,
       retryOnboarding: onboardingController.prepare,

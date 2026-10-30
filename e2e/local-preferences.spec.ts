@@ -24,7 +24,7 @@ const preferences = (page: Page) =>
 const promptQueue = (page: Page) =>
   page.getByRole("region", { name: "Queued prompts" });
 const row = (page: Page, idSuffix: string) =>
-  page.locator('button[role="treeitem"]').filter({
+  page.locator('[role="treeitem"][data-session-id]').filter({
     has: page.locator('[class*="sessionTitle"]', {
       hasText: new RegExp(`(?:^|\\s)${idSuffix}$`),
     }),
@@ -98,7 +98,7 @@ async function title(page: Page) {
   const displayed = (
     await page
       .locator(
-        'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+        '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
       )
       .innerText()
   ).trim();
