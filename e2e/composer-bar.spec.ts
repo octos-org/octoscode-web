@@ -76,6 +76,30 @@ async function offerSkills(page: Page) {
 test("the composer shows where, who, and what it may do, at a glance", async ({
   page,
 }) => {
+  await page.routeWebSocket(
+    (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
+    (route) => {
+      const server = route.connectToServer();
+      const withoutSkills = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(withoutSkills);
+        if (value === null || typeof value !== "object") return value;
+        return Object.fromEntries(
+          Object.entries(value).flatMap(([key, entry]) => [
+            [
+              key,
+              key === "supported_methods" && Array.isArray(entry)
+                ? entry.filter((method) => method !== "profile/skills/list")
+                : withoutSkills(entry),
+            ],
+          ]),
+        );
+      };
+      server.onMessage((message) =>
+        route.send(JSON.stringify(withoutSkills(JSON.parse(String(message))))),
+      );
+      route.onMessage((message) => server.send(message));
+    },
+  );
   await start(page, "/workspace/composer-bar");
   const row = settings(page);
   await expect(
