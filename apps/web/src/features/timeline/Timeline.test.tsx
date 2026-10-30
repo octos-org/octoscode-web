@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Timeline } from "./Timeline.tsx";
+import { timelineFromHydrate } from "./model.ts";
 import { AttachmentAccessContext } from "./attachment-access.ts";
 
 describe("Timeline", () => {
@@ -84,6 +85,55 @@ describe("Timeline", () => {
     );
     expect(html).toContain('data-attachment="report.md"');
     expect(html).toContain("Download report.md");
+  });
+
+  it("keeps a refreshed artifact card only when Core supplies write_path", () => {
+    const hydrated = (structured: boolean) =>
+      timelineFromHydrate({
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 2 },
+        replayed_projection_envelopes: [
+          {
+            session_id: "coding:local:main",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            seq: 1,
+            payload: {
+              type: "tool_start",
+              data: {
+                tool_call_id: "write-report",
+                name: "write_file",
+                arguments_preview: `{"content":"${"x".repeat(2_000)}`,
+                ...(structured ? { write_path: "report.md" } : {}),
+              },
+            },
+          },
+          {
+            session_id: "coding:local:main",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            seq: 2,
+            payload: {
+              type: "tool_end",
+              data: { tool_call_id: "write-report", status: "complete" },
+            },
+          },
+        ],
+      });
+    const render = (structured: boolean) =>
+      renderToStaticMarkup(
+        <AttachmentAccessContext.Provider
+          value={{ download: async () => new Blob() }}
+        >
+          <Timeline
+            connected
+            workspaceFileReadAvailable
+            entries={hydrated(structured)}
+          />
+        </AttachmentAccessContext.Provider>,
+      );
+    expect(render(true)).toContain('data-attachment="report.md"');
+    expect(render(false)).not.toContain('data-attachment="report.md"');
   });
 
   it("does not offer workspace artifacts without the read capability", () => {

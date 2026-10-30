@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { writtenArtifactPath } from "./artifact-tools.ts";
+import { structuredWritePath, writtenArtifactPath } from "./artifact-tools.ts";
 
 describe("written artifact paths", () => {
   it("accepts only explicit write/edit path arguments", () => {
@@ -35,5 +35,18 @@ describe("written artifact paths", () => {
     expect(writtenArtifactPath("write_file", '{"content":"report.md"}')).toBe(
       "",
     );
+  });
+
+  it("accepts only a safe structured replay write path", () => {
+    expect(structuredWritePath("write_file", "reports/report.md")).toBe(
+      "reports/report.md",
+    );
+    expect(structuredWritePath("edit_file", "C:\\repo\\report.md")).toBe(
+      "C:/repo/report.md",
+    );
+    expect(structuredWritePath("read_file", "report.md")).toBe("");
+    for (const value of [undefined, null, "", "../secret", 0, {}, ["x"]]) {
+      expect(structuredWritePath("write_file", value)).toBe("");
+    }
   });
 });

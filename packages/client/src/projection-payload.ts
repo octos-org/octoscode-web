@@ -37,7 +37,8 @@ export function isProjectionPayloadData(type: string, data: unknown): boolean {
         isRecord(data) &&
         isNonEmptyString(data.tool_call_id) &&
         isNonEmptyString(data.name) &&
-        nullable(data.arguments_preview, isString)
+        nullable(data.arguments_preview, isString) &&
+        nullable(data.write_path, isString)
       );
     case "tool_progress":
       return (

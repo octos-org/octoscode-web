@@ -1820,7 +1820,8 @@ describe("delivered attachments", () => {
         {
           tool_call_id: "write-report",
           name: "write_file",
-          arguments_preview: '{"path":"report.md","content":"# Report"}',
+          write_path: "report.md",
+          arguments_preview: '{"content":"# Report"}',
         },
         1,
       ),
@@ -1898,6 +1899,30 @@ describe("delivered attachments", () => {
       { previous },
     );
     expect(entries[0]?.artifactPath).toBe("report.md");
+  });
+
+  it("keeps old-Core replay path-free when write_path is absent", () => {
+    const entries = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      replayed_projection_envelopes: [
+        {
+          session_id: "coding:local:main",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          seq: 1,
+          payload: {
+            type: "tool_start",
+            data: {
+              tool_call_id: "old-core-write",
+              name: "write_file",
+              arguments_preview: '{"path":"report.md","content":"# Report"}',
+            },
+          },
+        },
+      ],
+    });
+    expect(entries[0]?.artifactPath).toBeUndefined();
   });
 
   it("retains authoritative delivered file sizes from file_attached", () => {
