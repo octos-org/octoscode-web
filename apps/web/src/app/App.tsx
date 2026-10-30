@@ -4,7 +4,24 @@ import { SettingsDefaultsSection } from "../features/session-config/SettingsDefa
 import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
 import { SettingsDialog } from "../features/product-controls/SettingsDialog.tsx";
 import { SessionConfigPane } from "../features/session-config/SessionConfigPane.tsx";
-import { SessionControlBar } from "../features/product-controls/SessionControlBar.tsx";
+import {
+  PermissionControl,
+  SessionControlBar,
+  type ModelControlProps,
+} from "../features/product-controls/SessionControlBar.tsx";
+import {
+  AttachChip,
+  ComposerSettingsRow,
+  FolderChip,
+  ModelChip,
+  SkillsChip,
+  UsageChip,
+} from "../features/composer-bar/ComposerBar.tsx";
+import {
+  modelStrengthLabel,
+  modelStrengths,
+} from "../features/composer-bar/model-strengths.ts";
+import { sessionUsage } from "../features/composer-bar/session-usage.ts";
 import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
@@ -27,6 +44,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
 } from "react";
 import {
   APPUI_SERVER_METHODS,
@@ -2262,6 +2281,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 : undefined,
           }
         : null;
+  // Composer settings row: choosing another folder starts a new session
+  // there and carries the unsent text along; a cancelled picker drops it.
+  const carryDraftRef = useRef<{ text: string; fromKey: string | null } | null>(
+    null,
+  );
+  useEffect(() => {
+    const carry = carryDraftRef.current;
+    if (!carry || !session.opened || activeSessionKey === carry.fromKey) return;
+    carryDraftRef.current = null;
+    if (draftRef.current || conversation.timeline.length > 0) return;
+    draftRef.current = carry.text;
+    setDraft(carry.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionKey, session.opened]);
+  const [composerDropping, setComposerDropping] = useState(false);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const resumeSession = navigableSessions.reduce<
     (typeof navigableSessions)[number] | undefined
   >((latest, ref) => {
@@ -2622,6 +2657,34 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
+  // "Good at" tags come from a local table (model-strengths.ts); the server
+  // reports no model capabilities yet.
+  const modelGroupsWithStrengths = projectedModelGroups.map((group) => ({
+    ...group,
+    models: group.models.map((option) => {
+      const tags = modelStrengths(option.description ?? option.name, group.id);
+      return tags.length
+        ? {
+            ...option,
+            description: [
+              option.description,
+              ...tags.map((tag) => t(modelStrengthLabel(tag))),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }
+        : option;
+    }),
+  }));
+  const modelControl: ModelControlProps = {
+    state: modelControlState(models.state),
+    groups: modelGroupsWithStrengths,
+    selected: currentProfileModel,
+    locked: runtimeMutationBlocked || models.state.busy,
+    labels: translateLabels(MODEL_LABELS, t),
+    onSelect: (selection: ModelSelection) => void selectModel(selection),
+    onRetry: () => void models.refresh(),
+  };
   // A template that edits files offers (never forces) leaving read-only.
   const appliedTemplate =
     templateNotice?.kind === "applied" &&
@@ -2756,6 +2819,69 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     work.supervision.runtimeStatus?.contextSnapshot,
     workspaceProduct.state.tokenCost,
   ).percent;
+  const composerUsage = sessionUsage(
+    session.opened?.session_id,
+    work.supervision.runtimeStatus,
+    workspaceProduct.state.tokenCost,
+  );
+  const skillsCapabilities =
+    protocol.client &&
+    session.opened?.capabilities &&
+    supportsMethod(session.opened.capabilities, APPUI_SKILL_METHODS.LIST)
+      ? { client: protocol.client, capabilities: session.opened.capabilities }
+      : null;
+  const loadSkills = async () => {
+    if (!skillsCapabilities) return [];
+    const commands = await skillsCapabilities.client.skillCommands(
+      protocol.profileId,
+      skillsCapabilities.capabilities,
+    );
+    return commands.list();
+  };
+  /** A visible, editable line: Core has no per-session skill selection. */
+  const askForSkill = (name: string) => {
+    const prefix = t("Use the {name} skill: ", { name });
+    const current = draftRef.current;
+    const next = current.startsWith(prefix)
+      ? current
+      : prefix + current.trimStart();
+    draftRef.current = next;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      const input = composerRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(next.length, next.length);
+    });
+  };
+  const chooseOtherFolder = () => {
+    carryDraftRef.current = draftRef.current.trim()
+      ? { text: draftRef.current, fromKey: activeSessionKey }
+      : null;
+    requestNewSession();
+  };
+  const imagesAvailable =
+    session.connected && codingCapabilities.turnStartAvailable;
+  const openImages = () => {
+    setImagesOpen(true);
+    void conversation.prepareAttachments();
+  };
+  /** Dropped or pasted files go through the same staged image draft as /images. */
+  const attachFiles = async (files: readonly File[]) => {
+    const images = files.filter((file) =>
+      /^image\/(png|jpeg|gif|webp)$/.test(file.type),
+    );
+    setAttachNotice(
+      images.length < files.length
+        ? t("Only images can be attached for now (PNG, JPEG, GIF, WebP).")
+        : null,
+    );
+    if (images.length === 0) return;
+    const store = await conversation.prepareAttachments();
+    if (!store) return;
+    store.selectFiles(images);
+    setImagesOpen(true);
+  };
 
   const recoveryStop = conversation.interruptible ? (
     <button type="button" onClick={() => void conversation.interrupt()}>
@@ -3584,7 +3710,42 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       conversation.cancelQueuedPrompt(turnId)
                     }
                   />
-                  <div className="composer">
+                  <div
+                    className={
+                      composerDropping
+                        ? `composer ${productStyles.composerDropping}`
+                        : "composer"
+                    }
+                    {...(imagesAvailable
+                      ? {
+                          onDragOver: (event: ReactDragEvent) => {
+                            if (!event.dataTransfer.types.includes("Files"))
+                              return;
+                            event.preventDefault();
+                            setComposerDropping(true);
+                          },
+                          onDragLeave: (event: ReactDragEvent) => {
+                            if (
+                              !event.currentTarget.contains(
+                                event.relatedTarget as Node | null,
+                              )
+                            )
+                              setComposerDropping(false);
+                          },
+                          onDrop: (event: ReactDragEvent) => {
+                            setComposerDropping(false);
+                            if (!event.dataTransfer.files.length) return;
+                            event.preventDefault();
+                            void attachFiles([...event.dataTransfer.files]);
+                          },
+                          onPaste: (event: ReactClipboardEvent) => {
+                            if (!event.clipboardData.files.length) return;
+                            event.preventDefault();
+                            void attachFiles([...event.clipboardData.files]);
+                          },
+                        }
+                      : {})}
+                  >
                     {conversation.steeringEnabled ? (
                       <p className="field-note" role="status">
                         {session.capabilities &&
@@ -3617,6 +3778,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ) : null}
                     {conversation.inputError ? (
                       <p role="alert">{conversation.inputError}</p>
+                    ) : null}
+                    {attachNotice ? (
+                      <p className="field-note" role="status">
+                        {attachNotice}
+                      </p>
                     ) : null}
                     {conversation.attachments?.getSnapshot().entries.length ? (
                       <button type="button" onClick={() => setImagesOpen(true)}>
@@ -3665,6 +3831,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         onChange={(value) => {
                           draftRef.current = value;
                           setDraft(value);
+                          setAttachNotice(null);
                           setSelectedCommandIndex(0);
                           setCommandPaletteDismissed(false);
                         }}
@@ -3739,26 +3906,55 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             />
                           }
                         >
+                          <ComposerSettingsRow>
+                            <FolderChip
+                              name={workspaceName(activeWorkspacePath)}
+                              path={activeWorkspacePath}
+                              disabled={
+                                navigationBlocked ||
+                                !codingCapabilities.sessionCreationAvailable
+                              }
+                              onChoose={chooseOtherFolder}
+                            />
+                            <ModelChip
+                              runtimeLabel={runtimeModelLabel}
+                              pendingLabel={pendingProfileDefault}
+                              control={modelControl}
+                            />
+                            {permissionControl ? (
+                              <PermissionControl {...permissionControl} />
+                            ) : null}
+                            {skillsCapabilities ? (
+                              <SkillsChip
+                                load={loadSkills}
+                                onUse={askForSkill}
+                                onManage={() =>
+                                  setProfileExtensionsMode("skills")
+                                }
+                              />
+                            ) : null}
+                            {imagesAvailable ? (
+                              <AttachChip onOpen={openImages} />
+                            ) : null}
+                          </ComposerSettingsRow>
+                        </SurfaceBoundary>
+                      ) : null}
+                      <div className="composer-actions">
+                        {session.opened ? (
                           <SessionStatusStrip
+                            stateOnly
                             model={runtimeModelLabel}
                             permissionMode={permissionModeLabel}
                             state={sessionStripState}
                             activity={turnActivityState}
                             onOpenPane={() => setSessionConfigOpen(true)}
                           />
-                        </SurfaceBoundary>
-                      ) : null}
-                      <div className="composer-actions">
-                        {contextPercent !== null ? (
-                          <span
-                            className={productStyles.contextUsage}
-                            title={t(
-                              "{percent}% of the model context window used",
-                              { percent: contextPercent },
-                            )}
-                          >
-                            {contextPercent}%
-                          </span>
+                        ) : null}
+                        {composerUsage ? (
+                          <UsageChip
+                            usage={composerUsage}
+                            contextPercent={contextPercent}
+                          />
                         ) : null}
                         <TurnStopButton
                           activeTurnId={activeTurnId}
@@ -3979,16 +4175,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               onRetry: () => void models.refresh(),
             }}
             modelSection={{
-              control: {
-                state: modelControlState(models.state),
-                groups: projectedModelGroups,
-                selected: currentProfileModel,
-                locked: runtimeMutationBlocked || models.state.busy,
-                labels: translateLabels(MODEL_LABELS, t),
-                onSelect: (selection: ModelSelection) =>
-                  void selectModel(selection),
-                onRetry: () => void models.refresh(),
-              },
+              control: modelControl,
               savedProfileModel: currentProfileModel
                 ? (projectedModelGroups
                     .find(
@@ -4207,9 +4394,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             creating={
               session.status === "connecting" || workspaceProduct.transitioning
             }
-            onCancel={() =>
-              setWorkspacePicker((current) => ({ ...current, open: false }))
-            }
+            onCancel={() => {
+              carryDraftRef.current = null;
+              setWorkspacePicker((current) => ({ ...current, open: false }));
+            }}
             onCreate={({ workspacePath }) =>
               createSessionInWorkspace(workspacePath)
             }
