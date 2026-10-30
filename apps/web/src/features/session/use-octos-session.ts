@@ -33,6 +33,7 @@ import {
 } from "./background-session-status.ts";
 import type { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
 import type { PeerRosterEntry } from "../peers/peer-manager.ts";
+import { peerReadonlySlug } from "../composer/peer-readonly.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
 import {
   sessionRuntimeScopeKey,
@@ -218,6 +219,8 @@ export interface BackgroundSessionSnapshot {
 export interface OctosSessionRuntime {
   peers: {
     manager: LazyPeerManager | null;
+    roster: readonly PeerRosterEntry[];
+    returnToMaster(): Promise<WorkspaceOpenOutcome>;
     error: string | null;
     /**
      * `/peer clear` (TUI parity 2500 §2): prune the ACTIVE record's FINISHED
@@ -2260,6 +2263,15 @@ export function useOctosSession(): OctosSessionRuntime {
     readonly prompt: string | null;
   }> => {
     const record = viewRecord;
+    if (
+      record &&
+      peerReadonlySlug(
+        peerCoordinator.get(record)?.snapshot().peers ?? [],
+        record.scope.sessionId,
+      ) !== null
+    ) {
+      return { sent: false, message: null, prompt: null };
+    }
     const authority = record?.runtime.currentAuthority() ?? null;
     const client = authority?.client ?? null;
     const sessionId = authority?.sessionId ?? null;
@@ -2357,7 +2369,7 @@ export function useOctosSession(): OctosSessionRuntime {
     await recordManager.engineFor(record)?.refreshDriverInventory(record.scope);
     if (!isCurrent()) return { sent: false, message: null, prompt: null };
     if (!prompt.trim()) return { sent: true, message: null, prompt: null };
-    const accepted = composerDrafts.enqueue(record, prompt);
+    const accepted = turnController.enqueuePrompt(prompt);
     return { sent: accepted, message: null, prompt };
   };
 
@@ -2642,9 +2654,16 @@ export function useOctosSession(): OctosSessionRuntime {
       selectedRecord()?.controller.interruptibleNow(),
     ),
     enqueuePrompt: (text: string, queueOnly = false) => {
-      const accepted = viewRecord
-        ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+      const readOnlyPeer = viewRecord
+        ? peerReadonlySlug(
+            peerCoordinator.get(viewRecord)?.snapshot().peers ?? [],
+            viewRecord.scope.sessionId,
+          ) !== null
         : false;
+      const accepted =
+        viewRecord && !readOnlyPeer
+          ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+          : false;
       if (accepted && viewRecord)
         btwControllersRef.current.get(viewRecord)?.clearSettled();
       return accepted;
@@ -3427,6 +3446,19 @@ export function useOctosSession(): OctosSessionRuntime {
   return {
     peers: {
       manager: viewRecord ? peerCoordinator.get(viewRecord) : null,
+      roster: peerCoordinator.roster(),
+      returnToMaster: () => {
+        const master = viewRecord
+          ? peerCoordinator.getMaster(viewRecord)
+          : null;
+        if (!master) return Promise.resolve("failed");
+        return openWorkspaceSession({
+          sessionId: master.scope.sessionId,
+          cwd: master.scope.workspaceRoot,
+          profileId: master.scope.profileId,
+          resolveLaunch: false,
+        });
+      },
       error: viewRecord ? peerCoordinator.getError(viewRecord) : null,
       /**
        * `/peer clear` (TUI parity 2500 §2): the coordinator prune for the ACTIVE

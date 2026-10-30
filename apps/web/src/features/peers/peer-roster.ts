@@ -12,7 +12,12 @@ import type {
 } from "@octos-org/octoscode-client/peers";
 
 export type PeerOpenOutcome =
-  | { status: "started"; operationId?: string | null; slug?: string }
+  | {
+      status: "started";
+      operationId?: string | null;
+      slug?: string;
+      sessionId?: string;
+    }
   | { status: "not-started"; error: string; refusalKind?: string }
   | { status: "unknown"; error: string };
 
@@ -144,6 +149,8 @@ export interface PeerSessionEvent {
   readonly requestKind?: PeerAttentionRequestKind;
 }
 export interface PeerRosterEntry {
+  /** Stable staging key for React rows; identity may become server-adopted. */
+  readonly rowKey?: string;
   readonly identity: string;
   readonly profileId: string;
   readonly topic: string;

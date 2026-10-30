@@ -162,23 +162,12 @@ describe("PeerDock row action parity with Fleet (judge #4)", () => {
     expect(render([APPROVAL_ROW], false)).not.toContain("data-row-action=");
   });
 
-  it("accessible names name the PEER, not a raw slug", () => {
+  it("accessible action names identify the exact peer slug", () => {
     const markup = render([APPROVAL_ROW, QUESTION_ROW, BASE]);
-    // The raw slug may appear as the row's own text (identity), but every
-    // action's accessible name carries the peer label word "Peer".
-    const labels = markup.match(/aria-label="[^"]*"/g) ?? [];
-    for (const label of labels) {
-      if (
-        label.includes("Approve") ||
-        label.includes("Deny") ||
-        label.includes("Answer") ||
-        label.includes("Steer") ||
-        label.includes("Stop")
-      )
-        expect(label).toContain("Peer");
-    }
-    expect(markup).toContain("Approve Peer");
-    expect(markup).toContain("Answer Peer");
+    expect(markup).toContain("Approve fence-approve once");
+    expect(markup).toContain("Answer fence-question");
+    expect(markup).toContain("Steer fence-a");
+    expect(markup).toContain("Stop fence-a");
   });
 });
 
@@ -378,34 +367,34 @@ describe("peerAnswerRequest — the App-side Answer card adapter (judge r2 #4)",
   });
 });
 
-describe("PeerDock row body drops the raw slug (triage 4510 P2)", () => {
+describe("PeerDock row identity", () => {
   const render = (peers: readonly PeerRosterEntry[]) =>
     renderToStaticMarkup(
       <PeerDock manager={managerFor(peers)} onRowAction={() => undefined} />,
     );
 
-  it("renders 'Peer N · model' as the row identity, never the raw slug text", () => {
+  it("renders each actual slug as the visible row identity", () => {
     const markup = render([APPROVAL_ROW, BASE]);
-    // The visible identity is the peer label, not the slug.
-    expect(markup).toContain("Peer 1");
-    expect(markup).toContain("Peer 2");
-    // The slug survives ONLY as the diagnostic data attribute, never as text.
-    expect(markup).not.toContain(">fence-approve<");
-    expect(markup).not.toContain(">fence-a<");
+    expect(markup).toContain(">fence-approve</span>");
+    expect(markup).toContain(">fence-a</span>");
     expect(markup).toContain('data-peer-slug="fence-approve"');
   });
 
-  it("appends the accepted dispatch's model to the row label when supplied", () => {
+  it("does not replace a real slug with its model or dispatch prompt", () => {
     const markup = render([
       entry({
         identity: "p-model",
         slug: "fence-model",
+        topic: "Fix every flaky test in the repository",
         activity: "live",
         operationId: "dispatch-op-1",
         model: "glm-5.3",
       }),
     ]);
-    expect(markup).toContain("Peer 1 · glm-5.3");
-    expect(markup).not.toContain(">fence-model<");
+    expect(markup).toContain(">fence-model</span>");
+    expect(markup).not.toContain(">Peer 1 · glm-5.3</span>");
+    expect(markup).not.toContain(
+      ">Fix every flaky test in the repository</span>",
+    );
   });
 });

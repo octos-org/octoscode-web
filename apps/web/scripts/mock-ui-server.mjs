@@ -919,7 +919,9 @@ function isPeerSessionId(sessionId) {
 function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = randomUUID();
+    const slug = workspaceRoot.includes("peer-presentation")
+      ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+      : randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,

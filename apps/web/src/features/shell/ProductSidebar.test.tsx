@@ -319,9 +319,8 @@ describe("ProductSidebar peer dock mount (dock plan §1)", () => {
     expect(tree).toBeGreaterThanOrEqual(0);
     expect(dock).toBeGreaterThan(tree);
     expect(settings).toBeGreaterThan(dock);
-    // Triage 4510 P2: the row body shows "Peer N · model", never the raw slug
-    // (the slug survives only as the data-peer-slug diagnostic attribute).
-    expect(html).toContain(">Peer 1<");
+    // The row body names the real peer instead of the generated dispatch prompt.
+    expect(html).toContain(">review<");
     expect(html).toContain('data-peer-slug="review"');
     expect(html).toContain(">started<");
   });

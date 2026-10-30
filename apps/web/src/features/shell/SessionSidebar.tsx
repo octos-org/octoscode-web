@@ -18,8 +18,10 @@ import {
   type ProductSidebarWorkspace,
 } from "./ProductSidebar.tsx";
 import { useUiText, type UiText } from "../preferences/ui-text.tsx";
+import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
+  peerRoster?: readonly PeerRosterEntry[] | undefined;
   recentWorkspaces: readonly RecentWorkspace[];
   knownSessions: readonly KnownSessionRef[];
   /**
@@ -47,6 +49,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
 
 /** Session rows are presentation of server-confirmed references in this tab. */
 export function SessionSidebar({
+  peerRoster,
   recentWorkspaces,
   knownSessions,
   sessionCatalog,
@@ -104,6 +107,9 @@ export function SessionSidebar({
         turn,
       ]),
     );
+    const peerSessionIds = new Set(
+      (peerRoster ?? []).map((peer) => peer.identity),
+    );
     const workspaces = knownSessionWorkspaces(
       recentWorkspaces,
       knownSessions,
@@ -118,15 +124,18 @@ export function SessionSidebar({
       const sourceSessions = mergeWorkspaceSessionRows(
         knownSessions.filter((item) => item.workspaceRoot === workspace.path),
         catalog?.sessions ?? [],
-      ).map((item) => ({
-        sessionId: item.sessionId,
-        profileId: item.profileId,
-        title: item.title ?? knownSessionTitle(item.sessionId, t),
-        updatedAt: item.updatedAt,
-      }));
+      )
+        .map((item) => ({
+          sessionId: item.sessionId,
+          profileId: item.profileId,
+          title: item.title ?? knownSessionTitle(item.sessionId, t),
+          updatedAt: item.updatedAt,
+        }))
+        .filter((item) => !peerSessionIds.has(item.sessionId));
       if (
         isActiveWorkspace &&
         opened &&
+        !peerSessionIds.has(opened.session_id) &&
         !sourceSessions.some(
           (item) =>
             item.sessionId === opened?.session_id &&
@@ -196,6 +205,7 @@ export function SessionSidebar({
     opened,
     terminal,
     openingSessionId,
+    peerRoster,
     t,
   ]);
 
@@ -203,6 +213,7 @@ export function SessionSidebar({
     <ProductSidebar
       {...sidebarProps}
       selectedSessionId={selectedSessionId}
+      peerRoster={peerRoster}
       workspaces={workspaces}
     />
   );

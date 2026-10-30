@@ -33,6 +33,7 @@ import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { peerReadonlySlug } from "../features/composer/peer-readonly.ts";
 import { planCardVisible } from "../features/supervision/plan.ts";
 import {
   type ComponentType,
@@ -1550,6 +1551,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
     string | null
   >(null);
+  const readOnlyPeer =
+    peerReadonlySlug(
+      peers.manager?.snapshot().peers ?? [],
+      session.opened?.session_id ?? null,
+    ) !== null;
   const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
@@ -1560,6 +1566,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (
       !session.connected ||
       !opened ||
+      readOnlyPeer ||
       !text ||
       // #56: another tab owns this session's lock — dispatching here
       // would interleave with it. Take over (banner button) to regain.
@@ -1951,7 +1958,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const retryPermissionDenied = async (turnId: string) => {
-    if (permissionRetryBusyTurnId || !safety.permission.editable) return;
+    if (
+      readOnlyPeer ||
+      permissionRetryBusyTurnId ||
+      !safety.permission.editable
+    )
+      return;
     const client = protocol.client;
     const opened = session.opened;
     const option = permissionRetryProfile;
@@ -3140,6 +3152,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
               selectedSessionId={activeSessionKey}
+              peerRoster={peers.roster}
+              peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
               error={workspaceProduct.state.error}
@@ -3150,6 +3164,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              onPeerDockSelect={(peer) => {
+                if (draftCapacityBlocked) return;
+                void workspaceProduct
+                  .openSession({
+                    sessionId: peer.identity,
+                    cwd: peer.cwd,
+                    profileId: peer.profileId,
+                    resolveLaunch: false,
+                  })
+                  .then((outcome) => {
+                    if (outcome === "opened" && compact)
+                      setSidebarCollapsed(true);
+                  });
+              }}
               peerDockCollapsed={peerDockCollapsed}
               onPeerDockToggle={() =>
                 setPeerDockCollapsed((collapsed) => !collapsed)
@@ -3582,7 +3610,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             ) : undefined
                           }
                           onRetryPermission={
-                            permissionRetryProfile
+                            permissionRetryProfile && !readOnlyPeer
                               ? (turnId) => void retryPermissionDenied(turnId)
                               : undefined
                           }
@@ -3951,6 +3979,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                         peerRoster={peers.manager?.snapshot().peers ?? []}
                         peerSessionId={session.opened?.session_id ?? null}
+                        onReturnToMaster={() => {
+                          if (draftCapacityBlocked) return;
+                          void peers.returnToMaster().then((outcome) => {
+                            if (outcome !== "opened") return;
+                            if (compact) setSidebarCollapsed(true);
+                            requestAnimationFrame(() =>
+                              composerRef.current?.focus(),
+                            );
+                          });
+                        }}
                         value={draft}
                         onChange={(value) => {
                           draftRef.current = value;
@@ -4088,6 +4126,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onInterrupt={() => void conversation.interrupt()}
                         />
                         {conversation.canSendPendingNow &&
+                        !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
                         // locked (same as App.submit's held-elsewhere gate).
@@ -4102,7 +4141,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
-                        {activeTurnId && draft.trim() ? (
+                        {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
                             disabled={
@@ -4120,7 +4159,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Queue")}
                           </button>
                         ) : null}
-                        {!activeTurnId || draft.trim() ? (
+                        {(!activeTurnId || draft.trim()) && !readOnlyPeer ? (
                           <button
                             className="send-button"
                             type="button"

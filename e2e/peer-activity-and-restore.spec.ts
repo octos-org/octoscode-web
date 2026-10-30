@@ -193,28 +193,19 @@ test.describe("peer activity glyphs from real peer events", () => {
     const slug = firstSlug(await stagePeers(page, observed));
 
     const row = dockRow(page, slug);
-    // Pre-trigger contract: the row renders with the slug hook + one activity
-    // glyph. Round-2 (judge #4 "no raw slugs"): the accessible name is now
-    // "Peer N — {activity word}" (PeerDock.tsx:94 peerRowLabel), with the slug
-    // kept ONLY as the data-peer-slug identity hook.
+    // The real slug is both the visible name and accessible-name prefix.
     await expect(dockActivity(page, slug)).toHaveAttribute(
       "data-activity",
       "idle",
     );
     await expect(row.locator("[data-activity]")).toHaveCount(1);
-    await expect(row).toHaveAttribute(
-      "aria-label",
-      new RegExp("^Peer \\d+ — idle$"),
-    );
+    await expect(row).toHaveAccessibleName(new RegExp(`^${slug} idle`));
     // The browser really drove `peer/prepare` (no fabricated counter).
     expect(observed.sentMethods).toContain("peer/prepare");
 
     // `turn/started` on the peer's OWN Session -> the row goes live.
     await startPeerTurn(page, slug);
-    await expect(row).toHaveAttribute(
-      "aria-label",
-      new RegExp("^Peer \\d+ — streaming$"),
-    );
+    await expect(row).toHaveAccessibleName(new RegExp(`^${slug} streaming`));
   });
 
   test("a peer approval blocks the row; Alt+Y stays fail-closed; a resolution clears it", async ({
@@ -234,7 +225,7 @@ test.describe("peer activity glyphs from real peer events", () => {
       "data-activity",
       "blocked",
     );
-    await expect(row).toHaveAttribute("aria-label", /needs you$/);
+    await expect(row).toHaveAccessibleName(/needs you/);
 
     // UX4-4020: App DOES thread `onApprovalRespond` now (App.tsx:1491 ->
     // peers.approvalRespond), but the sink exists ONLY while a control seat is
@@ -280,9 +271,8 @@ test.describe("peer activity glyphs from real peer events", () => {
       "data-activity",
       "done",
     );
-    await expect(dockRow(page, primary)).toHaveAttribute(
-      "aria-label",
-      new RegExp("^Peer \\d+ — done$"),
+    await expect(dockRow(page, primary)).toHaveAccessibleName(
+      new RegExp(`^${primary} done`),
     );
 
     // ...and the fleet count is real: the sibling never landed.
