@@ -13,7 +13,10 @@
   "dependencies": {
     "@octos-org/octoscode-client": "workspace:*",
     "@shikijs/langs": "^4.5.0",
+    "dompurify": "3.4.17",
     "katex": "0.16.47",
+    "papaparse": "5.7.0",
+    "pdfjs-dist": "6.4.299",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
@@ -23,9 +26,12 @@
     "shiki": "^4.5.0"
   },
   "devDependencies": {
+    "@types/papaparse": "5.5.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/react-test-renderer": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "react-test-renderer": "19.3.1",
     "vite": "^8.3.5",
     "ws": "^8.22.0"
   }

@@ -28,6 +28,8 @@ import type {
   SessionOpenResult,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionFileReadParams,
+  SessionFileReadResult,
   SessionFilesListParams,
   SessionFilesListResult,
   SessionListParams,
@@ -112,6 +114,7 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
   CORE_UI_FEATURES.PANE_SNAPSHOTS_V1,
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+  CORE_UI_FEATURES.SESSION_FILES_READ_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
   CORE_UI_FEATURES.THREAD_GRAPH_V1,
@@ -888,6 +891,17 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseSessionFilesListResult(value),
+    );
+  }
+
+  async readSessionFile(
+    params: SessionFileReadParams,
+  ): Promise<SessionFileReadResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_FILES_READ,
+      params,
+      async (value) =>
+        (await import("./session.ts")).parseSessionFileReadResult(value),
     );
   }
 

@@ -8,6 +8,33 @@ import { createContext } from "react";
  */
 export interface AttachmentAccess {
   download(reference: string, signal?: AbortSignal): Promise<Blob>;
+  /** Unbounded save route for files larger than the preview RPC limit. */
+  downloadForSave?: (reference: string, signal?: AbortSignal) => Promise<Blob>;
+  /** Workspace-only reader for tool-written files, never delivered media. */
+  downloadWorkspaceFile?: (
+    reference: string,
+    signal?: AbortSignal,
+  ) => Promise<Blob>;
+  /** Save a workspace file, using an unbounded legacy route when appropriate. */
+  saveWorkspaceFile?: (
+    reference: string,
+    sizeBytes?: number,
+    signal?: AbortSignal,
+  ) => Promise<Blob>;
+  /** False when this path cannot use any advertised workspace file route. */
+  workspacePathAvailable?: (reference: string) => boolean;
+  /** False when workspace reads are not advertised. */
+  previewAvailable?: boolean;
+  /** False when the legacy delivered-file blob method is not advertised. */
+  deliveredPreviewAvailable?: boolean;
+  /** Authoritative metadata from the actual read route, never a path guess. */
+  describe?: (
+    reference: string,
+    workspaceFile?: boolean,
+  ) => Promise<{
+    sizeBytes?: number;
+    saveAvailable?: boolean;
+  } | null>;
 }
 
 export const AttachmentAccessContext = createContext<AttachmentAccess | null>(

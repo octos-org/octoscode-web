@@ -45,6 +45,7 @@ interface TimelineProps {
   onCollapseAll?: () => void;
   /** Live turn activity; rendered at the transcript bottom while streaming. */
   activity?: TurnActivity | null;
+  workspaceFileReadAvailable?: boolean;
   /**
    * Replaces the default empty state of a connected, empty Session. Pass it
    * only while the Session is empty so the memoized transcript stays stable.
@@ -63,6 +64,7 @@ export const Timeline = memo(function Timeline({
   onExpandAll,
   onCollapseAll,
   activity = null,
+  workspaceFileReadAvailable = false,
   emptyState,
 }: TimelineProps) {
   const t = useUiText();
@@ -197,6 +199,7 @@ export const Timeline = memo(function Timeline({
           entry={entry}
           expanded={folds ? folds[entry.id] === true : undefined}
           onToggleFold={toggleFold}
+          workspaceFileReadAvailable={workspaceFileReadAvailable}
         />
       ))}
       <TurnActivityIndicator activity={activity} />
@@ -213,10 +216,12 @@ const TimelineEntryView = memo(function TimelineEntryView({
   entry,
   expanded,
   onToggleFold,
+  workspaceFileReadAvailable,
 }: {
   entry: TimelineEntry;
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
+  workspaceFileReadAvailable: boolean;
 }) {
   switch (entry.kind) {
     case "reasoning":
@@ -233,6 +238,7 @@ const TimelineEntryView = memo(function TimelineEntryView({
           entry={entry}
           expanded={expanded}
           onToggleFold={onToggleFold}
+          workspaceFileReadAvailable={workspaceFileReadAvailable}
         />
       );
     default:
@@ -308,7 +314,9 @@ function ReasoningBlock(props: FoldableBlockProps) {
 }
 
 /** Tool details stay available without pushing the response down as output arrives. */
-function ToolBlock(props: FoldableBlockProps) {
+function ToolBlock(
+  props: FoldableBlockProps & { workspaceFileReadAvailable: boolean },
+) {
   const { entry } = props;
   const t = useUiText();
   const running = entry.status === "running";
@@ -318,47 +326,54 @@ function ToolBlock(props: FoldableBlockProps) {
       ? Math.max(0, Math.round((entry.endedAtMs - entry.startedAtMs) / 1000))
       : undefined;
   return (
-    <details
-      data-timeline-entry={entry.id}
-      className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
-      data-live={running}
-      {...disclosureProps(props)}
-    >
-      <summary className={styles.toolHeader}>
-        <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
-        <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
-        {running ? (
-          <span className={styles.runningLabel}>{t("Running")}</span>
-        ) : (
-          <span className={styles.toolStatusLabel} data-status={entry.status}>
-            {t(
-              entry.statusLabel ??
-                (entry.status === "complete"
-                  ? "Done"
-                  : entry.status === "error"
-                    ? "Failed"
-                    : "Finished"),
-            )}
-            {seconds === undefined ? null : ` · ${seconds} s`}
-          </span>
-        )}
-        {entry.status === "complete" ? (
-          <CheckIcon size={14} className={styles.completedGlyph} />
-        ) : null}
-        <ChevronDownIcon className={styles.chevron} />
-      </summary>
-      <div className={styles.toolBody}>
-        {entry.body ? (
-          <pre className={styles.toolOutput}>{entry.body}</pre>
-        ) : (
-          <span className="muted">
-            {running
-              ? t("Waiting for tool output…")
-              : t("Finished without text output.")}
-          </span>
-        )}
-      </div>
-    </details>
+    <>
+      <details
+        data-timeline-entry={entry.id}
+        className={`${styles.toolBlock}${running ? ` ${styles.toolBlockLive}` : ""}`}
+        data-live={running}
+        {...disclosureProps(props)}
+      >
+        <summary className={styles.toolHeader}>
+          <ActivityGlyph status={entry.status} tool={toolKind(entry.title)} />
+          <strong>{target ? `${entry.title} · ${target}` : entry.title}</strong>
+          {running ? (
+            <span className={styles.runningLabel}>{t("Running")}</span>
+          ) : (
+            <span className={styles.toolStatusLabel} data-status={entry.status}>
+              {t(
+                entry.statusLabel ??
+                  (entry.status === "complete"
+                    ? "Done"
+                    : entry.status === "error"
+                      ? "Failed"
+                      : "Finished"),
+              )}
+              {seconds === undefined ? null : ` · ${seconds} s`}
+            </span>
+          )}
+          {entry.status === "complete" ? (
+            <CheckIcon size={14} className={styles.completedGlyph} />
+          ) : null}
+          <ChevronDownIcon className={styles.chevron} />
+        </summary>
+        <div className={styles.toolBody}>
+          {entry.body ? (
+            <pre className={styles.toolOutput}>{entry.body}</pre>
+          ) : (
+            <span className="muted">
+              {running
+                ? t("Waiting for tool output…")
+                : t("Finished without text output.")}
+            </span>
+          )}
+        </div>
+      </details>
+      {entry.status === "complete" &&
+      entry.artifactPath &&
+      props.workspaceFileReadAvailable ? (
+        <AttachmentList media={[entry.artifactPath]} workspaceFile />
+      ) : null}
+    </>
   );
 }
 

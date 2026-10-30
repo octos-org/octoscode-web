@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { attachmentName, isPreviewableImage } from "./attachments.ts";
+import {
+  attachmentName,
+  attachmentNameParts,
+  formatAttachmentSize,
+  isPreviewableImage,
+  uniqueProfileFileForWorkspacePath,
+  uniqueWorkspaceAttachmentFile,
+} from "./attachments.ts";
 
 describe("attachment naming", () => {
   it("names a server path by its file", () => {
@@ -16,6 +23,105 @@ describe("attachment naming", () => {
   it("falls back to the raw reference when there is no file name", () => {
     expect(attachmentName("/")).toBe("/");
     expect(attachmentName("")).toBe("file");
+  });
+
+  it("formats server-reported byte sizes without guessing", () => {
+    expect(formatAttachmentSize(0)).toBe("0 B");
+    expect(formatAttachmentSize(999)).toBe("999 B");
+    expect(formatAttachmentSize(1536)).toBe("1.5 KiB");
+    expect(formatAttachmentSize(2 * 1024 * 1024)).toBe("2 MiB");
+  });
+
+  it("matches oversized workspace files by full relative path", () => {
+    const workspace = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/session/workspace/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    const unrelated = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/session/workspace/other/result.pdf")}/result.pdf`,
+      size_bytes: 50,
+    };
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "result.pdf",
+        "/data/users/session/workspace",
+        [unrelated, workspace],
+      ),
+    ).toBeNull();
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/data/users/session/workspace",
+        [unrelated, workspace],
+      ),
+    ).toBe(workspace);
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "result.pdf",
+        "/data/users/session/workspace",
+        [unrelated, workspace, { ...workspace }],
+      ),
+    ).toBeNull();
+    expect(
+      uniqueWorkspaceAttachmentFile("reports/result.pdf", "/external/project", [
+        workspace,
+      ]),
+    ).toBeNull();
+    const profiled = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/coding%3Aapi%3Asession/workspace/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/data/users/coding%3Aapi%3Asession/workspace",
+        [profiled],
+      ),
+    ).toBe(profiled);
+    const nested = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/alice/workspace/repo/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/data/users/alice/workspace/repo",
+        [nested],
+      ),
+    ).toBe(nested);
+  });
+
+  it("matches delivered copies by their full workspace-relative path", () => {
+    const copy = {
+      filename: "photo.png",
+      path: `pf/${btoa("users/session/workspace/.artifacts/delivered/hash/photo.png")}/photo.png`,
+      size_bytes: 42,
+    };
+    expect(
+      uniqueProfileFileForWorkspacePath(".artifacts/delivered/hash/photo.png", [
+        copy,
+      ]),
+    ).toBe(copy);
+    expect(
+      uniqueProfileFileForWorkspacePath(
+        ".artifacts/delivered/other/photo.png",
+        [copy],
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps the extension separate so truncation cannot hide the file type", () => {
+    expect(
+      attachmentNameParts("/work/quarterly-report-final-reviewed.xlsx"),
+    ).toEqual({ stem: "quarterly-report-final-reviewed", extension: ".xlsx" });
+    expect(attachmentNameParts("/work/.env")).toEqual({
+      stem: ".env",
+      extension: "",
+    });
   });
 });
 

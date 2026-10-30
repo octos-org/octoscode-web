@@ -1,0 +1,97 @@
+.pdf {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.toolbar {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dsw-space-3);
+  padding: var(--dsw-space-2);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.toolbar button {
+  min-height: 28px;
+  padding: 0 var(--dsw-space-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: var(--dsw-font-size-micro);
+}
+
+.toolbar button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.toolbar button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar input {
+  width: 64px;
+  min-height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: center;
+}
+
+.canvasPage {
+  display: grid;
+  min-height: 240px;
+  place-items: start center;
+  padding: var(--dsw-space-4);
+  overflow: auto;
+  background: var(--dsw-specific-sidebar-fill);
+}
+
+.canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: white;
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.error {
+  padding: var(--dsw-space-3);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.textAlternative {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.textAlternative pre {
+  max-width: 75ch;
+  overflow: auto;
+  font: 400 12px/1.6 var(--dsw-font-family);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

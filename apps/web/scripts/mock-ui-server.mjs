@@ -1,6 +1,6 @@
 import { randomUUID } from "../src/shared/uuid.ts";
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
@@ -1265,7 +1265,92 @@ const FIXTURE_PNG = Buffer.from(
   "base64",
 );
 
-const http = createServer((request, response) => {
+async function previewFixture(name) {
+  if (name.endsWith(".png")) return FIXTURE_PNG;
+  if (name.endsWith(".pdf")) return fixturePdf();
+  if (name.endsWith(".csv")) {
+    return Buffer.from(
+      [
+        "name,value",
+        ...Array.from(
+          { length: 125 },
+          (_, index) => `row-${index + 1},${index + 1}`,
+        ),
+      ].join("\n"),
+    );
+  }
+  if (name.endsWith(".html")) {
+    return Buffer.from(
+      `<!doctype html><html><body><h1>Safe HTML artifact</h1><p>Scripts stay inert.</p><a href="/__test__/html-link-leak">Inert artifact link</a><form action="/__test__/html-form-leak"><button>Submit leak</button></form><meta http-equiv="refresh" content="0;url=/__test__/html-meta-leak"><img src="/__test__/html-network-leak"><script>document.body.dataset.scriptExecuted="yes";fetch("/__test__/html-script-leak")</script></body></html>`,
+    );
+  }
+  if (name.endsWith(".svg")) {
+    return Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 200 80"><a xlink:href="/__test__/svg-link-leak"><text x="10" y="40">Safe SVG artifact</text></a><script>document.documentElement.dataset.scriptExecuted="yes"</script><image href="/__test__/svg-network-leak"/></svg>`,
+    );
+  }
+  if (name.endsWith(".md")) {
+    return Buffer.from(
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n",
+    );
+  }
+  if (name.endsWith(".ts")) {
+    return Buffer.from("export const answer = 42;\n");
+  }
+  if (name.endsWith(".txt")) {
+    return Buffer.from("Plain text artifact\nAll 68 checks passed.\n");
+  }
+  return Buffer.from(`fixture ${name}`);
+}
+
+function fixturePdf() {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    pdfTextStream("PDF artifact page one"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>",
+    pdfTextStream("PDF artifact page two"),
+  ];
+  let source = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(source));
+    source += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(source);
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  source += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("");
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(source);
+}
+
+function pdfTextStream(text) {
+  const content = `BT /F1 18 Tf 72 720 Td (${text}) Tj ET\n`;
+  return `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`;
+}
+
+function artifactMime(name) {
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".html")) return "text/html";
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".pptx"))
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (name.endsWith(".xlsx"))
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (name.endsWith(".csv")) return "text/csv";
+  if (name.endsWith(".md")) return "text/markdown";
+  return "application/octet-stream";
+}
+
+const http = createServer(async (request, response) => {
   if (new URL(request.url, "http://fixture").pathname === "/api/files") {
     response.setHeader(
       "Access-Control-Allow-Origin",
@@ -1296,7 +1381,12 @@ const http = createServer((request, response) => {
       response.writeHead(403).end("access denied");
       return;
     }
-    response.writeHead(200, { "content-type": file.type }).end(file.bytes);
+    response
+      .writeHead(200, {
+        "content-type": file.type,
+        "content-length": file.bytes.length,
+      })
+      .end(request.method === "HEAD" ? undefined : file.bytes);
     return;
   }
   if (request.url === "/api/auth/me") {
@@ -1953,12 +2043,16 @@ const http = createServer((request, response) => {
     }
     // The original workspace path, as Core records it.
     const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
-    deliveredFiles.set(deliveredFileKey(sessionId, path), {
-      type: name.endsWith(".png") ? "image/png" : "application/octet-stream",
-      bytes: name.endsWith(".png")
-        ? FIXTURE_PNG
-        : Buffer.from(`fixture ${name}`),
-    });
+    const validPreview = url.searchParams.get("valid") === "1";
+    const deliveredFile = {
+      type: artifactMime(name),
+      bytes: validPreview
+        ? await previewFixture(name)
+        : name.endsWith(".png")
+          ? FIXTURE_PNG
+          : Buffer.from(`fixture ${name}`),
+    };
+    deliveredFiles.set(deliveredFileKey(sessionId, path), deliveredFile);
     const turnId = randomUUID();
     notify(
       socket,
@@ -1984,6 +2078,23 @@ const http = createServer((request, response) => {
       turnId,
       turnId,
       2,
+      state.log.seq + 1,
+      "file_attached",
+      {
+        path,
+        mime: deliveredFile.type,
+        size_bytes: deliveredFile.bytes.length,
+        attachment_owner: {
+          assistant_segment_id: `${turnId}:assistant:delivery`,
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      turnId,
+      turnId,
+      3,
       state.log.seq + 1,
       "turn_terminal",
       {
@@ -2563,6 +2674,7 @@ const baseCapabilities = {
     "session/list",
     "session/delete",
     "session/files.list",
+    "session/files/read",
     "peer/prepare",
     "peer/gather",
   ],
@@ -2585,6 +2697,7 @@ const baseCapabilities = {
     "harness.task_artifacts.v1",
     "plan.todos.v1",
     "session.workspace_cwd.v1",
+    "session.files.read.v1",
     "skill.actions.v1",
     "skill.action_jobs.v1",
     "auxiliary.rest_to_ws.v1",
@@ -5007,7 +5120,57 @@ sockets.on("connection", (socket, request) => {
       });
       return;
     }
+    if (request.method === "session/files/read") {
+      const path = request.params.path;
+      const entry = [...deliveredFiles.entries()].find(([key]) => {
+        if (!key.startsWith(`${sessionId}\n`)) return false;
+        if (path.startsWith(".artifacts/delivered/")) {
+          const original = key.slice(sessionId.length + 1);
+          const bucket = createHash("sha256")
+            .update(original)
+            .digest("hex")
+            .slice(0, 32);
+          return (
+            path ===
+            `.artifacts/delivered/${bucket}/${original.split("/").at(-1)}`
+          );
+        }
+        return key.endsWith(`/${path}`);
+      });
+      if (!entry) {
+        replyError(socket, request.id, -32004, "workspace file was not found", {
+          kind: "workspace_file_not_found",
+        });
+        return;
+      }
+      const file = entry[1];
+      const offset = request.params.offset ?? 0;
+      const length = Math.min(request.params.length ?? 512 * 1024, 512 * 1024);
+      const bytes = file.bytes.subarray(offset, offset + length);
+      reply(socket, request.id, {
+        session_id: sessionId,
+        path,
+        size_bytes: file.bytes.length,
+        offset,
+        eof: offset + bytes.length >= file.bytes.length,
+        mime_type: file.type,
+        encoding: "base64",
+        content_base64: bytes.toString("base64"),
+      });
+      return;
+    }
     if (request.method === "session/files.list") {
+      const delivered = [...deliveredFiles.entries()]
+        .filter(([key]) => key.startsWith(`${sessionId}\n`))
+        .map(([key, file]) => {
+          const path = key.slice(sessionId.length + 1);
+          return {
+            filename: path.split("/").at(-1),
+            path,
+            size_bytes: file.bytes.length,
+            modified_at: "2026-10-28T00:00:00Z",
+          };
+        });
       reply(socket, request.id, {
         files: [
           {
@@ -5022,6 +5185,7 @@ sockets.on("connection", (socket, request) => {
             size_bytes: 8100,
             modified_at: "2026-08-25T23:58:00Z",
           },
+          ...delivered,
         ],
       });
       return;

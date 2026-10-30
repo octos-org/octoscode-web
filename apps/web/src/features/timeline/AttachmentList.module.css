@@ -15,10 +15,20 @@
   border-radius: 8px;
 }
 
+.expanded {
+  max-width: 100%;
+}
+
+.previewPanel {
+  min-width: 0;
+  min-height: 240px;
+}
+
 .preview {
   display: block;
   max-width: 100%;
   max-height: 320px;
+  height: auto;
   border-radius: 4px;
   object-fit: contain;
 }
@@ -30,14 +40,37 @@
   min-width: 0;
 }
 
+.fileIcon {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fileSize {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .name {
+  display: flex;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.nameStem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nameExtension {
+  flex: none;
 }
 
 .download {

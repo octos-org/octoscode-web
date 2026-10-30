@@ -227,6 +227,17 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
+import {
+  deliveredArtifactWorkspacePath,
+  isWorkspaceReadLimitError,
+  readSessionFileBlob,
+  readSessionFileSize,
+  workspaceRelativeArtifactPath,
+} from "../features/timeline/session-file-read.ts";
+import {
+  uniqueProfileFileForWorkspacePath,
+  uniqueWorkspaceAttachmentFile,
+} from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -776,6 +787,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const attachmentSessionId = session.opened?.session_id ?? "";
   const attachmentProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
+  const attachmentSizeMetadataRef = useRef(new Map<string, number>());
+  useMemo(() => {
+    const sizes = new Map<string, number>();
+    for (const entry of conversation.timeline) {
+      for (const [path, sizeBytes] of Object.entries(
+        entry.attachmentSizes ?? {},
+      )) {
+        sizes.set(path, sizeBytes);
+      }
+    }
+    const previous = attachmentSizeMetadataRef.current;
+    if (
+      previous.size === sizes.size &&
+      [...sizes].every(([path, size]) => previous.get(path) === size)
+    ) {
+      return previous;
+    }
+    attachmentSizeMetadataRef.current = sizes;
+    return sizes;
+  }, [conversation.timeline]);
   const attachmentAccess = useMemo((): AttachmentAccess | null => {
     const client = protocol.client;
     const capabilities = session.capabilities;
@@ -786,8 +818,218 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !attachmentProfileId
     )
       return null;
+    const canReadWorkspace = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_READ,
+    );
+    const canUseBlob = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_LIST,
+    );
+    const listedWorkspaceFile = async (reference: string) => {
+      if (!canUseBlob) return null;
+      const result = await client.listSessionFiles({
+        session_id: attachmentSessionId,
+      });
+      return uniqueWorkspaceAttachmentFile(
+        reference,
+        attachmentWorkspaceRoot,
+        result.files,
+      );
+    };
+    const downloadBlob = async (reference: string, signal?: AbortSignal) => {
+      const commands = await client.mediaCommands(
+        attachmentSessionId,
+        attachmentProfileId,
+        capabilities,
+      );
+      return commands.download(reference, signal);
+    };
     return {
+      ...(canReadWorkspace || canUseBlob
+        ? {
+            async describe(reference: string, workspaceFile = false) {
+              if (workspaceFile) {
+                const path = workspaceRelativeArtifactPath(
+                  reference,
+                  attachmentWorkspaceRoot,
+                );
+                if (!path || !canReadWorkspace) return null;
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      path,
+                    ),
+                  };
+                } catch (reason) {
+                  if (!isWorkspaceReadLimitError(reason)) throw reason;
+                  const listed = await listedWorkspaceFile(reference);
+                  // Listing is metadata-only and scoped to this Session. A
+                  // unique full-path handle preserves large tenant-contained
+                  // downloads; external files without one fail closed.
+                  return listed
+                    ? { sizeBytes: listed.size_bytes }
+                    : { saveAvailable: false };
+                }
+              }
+              if (!canUseBlob) return null;
+              const workspacePath = workspaceRelativeArtifactPath(
+                reference,
+                attachmentWorkspaceRoot,
+              );
+              const deliveredPath = canReadWorkspace
+                ? await deliveredArtifactWorkspacePath(reference)
+                : null;
+              if (deliveredPath && !workspacePath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // The durable copy is the correct source for an external
+                  // delivery, but older deliveries may not have one.
+                }
+              }
+              if (workspacePath && canReadWorkspace) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      workspacePath,
+                    ),
+                  };
+                } catch {
+                  // Fall back to delivery-time metadata when the current
+                  // source cannot be read through the workspace route.
+                }
+              }
+              const sizeBytes =
+                attachmentSizeMetadataRef.current.get(reference);
+              if (sizeBytes !== undefined && sizeBytes > 0) {
+                return { sizeBytes };
+              }
+              if (deliveredPath && workspacePath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // Older deliveries may predate the durable copy. Fall back
+                  // to the current workspace source only as a last resort.
+                }
+              }
+              try {
+                const result = await client.listSessionFiles({
+                  session_id: attachmentSessionId,
+                });
+                const deliveredCopy = deliveredPath
+                  ? uniqueProfileFileForWorkspacePath(
+                      deliveredPath,
+                      result.files,
+                    )
+                  : null;
+                if (deliveredCopy) {
+                  return { sizeBytes: deliveredCopy.size_bytes };
+                }
+                const exact = result.files.filter(
+                  (file) => file.path === reference,
+                );
+                return exact.length === 1
+                  ? { sizeBytes: exact[0]!.size_bytes }
+                  : null;
+              } catch {
+                return null;
+              }
+            },
+          }
+        : {}),
+      workspacePathAvailable(reference) {
+        const path = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        return Boolean(path && (canReadWorkspace || canUseBlob));
+      },
+      previewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_READ,
+      ),
+      deliveredPreviewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_LIST,
+      ),
       async download(reference, signal) {
+        return downloadBlob(reference, signal);
+      },
+      async downloadForSave(reference, signal) {
+        return downloadBlob(reference, signal);
+      },
+      async downloadWorkspaceFile(reference, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        if (
+          workspacePath &&
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
+        ) {
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
+        }
+        return downloadBlob(reference, signal);
+      },
+      async saveWorkspaceFile(reference, sizeBytes, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        const canReadWorkspace = supportsMethod(
+          capabilities,
+          CORE_UI_METHODS.SESSION_FILES_READ,
+        );
+        let limitError: unknown;
+        if (workspacePath && canReadWorkspace) {
+          if (sizeBytes !== undefined && sizeBytes > 32 * 1024 * 1024) {
+            limitError = new Error(
+              "workspace_file_too_large: session file exceeds the read limit",
+            );
+          } else {
+            try {
+              return await readSessionFileBlob(
+                client,
+                attachmentSessionId,
+                workspacePath,
+                signal,
+              );
+            } catch (reason) {
+              if (!isWorkspaceReadLimitError(reason)) throw reason;
+              limitError = reason;
+            }
+          }
+          const listed = await listedWorkspaceFile(reference);
+          if (!listed) throw limitError;
+          const commands = await client.mediaCommands(
+            attachmentSessionId,
+            attachmentProfileId,
+            capabilities,
+          );
+          return commands.download(listed.path, signal);
+        }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
@@ -801,6 +1043,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.capabilities,
     attachmentSessionId,
     attachmentProfileId,
+    attachmentWorkspaceRoot,
   ]);
   const autonomyAvailable = commandSuggestions(
     "/",
@@ -3039,6 +3282,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 )
                           }
                           connected={session.connected}
+                          workspaceFileReadAvailable={supportsMethod(
+                            session.capabilities,
+                            CORE_UI_METHODS.SESSION_FILES_READ,
+                          )}
                           showThinking={conversation.showReasoning}
                           folds={timelineFolds}
                           onToggleFold={(id) =>
@@ -4417,6 +4664,45 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onLoadMore={() => void work.loadMoreOutput()}
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
+            workspaceReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_READ,
+            )}
+            profileFileReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_LIST,
+            )}
+            artifactPathAvailable={attachmentAccess?.workspacePathAvailable}
+            describeArtifact={attachmentAccess?.describe}
+            loadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? attachmentAccess?.downloadWorkspaceFile
+                : undefined
+            }
+            downloadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? (path: string, signal?: AbortSignal) =>
+                    attachmentAccess!.saveWorkspaceFile!(
+                      path,
+                      undefined,
+                      signal,
+                    )
+                : undefined
+            }
           />
         </SurfaceBoundary>
       ) : null}

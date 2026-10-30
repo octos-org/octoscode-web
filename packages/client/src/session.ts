@@ -1,5 +1,9 @@
 import { isRecord } from "./rpc.ts";
-import type { SessionOpened, SessionOpenResult } from "./types.ts";
+import type {
+  SessionFileReadResult,
+  SessionOpened,
+  SessionOpenResult,
+} from "./types.ts";
 import { parseUiProtocolCapabilities } from "./workspace.ts";
 import { isNonEmptyString, parseUiCursor } from "./wire-decoders.ts";
 
@@ -46,5 +50,37 @@ function parseSessionOpened(value: unknown): SessionOpened | null {
     ...(value.reasoning_effort === undefined
       ? {}
       : { reasoning_effort: value.reasoning_effort }),
+  };
+}
+
+export function parseSessionFileReadResult(
+  value: unknown,
+): SessionFileReadResult | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.session_id) ||
+    !isNonEmptyString(value.path) ||
+    typeof value.size_bytes !== "number" ||
+    !Number.isSafeInteger(value.size_bytes) ||
+    value.size_bytes < 0 ||
+    typeof value.offset !== "number" ||
+    !Number.isSafeInteger(value.offset) ||
+    value.offset < 0 ||
+    typeof value.eof !== "boolean" ||
+    !isNonEmptyString(value.mime_type) ||
+    value.encoding !== "base64" ||
+    typeof value.content_base64 !== "string"
+  ) {
+    return null;
+  }
+  return {
+    session_id: value.session_id,
+    path: value.path,
+    size_bytes: value.size_bytes,
+    offset: value.offset,
+    eof: value.eof,
+    mime_type: value.mime_type,
+    encoding: "base64",
+    content_base64: value.content_base64,
   };
 }
