@@ -246,6 +246,50 @@ test("permission retry preserves the current network policy when profiles are re
   expect(update).toEqual({ mode: "workspace_write", network: "deny" });
 });
 
+test("permission retry refuses a response that broadens network access", async ({
+  page,
+}) => {
+  let armed = false;
+  let setId: string | null = null;
+  let held: {
+    socket: WebSocketRoute;
+    frame: { id?: string; result?: { current?: { network?: string } } };
+  } | null = null;
+  let starts = 0;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "turn/start") starts += 1;
+      if (armed && frame.method === "permission/profile/set") {
+        armed = false;
+        setId = frame.id;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (setId && frame.id === setId && frame.result) {
+        held = { socket, frame };
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  const { retry } = await prepareDeniedWrite(page);
+  armed = true;
+  await retry.click();
+  await expect.poll(() => Boolean(held)).toBe(true);
+  held!.frame.result!.current!.network = "allow";
+  const before = starts;
+  held!.socket.send(JSON.stringify(held!.frame));
+  setId = null;
+  await expect(
+    page.getByText("The server did not apply workspace write permission."),
+  ).toBeVisible();
+  expect(starts).toBe(before);
+});
+
 test("permission retry requires an applied workspace-write response", async ({
   page,
 }) => {

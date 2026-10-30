@@ -1968,7 +1968,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (
         !result.applied ||
         result.session_id !== opened.session_id ||
-        result.current.mode !== "workspace_write"
+        result.current.mode !== "workspace_write" ||
+        result.current.network !== option.network
       ) {
         throw new Error("The server did not apply workspace write permission.");
       }
