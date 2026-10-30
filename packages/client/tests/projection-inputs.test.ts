@@ -30,7 +30,10 @@ const validPayloads = [
       },
     },
   ],
-  ["tool_start", { tool_call_id: "tool-1", name: "bash" }],
+  [
+    "tool_start",
+    { tool_call_id: "tool-1", name: "write_file", write_path: "report.md" },
+  ],
   ["tool_progress", { tool_call_id: "tool-1", message: "" }],
   ["tool_end", { tool_call_id: "tool-1", status: "complete" }],
   ["file_attached", { ...file, attachment_owner: {} }],
@@ -174,6 +177,11 @@ describe("canonical payload input boundary", () => {
         "tool_start",
         { tool_call_id: "tool-1", name: "bash" },
         "arguments_preview",
+      ],
+      [
+        "tool_start",
+        { tool_call_id: "tool-1", name: "write_file" },
+        "write_path",
       ],
       ["tool_end", { tool_call_id: "tool-1", status: "complete" }, "error"],
       ["tool_end", { tool_call_id: "tool-1", status: "complete" }, "reason"],

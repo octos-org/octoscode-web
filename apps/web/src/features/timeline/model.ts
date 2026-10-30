@@ -15,7 +15,7 @@ import {
   type TimelineKind,
   type TimelineStatus,
 } from "./entry-model.ts";
-import { writtenArtifactPath } from "./artifact-tools.ts";
+import { structuredWritePath, writtenArtifactPath } from "./artifact-tools.ts";
 
 // The entry shape and the shell-side reducers live in `entry-model.ts` so the
 // app shell can write a system notice without loading the transcript fold.
@@ -592,7 +592,9 @@ function foldProjection(
       const settled = settleReasoning(entries, turnId);
       const toolName = stringOf(data.name, "Tool");
       const argumentsJson = stringOf(data.arguments_preview);
-      const artifactPath = writtenArtifactPath(toolName, argumentsJson);
+      // Replay must use Core's bounded, redacted structured field. Older Core
+      // versions omit it: do not resurrect truncated-argument path guessing.
+      const artifactPath = structuredWritePath(toolName, data.write_path);
       return startTool(settled, {
         id: `tool:${stringOf(data.tool_call_id, turnId)}`,
         kind: "tool",

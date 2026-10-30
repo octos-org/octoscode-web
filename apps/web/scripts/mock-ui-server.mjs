@@ -5376,6 +5376,43 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (text === "Write an artifact fixture") {
+    const content =
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n";
+    deliveredFiles.set(deliveredFileKey(sessionId, "/workspace/report.md"), {
+      type: "text/markdown",
+      bytes: Buffer.from(content),
+    });
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: "write-artifact",
+      name: "write_file",
+      write_path: "report.md",
+      arguments_preview: JSON.stringify({ content: "x".repeat(2_000) }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: "write-artifact",
+      status: "complete",
+      output_preview: "report.md written",
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      { outcome: "completed" },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
   if (text === "Fail a write fixture") {
     const denied = sessionState(sessionId).permission.mode === "read_only";
     notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
