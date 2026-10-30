@@ -27,19 +27,18 @@ function productNavigation(page: Page): Locator {
   return page.locator("aside");
 }
 
-function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: title });
+function sessionRowById(sidebar: Locator, sessionId: string): Locator {
+  return sidebar.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+  );
 }
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
-  const title = await sidebar
+  const sessionId = await sidebar
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
-  if (!title) throw new Error("Expected a selected Session title");
-  return title;
+    .getAttribute("data-session-id");
+  if (!sessionId) throw new Error("Expected a selected Session id");
+  return sessionId;
 }
 
 async function connectAndStartWorkspace(
@@ -396,11 +395,11 @@ async function createSiblingSession(
   workspaceName: string,
 ): Promise<string> {
   const workspace = sidebar.locator(
-    '[role="treeitem"][aria-label="' + workspaceName + '"]',
+    `[data-workspace-name=${JSON.stringify(workspaceName)}]`,
   );
   // Creating a sibling selects it, but selection only moves a beat AFTER the
   // click. Capture the current selection first, then wait until it changes, so
-  // we never read the previous Session's title as if it were the new sibling's.
+  // we never read the previous Session's id as if it were the new sibling's.
   const previous = await selectedSessionTitle(sidebar);
   await workspace
     .getByRole("button", { name: workspaceName, exact: true })
@@ -417,8 +416,11 @@ async function createSiblingSession(
   return selectedSessionTitle(sidebar);
 }
 
-async function selectSession(sidebar: Locator, title: string): Promise<void> {
-  const row = sessionRowByTitle(sidebar, title);
+async function selectSession(
+  sidebar: Locator,
+  sessionId: string,
+): Promise<void> {
+  const row = sessionRowById(sidebar, sessionId);
   await row.click();
   await expect(row).toHaveAttribute("aria-current", "page");
 }
@@ -442,7 +444,7 @@ test("runs bounded repeated waves across three progressing Sessions with per-Ses
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
 
   const titles = [await selectedSessionTitle(sidebar)];
   for (let index = 0; index < 2; index += 1) {

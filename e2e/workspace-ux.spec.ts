@@ -337,7 +337,11 @@ test("sidebar sort controls reorder sessions and track which Session was last op
     '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
   );
   await expect(sessions).toHaveCount(1);
-  const openedTitles = [await selectedTitle.innerText()];
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  const openedTitles = ["Name ux session 1"];
+  await composer.fill(openedTitles[0]!);
+  await composer.press("Enter");
+  await expect(selectedTitle).toHaveText(openedTitles[0]!);
   for (const count of [2, 3]) {
     await sidebar
       .getByRole("button", { name: "ux-review", exact: true })
@@ -346,10 +350,12 @@ test("sidebar sort controls reorder sessions and track which Session was last op
       .getByRole("button", { name: "New session in ux-review" })
       .click();
     await expect(sessions).toHaveCount(count);
-    await expect(
-      page.getByRole("textbox", { name: "Message Octos" }),
-    ).toBeEnabled();
-    openedTitles.push(await selectedTitle.innerText());
+    await expect(composer).toBeEnabled();
+    const title = `Name ux session ${count}`;
+    await composer.fill(title);
+    await composer.press("Enter");
+    await expect(selectedTitle).toHaveText(title);
+    openedTitles.push(title);
   }
   expect(new Set(openedTitles).size).toBe(3);
   await expect(titles).toHaveText([...openedTitles].reverse());

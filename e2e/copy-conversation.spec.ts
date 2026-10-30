@@ -16,6 +16,11 @@ async function startConversation(page: Page, cwd: string) {
   await page.getByLabel("Server workspace path").press("Enter");
 }
 
+async function openCopyMenu(page: Page) {
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  return page.getByRole("menuitem", { name: "Copy as Markdown", exact: true });
+}
+
 test("copies the conversation as Markdown from the server's history", async ({
   page,
 }) => {
@@ -32,7 +37,7 @@ test("copies the conversation as Markdown from the server's history", async ({
 
   // The label (and so the accessible name) changes with the result, so hold
   // the button by its stable hook once found by name.
-  await page.getByRole("button", { name: "Copy as Markdown" }).click();
+  await (await openCopyMenu(page)).click();
   const copy = page.locator("[data-copy-conversation]");
   await expect(copy).toHaveAttribute("data-copy-conversation", "copied");
   await expect(copy).toHaveText("Copied");
@@ -59,13 +64,13 @@ test("says there is nothing to copy for a conversation with no messages yet", as
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Copy as Markdown" }).click();
+  await (await openCopyMenu(page)).click();
   const copy = page.locator("[data-copy-conversation]");
   await expect(copy).toHaveAttribute("data-copy-conversation", "empty");
   await expect(copy).toHaveText("Nothing to copy");
 });
 
-test("keeps the phone header for the workspace title: no copy button there", async ({
+test("keeps the phone header compact and offers copy from its menu", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -74,4 +79,5 @@ test("keeps the phone header for the workspace title: no copy button there", asy
     page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeEnabled();
   await expect(page.locator("[data-copy-conversation]")).toHaveCount(0);
+  await expect(await openCopyMenu(page)).toBeVisible();
 });

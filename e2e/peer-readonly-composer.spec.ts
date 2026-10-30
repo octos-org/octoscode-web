@@ -118,8 +118,7 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   const masterId = String(w.calls("session/open")[0]!.params!.session_id!);
   const masterTitle = await sessionRows(page)
     .first()
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
 
   // Stage ONE native peer from the master through the /peer dialog
   // (mock `peer/prepare` -> `peer/staged`; :512-553).
@@ -190,7 +189,9 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
   // 5. The status action returns to the actual owner master and restores input.
-  const master = sessionRows(page).filter({ hasText: masterTitle! });
+  const master = productNavigation(page).locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(masterTitle)}]`,
+  );
   await hint(page)
     .getByRole("button", { name: "Return to master", exact: true })
     .click();

@@ -305,12 +305,11 @@ test.describe("per-session interrupt-prompt restore", () => {
     // Session A: send a draft, then interrupt A's live turn via the product's
     // own stop control (TurnStopButton; accessible name Interrupt|Stop).
     const navigation = productNavigation(page);
-    const sessionTitle = navigation.locator(
-      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
+    const selectedSession = navigation.locator(
+      '[role="treeitem"][data-session-id][aria-current="page"]',
     );
-    const sessionAName = (await sessionTitle.textContent())?.trim() ?? "";
-    if (sessionAName === "")
-      throw new Error("workspace start opened no Session");
+    const sessionAId = await selectedSession.getAttribute("data-session-id");
+    if (!sessionAId) throw new Error("workspace start opened no Session");
     await composer(page).fill(draft);
     await page
       .getByRole("button", { name: "Send prompt", exact: true })
@@ -323,10 +322,9 @@ test.describe("per-session interrupt-prompt restore", () => {
     // Open a sibling Session B under the SAME workspace (native-workflows.spec
     // `sibling`, :90-101): hover the workspace row, then `New session in …`.
     // B has its OWN composer record, so A's draft must NOT leak into it.
-    const workspaceRow = navigation.getByRole("treeitem", {
-      name: WORKSPACE,
-      exact: true,
-    });
+    const workspaceRow = navigation.locator(
+      `[data-workspace-name=${JSON.stringify(WORKSPACE)}]`,
+    );
     await workspaceRow
       .getByRole("button", { name: WORKSPACE, exact: true })
       .hover();
@@ -334,19 +332,26 @@ test.describe("per-session interrupt-prompt restore", () => {
       .getByRole("button", { name: `New session in ${WORKSPACE}` })
       .click();
     await expect
-      .poll(async () => (await sessionTitle.textContent())?.trim() ?? "")
-      .not.toBe(sessionAName);
+      .poll(() => selectedSession.getAttribute("data-session-id"))
+      .not.toBe(sessionAId);
+    const sessionBId = await selectedSession.getAttribute("data-session-id");
+    if (!sessionBId) throw new Error("sibling action opened no Session");
+    await expect(
+      navigation.locator(
+        `[role="treeitem"][data-session-id=${JSON.stringify(sessionBId)}]`,
+      ),
+    ).toHaveAttribute("aria-current", "page");
     await expect(composer(page)).toHaveValue("");
 
     // Back to A: the draft is restored exactly once.
     await navigation
-      .locator('[role="treeitem"][data-session-id]')
-      .filter({ hasText: sessionAName })
-      .first()
+      .locator(
+        `[role="treeitem"][data-session-id=${JSON.stringify(sessionAId)}]`,
+      )
       .click();
     await expect
-      .poll(async () => (await sessionTitle.textContent())?.trim() ?? "")
-      .toBe(sessionAName);
+      .poll(() => selectedSession.getAttribute("data-session-id"))
+      .toBe(sessionAId);
     await expect(composer(page)).toHaveValue(draft);
   });
 });

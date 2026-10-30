@@ -214,6 +214,8 @@ export interface BackgroundSessionSnapshot {
   workspaceRoot: string;
   /** Background work state derived from the record's own live queue. */
   state: BackgroundSessionState;
+  /** The retained record's own first prompt, used only for display naming. */
+  firstPrompt: string | null;
   activeTurnId: string | null;
   queuedCount: number;
   unread: boolean;
@@ -2854,6 +2856,10 @@ export function useOctosSession(): OctosSessionRuntime {
       }
       return {
         ...scope,
+        firstPrompt:
+          record.timeline.find(
+            (entry) => entry.kind === "user" && entry.body.trim(),
+          )?.body ?? null,
         state: lost
           ? "failed"
           : backgroundSessionState(queue, waiting, record.timeline),

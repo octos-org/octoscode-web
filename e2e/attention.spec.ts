@@ -233,11 +233,10 @@ test("a background Session completing while another is selected signals and ackn
   const navigation = page.getByRole("complementary", {
     name: "Product navigation",
   });
-  const sessions = navigation.getByRole("treeitem", { name: /Session / });
+  const sessions = navigation.locator('[role="treeitem"][data-session-id]');
   const originalSessionTitle = await sessions
     .first()
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   if (!originalSessionTitle)
     throw new Error("Expected a confirmed Session title");
   await send(page, "Continue this turn while I open another Session");
@@ -245,7 +244,7 @@ test("a background Session completing while another is selected signals and ackn
     page.getByRole("button", { name: "Stop", exact: true }),
   ).toBeVisible();
   await navigation
-    .getByRole("treeitem", { name: "attention-check", exact: true })
+    .locator('[data-workspace-name="attention-check"]')
     .getByRole("button", { name: "attention-check", exact: true })
     .hover();
   await navigation
@@ -262,9 +261,9 @@ test("a background Session completing while another is selected signals and ackn
   expect(
     await page.evaluate(() => window.__attentionProbe.notices),
   ).toHaveLength(1);
-  const original = navigation
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: originalSessionTitle });
+  const original = navigation.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(originalSessionTitle)}]`,
+  );
   await original.click();
   await expect(original).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle(originalTitle);

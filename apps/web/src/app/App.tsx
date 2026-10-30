@@ -209,7 +209,7 @@ import {
   writePanelLayout,
   type SessionPanelTab,
 } from "../features/side-panel/panel-layout.ts";
-import { CopyConversationButton } from "../features/transcript-export/CopyConversationButton.tsx";
+import { ConversationActionsMenu } from "../features/shell/ConversationActionsMenu.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
 import type {
@@ -3436,7 +3436,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     {activeWorkspacePath || t("Choose a workspace")}
                   </small>
                 </div>
-                {session.opened?.active_profile_id &&
+                {!compact &&
+                session.opened?.active_profile_id &&
                 session.opened.workspace_root ? (
                   <CopySessionLinkButton
                     key={session.opened.session_id}
@@ -3477,41 +3478,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 </nav>
               ) : null}
               <div className="header-actions">
-                {/* Desktop only: at phone width the header keeps its room
-                    for the workspace title and Review changes. */}
-                {!compact &&
-                protocol.client &&
-                session.opened &&
-                supportsMethod(
-                  session.capabilities,
-                  CORE_UI_METHODS.SESSION_HYDRATE,
-                ) ? (
-                  <CopyConversationButton
-                    key={session.opened.session_id}
-                    source={{
-                      client: protocol.client,
-                      sessionId: session.opened.session_id,
-                      workspaceRoot:
-                        session.opened.workspace_root ?? activeWorkspacePath,
-                    }}
-                    className={productStyles.preferencesTrigger ?? ""}
-                  />
-                ) : null}
-                <button
-                  className={productStyles.preferencesTrigger}
-                  type="button"
-                  aria-label={t("Browser preferences")}
-                  title={t("Browser preferences")}
-                  onClick={gate.openPreferences}
-                >
-                  {t("Browser preferences")}
-                </button>
                 {session.opened ? (
                   <button
                     className={
                       compact
                         ? productStyles.compactReview
-                        : productStyles.panelToggle
+                        : productStyles.headerAction
                     }
                     type="button"
                     aria-label={
@@ -3544,6 +3516,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ) : null}
                   </button>
                 ) : null}
+                <ConversationActionsMenu
+                  triggerClassName={
+                    compact
+                      ? (productStyles.compactReview ?? "")
+                      : (productStyles.headerAction ?? "")
+                  }
+                  copySource={
+                    protocol.client &&
+                    session.opened &&
+                    supportsMethod(
+                      session.capabilities,
+                      CORE_UI_METHODS.SESSION_HYDRATE,
+                    )
+                      ? {
+                          client: protocol.client,
+                          sessionId: session.opened.session_id,
+                          workspaceRoot:
+                            session.opened.workspace_root ??
+                            activeWorkspacePath,
+                        }
+                      : undefined
+                  }
+                  onOpenPreferences={gate.openPreferences}
+                />
               </div>
             </header>
             {cleanupFailed ? (

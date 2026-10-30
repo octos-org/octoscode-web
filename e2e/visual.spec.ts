@@ -117,6 +117,45 @@ test("session reply matches baseline", async ({ page }) => {
   );
 });
 
+test("session header actions align with a panel badge on desktop and mobile", async ({
+  page,
+}) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await composer.fill("Review syntax fixture");
+  await composer.press("Enter");
+
+  const actions = page.locator(".header-actions");
+  const panelButton = page.getByRole("button", { name: /^Session panel/ });
+  const menuButton = page.getByRole("button", {
+    name: "More actions",
+    exact: true,
+  });
+  await expect(panelButton).toContainText("1");
+  const expectAligned = async () => {
+    const [panel, menu] = await Promise.all([
+      panelButton.boundingBox(),
+      menuButton.boundingBox(),
+    ]);
+    if (!panel || !menu) throw new Error("Expected both header actions");
+    expect(Math.abs(panel.y - menu.y)).toBeLessThanOrEqual(1);
+    expect(menu.x - (panel.x + panel.width)).toBeGreaterThanOrEqual(4);
+  };
+
+  await expectAligned();
+  await expect(actions).toHaveScreenshot(
+    "session-header-actions-desktop.png",
+    SNAPSHOT,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectAligned();
+  await expect(actions).toHaveScreenshot(
+    "session-header-actions-mobile.png",
+    SNAPSHOT,
+  );
+});
+
 test("skills settings matches baseline", async ({ page }) => {
   await connect(page);
   await startDefaultWorkspace(page);

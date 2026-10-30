@@ -278,9 +278,7 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
   const selected = productNavigation(page).locator(
     '[role="treeitem"][data-session-id][aria-current="page"]',
   );
-  const sourceTitle = await selected
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+  const sourceKey = await selected.getAttribute("data-session-id");
   const prompt = "Persist the source conversation before its fixture fork";
   await composer(page).fill(prompt);
   await page.getByRole("button", { name: "Send prompt", exact: true }).click();
@@ -309,7 +307,7 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
   const childId = String(result!.new_session_id);
   expect(childId).toBe(sourceId.split("#")[0] + "#" + name);
   expect(protocol.requests("session/open")).toHaveLength(1);
-  await expect(selected).toContainText(sourceTitle!);
+  await expect(selected).toHaveAttribute("data-session-id", sourceKey!);
   await releaseHistoryRefresh(request, sourceId);
   const receipt = dialog.getByText(
     "Conversation fork opened in the background. Your selection was not changed.",
@@ -348,16 +346,16 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
   ).toEqual([sourceId, childId]);
   expect(protocol.requests("session/fork")).toHaveLength(1);
   expect(protocol.requests("turn/start")).toHaveLength(1);
-  await expect(selected).toContainText(sourceTitle!);
+  await expect(selected).toHaveAttribute("data-session-id", sourceKey!);
   await dialog
     .getByRole("button", { name: "Close history", exact: true })
     .click();
   await expect(
-    productNavigation(page).getByRole("treeitem", { name: /Session / }),
+    productNavigation(page).locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
-  const childRow = productNavigation(page)
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: "Session " + childId.slice(-8) });
+  const childRow = productNavigation(page).locator(
+    `[role="treeitem"][data-session-id*=${JSON.stringify(childId)}]`,
+  );
   await childRow.click();
   await expect(childRow).toHaveAttribute("aria-current", "page");
   await expect(page.getByText(prompt, { exact: true })).toHaveCount(1);
@@ -501,14 +499,12 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   const sidebar = productNavigation(page);
   const sourceOpen = protocol.requests("session/open")[0]!;
   const sessionId = String(sourceOpen.params!.session_id);
-  const aTitle = await sidebar
-    .locator(
-      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
-    )
-    .textContent();
-  const a = sidebar
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: aTitle! });
+  const aKey = await sidebar
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
+  const a = sidebar.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(aKey)}]`,
+  );
   const brief = "Gather this exact peer receipt";
   await sendSlashCommand(page, "/peer");
   const peers = page.getByRole("dialog", {
@@ -581,7 +577,7 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
     slugs: [slug],
   });
   await sidebar
-    .getByRole("treeitem", { name: "gather-exact-owner", exact: true })
+    .locator('[data-workspace-name="gather-exact-owner"]')
     .getByRole("button", { name: "gather-exact-owner", exact: true })
     .hover();
   await sidebar
@@ -590,21 +586,20 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
       exact: true,
     })
     .click();
-  await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
-    2,
-  );
+  // Two Session rows; the peer lives in the dock, not in the Session list.
+  await expect(
+    sidebar.locator('[role="treeitem"][data-session-id]'),
+  ).toHaveCount(2);
   await expect(sidebar.locator(`button[data-peer-slug="${slug}"]`)).toHaveCount(
     1,
   );
   await expect(a).not.toHaveAttribute("aria-current", "page");
-  const bTitle = await sidebar
-    .locator(
-      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
-    )
-    .textContent();
-  const b = sidebar
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: bTitle! });
+  const bKey = await sidebar
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
+  const b = sidebar.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(bKey)}]`,
+  );
   expect(
     (
       await request.post(
@@ -620,7 +615,9 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   await b.click();
   await expect(b).toHaveAttribute("aria-current", "page");
   await expect(
-    page.getByText(/Peer results gathered|Keep A active/),
+    page
+      .getByRole("region", { name: "Conversation", exact: true })
+      .getByText(/Peer results gathered|Keep A active/),
   ).toHaveCount(0);
   await expect
     .poll(async () => {
@@ -664,7 +661,9 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
     .toBe(2);
   await expect(b).toHaveAttribute("aria-current", "page");
   await expect(
-    page.getByText(/Peer results gathered|Keep A active/),
+    page
+      .getByRole("region", { name: "Conversation", exact: true })
+      .getByText(/Peer results gathered|Keep A active/),
   ).toHaveCount(0);
   await a.click();
   await expect(page.getByText(expected, { exact: true })).toHaveCount(1);

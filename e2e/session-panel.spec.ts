@@ -306,16 +306,13 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
   await start(page, "/workspace/review-output-a");
   const firstTitle = await navigation
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   await createWorkspace(page, "/workspace/review-output-b");
   const secondTitle = await navigation
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   await navigation
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: firstTitle! })
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(firstTitle)}]`)
     .click();
   const reference = new URL(page.url()).searchParams.get("s");
   const sessionId = (JSON.parse(reference!) as string[])[2]!;
@@ -335,8 +332,9 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
     .click();
   await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
   await navigation
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: secondTitle! })
+    .locator(
+      `[role="treeitem"][data-session-id=${JSON.stringify(secondTitle)}]`,
+    )
     .click();
   if ((await toggle(page).getAttribute("aria-expanded")) === "false") {
     await toggle(page).click();

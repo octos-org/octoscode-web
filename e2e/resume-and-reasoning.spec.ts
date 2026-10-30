@@ -75,7 +75,7 @@ async function send(page: Page, text: string) {
 }
 async function newSession(page: Page, name: string) {
   await sidebar(page)
-    .getByRole("treeitem", { name, exact: true })
+    .locator(`[data-workspace-name=${JSON.stringify(name)}]`)
     .getByRole("button", { name, exact: true })
     .hover();
   await sidebar(page)
@@ -84,14 +84,14 @@ async function newSession(page: Page, name: string) {
   await expect(composer(page)).toBeEnabled();
 }
 async function title(page: Page) {
-  return (
-    await selectedRow(page).locator('[class*="sessionTitle"]').innerText()
-  ).trim();
+  const sessionId = await selectedRow(page).getAttribute("data-session-id");
+  if (!sessionId) throw new Error("Expected a selected Session id");
+  return sessionId;
 }
-const row = (page: Page, name: string) =>
-  sidebar(page)
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: name });
+const row = (page: Page, sessionId: string) =>
+  sidebar(page).locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+  );
 const control = (name: string, sessionId: string, method?: string) =>
   `${origin}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
 

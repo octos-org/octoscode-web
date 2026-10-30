@@ -26,6 +26,14 @@ export function MenuIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function MoreIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M3 8h.01M8 8h.01M13 8h.01" strokeWidth={2.5} />
+    </svg>
+  );
+}
+
 export function DiffIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>
