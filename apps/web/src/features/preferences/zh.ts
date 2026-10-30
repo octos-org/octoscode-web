@@ -1725,6 +1725,12 @@ const catalog: Readonly<Record<string, string>> = {
   "This browser could not show a desktop notification. Tab counts still work.":
     "这个浏览器无法显示桌面通知，标签页计数仍然有效。",
 
+  Automation: "自动化",
+  "Autonomy limitations": "自动化功能限制",
+  "Goal history and budget accounting are still being reconciled.":
+    "目标历史和预算核算仍在对账中。",
+  "Monitor probes are not fully sandboxed yet.": "监控探针尚未完全沙箱化。",
+
   // Artifact preview (T-0012).
   Preview: "预览",
   "Hide preview": "收起预览",

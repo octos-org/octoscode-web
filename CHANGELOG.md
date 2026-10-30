@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a capability-gated Automation tab to the Session panel for goals, loops,
+  monitors, and agents. Reuse the session-scoped autonomy controller for
+  controls and live updates, hide the tab on unsupported connections, and show
+  the remaining goal-ledger and monitor-sandbox limitations.
 - Support plain-http LAN origins by generating UUIDs through a shared
   `crypto.randomUUID`/`getRandomValues` fallback, guarded by an oxlint rule.
   Associate provider, model, and route selects with labels in first-run setup.

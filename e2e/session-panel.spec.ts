@@ -349,3 +349,63 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
   ).toHaveCount(0);
   await expect(panel(page).locator("pre")).toHaveCount(0);
 });
+
+test("Automation shows and controls goals, loops, monitors and agents with zero axe violations", async ({
+  page,
+}, testInfo) => {
+  await start(page, "/srv/work/native-workflows-automation");
+  await toggle(page).click();
+  await panel(page).getByRole("tab", { name: "Automation" }).click();
+  const automation = panel(page).getByRole("tabpanel", {
+    name: "Automation",
+  });
+  await expect(automation).toContainText(
+    "Monitor probes are not fully sandboxed yet.",
+  );
+
+  await automation
+    .getByLabel("Goal objective")
+    .fill("Ship the automation panel");
+  await automation.getByRole("button", { name: "Set session goal" }).click();
+  await expect(automation).toContainText("Ship the automation panel");
+  await expect(automation).toContainText("Goal history and budget accounting");
+
+  await automation.getByRole("button", { name: "Create loop" }).click();
+  await expect(
+    automation.getByRole("list", { name: "Loop list" }),
+  ).toBeVisible();
+  await automation.getByRole("button", { name: /^Pause loop / }).click();
+  await automation.getByRole("button", { name: /^Resume loop / }).click();
+
+  await automation.getByLabel("New monitor name").fill("watch-build");
+  await automation
+    .getByLabel("New monitor probe command")
+    .fill('["./scripts/watch.sh"]');
+  await automation.getByRole("button", { name: "Create monitor" }).click();
+  await expect(automation).toContainText("watch-build");
+  await automation.getByRole("button", { name: /^Pause monitor / }).click();
+  await automation.getByRole("button", { name: /^Resume monitor / }).click();
+
+  await automation
+    .getByRole("button", { name: "Read output of agent native-agent-1" })
+    .click();
+  await expect(automation).toContainText("Output — native-agent-1");
+  await automation
+    .getByRole("button", { name: "Interrupt agent native-agent-1" })
+    .click();
+  await expect(
+    automation.getByRole("button", { name: "Interrupt agent native-agent-1" }),
+  ).toBeDisabled();
+
+  expect(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
+      .violations,
+  ).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("automation-panel.png"),
+    fullPage: true,
+  });
+
+  await automation.getByRole("button", { name: "Clear session goal" }).click();
+  await expect(automation).toContainText("No active goal for this session.");
+});
