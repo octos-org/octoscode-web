@@ -610,6 +610,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // when the seat proof lands.
   const [fleetStartPending, setFleetStartPending] =
     useState<FleetStartSequencerState>({ kind: "idle" });
+  const [nativeFleetStartState, setNativeFleetStartState] = useState<
+    FleetStartState | undefined
+  >(undefined);
+  const [fleetGatherState, setFleetGatherState] = useState<
+    "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed"
+  >("idle");
   const [showThinkingPreference] = useState(() =>
     parseShowThinking(
       browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null,
@@ -791,9 +797,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
-  const fleetSupported =
+  const nativeFleetSupported =
+    supportsMethod(session.capabilities, "peer/prepare") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.SESSION_OPEN) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_START);
+  const nativeFleetControlsSupported =
+    supportsMethod(session.capabilities, "turn/steer") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_INTERRUPT) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.APPROVAL_RESPOND);
+  const nativeFleetGatherSupported = supportsMethod(
+    session.capabilities,
+    "peer/gather",
+  );
+  const externalFleetSupported =
     peerControlAdmitted(session.capabilities) &&
     peerDispatchAdmitted(session.capabilities);
+  const nativeFleetActive = nativeFleetSupported && !externalFleetSupported;
+  const fleetSupported = nativeFleetSupported || externalFleetSupported;
   // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
   // advertises `onboarding.workspace_browse.v1`, and the picker shows no
   // browsing affordance at all without an adapter.
@@ -2911,6 +2931,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
    * only the settled kind (plus the bounded refusal kind) off this value.
    */
   const fleetStartSettle = ((): FleetStartState | undefined => {
+    if (nativeFleetActive) return nativeFleetStartState;
     const state = session.peerController?.state;
     if (state === undefined) return undefined;
     if (state.kind === "accepted")
@@ -4231,10 +4252,63 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   sessions={fleetSessions}
                   selectedSessionId={session.opened?.session_id ?? ""}
                   startState={fleetStartSettle}
+                  nativeStartAvailable={nativeFleetActive}
+                  nativeControlsAvailable={
+                    nativeFleetActive && nativeFleetControlsSupported
+                  }
                   onStart={(submit) => {
-                    // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
-                    // peer/dispatch. With no seat held, the FIRST call goes to
-                    // acquire and the dispatch is deferred to the effect below.
+                    if (nativeFleetActive) {
+                      const brief = submit.brief;
+                      const operationId = submit.operationId ?? randomUUID();
+                      const manager = peers.manager;
+                      setNativeFleetStartState(undefined);
+                      if (!manager) {
+                        setNativeFleetStartState({
+                          kind: "failed",
+                          laneKey: "native",
+                          brief,
+                          operationId,
+                          refusalKind: "peer_control_refused",
+                        });
+                        return;
+                      }
+                      void manager
+                        .kickoff({
+                          brief,
+                          n: 1,
+                          title: brief.split("\n", 1)[0]!.slice(0, 60),
+                        })
+                        .then((result) => {
+                          setNativeFleetStartState(
+                            result
+                              ? {
+                                  kind: "accepted",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  slug: result.peers[0]?.slug ?? result.slug,
+                                }
+                              : {
+                                  kind: "failed",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  refusalKind: "peer_control_refused",
+                                },
+                          );
+                        })
+                        .catch(() => {
+                          setNativeFleetStartState({
+                            kind: "failed",
+                            laneKey: "native",
+                            brief,
+                            operationId,
+                            refusalKind: "peer_control_refused",
+                          });
+                        });
+                      return;
+                    }
+                    // External-driver remains an optional fallback only.
                     const next = fleetStartOnSubmit({
                       state: fleetStartPending,
                       seatHeld: session.peerController?.seatHeld === true,
@@ -4254,7 +4328,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     });
                     if (next !== null) setFleetStartPending(next);
                   }}
-                  {...(session.peerController?.onRowAction
+                  {...(nativeFleetActive && nativeFleetGatherSupported
+                    ? {
+                        onGather: () => {
+                          setFleetGatherState("busy");
+                          void peers
+                            .gather(undefined, () => !navigationBlocked)
+                            .then(setFleetGatherState)
+                            .catch(() => setFleetGatherState("failed"));
+                        },
+                        gatherState: fleetGatherState,
+                      }
+                    : {})}
+                  {...(session.peerController?.onRowAction ||
+                  (nativeFleetActive && nativeFleetControlsSupported)
                     ? {
                         onRowAction: (row, action, steerText) => {
                           // Judge r2 #4 (H4): bind the row's REAL pending ids —
@@ -4265,6 +4352,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               (candidate) => candidate.slug === row.slug,
                             );
                           if (!entry) return;
+                          if (
+                            nativeFleetActive &&
+                            nativeFleetControlsSupported
+                          ) {
+                            peers.rowAction(entry, action, steerText ?? "");
+                            return;
+                          }
                           if (
                             entry.activity === "blocked" &&
                             entry.requestKind === "question"

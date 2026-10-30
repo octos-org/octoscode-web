@@ -376,7 +376,7 @@ test("Alt+A focuses the pending approval panel and announces when none waits", a
 test("Alt+D stays closed without Fleet capability; suppressed inside inputs", async ({
   page,
 }) => {
-  await connectAndStartWorkspace(page, "keyboard-fleet");
+  await connectAndStartWorkspace(page, "peer-control-no-fleet");
 
   // §8 suppression half: focus inside the composer's textarea (a text input)
   // must NOT fire — no focus steal, the chat view stays mounted (routed Fleet

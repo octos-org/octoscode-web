@@ -44,6 +44,10 @@ export interface FleetPaneProps {
   readonly startState?: FleetViewProps["startState"] | undefined;
   readonly onStart: NonNullable<FleetViewProps["onStart"]>;
   readonly onRowAction?: FleetViewProps["onRowAction"] | undefined;
+  readonly nativeStartAvailable?: boolean | undefined;
+  readonly nativeControlsAvailable?: boolean | undefined;
+  readonly onGather?: FleetViewProps["onGather"] | undefined;
+  readonly gatherState?: FleetViewProps["gatherState"] | undefined;
 }
 
 const subscribeNoPeerRoster = () => () => undefined;
@@ -59,6 +63,10 @@ export function FleetPane({
   startState,
   onStart,
   onRowAction,
+  nativeStartAvailable,
+  nativeControlsAvailable,
+  onGather,
+  gatherState,
 }: FleetPaneProps) {
   // Fleet rows: the SAME roster the controller value carries, projected
   // through ux-fleet-02's fleetRosterFromController (goal 3 mount).
@@ -114,8 +122,13 @@ export function FleetPane({
     });
   }, [fleetFacts, peerRosterSnapshot, selectedSessionId]);
   const fleetPeers: readonly FleetRosterPeer[] = useMemo(
-    () => fleetRosterFromUnion(fleetRosterPeers, workspacePath),
-    [fleetRosterPeers, workspacePath],
+    () =>
+      fleetRosterFromUnion(
+        fleetRosterPeers,
+        workspacePath,
+        nativeControlsAvailable ?? false,
+      ),
+    [fleetRosterPeers, workspacePath, nativeControlsAvailable],
   );
   return (
     <FleetView
@@ -131,6 +144,10 @@ export function FleetPane({
       selectedSessionId={selectedSessionId}
       startState={startState}
       onStart={onStart}
+      fleetPeers={fleetPeers}
+      nativeStartAvailable={nativeStartAvailable}
+      nativeControlsAvailable={nativeControlsAvailable}
+      {...(onGather ? { onGather, gatherState } : {})}
       {...(onRowAction ? { onRowAction } : {})}
     />
   );
@@ -140,6 +157,7 @@ export function FleetPane({
 function fleetRosterFromUnion(
   union: ReturnType<typeof unionFleetFacts>,
   workspacePath: string,
+  nativeControlsAvailable: boolean,
 ): FleetRosterPeer[] {
   const now = Date.now();
   return union.rows.map((row) => {
@@ -155,12 +173,17 @@ function fleetRosterFromUnion(
       elapsedMs:
         row.acceptedAtMs !== null ? Math.max(0, now - row.acceptedAtMs) : 0,
       tokens: row.tokens ?? 0,
-      controlSupported: row.operationId !== null,
+      controlSupported: nativeControlsAvailable
+        ? row.status === "started"
+        : row.operationId !== null,
     } satisfies FleetRosterPeer;
   });
 }
 
 function unionStatusWord(row: FleetUnionRow): FleetStatusWord {
+  // Native peers may keep status="started" after activity completes.
+  if (row.activity === "done" && row.status === "started")
+    return "Finished" as const;
   if (row.activity === "blocked") return "Waiting for your approval" as const;
   if (row.status === null) return "Requested" as const;
   switch (row.status) {
