@@ -120,6 +120,7 @@ import { mergeConfirmedRetainedSessions } from "../features/session/retained-ses
 import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
+  forgetKnownSession,
   loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
@@ -1116,6 +1117,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     "/",
     session.opened?.capabilities,
   ).some((command) => command.intent === "autonomy");
+  const [deletedSessionIds, setDeletedSessionIds] = useState<readonly string[]>(
+    [],
+  );
+  const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  useEffect(() => {
+    const reopened = session.opened?.session_id;
+    if (!reopened) return;
+    setDeletedSessionIds((current) =>
+      current.filter((sessionId) => sessionId !== reopened),
+    );
+  }, [session.opened?.session_id]);
   // The server's per-workspace history (`session/list { cwd, profile_id }`),
   // re-listed when the active session changes or a turn finishes so a new
   // conversation or a retitled one shows up without a reload. It is keyed to
@@ -1130,7 +1142,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
     refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
       conversation.queue.active?.turnId ?? ""
-    }`,
+    }\n${catalogRefreshNonce}`,
   });
   const navigableSessions = useMemo(() => {
     const catalogRefs = [...sessionCatalog.values()].flatMap(
@@ -1139,8 +1151,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return mergeConfirmedRetainedSessions(knownSessions, [
       ...workspaceProduct.backgroundTurns,
       ...catalogRefs,
-    ]);
-  }, [knownSessions, sessionCatalog, workspaceProduct.backgroundTurns]);
+    ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
+  }, [
+    knownSessions,
+    sessionCatalog,
+    workspaceProduct.backgroundTurns,
+    deletedSessionIds,
+  ]);
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -3227,6 +3244,57 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 });
               }}
               onSessionSelect={moveToProductSession}
+              onSessionRename={
+                workspaceProduct.state.renameAvailable
+                  ? async (rowKey, title) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not rename this session.");
+                      const outcome = await workspaceProduct.renameSession(
+                        reference.sessionId,
+                        title,
+                      );
+                      if (outcome.kind === "done") {
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not rename this session.");
+                    }
+                  : undefined
+              }
+              onSessionDelete={
+                workspaceProduct.state.deleteAvailable
+                  ? async (rowKey) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not delete this session.");
+                      const sessionId = reference.sessionId;
+                      const outcome =
+                        await workspaceProduct.deleteSession(sessionId);
+                      if (outcome.kind === "done") {
+                        setKnownSessions(
+                          forgetKnownSession(
+                            browserStorage("sessionStorage"),
+                            connection,
+                            sessionId,
+                          ),
+                        );
+                        setDeletedSessionIds((current) =>
+                          current.includes(sessionId)
+                            ? current
+                            : [...current, sessionId],
+                        );
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not delete this session.");
+                    }
+                  : undefined
+              }
               onSettings={() => {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);

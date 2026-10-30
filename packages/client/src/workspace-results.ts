@@ -7,6 +7,7 @@ import type {
   SessionFilesListResult,
   SessionListEntry,
   SessionListResult,
+  SessionTitleSetResult,
 } from "./types.ts";
 const LAUNCH_DECISIONS = new Set([
   "resume",
@@ -86,6 +87,16 @@ export function parseSessionDeleteResult(
   value: unknown,
 ): SessionDeleteResult | null {
   return isRecord(value) ? {} : null;
+}
+
+export function parseSessionTitleSetResult(
+  value: unknown,
+): SessionTitleSetResult | null {
+  return isRecord(value) &&
+    isNonEmptyString(value.session_id) &&
+    isNonEmptyString(value.title)
+    ? { session_id: value.session_id, title: value.title }
+    : null;
 }
 
 export function parseSessionFilesListResult(

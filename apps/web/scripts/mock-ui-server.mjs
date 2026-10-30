@@ -2693,6 +2693,7 @@ const baseCapabilities = {
     "cron/toggle",
     "session/list",
     "session/delete",
+    "session/title.set",
     "session/files.list",
     "session/files/read",
     "peer/prepare",
@@ -4954,6 +4955,28 @@ sockets.on("connection", (socket, request) => {
         sessionStateBySessionId.delete(request.params.session_id);
       }
       reply(socket, request.id, {});
+      return;
+    }
+    if (request.method === "session/title.set") {
+      const title = request.params?.title?.trim();
+      if (!title || [...title].length > 200) {
+        replyError(socket, request.id, -32602, "Invalid session title");
+        return;
+      }
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.map((session) =>
+            session.id === request.params.session_id
+              ? { ...session, title }
+              : session,
+          ),
+        );
+      }
+      reply(socket, request.id, {
+        session_id: request.params.session_id,
+        title,
+      });
       return;
     }
     if (request.method === "profile/skills/list") {
