@@ -177,6 +177,7 @@ export function ProductSidebar({
   const t = useUiText();
   const themeLabel =
     theme === "dark" ? t("Dark") : theme === "light" ? t("Light") : t("Auto");
+  const themeAccessibleLabel = theme === "system" ? t("Auto") : t(theme);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
@@ -993,10 +994,12 @@ export function ProductSidebar({
           <button
             type="button"
             className={styles.settings}
-            aria-label={t("Theme: {value0}", { value0: themeLabel })}
+            aria-label={t("Theme: {value0}", {
+              value0: themeAccessibleLabel,
+            })}
             title={
               collapsed
-                ? t("Theme: {value0}", { value0: themeLabel })
+                ? t("Theme: {value0}", { value0: themeAccessibleLabel })
                 : undefined
             }
             onClick={onThemeToggle}
