@@ -310,7 +310,7 @@ test("opening tool output keeps its heading in view instead of following the exp
   await region.evaluate((el) => {
     el.scrollTop = el.scrollHeight;
   });
-  const summary = page.locator("summary").filter({ hasText: "read_file" });
+  const summary = page.locator("summary").filter({ hasText: "Read a file" });
   await summary.scrollIntoViewIfNeeded();
   const before = (await summary.boundingBox())!.y;
   await summary.click();

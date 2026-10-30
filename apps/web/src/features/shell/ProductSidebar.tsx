@@ -33,7 +33,7 @@ import type { ApprovalDecision } from "@octos-org/octoscode-client/protocol";
 import type { PeerRosterEntry } from "../peers/peer-manager.ts";
 
 export type ProductSessionStatus =
-  "idle" | "running" | "waiting" | "completed" | "failed";
+  "idle" | "running" | "waiting" | "completed" | "attention" | "failed";
 
 export type ProductSidebarViewMode = "grouped" | "flat";
 export type ProductSidebarOrderMode = "manual" | "updated" | "oldest";
@@ -1377,6 +1377,8 @@ function defaultStatusLabel(status: ProductSessionStatus): string {
       return "Waiting for input";
     case "completed":
       return "Completed";
+    case "attention":
+      return "Completed with failed steps";
     case "failed":
       return "Failed";
   }

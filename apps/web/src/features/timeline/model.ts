@@ -476,6 +476,7 @@ export function foldNotification(
         turnId,
         "completed",
         usageText(params),
+        legacyUsageParts(params),
       );
     case CORE_UI_METHODS.TURN_ERROR:
       return settleTimelineTurn(
@@ -640,6 +641,7 @@ function foldProjection(
         turnId,
         stringOf(data.outcome, "errored"),
         terminalErrorText(data.error),
+        projectionUsageParts(data.token_usage),
       );
     }
     case "background/spawn_complete": {
@@ -832,7 +834,14 @@ export function settleTimelineTurn(
   turnId: string,
   outcome: string,
   body = "",
+  usage?: { input: number; output: number },
 ): TimelineEntry[] {
+  const startedAtMs = entries
+    .filter((entry) => entry.turnId === turnId)
+    .map((entry) => entry.startedAtMs)
+    .filter((value): value is number => value !== undefined)
+    .sort((left, right) => left - right)[0];
+  const endedAtMs = Date.now();
   return upsert(sweepTurnStreamtails(entries, turnId, outcome), {
     id: `terminal:${turnId}`,
     kind: "system",
@@ -855,6 +864,9 @@ export function settleTimelineTurn(
             : "error",
     turnId,
     latestTurnOutcome: outcome,
+    startedAtMs: startedAtMs ?? endedAtMs,
+    endedAtMs,
+    ...(usage ? { turnUsage: usage } : {}),
   });
 }
 
@@ -868,6 +880,7 @@ function startTool(
   entries: readonly TimelineEntry[],
   entry: TimelineEntry,
 ): TimelineEntry[] {
+  entry = { ...entry, toolArguments: entry.toolArguments ?? entry.body };
   if (entries.find((current) => current.id === entry.id)?.toolSettled) {
     return entries.slice();
   }
@@ -1172,6 +1185,29 @@ function pretty(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function legacyUsageParts(
+  value: Record<string, unknown>,
+): { input: number; output: number } | undefined {
+  const input = typeof value.tokens_in === "number" ? value.tokens_in : null;
+  const output = typeof value.tokens_out === "number" ? value.tokens_out : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
+}
+
+function projectionUsageParts(
+  value: unknown,
+): { input: number; output: number } | undefined {
+  if (!isRecord(value)) return undefined;
+  const input =
+    typeof value.input_tokens === "number" ? value.input_tokens : null;
+  const output =
+    typeof value.output_tokens === "number" ? value.output_tokens : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
 }
 
 function usageText(value: Record<string, unknown>): string {

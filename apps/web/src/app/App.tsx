@@ -639,6 +639,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   kind: "tool-start",
                   atMs: Date.now(),
                   toolName: last.title,
+                  argumentsJson: last.toolArguments ?? last.body,
                 } as const)
               : ({ kind: "tool-end", atMs: Date.now() } as const)
             : ({ kind: "assistant-delta", atMs: Date.now() } as const);
