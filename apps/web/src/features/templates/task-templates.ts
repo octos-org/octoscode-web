@@ -109,7 +109,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "Write a weekly report",
         summary: "Turn data or notes in this folder into a report.",
         prompt:
-          "Using [the data or notes in this folder, e.g. sales.csv], write this week's report and save it as weekly-report.md.\nInclude: highlights (3–5 points), a table of the key numbers, problems and risks, and next week's plan. Every number must match the source files.",
+          "Using [the data or notes in this folder, e.g. sales.csv], write this week's report and save it as weekly-report.md.\nInclude: highlights (3–5 points), a table of the key numbers, problems and risks, and next week's plan. Every number must match the source files. Use only facts supplied by the user or the referenced materials. Clearly label any inference or recommendation, and never present unknown information as decided or confirmed.",
         example:
           "Week 43 report\n• Revenue $184,300, +12.4% week over week\n• 37 new customers, 9 from online channels",
       },
@@ -117,7 +117,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "写周报",
         summary: "把文件夹里的数据或记录整理成一份周报。",
         prompt:
-          "根据这个文件夹里的【数据或记录文件，例如 sales.csv】，写一份本周周报，存成 周报.md。\n包括：本周概况（3–5 条要点）、关键数据表格、问题与风险、下周计划。所有数字都要能在原始文件里对得上。",
+          "根据这个文件夹里的【数据或记录文件，例如 sales.csv】，写一份本周周报，存成 周报.md。\n包括：本周概况（3–5 条要点）、关键数据表格、问题与风险、下周计划。所有数字都要能在原始文件里对得上。只使用用户或参考资料中提供的事实；推测和建议必须明确标注，不能把未知信息写成已确定或已确认。",
         example:
           "第 43 周周报\n• 销售额 ¥1,284,300，环比 +12.4%\n• 新客户 37 家，其中 9 家来自线上",
       },
@@ -132,7 +132,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "Clean up a spreadsheet",
         summary: "Dedupe, fix formats, save a cleaned copy.",
         prompt:
-          "Clean up [the spreadsheet, e.g. customers.csv]: remove duplicate rows, make dates and amounts consistent, fix obvious typos, and sort by [column]. Leave the original untouched and save the result as a new file. Tell me what changed and which rows you were unsure about.",
+          "Clean up [the spreadsheet, e.g. customers.csv]: remove duplicate rows, make dates and amounts consistent, fix obvious typos, and sort by [column]. Leave the original untouched and save the result as a new file. Tell me what changed and which rows you were unsure about. Use only facts supplied by the user or the referenced materials. Clearly label any inference or recommendation, and never present unknown information as decided or confirmed.",
         example:
           "Removed 23 duplicates · normalized 410 dates\n3 rows need a look\nSaved as customers-cleaned.csv",
       },
@@ -140,7 +140,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "整理表格",
         summary: "去重、统一格式，另存一份干净的。",
         prompt:
-          "整理【表格文件，例如 客户名单.csv】：去掉重复行，统一日期和金额格式，修正明显的错别字，按【排序依据】排序。原文件不动，结果另存为一个新文件，并告诉我改了什么、哪些行拿不准。",
+          "整理【表格文件，例如 客户名单.csv】：去掉重复行，统一日期和金额格式，修正明显的错别字，按【排序依据】排序。原文件不动，结果另存为一个新文件，并告诉我改了什么、哪些行拿不准。只使用用户或参考资料中提供的事实；推测和建议必须明确标注，不能把未知信息写成已确定或已确认。",
         example:
           "去重 23 行 · 统一日期 410 处\n有 3 行拿不准，请确认\n已另存为 客户名单_整理.csv",
       },
@@ -155,7 +155,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "Draft a slide outline",
         summary: "Slide-by-slide titles, points, and charts.",
         prompt:
-          "Draft a slide outline on [topic, e.g. Q4 review] for [audience], about [number] slides. For each slide give a title, at most three points, and a suggested chart or image. Use the related material in this folder and save it as slide-outline.md.",
+          "Draft a slide outline on [topic, e.g. Q4 review] for [audience], about [number] slides. For each slide give a title, at most three points, and a suggested chart or image. Use the related material in this folder and save it as slide-outline.md. Use only facts supplied by the user or the referenced materials. Clearly label any inference or recommendation, and never present unknown information as decided or confirmed.",
         example:
           "1. Q4 review\n2. Bottom line: revenue +18%, margin flat\n3. Results by region (bar chart)",
       },
@@ -163,7 +163,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
         title: "做一份 PPT 提纲",
         summary: "逐页写标题、要点和建议的图表。",
         prompt:
-          "为【主题，例如 第四季度复盘】做一份 PPT 提纲，面向【听众】，大约【页数】页。每页写：标题、不超过 3 条要点、建议配的图或表。参考这个文件夹里的相关资料，存成 PPT提纲.md。",
+          "为【主题，例如 第四季度复盘】做一份 PPT 提纲，面向【听众】，大约【页数】页。每页写：标题、不超过 3 条要点、建议配的图或表。参考这个文件夹里的相关资料，存成 PPT提纲.md。只使用用户或参考资料中提供的事实；推测和建议必须明确标注，不能把未知信息写成已确定或已确认。",
         example:
           "1. 第四季度复盘\n2. 一页结论：收入 +18%，利润率持平\n3. 分区表现（柱状图）",
       },

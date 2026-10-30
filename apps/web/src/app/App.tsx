@@ -193,6 +193,7 @@ import {
   firstTemplateBlank,
   type TaskTemplate,
 } from "../features/templates/task-templates.ts";
+import { applyTemplateReadOnly } from "../features/templates/template-permission.ts";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
@@ -1551,7 +1552,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
     string | null
   >(null);
-  const submit = (override?: string, queueOnly = false) => {
+  const submit = async (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
       conversation.btw?.dismiss();
@@ -1561,6 +1562,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (
       !session.connected ||
       !opened ||
+      !activeSessionKey ||
       !text ||
       // #56: another tab owns this session's lock — dispatching here
       // would interleave with it. Take over (banner button) to regain.
@@ -1581,6 +1583,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (intent.kind === "prompt" && conversation.turnRecovery) return;
     if (intent.kind === "prompt" && !codingCapabilities.turnStartAvailable)
       return;
+    if (
+      intent.kind === "prompt" &&
+      appliedTemplate?.access === "read" &&
+      currentPermission?.mode !== "read_only"
+    ) {
+      const confirmed = await ensureTemplateReadOnly(
+        appliedTemplate,
+        activeSessionKey,
+      );
+      if (!confirmed) {
+        if (activeSessionKeyRef.current === activeSessionKey) {
+          setCommandError(readOnlyPermissionError());
+        }
+        return;
+      }
+    }
     // Local admission may reject an incomplete upload or a retired Session.
     // Keep the original text and image drafts until that admission succeeds.
     if (
@@ -1594,6 +1612,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     )
       return;
 
+    if (appliedTemplate) {
+      setTemplateNotice(null);
+      templatePermissionRequestRef.current = null;
+      setTemplatePermission(null);
+    }
     draftRef.current = "";
     setDraft("");
     setCommandPaletteForced(false);
@@ -2281,6 +2304,76 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
     | null
   >(null);
+  const [templatePermission, setTemplatePermission] = useState<{
+    sessionKey: string;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
+  const templatePermissionRequestRef = useRef<{
+    key: string;
+    promise: Promise<boolean>;
+  } | null>(null);
+  const readOnlyPermissionError = () =>
+    t(
+      "Read-only permission is not confirmed. Current permission is still workspace write; sending is blocked.",
+    );
+  const ensureTemplateReadOnly = (
+    template: TaskTemplate,
+    sessionKey: string,
+  ): Promise<boolean> => {
+    const key = `${sessionKey}:${template.id}`;
+    const existing = templatePermissionRequestRef.current;
+    if (existing?.key === key) return existing.promise;
+    if (currentPermission?.mode === "read_only") {
+      setTemplatePermission(null);
+      return Promise.resolve(true);
+    }
+    const client = protocol.client;
+    const opened = session.opened;
+    if (
+      !client ||
+      !opened ||
+      !supportsMethod(
+        opened.capabilities,
+        CORE_UI_METHODS.PERMISSION_PROFILE_SET,
+      )
+    ) {
+      setTemplatePermission({
+        sessionKey,
+        busy: false,
+        error: readOnlyPermissionError(),
+      });
+      return Promise.resolve(false);
+    }
+    setTemplatePermission({ sessionKey, busy: true, error: null });
+    const promise = (async () => {
+      const ownerIsCurrent = () =>
+        activeSessionClientRef.current === client &&
+        activeSessionKeyRef.current === sessionKey &&
+        templatePermissionRequestRef.current?.key === key;
+      try {
+        await applyTemplateReadOnly(client, opened.session_id);
+        if (!ownerIsCurrent()) return false;
+        await safety.refreshPermission();
+        if (!ownerIsCurrent()) return false;
+        templatePermissionRequestRef.current = null;
+        setTemplatePermission(null);
+        return true;
+      } catch {
+        if (ownerIsCurrent()) {
+          templatePermissionRequestRef.current = null;
+          setTemplatePermission({
+            sessionKey,
+            busy: false,
+            error: readOnlyPermissionError(),
+          });
+        }
+        return false;
+      }
+    })();
+    templatePermissionRequestRef.current = { key, promise };
+    return promise;
+  };
   const heroPickerRef = useRef<HTMLDivElement>(null);
   const applyTemplate = (template: TaskTemplate, sessionKey: string) => {
     const text = template.copy[preferences.language].prompt;
@@ -2294,6 +2387,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       text,
       previousDraft,
     });
+    templatePermissionRequestRef.current = null;
+    setTemplatePermission(null);
+    if (template.access === "read") {
+      void ensureTemplateReadOnly(template, sessionKey);
+    }
     // Land on the first blank so typing replaces it.
     requestAnimationFrame(() => {
       const input = composerRef.current;
@@ -2355,6 +2453,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     draftRef.current = templateNotice.previousDraft;
                     setDraft(templateNotice.previousDraft);
                     setTemplateNotice(null);
+                    templatePermissionRequestRef.current = null;
+                    setTemplatePermission(null);
                     composerRef.current?.focus();
                   }
                 : undefined,
@@ -2720,6 +2820,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         locked:
           runtimeMutationBlocked ||
           safety.permission.busy ||
+          (templatePermission?.sessionKey === activeSessionKey &&
+            templatePermission.busy) ||
           !safety.permission.editable,
         labels: translateLabels(PERMISSION_LABELS, t),
         riskCopy: translateLabels(PERMISSION_RISK_COPY, t),
@@ -3578,6 +3680,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                       }
                                     : null
                                 }
+                                readAccess={
+                                  appliedTemplate?.access === "read" &&
+                                  templatePermission?.sessionKey ===
+                                    activeSessionKey
+                                    ? {
+                                        busy: templatePermission.busy,
+                                        error: templatePermission.error,
+                                      }
+                                    : null
+                                }
+                                templatesDisabled={
+                                  templatePermission?.sessionKey ===
+                                    activeSessionKey && templatePermission.busy
+                                }
                                 onUse={chooseTemplate}
                               />
                             ) : undefined
@@ -3977,10 +4093,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           const selected =
                             suggestedCommands[selectedCommandIndex];
                           if (selected) chooseCommand(selected);
-                          else submit();
+                          else void submit();
                         }}
                         {...(activeTurnId
-                          ? { onQueue: () => submit(undefined, true) }
+                          ? { onQueue: () => void submit(undefined, true) }
                           : {})}
                         {...(conversation.canSendPendingNow &&
                         // #218: interrupting the running turn to flush

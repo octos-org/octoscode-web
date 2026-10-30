@@ -27,6 +27,7 @@ interface HomeCopy {
   cancel: string;
   needsWrite: string;
   allowWrite: string;
+  readSwitching: string;
 }
 
 const COPY: Record<UiLanguage, HomeCopy> = {
@@ -49,6 +50,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     cancel: "Cancel",
     needsWrite: "This template edits files, but this session is read-only.",
     allowWrite: "Switch to workspace write",
+    readSwitching: "Switching to read-only before this template can send…",
   },
   zh: {
     heading: "想让 Octos 帮你做什么？",
@@ -67,6 +69,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     cancel: "取消",
     needsWrite: "这个模板会改文件，但当前会话是只读。",
     allowWrite: "切换到工作区写入",
+    readSwitching: "正在切换到只读，确认后才会发送…",
   },
 };
 
@@ -160,6 +163,8 @@ export interface TaskTemplateHomeProps {
   notice?: TemplateNotice | null | undefined;
   /** Offered when the chosen template edits files and the Session is read-only. */
   writeAccess?: { busy: boolean; onAllow: () => void } | null | undefined;
+  readAccess?: { busy: boolean; error: string | null } | null | undefined;
+  templatesDisabled?: boolean | undefined;
   onUse: (template: TaskTemplate) => void;
 }
 
@@ -170,6 +175,8 @@ export function TaskTemplateHome({
   resume,
   notice,
   writeAccess,
+  readAccess,
+  templatesDisabled = false,
   onUse,
 }: TaskTemplateHomeProps) {
   const copy = COPY[language];
@@ -228,6 +235,8 @@ export function TaskTemplateHome({
             </button>
           </p>
         ) : null}
+        {readAccess?.busy ? <p>{copy.readSwitching}</p> : null}
+        {readAccess?.error ? <p data-tone="warn">{readAccess.error}</p> : null}
       </div>
       {TASK_TEMPLATE_CATEGORIES.map((category) => (
         <TemplateGroup
@@ -235,6 +244,7 @@ export function TaskTemplateHome({
           category={category}
           language={language}
           selectedId={notice?.templateId}
+          disabled={templatesDisabled}
           onUse={onUse}
         />
       ))}
@@ -246,11 +256,13 @@ function TemplateGroup({
   category,
   language,
   selectedId,
+  disabled,
   onUse,
 }: {
   category: TaskTemplateCategory;
   language: UiLanguage;
   selectedId: string | undefined;
+  disabled: boolean;
   onUse: (template: TaskTemplate) => void;
 }) {
   const copy = COPY[language];
@@ -287,6 +299,7 @@ function TemplateGroup({
                   type="button"
                   className={styles.use}
                   aria-label={`${copy.use}${language === "zh" ? "：" : ": "}${text.title}`}
+                  disabled={disabled}
                   onClick={() => onUse(template)}
                 >
                   {copy.use}

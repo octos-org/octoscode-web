@@ -123,3 +123,126 @@ test("an empty session links back to the last session and stacks on a phone", as
     .click();
   await expect(page.getByText("/workspace/templates-earlier")).toBeVisible();
 });
+
+test("a read-only template waits for the permission receipt before sending", async ({
+  page,
+}) => {
+  let armSet = false;
+  let setId: string | null = null;
+  let release: (() => void) | undefined;
+  let starts = 0;
+  const setUpdates: unknown[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "turn/start") starts += 1;
+      if (armSet && frame.method === "permission/profile/set") {
+        armSet = false;
+        setId = frame.id;
+        setUpdates.push(frame.params.update);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (setId && frame.id === setId && frame.result) {
+        release = () => socket.send(message);
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await connect(page);
+  await startSession(page, "/workspace/templates-read-receipt");
+  const home = page.getByRole("region", { name: "What can Octos help with?" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  armSet = true;
+  await home
+    .getByRole("button", { name: "Use this: Review recent changes" })
+    .click();
+  await composer.press("Enter");
+  await expect.poll(() => Boolean(release)).toBe(true);
+  expect(starts).toBe(0);
+  await expect(composer).toHaveValue(/^Review the recent changes/);
+  release?.();
+  await expect(home).toBeHidden();
+  expect(starts).toBe(1);
+  expect(setUpdates).toEqual([{ mode: "read_only" }]);
+  await expect(
+    page.getByRole("button", { name: /Read only/ }).first(),
+  ).toBeVisible();
+});
+
+test("a write template sends without changing the selected permission", async ({
+  page,
+}) => {
+  const starts = countTurnStarts(page);
+  const permissionSets: unknown[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method === "permission/profile/set") permissionSets.push(frame);
+    }),
+  );
+  await connect(page);
+  await startSession(page, "/workspace/templates-write-permission");
+  const home = page.getByRole("region", { name: "What can Octos help with?" });
+  await home.getByRole("button", { name: "Use this: Fix a bug" }).click();
+  await page.getByRole("textbox", { name: "Message Octos" }).press("Enter");
+  await expect(home).toBeHidden();
+  expect(starts).toHaveLength(1);
+  expect(permissionSets).toEqual([]);
+  await expect(
+    page.getByRole("button", { name: /Workspace write/ }).first(),
+  ).toBeVisible();
+});
+
+test("a read-only template blocks sending when SET is unavailable", async ({
+  page,
+}) => {
+  const starts = countTurnStarts(page);
+  let blockedSets = 0;
+  const withoutSet = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(withoutSet);
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        key === "supported_methods" && Array.isArray(entry)
+          ? entry.filter((method) => method !== "permission/profile/set")
+          : withoutSet(entry),
+      ]),
+    );
+  };
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "permission/profile/set") blockedSets += 1;
+      server.send(message);
+    });
+    server.onMessage((message) =>
+      socket.send(JSON.stringify(withoutSet(JSON.parse(String(message))))),
+    );
+  });
+  await connect(page);
+  await startSession(page, "/workspace/templates-no-set");
+  const home = page.getByRole("region", { name: "What can Octos help with?" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await home
+    .getByRole("button", { name: "Use this: Review recent changes" })
+    .click();
+  await expect(home).toContainText(
+    "Current permission is still workspace write",
+  );
+  await composer.press("Enter");
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Current permission is still workspace write" }),
+  ).toBeVisible();
+  await expect(composer).toHaveValue(/^Review the recent changes/);
+  expect(starts).toEqual([]);
+  expect(blockedSets).toBe(0);
+});

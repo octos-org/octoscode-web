@@ -1086,6 +1086,8 @@ const catalog: Readonly<Record<string, string>> = {
   High: "高",
   Maximum: "最高",
   "Read only": "只读",
+  "Read-only permission is not confirmed. Current permission is still workspace write; sending is blocked.":
+    "只读权限尚未确认，当前仍是写入权限；已阻止发送。",
   "Workspace write": "工作区写入",
   "Full access": "完全访问",
   "Session settings": "会话设置",
