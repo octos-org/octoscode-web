@@ -31,7 +31,7 @@ export function uniqueWorkspaceAttachmentFile<T extends AttachmentFileMetadata>(
   const relative = workspaceRelativeArtifactPath(reference, workspaceRoot);
   if (!relative) return null;
   const normalizedRoot = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-  const canonicalRoot = /(?:^|\/)(users\/[^/]+\/workspace)$/.exec(
+  const canonicalRoot = /(?:^|\/)(users\/[^/]+\/workspace(?:\/[^/]+)*)$/.exec(
     normalizedRoot,
   )?.[1];
   if (!canonicalRoot) return null;

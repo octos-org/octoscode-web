@@ -81,6 +81,18 @@ describe("attachment naming", () => {
         [profiled],
       ),
     ).toBe(profiled);
+    const nested = {
+      filename: "result.pdf",
+      path: `pf/${btoa("users/alice/workspace/repo/reports/result.pdf")}/result.pdf`,
+      size_bytes: 40,
+    };
+    expect(
+      uniqueWorkspaceAttachmentFile(
+        "reports/result.pdf",
+        "/data/users/alice/workspace/repo",
+        [nested],
+      ),
+    ).toBe(nested);
   });
 
   it("matches delivered copies by their full workspace-relative path", () => {

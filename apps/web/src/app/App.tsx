@@ -945,11 +945,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           reference,
           attachmentWorkspaceRoot,
         );
-        if (path) return canReadWorkspace || canUseBlob;
-        return (
-          canUseBlob &&
-          (reference.startsWith("/") || /^[A-Za-z]:\//.test(reference))
-        );
+        return Boolean(path && (canReadWorkspace || canUseBlob));
       },
       previewAvailable: supportsMethod(
         capabilities,
