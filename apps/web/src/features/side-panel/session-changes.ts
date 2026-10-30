@@ -1,9 +1,12 @@
-import type { FileMutationNotice } from "@octos-org/octoscode-client/protocol";
+import type {
+  FileMutationNotice,
+  HydratedFileMutation,
+} from "@octos-org/octoscode-client/protocol";
 
 /**
  * The files this Session's tools touched, folded from Core's `file_mutation`
- * notices. Selected-view state like the latest diff preview: it holds what this
- * tab saw, and Core has no "files changed in this Session" read to restore it.
+ * notices, restored from hydrate's retained mutation snapshot on selection and
+ * reload, then continued by live notifications after the hydrate cursor.
  */
 export interface SessionFileChange {
   /** Relative to the workspace when it lies inside it; otherwise as reported. */
@@ -44,4 +47,27 @@ export function workspaceRelativePath(path: string, root: string): string {
   const base = root.replace(/\/+$/, "");
   if (base && path.startsWith(`${base}/`)) return path.slice(base.length + 1);
   return path.replace(/^(\.\/)+/, "");
+}
+
+/** Fold the authoritative history in the same order as live tool notices. */
+export function restoreSessionChanges(
+  mutations: readonly HydratedFileMutation[],
+  workspaceRoot: string,
+): SessionFileChange[] {
+  return mutations.reduce<SessionFileChange[]>(
+    (current, mutation) =>
+      applyFileMutation(
+        current,
+        {
+          sessionId: null,
+          turnId: null,
+          path: mutation.path,
+          operation: mutation.operation,
+          previewId: mutation.preview_id ?? null,
+          bytesWritten: mutation.bytes_written ?? null,
+        },
+        workspaceRoot,
+      ),
+    [],
+  );
 }

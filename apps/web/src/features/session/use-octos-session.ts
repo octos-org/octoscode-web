@@ -2664,10 +2664,6 @@ export function useOctosSession(): OctosSessionRuntime {
   const codingSafetyController = useCodingSafety({
     client: currentClient,
     sessionId: currentSessionId,
-    workspaceRoot: () =>
-      currentAuthority()?.opened?.workspace_root ??
-      currentAuthority()?.cwd ??
-      "",
     profileId: () => activeProfileId(),
     capabilities: currentCapabilities,
     onPermissionApplied: (client) => {
@@ -2821,6 +2817,10 @@ export function useOctosSession(): OctosSessionRuntime {
       // the selected Session's presentation.
       setTimeline(record.timeline);
       configureCodingSurfaces(payload.capabilities);
+      codingSafetyController.restoreChanges(
+        record.scope.sessionId,
+        record.changes,
+      );
     }
     // Mark the selected record read; its own ledger drives the foreground panel.
     record.interactions.markRead(record.scope);
@@ -2934,6 +2934,11 @@ export function useOctosSession(): OctosSessionRuntime {
       if (event.reason !== "recovery") {
         configureCodingSurfaces(event.authority.capabilities);
       }
+      if (record)
+        codingSafetyController.restoreChanges(
+          record.scope.sessionId,
+          record.changes,
+        );
       if (event.reason === "candidate") {
         setLaunch(EMPTY_LAUNCH_RUNTIME);
         markTransitioning(false);
@@ -3631,7 +3636,7 @@ export function useOctosSession(): OctosSessionRuntime {
     safety: {
       permission,
       diffReview,
-      changes: codingSafetyController.changes,
+      changes: viewRecord?.changes ?? [],
       refreshPermission: codingSafetyController.refreshPermission,
       updatePermission: codingSafetyController.updatePermission,
       openDiffReview: codingSafetyController.openDiffReview,

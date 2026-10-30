@@ -602,8 +602,12 @@ const catalog: Readonly<Record<string, string>> = {
   "Workspace uncommitted changes": "工作区未提交改动",
   "Includes staged, unstaged and untracked files. Changes may come from other sessions.":
     "包含暂存、未暂存和未跟踪文件，也可能包含其他会话的改动。",
-  "No session change preview yet. Switch to workspace changes.":
-    "此会话尚无改动预览，可切换到工作区改动。",
+  "This server does not support uncommitted Git changes.":
+    "此服务器不支持查看 Git 未提交改动。",
+  "No session change preview yet. You can also inspect uncommitted Git changes.":
+    "暂无会话改动预览，也可以查看 Git 未提交改动。",
+  "No session change preview is available. Select a changed file above, or check the files in your workspace.":
+    "暂无会话改动预览。可选择上方的改动文件，或查看工作区中的文件。",
   "Review changes": "审查更改",
   "Review diff": "审查差异",
   "Review installation": "检查安装",

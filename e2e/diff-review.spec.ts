@@ -9,7 +9,8 @@ type PreviewLine = {
   new_line?: number;
 };
 
-async function openReview(page: Page, lines: PreviewLine[]) {
+async function openReview(page: Page, lines: PreviewLine[], recover = false) {
+  const mutations = new Map<string, unknown[]>();
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     const server = socket.connectToServer();
     const requests = new Map<string | number, string>();
@@ -19,7 +20,30 @@ async function openReview(page: Page, lines: PreviewLine[]) {
       server.send(message);
     });
     server.onMessage((message) => {
-      const response = JSON.parse(String(message));
+      const response = JSON.parse(String(message), (key, value) =>
+        recover && key === "supported_methods" && Array.isArray(value)
+          ? value.filter((method) => method !== "diff/workspace/get")
+          : value,
+      );
+      if (
+        recover &&
+        response.method === "progress/updated" &&
+        response.params.metadata?.file_mutation
+      ) {
+        const { session_id, metadata } = response.params;
+        mutations.set(session_id, [
+          ...(mutations.get(session_id) ?? []),
+          metadata.file_mutation,
+        ]);
+      }
+      if (
+        recover &&
+        requests.get(response.id) === "session/hydrate" &&
+        response.result
+      ) {
+        response.result.file_mutations =
+          mutations.get(response.result.session_id) ?? [];
+      }
       if (requests.get(response.id) === "diff/preview/get") {
         response.result.preview.title = "Review precise code changes";
         response.result.preview.files = [
@@ -291,7 +315,7 @@ test("Changes works before a turn and ignores a late workspace reply after chang
     .click();
   await expect(
     dialog.getByText(
-      "No session change preview yet. Switch to workspace changes.",
+      "No session change preview yet. You can also inspect uncommitted Git changes.",
     ),
   ).toBeVisible();
   release!();
@@ -301,4 +325,59 @@ test("Changes works before a turn and ignores a late workspace reply after chang
   ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Close session panel" }).click();
   await expect(dialog).toHaveCount(0);
+});
+
+test("session changes recover on selection and reload without unsupported Git requests", async ({
+  page,
+}) => {
+  const methods: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      methods.push(JSON.parse(String(payload)).method);
+    }),
+  );
+  const changes = await openReview(page, replacement, true);
+  await expect(changes.locator(".diff-added code")).toHaveText(
+    replacement[2]!.content,
+  );
+  await expect(
+    changes.getByRole("button", { name: "Uncommitted (Git)" }),
+  ).toBeDisabled();
+  const navigation = page.getByRole("complementary", {
+    name: "Product navigation",
+  });
+  const first = await navigation
+    .locator(
+      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    )
+    .textContent();
+  await page.getByRole("button", { name: "New session", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "Start a new session in Server's working directory",
+      exact: true,
+    })
+    .click();
+  await expect(panelToggle(page)).toHaveAccessibleName("Session panel");
+  await navigation
+    .locator('button[role="treeitem"]')
+    .filter({ hasText: first! })
+    .click();
+  await expect(panelToggle(page)).toHaveAccessibleName(
+    "Session panel, 1 changed",
+  );
+  if ((await panelToggle(page).getAttribute("aria-expanded")) === "false")
+    await panelToggle(page).click();
+  await page.getByRole("tab", { name: /^Changes/ }).click();
+  await expect(changes.locator(".diff-added code")).toHaveText(
+    replacement[2]!.content,
+  );
+  await page.reload();
+  await expect(panelToggle(page)).toHaveAccessibleName(
+    "Session panel, 1 changed",
+  );
+  await expect(changes.locator(".diff-added code")).toHaveText(
+    replacement[2]!.content,
+  );
+  expect(methods).not.toContain("diff/workspace/get");
 });

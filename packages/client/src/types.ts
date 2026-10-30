@@ -578,6 +578,14 @@ export interface HydratedTurn {
   thread_id?: string;
 }
 
+/** Actual retained tool mutations, oldest first through the hydrate cursor. */
+export interface HydratedFileMutation {
+  path: string;
+  operation: "create" | "write" | "modify" | "delete";
+  preview_id?: string;
+  bytes_written?: number;
+}
+
 export interface SessionHydrateResult {
   session_id: string;
   cursor: UiCursor;
@@ -590,6 +598,7 @@ export interface SessionHydrateResult {
   pending_questions?: unknown[];
   replayed_envelopes?: ProjectionEnvelopeV2[];
   replayed_tool_envelopes?: ProjectionEnvelopeV2[];
+  file_mutations?: HydratedFileMutation[];
   /** Optional bounded canonical replay and continuation checkpoints (Core #2296). */
   replayed_projection_envelopes?: ProjectionEnvelopeV2[];
   projection_thread_sequences?: Record<string, number>;
