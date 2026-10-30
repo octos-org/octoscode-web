@@ -37,7 +37,7 @@ server does in the chosen folder.
 | Start         | Empty Session home: code/office templates fill the composer (never sent, never raise permission); last-Session link.            |
 | Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.         |
 | Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback. |
-| Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown. |
+| Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown.     |
 | Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.             |
 | Decisions     | Approvals with action/impact/risk, explicit deny/session/once choices, questions, and permission-denied retry.                  |
 | Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.             |
