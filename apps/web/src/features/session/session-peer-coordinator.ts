@@ -4,6 +4,7 @@ import {
   approvalResolutionId,
   isRecord,
   parseApprovalRequested,
+  parseProjectionEnvelope,
   parseTokenCostUpdate,
   parseUserQuestionRequested,
   type RpcNotification,
@@ -143,6 +144,36 @@ export function peerSessionEventFor(
   opened: ReadonlyMap<string, { scope: { sessionId: string } }>,
 ): PeerSessionEvent | null {
   const frame = notification as RpcNotification;
+  if (notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) {
+    const envelope = parseProjectionEnvelope(notification.params);
+    if (
+      !envelope ||
+      envelope.payload.type !== "turn_terminal" ||
+      !isRecord(envelope.payload.data)
+    )
+      return null;
+    const projectedSessionId =
+      envelope.cursor?.stream.split("\0", 1)[0] ?? envelope.session_id;
+    let key: string | null = null;
+    for (const [staging, peer] of opened)
+      if (peer.scope.sessionId === projectedSessionId) key = staging;
+    if (!key) return null;
+    const outcome = envelope.payload.data.outcome;
+    const error = isRecord(envelope.payload.data.error)
+      ? envelope.payload.data.error.message
+      : undefined;
+    return {
+      sessionId: key,
+      kind: "turn-terminal",
+      outcome:
+        outcome === "interrupted"
+          ? "interrupted"
+          : outcome === "completed" || outcome === "finished"
+            ? "finished"
+            : "failed",
+      ...(typeof error === "string" ? { error } : {}),
+    };
+  }
   if (!isRecord(notification.params)) return null;
   const sessionId = notification.params.session_id;
   if (typeof sessionId !== "string") return null;

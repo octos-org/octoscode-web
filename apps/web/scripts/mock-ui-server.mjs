@@ -2786,7 +2786,9 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods,
+        : memoryCapabilities.supported_methods.filter(
+            (method) => method !== "peer/prepare" && method !== "peer/gather",
+          ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,

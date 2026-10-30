@@ -157,6 +157,9 @@ function mount(
     readonly seatHeld?: boolean;
     readonly selectedSessionId?: string;
     readonly laneReadStatus?: "loading" | "empty" | "ready";
+    readonly nativeStartAvailable?: boolean;
+    readonly nativeControlsAvailable?: boolean;
+    readonly onGather?: () => void;
     readonly peerController?: Record<string, unknown> | null;
     readonly onStart?: (submit: StartSubmit) => void;
     readonly onRowAction?: (
@@ -185,6 +188,10 @@ function mount(
             ...input.peerController,
           },
     sessions: [],
+    fleetPeers: input.peers ?? [],
+    nativeStartAvailable: input.nativeStartAvailable ?? false,
+    nativeControlsAvailable: input.nativeControlsAvailable ?? false,
+    ...(input.onGather ? { onGather: input.onGather } : {}),
     ...(input.onStart ? { onStart: input.onStart } : {}),
     ...(input.onRowAction ? { onRowAction: input.onRowAction } : {}),
     ...(input.selectedSessionId !== undefined
@@ -270,6 +277,36 @@ describe("§4.3 Start form — the ONLY implicit acquisition", () => {
       },
     ]);
     expect(calls[0]!.operationId).not.toBe("");
+  });
+
+  it("native Start needs only a brief and hides external lane/session selectors", () => {
+    const calls: StartSubmit[] = [];
+    const harness = mount({
+      peerController: null,
+      nativeStartAvailable: true,
+      selectedSessionId: "coding:local:tui#s1",
+      onStart: (submit) => calls.push(submit),
+    });
+    const first = harness.render();
+    expect(
+      collect(first, "data-fleet-field").filter((element) =>
+        ["model", "session"].includes(
+          String(element.props!["data-fleet-field"]),
+        ),
+      ),
+    ).toHaveLength(0);
+    change(one(first, "data-fleet-field", "brief"), "Review native peers");
+    const second = harness.render();
+    expect(isDisabled(one(second, "data-fleet-action", "start"))).toBe(false);
+    (one(second, "data-fleet-action", "start").props!.onClick as () => void)();
+    expect(calls).toEqual([
+      {
+        sessionId: "coding:local:tui#s1",
+        operationId: expect.any(String),
+        model: "native",
+        brief: "Review native peers",
+      },
+    ]);
   });
 
   it("sends nothing while the seat is not held", () => {
