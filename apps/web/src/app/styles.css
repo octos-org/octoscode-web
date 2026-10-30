@@ -774,6 +774,21 @@ label > span {
   color: var(--dsw-alias-label-caption);
 }
 
+/* Notes inside the composer (steering, attachments, Vim mode) caption the
+   input: they share the textarea's 20px text inset and sit just above the
+   text. The bare-form .field-note margin put them 2px from the rounded
+   border, with a wider gap below than the input's own padding. */
+.composer > .field-note {
+  margin: 0;
+  padding: var(--dsw-space-3) 20px 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.composer > .field-note ~ textarea {
+  padding-top: var(--dsw-space-2);
+}
+
 .composer-footer {
   display: flex;
   flex-wrap: wrap;

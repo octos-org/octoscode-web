@@ -1,6 +1,22 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+async function connect(page: import("@playwright/test").Page): Promise<void> {
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token", { exact: true }).press("Enter");
+  await page
+    .getByLabel("Server workspace path")
+    .fill(`/workspace/execution-feedback-${Date.now()}`);
+  await page.getByLabel("Server workspace path").press("Enter");
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeEnabled();
+}
+
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
 test("expands a failed write, summarizes the turn, and marks the sidebar with zero axe violations", async ({
@@ -43,4 +59,25 @@ test("expands a failed write, summarizes the turn, and marks the sidebar with ze
     path: testInfo.outputPath("failed-write-summary.png"),
     fullPage: true,
   });
+});
+
+test("explains a long wait with its phase, elapsed time, and next action", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(45_000);
+  await connect(page);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`);
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Wait for the first model response");
+  await composer.press("Enter");
+
+  const feedback = page.locator('[data-waiting-feedback="true"]');
+  await expect(feedback).toBeVisible({ timeout: 20_000 });
+  await expect(feedback).toContainText("Writing response…");
+  await expect(feedback).toContainText(/Elapsed [1-9][0-9]*/);
+  await expect(feedback).toContainText(
+    "You can stop this turn, check the connection, or retry.",
+  );
+  await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
 });
