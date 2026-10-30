@@ -1,10 +1,15 @@
 import { useEffect, useRef } from "react";
-import type { PlanUpdated } from "@octos-org/octoscode-client/protocol";
+import type {
+  PlanUpdated,
+  UiProtocolCapabilities,
+} from "@octos-org/octoscode-client/protocol";
 import { ChangesView } from "../review/ChangesView.tsx";
 import type { DiffReviewRuntimeState } from "../review/use-coding-safety.ts";
 import type { SupervisedTask } from "../supervision/model.ts";
 import type { AttachmentAccess } from "../timeline/attachment-access.ts";
 import type { WorkspaceBrowseAdapter } from "../workspace-create/workspace-browse.ts";
+import type { AutonomyClient } from "../autonomy/binding.ts";
+import { AutomationTab } from "./AutomationTab.tsx";
 import { FilesTab } from "./FilesTab.tsx";
 import { OutputsTab } from "./OutputsTab.tsx";
 import { OverviewTab } from "./OverviewTab.tsx";
@@ -41,6 +46,12 @@ export interface SessionPanelHostProps {
 
   delivered: readonly string[];
   access: AttachmentAccess | null;
+  automation: {
+    client: AutonomyClient;
+    sessionId: string;
+    capabilities: UiProtocolCapabilities;
+    authorityKey: string;
+  } | null;
 }
 
 /** The session panel with its tabs wired to the open Session's state. */
@@ -69,12 +80,20 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
       width={props.width}
       availableWidth={props.availableWidth}
       counts={{ changes: props.changes.length, outputs }}
+      automationAvailable={props.automation !== null}
       onTabChange={props.onTabChange}
       onWidthChange={props.onWidthChange}
       onClose={props.onClose}
       className={props.className}
     >
-      {props.tab === "overview" ? (
+      {props.tab === "automation" && props.automation ? (
+        <AutomationTab
+          client={props.automation.client}
+          sessionId={props.automation.sessionId}
+          capabilities={props.automation.capabilities}
+          authorityKey={props.automation.authorityKey}
+        />
+      ) : props.tab === "overview" ? (
         <OverviewTab
           planAvailable={props.planAvailable}
           plan={props.plan}
