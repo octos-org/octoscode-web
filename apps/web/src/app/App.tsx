@@ -4738,6 +4738,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         fallback={<DeferredSurface label="Loading memory…" />}
                       >
                         <MemorySettingsContent
+                          key={`${session.opened.session_id}:${memoryProfileId}`}
+                          sessionId={session.opened.session_id}
                           client={protocol.client}
                           authenticatedProfileId={authenticatedMemoryProfileId}
                           sessionProfileId={memoryProfileId}

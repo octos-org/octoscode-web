@@ -25,6 +25,7 @@ export {
 } from "./skill-methods.ts";
 export {
   APPUI_MEMORY_PROMOTE_METHOD,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   APPUI_MEMORY_REQUEST_METHOD,
 } from "./memory-methods.ts";
 export { APPUI_RESEARCH_METHODS } from "./research-methods.ts";
