@@ -562,28 +562,40 @@ export function ProductSidebar({
     );
 
   const moveTreeActive = (next: HTMLElement) => {
+    // Hand focus from a clicked row back to the tree, which tracks the
+    // active row from here on.
+    if (document.activeElement?.getAttribute("role") === "treeitem")
+      treeRef.current?.focus();
     setActiveTreeItemId(next.id);
     next.scrollIntoView({ block: "nearest", inline: "start" });
   };
 
   const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    // The tree owns its roving focus keys. Nested buttons keep their native
-    // keyboard activation (for example New session and Show more).
+    // The tree owns its roving focus keys. Nested buttons and the rename
+    // field keep their own keys (New session, Show more, row actions). A row
+    // that took focus from a click is not a button any more, so its keys are
+    // the tree's too, acting on that row.
+    const focusedRow =
+      event.target instanceof HTMLElement &&
+      event.target !== event.currentTarget &&
+      event.target.getAttribute("role") === "treeitem" &&
+      event.target.id
+        ? event.target
+        : null;
     if (
-      event.target !== event.currentTarget ||
+      (event.target !== event.currentTarget && !focusedRow) ||
       event.nativeEvent.isComposing ||
       event.nativeEvent.keyCode === 229
     )
       return;
+    const activeId = focusedRow?.id ?? activeTreeItemId;
     if (
       event.key === "F2" ||
       event.key === "Delete" ||
       event.key === "ContextMenu" ||
       (event.key === "F10" && event.shiftKey)
     ) {
-      const row = activeTreeItemId
-        ? document.getElementById(activeTreeItemId)
-        : null;
+      const row = activeId ? document.getElementById(activeId) : null;
       const sessionId = row?.getAttribute("data-session-id");
       const session = sessionId ? sessionsById.get(sessionId) : undefined;
       const actions = session ? rowActions(session) : null;
@@ -614,13 +626,11 @@ export function ProductSidebar({
     if (!first) return;
     // With no active row yet, the first ArrowDown/ArrowUp activates the
     // first/last item instead of skipping past it.
-    const currentIndex = activeTreeItemId
-      ? items.findIndex((el) => el.id === activeTreeItemId)
+    const currentIndex = activeId
+      ? items.findIndex((el) => el.id === activeId)
       : -1;
     const activeElement =
-      (activeTreeItemId
-        ? document.getElementById(activeTreeItemId)
-        : undefined) ?? first;
+      (activeId ? document.getElementById(activeId) : undefined) ?? first;
 
     const focusNext = (nextIndex: number) => {
       const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));

@@ -117,7 +117,10 @@ import {
   saveDurableDraft,
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
-import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
+import {
+  useWorkspaceSessionCatalog,
+  type WorkspaceSessionCatalogSnapshot,
+} from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
   forgetKnownSession,
@@ -1144,8 +1147,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       conversation.queue.active?.turnId ?? ""
     }\n${catalogRefreshNonce}`,
   });
+  // Deleted rows stay hidden while the catalog re-lists, so the old listing
+  // cannot flash them back into the sidebar.
+  const visibleCatalog = useMemo<WorkspaceSessionCatalogSnapshot>(
+    () =>
+      deletedSessionIds.length === 0
+        ? sessionCatalog
+        : new Map(
+            [...sessionCatalog].map(([path, workspace]) => [
+              path,
+              {
+                ...workspace,
+                sessions: workspace.sessions.filter(
+                  (row) => !deletedSessionIds.includes(row.sessionId),
+                ),
+              },
+            ]),
+          ),
+    [deletedSessionIds, sessionCatalog],
+  );
   const navigableSessions = useMemo(() => {
-    const catalogRefs = [...sessionCatalog.values()].flatMap(
+    const catalogRefs = [...visibleCatalog.values()].flatMap(
       (workspace) => workspace.sessions,
     );
     return mergeConfirmedRetainedSessions(knownSessions, [
@@ -1154,7 +1176,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
   }, [
     knownSessions,
-    sessionCatalog,
+    visibleCatalog,
     workspaceProduct.backgroundTurns,
     deletedSessionIds,
   ]);
@@ -3172,7 +3194,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               collapsed={sidebarCollapsed}
               recentWorkspaces={recentWorkspaces}
               knownSessions={navigableSessions}
-              sessionCatalog={sessionCatalog}
+              sessionCatalog={visibleCatalog}
               activeWorkspacePath={activeWorkspacePath}
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}
@@ -3271,6 +3293,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       if (!reference)
                         return t("Could not delete this session.");
                       const sessionId = reference.sessionId;
+                      // Another tab or client may be running it; the server
+                      // would keep writing to a conversation shown as gone.
+                      const running = [...sessionCatalog.values()].some(
+                        (workspace) =>
+                          workspace.sessions.some(
+                            (row) =>
+                              row.sessionId === sessionId && row.activeTurn,
+                          ),
+                      );
+                      if (running) return t("Stop this session’s work first.");
                       const outcome =
                         await workspaceProduct.deleteSession(sessionId);
                       if (outcome.kind === "done") {

@@ -306,7 +306,7 @@ test.describe("per-session interrupt-prompt restore", () => {
     // own stop control (TurnStopButton; accessible name Interrupt|Stop).
     const navigation = productNavigation(page);
     const sessionTitle = navigation.locator(
-      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
     );
     const sessionAName = (await sessionTitle.textContent())?.trim() ?? "";
     if (sessionAName === "")
@@ -340,7 +340,7 @@ test.describe("per-session interrupt-prompt restore", () => {
 
     // Back to A: the draft is restored exactly once.
     await navigation
-      .locator('button[role="treeitem"]')
+      .locator('[role="treeitem"][data-session-id]')
       .filter({ hasText: sessionAName })
       .first()
       .click();

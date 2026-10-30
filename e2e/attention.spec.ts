@@ -263,7 +263,7 @@ test("a background Session completing while another is selected signals and ackn
     await page.evaluate(() => window.__attentionProbe.notices),
   ).toHaveLength(1);
   const original = navigation
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: originalSessionTitle });
   await original.click();
   await expect(original).toHaveAttribute("aria-current", "page");

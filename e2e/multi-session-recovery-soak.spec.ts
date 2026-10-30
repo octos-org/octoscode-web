@@ -28,12 +28,14 @@ function productNavigation(page: Page): Locator {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .locator('[class*="sessionTitle"]')
     .textContent();
   if (!title) throw new Error("Expected a selected Session title");

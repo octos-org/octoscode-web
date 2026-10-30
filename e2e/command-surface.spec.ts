@@ -236,7 +236,7 @@ test("keeps /sessions refocus stable on the active Session via sidebar search", 
 
   const sidebar = productNavigation(page);
   const selected = sidebar.locator(
-    'button[role="treeitem"][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
   const selectedTitle = await selected
     .locator('[class*="sessionTitle"]')
@@ -276,7 +276,7 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
   const sourceOpen = protocol.requests("session/open")[0]!;
   const sourceId = String(sourceOpen.params!.session_id);
   const selected = productNavigation(page).locator(
-    'button[role="treeitem"][aria-current="page"]',
+    '[role="treeitem"][data-session-id][aria-current="page"]',
   );
   const sourceTitle = await selected
     .locator('[class*="sessionTitle"]')
@@ -356,7 +356,7 @@ test("keeps the confirmed fork receipt across parent refresh and opens the exact
     productNavigation(page).getByRole("treeitem", { name: /Session / }),
   ).toHaveCount(2);
   const childRow = productNavigation(page)
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: "Session " + childId.slice(-8) });
   await childRow.click();
   await expect(childRow).toHaveAttribute("aria-current", "page");
@@ -503,11 +503,11 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   const sessionId = String(sourceOpen.params!.session_id);
   const aTitle = await sidebar
     .locator(
-      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
     )
     .textContent();
   const a = sidebar
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: aTitle! });
   const brief = "Gather this exact peer receipt";
   await sendSlashCommand(page, "/peer");
@@ -599,11 +599,11 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const bTitle = await sidebar
     .locator(
-      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+      '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
     )
     .textContent();
   const b = sidebar
-    .locator('button[role="treeitem"]')
+    .locator('[role="treeitem"][data-session-id]')
     .filter({ hasText: bTitle! });
   expect(
     (
