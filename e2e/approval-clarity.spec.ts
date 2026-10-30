@@ -91,7 +91,10 @@ test("switches a permission-denied write to workspace-write and retries it", asy
 }) => {
   const { retry } = await prepareDeniedWrite(page);
   await retry.click();
-  await expect(page.getByText("report.md written").last()).toBeVisible();
+  const completedWrite = page.locator("details").filter({
+    hasText: "Write file report.md",
+  });
+  await expect(completedWrite).toContainText("report.md written");
   await expect(
     page.getByRole("button", { name: "Switch to write and retry" }),
   ).toHaveCount(0);

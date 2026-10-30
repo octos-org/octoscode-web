@@ -5420,12 +5420,16 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       sessionState(sessionId).permission.mode === "read_only";
     const denied = permissionDenied || unconditionalWriteFailure;
     notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
-      tool_call_id: unconditionalWriteFailure ? "write-fail" : "write-permission",
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
       name: "write_file",
       arguments_preview: JSON.stringify({ path: "report.md" }),
     });
     notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
-      tool_call_id: unconditionalWriteFailure ? "write-fail" : "write-permission",
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
       status: denied ? "error" : "complete",
       ...(denied
         ? {
