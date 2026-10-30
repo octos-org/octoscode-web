@@ -1797,6 +1797,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Allow once": "允许一次",
   "Switch to write and retry": "切换到可写后重试",
   "Switching to write and retrying…": "正在切换到可写并重试…",
+  "Current server does not support Fleet yet": "当前服务器还不支持多智能体",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };

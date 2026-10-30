@@ -82,6 +82,8 @@ export interface ProductSidebarProps {
     icon: string;
   } | null;
   fleetActive?: boolean;
+  /** Peer control/dispatch and external-driver support for the Fleet route. */
+  fleetAvailable?: boolean;
   /** Monotonic presentation intent from the /sessions command. */
   searchRequest?: number;
   sessionCreationAvailable?: boolean;
@@ -152,6 +154,7 @@ export function ProductSidebar({
   settingsActive = false,
   fleetEntry = null,
   fleetActive = false,
+  fleetAvailable = true,
   searchRequest = 0,
   sessionCreationAvailable = true,
   viewMode: controlledViewMode,
@@ -974,18 +977,32 @@ export function ProductSidebar({
 
       <div className={styles.footer}>
         {fleetEntry && onFleet ? (
-          <button
-            type="button"
-            className={`${styles.settings} ${fleetActive ? styles.settingsActive : ""}`}
-            aria-current={fleetActive ? "page" : undefined}
-            aria-label={t(fleetEntry.label)}
-            title={collapsed ? t(fleetEntry.label) : undefined}
-            data-fleet-nav="entry"
-            onClick={onFleet}
-          >
-            <span aria-hidden="true">{fleetEntry.icon}</span>
-            {!collapsed ? <span>{t(fleetEntry.label)}</span> : null}
-          </button>
+          <>
+            <button
+              type="button"
+              className={`${styles.settings} ${fleetActive ? styles.settingsActive : ""}`}
+              aria-current={fleetActive ? "page" : undefined}
+              aria-label={t(fleetEntry.label)}
+              title={
+                !fleetAvailable
+                  ? t("Current server does not support Fleet yet")
+                  : collapsed
+                    ? t(fleetEntry.label)
+                    : undefined
+              }
+              data-fleet-nav="entry"
+              disabled={!fleetAvailable}
+              onClick={fleetAvailable ? onFleet : undefined}
+            >
+              <span aria-hidden="true">{fleetEntry.icon}</span>
+              {!collapsed ? <span>{t(fleetEntry.label)}</span> : null}
+            </button>
+            {!fleetAvailable && !collapsed ? (
+              <small className={styles.fleetUnavailable}>
+                {t("Current server does not support Fleet yet")}
+              </small>
+            ) : null}
+          </>
         ) : null}
         {onThemeToggle ? (
           <button

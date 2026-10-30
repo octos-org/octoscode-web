@@ -142,6 +142,8 @@ import {
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
+import { peerControlAdmitted } from "../features/control/peer-control-commands.ts";
+import { peerDispatchAdmitted } from "../features/control/peer-dispatch-commands.ts";
 import {
   loadSessionDefaults,
   saveSessionDefaults,
@@ -787,6 +789,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
+  const fleetSupported =
+    peerControlAdmitted(session.capabilities) &&
+    peerDispatchAdmitted(session.capabilities);
   // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
   // advertises `onboarding.workspace_browse.v1`, and the picker shows no
   // browsing affordance at all without an adapter.
@@ -1502,6 +1507,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (matchKeyboardParityShortcut(event)?.id !== "focus-dispatch") return;
       // §8: never steal a chord a text control or dialog owns.
       if (shortcutTargetSuppressed(event.target)) return;
+      if (!fleetSupported) return;
       event.preventDefault();
       setFleetRouteActive(true);
       // The Fleet pane is `hidden` until the route is active and a HIDDEN
@@ -1512,7 +1518,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
     window.addEventListener("keydown", onFocusDispatchKeyDown);
     return () => window.removeEventListener("keydown", onFocusDispatchKeyDown);
-  }, []);
+  }, [fleetSupported]);
   // Wait only for the lazy Fleet surface to mount. An unavailable Start form
   // has an immediate focus target, so it does not exhaust the frame retries.
   useEffect(() => {
@@ -2450,6 +2456,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const moveToProductSession = async (productSessionId: string) => {
+    setFleetRouteActive(false);
     const target = navigableSessions.find(
       (item) =>
         workspaceSessionKey(
@@ -2846,6 +2853,36 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         session.opened.workspace_root !== undefined,
       )
     : null;
+  // Fleet is a transient destination, not a second session route. Any real
+  // navigation state change (including browser history and settings/pickers)
+  // returns to that destination; moveToProductSession also covers selecting
+  // the already-active session, whose key does not change.
+  useEffect(() => {
+    setFleetRouteActive(false);
+  }, [activeSessionKey, fleetSupported]);
+  useEffect(() => {
+    if (
+      settingsOpen ||
+      workspacePicker.open ||
+      inspectionView ||
+      resumeView ||
+      nativeReview ||
+      profileExtensionsMode ||
+      inventoryMode ||
+      savedLink
+    ) {
+      setFleetRouteActive(false);
+    }
+  }, [
+    settingsOpen,
+    workspacePicker.open,
+    inspectionView,
+    resumeView,
+    nativeReview,
+    profileExtensionsMode,
+    inventoryMode,
+    savedLink,
+  ]);
   const fleetSessions = navigableSessions.map((ref) => ({
     sessionId: ref.sessionId,
     name: knownSessionTitle(ref.sessionId, t),
@@ -3109,6 +3146,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               settingsActive={settingsOpen}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
+              fleetAvailable={fleetSupported}
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
@@ -3144,6 +3182,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setSettingsOpen(true);
               }}
               onFleet={() => {
+                if (!fleetSupported) return;
                 if (compact) setSidebarCollapsed(true);
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
