@@ -134,7 +134,9 @@ test("holds twelve browser turns and three browser-started native peers on one p
           '[role="treeitem"][data-session-id][aria-current="page"]',
         ),
       ).not.toContainText(runningTitle);
-      const showMore = workspace.locator('button[class*="showMore"]');
+      // "Show more" sits in the workspace's owned session group, a sibling
+      // of the workspace row (ProductSidebar aria-owns).
+      const showMore = sidebar.locator('button[class*="showMore"]');
       if (await showMore.isVisible()) await showMore.click();
       await expect(
         sidebar

@@ -673,9 +673,12 @@ export function ProductSidebar({
           event.preventDefault();
           onWorkspaceExpandedChange(workspaceId, true);
         } else if (activeElement.getAttribute("aria-expanded") === "true") {
-          const child = activeElement
-            .closest('[role="group"]')
-            ?.querySelector<HTMLElement>('[role="group"] [role="treeitem"]');
+          const owned = activeElement.getAttribute("aria-owns");
+          const child = owned
+            ? document
+                .getElementById(owned)
+                ?.querySelector<HTMLElement>('[role="treeitem"]')
+            : null;
           if (child) {
             event.preventDefault();
             moveTreeActive(child);
@@ -693,9 +696,10 @@ export function ProductSidebar({
           onWorkspaceExpandedChange(workspaceId, false);
           return;
         }
-        const parent = activeElement
-          .closest("[data-workspace-id]")
-          ?.querySelector(":scope > [role='treeitem']");
+        const groupId = activeElement.closest('[role="group"][id]')?.id;
+        const parent = groupId
+          ? items.find((item) => item.getAttribute("aria-owns") === groupId)
+          : undefined;
         if (parent instanceof HTMLElement) {
           event.preventDefault();
           moveTreeActive(parent);
@@ -1020,10 +1024,15 @@ export function ProductSidebar({
                         orderedSessions.length - visibleSessions.length;
 
                       return (
+                        // The workspace row is the treeitem and owns its session
+                        // group through aria-owns rather than DOM nesting: a
+                        // treeitem that contained the rows would carry all of
+                        // their text, which its short name cannot match
+                        // (axe label-content-name-mismatch, WCAG 2.5.3).
                         <div
                           key={workspace.id}
                           data-workspace-id={workspace.id}
-                          className={`${styles.workspaceGroup} ${activeTreeItemId === `tree-workspace-${workspace.id}` ? styles.treeActive : ""}`}
+                          className={styles.workspaceGroup}
                           role="group"
                         >
                           <div
@@ -1034,6 +1043,11 @@ export function ProductSidebar({
                             tabIndex={-1}
                             aria-label={workspace.label}
                             aria-expanded={expanded}
+                            aria-owns={
+                              expanded
+                                ? `tree-group-${workspace.id}`
+                                : undefined
+                            }
                           >
                             <button
                               type="button"
@@ -1077,7 +1091,11 @@ export function ProductSidebar({
                           </div>
 
                           {expanded ? (
-                            <div className={styles.sessionRun} role="group">
+                            <div
+                              id={`tree-group-${workspace.id}`}
+                              className={styles.sessionRun}
+                              role="group"
+                            >
                               {visibleSessions.map((session) =>
                                 renderSessionRow(
                                   session,
