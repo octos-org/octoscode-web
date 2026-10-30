@@ -867,10 +867,22 @@
   cursor: pointer;
 }
 
-.settings:hover,
+.settings:hover:not(:disabled),
 .settingsActive {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.settings:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.fleetUnavailable {
+  padding: 0 10px 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .collapsed .footer {
