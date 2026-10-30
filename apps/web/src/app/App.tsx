@@ -3176,7 +3176,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     className={
                       compact
                         ? productStyles.compactReview
-                        : productStyles.panelToggle
+                        : productStyles.headerAction
                     }
                     type="button"
                     aria-label={
@@ -3213,7 +3213,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   triggerClassName={
                     compact
                       ? (productStyles.compactReview ?? "")
-                      : (productStyles.preferencesTrigger ?? "")
+                      : (productStyles.headerAction ?? "")
                   }
                   copySource={
                     protocol.client &&

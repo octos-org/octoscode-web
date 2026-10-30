@@ -5,7 +5,9 @@ const composer = (page: Page) =>
   page.getByPlaceholder("Ask Octos to change, explain, or review code…");
 const sidebar = (page: Page) => page.locator("aside");
 const selectedRow = (page: Page) =>
-  sidebar(page).locator('button[role="treeitem"][aria-current="page"]');
+  sidebar(page).locator(
+    'button[role="treeitem"][data-session-id][aria-current="page"]',
+  );
 const historyDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Resume historical conversation" });
 /**
@@ -73,7 +75,7 @@ async function send(page: Page, text: string) {
 }
 async function newSession(page: Page, name: string) {
   await sidebar(page)
-    .getByRole("treeitem", { name, exact: true })
+    .locator(`[data-workspace-name=${JSON.stringify(name)}]`)
     .getByRole("button", { name, exact: true })
     .hover();
   await sidebar(page)
@@ -82,12 +84,14 @@ async function newSession(page: Page, name: string) {
   await expect(composer(page)).toBeEnabled();
 }
 async function title(page: Page) {
-  return (
-    await selectedRow(page).locator('[class*="sessionTitle"]').innerText()
-  ).trim();
+  const sessionId = await selectedRow(page).getAttribute("data-session-id");
+  if (!sessionId) throw new Error("Expected a selected Session id");
+  return sessionId;
 }
-const row = (page: Page, name: string) =>
-  sidebar(page).locator('button[role="treeitem"]').filter({ hasText: name });
+const row = (page: Page, sessionId: string) =>
+  sidebar(page).locator(
+    `button[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+  );
 const control = (name: string, sessionId: string, method?: string) =>
   `${origin}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
 

@@ -39,25 +39,26 @@ type Probe = ReturnType<typeof observe>;
 function sidebar(page: Page) {
   return page.getByRole("complementary", { name: "Product navigation" });
 }
-async function selectedTitle(page: Page) {
+async function selectedSessionId(page: Page) {
   // A ModalSurface dialog (thread/turn/goal/agents inspector) sets aria-hidden
   // on main.workspace-grid — the required a11y contract — which hides the
   // product nav from ROLE queries. Read the selected row through a CSS locator
-  // that ignores aria-hidden so the title stays readable under an open dialog.
+  // that ignores aria-hidden so the ID stays readable under an open dialog.
   const value = await page
     .locator(
-      'aside[aria-label="Product navigation"] button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+      'aside[aria-label="Product navigation"] button[role="treeitem"][aria-current="page"]',
     )
-    .textContent();
+    .getAttribute("data-session-id");
   if (!value) throw new Error("A confirmed selected Session is required");
   return value;
 }
-async function selectSession(page: Page, title: string) {
+async function selectSession(page: Page, sessionId: string) {
   await sidebar(page)
-    .locator('button[role="treeitem"]')
-    .filter({ hasText: title })
+    .locator(
+      `button[role="treeitem"][data-session-id*=${JSON.stringify(sessionId)}]`,
+    )
     .click();
-  await expect.poll(() => selectedTitle(page)).toBe(title);
+  await expect.poll(() => selectedSessionId(page)).toContain(sessionId);
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
 }
 // v0.10.0's QueuedPrompts replaced our pre-rebase `.prompt-queue` div with
@@ -94,17 +95,15 @@ async function connect(page: Page, probe: Probe, name: string, native = true) {
     throw new Error("Expected a full Session ID");
   return {
     sessionId,
-    title: await selectedTitle(page),
     workspace: cwd.split("/").at(-1)!,
   };
 }
 async function sibling(page: Page, probe: Probe, workspace: string) {
-  const before = await selectedTitle(page);
+  const before = await selectedSessionId(page);
   const opens = probe.calls("session/open").length;
-  const workspaceRow = sidebar(page).getByRole("treeitem", {
-    name: workspace,
-    exact: true,
-  });
+  const workspaceRow = sidebar(page).locator(
+    `[data-workspace-name=${JSON.stringify(workspace)}]`,
+  );
   await workspaceRow
     .getByRole("button", { name: workspace, exact: true })
     .hover();
@@ -112,12 +111,12 @@ async function sibling(page: Page, probe: Probe, workspace: string) {
     .getByRole("button", { name: `New session in ${workspace}` })
     .click();
   await expect.poll(() => probe.calls("session/open").length).toBe(opens + 1);
-  await expect.poll(() => selectedTitle(page)).not.toBe(before);
+  await expect.poll(() => selectedSessionId(page)).not.toBe(before);
   await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
   const sessionId = probe.calls("session/open").at(-1)!.params.session_id;
   if (typeof sessionId !== "string")
     throw new Error("Expected a sibling Session ID");
-  return { sessionId, title: await selectedTitle(page) };
+  return { sessionId };
 }
 async function submit(page: Page, text: string) {
   const composer = page.getByPlaceholder(COMPOSER);
@@ -261,12 +260,12 @@ test("native asides remain ephemeral and owned by their original Session across 
   await page.getByPlaceholder(COMPOSER).fill("Unsent native B draft");
   await nativeControl(request, "release", a.sessionId, "session/btw");
   await probe.settled(probe.calls("session/btw")[0]!);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
   await expect(aside).not.toContainText(a.sessionId);
   await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
     "Unsent native B draft",
   );
-  await selectSession(page, a.title);
+  await selectSession(page, a.sessionId);
   await expect(aside).toContainText(
     `Native aside for ${a.sessionId}: question for native A`,
   );
@@ -311,7 +310,7 @@ test("thread, turn and remembered-scope inspectors use exact owners and discard 
   await graph.getByRole("button", { name: "Refresh inspection" }).click();
   await expect(graph).toContainText("No threads returned for this Session.");
   await expect(graph).not.toContainText(a.sessionId);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
   await graph.getByRole("button", { name: "Close inspector" }).click();
   await submit(page, `/turn state ${String(turnId)}`);
   let turn = page.getByRole("dialog", { name: "Turn state" });
@@ -323,7 +322,7 @@ test("thread, turn and remembered-scope inspectors use exact owners and discard 
     turn_id: turnId,
   });
   await turn.getByRole("button", { name: "Close inspector" }).click();
-  await selectSession(page, a.title);
+  await selectSession(page, a.sessionId);
   await submit(page, `/turn state ${String(turnId)}`);
   turn = page.getByRole("dialog", { name: "Turn state" });
   await expect(
@@ -467,17 +466,17 @@ test("a dropped native steer returns once to its owning FIFO while a different S
           .length,
     )
     .toBe(2);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
   await expect(promptQueue(page)).toHaveCount(0);
   await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
     "Retain native B draft",
   );
-  await selectSession(page, a.title);
+  await selectSession(page, a.sessionId);
   await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
   await submit(page, "/steer off");
   await submit(page, "Ordinary native FIFO successor");
   await expect(promptQueue(page).locator("strong")).toHaveText("2 queued");
-  await selectSession(page, b.title);
+  await selectSession(page, b.sessionId);
   await expect
     .poll(async () =>
       (
@@ -507,7 +506,7 @@ test("a dropped native steer returns once to its owning FIFO while a different S
   ]);
   expect(new Set(aStarts.map((frame) => frame.params.turn_id)).size).toBe(3);
   await terminal(probe, aStarts[2]!.params.turn_id);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
   await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
     "Retain native B draft",
   );
@@ -709,7 +708,7 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
     agent_id: "native-agent-2",
   });
   await expect(dialog).not.toContainText(a.sessionId);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
   expect(probe.calls("turn/start")).toHaveLength(0);
   // Native /agents spawn is deliberately an ordinary prompt, not a made-up
   // agent/spawn RPC. No fixture scheduler or provider is started by the form.
@@ -736,7 +735,7 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
   await terminal(probe, admitted.params.turn_id);
   expect(probe.calls("turn/start")).toHaveLength(1);
   expect(probe.calls("agent/spawn")).toHaveLength(0);
-  expect(await selectedTitle(page)).toBe(b.title);
+  expect(await selectedSessionId(page)).toContain(b.sessionId);
 });
 
 test("native maintenance, self-paced and fixed loops send one typed creation each without automatic firing", async ({

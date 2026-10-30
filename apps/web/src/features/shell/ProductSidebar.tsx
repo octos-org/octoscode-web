@@ -175,6 +175,8 @@ export function ProductSidebar({
   onPeerDockToggle,
 }: ProductSidebarProps) {
   const t = useUiText();
+  const themeLabel =
+    theme === "dark" ? t("Dark") : theme === "light" ? t("Light") : t("Auto");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
@@ -767,10 +769,10 @@ export function ProductSidebar({
                           key={workspace.id}
                           id={`tree-workspace-${workspace.id}`}
                           data-workspace-id={workspace.id}
+                          data-workspace-name={workspace.label}
                           className={`${styles.workspaceGroup} ${activeTreeItemId === `tree-workspace-${workspace.id}` ? styles.treeActive : ""}`}
                           role="treeitem"
                           tabIndex={-1}
-                          aria-label={workspace.label}
                           aria-expanded={expanded}
                         >
                           <div className={styles.workspaceRow}>
@@ -991,22 +993,16 @@ export function ProductSidebar({
           <button
             type="button"
             className={styles.settings}
-            aria-label={t("Theme: {value0}", { value0: t(theme) })}
+            aria-label={t("Theme: {value0}", { value0: themeLabel })}
             title={
-              collapsed ? t("Theme: {value0}", { value0: t(theme) }) : undefined
+              collapsed
+                ? t("Theme: {value0}", { value0: themeLabel })
+                : undefined
             }
             onClick={onThemeToggle}
           >
             <ThemeIcon mode={theme} />
-            {!collapsed ? (
-              <span>
-                {theme === "dark"
-                  ? t("Dark")
-                  : theme === "light"
-                    ? t("Light")
-                    : t("Auto")}
-              </span>
-            ) : null}
+            {!collapsed ? <span>{themeLabel}</span> : null}
           </button>
         ) : null}
         <button
@@ -1246,20 +1242,7 @@ function SessionRow({
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
       aria-busy={session.opening || undefined}
-      // WCAG 2.5.3 (axe label-content-name-mismatch): the accessible name
-      // must contain the row's visible text, and axe compares it as the
-      // whitespace-free concatenation of the row's text nodes ("Completed"
-      // + title + time). Build the name from the same strings so it matches
-      // that concatenation exactly.
-      aria-label={[
-        showStatus ? statusLabel : "",
-        title,
-        session.opening
-          ? t("Opening…")
-          : !session.blank && updated
-            ? updated
-            : "",
-      ].join("")}
+      data-session-id={session.id}
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.statusSlot}>
@@ -1302,6 +1285,7 @@ function SearchSessionRow({
       aria-current={selected ? "page" : undefined}
       aria-selected={selected}
       aria-busy={session.opening || undefined}
+      data-session-id={session.id}
       onClick={() => onSelect(session.id)}
     >
       <span className={styles.searchResultHeading}>

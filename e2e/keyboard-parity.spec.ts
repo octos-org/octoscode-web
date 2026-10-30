@@ -187,7 +187,7 @@ test("switches sessions by keyboard and preserves sidebar focus order", async ({
   // then activate it with Enter. Scoped CSS attribute locator, per repo
   // precedent (interaction-ownership.spec.ts:188, local-preferences.spec.ts:103).
   const firstWorkspace = productNavigation(page).locator(
-    '[role="treeitem"][aria-label="keyboard-sidebar"]',
+    '[data-workspace-name="keyboard-sidebar"]',
   );
   await firstWorkspace.locator('button[class*="workspaceToggle"]').focus();
   await firstWorkspace
@@ -243,10 +243,12 @@ test("switches sessions by keyboard and preserves sidebar focus order", async ({
     .map((call) => call.params!.session_id!);
   const previousId = openedIds.at(-1)!; // the keyboard-created sibling (active now)
   const targetId = openedIds.find((id) => id !== previousId)!;
-  const target = rows.filter({ hasText: "Session " + targetId.slice(-8) });
-  const previousRow = rows.filter({
-    hasText: "Session " + previousId.slice(-8),
-  });
+  const target = productNavigation(page).locator(
+    `button[role="treeitem"][data-session-id*=${JSON.stringify(targetId)}]`,
+  );
+  const previousRow = productNavigation(page).locator(
+    `button[role="treeitem"][data-session-id*=${JSON.stringify(previousId)}]`,
+  );
   const opensBefore = w.calls("session/open").length;
   const startsBefore = w.calls("turn/start").length;
   await target.press("Enter");

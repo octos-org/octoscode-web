@@ -145,8 +145,15 @@
   border-style: dashed;
 }
 
-.preferencesTrigger {
+.headerAction {
+  position: relative;
+  display: inline-flex;
+  box-sizing: border-box;
+  height: 32px;
   min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 0 8px;
@@ -157,8 +164,13 @@
   cursor: pointer;
 }
 
-.preferencesTrigger:hover {
+.headerAction:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.headerAction[aria-expanded="true"] {
+  border-color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Skip-link target that hosts both routed panes (chat + Fleet) in the
@@ -190,31 +202,6 @@
 
 .workspaceMainWithPanel > .panelSlot {
   grid-area: 1 / 2;
-}
-
-.panelToggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 0 10px 0 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.panelToggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.panelToggle[aria-expanded="true"] {
-  border-color: var(--dsw-alias-label-secondary);
-  color: var(--dsw-alias-label-primary);
 }
 
 .panelBadge {
@@ -309,12 +296,6 @@
 }
 
 @media (max-width: 760px) {
-  /* Settings remains available from the session drawer; keep the compact
-     header to navigation, workspace context, tabs, and Review. */
-  .preferencesTrigger {
-    display: none;
-  }
-
   .conversationTabs {
     flex: none;
   }

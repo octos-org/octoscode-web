@@ -43,7 +43,9 @@ function productNavigation(page: Page): Locator {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar.locator(
+    `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+  );
 }
 
 /** The always-visible peer dock: `section[role=region][aria-label="Peers"]`
@@ -62,8 +64,7 @@ function peerDockRows(page: Page): Locator {
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
     .locator('button[role="treeitem"][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
 }
@@ -364,10 +365,9 @@ async function createSiblingSession(
   sidebar: Locator,
   workspaceName: string,
 ): Promise<string> {
-  const workspace = sidebar.getByRole("treeitem", {
-    name: workspaceName,
-    exact: true,
-  });
+  const workspace = sidebar.locator(
+    `[data-workspace-name=${JSON.stringify(workspaceName)}]`,
+  );
   const previous = await selectedSessionTitle(sidebar);
   await workspace
     .getByRole("button", { name: workspaceName, exact: true })

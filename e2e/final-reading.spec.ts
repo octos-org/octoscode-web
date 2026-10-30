@@ -127,9 +127,7 @@ test("sidebar native buttons keep Enter behavior and search Escape restores its 
   page,
 }) => {
   await start(page);
-  await page
-    .getByRole("treeitem", { name: "final-reading", exact: true })
-    .hover();
+  await page.locator('[data-workspace-name="final-reading"]').hover();
   const add = page.getByRole("button", {
     name: "New session in final-reading",
     exact: true,
@@ -137,7 +135,7 @@ test("sidebar native buttons keep Enter behavior and search Escape restores its 
   await add.focus();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("tree").getByRole("treeitem", { name: /^Session / }),
+    page.getByRole("tree").locator('button[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   const searchButton = page.getByRole("button", {
     name: "Search sessions",
@@ -284,15 +282,16 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   const selectedTitle = page.locator(
-    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    'button[role="treeitem"][aria-current="page"]',
   );
-  const sessionA = (await selectedTitle.textContent())!;
+  const sessionA = (await selectedTitle.getAttribute("data-session-id"))!;
   const selectSession = async (title: string) => {
     await page
-      .locator('button[role="treeitem"]')
-      .filter({ hasText: title })
+      .locator(
+        `button[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+      )
       .click();
-    await expect(selectedTitle).toHaveText(title);
+    await expect(selectedTitle).toHaveAttribute("data-session-id", title);
   };
   const region = page.getByRole("region", {
     name: "Conversation",
@@ -346,7 +345,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
     .click();
   // Reused hydrate entry IDs must not borrow A's expansion or reading position.
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
-  const sessionB = (await selectedTitle.textContent())!;
+  const sessionB = (await selectedTitle.getAttribute("data-session-id"))!;
   await page.getByRole("button", { name: "Show 100 earlier messages" }).click();
   await expect(page.locator(".timeline-entry")).toHaveCount(140);
   const readingB = page.locator(".timeline-entry").nth(40);

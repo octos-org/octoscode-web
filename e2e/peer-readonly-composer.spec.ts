@@ -117,8 +117,7 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   const masterId = String(w.calls("session/open")[0]!.params!.session_id!);
   const masterTitle = await sessionRows(page)
     .first()
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
 
   // Stage ONE native peer from the master through the /peer dialog
   // (mock `peer/prepare` -> `peer/staged`; :512-553).
@@ -162,11 +161,9 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   const staged = w.received.find((f) => f.method === "peer/staged")!.params!;
   const slug = String(staged.slug);
   const peerId = `${String(staged.profile_id)}:local:tui#${String(staged.topic)}`;
-  // The peer Session row title is `Session <last-8-of-slug>` (repo precedent
-  // capacity-and-peers.spec.ts:285-288).
-  const peerRow = sessionRows(page).filter({
-    hasText: `Session ${slug.slice(-8)}`,
-  });
+  const peerRow = productNavigation(page).locator(
+    `button[role="treeitem"][data-session-id*=${JSON.stringify(peerId)}]`,
+  );
   await expect(peerRow).toHaveCount(1);
 
   // Focus the peer's Session by keyboard: Enter -> onSelect -> local switch.
@@ -194,7 +191,9 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
   // 5. Switching back to the master re-enables the composer.
-  const master = sessionRows(page).filter({ hasText: masterTitle! });
+  const master = productNavigation(page).locator(
+    `button[role="treeitem"][data-session-id=${JSON.stringify(masterTitle)}]`,
+  );
   await master.focus();
   await master.press("Enter");
   await expect(master).toHaveAttribute("aria-current", "page");
