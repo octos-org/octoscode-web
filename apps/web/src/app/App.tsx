@@ -29,6 +29,7 @@ import {
   timelineActivity,
 } from "../features/timeline/entry-model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
+import { waitingFeedback } from "../features/session/waiting-feedback.ts";
 import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
@@ -2030,6 +2031,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
   const activityLabel = timelineActivity(conversation.timeline, activeTurnId);
+  const activeTurnWaitRef = useRef<{
+    turnId: string;
+    startedAtMs: number;
+  } | null>(null);
+  const [waitNow, setWaitNow] = useState(() => Date.now());
+  if (activeTurnId) {
+    if (activeTurnWaitRef.current?.turnId !== activeTurnId)
+      activeTurnWaitRef.current = {
+        turnId: activeTurnId,
+        startedAtMs: Date.now(),
+      };
+  } else activeTurnWaitRef.current = null;
+  useEffect(() => {
+    if (!activeTurnId) return;
+    const timer = window.setInterval(() => setWaitNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [activeTurnId]);
+  const longWait = activityLabel
+    ? waitingFeedback({
+        activityLabel,
+        turnStarting,
+        elapsedMs: activeTurnWaitRef.current
+          ? waitNow - activeTurnWaitRef.current.startedAtMs
+          : 0,
+      })
+    : null;
+  const localizedActivityLabel = activityLabel
+    ? activityLabel.startsWith("Running ") && activityLabel.endsWith("…")
+      ? t("Running {value0}…", {
+          value0: activityLabel.slice("Running ".length, -1),
+        })
+      : t(activityLabel)
+    : null;
+  const waitDuration = longWait
+    ? longWait.elapsedSeconds >= 60
+      ? t("{value0}m {value1}s", {
+          value0: Math.floor(longWait.elapsedSeconds / 60),
+          value1: longWait.elapsedSeconds % 60,
+        })
+      : t("{value0}s", { value0: longWait.elapsedSeconds })
+    : "";
   const hasUnfinishedWork = Boolean(
     activeTurnId ||
     conversation.queue.pending.length ||
@@ -3666,7 +3708,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           className={productStyles.thinkingOctopus}
                         />
                         <span>
-                          {turnStarting ? t("Starting…") : activityLabel}
+                          {turnStarting
+                            ? t("Starting…")
+                            : localizedActivityLabel}
+                          {longWait ? (
+                            <small data-waiting-feedback="true">
+                              <br />
+                              {t(longWait.phase)} ·{" "}
+                              {t("Elapsed {value0}", { value0: waitDuration })}
+                              <br />
+                              {t(
+                                "You can stop this turn, check the connection, or retry.",
+                              )}
+                            </small>
+                          ) : null}
                         </span>
                       </div>
                     ) : null}

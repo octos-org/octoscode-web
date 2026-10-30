@@ -201,7 +201,7 @@ function PickerBody({
                     className={styles.workspace}
                     data-workspace-entry="server-working-directory"
                     aria-label={t("Start a new session in {value0}", {
-                      value0: serverWorkingDirectory.label,
+                      value0: t(serverWorkingDirectory.label),
                     })}
                     disabled={creating || serverWorkingDirectory.path === null}
                     onClick={() => {
@@ -214,7 +214,7 @@ function PickerBody({
                     </span>
                     <span className={styles.workspaceText}>
                       <span className={styles.workspaceName}>
-                        {serverWorkingDirectory.label}
+                        {t(serverWorkingDirectory.label)}
                       </span>
                       {serverWorkingDirectory.path ? (
                         <span className={styles.workspacePath}>

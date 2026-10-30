@@ -32,6 +32,14 @@ export function ApprovalPanel({
   const previewId = approvalDiffPreviewId(approval);
   const impact = approvalImpactDetails(approval);
   const risk = approval.risk?.toLowerCase();
+  const riskLabel =
+    risk === "high" || risk === "critical"
+      ? "High risk"
+      : risk === "medium"
+        ? "Medium risk"
+        : risk === "low"
+          ? "Low risk"
+          : "Risk not specified";
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (
@@ -71,20 +79,10 @@ export function ApprovalPanel({
       <div className="approval-strip">
         <span className="approval-dot" />
         <span>{t("Approval required")}</span>
-        {approval.risk ? (
-          <em data-risk={risk}>
-            {t(
-              risk === "high" || risk === "critical"
-                ? "High risk"
-                : risk === "medium"
-                  ? "Medium risk"
-                  : "Low risk",
-            )}
-          </em>
-        ) : null}
+        {approval.risk ? <em data-risk={risk}>{t(riskLabel)}</em> : null}
       </div>
       <div className="approval-body">
-        <strong id="approval-title">{approval.title}</strong>
+        <strong id="approval-title">{t(approval.title)}</strong>
         <p className="approval-impact">
           {t("Impact: {directory} · {network} · {deletion}", {
             directory: impact.directory
