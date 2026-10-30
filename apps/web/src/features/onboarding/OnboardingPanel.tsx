@@ -130,7 +130,6 @@ export function OnboardingPanel({
         </div>
       ) : (
         <form className={styles.form} onSubmit={submit}>
-
           <p className={styles.step}>
             {step === "service"
               ? t("Step 1 of 2 · Model service")
