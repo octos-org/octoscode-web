@@ -2286,6 +2286,20 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  // Profile model state is shared by every test on this fixture. A test that
+  // changes the Profile default resets it first, so a retry (or a later test)
+  // starts from the same configured models.
+  if (request.method === "POST" && request.url === "/__test__/models/reset") {
+    configuredModelsByProfile.clear();
+    configuredModelsByProfile.set(
+      defaultProfileId,
+      cloneConfiguredModels(initialProfileModels),
+    );
+    effectiveRuntimeModelByProfile.clear();
+    effectiveRuntimeModelByProfile.set(defaultProfileId, defaultRuntimeModel);
+    response.writeHead(204).end();
+    return;
+  }
   if (
     request.method === "POST" &&
     request.url === "/__test__/session-open/reset"
