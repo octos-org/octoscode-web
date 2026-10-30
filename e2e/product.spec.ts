@@ -1268,7 +1268,9 @@ test("restores the origin, tab credential, session, and workspace after refresh"
 
   const restoredNavigation = productNavigation(page);
   await expect(restoredNavigation).toBeVisible();
-  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
+  await expect(
+    page.locator("main").getByText(cwd, { exact: true }).first(),
+  ).toBeVisible();
   await expect(
     restoredNavigation.getByRole("treeitem", { name: /Session / }),
   ).toHaveAttribute("aria-current", "page");

@@ -442,8 +442,11 @@
    about to change. */
 @media (max-width: 400px) {
   :global(.workspace-grid .conversation-header) {
+    position: relative;
+    z-index: 8;
     gap: 6px;
     padding: 0 8px;
+    background: var(--dsw-alias-bg-base);
   }
 
   :global(.header-actions) {
