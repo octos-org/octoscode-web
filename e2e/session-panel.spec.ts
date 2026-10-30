@@ -17,7 +17,11 @@ async function start(
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(workspace);
+  const manual = page.getByRole("button", { name: "Enter path manually" });
+  const pathInput = page.getByLabel("Server workspace path");
+  await expect(manual.or(pathInput).first()).toBeVisible();
+  if (await manual.isVisible().catch(() => false)) await manual.click();
+  await pathInput.fill(workspace);
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
@@ -41,7 +45,11 @@ async function createWorkspace(page: Page, path: string) {
   await picker
     .getByRole("button", { name: "Add workspace", exact: true })
     .click();
-  await picker.getByLabel("Server workspace path").fill(path);
+  const manual = picker.getByRole("button", { name: "Enter path manually" });
+  const pathInput = picker.getByLabel("Server workspace path");
+  await expect(manual.or(pathInput).first()).toBeVisible();
+  if (await manual.isVisible().catch(() => false)) await manual.click();
+  await pathInput.fill(path);
   await picker.getByLabel("Server workspace path").press("Enter");
   await expect(
     page.locator("main").getByText(path, { exact: true }).first(),

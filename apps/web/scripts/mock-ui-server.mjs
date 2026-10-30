@@ -3785,6 +3785,18 @@ sockets.on("connection", (socket, request) => {
               },
             ],
           },
+          moonshot: {
+            env: "MOONSHOT_API_KEY",
+            models: [{ id: "kimi-2.5", endpoints: [] }],
+          },
+          dashscope: {
+            env: "DASHSCOPE_API_KEY",
+            models: [{ id: "qwen3-coder", endpoints: [] }],
+          },
+          minimax: {
+            env: "MINIMAX_API_KEY",
+            models: [{ id: "minimax-m3", endpoints: [] }],
+          },
           ollama: {
             env: "",
             models: [{ id: "qwen3", endpoints: [] }],

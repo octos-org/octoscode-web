@@ -20,7 +20,7 @@ describe("OnboardingPanel", () => {
     );
     expect(html).toContain("octoscode onboard");
   });
-  it("associates provider, model and route selects with labels", () => {
+  it("labels the provider, model and advanced identity controls", () => {
     const html = renderToStaticMarkup(
       <OnboardingPanel
         state={{
@@ -48,11 +48,11 @@ describe("OnboardingPanel", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(html).toContain('for="onboarding-provider"');
-    expect(html).toContain('for="onboarding-model"');
-    expect(html).toContain('for="onboarding-route"');
-    expect(html).toContain('id="onboarding-provider"');
-    expect(html).toContain('id="onboarding-model"');
-    expect(html).toContain('id="onboarding-route"');
+    expect(html).toContain('type="radio"');
+    expect(html).toContain('name="provider"');
+    expect(html).toContain('name="model"');
+    expect(html).toContain('name="profile-id"');
+    expect(html).toContain('name="profile-name"');
+    expect(html).toContain("Use as the default local profile");
   });
 });
