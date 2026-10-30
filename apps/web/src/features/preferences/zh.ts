@@ -1727,6 +1727,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Page {page} of {name}": "{name} · 第 {page} 页",
 
   // Connectors and scheduled tasks (T-0025).
+  Tool: "工具",
   Tools: "工具",
   Connectors: "连接器",
   "Read-only MCP server status for this Session.":

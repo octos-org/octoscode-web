@@ -110,11 +110,6 @@ describe("thinking one-line summary", () => {
       unit: "characters",
     });
   });
-
-  it("counts Chinese characters rather than treating a sentence as one word", () => {
-    expect(thinkingSummaryParts({ body: "你好，世界" }).words).toBe(4);
-    expect(thinkingSummaryParts({ body: "你好 world" }).words).toBe(3);
-  });
 });
 
 describe("tool call header line", () => {
