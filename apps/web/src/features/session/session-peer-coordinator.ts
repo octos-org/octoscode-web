@@ -19,6 +19,7 @@ import { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
 import type {
   PeerOpenOutcome,
   PeerOpenRequest,
+  PeerRosterEntry,
   PeerSessionEvent,
 } from "../peers/peer-manager.ts";
 import type { QueueBackedTurnController } from "../composer/use-turn-controller.ts";
@@ -123,6 +124,7 @@ interface Binding<
   timer: ReturnType<typeof setTimeout> | null;
   unsubscribe: () => void;
   opened: Map<string, Record>;
+  adopted: Map<string, string>;
   closed: Set<string>;
   /** Pre-dispatch idempotency keys for THIS master, keyed by the pending peer's
    * retry-stable kickoff `turnId`. Minted ONCE and reused on every retry so a
@@ -270,6 +272,19 @@ export class SessionPeerCoordinator<
   #publish = (): void => {
     for (const listener of this.#listeners) listener();
   };
+  roster(): readonly PeerRosterEntry[] {
+    return [...this.#bindings.values()].flatMap(
+      (binding) => binding.manager.snapshot().peers,
+    );
+  }
+  getMaster(record: Record): Record | null {
+    const owner = [...this.#bindings.values()].find((binding) => {
+      const staging =
+        binding.adopted.get(record.scope.sessionId) ?? record.scope.sessionId;
+      return binding.opened.has(staging) || binding.closed.has(staging);
+    });
+    return (owner ?? this.#bindings.get(record))?.record ?? null;
+  }
   get(record: Record): LazyPeerManager | null {
     // A FOCUSED peer record is never bound itself — its roster lives in the
     // MASTER binding that opened it (`opened`/`closed` are keyed by that peer's
@@ -283,12 +298,8 @@ export class SessionPeerCoordinator<
     // is deliberately the record OBJECT, never a scope key: a retired master
     // must not be repainted by a replacement incarnating the same session id
     // (`retirement cancels only its owner`).
-    const owner = [...this.#bindings.values()].find(
-      (binding) =>
-        binding.opened.has(record.scope.sessionId) ||
-        binding.closed.has(record.scope.sessionId),
-    );
-    return (owner ?? this.#bindings.get(record))?.manager ?? null;
+    const master = this.getMaster(record);
+    return master ? (this.#bindings.get(master)?.manager ?? null) : null;
   }
   getError(record: Record): string | null {
     return this.#bindings.get(record)?.error ?? null;
@@ -330,6 +341,7 @@ export class SessionPeerCoordinator<
         timer: null,
         unsubscribe: () => {},
         opened: new Map(),
+        adopted: new Map(),
         closed: new Set(),
         operations: new Map(),
         manager: new LazyPeerManager({
@@ -618,6 +630,7 @@ export class SessionPeerCoordinator<
         error:
           "The opened peer did not match its confirmed owner and workspace.",
       };
+    binding.adopted.set(scope.sessionId, request.sessionId);
     binding.opened.set(request.sessionId, peer);
     const hydrated = peer.payload?.hydrated,
       queue = peer.controller.queueSnapshot();
@@ -734,6 +747,7 @@ export class SessionPeerCoordinator<
     // Key by the STAGING key: that is the identity the manager closes with
     // (peer-manager.ts #close sends `sessionId: identity`), so teardown still
     // resolves. The record itself carries the adopted session scope.
+    binding.adopted.set(started.adoptedSessionId, request.sessionId);
     binding.opened.set(request.sessionId, peer);
     // A `duplicate: true` receipt is an idempotent replay of the SAME key, so it
     // resolves `started` with that key — never a second row. The receipt's OWN
@@ -742,6 +756,7 @@ export class SessionPeerCoordinator<
       status: "started",
       operationId: started.operationId,
       slug: started.slug,
+      sessionId: started.adoptedSessionId,
     };
   }
 
@@ -796,7 +811,7 @@ export class SessionPeerCoordinator<
           // type is already threaded by PeerManager; this site stays
           // `{ status: "started" }` (rows carry null) until the web adopts the
           // dispatch leaf, at which point its accepted receipt is stamped here.
-          finish({ status: "started" });
+          finish({ status: "started", sessionId: peer.scope.sessionId });
       };
       const timer = setTimeout(
         () =>

@@ -39,7 +39,8 @@ const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50
 const token = "tab-scoped-e2e-token";
 
 const composer = (page: Page) => page.locator(".composer textarea");
-const hint = (page: Page) => page.locator(".composer p.peer-readonly-composer");
+const hint = (page: Page) =>
+  page.locator('[role="status"][class*="peerReadonly"]');
 // CSS (not role) — survives routing that hides ancestors from the a11y tree.
 const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
@@ -162,27 +163,22 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   const staged = w.received.find((f) => f.method === "peer/staged")!.params!;
   const slug = String(staged.slug);
   const peerId = `${String(staged.profile_id)}:local:tui#${String(staged.topic)}`;
-  // The peer Session row title is `Session <last-8-of-slug>` (repo precedent
-  // capacity-and-peers.spec.ts:285-288).
-  const peerRow = sessionRows(page).filter({
-    hasText: `Session ${slug.slice(-8)}`,
-  });
-  await expect(peerRow).toHaveCount(1);
+  // A peer is not an ordinary Session row. The dock exposes its real slug and
+  // opens the exact retained peer record instead of adding a second list entry.
+  await expect(sessionRows(page)).toHaveCount(1);
+  await expect(sessionRows(page).filter({ hasText: slug })).toHaveCount(0);
+  const peerRow = page.locator(`button[data-peer-slug="${slug}"]`);
+  await expect(peerRow).toContainText(slug);
+  await peerRow.click();
 
-  // Focus the peer's Session by keyboard: Enter -> onSelect -> local switch.
-  await peerRow.focus();
-  await peerRow.press("Enter");
-  await expect(peerRow).toHaveAttribute("aria-current", "page");
-
-  // 1. The textarea is disabled on the peer surface (ComposerInput.tsx:114).
-  await expect(composer(page)).toBeDisabled();
-  // 2. The role="status" row shows the en.yml:171 hint, naming the slug
-  //    (ComposerInput.tsx:237-241; peer-readonly.ts:16-18).
+  // The peer surface replaces the editable textarea with one aligned status.
+  await expect(composer(page)).toHaveCount(0);
   await expect(hint(page)).toBeVisible();
-  await expect(hint(page)).toContainText("read-only peer");
-  await expect(hint(page)).toContainText(slug.slice(-8));
-  // 3. Keyboard focus is not lost to <body>: the activated row keeps it.
-  await expect(peerRow).toBeFocused();
+  await expect(hint(page)).toContainText("read-only");
+  await expect(hint(page)).toContainText(slug);
+  await expect(
+    page.getByRole("button", { name: "Send prompt", exact: true }),
+  ).toHaveCount(0);
   expect(peerId).toBe(
     String(staged.profile_id) + ":local:tui#" + String(staged.topic),
   );
@@ -193,12 +189,14 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await page.keyboard.press("Escape");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
-  // 5. Switching back to the master re-enables the composer.
+  // 5. The status action returns to the actual owner master and restores input.
   const master = sessionRows(page).filter({ hasText: masterTitle! });
-  await master.focus();
-  await master.press("Enter");
+  await hint(page)
+    .getByRole("button", { name: "Return to master", exact: true })
+    .click();
   await expect(master).toHaveAttribute("aria-current", "page");
   await expect(composer(page)).toBeEnabled();
+  await expect(composer(page)).toBeFocused();
   await expect(hint(page)).toHaveCount(0);
 
   // 4b. Esc DOES reach the interrupt path when a turn is live and the master

@@ -108,6 +108,8 @@ export interface ProductSidebarProps {
    * empty, so the sidebar never gates it.
    */
   peerDock?: PeerDockManager | null | undefined;
+  peerRoster?: PeerDockProps["roster"];
+  peerActionRoster?: PeerDockProps["actionRoster"];
   /**
    * Answers a blocked peer's pending APPROVAL (web gap 6). The sidebar is a
    * pass-through only: it threads this straight to the dock, which stays pure.
@@ -118,6 +120,7 @@ export interface ProductSidebarProps {
     ((entry: PeerRosterEntry, decision: ApprovalDecision) => void) | undefined;
   /** Round 3 item 6 (judge #4): the dock rows' real-id action seam. */
   onPeerDockRowAction?: PeerDockProps["onRowAction"];
+  onPeerDockSelect?: PeerDockProps["onSelect"];
   /**
    * Controlled PeerDock fold (reference TUI `peer_dock_collapsed`). The shell
    * owns the state (Alt+P flips it in App) and the sidebar is again a pure
@@ -172,8 +175,11 @@ export function ProductSidebar({
   onFleet,
   onRetry,
   peerDock = null,
+  peerRoster,
+  peerActionRoster,
   onApprovalRespond,
   onPeerDockRowAction,
+  onPeerDockSelect,
   peerDockCollapsed = false,
   onPeerDockToggle,
 }: ProductSidebarProps) {
@@ -967,8 +973,11 @@ export function ProductSidebar({
 
       <PeerDock
         manager={peerDock}
+        roster={peerRoster}
+        actionRoster={peerActionRoster}
         onApprovalRespond={onApprovalRespond}
         onRowAction={onPeerDockRowAction}
+        {...(onPeerDockSelect ? { onSelect: onPeerDockSelect } : {})}
         collapsed={peerDockCollapsed}
         // PeerDock's `onToggle?` omits `| undefined` (exactOptionalPropertyTypes),
         // so thread it only when the shell actually supplies the fold control.

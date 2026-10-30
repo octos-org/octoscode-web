@@ -591,7 +591,10 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
     })
     .click();
   await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
-    3,
+    2,
+  );
+  await expect(sidebar.locator(`button[data-peer-slug="${slug}"]`)).toHaveCount(
+    1,
   );
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const bTitle = await sidebar
