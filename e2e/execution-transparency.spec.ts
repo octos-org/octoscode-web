@@ -18,7 +18,7 @@ test("expands a failed write, summarizes the turn, and marks the sidebar with ze
   await page.getByLabel("Server workspace path").press("Enter");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
-  await composer.fill("Fail a write fixture");
+  await composer.fill("Fail a write fixture unconditionally");
   await composer.press("Enter");
 
   const failed = page.locator("details").filter({

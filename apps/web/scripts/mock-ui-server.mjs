@@ -5413,19 +5413,25 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     state.activeTurn = null;
     return null;
   }
-  if (text === "Fail a write fixture") {
-    const denied = sessionState(sessionId).permission.mode === "read_only";
+  const unconditionalWriteFailure =
+    text === "Fail a write fixture unconditionally";
+  if (text === "Fail a write fixture" || unconditionalWriteFailure) {
+    const permissionDenied =
+      sessionState(sessionId).permission.mode === "read_only";
+    const denied = permissionDenied || unconditionalWriteFailure;
     notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
-      tool_call_id: "write-permission",
+      tool_call_id: unconditionalWriteFailure ? "write-fail" : "write-permission",
       name: "write_file",
       arguments_preview: JSON.stringify({ path: "report.md" }),
     });
     notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
-      tool_call_id: "write-permission",
+      tool_call_id: unconditionalWriteFailure ? "write-fail" : "write-permission",
       status: denied ? "error" : "complete",
       ...(denied
         ? {
-            error: "write_file is not permitted by read-only filesystem access",
+            error: permissionDenied
+              ? "write_file is not permitted by read-only filesystem access"
+              : "permission denied: read-only workspace",
           }
         : { output_preview: "report.md written" }),
     });
