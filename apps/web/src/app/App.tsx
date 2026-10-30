@@ -879,6 +879,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 reference,
                 attachmentWorkspaceRoot,
               );
+              const deliveredPath = canReadWorkspace
+                ? await deliveredArtifactWorkspacePath(reference)
+                : null;
+              if (deliveredPath && !workspacePath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // The durable copy is the correct source for an external
+                  // delivery, but older deliveries may not have one.
+                }
+              }
               if (workspacePath && canReadWorkspace) {
                 try {
                   return {
@@ -898,10 +915,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               if (sizeBytes !== undefined && sizeBytes > 0) {
                 return { sizeBytes };
               }
-              const deliveredPath = canReadWorkspace
-                ? await deliveredArtifactWorkspacePath(reference)
-                : null;
-              if (deliveredPath) {
+              if (deliveredPath && workspacePath) {
                 try {
                   return {
                     sizeBytes: await readSessionFileSize(
