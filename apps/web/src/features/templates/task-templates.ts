@@ -13,7 +13,7 @@ import type { UiLanguage } from "../preferences/model.ts";
  * `example` is an illustrative excerpt of a typical result, shown as such. It
  * is not read from the server.
  */
-export type TaskTemplateCategory = "code" | "office";
+export type TaskTemplateCategory = "code" | "general";
 export type TaskTemplateAccess = "read" | "write";
 
 export interface TaskTemplateCopy {
@@ -102,7 +102,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "weekly-report",
-    category: "office",
+    category: "general",
     access: "write",
     copy: {
       en: {
@@ -125,7 +125,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "tidy-spreadsheet",
-    category: "office",
+    category: "general",
     access: "write",
     copy: {
       en: {
@@ -148,7 +148,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "slide-outline",
-    category: "office",
+    category: "general",
     access: "write",
     copy: {
       en: {
@@ -160,10 +160,10 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
           "1. Q4 review\n2. Bottom line: revenue +18%, margin flat\n3. Results by region (bar chart)",
       },
       zh: {
-        title: "做一份 PPT 提纲",
+        title: "写演示提纲",
         summary: "逐页写标题、要点和建议的图表。",
         prompt:
-          "为【主题，例如 第四季度复盘】做一份 PPT 提纲，面向【听众】，大约【页数】页。每页写：标题、不超过 3 条要点、建议配的图或表。参考这个文件夹里的相关资料，存成 PPT提纲.md。",
+          "为【主题，例如 第四季度复盘】写一份演示提纲，面向【听众】，大约【页数】页。每页写：标题、不超过 3 条要点、建议配的图或表。参考这个文件夹里的相关资料，存成 演示提纲.md。",
         example:
           "1. 第四季度复盘\n2. 一页结论：收入 +18%，利润率持平\n3. 分区表现（柱状图）",
       },
@@ -173,7 +173,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
 
 export const TASK_TEMPLATE_CATEGORIES: readonly TaskTemplateCategory[] = [
   "code",
-  "office",
+  "general",
 ];
 
 export function findTaskTemplate(id: string): TaskTemplate | undefined {

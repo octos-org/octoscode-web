@@ -1004,7 +1004,7 @@ export function ProductSidebar({
                   ? t("Dark")
                   : theme === "light"
                     ? t("Light")
-                    : t("System")}
+                    : t("Auto")}
               </span>
             ) : null}
           </button>

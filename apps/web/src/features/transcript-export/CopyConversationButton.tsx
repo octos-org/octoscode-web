@@ -26,9 +26,11 @@ const RESULT_MS = 2500;
 export function CopyConversationButton({
   source,
   className,
+  role,
 }: {
   source: ConversationCopySource;
   className: string;
+  role?: "menuitem" | undefined;
 }) {
   const t = useUiText();
   const [phase, setPhase] = useState<CopyPhase>("idle");
@@ -69,6 +71,8 @@ export function CopyConversationButton({
     <>
       <button
         type="button"
+        role={role}
+        aria-live={role === "menuitem" ? "polite" : undefined}
         className={className}
         disabled={phase === "copying"}
         title={detail ?? t("Copy this conversation as Markdown")}
@@ -77,13 +81,15 @@ export function CopyConversationButton({
       >
         {label}
       </button>
-      <span className="sr-only" role="status">
-        {phase === "copied"
-          ? t("Conversation copied as Markdown.")
-          : phase === "empty" || phase === "error"
-            ? label
-            : ""}
-      </span>
+      {role === "menuitem" ? null : (
+        <span className="sr-only" role="status">
+          {phase === "copied"
+            ? t("Conversation copied as Markdown.")
+            : phase === "empty" || phase === "error"
+              ? label
+              : ""}
+        </span>
+      )}
     </>
   );
 }

@@ -39,7 +39,7 @@ test("an empty session fills the message box from a template and never sends it"
   await startSession(page, "/workspace/templates-home");
   const home = page.getByRole("region", { name: "What can Octos help with?" });
   await expect(home.getByRole("heading", { name: "Code" })).toBeVisible();
-  await expect(home.getByRole("heading", { name: "Office" })).toBeVisible();
+  await expect(home.getByRole("heading", { name: "General" })).toBeVisible();
   expect(
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
       .violations,
