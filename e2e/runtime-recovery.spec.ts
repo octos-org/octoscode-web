@@ -153,10 +153,9 @@ test("continues past an unknown turn without replaying it or losing the queue an
     "Keep this draft while the status is unknown",
   );
   const originalSession = await page
-    .getByRole("treeitem", { name: /Session / })
+    .locator('[role="treeitem"][data-session-id]')
     .first()
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   if (!originalSession) throw new Error("Missing original Session");
   await workspace.hover();
   await page
@@ -167,8 +166,9 @@ test("continues past an unknown turn without replaying it or losing the queue an
   expect(starts).toHaveLength(2);
   await expect(composer).toHaveValue("");
   await page
-    .getByRole("treeitem", { name: /Session / })
-    .filter({ hasText: originalSession })
+    .locator(
+      `[role="treeitem"][data-session-id=${JSON.stringify(originalSession)}]`,
+    )
     .click();
   await expect(composer).toHaveValue(
     "Keep this draft while the status is unknown",

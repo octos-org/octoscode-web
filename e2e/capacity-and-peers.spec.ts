@@ -14,16 +14,15 @@ function productNavigation(page: Page): Locator {
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: title });
+  return sidebar.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+  );
 }
 
 async function connectAndStartWorkspace(
@@ -107,7 +106,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
     // v0.10.0 renders the workspace tree item as a <div role="treeitem">
     // (it was a <section> before). Match the ARIA role, not the tag.
     const workspace = sidebar.locator(
-      '[role="treeitem"][aria-label="twelve-plus-peers"]',
+      '[data-workspace-name="twelve-plus-peers"]',
     );
     const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
     const sessionByMarker = new Map<string, string>();
@@ -129,19 +128,13 @@ test("holds twelve browser turns and three browser-started native peers on one p
       await sidebar
         .locator('button[aria-label="New session in twelve-plus-peers"]')
         .click();
-      await expect(
-        sidebar.locator(
-          '[role="treeitem"][data-session-id][aria-current="page"]',
-        ),
-      ).not.toContainText(runningTitle);
-      // "Show more" sits in the workspace's owned session group, a sibling
-      // of the workspace row (ProductSidebar aria-owns).
-      const showMore = sidebar.locator('button[class*="showMore"]');
+      await expect
+        .poll(() => selectedSessionTitle(sidebar))
+        .not.toBe(runningTitle);
+      const showMore = workspace.locator('button[class*="showMore"]');
       if (await showMore.isVisible()) await showMore.click();
       await expect(
-        sidebar
-          .locator('[role="treeitem"][data-session-id]')
-          .filter({ hasText: /Session / }),
+        sidebar.locator('[role="treeitem"][data-session-id]'),
       ).toHaveCount(index + 2);
     }
     const masterTitle = await selectedSessionTitle(sidebar);

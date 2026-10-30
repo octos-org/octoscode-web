@@ -204,6 +204,9 @@ export function ProductSidebar({
   onPeerDockToggle,
 }: ProductSidebarProps) {
   const t = useUiText();
+  const themeLabel =
+    theme === "dark" ? t("Dark") : theme === "light" ? t("Light") : t("Auto");
+  const themeAccessibleLabel = theme === "system" ? t("Auto") : t(theme);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
@@ -1032,6 +1035,7 @@ export function ProductSidebar({
                         <div
                           key={workspace.id}
                           data-workspace-id={workspace.id}
+                          data-workspace-name={workspace.label}
                           className={styles.workspaceGroup}
                           role="group"
                         >
@@ -1303,22 +1307,18 @@ export function ProductSidebar({
           <button
             type="button"
             className={styles.settings}
-            aria-label={t("Theme: {value0}", { value0: t(theme) })}
+            aria-label={t("Theme: {value0}", {
+              value0: themeAccessibleLabel,
+            })}
             title={
-              collapsed ? t("Theme: {value0}", { value0: t(theme) }) : undefined
+              collapsed
+                ? t("Theme: {value0}", { value0: themeAccessibleLabel })
+                : undefined
             }
             onClick={onThemeToggle}
           >
             <ThemeIcon mode={theme} />
-            {!collapsed ? (
-              <span>
-                {theme === "dark"
-                  ? t("Dark")
-                  : theme === "light"
-                    ? t("Light")
-                    : t("System")}
-              </span>
-            ) : null}
+            {!collapsed ? <span>{themeLabel}</span> : null}
           </button>
         ) : null}
         <button

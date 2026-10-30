@@ -392,7 +392,7 @@ const catalog: Readonly<Record<string, string>> = {
   "New monitor filter regex, optional": "新监视器筛选正则表达式（可选）",
   "New monitor name": "新监视器名称",
   "New monitor probe command": "新监视器探测命令",
-  "New session": "新建会话",
+  "New session": "新会话",
   "New session in {value0}": "在 {value0} 中新建会话",
   "Next run": "下次运行",
   No: "否",
@@ -1639,6 +1639,9 @@ const catalog: Readonly<Record<string, string>> = {
   "Start session": "开始会话",
   "Starting your session…": "正在开始会话…",
   System: "跟随系统",
+  Auto: "跟随系统",
+  "More actions": "更多操作",
+  "Conversation actions": "会话操作",
   "The client could not recover this view. Closing its connection may have stopped running work. Octos keeps persisted history; unsent drafts and queued messages may be lost when you reload.":
     "界面没能恢复。关闭它的连接可能已经停止了正在运行的工作。Octos 会保留已保存的历史；重新加载时，未发送的草稿和排队的消息可能会丢失。",
   "The control command could not be confirmed.": "没能确认控制命令的结果。",

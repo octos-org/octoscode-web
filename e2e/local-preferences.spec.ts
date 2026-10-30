@@ -23,12 +23,10 @@ const preferences = (page: Page) =>
 // name — the stable contract — never a module-hashed class.
 const promptQueue = (page: Page) =>
   page.getByRole("region", { name: "Queued prompts" });
-const row = (page: Page, idSuffix: string) =>
-  page.locator('[role="treeitem"][data-session-id]').filter({
-    has: page.locator('[class*="sessionTitle"]', {
-      hasText: new RegExp(`(?:^|\\s)${idSuffix}$`),
-    }),
-  });
+const row = (page: Page, sessionId: string) =>
+  page.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
+  );
 type Frame = {
   id?: string;
   method?: string;
@@ -95,27 +93,17 @@ async function connect(page: Page, workspace: string) {
   await expect(input(page)).toBeEnabled();
 }
 async function title(page: Page) {
-  const displayed = (
-    await page
-      .locator(
-        '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
-      )
-      .innerText()
-  ).trim();
-  // The browser-owned Session/会话 label translates live, the confirmed native
-  // identifier suffix does not. Do not pin a row to its earlier English label.
-  const suffix = displayed.split(/\s+/).at(-1);
-  if (!suffix || !/^[a-zA-Z0-9_-]+$/.test(suffix))
-    throw new Error("Selected Session has no stable identifier suffix");
-  return suffix;
+  const sessionId = await page
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
+  if (!sessionId) throw new Error("Expected a selected Session id");
+  return sessionId;
 }
 async function sibling(page: Page, workspace: string) {
   const navigation = page.locator("aside");
   await navigation
-    // v0.10.0's sidebar renders the workspace group as a <div role="treeitem">
-    // (ProductSidebar.tsx:765-772) so its tree navigation can own the node id;
-    // the role + accessible name are the contract, the tag name never was.
-    .locator(`[role="treeitem"][aria-label="${workspace}"]`)
+    // The stable workspace id is the contract, not its accessible name.
+    .locator(`[data-workspace-name=${JSON.stringify(workspace)}]`)
     .locator('button[class*="workspaceToggle"]')
     .hover();
   await navigation

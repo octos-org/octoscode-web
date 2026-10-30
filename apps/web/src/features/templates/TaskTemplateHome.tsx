@@ -38,7 +38,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     chooserHeading: "Or start from a template",
     chooserLead:
       "Pick one, then choose a folder above. The request goes into the message box for you to edit.",
-    categories: { code: "Code", office: "Office" },
+    categories: { code: "Code", general: "General" },
     access: { read: "Reads only", write: "Edits files" },
     example: "Example result",
     use: "Use this",
@@ -58,7 +58,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
       "在 {workspace} 里工作。挑一个模板改改，或者直接在下面写需求。",
     chooserHeading: "也可以先挑一个模板",
     chooserLead: "选好后在上面选文件夹，需求会填进输入框，改好再发送。",
-    categories: { code: "编程", office: "办公" },
+    categories: { code: "编程", general: "通用" },
     access: { read: "只读", write: "会改文件" },
     example: "示例结果",
     use: "做同款",

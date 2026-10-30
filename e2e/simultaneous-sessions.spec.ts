@@ -14,10 +14,14 @@ function productNavigation(page: Page): Locator {
   return page.locator("aside");
 }
 
+function conversation(page: Page): Locator {
+  return page.getByRole("region", { name: "Conversation", exact: true });
+}
+
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar
-    .locator('[role="treeitem"][data-session-id]')
-    .filter({ hasText: title });
+  return sidebar.locator(
+    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
+  );
 }
 
 async function connectAndStartWorkspace(
@@ -51,8 +55,7 @@ async function connectAndStartWorkspace(
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .getAttribute("data-session-id");
   if (!title) throw new Error("Expected a selected Session title");
   return title;
 }
@@ -154,12 +157,12 @@ test("isolates independent turns across rapid Session switches", async ({
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
   const workspace = sidebar.locator(
-    '[role="treeitem"][aria-label="' + "simultaneous-sessions" + '"]',
+    '[data-workspace-name="simultaneous-sessions"]',
   );
   const createSession = async () => {
     await workspace
@@ -186,15 +189,19 @@ test("isolates independent turns across rapid Session switches", async ({
   expect(bTitle).not.toBe(aTitle);
 
   await send(bPrompt);
-  await expect(page.getByText(bPrompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toBeVisible({
+  await expect(
+    conversation(page).getByText(bPrompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toBeVisible({
     timeout: 10_000,
   });
 
   await expect(
     sidebar.locator('[title="Completed in background"]'),
   ).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("A-one-unique", { exact: false })).toHaveCount(0);
+  await expect(
+    conversation(page).getByText("A-one-unique", { exact: false }),
+  ).toHaveCount(0);
 
   await createSession();
   await expect(sessions).toHaveCount(3);
@@ -203,33 +210,53 @@ test("isolates independent turns across rapid Session switches", async ({
   expect(cTitle).not.toBe(aTitle);
   expect(cTitle).not.toBe(bTitle);
   await send(cPrompt);
-  await expect(page.getByText(cPrompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toBeVisible({
+  await expect(
+    conversation(page).getByText(cPrompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toBeVisible({
     timeout: 10_000,
   });
 
   await sessionA.click();
   await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("A-one-unique", { exact: false })).toBeVisible({
+  await expect(
+    conversation(page).getByText("A-one-unique", { exact: false }),
+  ).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-  await expect(page.getByText(bPrompt, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(cPrompt, { exact: true })).toHaveCount(0);
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await expect(
+    conversation(page).getByText(bPrompt, { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(cPrompt, { exact: true }),
+  ).toHaveCount(0);
 
   await sessionB.click();
   await expect(sessionB).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(bPrompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-  await expect(page.getByText("A-one-unique", { exact: false })).toHaveCount(0);
-  await expect(page.getByText(cPrompt, { exact: true })).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(bPrompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await expect(
+    conversation(page).getByText("A-one-unique", { exact: false }),
+  ).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(cPrompt, { exact: true }),
+  ).toHaveCount(0);
 
   await sessionC.click();
   await expect(sessionC).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(cPrompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
-  await expect(page.getByText("A-one-unique", { exact: false })).toHaveCount(0);
-  await expect(page.getByText(bPrompt, { exact: true })).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(cPrompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await expect(
+    conversation(page).getByText("A-one-unique", { exact: false }),
+  ).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(bPrompt, { exact: true }),
+  ).toHaveCount(0);
 
   const startedTurns = started();
   expect(startedTurns).toHaveLength(3);
@@ -299,15 +326,15 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   }
   await expect(page.getByText(/2 queued/)).toBeVisible();
   await sidebar
-    .getByRole("treeitem", { name: "busy-loss-fifo", exact: true })
+    .locator('[data-workspace-name="busy-loss-fifo"]')
     .getByRole("button", { name: "busy-loss-fifo", exact: true })
     .hover();
   await sidebar
     .getByRole("button", { name: "New session in busy-loss-fifo" })
     .click();
-  await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
-    2,
-  );
+  await expect(
+    sidebar.locator('[role="treeitem"][data-session-id]'),
+  ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));
   await expect(b).toHaveAttribute("aria-current", "page");
@@ -328,7 +355,7 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
     .poll(() => started().map((turn) => turn.text), { timeout: 20_000 })
     .toEqual(["A1-busy-loss", "A2-busy-loss"]);
   await expect(b).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(/A[123]-busy-loss/)).toHaveCount(0);
+  await expect(conversation(page).getByText(/A[123]-busy-loss/)).toHaveCount(0);
   expect(
     recoveredSnapshots.filter(
       (snapshot) =>
@@ -362,9 +389,11 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   await releaseHeldTerminal(request, first.sessionId);
   await a.click();
   for (const prompt of ["A1-busy-loss", "A2-busy-loss", "A3-busy-loss"]) {
-    await expect(page.getByText(prompt, { exact: true })).toHaveCount(1);
+    await expect(
+      conversation(page).getByText(prompt, { exact: true }),
+    ).toHaveCount(1);
   }
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(2);
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(2);
   expect(interrupts()).toBe(0);
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
 });
@@ -391,7 +420,7 @@ test("drains a queued A2 after a released A1 terminal while B stays selected", a
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const sessionA = sessionRowByTitle(sidebar, aTitle);
@@ -412,9 +441,7 @@ test("drains a queued A2 after a released A1 terminal while B stays selected", a
   // Switch to B while A1 is still server-active (terminal held). This is the
   // new persistent-record navigation semantics: allowed even before A1's
   // terminal, and it must not interrupt A1 or drop A2.
-  const workspace = sidebar.locator(
-    '[role="treeitem"][aria-label="' + "queued-fifo-a2" + '"]',
-  );
+  const workspace = sidebar.locator('[data-workspace-name="queued-fifo-a2"]');
   await workspace
     .getByRole("button", { name: "queued-fifo-a2", exact: true })
     .hover();
@@ -448,20 +475,26 @@ test("drains a queued A2 after a released A1 terminal while B stays selected", a
     )
     .toBe(1);
   await expect(sessionB).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(a2Prompt, { exact: true })).toHaveCount(0);
-  await expect(page.getByText("A1-fifo-marker", { exact: false })).toHaveCount(
-    0,
-  );
+  await expect(
+    conversation(page).getByText(a2Prompt, { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    conversation(page).getByText("A1-fifo-marker", { exact: false }),
+  ).toHaveCount(0);
   expect(interrupts()).toBe(0);
 
   // Refocus A: both prompts belong to A, each exactly once.
   await sessionA.click();
   await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("A1-fifo-marker", { exact: false })).toBeVisible({
+  await expect(
+    conversation(page).getByText("A1-fifo-marker", { exact: false }),
+  ).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page.getByText(a2Prompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(2);
+  await expect(
+    conversation(page).getByText(a2Prompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(2);
   const turnsAgainstA = started().filter(
     (turn) => turn.sessionId === a1Start!.sessionId,
   );
@@ -482,7 +515,7 @@ test("keeps per-Session transcripts distinct and restores the pre-reload Session
 
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const sessions = sidebar.getByRole("treeitem", { name: /Session / });
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   await expect(sessions).toHaveCount(1);
   const firstTitle = await selectedSessionTitle(sidebar);
   const firstSession = sessionRowByTitle(sidebar, firstTitle);
@@ -490,14 +523,16 @@ test("keeps per-Session transcripts distinct and restores the pre-reload Session
 
   await composer.fill(firstPrompt);
   await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(COMPLETION_TEXT)).toBeVisible({
+  await expect(
+    conversation(page).getByText(firstPrompt, { exact: true }),
+  ).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toBeVisible({
     timeout: 10_000,
   });
   const turnsAfterFirst = started().length;
 
   const workspace = sidebar.locator(
-    '[role="treeitem"][aria-label="' + "per-session-transcripts" + '"]',
+    '[data-workspace-name="per-session-transcripts"]',
   );
   await workspace
     .getByRole("button", { name: "per-session-transcripts", exact: true })
@@ -507,22 +542,28 @@ test("keeps per-Session transcripts distinct and restores the pre-reload Session
     .click();
   await expect(sessions).toHaveCount(2);
   const secondTitle = await selectedSessionTitle(sidebar);
-  await expect(page.getByText(firstPrompt, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(firstPrompt, { exact: true }),
+  ).toHaveCount(0);
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(0);
 
   await page.reload();
   await expect(sessions).toHaveCount(2);
   await expect(
     sessionRowByTitle(productNavigation(page), secondTitle),
   ).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(firstPrompt, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(0);
+  await expect(
+    conversation(page).getByText(firstPrompt, { exact: true }),
+  ).toHaveCount(0);
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(0);
   await firstSession.click();
   await expect(firstSession).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible({
+  await expect(
+    conversation(page).getByText(firstPrompt, { exact: true }),
+  ).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page.getByText(COMPLETION_TEXT)).toBeVisible();
+  await expect(conversation(page).getByText(COMPLETION_TEXT)).toBeVisible();
   expect(started().length).toBe(turnsAfterFirst);
 });
 
@@ -566,9 +607,9 @@ test("preserves native persisted segment finality across late deltas and the nex
     "/srv/work/native-persisted-stream-order",
   );
   const sidebar = productNavigation(page);
-  await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
-    1,
-  );
+  await expect(
+    sidebar.locator('[role="treeitem"][data-session-id]'),
+  ).toHaveCount(1);
   const aTitle = await selectedSessionTitle(sidebar);
   const a = sessionRowByTitle(sidebar, aTitle);
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
@@ -582,9 +623,7 @@ test("preserves native persisted segment finality across late deltas and the nex
   await page.getByRole("button", { name: "Queue prompt", exact: true }).click();
   await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
   await sidebar
-    .locator(
-      '[role="treeitem"][aria-label="' + "native-persisted-stream-order" + '"]',
-    )
+    .locator('[data-workspace-name="native-persisted-stream-order"]')
     .getByRole("button", { name: "native-persisted-stream-order", exact: true })
     .hover();
   await sidebar
@@ -593,9 +632,9 @@ test("preserves native persisted segment finality across late deltas and the nex
       exact: true,
     })
     .click();
-  await expect(sidebar.getByRole("treeitem", { name: /Session / })).toHaveCount(
-    2,
-  );
+  await expect(
+    sidebar.locator('[role="treeitem"][data-session-id]'),
+  ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
   const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));
   expect(started()).toHaveLength(1);
@@ -611,7 +650,9 @@ test("preserves native persisted segment finality across late deltas and the nex
     .toBe(2);
   await expect(b).toHaveAttribute("aria-current", "page");
   await expect(
-    page.getByText(/STREAM_ORDER|Fixture native persisted-before-delta/),
+    conversation(page).getByText(
+      /STREAM_ORDER|Fixture native persisted-before-delta/,
+    ),
   ).toHaveCount(0);
   expect(started().map((turn) => [turn.sessionId, turn.text])).toEqual([
     [source.sessionId, firstPrompt],
@@ -694,7 +735,9 @@ test("preserves native persisted segment finality across late deltas and the nex
     ]);
   await expect.soft(page.locator(".timeline .running-label")).toHaveCount(0);
   for (const prompt of [firstPrompt, secondPrompt])
-    await expect(page.getByText(prompt, { exact: true })).toHaveCount(1);
+    await expect(
+      conversation(page).getByText(prompt, { exact: true }),
+    ).toHaveCount(1);
   expect(started()).toHaveLength(2);
   expect(interrupts()).toBe(0);
 });

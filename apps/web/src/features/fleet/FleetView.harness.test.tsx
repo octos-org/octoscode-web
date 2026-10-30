@@ -219,7 +219,7 @@ beforeEach(() => {
 describe("navigation descriptor", () => {
   it("exports label, icon and route key for the strip owner to mount", () => {
     expect(fleetNavigationEntry).toMatchObject({
-      label: "Fleet",
+      label: "Agents",
       routeKey: "fleet",
     });
     expect(typeof fleetNavigationEntry.icon).toBe("string");

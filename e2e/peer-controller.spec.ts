@@ -272,13 +272,10 @@ test.describe("Fleet view (migrated console semantics)", () => {
       .getByRole("button", { name: "New session in peer-control-nav" })
       .click();
     await expect(
-      sidebar.getByRole("treeitem", { name: /Session / }),
+      sidebar.locator('[role="treeitem"][data-session-id]'),
     ).toHaveCount(2);
     await openFleet(page);
-    await sidebar
-      .getByRole("treeitem", { name: /Session / })
-      .first()
-      .click();
+    await sidebar.locator('[role="treeitem"][data-session-id]').first().click();
     await expect(page.locator("section.conversation")).toBeVisible();
     await expect(composer(page)).toBeEnabled();
     await expect(fleet(page)).toBeHidden();
@@ -304,7 +301,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await expect(composer(page)).toBeEnabled();
     await expect(fleet(page)).toBeHidden();
     await expect(
-      sidebar.getByRole("treeitem", { name: /Session / }),
+      sidebar.locator('[role="treeitem"][data-session-id]'),
     ).toHaveCount(2);
   });
 

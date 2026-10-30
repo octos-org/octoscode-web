@@ -17,7 +17,7 @@ import {
   type ProductSidebarSession,
   type ProductSidebarWorkspace,
 } from "./ProductSidebar.tsx";
-import { useUiText, type UiText } from "../preferences/ui-text.tsx";
+import { useUiText } from "../preferences/ui-text.tsx";
 import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
@@ -38,6 +38,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
     profileId: string;
     sessionId: string;
     state: "running" | "waiting" | "completed" | "failed";
+    firstPrompt: string | null;
   }[];
   hasPendingInteraction: boolean;
   recoveryPhase: string | null;
@@ -77,6 +78,12 @@ export function SessionSidebar({
       entry.status === "error" &&
       entry.turnId === terminal?.turnId,
   );
+  const activePromptTitle = useMemo(() => {
+    const firstPrompt = timeline.find(
+      (entry) => entry.kind === "user" && entry.body.trim(),
+    )?.body;
+    return firstPrompt ? sessionTitleFromPrompt(firstPrompt) : null;
+  }, [timeline]);
   const workspaces = useMemo(() => {
     let activeStatus: Pick<ProductSidebarSession, "status" | "statusLabel"> =
       {};
@@ -137,12 +144,29 @@ export function SessionSidebar({
         knownSessions.filter((item) => item.workspaceRoot === workspace.path),
         catalog?.sessions ?? [],
       )
-        .map((item) => ({
-          sessionId: item.sessionId,
-          profileId: item.profileId,
-          title: item.title ?? knownSessionTitle(item.sessionId, t),
-          updatedAt: item.updatedAt,
-        }))
+        .map((item) => {
+          const productId = workspaceSessionKey(
+            workspace.path,
+            item.profileId,
+            item.sessionId,
+          );
+          const selected = productId === selectedSessionId;
+          const backgroundPrompt =
+            backgroundBySession.get(productId)?.firstPrompt;
+          return {
+            sessionId: item.sessionId,
+            profileId: item.profileId,
+            title:
+              item.title ??
+              (selected
+                ? activePromptTitle
+                : backgroundPrompt
+                  ? sessionTitleFromPrompt(backgroundPrompt)
+                  : null) ??
+              t("New session"),
+            updatedAt: item.updatedAt,
+          };
+        })
         .filter((item) => !peerSessionIds.has(item.sessionId));
       if (
         isActiveWorkspace &&
@@ -157,7 +181,7 @@ export function SessionSidebar({
         sourceSessions.unshift({
           sessionId: opened.session_id,
           profileId: opened.active_profile_id ?? "",
-          title: knownSessionTitle(opened.session_id, t),
+          title: activePromptTitle ?? t("New session"),
           updatedAt: Date.now(),
         });
       }
@@ -216,6 +240,7 @@ export function SessionSidebar({
     backgroundTurns,
     opened,
     terminal,
+    activePromptTitle,
     openingSessionId,
     peerRoster,
     t,
@@ -268,10 +293,12 @@ function knownSessionWorkspaces(
   return [...projected.values()];
 }
 
-function knownSessionTitle(sessionId: string, t: UiText): string {
-  const wireLeaf = sessionId.split(":").at(-1)?.trim() || sessionId.trim();
-  const compact = wireLeaf.length > 10 ? wireLeaf.slice(-8) : wireLeaf;
-  return t("Session {id}", { id: compact || t("unknown") });
+function sessionTitleFromPrompt(prompt: string): string {
+  const firstLine = prompt.trim().split(/\r?\n/, 1)[0]!.trim();
+  const characters = Array.from(firstLine);
+  return characters.length > 48
+    ? `${characters.slice(0, 48).join("").trimEnd()}…`
+    : firstLine;
 }
 
 function backgroundSessionStatus(

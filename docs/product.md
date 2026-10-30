@@ -34,7 +34,7 @@ server does in the chosen folder.
 | Area          | Current behavior                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.       |
-| Start         | Empty Session home: code/office templates fill the composer (never sent, never raise permission); last-Session link.            |
+| Start         | Empty Session home: code/general templates fill the composer (never sent, never raise permission); last-Session link.           |
 | Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.         |
 | Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback. |
 | Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown.     |
