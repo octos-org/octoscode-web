@@ -30,6 +30,20 @@ const memoryRecords = new Map([
     },
   ],
 ]);
+const cronJobs = [
+  {
+    id: "cron-1",
+    name: "Queue check",
+    enabled: false,
+    schedule: { every_ms: 1800000 },
+    message: "check the queue",
+    channel: "system",
+    last_run: null,
+    last_status: null,
+    next_in: "30m",
+    timezone: "UTC",
+  },
+];
 function sessionState(sessionId) {
   let state = sessionStateBySessionId.get(sessionId);
   if (!state) {
@@ -2671,6 +2685,9 @@ const baseCapabilities = {
     "memory/search",
     "memory/load",
     "memory/ingest",
+    "mcp/status/list",
+    "cron/list",
+    "cron/toggle",
     "session/list",
     "session/delete",
     "session/files.list",
@@ -5157,6 +5174,51 @@ sockets.on("connection", (socket, request) => {
         encoding: "base64",
         content_base64: bytes.toString("base64"),
       });
+      return;
+    }
+    if (request.method === "mcp/status/list") {
+      reply(socket, request.id, {
+        session_id: sessionId,
+        profile_id: request.params.profile_id,
+        servers: [
+          {
+            id: "docs",
+            display_name: "Documentation MCP",
+            transport: "stdio",
+            status: "connected",
+            tool_count: 2,
+            tools: ["search", "read"],
+          },
+          {
+            id: "legacy",
+            transport: "http",
+            status: "failed",
+            tool_count: 0,
+            tools: [],
+            error: "connection refused",
+          },
+        ],
+        summary: { connected: 1, connecting: 0, failed: 1, disabled: 0 },
+      });
+      return;
+    }
+    if (request.method === "cron/list") {
+      reply(socket, request.id, {
+        jobs: cronJobs,
+        count: cronJobs.length,
+        gateway_running: false,
+        truncated: false,
+      });
+      return;
+    }
+    if (request.method === "cron/toggle") {
+      const job = cronJobs.find((entry) => entry.id === request.params.job_id);
+      if (!job) {
+        replyError(socket, request.id, -32_170, "Cron job not found");
+        return;
+      }
+      job.enabled = request.params.enabled === true;
+      reply(socket, request.id, { job });
       return;
     }
     if (request.method === "session/files.list") {

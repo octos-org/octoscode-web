@@ -32,6 +32,23 @@ export function MemoryIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function ConnectorsIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M5 3H3v10h2M11 3h2v10h-2M5 8h6M8 5v6" />
+    </svg>
+  );
+}
+
+export function CronIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 5v3l2 1.5" />
+    </svg>
+  );
+}
+
 export function ModelsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>

@@ -1726,6 +1726,34 @@ const catalog: Readonly<Record<string, string>> = {
   "Page {page} of {count}": "第 {page} 页，共 {count} 页",
   "Page {page} of {name}": "{name} · 第 {page} 页",
 
+  // Connectors and scheduled tasks (T-0025).
+  Tools: "工具",
+  Connectors: "连接器",
+  "Read-only MCP server status for this Session.":
+    "此会话的 MCP 服务器状态（只读）。",
+  "Add, remove, edit, and OAuth are unavailable in the current protocol.":
+    "当前协议不支持添加、删除、编辑或 OAuth。",
+  "{connected} connected · {connecting} connecting · {failed} failed · {disabled} disabled":
+    "已连接 {connected} · 连接中 {connecting} · 失败 {failed} · 已停用 {disabled}",
+  "No MCP servers are configured for this Session.":
+    "此会话未配置 MCP 服务器。",
+  "Scheduled tasks": "定时任务",
+  "Existing cron jobs for this server Profile.":
+    "此服务器配置文件中的已有定时任务。",
+  "New scheduled tasks are unavailable until cron/create lands (T-0014).":
+    "新建定时任务需等待 cron/create（T-0014）实现。",
+  "The gateway owns cron writes. Stop it before enabling or disabling a job.":
+    "网关正在管理定时任务，请先停止网关再启用或停用任务。",
+  "This server exposes cron jobs read-only.":
+    "此服务器仅支持只读查看定时任务。",
+  "No scheduled tasks yet.": "暂无定时任务。",
+  Enabled: "已启用",
+  Disabled: "已停用",
+  "No channel": "无频道",
+  "No next run": "无下次运行",
+  "Schedule and status": "调度与状态",
+  "Only the first jobs are shown.": "仅显示部分任务。",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
 

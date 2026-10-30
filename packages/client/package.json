@@ -15,6 +15,7 @@
     "./skills": "./src/skills.ts",
     "./skill-actions": "./src/skill-actions.ts",
     "./research": "./src/research.ts",
+    "./cron": "./src/cron.ts",
     "./media": "./src/media.ts",
     "./memory": "./src/memory.ts",
     "./peers": "./src/peers.ts",

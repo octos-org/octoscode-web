@@ -45,6 +45,8 @@ server does in the chosen folder.
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
 | Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.            |
 | Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.     |
+| Connectors    | Read-only MCP server status; no add/remove/edit or OAuth controls.                                                          |
+| Scheduled     | Existing cron job list and capability-gated enable/disable; no cron creation.                                               |
 | Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                        |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.  |
@@ -67,6 +69,10 @@ with scripts, forms, external requests, and credential access disabled. DOCX,
 XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
 File bytes come from the authenticated Session blob API, and copy-path/download
 controls never put the server token in a URL.
+
+Connector and scheduled-task surfaces are intentionally incomplete by protocol:
+there is no connector configuration/OAuth flow and no `cron/create`. The UI does
+not describe either surface as full management.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

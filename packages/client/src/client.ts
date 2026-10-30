@@ -299,6 +299,11 @@ export class OctosUiClient {
     return createMemoryCommands(this.invoke, capabilities);
   }
 
+  async cronCommands(capabilities: UiProtocolCapabilities) {
+    const { createCronCommands } = await import("./cron.ts");
+    return createCronCommands(this.invoke, capabilities);
+  }
+
   async researchCommands(
     profileId: string,
     capabilities: UiProtocolCapabilities,

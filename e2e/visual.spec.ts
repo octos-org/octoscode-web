@@ -132,6 +132,36 @@ test("skills settings matches baseline", async ({ page }) => {
   await expect(settings).toHaveScreenshot("settings-skills.png", SNAPSHOT);
 });
 
+test("connectors settings matches baseline", async ({ page }) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings
+    .getByRole("button", { name: "Connectors", exact: true })
+    .click();
+  await expect(settings.getByText("Documentation MCP")).toBeVisible();
+  await expect(settings).toHaveScreenshot("settings-connectors.png", SNAPSHOT);
+});
+
+test("scheduled tasks settings matches baseline", async ({ page }) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings
+    .getByRole("button", { name: "Scheduled tasks", exact: true })
+    .click();
+  await expect(settings.getByText("Queue check")).toBeVisible();
+  await expect(settings).toHaveScreenshot("settings-scheduled.png", SNAPSHOT);
+});
+
 test("memory settings matches baseline", async ({ page }) => {
   await connect(page, "memory-e2e-token");
   await startDefaultWorkspace(page);
