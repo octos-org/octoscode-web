@@ -82,12 +82,7 @@ export interface ModelControlLabels {
 }
 
 export type SettingsSectionId =
-  | "general"
-  | "models"
-  | "skills"
-  | "memory"
-  | "connectors"
-  | "scheduled";
+  "general" | "models" | "skills" | "memory" | "connectors" | "scheduled";
 
 export interface SettingsLabels {
   title: string;
