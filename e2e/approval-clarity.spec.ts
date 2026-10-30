@@ -33,9 +33,9 @@ async function prepareDeniedWrite(page: Page) {
     .click();
   await page.getByRole("menuitemradio", { name: /^Read/ }).click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Session settings" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("dialog", { name: "Session settings" }),
+  ).toHaveCount(0);
   await page.reload();
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
