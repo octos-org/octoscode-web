@@ -817,7 +817,7 @@ describe("streaming lifecycle regressions", () => {
     });
     const completed = entries;
     expect(entries.at(-1)).toMatchObject({
-      id: "tool:missing-start",
+      id: "tool:turn-1:missing-start",
       kind: "tool",
       title: "Tool output",
       body: "Durable tool result",
@@ -855,7 +855,7 @@ describe("streaming lifecycle regressions", () => {
       message: "Background stage finished",
     });
     expect(
-      entries.find((entry) => entry.id === "tool:continuing"),
+      entries.find((entry) => entry.id === "tool:turn-1:continuing"),
     ).toMatchObject({
       body: "Background stage finished",
       status: "info",
@@ -979,9 +979,9 @@ describe("hydrated tool presentation", () => {
     const result = timelineFromHydrate(freeze(hydrate));
     const tools = result.filter((entry) => entry.kind === "tool");
     expect(tools.map((entry) => entry.id)).toEqual([
-      "tool:read-call",
-      "tool:pwd-call",
-      "tool:status-call",
+      "tool:turn-1:read-call",
+      "tool:turn-1:pwd-call",
+      "tool:turn-1:status-call",
     ]);
     expect(tools.map((entry) => entry.body).sort()).toEqual(
       durable.map((message) => message.content).sort(),
@@ -1038,19 +1038,19 @@ describe("hydrated tool presentation", () => {
       const result = timelineFromHydrate(freeze(hydrate));
       const identified = result.filter((entry) => entry.id.startsWith("tool:"));
       expect(identified.map((entry) => entry.id)).toEqual([
-        "tool:status-call",
-        "tool:pwd-call",
+        "tool:turn-1:status-call",
+        "tool:turn-1:pwd-call",
       ]);
       if (boundary === "raw tool" || boundary === "reasoning") {
         expect(
           result.findIndex((entry) => entry.messageId === "boundary"),
         ).toBeGreaterThan(
-          result.findIndex((entry) => entry.id === "tool:status-call"),
+          result.findIndex((entry) => entry.id === "tool:turn-1:status-call"),
         );
         expect(
           result.findIndex((entry) => entry.messageId === "boundary"),
         ).toBeLessThan(
-          result.findIndex((entry) => entry.id === "tool:pwd-call"),
+          result.findIndex((entry) => entry.id === "tool:turn-1:pwd-call"),
         );
       }
     },
@@ -1100,14 +1100,14 @@ describe("hydrated tool presentation", () => {
     ]);
     expect(result.slice(1, 3)).toMatchObject([
       {
-        id: "tool:pwd-call",
+        id: "tool:turn-1:pwd-call",
         title: "bash",
         body: "/workspace/project",
         messageId: "pwd-message",
         turnId: "turn-1",
       },
       {
-        id: "tool:status-call",
+        id: "tool:turn-1:status-call",
         title: "bash",
         body: "## main\nNothing to commit",
         messageId: "status-message",
@@ -1160,7 +1160,7 @@ describe("hydrated tool presentation", () => {
       turnId: "explicit-other-turn",
     });
     expect(tools[1]).toMatchObject({
-      id: "tool:status-call",
+      id: "tool:turn-1:status-call",
       messageId: "status-message",
     });
   });
@@ -1229,7 +1229,7 @@ describe("hydrated tool presentation", () => {
       );
       expect(tools).toHaveLength(2);
       expect(tools[0]).toMatchObject({
-        id: "tool:pwd-call",
+        id: "tool:turn-1:pwd-call",
         messageId: "pwd-message",
         body: output,
       });
@@ -1337,7 +1337,7 @@ describe("hydrated tool presentation", () => {
     });
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      id: "tool:read-1",
+      id: "tool:turn-1:read-1",
       kind: "tool",
       title: "read_file",
       body: output,
@@ -1795,5 +1795,211 @@ describe("delivered attachments", () => {
     });
     expect(entries[0]?.body).toBe("shown to model\n\nAttachment: /w/shot.png");
     expect(entries[0]).not.toHaveProperty("media");
+  });
+
+  it("keeps an explicit write_file path after the tool result replaces its arguments", () => {
+    const notification = (
+      type: string,
+      data: Record<string, unknown>,
+      seq: number,
+    ) => ({
+      jsonrpc: "2.0" as const,
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq,
+        payload: { type, data },
+      },
+    });
+    const started = foldNotification(
+      [],
+      notification(
+        "tool_start",
+        {
+          tool_call_id: "write-report",
+          name: "write_file",
+          write_path: "report.md",
+          arguments_preview: '{"content":"# Report"}',
+        },
+        1,
+      ),
+    );
+    const completed = foldNotification(
+      started,
+      notification(
+        "tool_end",
+        {
+          tool_call_id: "write-report",
+          status: "complete",
+          output_preview: "Successfully wrote report.md",
+        },
+        2,
+      ),
+    );
+    const full = foldNotification([], {
+      jsonrpc: "2.0",
+      method: "tool/started",
+      params: {
+        turn_id: "turn-1",
+        tool_call_id: "write-large",
+        tool_name: "write_file",
+        arguments: { content: "x".repeat(2_000), path: "report.md" },
+      },
+    });
+    const hydrated = foldNotification(
+      full,
+      notification(
+        "tool_start",
+        { tool_call_id: "write-large", name: "write_file" },
+        3,
+      ),
+    );
+    expect(hydrated[0]?.artifactPath).toBe("report.md");
+    expect(completed[0]).toMatchObject({
+      status: "complete",
+      artifactPath: "report.md",
+      body: "Successfully wrote report.md",
+    });
+  });
+
+  it("preserves an explicit tool path when hydrate truncates its preview", () => {
+    const previous = [
+      {
+        id: "tool:turn-1:write-large",
+        kind: "tool" as const,
+        title: "write_file",
+        body: "full arguments",
+        status: "complete" as const,
+        artifactPath: "report.md",
+      },
+    ];
+    const entries = timelineFromHydrate(
+      {
+        session_id: "coding:local:main",
+        cursor: { stream: "coding:local:main", seq: 1 },
+        replayed_projection_envelopes: [
+          {
+            session_id: "coding:local:main",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            seq: 1,
+            payload: {
+              type: "tool_start",
+              data: {
+                tool_call_id: "write-large",
+                name: "write_file",
+                arguments_preview: 'content: "truncated…',
+              },
+            },
+          },
+        ],
+      },
+      { previous },
+    );
+    expect(entries[0]?.artifactPath).toBe("report.md");
+  });
+
+  it("keeps old-Core replay path-free when write_path is absent", () => {
+    const entries = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      replayed_projection_envelopes: [
+        {
+          session_id: "coding:local:main",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          seq: 1,
+          payload: {
+            type: "tool_start",
+            data: {
+              tool_call_id: "old-core-write",
+              name: "write_file",
+              arguments_preview: '{"path":"report.md","content":"# Report"}',
+            },
+          },
+        },
+      ],
+    });
+    expect(entries[0]?.artifactPath).toBeUndefined();
+  });
+
+  it("retains authoritative delivered file sizes from file_attached", () => {
+    const entries = foldNotification([], {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: {
+          type: "file_attached",
+          data: {
+            path: "/work/report.pdf",
+            mime: "application/pdf",
+            size_bytes: 123,
+            attachment_owner: { assistant_segment_id: "segment-1" },
+          },
+        },
+      },
+    });
+    expect(entries[0]?.media).toBeUndefined();
+    expect(entries[0]?.attachmentSizes).toEqual({ "/work/report.pdf": 123 });
+  });
+
+  it("keeps same-basename attachment sizes distinct", () => {
+    const attached = (path: string, seq: number) => ({
+      jsonrpc: "2.0" as const,
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq,
+        payload: {
+          type: "file_attached",
+          data: {
+            path,
+            mime: "application/pdf",
+            size_bytes: seq * 100,
+            attachment_owner: { assistant_segment_id: "segment-1" },
+          },
+        },
+      },
+    });
+    const first = foldNotification([], attached("/work/a/result.pdf", 1));
+    const entries = foldNotification(first, attached("/work/b/result.pdf", 2));
+    expect(entries).toHaveLength(2);
+    expect(entries.map((entry) => entry.attachmentSizes)).toEqual([
+      { "/work/a/result.pdf": 100 },
+      { "/work/b/result.pdf": 200 },
+    ]);
+  });
+
+  it("retains uploaded sizes through canonical user upsert", () => {
+    const media = [
+      {
+        path: "up/coding/image.png/image.png",
+        mime: "image/png",
+        size_bytes: 42,
+      },
+    ];
+    const optimistic = addOptimisticUser([], "turn-1", "Inspect", media);
+    const entries = foldNotification(optimistic, {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: { type: "user_message", data: { text: "Inspect" } },
+      },
+    });
+    expect(entries[0]?.attachmentSizes).toEqual({
+      "up/coding/image.png/image.png": 42,
+    });
   });
 });

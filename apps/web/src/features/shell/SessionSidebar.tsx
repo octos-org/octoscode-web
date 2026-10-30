@@ -18,8 +18,10 @@ import {
   type ProductSidebarWorkspace,
 } from "./ProductSidebar.tsx";
 import { useUiText, type UiText } from "../preferences/ui-text.tsx";
+import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
+  peerRoster?: readonly PeerRosterEntry[] | undefined;
   recentWorkspaces: readonly RecentWorkspace[];
   knownSessions: readonly KnownSessionRef[];
   /**
@@ -47,6 +49,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
 
 /** Session rows are presentation of server-confirmed references in this tab. */
 export function SessionSidebar({
+  peerRoster,
   recentWorkspaces,
   knownSessions,
   sessionCatalog,
@@ -67,6 +70,12 @@ export function SessionSidebar({
   const terminal = useMemo(
     () => timeline.findLast((entry) => entry.latestTurnOutcome),
     [timeline],
+  );
+  const failedSteps = timeline.some(
+    (entry) =>
+      entry.kind === "tool" &&
+      entry.status === "error" &&
+      entry.turnId === terminal?.turnId,
   );
   const workspaces = useMemo(() => {
     let activeStatus: Pick<ProductSidebarSession, "status" | "statusLabel"> =
@@ -89,10 +98,16 @@ export function SessionSidebar({
     } else if (terminal) {
       activeStatus = {
         status:
-          terminal.latestTurnOutcome === "completed" ? "completed" : "failed",
+          terminal.latestTurnOutcome === "completed"
+            ? failedSteps
+              ? "attention"
+              : "completed"
+            : "failed",
         statusLabel:
           terminal.latestTurnOutcome === "completed"
-            ? "Completed"
+            ? failedSteps
+              ? t("Completed with failed steps")
+              : t("Completed")
             : terminal.latestTurnOutcome === "interrupted"
               ? "Stopped"
               : "Failed",
@@ -103,6 +118,9 @@ export function SessionSidebar({
         workspaceSessionKey(turn.workspaceRoot, turn.profileId, turn.sessionId),
         turn,
       ]),
+    );
+    const peerSessionIds = new Set(
+      (peerRoster ?? []).map((peer) => peer.identity),
     );
     const workspaces = knownSessionWorkspaces(
       recentWorkspaces,
@@ -118,15 +136,18 @@ export function SessionSidebar({
       const sourceSessions = mergeWorkspaceSessionRows(
         knownSessions.filter((item) => item.workspaceRoot === workspace.path),
         catalog?.sessions ?? [],
-      ).map((item) => ({
-        sessionId: item.sessionId,
-        profileId: item.profileId,
-        title: item.title ?? knownSessionTitle(item.sessionId, t),
-        updatedAt: item.updatedAt,
-      }));
+      )
+        .map((item) => ({
+          sessionId: item.sessionId,
+          profileId: item.profileId,
+          title: item.title ?? knownSessionTitle(item.sessionId, t),
+          updatedAt: item.updatedAt,
+        }))
+        .filter((item) => !peerSessionIds.has(item.sessionId));
       if (
         isActiveWorkspace &&
         opened &&
+        !peerSessionIds.has(opened.session_id) &&
         !sourceSessions.some(
           (item) =>
             item.sessionId === opened?.session_id &&
@@ -196,6 +217,7 @@ export function SessionSidebar({
     opened,
     terminal,
     openingSessionId,
+    peerRoster,
     t,
   ]);
 
@@ -203,6 +225,7 @@ export function SessionSidebar({
     <ProductSidebar
       {...sidebarProps}
       selectedSessionId={selectedSessionId}
+      peerRoster={peerRoster}
       workspaces={workspaces}
     />
   );

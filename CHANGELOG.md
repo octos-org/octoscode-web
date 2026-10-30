@@ -6,6 +6,9 @@
   monitors, and agents. Reuse the session-scoped autonomy controller for
   controls and live updates, hide the tab on unsupported connections, and show
   the remaining goal-ledger and monitor-sandbox limitations.
+- Support plain-http LAN origins by generating UUIDs through a shared
+  `crypto.randomUUID`/`getRandomValues` fallback, guarded by an oxlint rule.
+  Associate provider, model, and route selects with labels in first-run setup.
 - Keep approval and question takeovers inside the viewport without scrolling the
   workspace header out of view. Preserve compact-header button spacing on
   phones, and cover all three audit viewports with layout, axe, and full-page
@@ -19,6 +22,28 @@
   search/result details, and an optional Remember-this ingest form. Request and
   Promote controls appear only when the server advertises those methods, and the
   page explicitly notes that edit/delete are not available in the protocol.
+- Add a reusable, localized artifact preview for delivered files, supervised
+  task artifacts, and explicit write/edit-file results. PDF, CSV, images,
+  HTML/SVG, Markdown, code, and plain text render inline; DOCX, XLSX, PPTX, and
+  other unsupported or oversized files retain a clear download path. Path copy
+  and download actions sit beside the preview. File cards retain the extension
+  and show a type icon and server-reported size when available.
+- Parse CSV in a bounded, on-demand worker and render one PDF page at a time.
+  HTML/SVG frames use an opaque-origin, script-free offline sandbox without
+  weakening the application CSP. Include browser, component, security, and axe
+  coverage for the new surface.
+- Add read-only MCP connector status and existing cron job controls to Settings.
+  Cron jobs can be enabled/disabled only when the server permits it;
+  add/remove/edit/OAuth and cron creation remain explicitly unavailable.
+- Replace first-run developer fields with a two-step model setup: domestic
+  provider recommendations, generated identity under Advanced, custom
+  OpenAI-compatible endpoints, and a folder-first workspace picker.
+- Clarify approval actions with directory/network/deletion impact and localized
+  risk labels; use Deny / Allow for this session / Allow once while retaining
+  shortcuts. Permission-denied tools can switch to workspace-write and retry.
+- Make execution legible: human-readable tool titles with raw names in details,
+  per-turn duration/file/token summaries, expanded failure reasons and amber
+  sidebar attention, plus streaming Markdown without raw incomplete markers.
 
 ## v0.20.0 — 2026-10-29
 

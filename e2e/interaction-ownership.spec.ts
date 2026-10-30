@@ -27,12 +27,14 @@ function productNavigation(page: Page): Locator {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .locator('[class*="sessionTitle"]')
     .textContent();
   if (!title) throw new Error("Expected a selected Session title");
@@ -203,7 +205,9 @@ async function createSiblingSession(
     .locator(`button[aria-label="New session in ${workspaceName}"]`)
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"]').filter({ hasText: /Session / }),
+    sidebar
+      .locator('[role="treeitem"][data-session-id]')
+      .filter({ hasText: /Session / }),
   ).toHaveCount(2);
   return selectedSessionTitle(sidebar);
 }
@@ -222,7 +226,9 @@ async function createSiblingSessionExpecting(
     .locator(`button[aria-label="New session in ${workspaceName}"]`)
     .click();
   await expect(
-    sidebar.locator('button[role="treeitem"]').filter({ hasText: /Session / }),
+    sidebar
+      .locator('[role="treeitem"][data-session-id]')
+      .filter({ hasText: /Session / }),
   ).toHaveCount(expectedCount);
   return selectedSessionTitle(sidebar);
 }
@@ -471,7 +477,7 @@ for (const kind of ["approval", "question"] as const) {
     ).toHaveLength(0);
 
     if (kind === "approval")
-      await ownerDialog.getByRole("button", { name: /Yes/ }).click();
+      await ownerDialog.getByRole("button", { name: /Allow once/ }).click();
     else {
       await ownerDialog.getByLabel(/Full/).check();
       await ownerDialog.getByRole("button", { name: "Continue" }).click();
@@ -564,7 +570,7 @@ test("responds to a parked approval from the owning Session with exact ids", asy
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toBeVisible({
     timeout: 10_000,
   });
-  await approvalDialog.getByRole("button", { name: /Yes/ }).click();
+  await approvalDialog.getByRole("button", { name: /Allow once/ }).click();
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );

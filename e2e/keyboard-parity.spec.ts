@@ -36,7 +36,7 @@ const palette = (page: Page) => page.locator(".command-palette");
 const productNavigation = (page: Page) =>
   page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
-  productNavigation(page).locator('button[role="treeitem"]');
+  productNavigation(page).locator('[role="treeitem"][data-session-id]');
 /** v0.10.0's sidebar is an aria-activedescendant TREE: the container owns the
  *  single tab stop and the items carry tabindex=-1, so "keyboard order" is the
  *  tree's roving order, not the document tab order. */
@@ -325,9 +325,6 @@ const dockRowButtons = (page: Page) =>
 /** The ApprovalPanel surface: ModalSurface keys the dialog by this label. */
 const approvalSurface = (page: Page) =>
   page.locator('[aria-labelledby="approval-title"]');
-/** This fixture does not advertise peer control, so Alt+D targets its notice. */
-const fleetUnavailable = (page: Page) =>
-  page.locator('[data-fleet-start-unavailable="true"]');
 /** The sidebar's Fleet footer entry (ProductSidebar.tsx:780). */
 const fleetEntry = (page: Page) =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
@@ -376,10 +373,10 @@ test("Alt+A focuses the pending approval panel and announces when none waits", a
   await expect(approvalSurface(page)).toBeFocused();
 });
 
-test("Alt+D focuses Fleet's capability notice; suppressed inside inputs", async ({
+test("Alt+D stays closed without Fleet capability; suppressed inside inputs", async ({
   page,
 }) => {
-  await connectAndStartWorkspace(page, "keyboard-fleet");
+  await connectAndStartWorkspace(page, "peer-control-no-fleet");
 
   // §8 suppression half: focus inside the composer's textarea (a text input)
   // must NOT fire — no focus steal, the chat view stays mounted (routed Fleet
@@ -399,24 +396,19 @@ test("Alt+D focuses Fleet's capability notice; suppressed inside inputs", async 
   await expect(composer(page)).toBeFocused();
   await expect(fleetWrapper).toBeHidden();
 
-  // This Core lacks peer-control capability. The shortcut focuses the reason
-  // starting is unavailable; it must not expose an unusable Start form.
+  // This Core lacks peer-control capability. The sidebar explains why Fleet is
+  // unavailable and the shortcut does not open an empty page or steal focus.
   await focusOutsideTextEntry(page);
   await page.keyboard.press("Alt+KeyD");
-  await expect(fleetWrapper).toBeVisible();
-  await expect(fleetUnavailable(page)).toHaveText(
-    "This server does not support starting peers",
-  );
-  await expect(fleetUnavailable(page)).toBeFocused();
-  await expect(page.locator('[data-fleet-form="start"]')).toHaveCount(0);
-  await expect(fleetEntry(page)).toHaveAttribute("aria-current", "page");
-  await expect(page.locator('[data-fleet-back="true"]')).toBeVisible();
-
-  // §8 dialog half: an open dialog (the pane) suppresses the chord too. The
-  // pane's trigger lives on the CHAT pane's status strip, which is hidden while
-  // Fleet is routed — so leave Fleet through its own Back affordance first.
-  await page.locator('[data-fleet-back="true"]').press("Enter");
   await expect(fleetWrapper).toBeHidden();
+  await expect(fleetEntry(page)).toBeDisabled();
+  await expect(
+    productNavigation(page).getByText(
+      "Current server does not support Fleet yet",
+    ),
+  ).toBeVisible();
+
+  // §8 dialog half: an open dialog (the pane) suppresses the chord too.
   await page.getByRole("button", { name: /Session settings/ }).click();
   const pane = page.getByRole("dialog", {
     name: /Session settings/,

@@ -186,6 +186,77 @@ describe("canonical hydrate recovery", () => {
     ).toEqual(["A question", "B question", "A answer", "B answer"]);
   });
 
+  it("keeps same-id tool retries, attachments, and terminals in their own turns", () => {
+    const retry = (seq: number, type: string, data: unknown) =>
+      event(seq, type, data, {
+        thread_id: "thread-retry",
+        turn_id: "turn-retry",
+        cursor: { stream: "s", seq: seq + 5 },
+      });
+    const events = [
+      event(1, "user_message", { text: "First attempt" }),
+      event(2, "tool_start", {
+        tool_call_id: "shared-call",
+        name: "write_file",
+      }),
+      event(3, "tool_end", {
+        tool_call_id: "shared-call",
+        status: "error",
+        error: "denied",
+      }),
+      event(4, "file_attached", {
+        path: "first.md",
+        mime: "text/markdown",
+        size_bytes: 1,
+        attachment_owner: {
+          assistant_segment_id: null,
+          tool_call_id: "shared-call",
+        },
+      }),
+      event(5, "turn_terminal", { outcome: "completed" }),
+      retry(1, "user_message", { text: "Retry with permission" }),
+      retry(2, "tool_start", {
+        tool_call_id: "shared-call",
+        name: "write_file",
+      }),
+      retry(3, "tool_end", {
+        tool_call_id: "shared-call",
+        status: "complete",
+        output_preview: "written",
+      }),
+      retry(4, "file_attached", {
+        path: "second.md",
+        mime: "text/markdown",
+        size_bytes: 2,
+        attachment_owner: {
+          assistant_segment_id: null,
+          tool_call_id: "shared-call",
+        },
+      }),
+      retry(5, "turn_terminal", { outcome: "completed" }),
+    ];
+    const restored = timelineFromHydrate(
+      snapshot(events, {
+        projection_thread_sequences: { thread: 5, "thread-retry": 5 },
+      }),
+    );
+    expect(
+      restored.map((entry) => [entry.kind, entry.body, entry.turnId]),
+    ).toEqual([
+      ["user", "First attempt", "turn"],
+      ["tool", "denied", "turn"],
+      ["system", "first.md", "turn"],
+      ["system", "", "turn"],
+      ["user", "Retry with permission", "turn-retry"],
+      ["tool", "written", "turn-retry"],
+      ["system", "second.md", "turn-retry"],
+      ["system", "", "turn-retry"],
+    ]);
+    expect(new Set(restored.map((entry) => entry.id)).size).toBe(
+      restored.length,
+    );
+  });
+
   it("places an unpersisted foreground question before an interleaved durable background completion", () => {
     const background = event(
       1,

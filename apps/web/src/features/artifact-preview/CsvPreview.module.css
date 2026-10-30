@@ -1,0 +1,169 @@
+.pages,
+.sheetToolbar,
+.rowPages {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dsw-space-3);
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.pages {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.pages button,
+.rowPages button {
+  min-height: 28px;
+  padding: 0 var(--dsw-space-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: var(--dsw-font-size-micro);
+}
+
+.pages button:hover:not(:disabled),
+.rowPages button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pages button:disabled,
+.rowPages button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-micro);
+  text-wrap: pretty;
+}
+
+.workbook {
+  min-width: 0;
+}
+
+.sheetToolbar {
+  justify-content: space-between;
+}
+
+.sheetToolbar label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--dsw-space-2);
+}
+
+.sheetToolbar select {
+  max-width: min(320px, 50vw);
+  min-height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.tableScroll {
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.tableScroll table {
+  border-collapse: collapse;
+  color: var(--dsw-alias-label-secondary);
+  font: 400 12px/1.5 var(--dsw-font-family);
+  font-variant-numeric: tabular-nums;
+}
+
+.tableScroll th,
+.tableScroll td {
+  max-width: 320px;
+  min-width: 80px;
+  height: 32px;
+  padding: var(--dsw-space-1) var(--dsw-space-2);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tableScroll thead th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  min-width: 80px;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+  text-align: center;
+}
+
+.tableScroll tbody th {
+  position: sticky;
+  left: 0;
+  min-width: 52px;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+  text-align: right;
+}
+
+.tableScroll thead th:first-child {
+  z-index: 2;
+  left: 0;
+  min-width: 52px;
+}
+
+.tableScroll tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
+
+.rowPages {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 0;
+}
+
+.message {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  padding: var(--dsw-space-5);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .pages,
+  .sheetToolbar {
+    flex-wrap: wrap;
+    gap: var(--dsw-space-2);
+  }
+}

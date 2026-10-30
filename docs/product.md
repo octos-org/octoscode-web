@@ -31,23 +31,25 @@ server does in the chosen folder.
 
 ## Supported surface
 
-| Area          | Current behavior                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.   |
-| Start         | Empty Session home: code/office templates fill the composer (never sent, never raise permission); last-Session link.        |
-| Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.     |
-| Onboarding    | Capability-gated solo profile/provider setup with catalog data, test-before-save, transient credentials, and TUI fallback.  |
-| Conversation  | Session-local Chat with durable transcript, FIFO prompts, interrupt, commands, safe GFM, and highlighted code.              |
-| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifacts.                      |
-| Decisions     | Typed approvals plus single-select, multi-select, and free-text questions.                                                  |
-| Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.         |
-| Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.     |
-| Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings. |
-| Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.            |
-| Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.     |
-| Workspace     | Server-confirmed path, same-cwd multi-Session switch/create, per-Session drafts, and tab-scoped navigation memory.          |
-| Usage         | Context-window, token, and cost projections from typed server state.                                                        |
-| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.  |
+| Area          | Current behavior                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.       |
+| Start         | Empty Session home: code/office templates fill the composer (never sent, never raise permission); last-Session link.            |
+| Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.         |
+| Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback. |
+| Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown.     |
+| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.             |
+| Decisions     | Approvals with action/impact/risk, explicit deny/session/once choices, questions, and permission-denied retry.                  |
+| Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.             |
+| Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.         |
+| Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.     |
+| Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.                |
+| Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
+| Connectors    | Read-only MCP server status; no add/remove/edit or OAuth controls.                                                              |
+| Scheduled     | Existing cron job list and capability-gated enable/disable; no cron creation.                                                   |
+| Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
+| Usage         | Context-window, token, and cost projections from typed server state.                                                            |
+| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.      |
 
 Remote one-click skill installation is not part of the Settings Skills section:
 its supply-chain review is still open. Existing skills are read from the active
@@ -57,6 +59,20 @@ Memory edit and delete controls are not offered because the current protocol has
 no corresponding operations. Remember-this uses the explicit ingest RPC;
 accepted request/promote responses are described as accepted or staged, never as
 completed writes.
+
+Delivered files, supervised-task artifacts, and files explicitly written by
+`write_file`/`edit_file` share an inline preview component. Tool arguments must
+carry the path; result prose is never scraped to invent an artifact. PDF and CSV
+parsers load only on demand; PDF pages, CSV rows, and long text are bounded
+rather than dumped into one DOM. HTML and SVG previews use opaque-origin frames
+with scripts, forms, external requests, and credential access disabled. DOCX,
+XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
+File bytes come from the authenticated Session blob API, and copy-path/download
+controls never put the server token in a URL.
+
+Connector and scheduled-task surfaces are intentionally incomplete by protocol:
+there is no connector configuration/OAuth flow and no `cron/create`. The UI does
+not describe either surface as full management.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

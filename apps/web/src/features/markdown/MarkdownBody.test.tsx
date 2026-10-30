@@ -41,14 +41,13 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("never formats a marker the model has not closed yet", () => {
-    // Mid-stream, `**` has been written but its closer has not: it must stay
-    // literal rather than turning the rest of the reply bold.
+  it("hides an inline marker the model has not closed yet", () => {
     const html = renderToStaticMarkup(
       <MarkdownBody text="**still streaming" streaming />,
     );
 
-    expect(html).toContain("**still streaming");
+    expect(html).toContain("still streaming");
+    expect(html).not.toContain("**");
     expect(html).not.toContain("<strong>");
   });
 
@@ -67,6 +66,31 @@ describe("MarkdownBody", () => {
     expect(html).toContain("<li>read the file</li>");
     expect(html).toContain("<strong>fix</strong>");
     expect(html).toContain("<table>");
+  });
+
+  it("keeps multiline inline and indented code exact while streaming", () => {
+    const inline = "Code: `first\n2 ** 3`";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={inline} streaming />),
+    ).toContain("first 2 ** 3");
+    const indented = "    print(2 ** 3)\n";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={indented} streaming />),
+    ).toContain("print(2 ** 3)");
+  });
+
+  it("keeps template strings and exponent operators exact in indented code", () => {
+    const sameLine = "    const s = `hello`; let n = 2 ** 3;\n";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={sameLine} streaming />),
+    ).toContain("const s = `hello`; let n = 2 ** 3;");
+
+    const nextLine = "    const a = `x`;\n    print(2 ** 3)\n";
+    const html = renderToStaticMarkup(
+      <MarkdownBody text={nextLine} streaming />,
+    );
+    expect(html).toContain("const a = `x`;");
+    expect(html).toContain("print(2 ** 3)");
   });
 
   it("shows an unfinished code block as code, unhighlighted, while streaming", () => {

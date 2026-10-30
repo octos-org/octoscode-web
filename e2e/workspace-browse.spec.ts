@@ -18,7 +18,9 @@ async function connect(page: Page, token: string): Promise<Locator> {
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const form = page.getByRole("region", { name: "Add workspace" });
+  const form = page.getByRole("region", {
+    name: /Add workspace|Browse server folders/,
+  });
   await expect(form).toBeVisible();
   return form;
 }
@@ -32,8 +34,10 @@ function currentFolder(page: Page): Locator {
 }
 
 async function openBrowser(page: Page, form: Locator): Promise<Locator> {
-  await form.getByRole("button", { name: "Browse server folders" }).click();
   const surface = browser(page);
+  if (!(await surface.isVisible().catch(() => false))) {
+    await form.getByRole("button", { name: "Browse server folders" }).click();
+  }
   await expect(surface).toBeVisible();
   return surface;
 }
@@ -43,6 +47,9 @@ test("browses the server's folders, drills in and out, and reports what the serv
 }) => {
   const form = await connect(page, BROWSE_TOKEN);
   await openBrowser(page, form);
+  await expect(
+    page.getByRole("button", { name: "Enter path manually" }),
+  ).toBeVisible();
 
   // An empty path box opens on the server's OWN working directory.
   await expect(currentFolder(page)).toHaveText("/srv/fixture");

@@ -35,6 +35,7 @@ export interface OnboardingSubmission {
   familyId: string;
   modelId: string;
   routeId: string;
+  baseUrl?: string;
   apiKey: string;
 }
 

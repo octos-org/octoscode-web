@@ -35,6 +35,33 @@ describe("peerSessionEventFor — terminal codes survive (J3)", () => {
     });
   });
 
+  it("projection/envelope turn_terminal preserves interrupted outcome", () => {
+    const event = peerSessionEventFor(
+      frame("projection/envelope", {
+        session_id: "dev:local:tui#master",
+        topic: "peer-a",
+        cursor: { stream: "dev:local:tui#peer-a\0~cwd-test", seq: 2 },
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: {
+          type: "turn_terminal",
+          data: {
+            outcome: "interrupted",
+            error: { code: "interrupted_by_user", message: "stopped" },
+          },
+        },
+      }),
+      OPENED,
+    );
+    expect(event).toEqual({
+      sessionId: "dev:local:tui#master",
+      kind: "turn-terminal",
+      outcome: "interrupted",
+      error: "stopped",
+    });
+  });
+
   it("turn/error with code interrupted maps to outcome interrupted — never Finished", () => {
     const event = peerSessionEventFor(
       frame("turn/error", {

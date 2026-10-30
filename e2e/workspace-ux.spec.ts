@@ -310,7 +310,7 @@ test("opening tool output keeps its heading in view instead of following the exp
   await region.evaluate((el) => {
     el.scrollTop = el.scrollHeight;
   });
-  const summary = page.locator("summary").filter({ hasText: "read_file" });
+  const summary = page.locator("summary").filter({ hasText: "Read a file" });
   await summary.scrollIntoViewIfNeeded();
   const before = (await summary.boundingBox())!.y;
   await summary.click();
@@ -331,10 +331,10 @@ test("sidebar sort controls reorder sessions and track which Session was last op
   const sidebar = page.getByRole("complementary", {
     name: "Product navigation",
   });
-  const sessions = sidebar.locator('button[role="treeitem"]');
+  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
   const titles = sessions.locator('[class*="sessionTitle"]');
   const selectedTitle = sidebar.locator(
-    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
   );
   await expect(sessions).toHaveCount(1);
   const openedTitles = [await selectedTitle.innerText()];
@@ -434,7 +434,7 @@ test("finishing approval and question takeovers returns the keyboard to the comp
   await input.fill("Request approval fixture");
   await input.press("Enter");
   const approval = page.getByRole("dialog", { name: "Run product checks?" });
-  await approval.getByRole("button", { name: /Yes/ }).click();
+  await approval.getByRole("button", { name: /Allow once/ }).click();
   await expect(approval).toBeHidden();
   await expect(input).toBeFocused();
   await page.keyboard.type("Follow-up after approval");

@@ -32,6 +32,23 @@ export function MemoryIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function ConnectorsIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M5 3H3v10h2M11 3h2v10h-2M5 8h6M8 5v6" />
+    </svg>
+  );
+}
+
+export function CronIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 5v3l2 1.5" />
+    </svg>
+  );
+}
+
 export function ModelsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>
@@ -78,6 +95,15 @@ export function ShieldIcon({
   );
 }
 
+export function FileIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M4 1.75h4.5L12 5.25v9H4v-12.5Z" />
+      <path d="M8.5 1.75v3.5H12M6 8h4M6 10.5h4" />
+    </svg>
+  );
+}
+
 export function FolderIcon({ size = 18, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 18 18", className)}>
@@ -115,15 +141,6 @@ export function PanelRightIcon({ size = 16, className }: IconProps) {
     <svg {...svgProps(size, "0 0 16 16", className)}>
       <rect x="2" y="2.75" width="12" height="10.5" rx="1.75" />
       <path d="M10 2.75v10.5" />
-    </svg>
-  );
-}
-
-export function FileIcon({ size = 16, className }: IconProps) {
-  return (
-    <svg {...svgProps(size, "0 0 16 16", className)}>
-      <path d="M4.25 1.75h4.5l3 3v8.5c0 .55-.45 1-1 1h-6.5c-.55 0-1-.45-1-1V2.75c0-.55.45-1 1-1Z" />
-      <path d="M8.75 1.75v3h3" />
     </svg>
   );
 }

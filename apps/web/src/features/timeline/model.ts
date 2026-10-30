@@ -4,6 +4,7 @@ import {
   parseProjectionEnvelope,
   type RpcNotification,
   type SessionHydrateResult,
+  type TurnMedia,
 } from "@octos-org/octoscode-client/protocol";
 import {
   addSystemMessage,
@@ -14,6 +15,7 @@ import {
   type TimelineKind,
   type TimelineStatus,
 } from "./entry-model.ts";
+import { structuredWritePath, writtenArtifactPath } from "./artifact-tools.ts";
 
 // The entry shape and the shell-side reducers live in `entry-model.ts` so the
 // app shell can write a system notice without loading the transcript fold.
@@ -204,6 +206,7 @@ export function timelineFromHydrate(
             "tool_start",
             "tool_progress",
             "tool_end",
+            "file_attached",
             "background/spawn_complete",
           ].includes(event.payload.type),
         ),
@@ -223,6 +226,43 @@ export function timelineFromHydrate(
     });
   }
   entries = coalesceHydratedTools(entries, replayed);
+  const previousArtifactPaths = new Map(
+    (identities.previous ?? [])
+      .filter((entry) => entry.artifactPath)
+      .map((entry) => [entry.id, entry.artifactPath!] as const),
+  );
+  if (previousArtifactPaths.size) {
+    entries = entries.map((entry) => {
+      const artifactPath = previousArtifactPaths.get(entry.id);
+      return artifactPath && !entry.artifactPath
+        ? { ...entry, artifactPath }
+        : entry;
+    });
+  }
+  const previousAttachmentSizes = new Map<string, number>();
+  for (const entry of identities.previous ?? []) {
+    for (const [path, sizeBytes] of Object.entries(
+      entry.attachmentSizes ?? {},
+    )) {
+      previousAttachmentSizes.set(path, sizeBytes);
+    }
+  }
+  if (previousAttachmentSizes.size) {
+    entries = entries.map((entry) => {
+      const retained = Object.fromEntries(
+        (entry.media ?? []).flatMap((path) => {
+          const sizeBytes = previousAttachmentSizes.get(path);
+          return sizeBytes === undefined ? [] : [[path, sizeBytes] as const];
+        }),
+      );
+      return Object.keys(retained).length
+        ? {
+            ...entry,
+            attachmentSizes: { ...retained, ...entry.attachmentSizes },
+          }
+        : entry;
+    });
+  }
   const terminalTurns = new Map(
     (result.turns ?? [])
       .filter((turn) =>
@@ -310,6 +350,7 @@ export function addOptimisticUser(
   entries: readonly TimelineEntry[],
   turnId: string,
   text: string,
+  media: readonly TurnMedia[] = [],
 ): TimelineEntry[] {
   return upsertUser(entries, {
     id: `user:${turnId}`,
@@ -318,6 +359,13 @@ export function addOptimisticUser(
     body: text,
     status: "complete",
     turnId,
+    ...(media.length
+      ? {
+          attachmentSizes: Object.fromEntries(
+            media.map((item) => [item.path, item.size_bytes]),
+          ),
+        }
+      : {}),
   });
 }
 
@@ -389,24 +437,27 @@ export function foldNotification(
         params.text,
         turnId,
       );
-    case CORE_UI_METHODS.TOOL_STARTED:
+    case CORE_UI_METHODS.TOOL_STARTED: {
+      const toolName = stringOf(params.tool_name, "Tool");
+      const artifactPath = writtenArtifactPath(
+        toolName,
+        pretty(params.arguments),
+      );
       return startTool(settleReasoning(entries, turnId), {
-        id: `tool:${stringOf(params.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, params.tool_call_id),
         kind: "tool",
-        title: stringOf(params.tool_name, "Tool"),
+        title: toolName,
         body: pretty(params.arguments),
         status: "running",
         turnId,
         startedAtMs: Date.now(),
+        ...(artifactPath ? { artifactPath } : {}),
       });
+    }
     case CORE_UI_METHODS.TOOL_PROGRESS:
-      return progressTool(
-        entries,
-        `tool:${stringOf(params.tool_call_id, turnId)}`,
-        {
-          body: typeof params.message === "string" ? params.message : undefined,
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, params.tool_call_id), {
+        body: typeof params.message === "string" ? params.message : undefined,
+      });
     case CORE_UI_METHODS.TOOL_COMPLETED:
       return completeTool(entries, turnId, params.tool_call_id, {
         ...(typeof params.output_preview === "string"
@@ -421,6 +472,7 @@ export function foldNotification(
         turnId,
         "completed",
         usageText(params),
+        legacyUsageParts(params),
       );
     case CORE_UI_METHODS.TURN_ERROR:
       return settleTimelineTurn(
@@ -535,24 +587,26 @@ function foldProjection(
       // A tool call ends the current reasoning segment: settle any running
       // reasoning entry so it doesn't keep a stale "running" badge.
       const settled = settleReasoning(entries, turnId);
+      const toolName = stringOf(data.name, "Tool");
+      const argumentsJson = stringOf(data.arguments_preview);
+      // Replay must use Core's bounded, redacted structured field. Older Core
+      // versions omit it: do not resurrect truncated-argument path guessing.
+      const artifactPath = structuredWritePath(toolName, data.write_path);
       return startTool(settled, {
-        id: `tool:${stringOf(data.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, data.tool_call_id),
         kind: "tool",
-        title: stringOf(data.name, "Tool"),
-        body: stringOf(data.arguments_preview),
+        title: toolName,
+        body: argumentsJson,
         status: "running",
         turnId,
         startedAtMs: Date.now(),
+        ...(artifactPath ? { artifactPath } : {}),
       });
     }
     case "tool_progress":
-      return progressTool(
-        entries,
-        `tool:${stringOf(data.tool_call_id, turnId)}`,
-        {
-          body: typeof data.message === "string" ? data.message : "",
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, data.tool_call_id), {
+        body: typeof data.message === "string" ? data.message : "",
+      });
     case "tool_end": {
       const raw = stringOf(data.output_preview ?? data.error ?? data.reason);
       return completeTool(entries, turnId, data.tool_call_id, {
@@ -579,6 +633,7 @@ function foldProjection(
         turnId,
         stringOf(data.outcome, "errored"),
         terminalErrorText(data.error),
+        projectionUsageParts(data.token_usage),
       );
     }
     case "background/spawn_complete": {
@@ -604,13 +659,21 @@ function foldProjection(
     case "file_attached": {
       const filePath = stringOf(data.path, "");
       const fileName = filePath.split("/").pop() || filePath || "unknown";
-      return addSystemMessage(
-        entries,
-        `file-attached:${turnId}:${fileName}`,
-        "File attached",
-        fileName,
-        "info",
-      );
+      const sizeBytes = data.size_bytes;
+      return upsert(entries, {
+        id: `file-attached:${turnId}:${filePath}`,
+        kind: "system",
+        title: "File attached",
+        body: fileName,
+        status: "info",
+        turnId,
+        ...(filePath &&
+        typeof sizeBytes === "number" &&
+        Number.isSafeInteger(sizeBytes) &&
+        sizeBytes >= 0
+          ? { attachmentSizes: { [filePath]: sizeBytes } }
+          : {}),
+      });
     }
     default:
       return entries.slice();
@@ -763,7 +826,14 @@ export function settleTimelineTurn(
   turnId: string,
   outcome: string,
   body = "",
+  usage?: { input: number; output: number },
 ): TimelineEntry[] {
+  const startedAtMs = entries
+    .filter((entry) => entry.turnId === turnId)
+    .map((entry) => entry.startedAtMs)
+    .filter((value): value is number => value !== undefined)
+    .sort((left, right) => left - right)[0];
+  const endedAtMs = Date.now();
   return upsert(sweepTurnStreamtails(entries, turnId, outcome), {
     id: `terminal:${turnId}`,
     kind: "system",
@@ -786,6 +856,9 @@ export function settleTimelineTurn(
             : "error",
     turnId,
     latestTurnOutcome: outcome,
+    startedAtMs: startedAtMs ?? endedAtMs,
+    endedAtMs,
+    ...(usage ? { turnUsage: usage } : {}),
   });
 }
 
@@ -799,19 +872,25 @@ function startTool(
   entries: readonly TimelineEntry[],
   entry: TimelineEntry,
 ): TimelineEntry[] {
+  entry = { ...entry, toolArguments: entry.toolArguments ?? entry.body };
   if (entries.find((current) => current.id === entry.id)?.toolSettled) {
     return entries.slice();
   }
+  const previous = entries.find((current) => current.id === entry.id);
+  const next =
+    previous?.artifactPath && !entry.artifactPath
+      ? { ...entry, artifactPath: previous.artifactPath }
+      : entry;
   return upsert(
     entries,
-    entry.turnId && hasTerminal(entries, entry.turnId)
+    next.turnId && hasTerminal(entries, next.turnId)
       ? {
-          ...entry,
+          ...next,
           status: "info",
           statusLabel: "Background",
           turnSettled: true,
         }
-      : entry,
+      : next,
   );
 }
 
@@ -832,6 +911,11 @@ function progressTool(
   });
 }
 
+/** Tool call ids are only unique within a turn; retries may reuse them. */
+function toolEntryId(turnId: string, toolCallId: unknown): string {
+  return `tool:${turnId}:${stringOf(toolCallId, turnId)}`;
+}
+
 function completeTool(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -842,7 +926,7 @@ function completeTool(
   // using its server-provided call identity; never invent an unscoped tool.
   if (typeof toolCallId !== "string" || !toolCallId.trim())
     return entries.slice();
-  const id = `tool:${toolCallId}`;
+  const id = toolEntryId(turnId, toolCallId);
   const existing = entries.find((entry) => entry.id === id);
   return upsert(entries, {
     ...(existing ?? {
@@ -875,7 +959,7 @@ function coalesceHydratedTools(
       isRecord(data) &&
       typeof data.tool_call_id === "string"
     ) {
-      const id = `tool:${data.tool_call_id}`;
+      const id = toolEntryId(envelope.turn_id, data.tool_call_id);
       const previous = starts.get(id);
       starts.set(
         id,
@@ -895,7 +979,7 @@ function coalesceHydratedTools(
     const preview = data.output_preview.trim();
     if (!preview) continue;
     const truncatedPrefix = toolPreviewPrefix(data.output_preview);
-    const toolId = `tool:${stringOf(data.tool_call_id, envelope.turn_id)}`;
+    const toolId = toolEntryId(envelope.turn_id, data.tool_call_id);
     const card = entries.find((entry) => entry.id === toolId);
     if (!card) continue;
     const candidates = entries.filter(
@@ -1009,6 +1093,9 @@ function upsertCanonicalUser(
     status: "complete",
     turnId,
     streamId: eventId,
+    ...(optimistic?.attachmentSizes
+      ? { attachmentSizes: optimistic.attachmentSizes }
+      : {}),
   };
   // A drained steer can precede persistence of the original prompt. Match an
   // optimistic prompt by its text; never replace it with an unrelated input.
@@ -1021,18 +1108,23 @@ function upsertUser(
   user: TimelineEntry,
 ): TimelineEntry[] {
   const existing = entries.findIndex((entry) => entry.id === user.id);
+  const previous = existing >= 0 ? entries[existing] : undefined;
+  const nextUser =
+    previous?.attachmentSizes && !user.attachmentSizes
+      ? { ...user, attachmentSizes: previous.attachmentSizes }
+      : user;
   const firstReply = entries.findIndex(
     (entry) =>
       entry.turnId === user.turnId &&
       ["reasoning", "tool", "assistant"].includes(entry.kind),
   );
   if (firstReply < 0 || (existing >= 0 && existing < firstReply)) {
-    return upsert(entries, user);
+    return upsert(entries, nextUser);
   }
   // Canonical user_message can arrive after streaming replies. Place only its
   // display row before that turn's activity; retain every other row's order.
   const next = entries.filter((entry) => entry.id !== user.id);
-  next.splice(firstReply, 0, user);
+  next.splice(firstReply, 0, nextUser);
   return next;
 }
 
@@ -1090,6 +1182,29 @@ function pretty(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function legacyUsageParts(
+  value: Record<string, unknown>,
+): { input: number; output: number } | undefined {
+  const input = typeof value.tokens_in === "number" ? value.tokens_in : null;
+  const output = typeof value.tokens_out === "number" ? value.tokens_out : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
+}
+
+function projectionUsageParts(
+  value: unknown,
+): { input: number; output: number } | undefined {
+  if (!isRecord(value)) return undefined;
+  const input =
+    typeof value.input_tokens === "number" ? value.input_tokens : null;
+  const output =
+    typeof value.output_tokens === "number" ? value.output_tokens : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
 }
 
 function usageText(value: Record<string, unknown>): string {

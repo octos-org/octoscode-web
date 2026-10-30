@@ -28,12 +28,14 @@ function productNavigation(page: Page): Locator {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 async function selectedSessionTitle(sidebar: Locator): Promise<string> {
   const title = await sidebar
-    .locator('button[role="treeitem"][aria-current="page"]')
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
     .locator('[class*="sessionTitle"]')
     .textContent();
   if (!title) throw new Error("Expected a selected Session title");
@@ -720,7 +722,7 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   await expect(dialog).toBeVisible();
   await expect(page.getByText(/\b1 queued\b/)).toHaveCount(0);
   await holdTerminals(request, 1);
-  await dialog.getByRole("button", { name: /Yes/ }).click();
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
@@ -856,7 +858,7 @@ test("resolves three concurrent parked background approvals out of order without
   for (const index of [2, 1, 0]) {
     await selectSession(sidebar, titles[index]!);
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /Yes/ }).click();
+    await dialog.getByRole("button", { name: /Allow once/ }).click();
     await expect(dialog).toHaveCount(0);
     await expect.poll(() => responds().length).toBe(3 - index);
   }

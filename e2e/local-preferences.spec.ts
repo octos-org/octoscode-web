@@ -24,7 +24,7 @@ const preferences = (page: Page) =>
 const promptQueue = (page: Page) =>
   page.getByRole("region", { name: "Queued prompts" });
 const row = (page: Page, idSuffix: string) =>
-  page.locator('button[role="treeitem"]').filter({
+  page.locator('[role="treeitem"][data-session-id]').filter({
     has: page.locator('[class*="sessionTitle"]', {
       hasText: new RegExp(`(?:^|\\s)${idSuffix}$`),
     }),
@@ -98,7 +98,7 @@ async function title(page: Page) {
   const displayed = (
     await page
       .locator(
-        'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+        '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
       )
       .innerText()
   ).trim();
@@ -445,7 +445,9 @@ for (const kind of ["approval", "question"] as const) {
     expect(request).toBeDefined();
     if (kind === "approval") {
       await expect(dialog.getByText("需要批准", { exact: true })).toBeVisible();
-      await expect(dialog.getByRole("button", { name: /^是/ })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /^允许一次/ }),
+      ).toBeVisible();
       await expect(
         dialog.getByText("The agent wants to run the repository checks.", {
           exact: true,
@@ -474,7 +476,7 @@ for (const kind of ["approval", "question"] as const) {
       await expect(
         dialog.getByText("Approval required", { exact: true }),
       ).toBeVisible();
-      await dialog.getByRole("button", { name: /^Yes/ }).click();
+      await dialog.getByRole("button", { name: /^Allow once/ }).click();
     } else {
       await dialog.getByLabel(/Full/).check();
       await dialog

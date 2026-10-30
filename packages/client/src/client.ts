@@ -1,8 +1,10 @@
+import { APPUI_MEMORY_SESSION_SCOPE_FEATURE } from "./memory-methods.ts";
 import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 import {
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
 } from "./skill-methods.ts";
+import { MCP_CONNECTOR_MANAGE_V1 } from "./inventory-methods.ts";
 import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
@@ -28,6 +30,10 @@ import type {
   SessionOpenResult,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
+  SessionFileReadParams,
+  SessionFileReadResult,
   SessionFilesListParams,
   SessionFilesListResult,
   SessionListParams,
@@ -112,7 +118,9 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.APPROVAL_TYPED_V1,
   CORE_UI_FEATURES.PANE_SNAPSHOTS_V1,
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
+  CORE_UI_FEATURES.SESSION_FILES_READ_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
   CORE_UI_FEATURES.THREAD_GRAPH_V1,
   CORE_UI_FEATURES.TURN_STATE_GET_V1,
@@ -132,6 +140,7 @@ export const DEFAULT_UI_FEATURES = [
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
   EXTERNAL_DRIVER_V1_UI_FEATURE,
+  MCP_CONNECTOR_MANAGE_V1,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -291,9 +300,17 @@ export class OctosUiClient {
     );
   }
 
-  async memoryCommands(capabilities: UiProtocolCapabilities) {
+  async memoryCommands(
+    capabilities: UiProtocolCapabilities,
+    sessionId?: string,
+  ) {
     const { createMemoryCommands } = await import("./memory.ts");
-    return createMemoryCommands(this.invoke, capabilities);
+    return createMemoryCommands(this.invoke, capabilities, sessionId);
+  }
+
+  async cronCommands(capabilities: UiProtocolCapabilities) {
+    const { createCronCommands } = await import("./cron.ts");
+    return createCronCommands(this.invoke, capabilities);
   }
 
   async researchCommands(
@@ -880,6 +897,17 @@ export class OctosUiClient {
     );
   }
 
+  async setSessionTitle(
+    params: SessionTitleSetParams,
+  ): Promise<SessionTitleSetResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_TITLE_SET,
+      params,
+      async (value) =>
+        (await loadWorkspaceResults()).parseSessionTitleSetResult(value),
+    );
+  }
+
   async listSessionFiles(
     params: SessionFilesListParams,
   ): Promise<SessionFilesListResult> {
@@ -888,6 +916,17 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseSessionFilesListResult(value),
+    );
+  }
+
+  async readSessionFile(
+    params: SessionFileReadParams,
+  ): Promise<SessionFileReadResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_FILES_READ,
+      params,
+      async (value) =>
+        (await import("./session.ts")).parseSessionFileReadResult(value),
     );
   }
 

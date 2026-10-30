@@ -81,6 +81,7 @@ describe("Chinese browser feature presentation", () => {
           toolName: "shell",
           title: "Approval required",
           body: "This session",
+          risk: "unspecified",
           typedDetails: { command: { command_line: "printf 'Yes'" } },
         }}
         busy={false}
@@ -89,12 +90,13 @@ describe("Chinese browser feature presentation", () => {
       />,
     );
     expect(html).toContain("需要批准");
-    expect(html).toContain('id="approval-title">Approval required');
+    expect(html).toContain('id="approval-title">需要批准');
+    expect(html).toContain("未说明风险");
     expect(html).toContain("<p>This session</p>");
     expect(html).toContain("printf &#x27;Yes&#x27;");
-    expect(html).toContain("此会话");
-    expect(html).toContain("否 <kbd>N");
-    expect(html).toContain("是 <kbd>Y");
+    expect(html).toContain("本会话都允许");
+    expect(html).toContain("拒绝 <kbd>N");
+    expect(html).toContain("允许一次 <kbd>Y");
     expect(onDecide).not.toHaveBeenCalled();
   });
 

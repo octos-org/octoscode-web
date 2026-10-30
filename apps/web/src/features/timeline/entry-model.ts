@@ -32,6 +32,8 @@ export interface TimelineEntry {
   turnSettled?: true;
   toolSettled?: true;
   latestTurnOutcome?: string;
+  turnUsage?: { input: number; output: number } | undefined;
+  toolArguments?: string | undefined;
   /** Explicit terminal state from this owner's hydrate/live lifecycle. */
   textTerminal?: "completed" | "errored" | "interrupted";
   omittedCount?: number;
@@ -40,6 +42,10 @@ export interface TimelineEntry {
    * handles). Rendered as attachments, never as part of `body`.
    */
   media?: readonly string[];
+  /** Authoritative delivered sizes from file_attached envelopes, keyed by path. */
+  attachmentSizes?: Readonly<Record<string, number>>;
+  /** Explicit path argument of a successful write_file/edit_file call. */
+  artifactPath?: string;
   /** First-seen wall-clock for a streamed block (duration in fold headers). */
   startedAtMs?: number;
   /** Latest stream time while running; final time once settled. */

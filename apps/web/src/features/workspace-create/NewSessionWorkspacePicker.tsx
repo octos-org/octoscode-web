@@ -201,7 +201,7 @@ function PickerBody({
                     className={styles.workspace}
                     data-workspace-entry="server-working-directory"
                     aria-label={t("Start a new session in {value0}", {
-                      value0: serverWorkingDirectory.label,
+                      value0: t(serverWorkingDirectory.label),
                     })}
                     disabled={creating || serverWorkingDirectory.path === null}
                     onClick={() => {
@@ -214,7 +214,7 @@ function PickerBody({
                     </span>
                     <span className={styles.workspaceText}>
                       <span className={styles.workspaceName}>
-                        {serverWorkingDirectory.label}
+                        {t(serverWorkingDirectory.label)}
                       </span>
                       {serverWorkingDirectory.path ? (
                         <span className={styles.workspacePath}>
@@ -303,14 +303,26 @@ function PickerBody({
           ) : null}
         </div>
       ) : view === "browse" && browse ? (
-        <WorkspaceFolderBrowser
-          adapter={browse}
-          initialPath={workspaceBrowseOpenPath(serverPath)}
-          titleId={titleId}
-          disabled={creating}
-          onChoose={onBrowseChoose}
-          onBack={() => onViewChange("add")}
-        />
+        <>
+          <WorkspaceFolderBrowser
+            adapter={browse}
+            initialPath={workspaceBrowseOpenPath(serverPath)}
+            titleId={titleId}
+            disabled={creating}
+            onChoose={onBrowseChoose}
+            onBack={() => onViewChange("add")}
+          />
+          <div className={styles.footer}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={creating}
+              onClick={() => onViewChange("add")}
+            >
+              {t("Enter path manually")}
+            </button>
+          </div>
+        </>
       ) : (
         <form
           className={styles.body}
@@ -468,7 +480,9 @@ export function NewSessionWorkspacePicker({
           !props.workspaces.length &&
           !props.serverWorkingDirectory &&
           !props.loading
-        ? "add"
+        ? props.browse
+          ? "browse"
+          : "add"
         : view;
 
   useEffect(() => {

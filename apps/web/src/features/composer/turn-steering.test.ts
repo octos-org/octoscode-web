@@ -266,6 +266,11 @@ describe("record-owned native steering", () => {
     expect(h.timeline().some((row) => row.title === "Steering accepted")).toBe(
       true,
     );
+    expect(
+      h
+        .timeline()
+        .some((row) => row.title === "Steering delivery not confirmed"),
+    ).toBe(false);
   });
   it("restages explicit rejection before later pending drafts", async () => {
     const h = fixture();
@@ -359,6 +364,11 @@ describe("record-owned native steering", () => {
     expect(
       h.timeline().some((row) => row.title === "Steering outcome unknown"),
     ).toBe(true);
+    expect(
+      h
+        .timeline()
+        .some((row) => row.title === "Steering delivery not confirmed"),
+    ).toBe(false);
     h.controller.reconcileFromHydrate({
       session_id: "master#peer",
       turns: [],

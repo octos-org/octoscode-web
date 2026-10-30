@@ -27,10 +27,16 @@ import { RequestGate } from "../async/request-gate.ts";
 import { terminalTurnId } from "../timeline/entry-model.ts";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import {
+  artifactKind,
+  artifactReadsBlob,
+} from "../artifact-preview/artifact-kind.ts";
+import { workspaceRelativeArtifactPath } from "../timeline/session-file-read.ts";
 
 interface SupervisionDependencies {
   client: () => OctosUiClient | null;
   sessionId: () => string;
+  workspaceRoot: () => string;
   capabilities: () => UiProtocolCapabilities | undefined;
 }
 
@@ -356,6 +362,7 @@ export function useSupervision(
   };
 
   const readTaskArtifact = async (artifact: TaskArtifactRecord) => {
+    const request = detailRequestsRef.current.begin();
     const client = dependenciesRef.current.client();
     const sessionId = dependenciesRef.current.sessionId();
     const taskId = state.detail.taskId;
@@ -366,6 +373,8 @@ export function useSupervision(
         ...current,
         detail: {
           ...current.detail,
+          artifactLoading: false,
+          error: null,
           selectedArtifact: {
             session_id: sessionId,
             task_id: taskId,
@@ -377,9 +386,54 @@ export function useSupervision(
       }));
       return;
     }
+    const pathKind = artifact.path
+      ? artifactKind(artifact.path)
+      : "unsupported";
+    const textArtifact =
+      pathKind !== "unsupported"
+        ? ["markdown", "code", "text"].includes(pathKind)
+        : ["text", "report", "log", "markdown", "json"].includes(artifact.kind);
+    const capabilities = dependenciesRef.current.capabilities();
+    const workspacePath = artifact.path
+      ? workspaceRelativeArtifactPath(
+          artifact.path,
+          dependenciesRef.current.workspaceRoot(),
+        )
+      : null;
+    const canReadBlob = artifact.path?.startsWith("pf/")
+      ? supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_LIST)
+      : workspacePath !== null &&
+        supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ);
+    if (
+      canReadBlob &&
+      !textArtifact &&
+      artifact.path &&
+      artifactReadsBlob(artifact.path)
+    ) {
+      setState((current) => ({
+        ...current,
+        detail: {
+          ...current.detail,
+          artifactLoading: false,
+          error: null,
+          selectedArtifact: {
+            session_id: sessionId,
+            task_id: taskId,
+            artifact,
+            has_more: false,
+          },
+        },
+      }));
+      return;
+    }
     setState((current) => ({
       ...current,
-      detail: { ...current.detail, artifactLoading: true, error: null },
+      detail: {
+        ...current.detail,
+        artifactLoading: true,
+        error: null,
+        selectedArtifact: null,
+      },
     }));
     try {
       const result = await client.readTaskArtifact({
@@ -390,6 +444,7 @@ export function useSupervision(
       });
       if (
         dependenciesRef.current.client() !== client ||
+        !detailRequestsRef.current.isCurrent(request) ||
         result.session_id !== sessionId ||
         result.task_id !== taskId
       ) {
@@ -404,7 +459,12 @@ export function useSupervision(
         },
       }));
     } catch (reason) {
-      if (dependenciesRef.current.client() !== client) return;
+      if (
+        dependenciesRef.current.client() !== client ||
+        !detailRequestsRef.current.isCurrent(request)
+      ) {
+        return;
+      }
       setState((current) => ({
         ...current,
         detail: {

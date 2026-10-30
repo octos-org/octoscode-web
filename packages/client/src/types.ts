@@ -466,6 +466,17 @@ export interface SessionDeleteParams {
 
 export type SessionDeleteResult = Record<string, never>;
 
+export interface SessionTitleSetParams {
+  session_id: string;
+  /** Trimmed by the server; empty or over 200 characters is rejected. */
+  title: string;
+}
+
+export interface SessionTitleSetResult {
+  session_id: string;
+  title: string;
+}
+
 export interface SessionFileInfo {
   filename: string;
   path: string;
@@ -479,6 +490,24 @@ export interface SessionFilesListParams {
 
 export interface SessionFilesListResult {
   files: SessionFileInfo[];
+}
+
+export interface SessionFileReadParams {
+  session_id: string;
+  path: string;
+  offset?: number;
+  length?: number;
+}
+
+export interface SessionFileReadResult {
+  session_id: string;
+  path: string;
+  size_bytes: number;
+  offset: number;
+  eof: boolean;
+  mime_type: string;
+  encoding: "base64";
+  content_base64: string;
 }
 
 export interface SessionOpenParams {

@@ -99,7 +99,9 @@ async function openSettings(page: Page): Promise<Locator> {
 }
 
 function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator('button[role="treeitem"]').filter({ hasText: title });
+  return sidebar
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: title });
 }
 
 interface ObservedSessionOpen {
@@ -999,7 +1001,7 @@ test("selects each retained target immediately while A's acknowledgement remains
     name: "New session in delayed-turn-start-latest-target",
   });
   const selectedSession = () =>
-    sidebar.locator('button[role="treeitem"][aria-current="page"]');
+    sidebar.locator('[role="treeitem"][data-session-id][aria-current="page"]');
   const selectedTitle = async () => {
     const title = await selectedSession()
       .locator('[class*="sessionTitle"]')
@@ -1203,10 +1205,12 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
     // can tell it about A's Session.
     const tabB = await fresh.newPage();
     await connectAndStartWorkspace(tabB, cwd);
-    const sessions = productNavigation(tabB).locator('button[role="treeitem"]');
+    const sessions = productNavigation(tabB).locator(
+      '[role="treeitem"][data-session-id]',
+    );
     await expect(sessions).toHaveCount(2);
     const history = productNavigation(tabB).locator(
-      'button[role="treeitem"]:not([aria-current="page"])',
+      '[role="treeitem"][data-session-id]:not([aria-current="page"])',
     );
     await expect(history).toHaveCount(1);
     const historyId = await history.getAttribute("id");
@@ -1268,7 +1272,9 @@ test("restores the origin, tab credential, session, and workspace after refresh"
 
   const restoredNavigation = productNavigation(page);
   await expect(restoredNavigation).toBeVisible();
-  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
+  await expect(
+    page.locator("main").getByText(cwd, { exact: true }).first(),
+  ).toBeVisible();
   await expect(
     restoredNavigation.getByRole("treeitem", { name: /Session / }),
   ).toHaveAttribute("aria-current", "page");
@@ -1343,7 +1349,22 @@ test("offers whole permission presets and confirms full access", async ({
 
 test("separates the Session runtime from the Profile default model", async ({
   page,
+  request,
 }) => {
+  // This test saves a new Profile default on the shared fixture. Start every
+  // attempt (retries included) from the fixture's configured models, and put
+  // them back afterwards for later tests.
+  const resetModels = () =>
+    request.post(`${FIXTURE_ORIGIN}/__test__/models/reset`);
+  expect((await resetModels()).status()).toBe(204);
+  try {
+    await checkSessionRuntimeAndProfileDefault(page);
+  } finally {
+    await resetModels();
+  }
+});
+
+async function checkSessionRuntimeAndProfileDefault(page: Page) {
   await connectAndStartWorkspace(page);
 
   // Round-2 surface: the runtime model moved into the Session settings pane's
@@ -1405,15 +1426,46 @@ test("separates the Session runtime from the Profile default model", async ({
   });
   const glm = models.getByRole("radio", { name: /GLM 5\.3 Flash/ });
   await expect(glm).toHaveAttribute("aria-checked", "true");
+  // The provider list below loads on its own; let it settle so the only
+  // status left to read is the one this choice produces.
+  const providersLoading = settings.getByText("Loading model providers…");
+  await expect(settings.getByText("Loading model management…")).toHaveCount(0);
+  await expect(
+    settings.getByRole("heading", { name: "Model providers" }),
+  ).toBeVisible();
+  await expect(providersLoading).toHaveCount(0);
+  // Record whether the provider list ever drops back to its loading notice
+  // after the choice (it used to blank while it re-read the configuration).
+  await settings.evaluate((dialog) => {
+    const flags = window as unknown as { providersBlanked?: boolean };
+    flags.providersBlanked = false;
+    new MutationObserver(() => {
+      if (dialog.textContent?.includes("Loading model providers…"))
+        flags.providersBlanked = true;
+    }).observe(dialog, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
   const deepseek = models.getByRole("radio", { name: /DeepSeek V4 Pro/ });
   await deepseek.click();
   await expect(deepseek).toHaveAttribute("aria-checked", "true");
-  await expect(settings.getByRole("status")).toContainText(
+  const restartNotice = settings
+    .getByRole("status")
+    .filter({ hasText: "Profile default is" });
+  await expect(restartNotice).toContainText(
     "Profile default is DeepSeek V4 Pro",
   );
-  await expect(settings.getByRole("status")).toContainText(
-    "still serving DeepSeek V4",
-  );
+  await expect(restartNotice).toContainText("still serving DeepSeek V4");
+  // Re-reading the providers for the new default keeps the list on screen.
+  await expect(providersLoading).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as { providersBlanked?: boolean }).providersBlanked,
+    ),
+  ).toBe(false);
   await settings.getByRole("button", { name: "Close settings" }).click();
   // Round-2: the restart notice lives in the PANE's Model section (the old
   // control-bar trigger that carried the pending-restart aria-label is gone).
@@ -1424,7 +1476,7 @@ test("separates the Session runtime from the Profile default model", async ({
   ).toContainText(/pending an Octos restart|keeps running DeepSeek V4/);
   await pane.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("menu", { name: "Model" })).toHaveCount(0);
-});
+}
 
 test("keeps server connection actions in General settings", async ({
   page,
@@ -1599,15 +1651,17 @@ test("resolves approval and structured-question takeovers", async ({
   await expect(approval).toBeFocused();
   await expect(approval).toContainText("pnpm check");
   await page.keyboard.press("Shift+Tab");
-  await expect(approval.getByRole("button", { name: /Yes/ })).toBeFocused();
+  await expect(
+    approval.getByRole("button", { name: /Allow once/ }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(approval.getByRole("button", { name: /No/ })).toBeFocused();
+  await expect(approval.getByRole("button", { name: /Deny/ })).toBeFocused();
   const approvalAccessibility = await new AxeBuilder({ page })
     .include(".approval-card")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(approvalAccessibility.violations).toEqual([]);
-  await approval.getByRole("button", { name: /Yes/ }).click();
+  await approval.getByRole("button", { name: /Allow once/ }).click();
   await expect(approval).toBeHidden();
 
   await composer.fill("Request question fixture");
@@ -1773,11 +1827,21 @@ test("onboards an empty solo server from workspace creation", async ({
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
-    name: "Create your local coding profile",
+    name: "Set up your coding assistant",
   });
   await expect(onboarding).toBeVisible();
-  await expect(onboarding.getByLabel("Provider")).toHaveValue("zai");
-  await expect(onboarding.getByLabel("Model")).toHaveValue("glm-5.3-flash");
+  await expect(
+    onboarding.getByRole("radio", { name: /DeepSeek 深度求索/ }),
+  ).toBeChecked();
+  await expect(onboarding.getByLabel("Model")).toHaveValue("deepseek-chat");
+  await expect(onboarding.getByLabel("Profile ID")).toBeHidden();
+  await expect(onboarding.getByText("Route", { exact: true })).toHaveCount(0);
+  await onboarding.getByRole("button", { name: "Continue" }).click();
+  const axeResults = await new AxeBuilder({ page })
+    .include('section[role="dialog"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+    .analyze();
+  expect(axeResults.violations).toEqual([]);
 
   const apiKey = onboarding.getByLabel("API key");
   await apiKey.fill("sk-rejected-secret");
@@ -1820,10 +1884,11 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/no-profile");
   const onboarding = page.getByRole("dialog", {
-    name: "Create your local coding profile",
+    name: "Set up your coding assistant",
   });
-  await onboarding.getByLabel("Provider").selectOption("ollama");
+  await onboarding.getByRole("radio", { name: /ollama/ }).check();
   await expect(onboarding.getByLabel("Model")).toHaveValue("qwen3");
+  await onboarding.getByRole("button", { name: "Continue" }).click();
   await expect(onboarding.getByText("No API key required")).toBeVisible();
   await expect(onboarding.getByLabel("API key")).toHaveCount(0);
   await onboarding.getByRole("button", { name: "Test, save & open" }).click();
@@ -1831,6 +1896,60 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
     page.getByText("/srv/work/no-profile", { exact: true }),
   ).toBeVisible();
   await expect(onboarding).toBeHidden();
+});
+
+test("tests and saves a custom OpenAI-compatible endpoint in the first-run wizard", async ({
+  page,
+}) => {
+  let testedBaseUrl = "";
+  let savedBaseUrl = "";
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        method?: string;
+        params?: { selection?: { route?: { base_url?: string } } };
+      };
+      if (frame.method === "profile/llm/test") {
+        testedBaseUrl = frame.params?.selection?.route?.base_url ?? "";
+      }
+      if (frame.method === "profile/llm/upsert") {
+        savedBaseUrl = frame.params?.selection?.route?.base_url ?? "";
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  await connectServer(page);
+  await requestInitialWorkspace(page, "/srv/work/no-profile");
+  const onboarding = page.getByRole("dialog", {
+    name: "Set up your coding assistant",
+  });
+  for (const name of [
+    /DeepSeek 深度求索/,
+    /Kimi 月之暗面/,
+    /Z.ai/,
+    /通义千问/,
+    /MiniMax/,
+  ]) {
+    await expect(onboarding.getByRole("radio", { name })).toBeVisible();
+  }
+  await onboarding.getByText("Advanced", { exact: true }).click();
+  await expect(onboarding.getByLabel("Profile ID")).toHaveValue("coding");
+  await expect(onboarding.getByLabel("Profile name")).toHaveValue("Coding");
+  await onboarding.getByText("Advanced", { exact: true }).click();
+  await onboarding.getByRole("button", { name: "Continue" }).click();
+  await onboarding
+    .getByLabel("Use a custom OpenAI-compatible endpoint")
+    .check();
+  await onboarding
+    .getByLabel("Custom OpenAI-compatible base URL")
+    .fill("http://127.0.0.1:9091/v1");
+  await onboarding.getByLabel("API key").fill("sk-e2e-valid");
+  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  await expect(onboarding).toBeHidden();
+  expect(testedBaseUrl).toBe("http://127.0.0.1:9091/v1");
+  expect(savedBaseUrl).toBe("http://127.0.0.1:9091/v1");
 });
 
 test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({

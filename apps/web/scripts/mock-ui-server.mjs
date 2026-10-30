@@ -1,5 +1,6 @@
+import { randomUUID } from "../src/shared/uuid.ts";
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 
 const port = Number.parseInt(process.env.OCTOSCODE_MOCK_PORT ?? "50080", 10);
@@ -29,6 +30,79 @@ const memoryRecords = new Map([
     },
   ],
 ]);
+const cronJobs = [
+  {
+    id: "cron-1",
+    name: "Queue check",
+    enabled: false,
+    schedule: { every_ms: 1800000 },
+    message: "check the queue",
+    channel: "system",
+    last_run: null,
+    last_status: null,
+    next_in: "30m",
+    timezone: "UTC",
+  },
+];
+const MCP_CONNECTOR_FEATURE = "mcp.connector.manage.v1";
+const MCP_CONNECTOR_METHODS = [
+  "mcp/connector/create",
+  "mcp/connector/update",
+  "mcp/connector/delete",
+  "mcp/connector/set_enabled",
+  "mcp/connector/reconnect",
+];
+const connectorRowsByWorkspace = new Map();
+function connectorRows(workspaceRoot) {
+  if (!connectorRowsByWorkspace.has(workspaceRoot)) {
+    connectorRowsByWorkspace.set(workspaceRoot, [
+      {
+        id: "docs",
+        display_name: "Documentation MCP",
+        transport: "stdio",
+        enabled: true,
+        status: "connected",
+        tool_count: 2,
+        tools: ["search", "read"],
+      },
+      {
+        id: "legacy",
+        display_name: "Legacy HTTP",
+        transport: "http",
+        enabled: true,
+        status: "failed",
+        tool_count: 0,
+        tools: [],
+        error: "connection refused",
+        url: "https://legacy.example.test/mcp",
+      },
+    ]);
+  }
+  return connectorRowsByWorkspace.get(workspaceRoot);
+}
+function connectorPayload(sessionId, profileId, workspaceRoot) {
+  const rows = connectorRows(workspaceRoot);
+  return {
+    session_id: sessionId,
+    profile_id: profileId,
+    servers: rows.map((row) => ({
+      id: row.id,
+      display_name: row.display_name,
+      transport: row.transport,
+      enabled: row.enabled,
+      status: row.status,
+      tool_count: row.tool_count,
+      tools: row.tools,
+      ...(row.error ? { error: row.error } : {}),
+    })),
+    summary: {
+      connected: rows.filter((row) => row.status === "connected").length,
+      connecting: rows.filter((row) => row.status === "connecting").length,
+      failed: rows.filter((row) => row.status === "failed").length,
+      disabled: rows.filter((row) => !row.enabled).length,
+    },
+  };
+}
 function sessionState(sessionId) {
   let state = sessionStateBySessionId.get(sessionId);
   if (!state) {
@@ -464,8 +538,9 @@ function effectivePeerControlVariant(state) {
 }
 function peerControlAdverts(variant) {
   return {
-    method: variant !== "no-method",
-    feature: variant !== "no-feature",
+    method: variant !== "no-method" && variant !== "no-fleet",
+    feature: variant !== "no-feature" && variant !== "no-fleet",
+    native: variant !== "no-fleet",
   };
 }
 const peerControlCalls = new Map(); // sessionId -> [kind, ...]
@@ -904,7 +979,9 @@ function isPeerSessionId(sessionId) {
 function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = crypto.randomUUID();
+    const slug = workspaceRoot.includes("peer-presentation")
+      ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+      : randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,
@@ -955,7 +1032,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
   if (kind === "turn")
     send("turn/started", {
       session_id: peerSessionId,
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
       // Core `TurnStartedEvent` declares `timestamp` NON-Option (wire-parity
       // finding 2360); the client never reads it, but a Core-strict
       // deserializer would reject the frame without it.
@@ -965,7 +1042,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
     send("approval/requested", {
       session_id: peerSessionId,
       approval_id: peerApprovalId(slug),
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
       tool_name: "shell",
       title: "Peer requests to run checks",
       body: "A staged peer wants to run the repository checks.",
@@ -981,7 +1058,7 @@ function emitPeerActivityFrame(socket, kind, slug) {
   else if (kind === "complete")
     send("turn/completed", {
       session_id: peerSessionId,
-      turn_id: crypto.randomUUID(),
+      turn_id: randomUUID(),
     });
   return true;
 }
@@ -1264,7 +1341,92 @@ const FIXTURE_PNG = Buffer.from(
   "base64",
 );
 
-const http = createServer((request, response) => {
+async function previewFixture(name) {
+  if (name.endsWith(".png")) return FIXTURE_PNG;
+  if (name.endsWith(".pdf")) return fixturePdf();
+  if (name.endsWith(".csv")) {
+    return Buffer.from(
+      [
+        "name,value",
+        ...Array.from(
+          { length: 125 },
+          (_, index) => `row-${index + 1},${index + 1}`,
+        ),
+      ].join("\n"),
+    );
+  }
+  if (name.endsWith(".html")) {
+    return Buffer.from(
+      `<!doctype html><html><body><h1>Safe HTML artifact</h1><p>Scripts stay inert.</p><a href="/__test__/html-link-leak">Inert artifact link</a><form action="/__test__/html-form-leak"><button>Submit leak</button></form><meta http-equiv="refresh" content="0;url=/__test__/html-meta-leak"><img src="/__test__/html-network-leak"><script>document.body.dataset.scriptExecuted="yes";fetch("/__test__/html-script-leak")</script></body></html>`,
+    );
+  }
+  if (name.endsWith(".svg")) {
+    return Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 200 80"><a xlink:href="/__test__/svg-link-leak"><text x="10" y="40">Safe SVG artifact</text></a><script>document.documentElement.dataset.scriptExecuted="yes"</script><image href="/__test__/svg-network-leak"/></svg>`,
+    );
+  }
+  if (name.endsWith(".md")) {
+    return Buffer.from(
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n",
+    );
+  }
+  if (name.endsWith(".ts")) {
+    return Buffer.from("export const answer = 42;\n");
+  }
+  if (name.endsWith(".txt")) {
+    return Buffer.from("Plain text artifact\nAll 68 checks passed.\n");
+  }
+  return Buffer.from(`fixture ${name}`);
+}
+
+function fixturePdf() {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    pdfTextStream("PDF artifact page one"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>",
+    pdfTextStream("PDF artifact page two"),
+  ];
+  let source = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(source));
+    source += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(source);
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  source += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("");
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(source);
+}
+
+function pdfTextStream(text) {
+  const content = `BT /F1 18 Tf 72 720 Td (${text}) Tj ET\n`;
+  return `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`;
+}
+
+function artifactMime(name) {
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".html")) return "text/html";
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".pptx"))
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (name.endsWith(".xlsx"))
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (name.endsWith(".csv")) return "text/csv";
+  if (name.endsWith(".md")) return "text/markdown";
+  return "application/octet-stream";
+}
+
+const http = createServer(async (request, response) => {
   if (new URL(request.url, "http://fixture").pathname === "/api/files") {
     response.setHeader(
       "Access-Control-Allow-Origin",
@@ -1295,7 +1457,12 @@ const http = createServer((request, response) => {
       response.writeHead(403).end("access denied");
       return;
     }
-    response.writeHead(200, { "content-type": file.type }).end(file.bytes);
+    response
+      .writeHead(200, {
+        "content-type": file.type,
+        "content-length": file.bytes.length,
+      })
+      .end(request.method === "HEAD" ? undefined : file.bytes);
     return;
   }
   if (request.url === "/api/auth/me") {
@@ -1457,18 +1624,18 @@ const http = createServer((request, response) => {
     if (url.pathname === "/__test__/native/seed-history") {
       const entries = [
         {
-          id: `bare-${crypto.randomUUID()}`,
+          id: `bare-${randomUUID()}`,
           title: "Unscoped native history (not resumable)",
           message_count: 2,
         },
       ];
       for (const label of ["A", "B"]) {
-        const id = `${state.profileId}:local:native-history-${crypto.randomUUID()}`;
+        const id = `${state.profileId}:local:native-history-${randomUUID()}`;
         const historical = sessionState(id);
         historical.profileId = state.profileId;
         historical.workspaceRoot = state.workspaceRoot;
         forkedSessions.add(id);
-        const turnId = crypto.randomUUID();
+        const turnId = randomUUID();
         const frames = [
           {
             type: "user_message",
@@ -1952,13 +2119,17 @@ const http = createServer((request, response) => {
     }
     // The original workspace path, as Core records it.
     const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
-    deliveredFiles.set(deliveredFileKey(sessionId, path), {
-      type: name.endsWith(".png") ? "image/png" : "application/octet-stream",
-      bytes: name.endsWith(".png")
-        ? FIXTURE_PNG
-        : Buffer.from(`fixture ${name}`),
-    });
-    const turnId = crypto.randomUUID();
+    const validPreview = url.searchParams.get("valid") === "1";
+    const deliveredFile = {
+      type: artifactMime(name),
+      bytes: validPreview
+        ? await previewFixture(name)
+        : name.endsWith(".png")
+          ? FIXTURE_PNG
+          : Buffer.from(`fixture ${name}`),
+    };
+    deliveredFiles.set(deliveredFileKey(sessionId, path), deliveredFile);
+    const turnId = randomUUID();
     notify(
       socket,
       sessionId,
@@ -1983,6 +2154,23 @@ const http = createServer((request, response) => {
       turnId,
       turnId,
       2,
+      state.log.seq + 1,
+      "file_attached",
+      {
+        path,
+        mime: deliveredFile.type,
+        size_bytes: deliveredFile.bytes.length,
+        attachment_owner: {
+          assistant_segment_id: `${turnId}:assistant:delivery`,
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      turnId,
+      turnId,
+      3,
       state.log.seq + 1,
       "turn_terminal",
       {
@@ -2157,6 +2345,20 @@ const http = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  // Profile model state is shared by every test on this fixture. A test that
+  // changes the Profile default resets it first, so a retry (or a later test)
+  // starts from the same configured models.
+  if (request.method === "POST" && request.url === "/__test__/models/reset") {
+    configuredModelsByProfile.clear();
+    configuredModelsByProfile.set(
+      defaultProfileId,
+      cloneConfiguredModels(initialProfileModels),
+    );
+    effectiveRuntimeModelByProfile.clear();
+    effectiveRuntimeModelByProfile.set(defaultProfileId, defaultRuntimeModel);
+    response.writeHead(204).end();
+    return;
+  }
   if (
     request.method === "POST" &&
     request.url === "/__test__/session-open/reset"
@@ -2242,6 +2444,14 @@ const http = createServer((request, response) => {
     ).searchParams.get("session_id");
     if (armedSessionId) peerHoldNextSessions.add(armedSessionId);
     else holdPeerNextTurn += 1;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/connectors/reset"
+  ) {
+    connectorRowsByWorkspace.clear();
     response.writeHead(204).end();
     return;
   }
@@ -2559,9 +2769,14 @@ const baseCapabilities = {
     "memory/search",
     "memory/load",
     "memory/ingest",
+    "mcp/status/list",
+    "cron/list",
+    "cron/toggle",
     "session/list",
     "session/delete",
+    "session/title.set",
     "session/files.list",
+    "session/files/read",
     "peer/prepare",
     "peer/gather",
   ],
@@ -2584,6 +2799,7 @@ const baseCapabilities = {
     "harness.task_artifacts.v1",
     "plan.todos.v1",
     "session.workspace_cwd.v1",
+    "session.files.read.v1",
     "skill.actions.v1",
     "skill.action_jobs.v1",
     "auxiliary.rest_to_ws.v1",
@@ -2619,6 +2835,10 @@ function capabilitiesFor(socket, state) {
   const memoryCapabilities = memoryMainSockets.has(socket)
     ? {
         ...capabilities,
+        supported_features: [
+          ...capabilities.supported_features,
+          "memory.session_scope.v1",
+        ],
         supported_methods: [
           ...capabilities.supported_methods,
           "memory/request",
@@ -2629,6 +2849,19 @@ function capabilitiesFor(socket, state) {
   const workspaceRoot = state
     ? state.workspaceRoot
     : openedWorkspaceBySocket.get(socket);
+  if (workspaceRoot?.includes("connector-management")) {
+    return {
+      ...memoryCapabilities,
+      supported_methods: [
+        ...memoryCapabilities.supported_methods,
+        ...MCP_CONNECTOR_METHODS,
+      ],
+      supported_features: [
+        ...memoryCapabilities.supported_features,
+        MCP_CONNECTOR_FEATURE,
+      ],
+    };
+  }
   if (workspaceRoot?.startsWith(driverDiscoveryPrefix)) {
     const adverts = driverAdverts(
       workspaceRoot.slice(driverDiscoveryPrefix.length),
@@ -2655,7 +2888,11 @@ function capabilitiesFor(socket, state) {
             ...PEER_CONTROL_METHODS,
             PEER_SUB_PROVIDERS_METHOD,
           ]
-        : memoryCapabilities.supported_methods,
+        : adverts.native
+          ? memoryCapabilities.supported_methods
+          : memoryCapabilities.supported_methods.filter(
+              (method) => method !== "peer/prepare" && method !== "peer/gather",
+            ),
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,
@@ -2797,7 +3034,7 @@ function handleNativeRequest(socket, request, state) {
     }
     native.goal = {
       ...native.goal,
-      goal_id: native.goal?.goal_id ?? crypto.randomUUID(),
+      goal_id: native.goal?.goal_id ?? randomUUID(),
       objective: params.objective,
       status: params.status,
       token_budget: params.token_budget ?? native.goal?.token_budget ?? 50_000,
@@ -2835,7 +3072,7 @@ function handleNativeRequest(socket, request, state) {
     }
     const loop = {
       ...owner,
-      loop_id: crypto.randomUUID(),
+      loop_id: randomUUID(),
       mode: params.mode,
       prompt: params.prompt?.trim() || "run maintenance checks",
       status: "active",
@@ -2950,7 +3187,7 @@ function handleNativeRequest(socket, request, state) {
     const mode = params.mode === "stream" ? "stream" : "poll";
     const monitor = {
       ...owner,
-      monitor_id: crypto.randomUUID(),
+      monitor_id: randomUUID(),
       name: params.name.trim(),
       argv: params.argv,
       filter_regex: params.filter_regex ?? null,
@@ -3653,6 +3890,18 @@ sockets.on("connection", (socket, request) => {
                 ],
               },
             ],
+          },
+          moonshot: {
+            env: "MOONSHOT_API_KEY",
+            models: [{ id: "kimi-2.5", endpoints: [] }],
+          },
+          dashscope: {
+            env: "DASHSCOPE_API_KEY",
+            models: [{ id: "qwen3-coder", endpoints: [] }],
+          },
+          minimax: {
+            env: "MINIMAX_API_KEY",
+            models: [{ id: "minimax-m3", endpoints: [] }],
           },
           ollama: {
             env: "",
@@ -4802,6 +5051,28 @@ sockets.on("connection", (socket, request) => {
       reply(socket, request.id, {});
       return;
     }
+    if (request.method === "session/title.set") {
+      const title = request.params?.title?.trim();
+      if (!title || [...title].length > 200) {
+        replyError(socket, request.id, -32602, "Invalid session title");
+        return;
+      }
+      for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
+        sessionsByWorkspace.set(
+          workspaceRoot,
+          sessions.map((session) =>
+            session.id === request.params.session_id
+              ? { ...session, title }
+              : session,
+          ),
+        );
+      }
+      reply(socket, request.id, {
+        session_id: request.params.session_id,
+        title,
+      });
+      return;
+    }
     if (request.method === "profile/skills/list") {
       const duplicates = skillDuplicatesSockets.has(socket);
       reply(socket, request.id, {
@@ -5006,7 +5277,179 @@ sockets.on("connection", (socket, request) => {
       });
       return;
     }
+    if (request.method === "session/files/read") {
+      const path = request.params.path;
+      const entry = [...deliveredFiles.entries()].find(([key]) => {
+        if (!key.startsWith(`${sessionId}\n`)) return false;
+        if (path.startsWith(".artifacts/delivered/")) {
+          const original = key.slice(sessionId.length + 1);
+          const bucket = createHash("sha256")
+            .update(original)
+            .digest("hex")
+            .slice(0, 32);
+          return (
+            path ===
+            `.artifacts/delivered/${bucket}/${original.split("/").at(-1)}`
+          );
+        }
+        return key.endsWith(`/${path}`);
+      });
+      if (!entry) {
+        replyError(socket, request.id, -32004, "workspace file was not found", {
+          kind: "workspace_file_not_found",
+        });
+        return;
+      }
+      const file = entry[1];
+      const offset = request.params.offset ?? 0;
+      const length = Math.min(request.params.length ?? 512 * 1024, 512 * 1024);
+      const bytes = file.bytes.subarray(offset, offset + length);
+      reply(socket, request.id, {
+        session_id: sessionId,
+        path,
+        size_bytes: file.bytes.length,
+        offset,
+        eof: offset + bytes.length >= file.bytes.length,
+        mime_type: file.type,
+        encoding: "base64",
+        content_base64: bytes.toString("base64"),
+      });
+      return;
+    }
+    if (request.method.startsWith("mcp/connector/")) {
+      const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
+      if (workspaceRoot.includes("connector-management-denied")) {
+        replyError(
+          socket,
+          request.id,
+          -32003,
+          "forbidden: session access cannot manage profile connectors",
+          { kind: "forbidden" },
+        );
+        return;
+      }
+      const rows = connectorRows(workspaceRoot);
+      const connectorId = request.params.connector_id;
+      let row = rows.find((item) => item.id === connectorId);
+      if (request.method === "mcp/connector/create") {
+        const input = request.params.connector;
+        row = {
+          id: `http-${rows.length + 1}`,
+          display_name: input.name,
+          transport: "http",
+          enabled: true,
+          status: "connected",
+          tool_count: 1,
+          tools: ["fetch"],
+          url: input.url,
+        };
+        rows.push(row);
+      } else if (request.method === "mcp/connector/delete") {
+        const index = rows.findIndex((item) => item.id === connectorId);
+        if (index >= 0) rows.splice(index, 1);
+      } else if (!row) {
+        replyError(socket, request.id, -32004, "connector was not found", {
+          kind: "resource_not_found",
+        });
+        return;
+      } else if (request.method === "mcp/connector/update") {
+        if (request.params.patch.name)
+          row.display_name = request.params.patch.name;
+        if (request.params.patch.url) row.url = request.params.patch.url;
+      } else if (request.method === "mcp/connector/set_enabled") {
+        row.enabled = request.params.enabled === true;
+        row.status = row.enabled ? "connected" : "disabled";
+        if (row.enabled) delete row.error;
+      } else if (request.method === "mcp/connector/reconnect") {
+        row.status = row.enabled ? "connected" : "disabled";
+        if (row.enabled) delete row.error;
+      }
+      const status = connectorPayload(
+        sessionId,
+        request.params.profile_id ??
+          profileIdFromSessionId(sessionId) ??
+          defaultProfileId,
+        workspaceRoot,
+      );
+      reply(socket, request.id, {
+        connector: row
+          ? {
+              id: row.id,
+              display_name: row.display_name,
+              transport: row.transport,
+              enabled: row.enabled,
+            }
+          : { id: connectorId },
+        status: status.servers.find((server) => server.id === row?.id) ?? null,
+      });
+      return;
+    }
+    if (request.method === "mcp/status/list") {
+      const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
+      if (workspaceRoot.includes("connector-management")) {
+        reply(
+          socket,
+          request.id,
+          connectorPayload(sessionId, request.params.profile_id, workspaceRoot),
+        );
+        return;
+      }
+      reply(socket, request.id, {
+        session_id: sessionId,
+        profile_id: request.params.profile_id,
+        servers: [
+          {
+            id: "docs",
+            display_name: "Documentation MCP",
+            transport: "stdio",
+            status: "connected",
+            tool_count: 2,
+            tools: ["search", "read"],
+          },
+          {
+            id: "legacy",
+            transport: "http",
+            status: "failed",
+            tool_count: 0,
+            tools: [],
+            error: "connection refused",
+          },
+        ],
+        summary: { connected: 1, connecting: 0, failed: 1, disabled: 0 },
+      });
+      return;
+    }
+    if (request.method === "cron/list") {
+      reply(socket, request.id, {
+        jobs: cronJobs,
+        count: cronJobs.length,
+        gateway_running: false,
+        truncated: false,
+      });
+      return;
+    }
+    if (request.method === "cron/toggle") {
+      const job = cronJobs.find((entry) => entry.id === request.params.job_id);
+      if (!job) {
+        replyError(socket, request.id, -32_170, "Cron job not found");
+        return;
+      }
+      job.enabled = request.params.enabled === true;
+      reply(socket, request.id, { job });
+      return;
+    }
     if (request.method === "session/files.list") {
+      const delivered = [...deliveredFiles.entries()]
+        .filter(([key]) => key.startsWith(`${sessionId}\n`))
+        .map(([key, file]) => {
+          const path = key.slice(sessionId.length + 1);
+          return {
+            filename: path.split("/").at(-1),
+            path,
+            size_bytes: file.bytes.length,
+            modified_at: "2026-10-28T00:00:00Z",
+          };
+        });
       reply(socket, request.id, {
         files: [
           {
@@ -5021,6 +5464,7 @@ sockets.on("connection", (socket, request) => {
             size_bytes: 8100,
             modified_at: "2026-08-25T23:58:00Z",
           },
+          ...delivered,
         ],
       });
       return;
@@ -5137,6 +5581,91 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (text === "Write an artifact fixture") {
+    const content =
+      "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n";
+    deliveredFiles.set(deliveredFileKey(sessionId, "/workspace/report.md"), {
+      type: "text/markdown",
+      bytes: Buffer.from(content),
+    });
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: "write-artifact",
+      name: "write_file",
+      write_path: "report.md",
+      arguments_preview: JSON.stringify({ content: "x".repeat(2_000) }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: "write-artifact",
+      status: "complete",
+      output_preview: "report.md written",
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      { outcome: "completed" },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
+  const unconditionalWriteFailure =
+    text === "Fail a write fixture unconditionally";
+  if (text === "Fail a write fixture" || unconditionalWriteFailure) {
+    const permissionDenied =
+      sessionState(sessionId).permission.mode === "read_only";
+    const denied = permissionDenied || unconditionalWriteFailure;
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
+      name: "write_file",
+      arguments_preview: JSON.stringify({ path: "report.md" }),
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: unconditionalWriteFailure
+        ? "write-fail"
+        : "write-permission",
+      status: denied ? "error" : "complete",
+      ...(denied
+        ? {
+            error: permissionDenied
+              ? "write_file is not permitted by read-only filesystem access"
+              : "permission denied: read-only workspace",
+          }
+        : { output_preview: "report.md written" }),
+    });
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "turn_terminal",
+      {
+        outcome: "completed",
+        token_usage: { input_tokens: 12, output_tokens: 9 },
+      },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push({
+      turn_id: turnId,
+      thread_id: turnId,
+      state: "completed",
+    });
+    state.activeTurn = null;
+    return null;
+  }
   // plan.todos.v1: only the plan fixture streams a checklist, so every other
   // spec keeps a composer with nothing pinned above it.
   if (planFixtureSockets.has(socket) && text.startsWith(PLAN_FIXTURE_PROMPT)) {

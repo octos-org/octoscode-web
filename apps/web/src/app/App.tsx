@@ -1,9 +1,27 @@
+import { randomUUID } from "../shared/uuid.ts";
 import { ModelsSettingsContent } from "../features/product-settings/ModelsSettingsContent.tsx";
 import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
 import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
 import { SettingsDialog } from "../features/product-controls/SettingsDialog.tsx";
 import { SessionConfigPane } from "../features/session-config/SessionConfigPane.tsx";
-import { SessionControlBar } from "../features/product-controls/SessionControlBar.tsx";
+import {
+  PermissionControl,
+  SessionControlBar,
+  type ModelControlProps,
+} from "../features/product-controls/SessionControlBar.tsx";
+import {
+  AttachChip,
+  ComposerSettingsRow,
+  FolderChip,
+  ModelChip,
+  SkillsChip,
+  UsageChip,
+} from "../features/composer-bar/ComposerBar.tsx";
+import {
+  modelStrengthLabel,
+  modelStrengths,
+} from "../features/composer-bar/model-strengths.ts";
+import { sessionUsage } from "../features/composer-bar/session-usage.ts";
 import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
@@ -11,10 +29,12 @@ import {
   timelineActivity,
 } from "../features/timeline/entry-model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
+import { waitingFeedback } from "../features/session/waiting-feedback.ts";
 import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { peerReadonlySlug } from "../features/composer/peer-readonly.ts";
 import { planCardVisible } from "../features/supervision/plan.ts";
 import {
   type ComponentType,
@@ -26,8 +46,11 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
 } from "react";
 import {
+  APPUI_INVENTORY_METHODS,
   APPUI_SERVER_METHODS,
   APPUI_SKILL_METHODS,
   CORE_UI_FEATURES,
@@ -95,9 +118,13 @@ import {
   saveDurableDraft,
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
-import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
+import {
+  useWorkspaceSessionCatalog,
+  type WorkspaceSessionCatalogSnapshot,
+} from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
+  forgetKnownSession,
   loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
@@ -121,6 +148,8 @@ import {
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
+import { peerControlAdmitted } from "../features/control/peer-control-commands.ts";
+import { peerDispatchAdmitted } from "../features/control/peer-dispatch-commands.ts";
 import {
   loadSessionDefaults,
   saveSessionDefaults,
@@ -226,6 +255,17 @@ import {
   AttachmentAccessContext,
   type AttachmentAccess,
 } from "../features/timeline/attachment-access.ts";
+import {
+  deliveredArtifactWorkspacePath,
+  isWorkspaceReadLimitError,
+  readSessionFileBlob,
+  readSessionFileSize,
+  workspaceRelativeArtifactPath,
+} from "../features/timeline/session-file-read.ts";
+import {
+  uniqueProfileFileForWorkspacePath,
+  uniqueWorkspaceAttachmentFile,
+} from "../features/timeline/attachments.ts";
 import { useConversationSearch } from "../features/timeline/use-conversation-search.ts";
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
@@ -311,6 +351,14 @@ const SkillsSettingsContent = lazyNamed(
 const MemorySettingsContent = lazyNamed(
   () => import("../features/memory/MemorySettingsContent.tsx"),
   (module) => module.MemorySettingsContent,
+);
+const ConnectorsSettingsContent = lazyNamed(
+  () => import("../features/connectors/ConnectorsSettingsContent.tsx"),
+  (module) => module.ConnectorsSettingsContent,
+);
+const CronSettingsContent = lazyNamed(
+  () => import("../features/cron/CronSettingsContent.tsx"),
+  (module) => module.CronSettingsContent,
 );
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
@@ -567,6 +615,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // when the seat proof lands.
   const [fleetStartPending, setFleetStartPending] =
     useState<FleetStartSequencerState>({ kind: "idle" });
+  const [nativeFleetStartState, setNativeFleetStartState] = useState<
+    FleetStartState | undefined
+  >(undefined);
+  const [fleetGatherState, setFleetGatherState] = useState<
+    "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed"
+  >("idle");
   const [showThinkingPreference] = useState(() =>
     parseShowThinking(
       browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null,
@@ -597,6 +651,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   kind: "tool-start",
                   atMs: Date.now(),
                   toolName: last.title,
+                  argumentsJson: last.toolArguments ?? last.body,
                 } as const)
               : ({ kind: "tool-end", atMs: Date.now() } as const)
             : ({ kind: "assistant-delta", atMs: Date.now() } as const);
@@ -747,6 +802,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
+  const nativeFleetSupported =
+    supportsMethod(session.capabilities, "peer/prepare") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.SESSION_OPEN) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_START);
+  const nativeFleetControlsSupported =
+    supportsMethod(session.capabilities, "turn/steer") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_INTERRUPT) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.APPROVAL_RESPOND);
+  const nativeFleetGatherSupported = supportsMethod(
+    session.capabilities,
+    "peer/gather",
+  );
+  const externalFleetSupported =
+    peerControlAdmitted(session.capabilities) &&
+    peerDispatchAdmitted(session.capabilities);
+  const nativeFleetActive = nativeFleetSupported && !externalFleetSupported;
+  const fleetSupported = nativeFleetSupported || externalFleetSupported;
   // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
   // advertises `onboarding.workspace_browse.v1`, and the picker shows no
   // browsing affordance at all without an adapter.
@@ -764,9 +836,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
     ) &&
     supportsMethod(session.capabilities, CORE_UI_METHODS.MEMORY_OVERVIEW);
+  const connectorsSettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsMethod(session.capabilities, APPUI_INVENTORY_METHODS.MCP);
+  const scheduledSettingsAvailable =
+    Boolean(protocol.client && session.opened) &&
+    supportsFeature(
+      session.capabilities,
+      CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+    ) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.CRON_LIST);
   const skillsProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const memoryProfileId =
+    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const settingsProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const [authenticatedMemoryProfileId, setAuthenticatedMemoryProfileId] =
     useState<string | null>(null);
@@ -775,6 +859,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const attachmentSessionId = session.opened?.session_id ?? "";
   const attachmentProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+  const attachmentWorkspaceRoot = session.opened?.workspace_root ?? "";
+  const attachmentSizeMetadataRef = useRef(new Map<string, number>());
+  useMemo(() => {
+    const sizes = new Map<string, number>();
+    for (const entry of conversation.timeline) {
+      for (const [path, sizeBytes] of Object.entries(
+        entry.attachmentSizes ?? {},
+      )) {
+        sizes.set(path, sizeBytes);
+      }
+    }
+    const previous = attachmentSizeMetadataRef.current;
+    if (
+      previous.size === sizes.size &&
+      [...sizes].every(([path, size]) => previous.get(path) === size)
+    ) {
+      return previous;
+    }
+    attachmentSizeMetadataRef.current = sizes;
+    return sizes;
+  }, [conversation.timeline]);
   const attachmentAccess = useMemo((): AttachmentAccess | null => {
     const client = protocol.client;
     const capabilities = session.capabilities;
@@ -785,8 +890,218 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !attachmentProfileId
     )
       return null;
+    const canReadWorkspace = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_READ,
+    );
+    const canUseBlob = supportsMethod(
+      capabilities,
+      CORE_UI_METHODS.SESSION_FILES_LIST,
+    );
+    const listedWorkspaceFile = async (reference: string) => {
+      if (!canUseBlob) return null;
+      const result = await client.listSessionFiles({
+        session_id: attachmentSessionId,
+      });
+      return uniqueWorkspaceAttachmentFile(
+        reference,
+        attachmentWorkspaceRoot,
+        result.files,
+      );
+    };
+    const downloadBlob = async (reference: string, signal?: AbortSignal) => {
+      const commands = await client.mediaCommands(
+        attachmentSessionId,
+        attachmentProfileId,
+        capabilities,
+      );
+      return commands.download(reference, signal);
+    };
     return {
+      ...(canReadWorkspace || canUseBlob
+        ? {
+            async describe(reference: string, workspaceFile = false) {
+              if (workspaceFile) {
+                const path = workspaceRelativeArtifactPath(
+                  reference,
+                  attachmentWorkspaceRoot,
+                );
+                if (!path || !canReadWorkspace) return null;
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      path,
+                    ),
+                  };
+                } catch (reason) {
+                  if (!isWorkspaceReadLimitError(reason)) throw reason;
+                  const listed = await listedWorkspaceFile(reference);
+                  // Listing is metadata-only and scoped to this Session. A
+                  // unique full-path handle preserves large tenant-contained
+                  // downloads; external files without one fail closed.
+                  return listed
+                    ? { sizeBytes: listed.size_bytes }
+                    : { saveAvailable: false };
+                }
+              }
+              if (!canUseBlob) return null;
+              const workspacePath = workspaceRelativeArtifactPath(
+                reference,
+                attachmentWorkspaceRoot,
+              );
+              const deliveredPath = canReadWorkspace
+                ? await deliveredArtifactWorkspacePath(reference)
+                : null;
+              if (deliveredPath && !workspacePath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // The durable copy is the correct source for an external
+                  // delivery, but older deliveries may not have one.
+                }
+              }
+              if (workspacePath && canReadWorkspace) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      workspacePath,
+                    ),
+                  };
+                } catch {
+                  // Fall back to delivery-time metadata when the current
+                  // source cannot be read through the workspace route.
+                }
+              }
+              const sizeBytes =
+                attachmentSizeMetadataRef.current.get(reference);
+              if (sizeBytes !== undefined && sizeBytes > 0) {
+                return { sizeBytes };
+              }
+              if (deliveredPath && workspacePath) {
+                try {
+                  return {
+                    sizeBytes: await readSessionFileSize(
+                      client,
+                      attachmentSessionId,
+                      deliveredPath,
+                    ),
+                  };
+                } catch {
+                  // Older deliveries may predate the durable copy. Fall back
+                  // to the current workspace source only as a last resort.
+                }
+              }
+              try {
+                const result = await client.listSessionFiles({
+                  session_id: attachmentSessionId,
+                });
+                const deliveredCopy = deliveredPath
+                  ? uniqueProfileFileForWorkspacePath(
+                      deliveredPath,
+                      result.files,
+                    )
+                  : null;
+                if (deliveredCopy) {
+                  return { sizeBytes: deliveredCopy.size_bytes };
+                }
+                const exact = result.files.filter(
+                  (file) => file.path === reference,
+                );
+                return exact.length === 1
+                  ? { sizeBytes: exact[0]!.size_bytes }
+                  : null;
+              } catch {
+                return null;
+              }
+            },
+          }
+        : {}),
+      workspacePathAvailable(reference) {
+        const path = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        return Boolean(path && (canReadWorkspace || canUseBlob));
+      },
+      previewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_READ,
+      ),
+      deliveredPreviewAvailable: supportsMethod(
+        capabilities,
+        CORE_UI_METHODS.SESSION_FILES_LIST,
+      ),
       async download(reference, signal) {
+        return downloadBlob(reference, signal);
+      },
+      async downloadForSave(reference, signal) {
+        return downloadBlob(reference, signal);
+      },
+      async downloadWorkspaceFile(reference, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        if (
+          workspacePath &&
+          supportsMethod(capabilities, CORE_UI_METHODS.SESSION_FILES_READ)
+        ) {
+          return readSessionFileBlob(
+            client,
+            attachmentSessionId,
+            workspacePath,
+            signal,
+          );
+        }
+        return downloadBlob(reference, signal);
+      },
+      async saveWorkspaceFile(reference, sizeBytes, signal) {
+        const workspacePath = workspaceRelativeArtifactPath(
+          reference,
+          attachmentWorkspaceRoot,
+        );
+        const canReadWorkspace = supportsMethod(
+          capabilities,
+          CORE_UI_METHODS.SESSION_FILES_READ,
+        );
+        let limitError: unknown;
+        if (workspacePath && canReadWorkspace) {
+          if (sizeBytes !== undefined && sizeBytes > 32 * 1024 * 1024) {
+            limitError = new Error(
+              "workspace_file_too_large: session file exceeds the read limit",
+            );
+          } else {
+            try {
+              return await readSessionFileBlob(
+                client,
+                attachmentSessionId,
+                workspacePath,
+                signal,
+              );
+            } catch (reason) {
+              if (!isWorkspaceReadLimitError(reason)) throw reason;
+              limitError = reason;
+            }
+          }
+          const listed = await listedWorkspaceFile(reference);
+          if (!listed) throw limitError;
+          const commands = await client.mediaCommands(
+            attachmentSessionId,
+            attachmentProfileId,
+            capabilities,
+          );
+          return commands.download(listed.path, signal);
+        }
         const commands = await client.mediaCommands(
           attachmentSessionId,
           attachmentProfileId,
@@ -800,11 +1115,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.capabilities,
     attachmentSessionId,
     attachmentProfileId,
+    attachmentWorkspaceRoot,
   ]);
   const autonomyAvailable = commandSuggestions(
     "/",
     session.opened?.capabilities,
   ).some((command) => command.intent === "autonomy");
+  const [deletedSessionIds, setDeletedSessionIds] = useState<readonly string[]>(
+    [],
+  );
+  const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  useEffect(() => {
+    const reopened = session.opened?.session_id;
+    if (!reopened) return;
+    setDeletedSessionIds((current) =>
+      current.filter((sessionId) => sessionId !== reopened),
+    );
+  }, [session.opened?.session_id]);
   // The server's per-workspace history (`session/list { cwd, profile_id }`),
   // re-listed when the active session changes or a turn finishes so a new
   // conversation or a retitled one shows up without a reload. It is keyed to
@@ -819,17 +1146,41 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
     refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
       conversation.queue.active?.turnId ?? ""
-    }`,
+    }\n${catalogRefreshNonce}`,
   });
+  // Deleted rows stay hidden while the catalog re-lists, so the old listing
+  // cannot flash them back into the sidebar.
+  const visibleCatalog = useMemo<WorkspaceSessionCatalogSnapshot>(
+    () =>
+      deletedSessionIds.length === 0
+        ? sessionCatalog
+        : new Map(
+            [...sessionCatalog].map(([path, workspace]) => [
+              path,
+              {
+                ...workspace,
+                sessions: workspace.sessions.filter(
+                  (row) => !deletedSessionIds.includes(row.sessionId),
+                ),
+              },
+            ]),
+          ),
+    [deletedSessionIds, sessionCatalog],
+  );
   const navigableSessions = useMemo(() => {
-    const catalogRefs = [...sessionCatalog.values()].flatMap(
+    const catalogRefs = [...visibleCatalog.values()].flatMap(
       (workspace) => workspace.sessions,
     );
     return mergeConfirmedRetainedSessions(knownSessions, [
       ...workspaceProduct.backgroundTurns,
       ...catalogRefs,
-    ]);
-  }, [knownSessions, sessionCatalog, workspaceProduct.backgroundTurns]);
+    ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
+  }, [
+    knownSessions,
+    visibleCatalog,
+    workspaceProduct.backgroundTurns,
+    deletedSessionIds,
+  ]);
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -1218,6 +1569,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (matchKeyboardParityShortcut(event)?.id !== "focus-dispatch") return;
       // §8: never steal a chord a text control or dialog owns.
       if (shortcutTargetSuppressed(event.target)) return;
+      if (!fleetSupported) return;
       event.preventDefault();
       setFleetRouteActive(true);
       // The Fleet pane is `hidden` until the route is active and a HIDDEN
@@ -1228,7 +1580,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
     window.addEventListener("keydown", onFocusDispatchKeyDown);
     return () => window.removeEventListener("keydown", onFocusDispatchKeyDown);
-  }, []);
+  }, [fleetSupported]);
   // Wait only for the lazy Fleet surface to mount. An unavailable Start form
   // has an immediate focus target, so it does not exhaust the frame retries.
   useEffect(() => {
@@ -1257,6 +1609,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
   }, [fleetBriefFocusRequest, fleetRouteActive]);
 
+  const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
+    string | null
+  >(null);
+  const readOnlyPeer =
+    peerReadonlySlug(
+      peers.manager?.snapshot().peers ?? [],
+      session.opened?.session_id ?? null,
+    ) !== null;
   const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
@@ -1267,6 +1627,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (
       !session.connected ||
       !opened ||
+      readOnlyPeer ||
       !text ||
       // #56: another tab owns this session's lock — dispatching here
       // would interleave with it. Take over (banner button) to regain.
@@ -1309,7 +1670,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     // optional report formatting. It never submits work or rebinds to selection.
     const showLocalReport = (report: LocalReport) => {
       const append = conversation.setTimeline;
-      const id = `${report.kind}:${crypto.randomUUID()}`;
+      const id = `${report.kind}:${randomUUID()}`;
       void import("../features/commands/local-report.ts")
         .then(({ localCommandReport }) => {
           const message = localCommandReport(report, t);
@@ -1392,7 +1753,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `inspection:${crypto.randomUUID()}`,
+                `inspection:${randomUUID()}`,
                 t("Inspection unavailable"),
                 t(
                   "The Session authority changed. Reopen its thread or turn inspector.",
@@ -1418,7 +1779,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `resume:${crypto.randomUUID()}`,
+                `resume:${randomUUID()}`,
                 t("History browsing unavailable"),
                 t("The Session authority changed. Reopen the history picker."),
                 "error",
@@ -1470,7 +1831,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `gather:${crypto.randomUUID()}`,
+                `gather:${randomUUID()}`,
                 t("Peer gather"),
                 outcome === "empty"
                   ? t("No peers staged on the blackboard.")
@@ -1485,7 +1846,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `gather:${crypto.randomUUID()}`,
+                `gather:${randomUUID()}`,
                 t("Peer gather unavailable"),
                 t(
                   "No synthesis was queued. Retry from the current Session connection.",
@@ -1537,7 +1898,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `history-unavailable:${crypto.randomUUID()}`,
+                `history-unavailable:${randomUUID()}`,
                 t("History unavailable"),
                 t(
                   "The Session authority changed. Reopen history from its current connection.",
@@ -1563,7 +1924,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             conversation.setTimeline((current) =>
               addSystemMessage(
                 current,
-                `review-unavailable:${crypto.randomUUID()}`,
+                `review-unavailable:${randomUUID()}`,
                 t("Review unavailable"),
                 t(
                   "The Session authority changed. Reopen native review from its current connection.",
@@ -1657,11 +2018,99 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
 
+  const retryPermissionDenied = async (turnId: string) => {
+    if (
+      readOnlyPeer ||
+      permissionRetryBusyTurnId ||
+      !safety.permission.editable
+    )
+      return;
+    const client = protocol.client;
+    const opened = session.opened;
+    const option = permissionRetryProfile;
+    const prompt = conversation.timeline.find(
+      (entry) =>
+        entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
+    )?.body;
+    if (!client || !opened || !option || !prompt) return;
+    const retryKey = activeSessionKey;
+    const ownerIsCurrent = () =>
+      activeSessionClientRef.current === client &&
+      openedSessionIdRef.current === opened.session_id &&
+      activeSessionKeyRef.current === retryKey;
+    setPermissionRetryBusyTurnId(turnId);
+    try {
+      const result = await client.setPermissionProfile({
+        session_id: opened.session_id,
+        update: { mode: "workspace_write", network: option.network },
+      });
+      if (
+        !result.applied ||
+        result.session_id !== opened.session_id ||
+        result.current.mode !== "workspace_write" ||
+        result.current.network !== option.network
+      ) {
+        throw new Error("The server did not apply workspace write permission.");
+      }
+      if (!ownerIsCurrent()) return;
+      await safety.refreshPermission();
+      if (!ownerIsCurrent()) return;
+      conversation.enqueuePrompt(prompt);
+    } catch (reason) {
+      setCommandError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    } finally {
+      setPermissionRetryBusyTurnId(null);
+    }
+  };
+
   const activeTurnId = conversation.queue.active?.turnId ?? null;
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
   const activityLabel = timelineActivity(conversation.timeline, activeTurnId);
+  const activeTurnWaitRef = useRef<{
+    turnId: string;
+    startedAtMs: number;
+  } | null>(null);
+  const [waitNow, setWaitNow] = useState(() => Date.now());
+  if (activeTurnId) {
+    if (activeTurnWaitRef.current?.turnId !== activeTurnId)
+      activeTurnWaitRef.current = {
+        turnId: activeTurnId,
+        startedAtMs: Date.now(),
+      };
+  } else activeTurnWaitRef.current = null;
+  useEffect(() => {
+    if (!activeTurnId) return;
+    const timer = window.setInterval(() => setWaitNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [activeTurnId]);
+  const longWait = activityLabel
+    ? waitingFeedback({
+        activityLabel,
+        turnStarting,
+        elapsedMs: activeTurnWaitRef.current
+          ? waitNow - activeTurnWaitRef.current.startedAtMs
+          : 0,
+      })
+    : null;
+  const localizedActivityLabel = activityLabel
+    ? activityLabel.startsWith("Running ") && activityLabel.endsWith("…")
+      ? t("Running {value0}…", {
+          value0: activityLabel.slice("Running ".length, -1),
+        })
+      : t(activityLabel)
+    : null;
+  const waitDuration = longWait
+    ? longWait.elapsedSeconds >= 60
+      ? t("{value0}m {value1}s", {
+          value0: Math.floor(longWait.elapsedSeconds / 60),
+          value1: longWait.elapsedSeconds % 60,
+        })
+      : t("{value0}s", { value0: longWait.elapsedSeconds })
+    : "";
   const hasUnfinishedWork = Boolean(
     activeTurnId ||
     conversation.queue.pending.length ||
@@ -1714,6 +2163,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     previousActiveSessionKeyRef.current,
     historyView !== null,
   );
+  const activeSessionKeyRef = useRef(activeSessionKey);
+  const activeSessionClientRef = useRef(protocol.client);
+  const openedSessionIdRef = useRef(session.opened?.session_id);
+  activeSessionKeyRef.current = activeSessionKey;
+  activeSessionClientRef.current = protocol.client;
+  openedSessionIdRef.current = session.opened?.session_id;
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
@@ -2036,6 +2491,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 : undefined,
           }
         : null;
+  // Composer settings row: choosing another folder starts a new session
+  // there and carries the unsent text along; a cancelled picker drops it.
+  const carryDraftRef = useRef<{ text: string; fromKey: string | null } | null>(
+    null,
+  );
+  useEffect(() => {
+    const carry = carryDraftRef.current;
+    if (!carry || !session.opened || activeSessionKey === carry.fromKey) return;
+    carryDraftRef.current = null;
+    if (draftRef.current || conversation.timeline.length > 0) return;
+    draftRef.current = carry.text;
+    setDraft(carry.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionKey, session.opened]);
+  const [composerDropping, setComposerDropping] = useState(false);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const resumeSession = navigableSessions.reduce<
     (typeof navigableSessions)[number] | undefined
   >((latest, ref) => {
@@ -2117,6 +2588,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const moveToProductSession = async (productSessionId: string) => {
+    setFleetRouteActive(false);
     const target = navigableSessions.find(
       (item) =>
         workspaceSessionKey(
@@ -2396,6 +2868,34 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
+  // "Good at" tags come from a local table (model-strengths.ts); the server
+  // reports no model capabilities yet.
+  const modelGroupsWithStrengths = projectedModelGroups.map((group) => ({
+    ...group,
+    models: group.models.map((option) => {
+      const tags = modelStrengths(option.description ?? option.name, group.id);
+      return tags.length
+        ? {
+            ...option,
+            description: [
+              option.description,
+              ...tags.map((tag) => t(modelStrengthLabel(tag))),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }
+        : option;
+    }),
+  }));
+  const modelControl: ModelControlProps = {
+    state: modelControlState(models.state),
+    groups: modelGroupsWithStrengths,
+    selected: currentProfileModel,
+    locked: runtimeMutationBlocked || models.state.busy,
+    labels: translateLabels(MODEL_LABELS, t),
+    onSelect: (selection: ModelSelection) => void selectModel(selection),
+    onRetry: () => void models.refresh(),
+  };
   // A template that edits files offers (never forces) leaving read-only.
   const appliedTemplate =
     templateNotice?.kind === "applied" &&
@@ -2412,6 +2912,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             profile.network === currentPermission.network,
         )
       : undefined;
+  const permissionRetryProfile = safety.permission.editable
+    ? safety.permission.result?.profiles.find(
+        (profile) =>
+          profile.mode === "workspace_write" &&
+          profile.network === currentPermission?.network,
+      )
+    : undefined;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -2478,6 +2985,36 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         session.opened.workspace_root !== undefined,
       )
     : null;
+  // Fleet is a transient destination, not a second session route. Any real
+  // navigation state change (including browser history and settings/pickers)
+  // returns to that destination; moveToProductSession also covers selecting
+  // the already-active session, whose key does not change.
+  useEffect(() => {
+    setFleetRouteActive(false);
+  }, [activeSessionKey, fleetSupported]);
+  useEffect(() => {
+    if (
+      settingsOpen ||
+      workspacePicker.open ||
+      inspectionView ||
+      resumeView ||
+      nativeReview ||
+      profileExtensionsMode ||
+      inventoryMode ||
+      savedLink
+    ) {
+      setFleetRouteActive(false);
+    }
+  }, [
+    settingsOpen,
+    workspacePicker.open,
+    inspectionView,
+    resumeView,
+    nativeReview,
+    profileExtensionsMode,
+    inventoryMode,
+    savedLink,
+  ]);
   const fleetSessions = navigableSessions.map((ref) => ({
     sessionId: ref.sessionId,
     name: knownSessionTitle(ref.sessionId, t),
@@ -2493,6 +3030,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
    * only the settled kind (plus the bounded refusal kind) off this value.
    */
   const fleetStartSettle = ((): FleetStartState | undefined => {
+    if (nativeFleetActive) return nativeFleetStartState;
     const state = session.peerController?.state;
     if (state === undefined) return undefined;
     if (state.kind === "accepted")
@@ -2530,6 +3068,69 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     work.supervision.runtimeStatus?.contextSnapshot,
     workspaceProduct.state.tokenCost,
   ).percent;
+  const composerUsage = sessionUsage(
+    session.opened?.session_id,
+    work.supervision.runtimeStatus,
+    workspaceProduct.state.tokenCost,
+  );
+  const skillsCapabilities =
+    protocol.client &&
+    session.opened?.capabilities &&
+    supportsMethod(session.opened.capabilities, APPUI_SKILL_METHODS.LIST)
+      ? { client: protocol.client, capabilities: session.opened.capabilities }
+      : null;
+  const loadSkills = async () => {
+    if (!skillsCapabilities) return [];
+    const commands = await skillsCapabilities.client.skillCommands(
+      protocol.profileId,
+      skillsCapabilities.capabilities,
+    );
+    return commands.list();
+  };
+  /** A visible, editable line: Core has no per-session skill selection. */
+  const askForSkill = (name: string) => {
+    const prefix = t("Use the {name} skill: ", { name });
+    const current = draftRef.current;
+    const next = current.startsWith(prefix)
+      ? current
+      : prefix + current.trimStart();
+    draftRef.current = next;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      const input = composerRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(next.length, next.length);
+    });
+  };
+  const chooseOtherFolder = () => {
+    carryDraftRef.current = draftRef.current.trim()
+      ? { text: draftRef.current, fromKey: activeSessionKey }
+      : null;
+    requestNewSession();
+  };
+  const imagesAvailable =
+    session.connected && codingCapabilities.turnStartAvailable;
+  const openImages = () => {
+    setImagesOpen(true);
+    void conversation.prepareAttachments();
+  };
+  /** Dropped or pasted files go through the same staged image draft as /images. */
+  const attachFiles = async (files: readonly File[]) => {
+    const images = files.filter((file) =>
+      /^image\/(png|jpeg|gif|webp)$/.test(file.type),
+    );
+    setAttachNotice(
+      images.length < files.length
+        ? t("Only images can be attached for now (PNG, JPEG, GIF, WebP).")
+        : null,
+    );
+    if (images.length === 0) return;
+    const store = await conversation.prepareAttachments();
+    if (!store) return;
+    store.selectFiles(images);
+    setImagesOpen(true);
+  };
 
   const recoveryStop = conversation.interruptible ? (
     <button type="button" onClick={() => void conversation.interrupt()}>
@@ -2653,7 +3254,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               collapsed={sidebarCollapsed}
               recentWorkspaces={recentWorkspaces}
               knownSessions={navigableSessions}
-              sessionCatalog={sessionCatalog}
+              sessionCatalog={visibleCatalog}
               activeWorkspacePath={activeWorkspacePath}
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}
@@ -2672,15 +3273,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
               selectedSessionId={activeSessionKey}
+              peerRoster={peers.roster}
+              peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
               error={workspaceProduct.state.error}
               settingsActive={settingsOpen}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
+              fleetAvailable={fleetSupported}
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              onPeerDockSelect={(peer) => {
+                if (draftCapacityBlocked) return;
+                void workspaceProduct
+                  .openSession({
+                    sessionId: peer.identity,
+                    cwd: peer.cwd,
+                    profileId: peer.profileId,
+                    resolveLaunch: false,
+                  })
+                  .then((outcome) => {
+                    if (outcome === "opened" && compact)
+                      setSidebarCollapsed(true);
+                  });
+              }}
               peerDockCollapsed={peerDockCollapsed}
               onPeerDockToggle={() =>
                 setPeerDockCollapsed((collapsed) => !collapsed)
@@ -2708,11 +3326,73 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 });
               }}
               onSessionSelect={moveToProductSession}
+              onSessionRename={
+                workspaceProduct.state.renameAvailable
+                  ? async (rowKey, title) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not rename this session.");
+                      const outcome = await workspaceProduct.renameSession(
+                        reference.sessionId,
+                        title,
+                      );
+                      if (outcome.kind === "done") {
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not rename this session.");
+                    }
+                  : undefined
+              }
+              onSessionDelete={
+                workspaceProduct.state.deleteAvailable
+                  ? async (rowKey) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not delete this session.");
+                      const sessionId = reference.sessionId;
+                      // Another tab or client may be running it; the server
+                      // would keep writing to a conversation shown as gone.
+                      const running = [...sessionCatalog.values()].some(
+                        (workspace) =>
+                          workspace.sessions.some(
+                            (row) =>
+                              row.sessionId === sessionId && row.activeTurn,
+                          ),
+                      );
+                      if (running) return t("Stop this session’s work first.");
+                      const outcome =
+                        await workspaceProduct.deleteSession(sessionId);
+                      if (outcome.kind === "done") {
+                        setKnownSessions(
+                          forgetKnownSession(
+                            browserStorage("sessionStorage"),
+                            connection,
+                            sessionId,
+                          ),
+                        );
+                        setDeletedSessionIds((current) =>
+                          current.includes(sessionId)
+                            ? current
+                            : [...current, sessionId],
+                        );
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not delete this session.");
+                    }
+                  : undefined
+              }
               onSettings={() => {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);
               }}
               onFleet={() => {
+                if (!fleetSupported) return;
                 if (compact) setSidebarCollapsed(true);
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
@@ -3056,6 +3736,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 )
                           }
                           connected={session.connected}
+                          workspaceFileReadAvailable={supportsMethod(
+                            session.capabilities,
+                            CORE_UI_METHODS.SESSION_FILES_READ,
+                          )}
                           showThinking={conversation.showReasoning}
                           folds={timelineFolds}
                           onToggleFold={(id) =>
@@ -3107,6 +3791,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
+                          onRetryPermission={
+                            permissionRetryProfile && !readOnlyPeer
+                              ? (turnId) => void retryPermissionDenied(turnId)
+                              : undefined
+                          }
+                          permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
                       </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>
@@ -3136,7 +3826,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           className={productStyles.thinkingOctopus}
                         />
                         <span>
-                          {turnStarting ? t("Starting…") : activityLabel}
+                          {turnStarting
+                            ? t("Starting…")
+                            : localizedActivityLabel}
+                          {longWait ? (
+                            <small data-waiting-feedback="true">
+                              <br />
+                              {t(longWait.phase)} ·{" "}
+                              {t("Elapsed {value0}", { value0: waitDuration })}
+                              <br />
+                              {t(
+                                "You can stop this turn, check the connection, or retry.",
+                              )}
+                            </small>
+                          ) : null}
                         </span>
                       </div>
                     ) : null}
@@ -3354,7 +4057,42 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       conversation.cancelQueuedPrompt(turnId)
                     }
                   />
-                  <div className="composer">
+                  <div
+                    className={
+                      composerDropping
+                        ? `composer ${productStyles.composerDropping}`
+                        : "composer"
+                    }
+                    {...(imagesAvailable
+                      ? {
+                          onDragOver: (event: ReactDragEvent) => {
+                            if (!event.dataTransfer.types.includes("Files"))
+                              return;
+                            event.preventDefault();
+                            setComposerDropping(true);
+                          },
+                          onDragLeave: (event: ReactDragEvent) => {
+                            if (
+                              !event.currentTarget.contains(
+                                event.relatedTarget as Node | null,
+                              )
+                            )
+                              setComposerDropping(false);
+                          },
+                          onDrop: (event: ReactDragEvent) => {
+                            setComposerDropping(false);
+                            if (!event.dataTransfer.files.length) return;
+                            event.preventDefault();
+                            void attachFiles([...event.dataTransfer.files]);
+                          },
+                          onPaste: (event: ReactClipboardEvent) => {
+                            if (!event.clipboardData.files.length) return;
+                            event.preventDefault();
+                            void attachFiles([...event.clipboardData.files]);
+                          },
+                        }
+                      : {})}
+                  >
                     {conversation.steeringEnabled ? (
                       <p className="field-note" role="status">
                         {session.capabilities &&
@@ -3387,6 +4125,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ) : null}
                     {conversation.inputError ? (
                       <p role="alert">{conversation.inputError}</p>
+                    ) : null}
+                    {attachNotice ? (
+                      <p className="field-note" role="status">
+                        {attachNotice}
+                      </p>
                     ) : null}
                     {conversation.attachments?.getSnapshot().entries.length ? (
                       <button type="button" onClick={() => setImagesOpen(true)}>
@@ -3431,10 +4174,21 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                         peerRoster={peers.manager?.snapshot().peers ?? []}
                         peerSessionId={session.opened?.session_id ?? null}
+                        onReturnToMaster={() => {
+                          if (draftCapacityBlocked) return;
+                          void peers.returnToMaster().then((outcome) => {
+                            if (outcome !== "opened") return;
+                            if (compact) setSidebarCollapsed(true);
+                            requestAnimationFrame(() =>
+                              composerRef.current?.focus(),
+                            );
+                          });
+                        }}
                         value={draft}
                         onChange={(value) => {
                           draftRef.current = value;
                           setDraft(value);
+                          setAttachNotice(null);
                           setSelectedCommandIndex(0);
                           setCommandPaletteDismissed(false);
                         }}
@@ -3509,26 +4263,55 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             />
                           }
                         >
+                          <ComposerSettingsRow>
+                            <FolderChip
+                              name={workspaceName(activeWorkspacePath)}
+                              path={activeWorkspacePath}
+                              disabled={
+                                navigationBlocked ||
+                                !codingCapabilities.sessionCreationAvailable
+                              }
+                              onChoose={chooseOtherFolder}
+                            />
+                            <ModelChip
+                              runtimeLabel={runtimeModelLabel}
+                              pendingLabel={pendingProfileDefault}
+                              control={modelControl}
+                            />
+                            {permissionControl ? (
+                              <PermissionControl {...permissionControl} />
+                            ) : null}
+                            {skillsCapabilities ? (
+                              <SkillsChip
+                                load={loadSkills}
+                                onUse={askForSkill}
+                                onManage={() =>
+                                  setProfileExtensionsMode("skills")
+                                }
+                              />
+                            ) : null}
+                            {imagesAvailable ? (
+                              <AttachChip onOpen={openImages} />
+                            ) : null}
+                          </ComposerSettingsRow>
+                        </SurfaceBoundary>
+                      ) : null}
+                      <div className="composer-actions">
+                        {session.opened ? (
                           <SessionStatusStrip
+                            stateOnly
                             model={runtimeModelLabel}
                             permissionMode={permissionModeLabel}
                             state={sessionStripState}
                             activity={turnActivityState}
                             onOpenPane={() => setSessionConfigOpen(true)}
                           />
-                        </SurfaceBoundary>
-                      ) : null}
-                      <div className="composer-actions">
-                        {contextPercent !== null ? (
-                          <span
-                            className={productStyles.contextUsage}
-                            title={t(
-                              "{percent}% of the model context window used",
-                              { percent: contextPercent },
-                            )}
-                          >
-                            {contextPercent}%
-                          </span>
+                        ) : null}
+                        {composerUsage ? (
+                          <UsageChip
+                            usage={composerUsage}
+                            contextPercent={contextPercent}
+                          />
                         ) : null}
                         <TurnStopButton
                           activeTurnId={activeTurnId}
@@ -3538,6 +4321,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onInterrupt={() => void conversation.interrupt()}
                         />
                         {conversation.canSendPendingNow &&
+                        !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
                         // locked (same as App.submit's held-elsewhere gate).
@@ -3552,7 +4336,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
-                        {activeTurnId && draft.trim() ? (
+                        {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
                             disabled={
@@ -3570,7 +4354,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Queue")}
                           </button>
                         ) : null}
-                        {!activeTurnId || draft.trim() ? (
+                        {(!activeTurnId || draft.trim()) && !readOnlyPeer ? (
                           <button
                             className="send-button"
                             type="button"
@@ -3641,10 +4425,63 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   sessions={fleetSessions}
                   selectedSessionId={session.opened?.session_id ?? ""}
                   startState={fleetStartSettle}
+                  nativeStartAvailable={nativeFleetActive}
+                  nativeControlsAvailable={
+                    nativeFleetActive && nativeFleetControlsSupported
+                  }
                   onStart={(submit) => {
-                    // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
-                    // peer/dispatch. With no seat held, the FIRST call goes to
-                    // acquire and the dispatch is deferred to the effect below.
+                    if (nativeFleetActive) {
+                      const brief = submit.brief;
+                      const operationId = submit.operationId ?? randomUUID();
+                      const manager = peers.manager;
+                      setNativeFleetStartState(undefined);
+                      if (!manager) {
+                        setNativeFleetStartState({
+                          kind: "failed",
+                          laneKey: "native",
+                          brief,
+                          operationId,
+                          refusalKind: "peer_control_refused",
+                        });
+                        return;
+                      }
+                      void manager
+                        .kickoff({
+                          brief,
+                          n: 1,
+                          title: brief.split("\n", 1)[0]!.slice(0, 60),
+                        })
+                        .then((result) => {
+                          setNativeFleetStartState(
+                            result
+                              ? {
+                                  kind: "accepted",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  slug: result.peers[0]?.slug ?? result.slug,
+                                }
+                              : {
+                                  kind: "failed",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  refusalKind: "peer_control_refused",
+                                },
+                          );
+                        })
+                        .catch(() => {
+                          setNativeFleetStartState({
+                            kind: "failed",
+                            laneKey: "native",
+                            brief,
+                            operationId,
+                            refusalKind: "peer_control_refused",
+                          });
+                        });
+                      return;
+                    }
+                    // External-driver remains an optional fallback only.
                     const next = fleetStartOnSubmit({
                       state: fleetStartPending,
                       seatHeld: session.peerController?.seatHeld === true,
@@ -3664,7 +4501,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     });
                     if (next !== null) setFleetStartPending(next);
                   }}
-                  {...(session.peerController?.onRowAction
+                  {...(nativeFleetActive && nativeFleetGatherSupported
+                    ? {
+                        onGather: () => {
+                          setFleetGatherState("busy");
+                          void peers
+                            .gather(undefined, () => !navigationBlocked)
+                            .then(setFleetGatherState)
+                            .catch(() => setFleetGatherState("failed"));
+                        },
+                        gatherState: fleetGatherState,
+                      }
+                    : {})}
+                  {...(session.peerController?.onRowAction ||
+                  (nativeFleetActive && nativeFleetControlsSupported)
                     ? {
                         onRowAction: (row, action, steerText) => {
                           // Judge r2 #4 (H4): bind the row's REAL pending ids —
@@ -3675,6 +4525,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               (candidate) => candidate.slug === row.slug,
                             );
                           if (!entry) return;
+                          if (
+                            nativeFleetActive &&
+                            nativeFleetControlsSupported
+                          ) {
+                            peers.rowAction(entry, action, steerText ?? "");
+                            return;
+                          }
                           if (
                             entry.activity === "blocked" &&
                             entry.requestKind === "question"
@@ -3749,16 +4606,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               onRetry: () => void models.refresh(),
             }}
             modelSection={{
-              control: {
-                state: modelControlState(models.state),
-                groups: projectedModelGroups,
-                selected: currentProfileModel,
-                locked: runtimeMutationBlocked || models.state.busy,
-                labels: translateLabels(MODEL_LABELS, t),
-                onSelect: (selection: ModelSelection) =>
-                  void selectModel(selection),
-                onRetry: () => void models.refresh(),
-              },
+              control: modelControl,
               savedProfileModel: currentProfileModel
                 ? (projectedModelGroups
                     .find(
@@ -3977,9 +4825,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             creating={
               session.status === "connecting" || workspaceProduct.transitioning
             }
-            onCancel={() =>
-              setWorkspacePicker((current) => ({ ...current, open: false }))
-            }
+            onCancel={() => {
+              carryDraftRef.current = null;
+              setWorkspacePicker((current) => ({ ...current, open: false }));
+            }}
             onCreate={({ workspacePath }) =>
               createSessionInWorkspace(workspacePath)
             }
@@ -4196,9 +5045,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         fallback={<DeferredSurface label="Loading memory…" />}
                       >
                         <MemorySettingsContent
+                          key={`${session.opened.session_id}:${memoryProfileId}`}
+                          sessionId={session.opened.session_id}
                           client={protocol.client}
                           authenticatedProfileId={authenticatedMemoryProfileId}
                           sessionProfileId={memoryProfileId}
+                          capabilities={session.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
+              ...(connectorsSettingsAvailable &&
+              protocol.client &&
+              session.opened
+                ? {
+                    connectors: (
+                      <Suspense
+                        fallback={
+                          <DeferredSurface label="Loading connectors…" />
+                        }
+                      >
+                        <ConnectorsSettingsContent
+                          client={protocol.client}
+                          profileId={settingsProfileId}
+                          sessionId={session.opened.session_id}
+                          capabilities={session.capabilities!}
+                        />
+                      </Suspense>
+                    ),
+                  }
+                : {}),
+              ...(scheduledSettingsAvailable && protocol.client
+                ? {
+                    scheduled: (
+                      <Suspense
+                        fallback={
+                          <DeferredSurface label="Loading scheduled tasks…" />
+                        }
+                      >
+                        <CronSettingsContent
+                          client={protocol.client}
                           capabilities={session.capabilities!}
                         />
                       </Suspense>
@@ -4434,6 +5321,45 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             onLoadMore={() => void work.loadMoreOutput()}
             onReadArtifact={(artifact) => void work.readArtifact(artifact)}
             onLoadMoreArtifact={() => void work.loadMoreArtifact()}
+            workspaceReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_READ,
+            )}
+            profileFileReadAvailable={supportsMethod(
+              session.capabilities,
+              CORE_UI_METHODS.SESSION_FILES_LIST,
+            )}
+            artifactPathAvailable={attachmentAccess?.workspacePathAvailable}
+            describeArtifact={attachmentAccess?.describe}
+            loadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? attachmentAccess?.downloadWorkspaceFile
+                : undefined
+            }
+            downloadArtifact={
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_READ,
+              ) ||
+              supportsMethod(
+                session.capabilities,
+                CORE_UI_METHODS.SESSION_FILES_LIST,
+              )
+                ? (path: string, signal?: AbortSignal) =>
+                    attachmentAccess!.saveWorkspaceFile!(
+                      path,
+                      undefined,
+                      signal,
+                    )
+                : undefined
+            }
           />
         </SurfaceBoundary>
       ) : null}
@@ -4543,6 +5469,8 @@ const SETTINGS_LABELS = {
   models: "Models",
   skills: "Skills",
   memory: "Memory",
+  connectors: "Connectors",
+  scheduled: "Scheduled tasks",
   close: "Close settings",
 } as const;
 

@@ -1,0 +1,72 @@
+/* Wraps rather than scrolls: a scrolling row would clip the upward menus. */
+.row {
+  display: flex;
+  min-width: 0;
+  /* A full line on phones, so the actions wrap below it. Not a size
+     container: the shared trigger hides labels in narrow containers, and
+     here the labels are the point. */
+  flex: 1 1 18rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.leftMenu {
+  left: 0;
+}
+
+.rightMenu {
+  right: 0;
+}
+
+.menuFooter {
+  min-height: 36px;
+  margin-top: 4px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0 0 10px 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.usage {
+  padding-right: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.usagePanel {
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px;
+}
+
+.usagePanel dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.usagePanel dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dsw-space-3);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.usagePanel dt {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.usagePanel dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.usagePanel p {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}

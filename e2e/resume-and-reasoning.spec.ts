@@ -5,7 +5,9 @@ const composer = (page: Page) =>
   page.getByPlaceholder("Ask Octos to change, explain, or review code…");
 const sidebar = (page: Page) => page.locator("aside");
 const selectedRow = (page: Page) =>
-  sidebar(page).locator('button[role="treeitem"][aria-current="page"]');
+  sidebar(page).locator(
+    '[role="treeitem"][data-session-id][aria-current="page"]',
+  );
 const historyDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Resume historical conversation" });
 /**
@@ -87,7 +89,9 @@ async function title(page: Page) {
   ).trim();
 }
 const row = (page: Page, name: string) =>
-  sidebar(page).locator('button[role="treeitem"]').filter({ hasText: name });
+  sidebar(page)
+    .locator('[role="treeitem"][data-session-id]')
+    .filter({ hasText: name });
 const control = (name: string, sessionId: string, method?: string) =>
   `${origin}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
 

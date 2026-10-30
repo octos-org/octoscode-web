@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_METHODS,
   supportsMethod,
@@ -171,7 +172,7 @@ export class SessionComposerDrafts {
       (queueOnly
         ? record.controller.enqueueTurn
         : record.controller.submitTurn)({
-        turnId: crypto.randomUUID(),
+        turnId: randomUUID(),
         text,
         ...(draft.effort ? { reasoningEffort: draft.effort } : {}),
         ...(media.length ? { media } : {}),

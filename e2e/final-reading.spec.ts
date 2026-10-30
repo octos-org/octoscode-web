@@ -284,12 +284,12 @@ test("360-message history stays readable while new output streams and unsafe Mar
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   const selectedTitle = page.locator(
-    'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
+    '[role="treeitem"][data-session-id][aria-current="page"] [class*="sessionTitle"]',
   );
   const sessionA = (await selectedTitle.textContent())!;
   const selectSession = async (title: string) => {
     await page
-      .locator('button[role="treeitem"]')
+      .locator('[role="treeitem"][data-session-id]')
       .filter({ hasText: title })
       .click();
     await expect(selectedTitle).toHaveText(title);

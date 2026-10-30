@@ -2,11 +2,15 @@
    Dock's surface so the dock reads as a sibling of the session list. */
 .dock {
   display: grid;
+  min-width: 0;
   gap: var(--dsw-space-2, 0.5rem);
   margin-block-start: var(--dsw-space-3, 0.75rem);
   padding-block-start: var(--dsw-space-3, 0.75rem);
   border-top: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .header {
@@ -14,15 +18,19 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--dsw-space-2, 0.5rem);
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
 }
 
 .title {
+  min-width: 0;
   margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
 }
 
 .fold,
@@ -32,28 +40,37 @@
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: 8px;
   text-align: start;
 }
 
 .fold {
-  padding: 2px 6px;
-  font-size: 0.75rem;
+  flex: none;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 20px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
 
 .pill {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--dsw-space-1, 0.25rem);
+  min-width: 0;
+  min-height: 36px;
   width: 100%;
   padding: 6px 8px;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   background: var(--dsw-specific-sidebar-fill);
   border: 1px solid var(--dsw-alias-border-l2);
 }
 
 .rows {
   display: grid;
+  min-width: 0;
   gap: 2px;
   margin: 0;
   padding: 0;
@@ -62,39 +79,50 @@
 
 .row {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rowButton {
-  display: flex;
-  align-items: baseline;
-  gap: var(--dsw-space-2, 0.5rem);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--dsw-space-1, 0.25rem);
   width: 100%;
-  padding: 6px 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  box-sizing: border-box;
   font: inherit;
   color: inherit;
   text-align: start;
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .rowButton:hover,
 .pill:hover,
 .fold:hover {
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .rowButton:focus-visible,
 .pill:focus-visible,
 .fold:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-l3, currentColor);
+  outline: 2px solid var(--dsw-alias-state-business-primary, currentColor);
   outline-offset: 1px;
 }
 
 .glyph {
   flex: none;
-  width: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 20px;
   text-align: center;
 }
 
@@ -116,62 +144,109 @@
 }
 
 .slug {
-  flex: 1 1 auto;
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.meta {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  column-gap: var(--dsw-space-1, 0.25rem);
 }
 
 .status {
-  flex: none;
-  font-size: 0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 20px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.metricLong {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .metricCompact {
+    display: none;
+  }
+
+  .metricLong {
+    display: inline;
+  }
+}
+
+.status[data-peer-elapsed],
+.status[data-peer-tokens] {
+  font-family: var(--dsw-font-numeric);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Row actions (console plan §3): only an approval-blocked row grows these. */
 .actions {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--dsw-space-1, 0.25rem);
-  margin-inline-start: var(--dsw-space-2, 0.5rem);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px 4px 32px;
+  box-sizing: border-box;
 }
 
 .action {
+  min-height: 28px;
+  padding: 2px 8px;
+  overflow-wrap: anywhere;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 12px;
+  line-height: 20px;
   color: inherit;
   cursor: pointer;
-  padding: 2px 8px;
   background: transparent;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .action:hover {
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .action:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-l3, currentColor);
+  outline: 2px solid var(--dsw-alias-state-business-primary, currentColor);
   outline-offset: 1px;
 }
 
 /* Round 2 (judge #4): the inline free-text field an Answer / Steer action
    reads — the same affordance Fleet rows carry (§4.1/§4.3 dock parity). */
 .draft {
+  flex: 1 1 9rem;
   min-width: 0;
+  max-width: 100%;
   width: 9rem;
+  min-height: 28px;
   padding: 2px 6px;
+  box-sizing: border-box;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 12px;
+  line-height: 20px;
   color: inherit;
   background: transparent;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .draft:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-l3, currentColor);
+  outline: 2px solid var(--dsw-alias-state-business-primary, currentColor);
   outline-offset: 1px;
 }
 
@@ -180,16 +255,40 @@
 .request {
   display: grid;
   gap: 2px;
-  margin-inline-start: var(--dsw-space-2, 0.5rem);
-  font-size: 0.75rem;
+  max-width: 100%;
+  min-width: 0;
+  margin-inline: 32px 8px;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .request code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
 
 .answerCard {
   display: grid;
+  min-width: 0;
   gap: 2px;
+}
+
+@media (max-width: 760px) {
+  .actions {
+    padding-inline-start: 8px;
+  }
+
+  .request {
+    margin-inline-start: 8px;
+  }
+
+  .draft {
+    flex-basis: 100%;
+  }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   PEER_METHODS,
   PeerCapabilityError,
@@ -542,7 +543,7 @@ export class PeerManager {
       );
     const epoch = this.#epoch;
     const abort = new AbortController();
-    const turnId = crypto.randomUUID();
+    const turnId = randomUUID();
     const request: PeerOpenRequest = Object.freeze({
       scope: commands.scope,
       sessionId: identity,
@@ -571,6 +572,7 @@ export class PeerManager {
     this.#peers.set(
       identity,
       Object.freeze({
+        rowKey: identity,
         identity,
         profileId: peer.profile_id,
         topic: peer.topic,
@@ -624,6 +626,8 @@ export class PeerManager {
           request.sessionId,
           Object.freeze({
             ...entry,
+            identity:
+              opened && outcome.sessionId ? outcome.sessionId : entry.identity,
             // Identity is SERVER-adopted (finding 2920 (b)): a confirmed start
             // reports the dispatch receipt's OWN slug, so the dock/roster row is
             // keyed by the adopted slug rather than the locally pre-computed

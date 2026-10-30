@@ -11,6 +11,7 @@ import type {
 } from "./use-onboarding.ts";
 
 export const OFFICIAL_ROUTE = "__official__";
+export const CUSTOM_OPENAI_ROUTE = "__custom_openai__";
 const KEYLESS_CORE_PROBE = "octoscode-web-keyless-probe";
 
 interface OnboardingSubmissionContext {
@@ -133,7 +134,10 @@ export async function submitOnboarding({
 
 export function selectionFromCatalog(
   catalog: LlmCatalogResult,
-  selection: Pick<OnboardingSubmission, "familyId" | "modelId" | "routeId">,
+  selection: Pick<
+    OnboardingSubmission,
+    "familyId" | "modelId" | "routeId" | "baseUrl"
+  >,
 ): LlmSelection {
   const family = catalog.families.find(
     (candidate) => candidate.id === selection.familyId,
@@ -151,6 +155,37 @@ export function selectionFromCatalog(
       route: {
         route_id: family.id,
         label: "Official API",
+        api_key_env: family.env,
+        api_type: "openai",
+      },
+    };
+  }
+  if (selection.routeId === CUSTOM_OPENAI_ROUTE) {
+    const baseUrl = selection.baseUrl?.trim() ?? "";
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      throw new Error("Enter a complete custom endpoint URL.");
+    }
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error(
+        "Enter an HTTP(S) endpoint without credentials or query parameters.",
+      );
+    }
+    return {
+      family_id: family.id,
+      model_id: model.id,
+      route: {
+        route_id: "custom-openai",
+        label: "Custom OpenAI-compatible",
+        base_url: baseUrl,
         api_key_env: family.env,
         api_type: "openai",
       },

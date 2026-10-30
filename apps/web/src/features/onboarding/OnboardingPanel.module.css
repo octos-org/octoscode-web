@@ -27,7 +27,7 @@
   margin: 0;
 }
 
-.form input:not([type="checkbox"]),
+.form input:not([type="checkbox"]):not([type="radio"]),
 .form select {
   width: 100%;
   min-width: 0;
@@ -50,6 +50,118 @@
 .form select:disabled {
   cursor: wait;
   opacity: 0.58;
+}
+
+.step {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.providerGroup {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.providerGroup legend {
+  margin-bottom: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.providers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.provider {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-specific-selector);
+  cursor: pointer;
+}
+
+.provider.selected {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-specific-tip);
+}
+
+.provider input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.providerText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.providerText strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.providerText small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.modelField {
+  max-width: 360px;
+}
+
+.advanced {
+  padding: 8px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.advanced summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.advanced > p {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.selectionSummary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--dsw-specific-tip);
+}
+
+.selectionSummary strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.selectionSummary span {
+  color: var(--dsw-alias-label-tertiary);
+  font: 400 11px/1.4 var(--dsw-font-family-code);
+  overflow-wrap: anywhere;
 }
 
 .checkbox {
@@ -194,7 +306,8 @@
 
 @media (max-width: 760px) {
   .fields,
-  .profileFields {
+  .profileFields,
+  .providers {
     grid-template-columns: 1fr;
   }
 }

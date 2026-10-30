@@ -231,7 +231,7 @@ export type SessionControlBarProps = SessionControlBarBaseProps &
       }
   );
 
-function useOutsideDismiss(
+export function useOutsideDismiss(
   open: boolean,
   rootRef: RefObject<HTMLElement | null>,
   onDismiss: () => void,
@@ -555,6 +555,9 @@ export function PermissionControl(props: PermissionControlProps) {
 
 interface ModelMenuProps extends Omit<ModelControlProps, "onSelect"> {
   menuId: string;
+  /** One line above the list, e.g. what choosing a model changes. */
+  note?: string | undefined;
+  className?: string | undefined;
   onChoose: (
     providerId: string,
     model: ModelProviderGroup["models"][number],
@@ -564,6 +567,8 @@ interface ModelMenuProps extends Omit<ModelControlProps, "onSelect"> {
 /** Exported grouped catalog surface; disabled entries remain explainable. */
 export function ModelMenu({
   menuId,
+  note,
+  className = styles.modelMenu,
   state,
   groups,
   selected,
@@ -576,11 +581,12 @@ export function ModelMenu({
   return (
     <div
       id={menuId}
-      className={`${styles.menu} ${styles.modelMenu}`}
+      className={`${styles.menu} ${className}`}
       role="menu"
       aria-label={labels.menu}
       aria-busy={state.status === "loading"}
     >
+      {note ? <p className={styles.status}>{note}</p> : null}
       {state.status === "loading" ? (
         <div className={styles.status}>{labels.loading}</div>
       ) : null}

@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 /**
  * fleet-actions — the Start = acquire → dispatch state machine (judge round 1
  * item #2; round 2 owner web-ux-fleet-02; design WEB-UX-DESIGN-4000 §4.3/§5.4:
@@ -152,7 +153,7 @@ export const FLEET_START_REQUESTING: FleetStartState = Object.freeze({
 
 /** A minted operation id. Test seams inject a deterministic id. */
 export function fleetStartOperationId(
-  newOperationId: () => string = () => crypto.randomUUID(),
+  newOperationId: () => string = () => randomUUID(),
 ): string {
   const id = newOperationId();
   return id === "" ? newOperationId() : id;
@@ -167,7 +168,7 @@ export function fleetStartBegin(
   state: FleetStartState,
   laneKey: string,
   brief: string,
-  newOperationId: () => string = () => crypto.randomUUID(),
+  newOperationId: () => string = () => randomUUID(),
 ): FleetStartState {
   if (state.kind !== "idle") return state;
   if (laneKey === "") return state;

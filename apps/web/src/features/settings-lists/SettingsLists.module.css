@@ -1,0 +1,136 @@
+.page {
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading,
+.rowHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dsw-space-3);
+}
+
+.heading {
+  align-items: center;
+  margin-bottom: var(--dsw-space-3);
+}
+
+.heading h2,
+.heading p,
+.row p {
+  margin: 0;
+}
+
+.heading h2 {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.heading p,
+.meta,
+.notice {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.heading button {
+  min-height: 32px;
+  padding: 0 var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.heading button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.heading button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.notice {
+  margin: 0 0 var(--dsw-space-4);
+  padding: var(--dsw-space-3);
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rows {
+  display: grid;
+  gap: var(--dsw-space-3);
+}
+
+.row {
+  display: grid;
+  min-width: 0;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow-wrap: anywhere;
+}
+
+.rowHeading strong {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.rowHeading > span {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.rowHeading > span[data-status="connected"] {
+  color: var(--dsw-alias-state-success-text);
+}
+
+.rowHeading > span[data-status="failed"] {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.row code {
+  display: block;
+  overflow: auto;
+  color: var(--dsw-alias-label-secondary);
+  font: 400 12px/1.5 var(--dsw-font-family-code);
+  overflow-wrap: anywhere;
+}
+
+.toggle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--dsw-space-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.error {
+  color: var(--dsw-alias-state-error-text);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

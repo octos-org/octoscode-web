@@ -57,12 +57,16 @@ export function loadChineseCatalog(): Promise<UiCatalog> {
     import("../side-panel/session-panel-copy.ts").then(
       (module) => module.SESSION_PANEL_ZH_COPY,
     ),
+    import("../composer-bar/composer-bar-copy.ts").then(
+      (module) => module.COMPOSER_BAR_ZH_COPY,
+    ),
   ])
-    .then(([base, reasoning, sessionConfig, sessionPanel]) => ({
+    .then(([base, reasoning, sessionConfig, sessionPanel, composerBar]) => ({
       ...base,
       ...reasoning,
       ...sessionConfig,
       ...sessionPanel,
+      ...composerBar,
     }))
     .catch((error: unknown) => {
       chineseCatalog = undefined;

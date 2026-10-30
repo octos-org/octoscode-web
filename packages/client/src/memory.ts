@@ -6,6 +6,7 @@ import {
 } from "./generated/core-contract.ts";
 import {
   APPUI_MEMORY_PROMOTE_METHOD,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   APPUI_MEMORY_REQUEST_METHOD,
 } from "./memory-methods.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
@@ -281,7 +282,16 @@ export function parseMemoryPromote(value: unknown): MemoryPromoteResult | null {
 export function createMemoryCommands(
   client: { request(method: string, params: unknown): Promise<unknown> },
   capabilities: UiProtocolCapabilities,
+  sessionId?: string,
 ) {
+  if (
+    sessionId !== undefined &&
+    (!nonEmpty(sessionId) ||
+      !supportsFeature(capabilities, APPUI_MEMORY_SESSION_SCOPE_FEATURE))
+  ) {
+    throw new Error("Session memory requires memory.session_scope.v1");
+  }
+  const scope = sessionId === undefined ? {} : { session_id: sessionId };
   function available(method: string) {
     if (
       !supportsFeature(
@@ -296,7 +306,10 @@ export function createMemoryCommands(
   return {
     async overview(): Promise<MemoryOverview> {
       available(CORE_UI_METHODS.MEMORY_OVERVIEW);
-      const value = await client.request(CORE_UI_METHODS.MEMORY_OVERVIEW, {});
+      const value = await client.request(
+        CORE_UI_METHODS.MEMORY_OVERVIEW,
+        scope,
+      );
       const parsed = parseMemoryOverview(value);
       if (!parsed) throw new Error("Invalid memory overview");
       return parsed;
@@ -305,6 +318,7 @@ export function createMemoryCommands(
       available(CORE_UI_METHODS.MEMORY_ENTITY);
       if (!nonEmpty(name)) throw new Error("An entity name is required");
       const value = await client.request(CORE_UI_METHODS.MEMORY_ENTITY, {
+        ...scope,
         name,
       });
       const parsed = parseMemoryEntity(value, name);
@@ -322,6 +336,7 @@ export function createMemoryCommands(
         throw new Error("Invalid memory search");
       }
       const value = await client.request(CORE_UI_METHODS.MEMORY_SEARCH, {
+        ...scope,
         query,
         limit,
       });
@@ -332,7 +347,10 @@ export function createMemoryCommands(
     async load(id: string): Promise<MemoryLoadResult> {
       available(CORE_UI_METHODS.MEMORY_LOAD);
       if (!nonEmpty(id)) throw new Error("A memory record id is required");
-      const value = await client.request(CORE_UI_METHODS.MEMORY_LOAD, { id });
+      const value = await client.request(CORE_UI_METHODS.MEMORY_LOAD, {
+        ...scope,
+        id,
+      });
       const parsed = parseMemoryLoad(value, id);
       if (!parsed) throw new Error("Invalid or mismatched memory record");
       return parsed;
@@ -345,6 +363,7 @@ export function createMemoryCommands(
         throw new Error("Invalid memory records");
       }
       const value = await client.request(CORE_UI_METHODS.MEMORY_INGEST, {
+        ...scope,
         records,
         embed: false,
       });
@@ -361,6 +380,7 @@ export function createMemoryCommands(
         throw new Error("Invalid memory request");
       }
       const value = await client.request(APPUI_MEMORY_REQUEST_METHOD, {
+        ...scope,
         request_id: requestId,
         operation: "remember",
         content,
@@ -373,6 +393,7 @@ export function createMemoryCommands(
       available(APPUI_MEMORY_PROMOTE_METHOD);
       if (!nonEmpty(source)) throw new Error("A memory source is required");
       const value = await client.request(APPUI_MEMORY_PROMOTE_METHOD, {
+        ...scope,
         sources: [source],
         min_visits: 0,
         limit: 1,

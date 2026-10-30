@@ -224,6 +224,20 @@ const catalog: Readonly<Record<string, string>> = {
   "Current workspace": "当前工作区",
   "Decision:": "决定：",
   Delete: "删除",
+  "Delete…": "删除…",
+  "Delete this session?": "删除这个会话？",
+  "Could not delete this session.": "无法删除这个会话。",
+  "Could not rename this session.": "无法重命名这个会话。",
+  "More actions for {title}": "更多操作：{title}",
+  "Enter a title.": "请输入标题。",
+  Rename: "重命名",
+  "Session actions": "会话操作",
+  "Session title": "会话标题",
+  "Stop this session’s work first.": "请先停止这个会话的工作。",
+  "Switch to another session first.": "请先切换到其他会话。",
+  "“{title}” and its conversation will be deleted from the server. This cannot be undone.":
+    "服务器上的「{title}」及其对话将被删除，且无法撤销。",
+  Del: "Del",
   "Delete loop {value0}": "删除循环任务 {value0}",
   "Delete model provider?": "删除模型提供商？",
   "Delete monitor {value0}": "删除监视器 {value0}",
@@ -455,7 +469,27 @@ const catalog: Readonly<Record<string, string>> = {
   "Pause monitor {value0}": "暂停监视器 {value0}",
   "Pause session goal": "暂停会话目标",
   "Peer brief": "协作任务简报",
-  Peers: "协作会话",
+  Peers: "协作者",
+  "Peer {slug} is read-only. Return to the master to make changes.":
+    "这是协作者 {slug}，只读；要调整请回到主会话。",
+  "Return to master": "回到主会话",
+  "Peer run time": "协作者运行时间",
+  "Run {value0}": "运行 {value0}",
+  "Output {value0} tokens": "输出 {value0} token",
+  "Output tokens": "输出 token",
+  started: "已启动",
+  opening: "正在打开",
+  closed: "已关闭",
+  live: "进行中",
+  landed: "已完成",
+  "needs you": "需要你",
+  streaming: "正在输出",
+  Answer: "回答",
+  "Answer {value0}": "回答 {value0}",
+  "Approve once": "仅此一次批准",
+  "Approve {value0} once": "仅此一次批准 {value0}",
+  "Approve for this session": "本次会话内批准",
+  "Approve {value0} for this session": "本次会话内批准 {value0}",
   "Peer controller": "协作会话控制器",
   "Model lane": "模型通道",
   Brief: "任务简述",
@@ -808,6 +842,19 @@ const catalog: Readonly<Record<string, string>> = {
   "What should this session keep driving toward?": "此会话应持续推进什么目标？",
   Wire: "协议",
   "Working…": "正在工作…",
+  "Preparing next step…": "正在准备下一步…",
+  "Writing response…": "正在撰写回复…",
+  "Thinking…": "思考中…",
+  "Running {value0}…": "正在运行 {value0}…",
+  "Waiting for the server to accept this turn": "正在等待服务器接受本轮请求",
+  "Waiting for the model’s first response": "正在等待模型首个响应",
+  "Elapsed {value0}": "已等待 {value0}",
+  "You can stop this turn, check the connection, or retry.":
+    "你可以停止本轮、检查连接，或稍后重试。",
+  "{value0}s": "{value0} 秒",
+  "{value0}m {value1}s": "{value0} 分 {value1} 秒",
+  "Risk not specified": "未说明风险",
+  "Approve command": "批准命令",
   Workspace: "工作区",
   "Workspace launch": "启动工作区",
   Workspaces: "工作区",
@@ -1406,10 +1453,10 @@ const catalog: Readonly<Record<string, string>> = {
   Abandoned: "已中断",
   // Settings memory (T-0024).
   Memory: "记忆",
-  "Read and remember information in authenticated Profile {profileId}":
-    "查看并记住已认证配置文件 {profileId} 中的信息",
-  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Read and write are disabled.":
-    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。已禁用读写。",
+  "Read and remember information in Session Profile {profileId}":
+    "查看并记住会话配置文件 {profileId} 中的信息",
+  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Update the Octos server to use this Session’s memory. Read and write are disabled.":
+    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。请升级 Octos 服务端以使用此会话的记忆。已禁用读写。",
   unverified: "未验证",
   "This server cannot load entity details.": "此服务器无法加载实体详情。",
   "This server cannot load full record details.":
@@ -1681,6 +1728,191 @@ const catalog: Readonly<Record<string, string>> = {
   "Goal history and budget accounting are still being reconciled.":
     "目标历史和预算核算仍在对账中。",
   "Monitor probes are not fully sandboxed yet.": "监控探针尚未完全沙箱化。",
+
+  // Artifact preview (T-0012).
+  Preview: "预览",
+  "Hide preview": "收起预览",
+  "Preview {name}": "预览 {name}",
+  File: "文件",
+  "Show in folder": "在文件夹中显示",
+  "Copy path": "复制路径",
+  "Path copied": "路径已复制",
+  "File path copied to clipboard.": "文件路径已复制到剪贴板。",
+  "Could not copy the path. Select it and copy it manually.":
+    "无法复制路径，请手动选择并复制。",
+  "Loading preview…": "正在加载预览…",
+  "This server can't read the file for preview.":
+    "此服务器无法读取该文件以提供预览。",
+  "This preview could not be loaded. Try again or download the file.":
+    "无法加载预览，请重试或下载文件。",
+  "This file type doesn't have an inline preview.":
+    "此文件类型不支持内联预览。",
+  "Download it to open it in another app.": "下载后可使用其他应用打开。",
+  "This file is too large for safe inline preview. Download it to open it in another app.":
+    "文件过大，无法安全地内联预览。请下载后使用其他应用打开。",
+  "This file's size couldn't be verified. Download it to open it in another app.":
+    "无法确认文件大小。请下载后使用其他应用打开。",
+  "No preview or download route is available for this file.":
+    "此文件没有可用的预览或下载途径。",
+  "Show more": "显示更多",
+  "Sandboxed preview of {name}": "{name} 的沙箱预览",
+  "Previous page": "上一页",
+  "Next page": "下一页",
+  Page: "页码",
+  "of {count}": "共 {count} 页",
+  "The PDF couldn't be rendered. Download it to open it in another app.":
+    "无法渲染 PDF，请下载后使用其他应用打开。",
+  "Page text": "页面文字",
+  "Document preview of {name}": "{name} 的文档预览",
+  "This document couldn't be previewed. Download it to open it in another app.":
+    "无法预览此文档，请下载后使用其他应用打开。",
+  "No previewable content.": "没有可预览的内容。",
+  Worksheet: "工作表",
+  "Rows {first}–{last} of {total}": "第 {first}–{last} 行，共 {total} 行",
+  "0 rows": "0 行",
+  "This preview is limited to 1,000,000 cells and 200 columns. Download the file for the complete workbook.":
+    "预览最多显示 1,000,000 个单元格和 200 列，请下载文件查看完整工作簿。",
+  "Spreadsheet rows": "电子表格行",
+  "Row number": "行号",
+  "Previous rows": "上一批行",
+  "Next rows": "下一批行",
+  "Page {page} of {count}": "第 {page} 页，共 {count} 页",
+  "Page {page} of {name}": "{name} · 第 {page} 页",
+
+  // Connectors and scheduled tasks (T-0025).
+  Tool: "工具",
+  Tools: "工具",
+  Connectors: "连接器",
+  "Read-only MCP server status for this Session.":
+    "此会话的 MCP 服务器状态（只读）。",
+  "Add, remove, edit, and OAuth are unavailable in the current protocol.":
+    "当前协议不支持添加、删除、编辑或 OAuth。",
+  "{connected} connected · {connecting} connecting · {failed} failed · {disabled} disabled":
+    "已连接 {connected} · 连接中 {connecting} · 失败 {failed} · 已停用 {disabled}",
+  "No MCP servers are configured for this Session.":
+    "此会话未配置 MCP 服务器。",
+  "Scheduled tasks": "定时任务",
+  "Existing cron jobs for this server Profile.":
+    "此服务器配置文件中的已有定时任务。",
+  "New scheduled tasks are unavailable until cron/create lands (T-0014).":
+    "新建定时任务需等待 cron/create（T-0014）实现。",
+  "The gateway owns cron writes. Stop it before enabling or disabling a job.":
+    "网关正在管理定时任务，请先停止网关再启用或停用任务。",
+  "This server exposes cron jobs read-only.":
+    "此服务器仅支持只读查看定时任务。",
+  "No scheduled tasks yet.": "暂无定时任务。",
+  Enabled: "已启用",
+  Disabled: "已停用",
+  "No channel": "无频道",
+  "No next run": "无下次运行",
+  "Schedule and status": "调度与状态",
+  "Only the first jobs are shown.": "仅显示部分任务。",
+
+  // First-run setup (T-0017).
+  "Set up your coding assistant": "设置你的编程助手",
+  "Choose a model service, connect it, and start coding in two steps.":
+    "选择模型服务、完成连接，两步即可开始编程。",
+  "Loading model providers from your server…": "正在从服务器加载模型提供商…",
+  "Model setup could not be loaded": "无法加载模型设置",
+  "Step 1 of 2 · Model service": "第 1/2 步 · 模型服务",
+  "Step 2 of 2 · Connect": "第 2/2 步 · 连接",
+  "Choose a provider": "选择提供商",
+  "DeepSeek 深度求索": "DeepSeek 深度求索",
+  "Kimi 月之暗面": "Kimi 月之暗面",
+  "智谱 AI": "智谱 AI",
+  通义千问: "通义千问",
+  "Reasoning and coding": "擅长推理与编程",
+  "Long context and reasoning": "擅长长文本与推理",
+  "Coding and agents": "擅长编程与智能体",
+  "Multimodal and coding": "擅长多模态与编程",
+  "Fast and cost-efficient": "高效、经济",
+  "OpenAI-compatible provider": "OpenAI 兼容提供商",
+  "An ID and name are generated automatically. Change them only if needed.":
+    "ID 和名称已自动生成，仅在需要时修改。",
+  "Use a custom OpenAI-compatible endpoint": "使用自定义 OpenAI 兼容地址",
+  "Custom OpenAI-compatible base URL": "自定义 OpenAI 兼容基础地址",
+  "Creating your workspace profile": "正在创建工作区配置",
+  "Testing the connection": "正在测试连接",
+  "Saving your provider": "正在保存提供商",
+  "Opening your coding session": "正在打开编程会话",
+  "Enter path manually": "手动输入路径",
+
+  // Approval clarity (T-0019).
+  "High risk": "高风险",
+  "Medium risk": "中风险",
+  "Low risk": "低风险",
+  "Impact: {directory} · {network} · {deletion}":
+    "影响范围：{directory} · {network} · {deletion}",
+  "Directory {path}": "目录 {path}",
+  "Network not specified": "未说明是否联网",
+  "May delete files": "可能删除文件",
+  "No deletion indicated": "未要求删除",
+  "Allow for this session": "本会话都允许",
+  "Allow once": "允许一次",
+  "Switch to write and retry": "切换到可写后重试",
+  "Switching to write and retrying…": "正在切换到可写并重试…",
+  "Current server does not support Fleet yet": "当前服务器还不支持多智能体",
+
+  // Execution transparency (T-0018).
+  "Run a command": "运行命令",
+  "Run command {target}": "运行命令 {target}",
+  "Read a file": "查看文件",
+  "Read file {target}": "查看文件 {target}",
+  "Write a file": "写入文件",
+  "Write file {target}": "写入 {target}",
+  "Edit a file": "编辑文件",
+  "Edit file {target}": "编辑 {target}",
+  "Apply a patch": "应用补丁",
+  "Find files": "查找文件",
+  "Find files {target}": "查找文件 {target}",
+  "Search in files": "在文件中搜索",
+  "Search files for {target}": "在文件中搜索 {target}",
+  "Fetch a web page": "获取网页",
+  "Fetch {target}": "获取 {target}",
+  "Search the web": "搜索网络",
+  "Search the web for {target}": "搜索网络：{target}",
+  "Deliver a file": "交付文件",
+  "Deliver file {target}": "交付文件 {target}",
+  "Turn summary": "本轮汇总",
+  "⚠ {count} steps failed": "⚠ {count} 步失败",
+  "Duration {seconds}s": "用时 {seconds} 秒",
+  "{count} files changed": "改动 {count} 个文件",
+  "{input} tokens in · {output} tokens out":
+    "输入 {input} tokens · 输出 {output} tokens",
+  "Output files: {files}": "产出文件：{files}",
+  "No output files": "无产出文件",
+  "Completed with failed steps": "已完成，但有步骤失败",
+  // Connector management (T-0051).
+  "Manage MCP connectors for this profile.": "管理此配置档案的 MCP 连接器。",
+  "This server provides read-only connector status. Management is unavailable.":
+    "此服务器仅提供连接器状态，不支持管理操作。",
+  "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.":
+    "这里可以添加 HTTP 连接器；stdio 连接器需要运维先在服务器上配置白名单。",
+  "Management is disabled because this access can read sessions but cannot change the profile.":
+    "当前权限只能读取会话，不能修改配置档案，管理操作已停用。",
+  "You do not have permission to manage this profile's connectors.":
+    "你没有管理此配置档案连接器的权限。",
+  "Add HTTP connector": "添加 HTTP 连接器",
+  "Edit connector": "编辑连接器",
+  "Connector name": "连接器名称",
+  "HTTP URL": "HTTP URL",
+  HTTP: "HTTP",
+  "Leave blank to keep the current URL.": "留空则保持当前 URL。",
+  "Save connector": "保存连接器",
+  "Enter a connector name.": "请输入连接器名称。",
+  "Enter a valid HTTP(S) URL without embedded credentials.":
+    "请输入有效的 HTTP(S) URL，不要在 URL 中嵌入凭据。",
+  "Delete {name}? Its tools will no longer be available.":
+    "确定删除 {name} 吗？删除后无法继续使用它的工具。",
+  "Confirm delete": "确认删除",
+  Disable: "停用",
+  Reconnect: "重新连接",
+  "Reconnecting…": "正在重新连接…",
+  "Enable the connector before reconnecting.": "请先启用连接器，再重新连接。",
+  "Authorization required": "需要授权",
+  "{count} tools": "{count} 个工具",
+  connected: "已连接",
+  connecting: "连接中",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };

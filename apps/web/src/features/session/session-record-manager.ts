@@ -1108,6 +1108,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
           record.timeline,
           active.turnId,
           optimistic.body,
+          active.media,
         );
       }
       // Restore the record's blocking approvals/questions from the hydrate at

@@ -1,3 +1,4 @@
+import { randomUUID } from "../../shared/uuid.ts";
 import {
   CORE_UI_METHODS,
   isProtocolUuid,
@@ -261,6 +262,7 @@ export function createQueueBackedTurnController(options: {
     ownerTurnId: string;
     sent: boolean;
     returned: boolean;
+    accepted: boolean;
   }> = [];
 
   const publishRecovery = (value: TurnRecoveryState | null) => {
@@ -338,7 +340,7 @@ export function createQueueBackedTurnController(options: {
             "Native code review",
             turn.text || "Review requested for current project changes.",
           )
-        : addOptimisticUser(current, turn.turnId, turn.text),
+        : addOptimisticUser(current, turn.turnId, turn.text, turn.media),
     );
     // §5.2: a user prompt crosses the driver seam FIRST. Await the seat
     // release (or its refusal) BEFORE any turn/start frame is written.
@@ -547,15 +549,15 @@ export function createQueueBackedTurnController(options: {
         // model) — tell the user instead of silently splicing it out,
         // mirroring the suspend path (security audit v10 P3). Its own id
         // namespace avoids upserting the acceptance entry.
-        if (entry.sent && !entry.returned) {
+        if (entry.sent && !entry.returned && !entry.accepted && !steerUnknown) {
           dependenciesRef.current.setTimeline((current) =>
             addSystemMessage(
               current,
               `steer-inconclusive:${turnId}:${index}`,
-              "Steering outcome stayed inconclusive",
-              "The turn finished without confirming delivery. This text was not resent automatically: " +
+              "Steering delivery not confirmed",
+              "The turn finished without confirming delivery. Check the final response before deciding whether to send this text again; it was not resent automatically: " +
                 entry.turn.text,
-              "error",
+              "info",
             ),
           );
         }
@@ -664,7 +666,7 @@ export function createQueueBackedTurnController(options: {
     // made when it was typed, not a later re-selection.
     const reasoningEffort = dependenciesRef.current.reasoningEffort?.();
     const turn: PromptTurn = {
-      turnId: crypto.randomUUID(),
+      turnId: randomUUID(),
       text: text.trim(),
       ...(reasoningEffort ? { reasoningEffort } : {}),
     };
@@ -751,6 +753,7 @@ export function createQueueBackedTurnController(options: {
       ownerTurnId: active.turnId,
       sent: false,
       returned: false,
+      accepted: false,
     };
     retainedSteers.push(entry);
     steerInFlight = true;
@@ -822,7 +825,13 @@ export function createQueueBackedTurnController(options: {
             "Native steering started a new turn",
             "The prior turn ended before admission. Core started the submitted text as a new turn.",
           );
-        } else reportSteer(turn, "Steering accepted", turn.text);
+        } else {
+          // A valid steered=true receipt is acceptance, not proof of model
+          // consumption. Preserve that state at terminal instead of rewriting
+          // it as an inconclusive delivery when no drop receipt exists.
+          entry.accepted = true;
+          reportSteer(turn, "Steering accepted", turn.text);
+        }
       } catch (reason) {
         if (!isCurrent() || entry.returned) return;
         if (!entry.sent || reason instanceof OctosUiProtocolError) {
@@ -989,7 +998,7 @@ export function createQueueBackedTurnController(options: {
       currentDependencies.setTimeline((current) =>
         addSystemMessage(
           current,
-          `nothing-to-stop:${crypto.randomUUID()}`,
+          `nothing-to-stop:${randomUUID()}`,
           "Nothing to stop",
           "There is no active foreground turn, so no server command was sent.",
         ),
