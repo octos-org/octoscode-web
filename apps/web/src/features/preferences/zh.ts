@@ -1876,6 +1876,37 @@ const catalog: Readonly<Record<string, string>> = {
   "Output files: {files}": "产出文件：{files}",
   "No output files": "无产出文件",
   "Completed with failed steps": "已完成，但有步骤失败",
+  // Connector management (T-0051).
+  "Manage MCP connectors for this profile.": "管理此配置档案的 MCP 连接器。",
+  "This server provides read-only connector status. Management is unavailable.":
+    "此服务器仅提供连接器状态，不支持管理操作。",
+  "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.":
+    "这里可以添加 HTTP 连接器；stdio 连接器需要运维先在服务器上配置白名单。",
+  "Management is disabled because this access can read sessions but cannot change the profile.":
+    "当前权限只能读取会话，不能修改配置档案，管理操作已停用。",
+  "You do not have permission to manage this profile's connectors.":
+    "你没有管理此配置档案连接器的权限。",
+  "Add HTTP connector": "添加 HTTP 连接器",
+  "Edit connector": "编辑连接器",
+  "Connector name": "连接器名称",
+  "HTTP URL": "HTTP URL",
+  HTTP: "HTTP",
+  "Leave blank to keep the current URL.": "留空则保持当前 URL。",
+  "Save connector": "保存连接器",
+  "Enter a connector name.": "请输入连接器名称。",
+  "Enter a valid HTTP(S) URL without embedded credentials.":
+    "请输入有效的 HTTP(S) URL，不要在 URL 中嵌入凭据。",
+  "Delete {name}? Its tools will no longer be available.":
+    "确定删除 {name} 吗？删除后无法继续使用它的工具。",
+  "Confirm delete": "确认删除",
+  Disable: "停用",
+  Reconnect: "重新连接",
+  "Reconnecting…": "正在重新连接…",
+  "Enable the connector before reconnecting.": "请先启用连接器，再重新连接。",
+  "Authorization required": "需要授权",
+  "{count} tools": "{count} 个工具",
+  connected: "已连接",
+  connecting: "连接中",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
 };
