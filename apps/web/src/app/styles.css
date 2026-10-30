@@ -938,6 +938,24 @@ label > span {
   font-style: normal;
 }
 
+.approval-strip em[data-risk="low"] {
+  color: var(--dsw-alias-state-success-text);
+}
+
+.approval-strip em[data-risk="medium"] {
+  color: var(--dsw-alias-state-warn-text);
+}
+
+.approval-strip em[data-risk="high"],
+.approval-strip em[data-risk="critical"] {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.approval-body .approval-impact {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
 .approval-dot {
   width: 8px;
   height: 8px;

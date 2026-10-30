@@ -1541,6 +1541,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     };
   }, [fleetBriefFocusRequest, fleetRouteActive]);
 
+  const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
+    string | null
+  >(null);
   const submit = (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
@@ -1941,6 +1944,48 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
 
+  const retryPermissionDenied = async (turnId: string) => {
+    if (permissionRetryBusyTurnId || !safety.permission.editable) return;
+    const client = protocol.client;
+    const opened = session.opened;
+    const option = permissionRetryProfile;
+    const prompt = conversation.timeline.find(
+      (entry) =>
+        entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
+    )?.body;
+    if (!client || !opened || !option || !prompt) return;
+    const retryKey = activeSessionKey;
+    const ownerIsCurrent = () =>
+      activeSessionClientRef.current === client &&
+      openedSessionIdRef.current === opened.session_id &&
+      activeSessionKeyRef.current === retryKey;
+    setPermissionRetryBusyTurnId(turnId);
+    try {
+      const result = await client.setPermissionProfile({
+        session_id: opened.session_id,
+        update: { mode: "workspace_write", network: option.network },
+      });
+      if (
+        !result.applied ||
+        result.session_id !== opened.session_id ||
+        result.current.mode !== "workspace_write" ||
+        result.current.network !== option.network
+      ) {
+        throw new Error("The server did not apply workspace write permission.");
+      }
+      if (!ownerIsCurrent()) return;
+      await safety.refreshPermission();
+      if (!ownerIsCurrent()) return;
+      conversation.enqueuePrompt(prompt);
+    } catch (reason) {
+      setCommandError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    } finally {
+      setPermissionRetryBusyTurnId(null);
+    }
+  };
+
   const activeTurnId = conversation.queue.active?.turnId ?? null;
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
@@ -1998,6 +2043,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     previousActiveSessionKeyRef.current,
     historyView !== null,
   );
+  const activeSessionKeyRef = useRef(activeSessionKey);
+  const activeSessionClientRef = useRef(protocol.client);
+  const openedSessionIdRef = useRef(session.opened?.session_id);
+  activeSessionKeyRef.current = activeSessionKey;
+  activeSessionClientRef.current = protocol.client;
+  openedSessionIdRef.current = session.opened?.session_id;
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
@@ -2722,6 +2773,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             profile.network === currentPermission.network,
         )
       : undefined;
+  const permissionRetryProfile = safety.permission.editable
+    ? safety.permission.result?.profiles.find(
+        (profile) =>
+          profile.mode === "workspace_write" &&
+          profile.network === currentPermission?.network,
+      )
+    : undefined;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -3484,6 +3542,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
+                          onRetryPermission={
+                            permissionRetryProfile
+                              ? (turnId) => void retryPermissionDenied(turnId)
+                              : undefined
+                          }
+                          permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
                       </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>

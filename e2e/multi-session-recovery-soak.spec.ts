@@ -720,7 +720,7 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   await expect(dialog).toBeVisible();
   await expect(page.getByText(/\b1 queued\b/)).toHaveCount(0);
   await holdTerminals(request, 1);
-  await dialog.getByRole("button", { name: /Yes/ }).click();
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
@@ -856,7 +856,7 @@ test("resolves three concurrent parked background approvals out of order without
   for (const index of [2, 1, 0]) {
     await selectSession(sidebar, titles[index]!);
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /Yes/ }).click();
+    await dialog.getByRole("button", { name: /Allow once/ }).click();
     await expect(dialog).toHaveCount(0);
     await expect.poll(() => responds().length).toBe(3 - index);
   }

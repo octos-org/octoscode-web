@@ -17,6 +17,7 @@ import { toolKind, type ToolKind } from "./tool-kind.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { thinkingSummaryParts, toolTarget, type FoldState } from "./folds.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
+import { permissionDeniedReason } from "../approval/approval-presentation.ts";
 import type { TurnActivity } from "./turn-activity.ts";
 import { AttachmentList } from "./AttachmentList.tsx";
 import foldStyles from "./TimelineFolds.module.css";
@@ -51,6 +52,8 @@ interface TimelineProps {
    * only while the Session is empty so the memoized transcript stays stable.
    */
   emptyState?: ReactNode;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  permissionRetryBusyTurnId?: string | null | undefined;
 }
 
 export const Timeline = memo(function Timeline({
@@ -66,6 +69,8 @@ export const Timeline = memo(function Timeline({
   activity = null,
   workspaceFileReadAvailable = false,
   emptyState,
+  onRetryPermission,
+  permissionRetryBusyTurnId = null,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -200,6 +205,8 @@ export const Timeline = memo(function Timeline({
           expanded={folds ? folds[entry.id] === true : undefined}
           onToggleFold={toggleFold}
           workspaceFileReadAvailable={workspaceFileReadAvailable}
+          onRetryPermission={onRetryPermission}
+          retryBusy={permissionRetryBusyTurnId === entry.turnId}
         />
       ))}
       <TurnActivityIndicator activity={activity} />
@@ -217,11 +224,15 @@ const TimelineEntryView = memo(function TimelineEntryView({
   expanded,
   onToggleFold,
   workspaceFileReadAvailable,
+  onRetryPermission,
+  retryBusy,
 }: {
   entry: TimelineEntry;
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
   workspaceFileReadAvailable: boolean;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy: boolean;
 }) {
   switch (entry.kind) {
     case "reasoning":
@@ -239,6 +250,8 @@ const TimelineEntryView = memo(function TimelineEntryView({
           expanded={expanded}
           onToggleFold={onToggleFold}
           workspaceFileReadAvailable={workspaceFileReadAvailable}
+          onRetryPermission={onRetryPermission}
+          retryBusy={retryBusy}
         />
       );
     default:
@@ -251,6 +264,8 @@ interface FoldableBlockProps {
   /** undefined = reader-controlled native disclosure; boolean = folds state. */
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy?: boolean;
 }
 
 /**
@@ -317,7 +332,7 @@ function ReasoningBlock(props: FoldableBlockProps) {
 function ToolBlock(
   props: FoldableBlockProps & { workspaceFileReadAvailable: boolean },
 ) {
-  const { entry } = props;
+  const { entry, onRetryPermission, retryBusy = false } = props;
   const t = useUiText();
   const running = entry.status === "running";
   const target = toolTarget(entry.body);
@@ -357,6 +372,19 @@ function ToolBlock(
           <ChevronDownIcon className={styles.chevron} />
         </summary>
         <div className={styles.toolBody}>
+          {entry.turnId &&
+          onRetryPermission &&
+          permissionDeniedReason(entry.status, entry.body) ? (
+            <button
+              type="button"
+              disabled={retryBusy}
+              onClick={() => onRetryPermission(entry.turnId!)}
+            >
+              {retryBusy
+                ? t("Switching to write and retrying…")
+                : t("Switch to write and retry")}
+            </button>
+          ) : null}
           {entry.body ? (
             <pre className={styles.toolOutput}>{entry.body}</pre>
           ) : (

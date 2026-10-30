@@ -445,7 +445,9 @@ for (const kind of ["approval", "question"] as const) {
     expect(request).toBeDefined();
     if (kind === "approval") {
       await expect(dialog.getByText("需要批准", { exact: true })).toBeVisible();
-      await expect(dialog.getByRole("button", { name: /^是/ })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /^允许一次/ }),
+      ).toBeVisible();
       await expect(
         dialog.getByText("The agent wants to run the repository checks.", {
           exact: true,
@@ -474,7 +476,7 @@ for (const kind of ["approval", "question"] as const) {
       await expect(
         dialog.getByText("Approval required", { exact: true }),
       ).toBeVisible();
-      await dialog.getByRole("button", { name: /^Yes/ }).click();
+      await dialog.getByRole("button", { name: /^Allow once/ }).click();
     } else {
       await dialog.getByLabel(/Full/).check();
       await dialog
