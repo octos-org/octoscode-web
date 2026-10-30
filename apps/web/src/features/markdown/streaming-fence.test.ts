@@ -62,6 +62,15 @@ describe("prepareStreamingMarkdown", () => {
     ).toBe("Before draft\n\n    print(2 ** 3)\n");
   });
 
+  it("preserves exponent operators around template strings in indented code", () => {
+    expect(
+      prepareStreamingMarkdown("    const s = `hello`; let n = 2 ** 3;\n"),
+    ).toBe("    const s = `hello`; let n = 2 ** 3;\n");
+    expect(
+      prepareStreamingMarkdown("    const a = `x`;\n    print(2 ** 3)\n"),
+    ).toBe("    const a = `x`;\n    print(2 ** 3)\n");
+  });
+
   it("preserves fenced and inline code while hiding unmatched prose markers", () => {
     expect(
       prepareStreamingMarkdown(

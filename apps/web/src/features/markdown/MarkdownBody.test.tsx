@@ -79,6 +79,20 @@ describe("MarkdownBody", () => {
     ).toContain("print(2 ** 3)");
   });
 
+  it("keeps template strings and exponent operators exact in indented code", () => {
+    const sameLine = "    const s = `hello`; let n = 2 ** 3;\n";
+    expect(
+      renderToStaticMarkup(<MarkdownBody text={sameLine} streaming />),
+    ).toContain("const s = `hello`; let n = 2 ** 3;");
+
+    const nextLine = "    const a = `x`;\n    print(2 ** 3)\n";
+    const html = renderToStaticMarkup(
+      <MarkdownBody text={nextLine} streaming />,
+    );
+    expect(html).toContain("const a = `x`;");
+    expect(html).toContain("print(2 ** 3)");
+  });
+
   it("shows an unfinished code block as code, unhighlighted, while streaming", () => {
     const html = renderToStaticMarkup(
       <MarkdownBody text={"Here:\n\n```ts\nconst x = 1;"} streaming />,

@@ -53,40 +53,52 @@ export function prepareStreamingMarkdown(text: string): string {
 }
 
 function prepareInline(text: string): string {
-  let rendered = "";
-  let consumed = 0;
-  for (const match of text.matchAll(/(`+)([\s\S]*?)\1/g)) {
-    const start = match.index;
-    rendered += prepareIndented(text.slice(consumed, start));
-    rendered += match[0];
-    consumed = start + match[0].length;
-  }
-  return rendered + prepareIndented(text.slice(consumed));
+  return prepareIndented(text);
 }
 
 function prepareIndented(text: string): string {
+  let plain = "";
   let rendered = "";
   let indentedCode = false;
   let previousBlank = true;
+  const flushPlain = () => {
+    rendered += prepareInlineCode(plain);
+    plain = "";
+  };
   for (const line of text.split(/(?<=\n)/)) {
     const indented = /^(?: {4}|\t)/.test(line);
     const blank = /^\s*$/.test(line);
     if (indented && (indentedCode || previousBlank)) {
+      flushPlain();
       indentedCode = true;
       rendered += line;
       previousBlank = blank;
       continue;
     }
     if (indentedCode && (indented || blank)) {
+      flushPlain();
       rendered += line;
       previousBlank = blank;
       continue;
     }
     indentedCode = false;
-    rendered += preparePlain(line);
+    plain += line;
     previousBlank = blank;
   }
+  flushPlain();
   return rendered;
+}
+
+function prepareInlineCode(text: string): string {
+  let rendered = "";
+  let consumed = 0;
+  for (const match of text.matchAll(/(`+)([\s\S]*?)\1/g)) {
+    const start = match.index;
+    rendered += preparePlain(text.slice(consumed, start));
+    rendered += match[0];
+    consumed = start + match[0].length;
+  }
+  return rendered + preparePlain(text.slice(consumed));
 }
 
 function preparePlain(text: string): string {
