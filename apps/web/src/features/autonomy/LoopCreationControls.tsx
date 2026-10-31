@@ -94,7 +94,7 @@ export function LoopCreationControls({
       <p className={styles.hint}>
         {draft.mode === "maintenance"
           ? t(
-              "Native /loop default. Leave the prompt empty to use the server's maintenance prompt and cadence.",
+              "Default mode. Leave the prompt empty to use the server's maintenance prompt and cadence.",
             )
           : draft.mode === "self_paced"
             ? t("The server decides the next run from the loop's result.")

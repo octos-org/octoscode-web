@@ -385,8 +385,8 @@ const catalog: Readonly<Record<string, string>> = {
   Name: "名称",
   "Named provider routes for the server research pipeline. This is not a separate browser agent loop. Provider identity and API style are separate fields.":
     "用于服务器研究流程的命名提供商路由。这不是独立的浏览器智能体循环。提供商身份和 API 类型是不同字段。",
-  "Native /loop default. Leave the prompt empty to use the server's maintenance prompt and cadence.":
-    "原生 /loop 默认模式。提示词留空时使用服务器的维护指令和节奏。",
+  "Default mode. Leave the prompt empty to use the server's maintenance prompt and cadence.":
+    "默认模式。提示词留空时，使用服务器的维护指令和节奏。",
   "Native code review": "原生代码审查",
   "Native interval: {value0} seconds{value1}.":
     "原生间隔：{value0} 秒{value1}。",
@@ -804,7 +804,7 @@ const catalog: Readonly<Record<string, string>> = {
   "This follows Octoscode’s solo onboarding: create a named profile, test a server-advertised model route, save it, then open the canonical coding session.":
     "遵循 Octoscode 的独立配置流程：创建命名配置档案，测试服务器声明支持的模型路由，保存后打开正式编程会话。",
   "This goal is over budget. Resuming does not increase its token budget.":
-    "此目标已超出预算。恢复不会增加令牌预算。",
+    "此目标已超出预算。恢复不会增加 token 预算。",
   "This is a path on the Octos server, not a folder in this browser.":
     "这是 Octos 服务器上的路径，而非浏览器中的文件夹。",
   "This provider uses its native or local authentication path.":
@@ -819,9 +819,9 @@ const catalog: Readonly<Record<string, string>> = {
     "此视图仅列出服务器保存的决策，不会清除或更改权限。",
   Thread: "线程",
   "Thread graph": "线程图",
-  "Token budget (optional)": "令牌预算（可选）",
+  "Token budget (optional)": "token 预算（可选）",
   "Token for this browser tab": "此浏览器标签页的令牌",
-  Tokens: "令牌",
+  Tokens: "token",
   Trajectory: "轨迹",
   "Try again": "重试",
   "Turn images": "轮次图片",
@@ -878,7 +878,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Z.AI requires thinking to stay enabled for this model and recommends preserving thinking across coding turns.":
     "Z.AI 要求此模型保持思考功能开启，并建议在编程轮次间保留思考内容。",
   ZAI_API_KEY: "ZAI_API_KEY",
-  "Zero-token monitors": "零令牌监视器",
+  "Zero-token monitors": "不耗 token 的监视器",
   "and rebuilds its server skill runtime.": "并重建其服务器技能运行时。",
   at: "于",
   "bytes ·": "字节 ·",
@@ -887,7 +887,7 @@ const catalog: Readonly<Record<string, string>> = {
   "conversation rewind": "对话回退",
   disabled: "已禁用",
   "dropped.": "已丢弃。",
-  "estimated tokens ·": "估算令牌 ·",
+  "estimated tokens ·": "估算 token ·",
   "exists. A retry only repeats provider test and save.":
     "已存在。重试仅重复提供商测试与保存。",
   "failed ·": "失败 ·",
@@ -929,8 +929,8 @@ const catalog: Readonly<Record<string, string>> = {
   text: "文本",
   "thread(s) · Cursor": "个线程 · 游标",
   "to confirm": "以确认",
-  tokens: "令牌",
-  "tokens ·": "令牌 ·",
+  tokens: "token",
+  "tokens ·": "token ·",
   tools: "工具",
   "tools reported · Policy": "个已报告工具 · 策略",
   "user messages. They belong to one thread and will be removed together.":
@@ -940,7 +940,7 @@ const catalog: Readonly<Record<string, string>> = {
   "{value0} could not be loaded.": "无法加载 {value0}。",
   "{value0} is not advertised by this server": "此服务器未声明支持 {value0}",
   "{value0} pending.": "{value0} 待处理。",
-  "{value0} tokens": "{value0} 个令牌",
+  "{value0} tokens": "{value0} token",
   "{value0} · branch {value1}": "{value0} · 分支 {value1}",
   "· Root sequence:": "· 根序号：",
   "· Session:": "· 会话：",
@@ -1119,7 +1119,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Copy the last assistant reply": "复制最近一条助手回复",
   "Show session and capability status": "显示会话和功能状态",
   "Inspect reported Session token usage and estimated cost":
-    "检查会话报告的令牌用量与估算费用",
+    "检查会话报告的 token 用量与估算费用",
   "Show runtime model and Profile model settings":
     "显示运行时模型和配置档案模型设置",
   "Inspect context, cache, and compaction controls":
@@ -1252,7 +1252,7 @@ const catalog: Readonly<Record<string, string>> = {
   "API style": "API 类型",
   Description: "描述",
   "Context window (optional)": "上下文窗口（可选）",
-  "Max output tokens (optional)": "最大输出令牌数（可选）",
+  "Max output tokens (optional)": "最大输出 token 数（可选）",
   all: "全部",
   failed: "失败",
   done: "已完成",
@@ -1742,10 +1742,6 @@ const catalog: Readonly<Record<string, string>> = {
     "这个浏览器无法显示桌面通知，标签页计数仍然有效。",
 
   Automation: "自动化",
-  "Autonomy limitations": "自动化功能限制",
-  "Goal history and budget accounting are still being reconciled.":
-    "目标历史和预算核算仍在对账中。",
-  "Monitor probes are not fully sandboxed yet.": "监控探针尚未完全沙箱化。",
 
   // Artifact preview (T-0012).
   Preview: "预览",
@@ -1896,10 +1892,55 @@ const catalog: Readonly<Record<string, string>> = {
   "Duration {seconds}s": "用时 {seconds} 秒",
   "{count} files changed": "改动 {count} 个文件",
   "{input} tokens in · {output} tokens out":
-    "输入 {input} tokens · 输出 {output} tokens",
+    "输入 {input} token · 输出 {output} token",
   "Output files: {files}": "产出文件：{files}",
   "No output files": "无产出文件",
   "Completed with failed steps": "已完成，但有步骤失败",
+  // Quieter turn close and folded steps (T-0076).
+  "Ran {count} steps": "执行了 {count} 步",
+  "Retried automatically {count} times": "已自动重试 {count} 次",
+  "{count} steps failed": "{count} 步失败",
+  "Turn ended": "本轮已结束",
+  "{count} plan items": "{count} 项",
+  "Turn rejected": "本轮未被接受",
+  "Turn start unconfirmed": "未确认本轮已开始",
+  "Turn start timed out": "启动本轮超时",
+  "Turn is still starting": "本轮还在启动",
+  "Nothing to stop": "没有可以停止的内容",
+  "Native review rejected": "代码审查未被接受",
+  "Native review outcome unknown": "代码审查结果未知",
+  "Review requested for current project changes.": "已请求审查当前项目的改动。",
+  "Steering accepted": "插话已被接受",
+  "Steering queued": "插话已排队",
+  "Steering returned to queue": "插话已退回队列",
+  "Steering outcome unknown": "插话结果未知",
+  "Steering delivery not confirmed": "未确认插话送达",
+  "Native steering started a new turn": "插话开始了新的一轮",
+  "The prior turn ended before admission. Core started the submitted text as a new turn.":
+    "上一轮在插话送达前已结束，这段话已作为新的一轮发出。",
+  "Steering was not admitted. The text remains ahead of later pending prompts.":
+    "插话没有被接受，这段话排在其他待发消息前面。",
+  "There is no active foreground turn, so no server command was sent.":
+    "当前没有正在运行的任务，所以没有向服务器发送停止。",
+  "Octos has not accepted this turn yet, so no interrupt was sent.":
+    "Octos 还没有接受这一轮，所以没有发送停止。",
+  "The server had accepted the turn after all — no resubmission needed.":
+    "服务器其实已经接受了这一轮，不需要重新发送。",
+  "The server did not acknowledge the turn. It may still be running — do not resubmit; check its status after reconnecting.":
+    "服务器没有确认这一轮，它可能仍在运行。请不要重新发送，重新连接后查看状态。",
+  "The turn finished without confirming delivery. Check the final response before deciding whether to send this text again; it was not resent automatically: ":
+    "这一轮结束时没有确认插话已送达。请先看最终回复，再决定是否重发；系统不会自动重发：",
+  "The request may have been consumed or started a new turn. It will not be resent automatically. Use the Retry queued delivery control above — or reconnect from Settings to restore queued prompt delivery. Submitted text: ":
+    "这条插话可能已被使用，也可能开始了新的一轮，系统不会自动重发。请用上方的「重试排队发送」，或在设置里重新连接以恢复排队发送。提交的内容：",
+  "Transport changed before consumption could be confirmed. This text will not be resent automatically: ":
+    "确认送达前连接发生了变化，这段话不会自动重发：",
+  "Loading memory…": "正在加载记忆…",
+  Healthy: "正常",
+  Degraded: "部分可用",
+  Unhealthy: "异常",
+  "turn interrupted": "本轮已被中断",
+  "turn interrupted by client": "本轮已由你停止",
+  "connection closed before turn completed": "连接在本轮完成前断开了",
   // Connector management (T-0051).
   "Manage MCP connectors for this profile.": "管理此配置档案的 MCP 连接器。",
   "This server provides read-only connector status. Management is unavailable.":

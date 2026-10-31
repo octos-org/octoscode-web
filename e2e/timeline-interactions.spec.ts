@@ -64,7 +64,7 @@ test("keeps activity and reader-controlled disclosures correct across ten stream
     await expect.poll(() => Boolean(emit)).toBe(true);
     emit!("user_message", { text: `Inspect file ${round}` });
     emit!("reasoning_delta", { text: `Inspecting file ${round}` });
-    const thought = page.locator("details").filter({
+    const thought = page.locator("details[data-timeline-entry]").filter({
       has: page.getByText(`Inspecting file ${round}`, { exact: true }),
     });
     await expect(thought).not.toHaveAttribute("open");
@@ -92,7 +92,7 @@ test("keeps activity and reader-controlled disclosures correct across ten stream
       name: `read_file_${round}`,
     });
     const tool = page
-      .locator("details")
+      .locator("details[data-timeline-entry]")
       .filter({ has: page.getByText(`read_file_${round}`, { exact: true }) });
     await expect(tool).not.toHaveAttribute("open");
     await tool.locator("summary").focus();
@@ -140,6 +140,12 @@ test("keeps activity and reader-controlled disclosures correct across ten stream
     );
     await expect(thought).toHaveAttribute("open");
     await expect(tool).toHaveAttribute("open");
+    // The ended turn folds its steps into one group; it stays open because
+    // the reader had opened a step in it, so nothing they read disappears.
+    const group = page.locator("details[data-step-group]").last();
+    await expect(group).toHaveAttribute("open");
+    await expect(group.locator("summary").first()).toContainText("Ran 1 steps");
+    await expect(thought).toBeVisible();
   }
   await page.screenshot({
     path: test.info().outputPath("timeline-completed.png"),
