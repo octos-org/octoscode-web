@@ -5,7 +5,10 @@ export interface TurnSummaryData {
   seconds?: number | undefined;
   changedFiles: string[];
   outputFiles: string[];
+  /** Failed steps the turn never recovered from. */
   failedSteps: number;
+  /** Failed steps a later call of the same tool in the turn succeeded at. */
+  retriedSteps: number;
   usage?: { input: number; output: number } | undefined;
 }
 
@@ -17,11 +20,16 @@ export function summarizeTurn(
   const terminal = turn.find((entry) => entry.id === `terminal:${turnId}`);
   const changed = new Set<string>();
   const output = new Set<string>();
+  const recovered = recoveredFailures(turn);
   let failedSteps = 0;
+  let retriedSteps = 0;
   for (const entry of turn) {
     for (const path of entry.media ?? []) output.add(path);
     if (entry.kind !== "tool") continue;
-    if (entry.status === "error") failedSteps += 1;
+    if (entry.status === "error") {
+      if (recovered.has(entry.id)) retriedSteps += 1;
+      else failedSteps += 1;
+    }
     const name = entry.title.toLowerCase();
     const target = toolTargetFull(entry.toolArguments ?? entry.body);
     if (
@@ -55,6 +63,7 @@ export function summarizeTurn(
     changedFiles: [...changed],
     outputFiles: [...output],
     failedSteps,
+    retriedSteps,
     usage: terminal?.turnUsage ?? legacyUsage(terminal?.body),
   };
 }
@@ -64,4 +73,46 @@ function legacyUsage(body: string | undefined) {
   return match
     ? { input: Number(match[1]), output: Number(match[2]) }
     : undefined;
+}
+
+/**
+ * Failed tool calls that a later call of the same tool in the same turn
+ * completed: the model retried or worked around them, so they read as
+ * "retried", not as failures of the turn.
+ */
+export function recoveredFailures(turn: readonly TimelineEntry[]): Set<string> {
+  const recovered = new Set<string>();
+  turn.forEach((entry, index) => {
+    if (entry.kind !== "tool" || entry.status !== "error") return;
+    const name = entry.title.toLowerCase();
+    if (
+      turn
+        .slice(index + 1)
+        .some(
+          (later) =>
+            later.kind === "tool" &&
+            later.status === "complete" &&
+            later.title.toLowerCase() === name,
+        )
+    )
+      recovered.add(entry.id);
+  });
+  return recovered;
+}
+
+/** `recoveredFailures` for every turn in the transcript. */
+export function recoveredFailuresByTurn(
+  entries: readonly TimelineEntry[],
+): Set<string> {
+  const turns = new Map<string, TimelineEntry[]>();
+  for (const entry of entries) {
+    if (entry.turnId === undefined) continue;
+    const turn = turns.get(entry.turnId);
+    if (turn) turn.push(entry);
+    else turns.set(entry.turnId, [entry]);
+  }
+  const recovered = new Set<string>();
+  for (const turn of turns.values())
+    for (const id of recoveredFailures(turn)) recovered.add(id);
+  return recovered;
 }
