@@ -57,6 +57,7 @@ import {
   CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
+  type PermissionProfileSelection,
   type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
 import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
@@ -206,7 +207,10 @@ import {
   firstTemplateBlank,
   type TaskTemplate,
 } from "../features/templates/task-templates.ts";
-import { applyTemplateReadOnly } from "../features/templates/template-permission.ts";
+import {
+  applyTemplatePermission,
+  applyTemplateReadOnly,
+} from "../features/templates/template-permission.ts";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
@@ -1673,6 +1677,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       }
     }
+    if (
+      intent.kind === "prompt" &&
+      appliedTemplate?.access === "write" &&
+      currentPermission?.mode === "read_only"
+    ) {
+      setCommandError(
+        t("This template needs write permission. Switch before sending."),
+      );
+      return;
+    }
     // Local admission may reject an incomplete upload or a retired Session.
     // Keep the original text and image drafts until that admission succeeds.
     if (
@@ -1688,6 +1702,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
 
     if (appliedTemplate) {
       setTemplateNotice(null);
+      templatePermissionOriginRef.current = null;
       templatePermissionRequestRef.current = null;
       setTemplatePermission(null);
     }
@@ -2458,6 +2473,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   >(null);
   const [templatePermission, setTemplatePermission] = useState<{
     sessionKey: string;
+    action: "read" | "restore";
     busy: boolean;
     error: string | null;
   } | null>(null);
@@ -2465,18 +2481,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     key: string;
     promise: Promise<boolean>;
   } | null>(null);
+  const templatePermissionOriginRef = useRef<{
+    sessionKey: string;
+    selection: PermissionProfileSelection;
+  } | null>(null);
   const readOnlyPermissionError = () =>
     t(
       "Read-only permission is not confirmed. Current permission is still workspace write; sending is blocked.",
     );
+  const restorePermissionError = () =>
+    t("Could not restore the permission from before this template.");
   const ensureTemplateReadOnly = (
     template: TaskTemplate,
     sessionKey: string,
   ): Promise<boolean> => {
-    const key = `${sessionKey}:${template.id}`;
+    const key = `read:${sessionKey}:${template.id}`;
     const existing = templatePermissionRequestRef.current;
     if (existing?.key === key) return existing.promise;
-    if (currentPermission?.mode === "read_only") {
+    const previous = existing?.promise;
+    if (!previous && currentPermission?.mode === "read_only") {
       setTemplatePermission(null);
       return Promise.resolve(true);
     }
@@ -2492,17 +2515,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     ) {
       setTemplatePermission({
         sessionKey,
+        action: "read",
         busy: false,
         error: readOnlyPermissionError(),
       });
       return Promise.resolve(false);
     }
-    setTemplatePermission({ sessionKey, busy: true, error: null });
+    setTemplatePermission({
+      sessionKey,
+      action: "read",
+      busy: true,
+      error: null,
+    });
     const promise = (async () => {
       const ownerIsCurrent = () =>
         activeSessionClientRef.current === client &&
         activeSessionKeyRef.current === sessionKey &&
         templatePermissionRequestRef.current?.key === key;
+      if (previous) await previous;
       try {
         await applyTemplateReadOnly(client, opened.session_id);
         if (!ownerIsCurrent()) return false;
@@ -2516,8 +2546,88 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           templatePermissionRequestRef.current = null;
           setTemplatePermission({
             sessionKey,
+            action: "read",
             busy: false,
             error: readOnlyPermissionError(),
+          });
+        }
+        return false;
+      }
+    })();
+    templatePermissionRequestRef.current = { key, promise };
+    return promise;
+  };
+  const restoreTemplatePermission = (
+    template: TaskTemplate,
+    sessionKey: string,
+  ): Promise<boolean> => {
+    const origin = templatePermissionOriginRef.current;
+    if (!origin || origin.sessionKey !== sessionKey)
+      return Promise.resolve(true);
+    const key = `restore:${sessionKey}:${template.id}`;
+    const existing = templatePermissionRequestRef.current;
+    if (existing?.key === key) return existing.promise;
+    const previous = existing?.promise;
+    if (
+      !previous &&
+      currentPermission?.mode === origin.selection.mode &&
+      currentPermission.network === origin.selection.network
+    ) {
+      templatePermissionOriginRef.current = null;
+      setTemplatePermission(null);
+      return Promise.resolve(true);
+    }
+    const client = protocol.client;
+    const opened = session.opened;
+    if (
+      !client ||
+      !opened ||
+      !supportsMethod(
+        opened.capabilities,
+        CORE_UI_METHODS.PERMISSION_PROFILE_SET,
+      )
+    ) {
+      setTemplatePermission({
+        sessionKey,
+        action: "restore",
+        busy: false,
+        error: restorePermissionError(),
+      });
+      return Promise.resolve(false);
+    }
+    setTemplatePermission({
+      sessionKey,
+      action: "restore",
+      busy: true,
+      error: null,
+    });
+    const promise = (async () => {
+      const ownerIsCurrent = () =>
+        activeSessionClientRef.current === client &&
+        activeSessionKeyRef.current === sessionKey &&
+        templatePermissionRequestRef.current?.key === key;
+      if (previous) await previous;
+      try {
+        await applyTemplatePermission(
+          client,
+          opened.session_id,
+          origin.selection,
+        );
+        if (!ownerIsCurrent()) return false;
+        await safety.refreshPermission();
+        if (!ownerIsCurrent()) return false;
+        templatePermissionOriginRef.current = null;
+        templatePermissionRequestRef.current = null;
+        setTemplatePermission(null);
+        return true;
+      } catch {
+        if (ownerIsCurrent()) {
+          templatePermissionRequestRef.current = null;
+          setTemplatePermission({
+            sessionKey,
+            action: "restore",
+            busy: false,
+            error: restorePermissionError(),
           });
         }
         return false;
@@ -2539,10 +2649,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       text,
       previousDraft,
     });
-    templatePermissionRequestRef.current = null;
-    setTemplatePermission(null);
     if (template.access === "read") {
+      if (!templatePermissionOriginRef.current && currentPermission) {
+        templatePermissionOriginRef.current = {
+          sessionKey,
+          selection: { ...currentPermission },
+        };
+      }
       void ensureTemplateReadOnly(template, sessionKey);
+    } else if (templatePermissionOriginRef.current) {
+      void restoreTemplatePermission(template, sessionKey);
+    } else if (!templatePermissionRequestRef.current) {
+      setTemplatePermission(null);
     }
     // Land on the first blank so typing replaces it.
     requestAnimationFrame(() => {
@@ -2604,9 +2722,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 ? () => {
                     draftRef.current = templateNotice.previousDraft;
                     setDraft(templateNotice.previousDraft);
+                    const template = findTaskTemplate(
+                      templateNotice.templateId,
+                    );
+                    if (template) {
+                      void restoreTemplatePermission(
+                        template,
+                        templateNotice.sessionKey,
+                      );
+                    }
                     setTemplateNotice(null);
-                    templatePermissionRequestRef.current = null;
-                    setTemplatePermission(null);
                     composerRef.current?.focus();
                   }
                 : undefined,
@@ -2950,8 +3075,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
     setWorkspacePicker({ open: true, view: "choose" });
   };
+  const initialPermissionsRef = useRef(
+    new Map<string, PermissionProfileSelection>(),
+  );
+  const defaultPermission = useMemo(() => {
+    const result = safety.permission.result;
+    if (!activeSessionKey || !result) return undefined;
+    const key = `${protocol.authorityKey}:${activeSessionKey}`;
+    const initial = initialPermissionsRef.current.get(key);
+    if (initial) return initial;
+    initialPermissionsRef.current.set(key, result.current);
+    return result.current;
+  }, [
+    activeSessionKey,
+    protocol.authorityKey,
+    safety.permission.result?.session_id,
+  ]);
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
+    defaultPermission,
   ).map((option) => ({
     ...option,
     modeLabel: t(option.modeLabel),
@@ -2987,15 +3129,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         labels: translateLabels(PERMISSION_LABELS, t),
         riskCopy: translateLabels(PERMISSION_RISK_COPY, t),
         onSelect: (option: (typeof projectedPermissionOptions)[number]) => {
-          const selection = [
-            safety.permission.result?.current,
-            ...(safety.permission.result?.profiles ?? []),
-          ].find(
-            (candidate) =>
-              candidate?.mode === option.mode &&
-              candidate.network === option.network,
-          );
-          if (selection) void safety.updatePermission(selection);
+          void safety.updatePermission({
+            mode: option.mode,
+            network: option.network,
+          });
         },
         onRetry: () => void safety.refreshPermission(),
       }
@@ -3975,10 +4112,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                     : null
                                 }
                                 readAccess={
-                                  appliedTemplate?.access === "read" &&
+                                  appliedTemplate &&
                                   templatePermission?.sessionKey ===
                                     activeSessionKey
                                     ? {
+                                        action: templatePermission.action,
                                         busy: templatePermission.busy,
                                         error: templatePermission.error,
                                       }
@@ -4394,6 +4532,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         onChange={(value) => {
                           draftRef.current = value;
                           setDraft(value);
+                          if (!value && appliedTemplate && activeSessionKey) {
+                            void restoreTemplatePermission(
+                              appliedTemplate,
+                              activeSessionKey,
+                            );
+                            setTemplateNotice(null);
+                          }
                           setAttachNotice(null);
                           setSelectedCommandIndex(0);
                           setCommandPaletteDismissed(false);

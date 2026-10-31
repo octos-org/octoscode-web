@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
-import { applyTemplateReadOnly } from "./template-permission.ts";
+import {
+  applyTemplatePermission,
+  applyTemplateReadOnly,
+} from "./template-permission.ts";
 
 function clientWith(result: {
   session_id: string;
@@ -50,5 +53,35 @@ describe("read-only template permission", () => {
     await expect(applyTemplateReadOnly(client, "session-a")).rejects.toThrow(
       "did not confirm read-only",
     );
+  });
+});
+
+describe("template permission restoration", () => {
+  it("restores the complete mode/network pair and verifies its receipt", async () => {
+    const { client, setPermissionProfile } = clientWith({
+      session_id: "session-a",
+      applied: true,
+      current: { mode: "workspace_write", network: "allow" },
+    });
+    const selection = { mode: "workspace_write", network: "allow" } as const;
+    await applyTemplatePermission(client, "session-a", selection);
+    expect(setPermissionProfile).toHaveBeenCalledWith({
+      session_id: "session-a",
+      update: selection,
+    });
+  });
+
+  it("rejects a receipt with a different network policy", async () => {
+    const { client } = clientWith({
+      session_id: "session-a",
+      applied: true,
+      current: { mode: "workspace_write", network: "deny" },
+    });
+    await expect(
+      applyTemplatePermission(client, "session-a", {
+        mode: "workspace_write",
+        network: "allow",
+      }),
+    ).rejects.toThrow("did not confirm the template permission");
   });
 });
