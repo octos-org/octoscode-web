@@ -3908,7 +3908,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         target={resumeTarget}
                       />
                     ) : null}
-                    {codingCapabilities.sessionCreationAvailable ? (
+                    {codingCapabilities.sessionCreationAvailable &&
+                    !workspacePicker.open ? (
                       <div
                         ref={heroPickerRef}
                         className={productStyles.heroPickerSlot}

@@ -122,6 +122,21 @@
   line-height: 14px;
 }
 
+.moreProviders {
+  margin-top: 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.moreProviders summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.moreProviders .providers {
+  margin-top: 8px;
+}
+
 .modelField {
   max-width: 360px;
 }
@@ -269,6 +284,14 @@
 .recovery code {
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family-code);
+}
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 10px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .actions > div {
