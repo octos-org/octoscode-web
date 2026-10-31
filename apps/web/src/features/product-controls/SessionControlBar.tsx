@@ -27,7 +27,13 @@ import type {
   SessionPermissionOption,
 } from "./types.ts";
 import styles from "./SessionControlBar.module.css";
-import { CheckIcon, ChevronDownIcon, ShieldIcon } from "../../ui/Icon.tsx";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  EyeIcon,
+  PencilIcon,
+  ShieldIcon,
+} from "../../ui/Icon.tsx";
 import type { PermissionRuntimeState } from "../review/use-coding-safety.ts";
 import {
   permissionControlState,
@@ -274,6 +280,7 @@ export function PermissionMenu({
   onChoose,
   onRetry,
 }: PermissionMenuProps) {
+  const t = useUiText();
   return (
     <div
       id={menuId}
@@ -322,13 +329,24 @@ export function PermissionMenu({
                     : styles.optionIcon
                 }
               >
-                <ShieldIcon dangerous={option.risk === "dangerous"} />
+                {option.risk === "dangerous" ? (
+                  <ShieldIcon dangerous />
+                ) : option.mode === "read_only" ? (
+                  <EyeIcon />
+                ) : (
+                  <PencilIcon />
+                )}
               </span>
               <span className={styles.optionCopy}>
-                <span className={styles.optionName}>{name}</span>
+                <span className={styles.optionNameRow}>
+                  <span className={styles.optionName}>{name}</span>
+                  {option.isDefault ? (
+                    <span className={styles.optionDefault}>{t("Default")}</span>
+                  ) : null}
+                </span>
                 {option.description ? (
                   <span className={styles.optionDescription}>
-                    {option.description}
+                    {t(option.description)}
                   </span>
                 ) : null}
               </span>

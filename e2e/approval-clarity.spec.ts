@@ -31,7 +31,9 @@ async function prepareDeniedWrite(page: Page) {
     .filter({ hasText: /Write|Read/ })
     .first()
     .click();
-  await page.getByRole("menuitemradio", { name: /^Read/ }).click();
+  await page
+    .getByRole("menuitemradio", { name: /^Read · Network blocked/ })
+    .click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Session settings" }),
