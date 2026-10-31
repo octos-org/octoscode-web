@@ -255,7 +255,7 @@ for (const colorScheme of ["light", "dark"] as const) {
       (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
         .violations,
     ).toEqual([]);
-    await expect(dialog).toHaveScreenshot(
+    await expect(card).toHaveScreenshot(
       `shortcut-help-${colorScheme}.png`,
       SNAPSHOT,
     );
@@ -281,7 +281,10 @@ for (const colorScheme of ["light", "dark"] as const) {
       const chinese = page.getByRole("dialog", { name: "键盘快捷键" });
       await expect(chinese).toContainText("命令面板");
       await expect(chinese).toContainText("向运行中的一轮插话");
-      await expect(chinese).toHaveScreenshot("shortcut-help-zh.png", SNAPSHOT);
+      await expect(chinese.locator('[class*="card"]')).toHaveScreenshot(
+        "shortcut-help-zh.png",
+        SNAPSHOT,
+      );
     }
   });
 
@@ -309,8 +312,14 @@ for (const colorScheme of ["light", "dark"] as const) {
       (await new AxeBuilder({ page }).include('[role="search"]').analyze())
         .violations,
     ).toEqual([]);
-    await expect(page.locator(".workspace-grid")).toHaveScreenshot(
-      `conversation-search-${colorScheme}.png`,
+    await expect(search).toHaveScreenshot(
+      `conversation-search-bar-${colorScheme}.png`,
+      SNAPSHOT,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Durable coding transcript" }),
+    ).toHaveScreenshot(
+      `conversation-search-highlight-${colorScheme}.png`,
       SNAPSHOT,
     );
   });
