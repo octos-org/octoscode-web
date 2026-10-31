@@ -72,7 +72,6 @@ function ReadyAutomationTab({
   client: AutonomyClient;
   commands: SessionAutonomyCommands;
 }) {
-  const t = useUiText();
   const controller = useAutonomy({
     commands: () => commands,
     sessionId: () => commands.sessionId,
@@ -86,17 +85,6 @@ function ReadyAutomationTab({
 
   return (
     <div className={styles.stack}>
-      <section
-        className={styles.section}
-        aria-label={t("Autonomy limitations")}
-      >
-        <p className={styles.note}>
-          {t("Goal history and budget accounting are still being reconciled.")}
-        </p>
-        <p className={styles.note}>
-          {t("Monitor probes are not fully sandboxed yet.")}
-        </p>
-      </section>
       <AutonomyPanel controller={controller} />
     </div>
   );

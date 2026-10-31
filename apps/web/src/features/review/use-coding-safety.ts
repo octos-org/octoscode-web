@@ -207,8 +207,10 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     if (
       !next ||
       !permission.result?.profiles.some(
-        (profile) =>
-          profile.mode === next.mode && profile.network === next.network,
+        (profile) => profile.mode === next.mode,
+      ) ||
+      !permission.result?.profiles.some(
+        (profile) => profile.network === next.network,
       )
     ) {
       setPermission((state) => ({
