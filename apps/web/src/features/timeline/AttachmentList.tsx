@@ -1,4 +1,11 @@
-import { useContext, useEffect, useId, useRef, useState } from "react";
+import {
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   AttachmentAccessContext,
   type AttachmentAccess,
@@ -70,6 +77,14 @@ function AttachmentItem({
     reference: string;
     promise: ReturnType<NonNullable<AttachmentAccess["describe"]>>;
   } | null>(null);
+
+  useLayoutEffect(() => {
+    if (previewOpen) {
+      // Expanding below a bottom-anchored transcript can otherwise push the
+      // clicked card header under the top bar. Keep that header visible before paint.
+      itemRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [previewOpen]);
 
   useEffect(() => {
     if (!image) return;
@@ -252,6 +267,7 @@ function AttachmentItem({
           }
           aria-expanded={previewOpen}
           aria-controls={previewId}
+          data-attachment-preview
           onClick={() => setPreviewOpen((value) => !value)}
         >
           {previewOpen ? t("Hide preview") : t("Preview")}

@@ -216,6 +216,7 @@ import {
   writePanelLayout,
   type SessionPanelTab,
 } from "../features/side-panel/panel-layout.ts";
+import { SessionPanelHost } from "../features/side-panel/SessionPanelHost.tsx";
 import { ConversationActionsMenu } from "../features/shell/ConversationActionsMenu.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
@@ -390,10 +391,6 @@ const modelManagementSettingsLoader = () =>
 const ModelManagementSettings = lazyNamed(
   modelManagementSettingsLoader,
   (module) => module.ModelManagementSettings,
-);
-const SessionPanelHost = lazyNamed(
-  () => import("../features/side-panel/SessionPanelHost.tsx"),
-  (module) => module.SessionPanelHost,
 );
 const TaskDetailDialog = lazyNamed(
   () => import("../features/supervision/TaskDetailDialog.tsx"),
