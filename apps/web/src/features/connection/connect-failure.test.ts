@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   classifyConnectFailure,
   connectFailureCopy,
+  probeRejectedToken,
 } from "./connect-failure.ts";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("§5.1 connect failure classification", () => {
   it("classifies an unreachable server from the handshake error", () => {
@@ -58,5 +61,45 @@ describe("§5.1 connect failure copy", () => {
       "This site isn't allowed to talk to that server — ask the server owner to allow https://app.example.com",
     );
     expect(copy.focusTokenField).not.toBe(true);
+  });
+});
+
+describe("rejected-token probe", () => {
+  it("recognizes only an actual 401 from auth/me", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ status: 401 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      probeRejectedToken(
+        "wss://octos.example.com/api/ui-protocol/ws",
+        " secret ",
+        new AbortController().signal,
+      ),
+    ).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://octos.example.com/api/auth/me",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer secret" },
+        credentials: "omit",
+      }),
+    );
+  });
+
+  it("keeps network failures and non-401 responses unclassified", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    await expect(
+      probeRejectedToken(
+        "ws://127.0.0.1:1/api/ui-protocol/ws",
+        "secret",
+        new AbortController().signal,
+      ),
+    ).resolves.toBe(false);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 403 }));
+    await expect(
+      probeRejectedToken(
+        "ws://localhost/api/ui-protocol/ws",
+        "secret",
+        new AbortController().signal,
+      ),
+    ).resolves.toBe(false);
   });
 });

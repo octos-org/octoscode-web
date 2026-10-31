@@ -580,6 +580,53 @@
   }
 }
 
+.fleetEmpty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  min-height: calc(100dvh - 120px);
+  padding: 32px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: center;
+}
+
+.fleetEmpty h2,
+.fleetEmpty p {
+  margin: 0;
+}
+
+.fleetEmpty h2 {
+  color: var(--dsw-alias-label-primary);
+  font-size: 20px;
+}
+
+.fleetEmptyIcon {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.fleetEmptyAction {
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--dsw-alias-button-info-fill);
+  color: var(--dsw-alias-label-on-accent);
+  cursor: pointer;
+  font: 500 14px/22px var(--dsw-font-family);
+}
+
+.fleetEmptyAction:hover {
+  background: var(--dsw-alias-button-info-hover);
+}
+
 /* The workspace title and its copy-link action read as one unit. */
 .titleGroup {
   display: flex;

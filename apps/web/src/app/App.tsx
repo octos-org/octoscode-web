@@ -164,6 +164,7 @@ import {
 import {
   classifyConnectFailure,
   connectFailureCopy,
+  probeRejectedToken,
 } from "../features/connection/connect-failure.ts";
 import { shouldRouteNoModelSetup } from "../features/connection/no-model-setup.ts";
 import {
@@ -2923,13 +2924,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       },
     });
   };
+  const sessionWorkspaces = recentWorkspaces.filter(
+    (workspace, index, workspaces) =>
+      workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
+      index,
+  );
   const requestNewSession = (workspaceId?: string) => {
     if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
       return;
     if (compact) setSidebarCollapsed(true);
     const workspace = workspaceId
-      ? recentWorkspaces.find((candidate) => candidate.id === workspaceId)
-      : null;
+      ? sessionWorkspaces.find((candidate) => candidate.id === workspaceId)
+      : sessionWorkspaces.length === 1
+        ? sessionWorkspaces[0]
+        : null;
     if (workspace) {
       createSessionInWorkspace(workspace.path);
       return;
@@ -3297,14 +3305,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.opened,
   ]);
 
+  const [tokenRejected, setTokenRejected] = useState(false);
+  useEffect(() => {
+    setTokenRejected(false);
+    if (
+      !session.error ||
+      classifyConnectFailure(session.error)?.kind !== "unreachable" ||
+      !gate.panel.value.token.trim()
+    )
+      return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4_000);
+    void probeRejectedToken(
+      connection.endpoint,
+      gate.panel.value.token,
+      controller.signal,
+    ).then((rejected) => {
+      if (!controller.signal.aborted) setTokenRejected(rejected);
+    });
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    connection.endpoint,
+    gate.panel.value.token,
+    session.error,
+    session.status,
+  ]);
+
   if (!showProductShell) {
     const gateStatus =
       session.status === "connected" ? "connecting" : session.status;
     // §5.1: a classified connect failure replaces the raw handshake error
     // with its own message + destination; anything else stays verbatim.
-    const classified = session.error
+    const transportFailure = session.error
       ? classifyConnectFailure(session.error)
       : null;
+    const classified =
+      tokenRejected && transportFailure?.kind === "unreachable"
+        ? ({ kind: "rejected-token" } as const)
+        : transportFailure;
     const failureCopy = classified
       ? connectFailureCopy(classified, connection.endpoint)
       : null;
@@ -3488,6 +3529,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       const outcome =
                         await workspaceProduct.deleteSession(sessionId);
                       if (outcome.kind === "done") {
+                        if (
+                          session.opened?.session_id === sessionId &&
+                          resumeSession
+                        ) {
+                          await moveToProductSession(
+                            workspaceSessionKey(
+                              resumeSession.workspaceRoot,
+                              resumeSession.profileId,
+                              resumeSession.sessionId,
+                            ),
+                          );
+                        }
+                        workspaceProduct.evictSession(sessionId);
                         setKnownSessions(
                           forgetKnownSession(
                             browserStorage("sessionStorage"),
@@ -4706,13 +4760,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               // §3/4200b: pre-session Fleet destination — the entry stays
               // reachable, but there is nothing to start a peer against and
               // no roster: an empty state, NO Start form.
-              <div className="fleet-empty-session" role="status">
-                <p>{t("Open a project first")}</p>
-                <p>
+              <div
+                className={productStyles.fleetEmpty}
+                data-fleet-empty-session="true"
+              >
+                <span
+                  className={productStyles.fleetEmptyIcon}
+                  aria-hidden="true"
+                >
+                  <OctopusLogo size={40} />
+                </span>
+                <h2>{t("Agents")}</h2>
+                <p role="status">
                   {t(
                     "Peers run inside a session. Choose a workspace to continue.",
                   )}
                 </p>
+                {codingCapabilities.sessionCreationAvailable ? (
+                  <button
+                    type="button"
+                    className={productStyles.fleetEmptyAction}
+                    onClick={() => requestNewSession()}
+                  >
+                    {t("New session")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -4958,17 +5030,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           <NewSessionWorkspacePicker
             open
             initialView={workspacePicker.view}
-            workspaces={recentWorkspaces.map((workspace) => ({
+            workspaces={sessionWorkspaces.map((workspace) => ({
               id: workspace.id,
               name: workspace.name,
               path: workspace.path,
             }))}
-            {...(serverWorkingDirectory ? { serverWorkingDirectory } : {})}
+            {...(serverWorkingDirectory &&
+            !sessionWorkspaces.some(
+              (workspace) => workspace.path === serverWorkingDirectory.path,
+            )
+              ? { serverWorkingDirectory }
+              : {})}
             {...(activeWorkspacePath
               ? { selectedWorkspaceId: activeWorkspacePath }
               : {})}
-            {...(recentWorkspaces[0]
-              ? { recentWorkspaceId: recentWorkspaces[0].id }
+            {...(sessionWorkspaces[0]
+              ? { recentWorkspaceId: sessionWorkspaces[0].id }
               : {})}
             {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
             error={workspaceProduct.state.error}

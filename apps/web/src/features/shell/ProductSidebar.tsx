@@ -312,11 +312,9 @@ export function ProductSidebar({
       rename: Boolean(onSessionRename),
       delete: !onSessionDelete
         ? null
-        : session.id === selectedSessionId
-          ? "open"
-          : status === "running" || status === "waiting"
-            ? "running"
-            : "available",
+        : status === "running" || status === "waiting"
+          ? "running"
+          : "available",
     };
   };
 
@@ -826,7 +824,7 @@ export function ProductSidebar({
           onClick={() => onNewSession()}
         >
           <OctopusLogo size={18} />
-          {!collapsed ? <span>{t("New Session")}</span> : null}
+          {!collapsed ? <span>{t("New session")}</span> : null}
         </button>
       ) : null}
 

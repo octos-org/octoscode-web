@@ -200,6 +200,12 @@ const catalog: Readonly<Record<string, string>> = {
     "Octos 以此环境变量名称存储只写密钥；密钥值本身绝不会回读。",
   Cost: "费用",
   "Could not connect": "连接失败",
+  "Auth token is required.": "请输入认证令牌。",
+  "Re-enter the token": "重新输入令牌",
+  "Can't reach {value0}": "连不上 {value0}",
+  "check the address": "检查服务器地址",
+  "Could not open the Octos UI Protocol connection":
+    "无法打开 Octos UI 协议连接",
   "Could not delete this provider. The configuration was kept; try again.":
     "无法删除此提供商。配置已保留，请重试。",
   "Could not load autonomy controls. Close and try again.":
@@ -1274,7 +1280,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Server's working directory": "服务器的工作目录",
   "Server's working directory (path not reported)":
     "服务器的工作目录（路径未报告）",
-  "The server refused this token": "服务器拒绝了此令牌",
+  "The server refused this token": "令牌不对，请重新输入。",
   "Streaming messages and tool activity will appear here.":
     "流式消息和工具活动将在此显示。",
   "Couldn't resume chat — nothing was sent": "无法恢复聊天 — 未发送任何内容",

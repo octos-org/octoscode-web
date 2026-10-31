@@ -144,7 +144,6 @@ function PickerBody({
           <OctopusLogo size={32} />
         </span>
         <div className={styles.heading}>
-          <div className={styles.eyebrow}>{t("New Session")}</div>
           <h2 id={titleId} className={styles.title}>
             {view === "choose"
               ? t("Choose a workspace")
@@ -200,7 +199,7 @@ function PickerBody({
                     type="button"
                     className={styles.workspace}
                     data-workspace-entry="server-working-directory"
-                    aria-label={t("Start a new session in {value0}", {
+                    title={t("Start a new session in {value0}", {
                       value0: t(serverWorkingDirectory.label),
                     })}
                     disabled={creating || serverWorkingDirectory.path === null}
@@ -222,9 +221,7 @@ function PickerBody({
                         </span>
                       ) : null}
                     </span>
-                    <span className={styles.rowAction} aria-hidden="true">
-                      {t("Start")}
-                    </span>
+                    <span className={styles.rowAction}>{t("Start")}</span>
                   </button>
                 </li>
               ) : null}
@@ -238,7 +235,7 @@ function PickerBody({
                       ref={index === 0 ? firstWorkspaceRef : undefined}
                       type="button"
                       className={`${styles.workspace} ${selected ? styles.selected : ""}`}
-                      aria-label={t("Start a new session in {value0}", {
+                      title={t("Start a new session in {value0}", {
                         value0: String(workspace.name),
                       })}
                       aria-describedby={`${titleId}-workspace-${index}`}
@@ -271,9 +268,7 @@ function PickerBody({
                           <span className={styles.badge}>{t("Recent")}</span>
                         ) : null}
                       </span>
-                      <span className={styles.rowAction} aria-hidden="true">
-                        {t("Start")}
-                      </span>
+                      <span className={styles.rowAction}>{t("Start")}</span>
                     </button>
                   </li>
                 );
