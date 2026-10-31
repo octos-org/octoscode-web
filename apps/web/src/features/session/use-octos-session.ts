@@ -440,6 +440,7 @@ export interface OctosSessionRuntime {
       input: WorkspaceSessionOpenInput,
     ) => Promise<WorkspaceOpenOutcome>;
     deleteSession: (sessionId: string) => Promise<SessionMutationOutcome>;
+    evictSession: (sessionId: string) => void;
     renameSession: (
       sessionId: string,
       title: string,
@@ -3778,6 +3779,13 @@ export function useOctosSession(): OctosSessionRuntime {
       switchSession,
       openSession: openWorkspaceSession,
       deleteSession: workspaceController.deleteSession,
+      evictSession: (sessionId: string) => {
+        for (const record of recordManager.records()) {
+          if (record.scope.sessionId === sessionId) {
+            recordManager.evict(record.scope);
+          }
+        }
+      },
       renameSession: workspaceController.renameSession,
       chooseLaunchProfile,
       cancelLaunch,

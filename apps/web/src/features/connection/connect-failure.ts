@@ -26,6 +26,30 @@ export function classifyConnectFailure(error: string): ConnectFailure | null {
   return null;
 }
 
+/** A failed WebSocket upgrade hides HTTP status; only an actual auth/me 401
+ * may reclassify it as bad credentials. Network and CORS failures stay generic. */
+export async function probeRejectedToken(
+  endpoint: string,
+  token: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol === "ws:") url.protocol = "http:";
+    if (url.protocol === "wss:") url.protocol = "https:";
+    const response = await fetch(`${url.origin}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token.trim()}` },
+      credentials: "omit",
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      signal,
+    });
+    return response.status === 401;
+  } catch {
+    return false;
+  }
+}
+
 export interface ConnectFailureCopy {
   readonly message: string;
   readonly actions: readonly string[];

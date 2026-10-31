@@ -98,9 +98,11 @@ test("an empty session links back to the last session and stacks on a phone", as
 }) => {
   await connect(page);
   await startSession(page, "/workspace/templates-earlier");
-  await page.getByRole("button", { name: "New session", exact: true }).click();
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Add workspace", exact: true })
+    .click();
   const picker = page.getByRole("dialog");
-  await picker.getByRole("button", { name: "Add workspace" }).click();
   await picker
     .getByLabel("Server workspace path")
     .fill("/workspace/templates-later");

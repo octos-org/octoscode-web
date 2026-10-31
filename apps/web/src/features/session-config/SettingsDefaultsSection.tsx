@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import { useUiText } from "../preferences/ui-text.tsx";
 import type { SessionDefaults } from "./session-defaults.ts";
+import styles from "./SessionConfig.module.css";
 
 export interface DefaultsModelListState {
   /** The projected ModelControlProps from use-model-selection, rendered as-is. */
@@ -50,7 +51,7 @@ export function SettingsDefaultsSection({
 
   return (
     <section
-      className="settings-defaults-section"
+      className={`${styles["session-config-section"]} settings-defaults-section`}
       data-settings-defaults="true"
       aria-label={t("Defaults")}
     >
@@ -58,12 +59,14 @@ export function SettingsDefaultsSection({
       <p>{t("Shared by every session and tab of this profile")}</p>
       {modelList ? (
         <div data-defaults-field="model">
-          <h4>{t("Model")}</h4>
+          <div className={styles["session-config-row"]}>
+            <h4 className={styles["session-config-row-label"]}>{t("Model")}</h4>
+            {modelList.control}
+          </div>
           <p>
             {t("Saved for this profile:")}
             {savedModelName ?? t("(no model selected)")}
           </p>
-          {modelList.control}
         </div>
       ) : null}
       <div>
@@ -71,9 +74,15 @@ export function SettingsDefaultsSection({
           {t("New sessions")}
           <span> {t("for sessions you create from now on")}</span>
         </h4>
-        <label data-defaults-field="permission-mode">
-          <span>{t("Permission mode")}</span>
+        <label
+          className={styles["session-config-row"]}
+          data-defaults-field="permission-mode"
+        >
+          <span className={styles["session-config-row-label"]}>
+            {t("Permission mode")}
+          </span>
           <select
+            className={styles["session-config-select"]}
             value={current.permissionMode}
             onChange={(event) =>
               next({
@@ -89,8 +98,13 @@ export function SettingsDefaultsSection({
             ))}
           </select>
         </label>
-        <label data-defaults-field="sandbox-enabled">
-          <span>{t("Sandbox")}</span>
+        <label
+          className={styles["session-config-row"]}
+          data-defaults-field="sandbox-enabled"
+        >
+          <span className={styles["session-config-row-label"]}>
+            {t("Sandbox")}
+          </span>
           <input
             type="checkbox"
             checked={current.sandbox.enabled}
@@ -104,8 +118,13 @@ export function SettingsDefaultsSection({
             }
           />
         </label>
-        <label data-defaults-field="sandbox-network">
-          <span>{t("Sandbox network access")}</span>
+        <label
+          className={styles["session-config-row"]}
+          data-defaults-field="sandbox-network"
+        >
+          <span className={styles["session-config-row-label"]}>
+            {t("Sandbox network access")}
+          </span>
           <input
             type="checkbox"
             checked={current.sandbox.networkAccess}

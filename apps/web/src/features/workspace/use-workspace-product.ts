@@ -119,7 +119,6 @@ export function useWorkspaceProduct(
     const client = dependencies.client();
     if (
       !client ||
-      sessionId === dependencies.sessionId() ||
       !supportsMethod(
         dependencies.capabilities(),
         CORE_UI_METHODS.SESSION_DELETE,
