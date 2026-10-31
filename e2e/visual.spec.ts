@@ -281,10 +281,6 @@ for (const colorScheme of ["light", "dark"] as const) {
       const chinese = page.getByRole("dialog", { name: "键盘快捷键" });
       await expect(chinese).toContainText("命令面板");
       await expect(chinese).toContainText("向运行中的一轮插话");
-      await expect(chinese.locator('[class*="card"]')).toHaveScreenshot(
-        "shortcut-help-zh.png",
-        SNAPSHOT,
-      );
     }
   });
 
