@@ -33,7 +33,7 @@
 }
 
 .menuItem:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover-neutral);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .menuItem:disabled {

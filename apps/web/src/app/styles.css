@@ -247,7 +247,7 @@ label > span {
 .field-note-action {
   border: none;
   background: transparent;
-  color: var(--display-accent);
+  color: var(--dsw-alias-state-business-primary);
   cursor: pointer;
   font: inherit;
   padding: 0;
@@ -319,7 +319,7 @@ label > span {
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
-  border-radius: var(--dsw-radius-control, 6px);
+  border-radius: var(--dsw-radius-sm);
   padding: 4px 12px;
   font-size: var(--dsw-font-size-micro);
   cursor: pointer;
@@ -1938,13 +1938,13 @@ kbd {
 ::highlight(conversation-search) {
   background-color: color-mix(
     in srgb,
-    var(--display-highlight) 45%,
+    var(--dsw-alias-highlight) 45%,
     transparent
   );
   color: inherit;
 }
 
 ::highlight(conversation-search-active) {
-  background-color: var(--display-highlight);
-  color: var(--dsw-alias-label-on-accent, var(--display-surface));
+  background-color: var(--dsw-alias-highlight);
+  color: var(--dsw-alias-highlight-label);
 }

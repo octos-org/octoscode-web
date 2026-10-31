@@ -135,7 +135,7 @@
 }
 
 .pendingNavigation button:hover {
-  background: var(--dsw-alias-interactive-bg-hover-neutral);
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
