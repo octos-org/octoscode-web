@@ -8,6 +8,7 @@ import {
   foldNotification,
   timelineFromHydrate,
   withHydratedTurnOutcome,
+  withoutHydratedTiming,
   type HydratedTimelineIdentityOptions,
   type TimelineEntry,
 } from "./model.ts";
@@ -16,9 +17,11 @@ export function timelineFromCanonicalHydrate(
   result: SessionHydrateResult,
   identities: HydratedTimelineIdentityOptions = {},
 ): TimelineEntry[] {
-  return withHydratedTurnOutcome(
-    restoreCanonicalHydrate(result, timelineFromHydrate(result, identities)),
-    result,
+  return withoutHydratedTiming(
+    withHydratedTurnOutcome(
+      restoreCanonicalHydrate(result, timelineFromHydrate(result, identities)),
+      result,
+    ),
   );
 }
 
@@ -236,7 +239,15 @@ export function restoreCanonicalHydrate(
     if (order !== undefined) replayOrder.set(id, order);
   }
   const anchors = fallback
-    .filter((entry) => updates.get(entry.id) && replayOrder.has(entry.id))
+    .filter(
+      (entry) =>
+        // Core can append retained user_message events after the execution
+        // they preceded. Their durable identity is useful, but their replay
+        // position must not pull terminals or tools across later work.
+        entry.kind !== "user" &&
+        updates.get(entry.id) &&
+        replayOrder.has(entry.id),
+    )
     .sort((a, b) => replayOrder.get(a.id)! - replayOrder.get(b.id)!);
   const before = new Map<string, TimelineEntry[]>();
   const after = new Map<string, TimelineEntry[]>();

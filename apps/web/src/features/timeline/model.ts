@@ -324,7 +324,7 @@ export function timelineFromHydrate(
         }
       : entry;
   });
-  return withHydratedTurnOutcome(entries, result);
+  return withoutHydratedTiming(withHydratedTurnOutcome(entries, result));
 }
 
 export function withHydratedTurnOutcome(
@@ -343,6 +343,15 @@ export function withHydratedTurnOutcome(
       ? { latestTurnOutcome: latest.state }
       : {}),
   }));
+}
+
+/** Hydration has no reliable per-entry wall clock; never invent a zero duration. */
+export function withoutHydratedTiming(
+  entries: readonly TimelineEntry[],
+): TimelineEntry[] {
+  return entries.map(
+    ({ startedAtMs: _startedAtMs, endedAtMs: _endedAtMs, ...entry }) => entry,
+  );
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
@@ -943,6 +952,10 @@ function completeTool(
   });
 }
 
+function normalizedToolOutput(value: string): string {
+  return value.trim().replace(/^Error:\s*/, "");
+}
+
 function coalesceHydratedTools(
   entries: TimelineEntry[],
   replayed: NonNullable<SessionHydrateResult["replayed_envelopes"]>,
@@ -976,7 +989,7 @@ function coalesceHydratedTools(
       typeof data.output_preview !== "string"
     )
       continue;
-    const preview = data.output_preview.trim();
+    const preview = normalizedToolOutput(data.output_preview);
     if (!preview) continue;
     const truncatedPrefix = toolPreviewPrefix(data.output_preview);
     const toolId = toolEntryId(envelope.turn_id, data.tool_call_id);
@@ -987,10 +1000,11 @@ function coalesceHydratedTools(
         entry.kind === "tool" &&
         entry.id.startsWith("hydrated:") &&
         entry.turnId === envelope.turn_id &&
-        (entry.body.trim() === preview ||
-          (preview.length >= 80 && entry.body.trim().startsWith(preview)) ||
+        (normalizedToolOutput(entry.body) === preview ||
+          (preview.length >= 80 &&
+            normalizedToolOutput(entry.body).startsWith(preview)) ||
           (truncatedPrefix !== null &&
-            entry.body.trim().startsWith(truncatedPrefix))),
+            normalizedToolOutput(entry.body).startsWith(truncatedPrefix))),
     );
     cards.set(toolId, { card, candidates });
   }
