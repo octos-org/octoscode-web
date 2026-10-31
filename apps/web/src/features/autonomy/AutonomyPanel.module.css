@@ -7,7 +7,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: var(--dsw-shadow-lv1);
-  font-size: var(--dsw-font-size-body, 14px);
+  font-size: var(--dsw-font-size-body);
   color: var(--dsw-alias-label-primary);
 }
 

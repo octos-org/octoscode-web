@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${
@@ -232,4 +233,105 @@ test("artifact preview matches baseline", async ({ page, request }) => {
   ).toBeVisible();
   await expect(attachment.locator('[class*="fileSize"]')).toHaveText(/\d/);
   await expect(attachment).toHaveScreenshot("artifact-preview.png", SNAPSHOT);
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`shortcut help has an opaque themed surface (${colorScheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await connect(page);
+    await startDefaultWorkspace(page);
+    await page.locator("#workspace-main").focus();
+    await page.keyboard.type("?");
+    const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Command palette");
+    const card = dialog.locator('[class*="card"]');
+    await expect(dialog).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(card).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(card).toHaveCSS("border-style", "solid");
+    expect(
+      (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+        .violations,
+    ).toEqual([]);
+    await expect(dialog).toHaveScreenshot(
+      `shortcut-help-${colorScheme}.png`,
+      SNAPSHOT,
+    );
+    if (colorScheme === "light") {
+      await page.keyboard.press("Escape");
+      await page
+        .getByRole("button", { name: "More actions", exact: true })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Browser preferences", exact: true })
+        .click();
+      const preferences = page.locator('[role="dialog"]').filter({
+        has: page.getByRole("heading", { name: "Browser preferences" }),
+      });
+      await preferences
+        .locator('label:has-text("Language") select')
+        .selectOption("zh");
+      await page
+        .getByRole("button", { name: "关闭偏好设置", exact: true })
+        .click();
+      await page.locator("#workspace-main").focus();
+      await page.keyboard.type("?");
+      const chinese = page.getByRole("dialog", { name: "键盘快捷键" });
+      await expect(chinese).toContainText("命令面板");
+      await expect(chinese).toContainText("向运行中的一轮插话");
+      await expect(chinese).toHaveScreenshot("shortcut-help-zh.png", SNAPSHOT);
+    }
+  });
+
+  test(`conversation search and highlights remain visible (${colorScheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await connect(page);
+    await startDefaultWorkspace(page);
+    const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+    await composer.fill("Show the Markdown transcript surface");
+    await composer.press("Enter");
+    await expect(
+      page.getByRole("heading", { name: "Durable coding transcript" }),
+    ).toBeVisible();
+    await page.keyboard.press("Control+f");
+    const search = page.getByRole("search");
+    const input = page.getByPlaceholder("Search conversation");
+    await input.fill("Durable");
+    await expect(search.locator('[class*="count"]')).not.toContainText("0");
+    await expect(input).toHaveCSS("border-style", "solid");
+    await expect(input).toHaveCSS("outline-style", "solid");
+    await expect(input).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    expect(
+      (await new AxeBuilder({ page }).include('[role="search"]').analyze())
+        .violations,
+    ).toEqual([]);
+    await expect(page.locator(".workspace-grid")).toHaveScreenshot(
+      `conversation-search-${colorScheme}.png`,
+      SNAPSHOT,
+    );
+  });
+}
+
+test("conversation actions have a visible hover background", async ({
+  page,
+}) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Conversation actions" });
+  const item = menu.getByRole("menuitem", { name: "Browser preferences" });
+  await item.hover();
+  await expect(item).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  expect(
+    (await new AxeBuilder({ page }).include('[role="menu"]').analyze())
+      .violations,
+  ).toEqual([]);
+  await expect(menu).toHaveScreenshot(
+    "conversation-actions-hover.png",
+    SNAPSHOT,
+  );
 });

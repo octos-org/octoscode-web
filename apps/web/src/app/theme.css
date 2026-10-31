@@ -9,11 +9,12 @@
   color-scheme: light dark;
   --dsw-font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial,
-    sans-serif;
+    "Noto Sans CJK SC", "Source Han Sans SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --dsw-font-family-code:
     "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono",
-    Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+    Menlo, Courier, "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC",
+    "Microsoft YaHei";
   /* Numeric content (ids, timestamps, counters) — keeps digits aligned and
      visually distinct from prose (tasteskill numeric rule). */
   --dsw-font-numeric: var(--dsw-font-family-code);
@@ -38,6 +39,13 @@
   --dsw-transition-duration: 0.2s;
   --dsw-transition-duration-slow: 0.3s;
   --dsw-font-size-micro: 11px;
+  --dsw-font-size-xs: 12px;
+  --dsw-font-size-sm: 13px;
+  --dsw-font-size-body: 14px;
+  --dsw-font-size-base: 16px;
+  --dsw-radius-sm: 6px;
+  --dsw-radius-md: 10px;
+  --dsw-z-dialog: 100;
   --dsw-shadow-lv1: 0 2px 4px rgb(0 0 0 / 5%);
   --dsw-shadow-lv2: 0 4px 12px rgb(0 0 0 / 2%), 0 2px 8px rgb(0 0 0 / 4%);
   --dsw-shadow-composer: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 28px rgb(0 0 0 / 6%);
@@ -76,6 +84,8 @@
     rgb(236 19 19 / 5%),
     rgb(242 90 90 / 15%)
   );
+  --dsw-alias-highlight: light-dark(#ffe066, #8a6d00);
+  --dsw-alias-highlight-label: light-dark(#0f1115, #f9fafb);
   --dsw-alias-label-caption: light-dark(#646970, #81858c);
   --dsw-alias-label-primary: light-dark(#0f1115, #f9fafb);
   --dsw-alias-label-primary-dimmed: light-dark(#151517, #ebeef2);
@@ -165,6 +175,8 @@
   );
   --dsw-alias-interactive-bg-hover-solid: var(--display-frame);
   --dsw-alias-interactive-bg-hover-danger: var(--display-danger-bg);
+  --dsw-alias-highlight: var(--display-highlight);
+  --dsw-alias-highlight-label: var(--display-surface);
   --dsw-alias-label-caption: var(--display-muted);
   --dsw-alias-label-primary: var(--display-text);
   --dsw-alias-label-primary-dimmed: var(--display-text);

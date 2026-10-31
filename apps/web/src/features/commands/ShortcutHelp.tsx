@@ -108,7 +108,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
           {GLOBAL_ENTRIES.map((entry) => (
             <div className={styles.row} key={entry.keys}>
               <dt className={styles.keys}>{entry.keys}</dt>
-              <dd className={styles.label}>{entry.label}</dd>
+              <dd className={styles.label}>{t(entry.label)}</dd>
             </div>
           ))}
         </dl>
@@ -117,7 +117,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
           {COMPOSER_ENTRIES.map((entry) => (
             <div className={styles.row} key={entry.keys}>
               <dt className={styles.keys}>{entry.keys}</dt>
-              <dd className={styles.label}>{entry.label}</dd>
+              <dd className={styles.label}>{t(entry.label)}</dd>
             </div>
           ))}
         </dl>
