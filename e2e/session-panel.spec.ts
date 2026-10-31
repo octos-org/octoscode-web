@@ -357,16 +357,14 @@ test("Automation shows and controls goals, loops, monitors and agents with zero 
   const automation = panel(page).getByRole("tabpanel", {
     name: "Automation",
   });
-  await expect(automation).toContainText(
-    "Monitor probes are not fully sandboxed yet.",
-  );
+  // Engineering status notes are not shown to users (T-0076).
+  await expect(automation).not.toContainText("sandboxed");
 
   await automation
     .getByLabel("Goal objective")
     .fill("Ship the automation panel");
   await automation.getByRole("button", { name: "Set session goal" }).click();
   await expect(automation).toContainText("Ship the automation panel");
-  await expect(automation).toContainText("Goal history and budget accounting");
 
   await automation.getByRole("button", { name: "Create loop" }).click();
   await expect(

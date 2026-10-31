@@ -75,8 +75,14 @@ import {
   collapseAll,
   expandAll,
   initialFoldState,
+  setFold,
   toggleFold,
 } from "../features/timeline/folds.ts";
+import { stepGroupIds } from "../features/timeline/step-groups.ts";
+import {
+  latestTextPlan,
+  parseTextPlan,
+} from "../features/timeline/text-plan.ts";
 import {
   initialActivityState,
   turnActivity,
@@ -2228,8 +2234,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (previewId) void safety.openDiffReview(previewId);
   };
   // A plan is dropped when its turn ends; the Overview keeps showing the last
-  // one this view saw, marked as ended, until a new plan replaces it.
-  const livePlan = work.supervision.plan;
+  // one this view saw, marked as ended, until a new plan replaces it. The
+  // model's opening "Plan:" checklist counts as a plan too, so the transcript
+  // and the panel never disagree about whether there is one.
+  const textPlan = useMemo(
+    () =>
+      latestTextPlan(conversation.timeline, session.opened?.session_id ?? ""),
+    [conversation.timeline, session.opened?.session_id],
+  );
+  const livePlan =
+    work.supervision.plan ??
+    (textPlan && !textPlan.ended ? textPlan.plan : null);
   const [lastPlan, setLastPlan] = useState<{
     key: string | null;
     plan: PlanUpdated;
@@ -2237,8 +2252,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   useEffect(() => {
     if (livePlan) setLastPlan({ key: activeSessionKey, plan: livePlan });
   }, [livePlan, activeSessionKey]);
-  const finishedPlan =
-    !livePlan && lastPlan?.key === activeSessionKey ? lastPlan.plan : null;
+  const finishedPlan = livePlan
+    ? null
+    : newerPlan(
+        lastPlan?.key === activeSessionKey ? lastPlan.plan : null,
+        textPlan?.ended ? textPlan.plan : null,
+      );
+  const planAvailable = work.supervision.planAvailable || Boolean(textPlan);
   // Files Octos sent with its replies (user uploads are inputs, not outputs).
   const deliveredFiles = useMemo(
     () => [
@@ -2287,7 +2307,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       onRefreshChanges={() => void safety.openDiffReview()}
       onChangesScope={(scope) => void safety.openDiffReview(undefined, scope)}
       onOpenChange={(change) => openChangePreview(change.previewId)}
-      planAvailable={work.supervision.planAvailable}
+      planAvailable={planAvailable}
       plan={livePlan}
       finishedPlan={finishedPlan}
       taskListAvailable={work.supervision.taskListAvailable}
@@ -3764,7 +3784,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     fallback={<DeferredSurface label="Loading trajectory…" />}
                   >
                     <SessionTrajectory
-                      state={work.supervision}
+                      state={{
+                        ...work.supervision,
+                        planAvailable,
+                        plan: livePlan ?? finishedPlan,
+                      }}
                       onRefresh={() => void work.refresh()}
                       onOpenTask={(taskId) => void work.openTask(taskId)}
                       onCancelTask={(taskId) => void work.cancelTask(taskId)}
@@ -3843,18 +3867,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onToggleFold={(id) =>
                             setTimelineFolds(toggleFold(timelineFolds, id))
                           }
+                          onSetFold={(id, open) =>
+                            setTimelineFolds(setFold(timelineFolds, id, open))
+                          }
                           onExpandAll={() =>
                             setTimelineFolds(
-                              expandAll(
-                                timelineFolds,
-                                conversation.timeline
+                              expandAll(timelineFolds, [
+                                ...conversation.timeline
                                   .filter(
                                     (entry) =>
                                       entry.kind === "reasoning" ||
                                       entry.kind === "tool",
                                   )
                                   .map((entry) => entry.id),
-                              ),
+                                ...stepGroupIds(conversation.timeline),
+                                ...conversation.timeline.flatMap((entry) =>
+                                  entry.kind === "assistant" &&
+                                  parseTextPlan(entry.body)
+                                    ? [`plan:${entry.id}`]
+                                    : [],
+                                ),
+                              ]),
                             )
                           }
                           onCollapseAll={() =>
@@ -3904,7 +3937,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             ) : undefined
                           }
                           onRetryPermission={
-                            permissionRetryProfile && !readOnlyPeer
+                            // Offered only while the Session is still read
+                            // only: once it can write, the button has nothing
+                            // left to switch.
+                            permissionRetryProfile &&
+                            !readOnlyPeer &&
+                            currentPermission?.mode === "read_only"
                               ? (turnId) => void retryPermissionDenied(turnId)
                               : undefined
                           }
@@ -5652,4 +5690,13 @@ function translateLabels<T extends Record<string, string>>(
   return Object.fromEntries(
     Object.entries(labels).map(([key, value]) => [key, t(value)]),
   ) as { [K in keyof T]: string };
+}
+
+/** The more recently updated of two plans (either may be absent). */
+function newerPlan(
+  left: PlanUpdated | null,
+  right: PlanUpdated | null,
+): PlanUpdated | null {
+  if (!left || !right) return left ?? right;
+  return right.updatedAtMs > left.updatedAtMs ? right : left;
 }

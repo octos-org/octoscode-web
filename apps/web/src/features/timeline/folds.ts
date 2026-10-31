@@ -17,6 +17,15 @@ export function toggleFold(folds: FoldState, id: string): FoldState {
   return { ...folds, [id]: !folds[id] };
 }
 
+/** Records an explicit open/closed choice for one block. */
+export function setFold(
+  folds: FoldState,
+  id: string,
+  open: boolean,
+): FoldState {
+  return { ...folds, [id]: open };
+}
+
 /** Expands exactly the given live ids; ids not listed fold back. */
 export function expandAll(
   _folds: FoldState,
