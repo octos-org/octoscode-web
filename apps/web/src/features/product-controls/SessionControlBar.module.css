@@ -239,6 +239,23 @@
   min-width: 0;
 }
 
+.optionNameRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.optionDefault {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .optionName {
   overflow: hidden;
   color: inherit;

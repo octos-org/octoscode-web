@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { UiLanguage } from "../preferences/model.ts";
-import { ShieldIcon } from "../../ui/Icon.tsx";
+import { EyeIcon, PencilIcon } from "../../ui/Icon.tsx";
 import {
   TASK_TEMPLATES,
   TASK_TEMPLATE_CATEGORIES,
@@ -28,6 +28,7 @@ interface HomeCopy {
   needsWrite: string;
   allowWrite: string;
   readSwitching: string;
+  restoreSwitching: string;
 }
 
 const COPY: Record<UiLanguage, HomeCopy> = {
@@ -51,6 +52,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     needsWrite: "This template edits files, but this session is read-only.",
     allowWrite: "Switch to workspace write",
     readSwitching: "Switching to read-only before this template can send…",
+    restoreSwitching: "Restoring the previous permission…",
   },
   zh: {
     heading: "想让 Octos 帮你做什么？",
@@ -70,6 +72,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     needsWrite: "这个模板会改文件，但当前会话是只读。",
     allowWrite: "切换到工作区写入",
     readSwitching: "正在切换到只读，确认后才会发送…",
+    restoreSwitching: "正在恢复模板前的权限…",
   },
 };
 
@@ -163,7 +166,14 @@ export interface TaskTemplateHomeProps {
   notice?: TemplateNotice | null | undefined;
   /** Offered when the chosen template edits files and the Session is read-only. */
   writeAccess?: { busy: boolean; onAllow: () => void } | null | undefined;
-  readAccess?: { busy: boolean; error: string | null } | null | undefined;
+  readAccess?:
+    | {
+        action: "read" | "restore";
+        busy: boolean;
+        error: string | null;
+      }
+    | null
+    | undefined;
   templatesDisabled?: boolean | undefined;
   onUse: (template: TaskTemplate) => void;
 }
@@ -235,7 +245,13 @@ export function TaskTemplateHome({
             </button>
           </p>
         ) : null}
-        {readAccess?.busy ? <p>{copy.readSwitching}</p> : null}
+        {readAccess?.busy ? (
+          <p>
+            {readAccess.action === "restore"
+              ? copy.restoreSwitching
+              : copy.readSwitching}
+          </p>
+        ) : null}
         {readAccess?.error ? <p data-tone="warn">{readAccess.error}</p> : null}
       </div>
       {TASK_TEMPLATE_CATEGORIES.map((category) => (
@@ -292,7 +308,11 @@ function TemplateGroup({
               </figure>
               <div className={styles.footer}>
                 <span className={styles.access} data-access={template.access}>
-                  <ShieldIcon size={13} />
+                  {template.access === "read" ? (
+                    <EyeIcon size={13} />
+                  ) : (
+                    <PencilIcon size={13} />
+                  )}
                   {copy.access[template.access]}
                 </span>
                 <button

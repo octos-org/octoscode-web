@@ -223,6 +223,19 @@ const catalog: Readonly<Record<string, string>> = {
   "Current turn": "当前轮次",
   "Current workspace": "当前工作区",
   "Decision:": "决定：",
+  Default: "默认",
+  "Read files without editing. Network allowed.": "只读文件，可联网。",
+  "Read files without editing. No network access.": "只读文件，禁止联网。",
+  "Edit workspace files. Network allowed.": "可修改工作区文件，可联网。",
+  "Edit workspace files. No network access.": "可修改工作区文件，禁止联网。",
+  "Edit any file without sandbox limits. Network allowed.":
+    "可修改任意文件，不受沙箱范围限制，可联网。",
+  "Edit any file without sandbox limits. No network access.":
+    "可修改任意文件，不受沙箱范围限制，禁止联网。",
+  "This template needs write permission. Switch before sending.":
+    "此模板需要写入权限，请先切换。",
+  "Could not restore the permission from before this template.":
+    "无法恢复使用模板前的权限。",
   Delete: "删除",
   "Delete…": "删除…",
   "Delete this session?": "删除这个会话？",

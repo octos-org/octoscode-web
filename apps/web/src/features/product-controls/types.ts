@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+import type {
+  PermissionNetworkPolicy,
+  PermissionProfileMode,
+} from "@octos-org/octoscode-client/protocol";
 
 /**
  * Presentation contracts for the session-level controls.
@@ -18,15 +22,17 @@ export interface SessionPermissionOption {
   /** Stable server-provided identity for this whole preset. */
   id: string;
   /** Server vocabulary, retained so the adapter can submit the exact option. */
-  mode: string;
+  mode: PermissionProfileMode;
   /** Network policy belonging to this preset; it is never changed separately. */
-  network: string;
+  network: PermissionNetworkPolicy;
   /** Human-facing filesystem/mode label. */
   modeLabel: string;
   /** Human-facing network label. */
   networkLabel: string;
-  /** Optional server-provided explanation shown in the menu. */
+  /** Explanation of this legal mode/network combination. */
   description?: string;
+  /** The first permission reported for this session, not the current selection. */
+  isDefault?: boolean;
   /** Required fail-closed risk classification. */
   risk: "standard" | "dangerous";
 }
