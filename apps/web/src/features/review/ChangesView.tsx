@@ -89,7 +89,11 @@ export function ChangesView({
             type="button"
             aria-pressed={state.scope === "workspace"}
             disabled={!state.workspaceAvailable}
-            title={t("Workspace uncommitted changes")}
+            title={t(
+              state.workspaceAvailable
+                ? "Workspace uncommitted changes"
+                : "This server does not support uncommitted Git changes.",
+            )}
             onClick={() => onScopeChange("workspace")}
           >
             {t("Uncommitted (Git)")}
@@ -104,6 +108,11 @@ export function ChangesView({
           {t("Refresh")}
         </button>
       </div>
+      {!state.workspaceAvailable ? (
+        <p className={styles.plainNotice}>
+          {t("This server does not support uncommitted Git changes.")}
+        </p>
+      ) : null}
       {state.scope === "turn" ? (
         changes.length ? (
           <ul
@@ -191,7 +200,9 @@ export function ChangesView({
           <div className="review-empty">
             {t(
               !preview && state.scope === "turn"
-                ? "No session change preview yet. Switch to workspace changes."
+                ? state.workspaceAvailable
+                  ? "No session change preview yet. You can also inspect uncommitted Git changes."
+                  : "No session change preview is available. Select a changed file above, or check the files in your workspace."
                 : "The preview is ready, but it contains no changed files.",
             )}
           </div>

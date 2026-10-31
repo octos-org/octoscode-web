@@ -5,6 +5,52 @@ import {
 } from "../src/hydrate.ts";
 
 describe("session hydrate contract", () => {
+  it("restores bounded file mutation references and tolerates old servers", () => {
+    const snapshot = {
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 12 },
+    };
+    const preview = "01962caa-381d-7b2c-8345-66ded4cd67bd";
+    expect(parseSessionHydrateResult(snapshot)?.file_mutations).toBeUndefined();
+    expect(
+      parseSessionHydrateResult({
+        ...snapshot,
+        file_mutations: [
+          {
+            path: "sum.js",
+            operation: "modify",
+            preview_id: preview,
+            bytes_written: 12,
+          },
+          {
+            path: "future.js",
+            operation: "future-operation",
+            preview_id: "invalid",
+          },
+        ],
+      })?.file_mutations,
+    ).toEqual([
+      {
+        path: "sum.js",
+        operation: "modify",
+        preview_id: preview,
+        bytes_written: 12,
+      },
+      { path: "future.js", operation: "modify" },
+    ]);
+    for (const file_mutations of [
+      null,
+      {},
+      [{ path: "" }],
+      [{ path: "x".repeat(4097) }],
+      [{ path: "bad\npath" }],
+    ]) {
+      expect(
+        parseSessionHydrateResult({ ...snapshot, file_mutations }),
+      ).toBeNull();
+    }
+  });
+
   it("parses authoritative messages and injects session scope into replay envelopes", () => {
     const result = parseSessionHydrateResult({
       session_id: "coding:local:main",
