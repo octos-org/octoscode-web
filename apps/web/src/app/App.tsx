@@ -2929,15 +2929,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
       index,
   );
-  const requestNewSession = (workspaceId?: string) => {
+  const requestNewSession = (workspaceId?: string, forcePicker = false) => {
     if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
       return;
     if (compact) setSidebarCollapsed(true);
     const workspace = workspaceId
       ? sessionWorkspaces.find((candidate) => candidate.id === workspaceId)
-      : sessionWorkspaces.length === 1
-        ? sessionWorkspaces[0]
-        : null;
+      : forcePicker
+        ? null
+        : sessionWorkspaces.length === 1
+          ? sessionWorkspaces[0]
+          : null;
     if (workspace) {
       createSessionInWorkspace(workspace.path);
       return;
@@ -3237,7 +3239,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     carryDraftRef.current = draftRef.current.trim()
       ? { text: draftRef.current, fromKey: activeSessionKey }
       : null;
-    requestNewSession();
+    requestNewSession(undefined, true);
   };
   const imagesAvailable =
     session.connected && codingCapabilities.turnStartAvailable;
