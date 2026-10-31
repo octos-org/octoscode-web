@@ -133,35 +133,44 @@ test("creates a folder, moves into it, and starts a session there", async ({
   );
   await expect(page.locator('[data-browse-empty="true"]')).toBeVisible();
 
-  // Choosing a folder fills the path box…
+  // Choosing the folder starts immediately; no second confirmation is needed.
   await page.getByRole("button", { name: "Use this folder" }).click();
-  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await expect(addWorkspace.getByLabel("Server workspace path")).toHaveValue(
-    `/srv/fixture/Projects/${created}`,
-  );
-
-  // …and the existing flow starts the session with it, unchanged.
-  await addWorkspace.getByRole("button", { name: "Start session" }).click();
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
   await expect(
     page.getByText(`/srv/fixture/Projects/${created}`, { exact: true }).first(),
   ).toBeVisible();
 });
 
-test("picking a subfolder fills the path box without leaving the browser's parent", async ({
-  page,
-}) => {
+test("picking a subfolder starts its session immediately", async ({ page }) => {
   const form = await connect(page, BROWSE_TOKEN);
   await openBrowser(page, form);
   await page.getByRole("button", { name: "Use folder Projects" }).click();
-  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await expect(addWorkspace.getByLabel("Server workspace path")).toHaveValue(
-    "/srv/fixture/Projects",
-  );
+  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
+  await expect(
+    page.getByText("/srv/fixture/Projects", { exact: true }).first(),
+  ).toBeVisible();
+});
 
-  // Re-opening browses from the TYPED path, not the working directory again.
-  await openBrowser(page, addWorkspace);
-  await expect(currentFolder(page)).toHaveText("/srv/fixture/Projects");
+test("adding a workspace on mobile replaces the first-run browser instead of stacking over it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await connect(page, BROWSE_TOKEN);
+  await expect(browser(page)).toBeVisible();
+  await page.getByRole("button", { name: "Open sessions" }).click();
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Add workspace", exact: true })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await expect(dialog).toBeVisible();
+  await expect(browser(page)).toHaveCount(0);
+  await expect(dialog).toHaveScreenshot("add-workspace-mobile.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: 0.01,
+  });
 });
 
 test("shows no Browse affordance at all when the server does not advertise the feature", async ({

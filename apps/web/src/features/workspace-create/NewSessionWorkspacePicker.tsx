@@ -505,11 +505,10 @@ export function NewSessionWorkspacePicker({
     if (validationError) setValidationError(null);
   };
 
-  /** §Client behaviour: "Choosing a folder fills the path box." */
   const chooseBrowsedFolder = (path: string) => {
     setServerPath(path);
     setValidationError(null);
-    setView("add");
+    props.onCreate({ workspacePath: path });
   };
 
   const submitServerPath = (event: FormEvent<HTMLFormElement>) => {
