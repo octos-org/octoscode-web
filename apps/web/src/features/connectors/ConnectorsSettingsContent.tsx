@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type {
   OctosUiClient,
   UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import {
   supportsMcpConnectorManagement,
+  type McpStdioAllowlistEntry,
   type RuntimeMcp,
   type RuntimeMcpServer,
 } from "@octos-org/octoscode-client/inventory";
@@ -22,13 +23,56 @@ interface ConnectorsSettingsContentProps {
 
 type Editor = {
   mode: "add" | "edit";
+  transport: "http" | "stdio";
   connectorId?: string;
   name: string;
   url: string;
+  /** stdio add: the chosen allowlist entry. */
+  entryId: string;
+  /** stdio add: the name follows the entry until the user edits it. */
+  nameTouched: boolean;
 };
 
 const PERMISSION_ERROR =
   /forbidden|permission denied|not authorized|unauthorized|session ingress|host-managed|profile.*write/i;
+
+/** Why the server says this access cannot manage connectors (T-0056). */
+function manageUnavailableText(
+  reason: string | undefined,
+  t: ReturnType<typeof useUiText>,
+): string {
+  switch (reason) {
+    case "requires_profile_write":
+      return t(
+        "Management is disabled because this access can read sessions but cannot change the profile.",
+      );
+    case "external_session":
+      return t(
+        "This session is controlled by an external app, so its connectors can't be changed here.",
+      );
+    case "feature_disabled":
+      return t("Connector management is turned off on this server.");
+    case "profile_unavailable":
+      return t("This profile can't be changed right now.");
+    default:
+      return t("Connector management is unavailable for this access.");
+  }
+}
+
+function addEditor(
+  transport: "http" | "stdio",
+  allowlist: readonly McpStdioAllowlistEntry[],
+): Editor {
+  const first = transport === "stdio" ? allowlist[0] : undefined;
+  return {
+    mode: "add",
+    transport,
+    name: first?.displayName ?? "",
+    url: "",
+    entryId: first?.entryId ?? "",
+    nameTouched: false,
+  };
+}
 
 function connectorName(server: RuntimeMcpServer): string {
   return server.displayName?.trim() || server.id;
@@ -63,8 +107,16 @@ export function ConnectorsSettingsContent({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const generation = useRef(0);
+  const entryDescriptionId = useId();
   const managementAvailable = supportsMcpConnectorManagement(capabilities);
-  const managementDisabled = !managementAvailable || manageDenied;
+  // A server with the T-0056 facts says up front whether this access may
+  // manage; an older one is only learned from a refused mutation.
+  const serverDenied = state?.management?.canManage === false;
+  const managementDisabled =
+    !managementAvailable || manageDenied || serverDenied;
+  const allowlist = state?.stdioAllowlist;
+  const allowlistEntry = (entryId: string) =>
+    allowlist?.find((entry) => entry.entryId === entryId);
 
   const refresh = useCallback(async () => {
     const ticket = ++generation.current;
@@ -147,6 +199,17 @@ export function ConnectorsSettingsContent({
       setError(t("Enter a connector name."));
       return;
     }
+    if (editor.mode === "add" && editor.transport === "stdio") {
+      const entryId = editor.entryId;
+      if (!allowlistEntry(entryId)) {
+        setError(t("Choose an entry from the server's allowlist."));
+        return;
+      }
+      void runMutation("add", (commands) =>
+        commands.createStdioConnector(name, entryId),
+      );
+      return;
+    }
     if (editor.mode === "add" && !validHttpUrl(url)) {
       setError(t("Enter a valid HTTP(S) URL without embedded credentials."));
       return;
@@ -199,6 +262,21 @@ export function ConnectorsSettingsContent({
           >
             {refreshing ? t("Refreshing…") : t("Refresh")}
           </button>
+          {managementAvailable && allowlist?.length ? (
+            <button
+              type="button"
+              disabled={
+                managementDisabled || Boolean(busy) || loading || refreshing
+              }
+              onClick={() => {
+                setError(null);
+                setConfirmDelete(null);
+                setEditor(addEditor("stdio", allowlist));
+              }}
+            >
+              {t("Add stdio connector")}
+            </button>
+          ) : null}
           {managementAvailable ? (
             <button
               type="button"
@@ -209,7 +287,7 @@ export function ConnectorsSettingsContent({
               onClick={() => {
                 setError(null);
                 setConfirmDelete(null);
-                setEditor({ mode: "add", name: "", url: "" });
+                setEditor(addEditor("http", []));
               }}
             >
               {t("Add HTTP connector")}
@@ -224,20 +302,35 @@ export function ConnectorsSettingsContent({
             "This server provides read-only connector status. Management is unavailable.",
           )}
         </p>
-      ) : (
+      ) : serverDenied || manageDenied ? (
+        // Only the reason: "you can add…" next to greyed-out buttons would
+        // contradict it.
+        <p className={styles.notice} role="status">
+          {serverDenied
+            ? manageUnavailableText(state?.management?.reason, t)
+            : t(
+                "Management is disabled because this access can read sessions but cannot change the profile.",
+              )}
+        </p>
+      ) : allowlist === undefined ? (
         <p className={styles.notice}>
           {t(
             "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.",
           )}
         </p>
-      )}
-      {manageDenied ? (
-        <p className={styles.notice} role="status">
+      ) : allowlist.length ? (
+        <p className={styles.notice}>
           {t(
-            "Management is disabled because this access can read sessions but cannot change the profile.",
+            "Add HTTP connectors, or stdio connectors from the server's allowlist.",
           )}
         </p>
-      ) : null}
+      ) : (
+        <p className={styles.notice}>
+          {t(
+            "No stdio connectors can be added: an operator needs to configure the server allowlist first.",
+          )}
+        </p>
+      )}
       {error ? (
         <p className={styles.error} role="alert">
           {error}
@@ -248,32 +341,74 @@ export function ConnectorsSettingsContent({
       {editor ? (
         <form
           className={local.editor}
-          aria-label={t(
-            editor.mode === "add" ? "Add HTTP connector" : "Edit connector",
-          )}
+          aria-label={editorTitle(editor, t)}
           onSubmit={(event) => {
             event.preventDefault();
             saveEditor();
           }}
         >
-          <h3>
-            {t(editor.mode === "add" ? "Add HTTP connector" : "Edit connector")}
-          </h3>
+          <h3>{editorTitle(editor, t)}</h3>
+          {editor.mode === "add" && editor.transport === "stdio" ? (
+            <label className={local.field}>
+              <span>{t("Allowlist entry")}</span>
+              <select
+                value={editor.entryId}
+                disabled={formBusy || managementDisabled || refreshing}
+                aria-describedby={
+                  allowlistEntry(editor.entryId)?.description
+                    ? entryDescriptionId
+                    : undefined
+                }
+                onChange={(event) => {
+                  const entry = allowlistEntry(event.target.value);
+                  setEditor((current) =>
+                    current
+                      ? {
+                          ...current,
+                          entryId: event.target.value,
+                          name:
+                            current.nameTouched || !entry
+                              ? current.name
+                              : entry.displayName,
+                        }
+                      : current,
+                  );
+                }}
+              >
+                {(allowlist ?? []).map((entry) => (
+                  <option key={entry.entryId} value={entry.entryId}>
+                    {entry.displayName}
+                  </option>
+                ))}
+              </select>
+              {allowlistEntry(editor.entryId)?.description ? (
+                <small id={entryDescriptionId}>
+                  {allowlistEntry(editor.entryId)?.description}
+                </small>
+              ) : null}
+            </label>
+          ) : null}
           <label className={local.field}>
             <span>{t("Connector name")}</span>
             <input
               value={editor.name}
-              disabled={formBusy || manageDenied || refreshing}
+              disabled={formBusy || managementDisabled || refreshing}
               maxLength={200}
               autoComplete="off"
               onChange={(event) =>
                 setEditor((current) =>
-                  current ? { ...current, name: event.target.value } : current,
+                  current
+                    ? {
+                        ...current,
+                        name: event.target.value,
+                        nameTouched: true,
+                      }
+                    : current,
                 )
               }
             />
           </label>
-          {editor.mode === "add" ||
+          {(editor.mode === "add" && editor.transport === "http") ||
           state?.servers.find((row) => row.id === editor.connectorId)
             ?.transport === "http" ? (
             <label className={local.field}>
@@ -281,7 +416,7 @@ export function ConnectorsSettingsContent({
               <input
                 type="url"
                 value={editor.url}
-                disabled={formBusy || manageDenied || refreshing}
+                disabled={formBusy || managementDisabled || refreshing}
                 placeholder="https://example.com/mcp"
                 autoComplete="off"
                 onChange={(event) =>
@@ -299,7 +434,7 @@ export function ConnectorsSettingsContent({
             <button
               type="submit"
               className={local.primary}
-              disabled={formBusy || manageDenied || refreshing}
+              disabled={formBusy || managementDisabled || refreshing}
             >
               {formBusy ? t("Saving…") : t("Save connector")}
             </button>
@@ -387,9 +522,13 @@ export function ConnectorsSettingsContent({
                           setConfirmDelete(null);
                           setEditor({
                             mode: "edit",
+                            transport:
+                              server.transport === "http" ? "http" : "stdio",
                             connectorId: server.id,
                             name,
                             url: "",
+                            entryId: "",
+                            nameTouched: true,
                           });
                         }}
                       >
@@ -467,7 +606,9 @@ export function ConnectorsSettingsContent({
                         <button
                           type="button"
                           className={local.danger}
-                          disabled={manageDenied || Boolean(busy) || refreshing}
+                          disabled={
+                            managementDisabled || Boolean(busy) || refreshing
+                          }
                           onClick={() =>
                             void runMutation(
                               `delete:${server.id}`,
@@ -497,4 +638,11 @@ export function ConnectorsSettingsContent({
       ) : null}
     </div>
   );
+}
+
+function editorTitle(editor: Editor, t: ReturnType<typeof useUiText>): string {
+  if (editor.mode === "edit") return t("Edit connector");
+  return editor.transport === "stdio"
+    ? t("Add stdio connector")
+    : t("Add HTTP connector");
 }

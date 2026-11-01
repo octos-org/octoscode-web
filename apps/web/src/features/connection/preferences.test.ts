@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import {
+  rememberTabTurn,
+  wasTurnSentFromTab,
   clearConnectionPreferences,
   clearKnownSessions,
   forgetKnownSession,
@@ -26,6 +28,115 @@ const defaults: ConnectionDraft = {
 };
 
 describe("connection preferences", () => {
+  it("keeps turn provenance in this tab and exact identity/session scope, never across Forget", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = { ...defaults, token: "first-secret" };
+    const receipt = {
+      sessionId: "session-a",
+      profileId: "coding",
+      cwd: "/repo",
+      turnId: crypto.randomUUID(),
+    };
+    saveConnectionPreferences(identity, durable, tab);
+    expect(rememberTabTurn(tab, identity, receipt)).toBe(true);
+    saveConnectionPreferences({ ...identity, cwd: "/other" }, durable, tab);
+    expect(wasTurnSentFromTab(tab, identity, receipt)).toBe(true);
+    expect(wasTurnSentFromTab(new MemoryStorage(), identity, receipt)).toBe(
+      false,
+    );
+    expect([...durable.values.values()].join("")).not.toContain(receipt.turnId);
+    for (const changed of [
+      { sessionId: "session-b" },
+      { profileId: "other" },
+      { cwd: "/other" },
+      { turnId: crypto.randomUUID() },
+    ])
+      expect(
+        wasTurnSentFromTab(tab, identity, { ...receipt, ...changed }),
+      ).toBe(false);
+    for (const changed of [
+      { token: "new-token" },
+      { endpoint: "https://elsewhere.example" },
+    ]) {
+      expect(
+        wasTurnSentFromTab(tab, { ...identity, ...changed }, receipt),
+      ).toBe(false);
+      expect(rememberTabTurn(tab, { ...identity, ...changed }, receipt)).toBe(
+        false,
+      );
+    }
+    const next = { ...receipt, turnId: crypto.randomUUID() };
+    expect(rememberTabTurn(tab, identity, next)).toBe(true);
+    expect(wasTurnSentFromTab(tab, identity, receipt)).toBe(false);
+    saveConnectionPreferences(
+      { ...identity, token: "new-token" },
+      durable,
+      tab,
+    );
+    expect(rememberTabTurn(tab, identity, receipt)).toBe(false);
+    expect(
+      wasTurnSentFromTab(tab, { ...identity, token: "new-token" }, next),
+    ).toBe(false);
+    saveConnectionPreferences(identity, durable, tab);
+    expect(wasTurnSentFromTab(tab, identity, next)).toBe(false);
+    expect(rememberTabTurn(tab, identity, next)).toBe(true);
+    clearConnectionPreferences(durable, tab);
+    expect(wasTurnSentFromTab(tab, identity, next)).toBe(false);
+  });
+
+  it("bounds provenance and reports denied or invalid writes", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    saveConnectionPreferences(defaults, durable, tab);
+    const receipt = {
+      sessionId: "session-0",
+      profileId: "coding",
+      cwd: "/repo",
+      turnId: crypto.randomUUID(),
+    };
+    expect(
+      rememberTabTurn(tab, defaults, { ...receipt, turnId: "bad-id" }),
+    ).toBe(false);
+    expect(
+      rememberTabTurn(tab, defaults, { ...receipt, cwd: "x".repeat(4097) }),
+    ).toBe(false);
+    expect(rememberTabTurn(new ThrowingStorage(), defaults, receipt)).toBe(
+      false,
+    );
+    const blocked = {
+      getItem: (key: string) => tab.getItem(key),
+      setItem: () => {
+        throw new Error("quota");
+      },
+      removeItem: () => {},
+    };
+    expect(rememberTabTurn(blocked, defaults, receipt)).toBe(false);
+    for (let index = 0; index < 65; index++)
+      expect(
+        rememberTabTurn(tab, defaults, {
+          ...receipt,
+          sessionId: `session-${index}`,
+        }),
+      ).toBe(true);
+    expect(wasTurnSentFromTab(tab, defaults, receipt)).toBe(false);
+    expect(
+      wasTurnSentFromTab(tab, defaults, {
+        ...receipt,
+        sessionId: "session-64",
+      }),
+    ).toBe(true);
+    const key = "octoscode-web.tab-connection.v3";
+    const value = JSON.parse(tab.getItem(key)!);
+    value.sentTurns = [
+      { ...receipt, turnId: "invalid" },
+      null,
+      { ...receipt, cwd: 42 },
+    ];
+    tab.setItem(key, JSON.stringify(value));
+    expect(wasTurnSentFromTab(tab, defaults, receipt)).toBe(false);
+  });
+
   it("keeps unsent drafts only in the matching tab identity and clears them on token change or Forget", () => {
     const durable = new MemoryStorage();
     const tab = new MemoryStorage();

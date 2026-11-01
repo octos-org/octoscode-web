@@ -13,7 +13,8 @@ export interface PromptTurn {
    * and we took it over for display: another attached client (a terminal, a
    * second tab) is driving it. We can watch it and Stop it — `turn/interrupt`
    * is not connection-scoped — but we did not write the prompt, and the UI
-   * must not present it as ours.
+   * must not present it as ours. A matching tab-local sent receipt restores
+   * "local" presentation after reload, without granting transport ownership.
    */
   origin?: "local" | "adopted";
   /**

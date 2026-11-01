@@ -105,6 +105,73 @@ describe("runtime inventory contracts", () => {
     expect(JSON.stringify(result)).not.toContain("private.example");
     expect(JSON.stringify(result)).not.toContain("secret-token");
   });
+  it("projects the T-0056 management facts and nothing else from the allowlist", () => {
+    const result = parseRuntimeMcp(
+      {
+        ...mcpStatus,
+        can_manage: true,
+        stdio_allowlist: [
+          {
+            entry_id: "local-fs",
+            display_name: "Shared files",
+            description: "Read-only project files",
+            command: "/opt/octos/bin/filesystem-mcp",
+            args: ["--root", "/srv/shared"],
+            env: { TOKEN: "secret-token" },
+          },
+          { entry_id: "echo", display_name: null },
+        ],
+      },
+      "s1",
+      "p1",
+    );
+    expect(result?.management).toEqual({ canManage: true });
+    expect(result?.stdioAllowlist).toEqual([
+      {
+        entryId: "local-fs",
+        displayName: "Shared files",
+        description: "Read-only project files",
+      },
+      { entryId: "echo", displayName: "echo" },
+    ]);
+    for (const secret of ["filesystem-mcp", "/srv/shared", "secret-token"])
+      expect(JSON.stringify(result)).not.toContain(secret);
+  });
+  it("keeps an empty allowlist and the reason management is unavailable", () => {
+    const result = parseRuntimeMcp(
+      {
+        ...mcpStatus,
+        can_manage: false,
+        manage_unavailable_reason: "requires_profile_write",
+        stdio_allowlist: [],
+      },
+      "s1",
+      "p1",
+    );
+    expect(result?.management).toEqual({
+      canManage: false,
+      reason: "requires_profile_write",
+    });
+    expect(result?.stdioAllowlist).toEqual([]);
+  });
+  it("leaves the facts absent on an older server or when they are malformed", () => {
+    const legacy = parseRuntimeMcp(mcpStatus, "s1", "p1");
+    expect(legacy).not.toBeNull();
+    expect(legacy).not.toHaveProperty("management");
+    expect(legacy).not.toHaveProperty("stdioAllowlist");
+    const malformed = parseRuntimeMcp(
+      {
+        ...mcpStatus,
+        can_manage: "yes",
+        stdio_allowlist: [{ entry_id: "a" }, { entry_id: "a" }],
+      },
+      "s1",
+      "p1",
+    );
+    expect(malformed?.servers).toEqual([]);
+    expect(malformed).not.toHaveProperty("management");
+    expect(malformed).not.toHaveProperty("stdioAllowlist");
+  });
   it("projects only status fields and rejects duplicate or wrong-scope rows", () => {
     const result = parseRuntimeTools(
       {
@@ -271,6 +338,29 @@ describe("runtime inventory contracts", () => {
       );
     }
     expect(request).toHaveBeenCalledTimes(10);
+  });
+  it("creates a stdio connector from an allowlist entry, never a command", async () => {
+    const request = vi.fn(async (method: string) =>
+      method === APPUI_INVENTORY_METHODS.MCP ? mcpStatus : { status: null },
+    );
+    const commands = createInventoryCommands(
+      { request },
+      "s1",
+      "p1",
+      managementCapabilities,
+    );
+    await commands.createStdioConnector("Shared files", "local-fs");
+    expect(request).toHaveBeenNthCalledWith(1, MCP_CONNECTOR_METHODS.CREATE, {
+      session_id: "s1",
+      connector: {
+        transport: "stdio",
+        name: "Shared files",
+        allowlist_entry_id: "local-fs",
+      },
+    });
+    await expect(commands.createStdioConnector("Files", "")).rejects.toThrow(
+      /allowlist entry/,
+    );
   });
   it("uses method capabilities when Core #2912 omits the feature", async () => {
     const request = vi.fn(async (method: string) =>

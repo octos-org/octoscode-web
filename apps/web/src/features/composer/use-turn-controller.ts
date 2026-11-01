@@ -45,6 +45,9 @@ export interface TurnControllerDependencies {
   ) => void;
   setConnectionError: (message: string) => void;
   onDispatchState?: (event: TurnDispatchStateEvent) => void;
+  /** Tab-local display provenance, independent of transport ownership. */
+  onTurnSent?: (turnId: string) => void;
+  wasTurnSentHere?: (turnId: string) => boolean;
   /**
    * Fires when a user-interrupted turn's prompt comes back, on THAT turn's own
    * terminal. `sessionId` is the turn's OWNING session (not necessarily the one
@@ -388,6 +391,7 @@ export function createQueueBackedTurnController(options: {
               throw new Error(
                 "Native review authority changed before dispatch.",
               );
+            dependenciesRef.current.onTurnSent?.(turn.turnId);
             reviewSent = true;
             preflightTurnId = null;
           },
@@ -406,6 +410,7 @@ export function createQueueBackedTurnController(options: {
         }
       } else {
         preflightTurnId = null;
+        dependenciesRef.current.onTurnSent?.(turn.turnId);
         await client.startTurn({
           session_id: sessionId,
           turn_id: turn.turnId,
@@ -482,10 +487,7 @@ export function createQueueBackedTurnController(options: {
         const occupied = !terminalReceipts.has(collision.turnId);
         if (occupied) {
           attemptedTurns.add(collision.turnId);
-          queueOf().restoreActive(
-            { turnId: collision.turnId, text: "", origin: "adopted" },
-            true,
-          );
+          queueOf().restoreActive(observedTurn(collision.turnId), true);
         }
         dependenciesRef.current.onTurnNotSentRestore?.(turn, sessionId);
         dependenciesRef.current.setTimeline((current) =>
@@ -589,10 +591,7 @@ export function createQueueBackedTurnController(options: {
       interruptRequests.invalidate();
       queueOf().settle(turnId);
       attemptedTurns.add(otherActive.turnId);
-      queueOf().restoreActive(
-        { turnId: otherActive.turnId, text: "", origin: "adopted" },
-        true,
-      );
+      queueOf().restoreActive(observedTurn(otherActive.turnId), true);
       interruptingTurnId =
         otherActive.state === "interrupting" ? otherActive.turnId : null;
       setInterruptingTurnId(interruptingTurnId);
@@ -873,14 +872,21 @@ export function createQueueBackedTurnController(options: {
     return true;
   };
 
+  const observedTurn = (turnId: string): PromptTurn => ({
+    turnId,
+    text: "",
+    origin: dependenciesRef.current.wasTurnSentHere?.(turnId)
+      ? "local"
+      : "adopted",
+  });
+
   /**
    * A `turn/started` for a turn this app never queued means ANOTHER attached
    * client began a turn in this session: the server fans every session event
    * out to every connection that opened it, so a terminal typing into the same
    * session is visible here. Adopt it the way `reconcileFromHydrate` already
-   * adopts a server-reported active turn — but marked "adopted", so the strip
-   * and composer can name the other client instead of presenting the turn as
-   * ours. Without this the adoption only happened at hydrate time, leaving a
+   * adopts a server-reported active turn. A tab-local sent receipt identifies
+   * our own turn after reload; other turns keep the "adopted" presentation. Without this the adoption only happened at hydrate time, leaving a
    * live client idle-looking while someone else drove the session.
    *
    * Deliberately silent when we already own the foreground (our own turn, a
@@ -889,14 +895,14 @@ export function createQueueBackedTurnController(options: {
    * foreground means our own view is stale; hydrate reconciles that case with
    * the full ownership rules rather than this fast path guessing.
    */
-  const adoptForeignTurn = (turnId: string): void => {
+  const adoptObservedTurn = (turnId: string): void => {
     if (attemptedTurns.has(turnId)) return;
     if (locallyStartedTurn?.turnId === turnId) return;
     const snapshot = queueOf().snapshot();
     if (snapshot.active) return;
     if (snapshot.pending.some((turn) => turn.turnId === turnId)) return;
     attemptedTurns.add(turnId);
-    queueOf().restoreActive({ turnId, text: "", origin: "adopted" }, true);
+    queueOf().restoreActive(observedTurn(turnId), true);
     sync();
   };
 
@@ -913,7 +919,7 @@ export function createQueueBackedTurnController(options: {
       if (activeTurnId) {
         confirmTurnAccepted(activeTurnId);
         if (notification.method === CORE_UI_METHODS.TURN_STARTED)
-          adoptForeignTurn(activeTurnId);
+          adoptObservedTurn(activeTurnId);
       }
     }
     const params = notification.params;
@@ -1234,14 +1240,7 @@ export function createQueueBackedTurnController(options: {
     ) {
       attemptedTurns.add(serverActive.turn_id);
       startRequests.invalidate();
-      queueOf().restoreActive(
-        {
-          turnId: serverActive.turn_id,
-          text: "",
-          origin: "adopted",
-        },
-        true,
-      );
+      queueOf().restoreActive(observedTurn(serverActive.turn_id), true);
       sync();
       return null;
     }
@@ -1293,10 +1292,7 @@ export function createQueueBackedTurnController(options: {
         // Another server turn owns the foreground: pending prompts wait
         // behind it instead of dispatching over it.
         attemptedTurns.add(serverActive.turn_id);
-        queueOf().restoreActive(
-          { turnId: serverActive.turn_id, text: "", origin: "adopted" },
-          true,
-        );
+        queueOf().restoreActive(observedTurn(serverActive.turn_id), true);
         sync();
         return null;
       }
