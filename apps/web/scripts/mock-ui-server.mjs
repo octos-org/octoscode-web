@@ -946,6 +946,7 @@ function holdHistoryRefreshAfterMutation(sessionId) {
 }
 let holdNextTurnStartAcknowledgement = false;
 let heldTurnStart = null;
+let executionEnvironmentMode = "complete";
 const turnStateBySession = new Map();
 let rejectNextSessionOpen = false;
 // Controlled terminal-release barrier. Each /__test__/terminal/hold-next arms
@@ -2330,6 +2331,19 @@ const http = createServer(async (request, response) => {
   }
   if (
     request.method === "POST" &&
+    request.url?.startsWith("/__test__/execution-environment/")
+  ) {
+    const mode = request.url.split("/").at(-1);
+    if (!["complete", "failed", "unsupported"].includes(mode)) {
+      response.writeHead(400).end();
+      return;
+    }
+    executionEnvironmentMode = mode;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
     request.url === "/__test__/turn-start/reset"
   ) {
     holdNextTurnStartAcknowledgement = false;
@@ -2759,6 +2773,7 @@ const baseCapabilities = {
     "task/artifact/list",
     "task/artifact/read",
     "session/status/read",
+    "session/execution_environment/read",
     "profile/skills/list",
     "skill/action/list",
     "skill/action/invoke",
@@ -2799,6 +2814,7 @@ const baseCapabilities = {
     "harness.task_artifacts.v1",
     "plan.todos.v1",
     "session.workspace_cwd.v1",
+    "session.execution_environment.v1",
     "session.files.read.v1",
     "skill.actions.v1",
     "skill.action_jobs.v1",
@@ -4968,6 +4984,29 @@ sockets.on("connection", (socket, request) => {
         request.id,
         diffPreview(sessionId, request.params.preview_id),
       );
+      return;
+    }
+    if (request.method === "session/execution_environment/read") {
+      const complete = executionEnvironmentMode === "complete";
+      reply(socket, request.id, {
+        backend:
+          executionEnvironmentMode === "unsupported" ? "unknown" : "docker",
+        docker_image:
+          executionEnvironmentMode === "unsupported"
+            ? null
+            : "node:22-bookworm",
+        tools: {
+          node: complete ? "available" : "unknown",
+          npm: complete ? "available" : "unknown",
+          git: complete ? "available" : "unknown",
+          python: complete ? "missing" : "unknown",
+        },
+        probe_status: executionEnvironmentMode,
+        probed_at: "2026-11-01T00:00:00Z",
+        ...(executionEnvironmentMode === "failed"
+          ? { probe_error: "timeout" }
+          : {}),
+      });
       return;
     }
     if (request.method === "session/status/read") {

@@ -83,6 +83,7 @@
 }
 
 .rowButton {
+  --dsw-press-scale: none;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
@@ -208,7 +209,7 @@
   padding: 2px 8px;
   overflow-wrap: anywhere;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   line-height: 20px;
   color: inherit;
   cursor: pointer;

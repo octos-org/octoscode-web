@@ -10,6 +10,7 @@
 .sectionTitle,
 .tasks article,
 .taskBody {
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
 }
@@ -78,7 +79,7 @@
 .header button {
   height: 30px;
   padding: 0 11px;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .header button:hover:not(:disabled),
@@ -113,7 +114,7 @@
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-tertiary);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .plan,
@@ -163,7 +164,7 @@
 .plan small,
 .taskBody small {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .tasks article {
@@ -219,7 +220,7 @@
   flex: none;
   height: 28px;
   padding: 0 9px;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .empty {

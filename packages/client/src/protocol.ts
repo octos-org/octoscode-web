@@ -1,6 +1,15 @@
 export { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 // Transport-free public protocol surface for render-time consumers.
 export type { OctosUiClient } from "./client.ts";
+export {
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
+  parseExecutionEnvironmentResult,
+} from "./execution-environment.ts";
+export type {
+  ExecutionEnvironmentReadParams,
+  ExecutionEnvironmentResult,
+} from "./execution-environment.ts";
 export { OctosUiProtocolError } from "./protocol-error.ts";
 export {
   coreProtocolCompatibilityError,

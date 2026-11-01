@@ -1,8 +1,12 @@
 /**
  * §4.2 Sandbox section (judge #6): the effective sandbox fields, read-only,
  * with the fixed-at-open note and the "New session with…" action pre-filled
- * from Settings › Defaults. Feature absent → "Not supported by this server".
+ * from Settings › Defaults. Execution-environment facts come from their own
+ * read-only protocol method and remain visible even without sandbox controls.
  */
+import { ExecutionEnvironmentSection } from "./execution-environment-section.tsx";
+import type { ExecutionEnvironmentState } from "./use-execution-environment.ts";
+
 export interface SandboxEffectiveFields {
   enabled: boolean;
   /** null when the server did not report the field. */
@@ -17,6 +21,7 @@ export interface SandboxSectionProps {
   effective?: SandboxEffectiveFields | undefined;
   /** Pre-fills a new session's sandbox from Defaults (§4.4). */
   onNewSessionWith?: (() => void) | undefined;
+  executionEnvironment?: ExecutionEnvironmentState | null | undefined;
   t: (source: string, params?: Record<string, string | number>) => string;
 }
 
@@ -24,9 +29,10 @@ export function SandboxSection({
   supported,
   effective,
   onNewSessionWith,
+  executionEnvironment,
   t,
 }: SandboxSectionProps) {
-  if (!supported) {
+  if (!supported && !executionEnvironment) {
     return (
       <section aria-label={t("Sandbox")}>
         <h3>{t("Sandbox")}</h3>
@@ -49,32 +55,39 @@ export function SandboxSection({
   return (
     <section aria-label={t("Sandbox")}>
       <h3>{t("Sandbox")}</h3>
-      <p>
-        {t("Sandbox: {value0}", {
-          value0: effective?.enabled ? t("on") : t("off"),
-        })}
-      </p>
-      <p>{t("Network: {value0}", { value0: network })}</p>
-      {effective?.readAllowPaths ? (
-        <p>
-          {t("Read paths:")}
-          {effective.readAllowPaths.length
-            ? effective.readAllowPaths.map((path) => (
-                <code key={path}>{path}</code>
-              ))
-            : t("(none)")}
-        </p>
+      {supported ? (
+        <>
+          <p>
+            {t("Sandbox: {value0}", {
+              value0: effective?.enabled ? t("on") : t("off"),
+            })}
+          </p>
+          <p>{t("Network: {value0}", { value0: network })}</p>
+          {effective?.readAllowPaths ? (
+            <p>
+              {t("Read paths:")}
+              {effective.readAllowPaths.length
+                ? effective.readAllowPaths.map((path) => (
+                    <code key={path}>{path}</code>
+                  ))
+                : t("(none)")}
+            </p>
+          ) : (
+            <p>{t("Read paths: {value0}", { value0: paths })}</p>
+          )}
+          <p>
+            {t("Set when the session opens — start a new session to change it")}
+          </p>
+          {onNewSessionWith ? (
+            <button type="button" onClick={onNewSessionWith}>
+              {t("New session with…")}
+            </button>
+          ) : null}
+        </>
       ) : (
-        <p>{t("Read paths: {value0}", { value0: paths })}</p>
+        <p>{t("Not supported by this server")}</p>
       )}
-      <p>
-        {t("Set when the session opens — start a new session to change it")}
-      </p>
-      {onNewSessionWith ? (
-        <button type="button" onClick={onNewSessionWith}>
-          {t("New session with…")}
-        </button>
-      ) : null}
+      <ExecutionEnvironmentSection state={executionEnvironment} t={t} />
     </section>
   );
 }
