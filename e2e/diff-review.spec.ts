@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 
 const fixture = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
@@ -428,4 +428,87 @@ test("an unreadable path in retained history costs its row, not the Session", as
   );
   await expect(changes).not.toContainText("draft.md");
   expect(errors).toEqual([]);
+});
+
+test("reconnects preserve the selected preview and Git scope without new diff reads", async ({
+  page,
+}) => {
+  let route: WebSocketRoute | null = null;
+  let injected = false;
+  const sent: string[] = [];
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    route = socket;
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      sent.push(JSON.parse(String(message)).method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      socket.send(message);
+      const mutation = frame.params?.metadata?.file_mutation;
+      if (!injected && frame.method === "progress/updated" && mutation) {
+        injected = true;
+        frame.params.metadata.file_mutation = {
+          path: "src/new.ts",
+          operation: "create",
+          preview_id: "00000000-0000-4000-8000-000000000043",
+        };
+        socket.send(JSON.stringify(frame));
+      }
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(fixture);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
+  await page.getByRole("button", { name: "Start session" }).click();
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Review syntax fixture");
+  await composer.press("Enter");
+  await expect(panelToggle(page)).toHaveAccessibleName(
+    "Session panel, 2 changed",
+  );
+  const changes = await openChanges(page);
+  await expect(changes.locator(".diff-file").first()).toBeVisible();
+  const oldPreview = changes.locator(
+    'button[title="apps/web/src/app/App.tsx"]',
+  );
+  await oldPreview.click();
+  await expect(oldPreview).toHaveAttribute("aria-current", "true");
+
+  const reconnect = async () => {
+    const before = sent.length;
+    await route!.close({ code: 4000, reason: "changes view reconnect probe" });
+    await expect
+      .poll(() => sent.slice(before).includes("session/hydrate"), {
+        timeout: 20_000,
+      })
+      .toBe(true);
+    await page.waitForTimeout(500);
+    expect(
+      sent.slice(before).filter((method) => method?.startsWith("diff/")),
+    ).toEqual([]);
+  };
+
+  await reconnect();
+  await expect(oldPreview).toHaveAttribute("aria-current", "true");
+  await expect(
+    changes.getByRole("button", { name: "This session", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  const git = changes.getByRole("button", { name: "Uncommitted (Git)" });
+  await git.click();
+  await expect(git).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    changes.getByRole("heading", { name: "Workspace uncommitted changes" }),
+  ).toBeVisible();
+  await reconnect();
+  await expect(git).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    changes.getByRole("heading", { name: "Workspace uncommitted changes" }),
+  ).toBeVisible();
 });
