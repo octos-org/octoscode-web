@@ -28,11 +28,11 @@
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: var(--dsw-control-h-lg);
+  height: var(--dsw-control-h-lg);
   padding: 0;
   border: 0;
-  border-radius: var(--dsw-radius-md);
+  border-radius: var(--dsw-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -283,7 +283,7 @@
 
 .folder {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 44px;
+  grid-template-columns: 16px minmax(0, 1fr) var(--dsw-control-h-lg);
   align-items: center;
   gap: var(--dsw-space-3);
   padding: 6px 4px 6px 14px;
@@ -298,10 +298,10 @@
 .addFolder input {
   flex: 1;
   min-width: 0;
-  height: 44px;
+  height: var(--dsw-control-h-lg);
   padding: 0 12px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
+  border-radius: var(--dsw-radius-control);
   background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family-code);
@@ -314,10 +314,10 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  height: 44px;
+  height: var(--dsw-control-h-lg);
   padding: 0 16px;
   border: 0;
-  border-radius: var(--dsw-radius-md);
+  border-radius: var(--dsw-radius-control);
   background: var(--dsw-alias-button-info-fill);
   color: var(--dsw-alias-label-on-accent);
   font: inherit;
@@ -339,10 +339,10 @@
 
 .fullLink {
   justify-self: center;
-  min-height: 44px;
+  min-height: var(--dsw-control-h-lg);
   padding: 0 var(--dsw-space-4);
   border: 0;
-  border-radius: var(--dsw-radius-md);
+  border-radius: var(--dsw-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;

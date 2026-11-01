@@ -18,7 +18,7 @@
 }
 
 .stop:disabled {
-  cursor: wait;
+  cursor: progress;
   opacity: 0.55;
 }
 
@@ -31,7 +31,7 @@
 /* A finger needs a 44px target; desktop keeps the compact control. */
 @media (pointer: coarse) {
   .control {
-    height: 44px;
+    height: var(--dsw-control-h-lg);
     padding: 0 14px;
     font-size: 14px;
   }

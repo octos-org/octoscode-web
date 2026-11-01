@@ -939,8 +939,8 @@ label > span {
 
 @media (pointer: coarse) {
   .send-button {
-    width: 44px;
-    height: 44px;
+    width: var(--dsw-control-h-lg);
+    height: var(--dsw-control-h-lg);
   }
 }
 
