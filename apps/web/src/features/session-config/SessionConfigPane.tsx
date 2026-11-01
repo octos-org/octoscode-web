@@ -332,6 +332,9 @@ export function SessionConfigPane({
           {...(sandboxSection?.onNewSessionWith !== undefined
             ? { onNewSessionWith: sandboxSection.onNewSessionWith }
             : {})}
+          {...(sandboxSection?.executionEnvironment !== undefined
+            ? { executionEnvironment: sandboxSection.executionEnvironment }
+            : {})}
           t={t}
         />
         {onShowThinkingChange ? (
