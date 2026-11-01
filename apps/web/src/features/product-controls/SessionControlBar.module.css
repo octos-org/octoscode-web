@@ -114,7 +114,7 @@
 }
 
 .danger {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .menu {
@@ -161,7 +161,7 @@
   padding: 7px 8px;
   border-radius: 8px;
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: 12px;
   line-height: 18px;
 }
@@ -324,7 +324,7 @@
 
 .dialogWarning {
   display: inline-flex;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .dialogDescription {

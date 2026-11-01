@@ -118,7 +118,9 @@
   );
   --dsw-alias-highlight: light-dark(#ffe066, #8a6d00);
   --dsw-alias-highlight-label: light-dark(#0f1115, #f9fafb);
-  --dsw-alias-label-caption: light-dark(#646970, #81858c);
+  /* Dark caption sits on menus and selectors (#353638): #a0a4ab keeps 4.8:1
+     there (was #81858c, 3.3:1) and stays below tertiary (T-0120). */
+  --dsw-alias-label-caption: light-dark(#646970, #a0a4ab);
   --dsw-alias-label-primary: light-dark(#0f1115, #f9fafb);
   --dsw-alias-label-primary-dimmed: light-dark(#151517, #ebeef2);
   --dsw-alias-label-secondary: light-dark(#61666b, #cfd3d6);
@@ -127,10 +129,15 @@
   --dsw-alias-state-business-primary: light-dark(#3564c6, #679efe);
   --dsw-alias-state-error-primary: light-dark(#ec1313, #ff6b6b);
   --dsw-alias-state-error-secondary: light-dark(#f25a5a, #ff6b6b);
-  --dsw-alias-state-error-text: light-dark(#c50f0f, #ff6b6b);
-  --dsw-alias-state-success-primary: #22c55e;
+  /* Dark error text also sits on menus (#353638): #ff7a7a keeps 4.8:1 there
+     (was #ff6b6b, 4.4:1); error fills keep error-primary (T-0120). */
+  --dsw-alias-state-error-text: light-dark(#c50f0f, #ff7a7a);
+  /* Status dots need 3:1 on light surfaces down to the bubble (#edf3fe):
+     #169a45 is 3.3:1 there, #c46b05 3.5:1 (were 2.1 and 1.9). Dark keeps
+     the brighter pair (T-0120). */
+  --dsw-alias-state-success-primary: light-dark(#169a45, #22c55e);
   --dsw-alias-state-success-text: light-dark(#166534, #86efac);
-  --dsw-alias-state-warn-primary: #f59e0b;
+  --dsw-alias-state-warn-primary: light-dark(#c46b05, #f59e0b);
   --dsw-alias-state-warn-text: light-dark(#8a4b00, #fbbf24);
   --dsw-alias-state-warn-secondary: #f7ad31;
   --dsw-alias-state-warn-tertiary: light-dark(#fef5e7, #27241f);
