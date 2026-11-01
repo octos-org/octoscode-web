@@ -145,9 +145,7 @@
       "thread_id": "d340f94e-400a-4a4f-9c53-6b7d4953f528",
       "persisted_at": "2026-10-30T21:36:34.214568496Z",
       "message_id": "coding:api:web-5e720a10-1ea7-46da-86bc-ed824d2e96e0:0:1793396194214568496",
-      "media": [
-        "/data2/kamico/octos-dogfood/work/附件预览.pdf"
-      ]
+      "media": ["/data2/kamico/octos-dogfood/work/附件预览.pdf"]
     },
     {
       "seq": 12,
@@ -180,9 +178,7 @@
       "thread_id": "d340f94e-400a-4a4f-9c53-6b7d4953f528",
       "persisted_at": "2026-10-30T21:36:38.994268280Z",
       "message_id": "coding:api:web-5e720a10-1ea7-46da-86bc-ed824d2e96e0:1:1793396198994268280",
-      "media": [
-        "/data2/kamico/octos-dogfood/work/示意图.png"
-      ]
+      "media": ["/data2/kamico/octos-dogfood/work/示意图.png"]
     },
     {
       "seq": 15,
@@ -280,37 +276,14 @@
       "thread_id": "d340f94e-400a-4a4f-9c53-6b7d4953f528",
       "root_seq": 0,
       "message_seqs": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
       ],
       "status": "unknown"
     },
     {
       "thread_id": "01a18ec7-d21b-7440-82eb-ed3b7a70b603",
       "root_seq": 18,
-      "message_seqs": [
-        18,
-        19,
-        20,
-        21,
-        22
-      ],
+      "message_seqs": [18, 19, 20, 21, 22],
       "status": "unknown"
     }
   ],
