@@ -1899,7 +1899,6 @@ const catalog: Readonly<Record<string, string>> = {
     "服务器返回了已启用但没有下次运行时间的任务，该任务不会被调度。",
   "This enabled task has no next run and is not scheduled. Check its schedule and server version.":
     "此任务已启用但没有下次运行时间，不会被调度。请检查调度设置和服务器版本。",
-  "Technical details": "技术细节",
 
   // First-run setup (T-0017).
   "Set up your coding assistant": "设置你的编程助手",
