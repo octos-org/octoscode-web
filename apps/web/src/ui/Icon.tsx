@@ -95,6 +95,24 @@ export function ShieldIcon({
   );
 }
 
+export function EyeIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M1.5 8s2.2-4 6.5-4 6.5 4 6.5 4-2.2 4-6.5 4-6.5-4-6.5-4Z" />
+      <circle cx="8" cy="8" r="2" />
+    </svg>
+  );
+}
+
+export function PencilIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="m3 11.5-.5 3 3-.5L14 5.5 10.5 2 3 11.5Z" />
+      <path d="m8.8 3.7 3.5 3.5M2.5 14.5l2-2" />
+    </svg>
+  );
+}
+
 export function FileIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>

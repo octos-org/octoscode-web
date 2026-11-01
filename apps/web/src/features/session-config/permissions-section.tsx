@@ -9,6 +9,7 @@ import {
   PermissionControl,
   type PermissionControlProps,
 } from "../product-controls/SessionControlBar.tsx";
+import styles from "./SessionConfig.module.css";
 
 export type PermissionSaveState =
   { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
@@ -61,9 +62,12 @@ export function PermissionsSection({
         </p>
       ) : null}
       {onApprovalPolicyChange ? (
-        <label>
-          {t("Approval policy:")}
+        <label className={styles["session-config-row"]}>
+          <span className={styles["session-config-row-label"]}>
+            {t("Approval policy:")}
+          </span>
           <select
+            className={styles["session-config-select"]}
             data-permission-approval-policy="true"
             defaultValue={approvalPolicyReadback ?? "on-request"}
             onChange={(event) => {

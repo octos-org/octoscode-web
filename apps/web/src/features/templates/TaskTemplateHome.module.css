@@ -275,6 +275,11 @@
   content: "";
 }
 
+.card .use:active {
+  /* Outrank button:active:not(:disabled), or ::after shrinks to the button. */
+  transform: none;
+}
+
 .card:hover .use,
 .use:focus-visible {
   border-color: var(--dsw-alias-state-business-primary);

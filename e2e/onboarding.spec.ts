@@ -62,6 +62,8 @@ test("explains missing authentication while preserving password privacy and IME 
   await expect(page.getByRole("alert")).toContainText(
     "Auth token is required.",
   );
+  await expect(token).toBeFocused();
+  await expect(token).toHaveAttribute("aria-invalid", "true");
   await expect(
     page.getByRole("complementary", { name: "Product navigation" }),
   ).toHaveCount(0);
