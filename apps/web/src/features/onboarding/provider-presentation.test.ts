@@ -13,6 +13,11 @@ import {
 const catalog: LlmCatalogResult = {
   families: [
     {
+      id: "zai-coding",
+      env: "ZAI_API_KEY",
+      models: [{ id: "glm-5.3", endpoints: [] }],
+    },
+    {
       id: "anthropic",
       env: "ANTHROPIC_API_KEY",
       models: [{ id: "claude", endpoints: [] }],
@@ -51,19 +56,36 @@ const catalog: LlmCatalogResult = {
 };
 
 describe("first-run provider presentation", () => {
-  it("puts the five domestic providers first in the recommended order", () => {
+  it("puts six curated providers first, including the coding-plan family", () => {
     expect(orderedProviderFamilies(catalog).map((family) => family.id)).toEqual(
       [
+        "zai-coding",
         "deepseek",
         "moonshot",
         "zai",
-        "zhipu",
         "dashscope",
         "minimax",
+        "zhipu",
         "anthropic",
       ],
     );
+    expect(
+      orderedProviderFamilies(catalog)
+        .slice(0, 6)
+        .map((family) => family.id),
+    ).toContain("zai-coding");
     expect(providerPresentation("moonshot").name).toBe("Kimi 月之暗面");
+  });
+
+  it("uses readable names and accurate descriptions for other providers", () => {
+    expect(providerPresentation("anthropic")).toEqual({
+      name: "Anthropic",
+      tag: "Claude models from Anthropic",
+    });
+    expect(providerPresentation("gemini")).toEqual({
+      name: "Google Gemini",
+      tag: "Gemini models from Google",
+    });
   });
 
   it("keeps Z.ai and Zhipu official family, model and route identities", () => {

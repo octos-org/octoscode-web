@@ -200,6 +200,12 @@ const catalog: Readonly<Record<string, string>> = {
     "Octos 以此环境变量名称存储只写密钥；密钥值本身绝不会回读。",
   Cost: "费用",
   "Could not connect": "连接失败",
+  "Auth token is required.": "请输入认证令牌。",
+  "Re-enter the token": "重新输入令牌",
+  "Can't reach {value0}": "连不上 {value0}",
+  "check the address": "检查服务器地址",
+  "Could not open the Octos UI Protocol connection":
+    "无法打开 Octos UI 协议连接",
   "Could not delete this provider. The configuration was kept; try again.":
     "无法删除此提供商。配置已保留，请重试。",
   "Could not load autonomy controls. Close and try again.":
@@ -1287,7 +1293,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Server's working directory": "服务器的工作目录",
   "Server's working directory (path not reported)":
     "服务器的工作目录（路径未报告）",
-  "The server refused this token": "服务器拒绝了此令牌",
+  "The server refused this token": "令牌不对，请重新输入。",
   "Streaming messages and tool activity will appear here.":
     "流式消息和工具活动将在此显示。",
   "Couldn't resume chat — nothing was sent": "无法恢复聊天 — 未发送任何内容",
@@ -1840,6 +1846,27 @@ const catalog: Readonly<Record<string, string>> = {
   "Coding and agents": "擅长编程与智能体",
   "Multimodal and coding": "擅长多模态与编程",
   "Fast and cost-efficient": "高效、经济",
+  "Z.ai Coding Plan": "Z.ai 编程套餐",
+  "Kimi Coding Plan": "Kimi 编程套餐",
+  "GLM coding and agents": "GLM 编程与智能体",
+  "More providers": "更多提供商",
+  "Claude models from Anthropic": "Anthropic 的 Claude 模型",
+  "Gemini models from Google": "Google 的 Gemini 模型",
+  "Low-latency inference from Groq": "Groq 提供的低延迟推理",
+  "Local model server": "本地模型服务",
+  "A model server on your own machine": "运行在你自己机器上的模型服务",
+  "MiniMax models for the China region": "MiniMax 中国站模型",
+  "Kimi models for coding": "Kimi 编程模型",
+  "Inference with NVIDIA NIM": "通过 NVIDIA NIM 运行推理",
+  "Local models through Ollama": "通过 Ollama 运行本地模型",
+  "GPT models from OpenAI": "OpenAI 的 GPT 模型",
+  "Multiple model providers through OpenRouter":
+    "通过 OpenRouter 使用多家模型提供商",
+  "Custom model service configured as r9s": "配置为 r9s 的自定义模型服务",
+  "Models through Google Cloud Vertex AI":
+    "通过 Google Cloud Vertex AI 使用模型",
+  "An OpenAI-compatible vLLM server": "OpenAI 兼容的 vLLM 服务",
+  "Model service supplied by the server catalog": "服务器目录提供的模型服务",
   "OpenAI-compatible provider": "OpenAI 兼容提供商",
   "An ID and name are generated automatically. Change them only if needed.":
     "ID 和名称已自动生成，仅在需要时修改。",

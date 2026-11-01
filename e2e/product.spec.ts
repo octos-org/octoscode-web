@@ -1836,7 +1836,9 @@ test("onboards an empty solo server from workspace creation", async ({
   await expect(
     onboarding.getByRole("radio", { name: /DeepSeek 深度求索/ }),
   ).toBeChecked();
-  await expect(onboarding.getByLabel("Model")).toHaveValue("deepseek-chat");
+  await expect(onboarding.locator('select[name="model"]')).toHaveValue(
+    "deepseek-chat",
+  );
   await expect(onboarding.getByLabel("Profile ID")).toBeHidden();
   await expect(onboarding.getByText("Route", { exact: true })).toHaveCount(0);
   await onboarding.getByRole("button", { name: "Continue" }).click();
@@ -1889,8 +1891,8 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
   const onboarding = page.getByRole("dialog", {
     name: "Set up your coding assistant",
   });
-  await onboarding.getByRole("radio", { name: /ollama/ }).check();
-  await expect(onboarding.getByLabel("Model")).toHaveValue("qwen3");
+  await onboarding.getByRole("radio", { name: /Ollama/ }).check();
+  await expect(onboarding.locator('select[name="model"]')).toHaveValue("qwen3");
   await onboarding.getByRole("button", { name: "Continue" }).click();
   await expect(onboarding.getByText("No API key required")).toBeVisible();
   await expect(onboarding.getByLabel("API key")).toHaveCount(0);
