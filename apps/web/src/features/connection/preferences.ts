@@ -1,6 +1,9 @@
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
 import { isRecord } from "../../shared/guards.ts";
-import type { SessionOpened } from "@octos-org/octoscode-client/protocol";
+import {
+  isProtocolUuid,
+  type SessionOpened,
+} from "@octos-org/octoscode-client/protocol";
 import { connectionEndpointError } from "./validation.ts";
 import {
   parseSessionDrafts,
@@ -66,6 +69,7 @@ interface TabConnectionPreferences {
   autoConnect: boolean;
   knownSessions: KnownSessionRef[];
   composerDrafts: SessionDraftRecord[];
+  sentTurns: TabTurnReceipt[];
   draftPrincipal?: string | undefined;
 }
 
@@ -132,12 +136,77 @@ export function saveConnectionPreferences(
     // tab-known Session projection together. No token is copied into an entry.
     knownSessions: sameIdentity ? previous.knownSessions : [],
     composerDrafts: sameIdentity ? previous.composerDrafts : [],
+    sentTurns: sameIdentity ? previous.sentTurns : [],
     draftPrincipal: sameIdentity ? previous.draftPrincipal : undefined,
   };
   safely(() => durableStorage.setItem(DURABLE_KEY, JSON.stringify(durable)));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
   writeTabConnection(tabStorage, tab);
   clearLegacyTabState(tabStorage);
+}
+
+/** Display provenance only: never restores a prompt, queue, or execution lease. */
+export interface TabTurnReceipt {
+  sessionId: string;
+  profileId: string;
+  cwd: string;
+  turnId: string;
+}
+
+const MAX_TAB_TURN_SCOPES = 64;
+
+function sameTurnScope(a: TabTurnReceipt, b: TabTurnReceipt): boolean {
+  return (
+    a.sessionId === b.sessionId &&
+    a.profileId === b.profileId &&
+    a.cwd === b.cwd
+  );
+}
+
+function parseTabTurns(value: unknown): TabTurnReceipt[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-MAX_TAB_TURN_SCOPES).flatMap((entry) => {
+    if (!isRecord(entry) || !isProtocolUuid(entry.turnId)) return [];
+    const sessionId = bounded(entry.sessionId, LIMITS.sessionId);
+    const profileId = bounded(entry.profileId, LIMITS.profileId);
+    const cwd = bounded(entry.cwd, LIMITS.cwd);
+    return sessionId && profileId && cwd
+      ? [{ sessionId, profileId, cwd, turnId: entry.turnId }]
+      : [];
+  });
+}
+
+export function wasTurnSentFromTab(
+  storage: StorageLike,
+  identity: ConnectionIdentity,
+  receipt: TabTurnReceipt,
+): boolean {
+  const current = readTabConnection(storage);
+  return Boolean(
+    current &&
+    matchesIdentity(current, identity) &&
+    current.sentTurns.some(
+      (entry) =>
+        sameTurnScope(entry, receipt) && entry.turnId === receipt.turnId,
+    ),
+  );
+}
+
+/** Save synchronously at dispatch, never from an ACK that may arrive after reconnect. */
+export function rememberTabTurn(
+  storage: StorageLike,
+  identity: ConnectionIdentity,
+  receipt: TabTurnReceipt,
+): boolean {
+  const current = readTabConnection(storage);
+  const parsed = parseTabTurns([receipt])[0];
+  if (!current || !matchesIdentity(current, identity) || !parsed) return false;
+  const sentTurns = [
+    ...current.sentTurns.filter((entry) => !sameTurnScope(entry, parsed)),
+    parsed,
+  ].slice(-MAX_TAB_TURN_SCOPES);
+  writeTabConnection(storage, { ...current, sentTurns });
+  return wasTurnSentFromTab(storage, identity, parsed);
 }
 
 export function clearConnectionPreferences(
@@ -367,6 +436,7 @@ function readTabConnection(
           ? parseKnownSessionRegistry(value.knownSessions)
           : [],
       composerDrafts: parseSessionDrafts(value.composerDrafts),
+      sentTurns: parseTabTurns(value.sentTurns),
       draftPrincipal: bounded(value.draftPrincipal, 1_024) || undefined,
     };
   } catch {

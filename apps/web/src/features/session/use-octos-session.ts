@@ -1,3 +1,8 @@
+import {
+  browserStorage,
+  rememberTabTurn,
+  wasTurnSentFromTab,
+} from "../connection/preferences.ts";
 import { randomUUID } from "../../shared/uuid.ts";
 import {
   useEffect,
@@ -1409,6 +1414,51 @@ export function useOctosSession(): OctosSessionRuntime {
       isFatalSessionError: (reason) =>
         isFatalSessionContractError(errorMessage(reason)),
       controllerDependencies: (scope, recordClient) => ({
+        onTurnSent: (turnId) => {
+          const record = recordManagerRef.current?.get(scope);
+          const authority = record?.runtime.currentAuthority();
+          if (
+            !record ||
+            !authority ||
+            scope.authorityEpoch !== authEpochRef.current
+          )
+            return;
+          if (
+            !rememberTabTurn(
+              browserStorage("sessionStorage"),
+              authority.config,
+              {
+                sessionId: scope.sessionId,
+                profileId: scope.profileId,
+                cwd: scope.workspaceRoot,
+                turnId,
+              },
+            )
+          ) {
+            record.runtime.reportError(
+              "This tab could not save the turn's origin. After a refresh, it may appear as another client's turn.",
+            );
+          }
+        },
+        wasTurnSentHere: (turnId) => {
+          const authority = recordManagerRef.current
+            ?.get(scope)
+            ?.runtime.currentAuthority();
+          return Boolean(
+            authority &&
+            scope.authorityEpoch === authEpochRef.current &&
+            wasTurnSentFromTab(
+              browserStorage("sessionStorage"),
+              authority.config,
+              {
+                sessionId: scope.sessionId,
+                profileId: scope.profileId,
+                cwd: scope.workspaceRoot,
+                turnId,
+              },
+            ),
+          );
+        },
         canSteer: () => {
           const capabilities = recordManagerRef.current
             ?.get(scope)
