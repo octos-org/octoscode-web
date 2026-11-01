@@ -206,6 +206,9 @@
 }
 
 .panelBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
   min-width: 18px;
   border-radius: 999px;
   padding: 0 5px;
@@ -216,12 +219,6 @@
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-}
-
-.compactReview .panelBadge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
 }
 
 .sessionControlsFallback {

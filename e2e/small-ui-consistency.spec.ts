@@ -53,6 +53,41 @@ test("keeps Chat and Trajectory fixed when the panel badge appears", async ({
   );
 });
 
+test("keeps tabs fixed when the badge appears with the panel open", async ({
+  page,
+}) => {
+  const widths = [900, 960, 1024, 1060, 1100, 1140, 1180, 1280, 1366, 1440];
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await start(page, "/workspace/diff-review");
+  await page
+    .getByRole("button", { name: "Session panel", exact: true })
+    .click();
+  const tabs = page.getByRole("navigation", { name: "Session views" });
+  const before = new Map<number, number>();
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 800 });
+    before.set(width, (await tabs.boundingBox())!.x);
+  }
+
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Review syntax fixture");
+  await composer.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Session panel, 1 changed" }),
+  ).toBeVisible();
+  const trajectory = page.getByRole("button", {
+    name: "Trajectory",
+    exact: true,
+  });
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 800 });
+    expect((await tabs.boundingBox())!.x).toBe(before.get(width));
+    await trajectory.click();
+    await expect(trajectory).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+  }
+});
+
 test("keeps Trajectory clickable beside header actions at narrow and resized widths", async ({
   page,
 }) => {
