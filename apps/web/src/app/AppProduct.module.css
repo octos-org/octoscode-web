@@ -420,8 +420,12 @@
     position: relative;
     z-index: 8;
     gap: 4px;
-    padding: 0 6px;
+    padding: 0 2px;
     background: var(--dsw-alias-bg-base);
+  }
+
+  .titleCluster {
+    gap: 4px;
   }
 
   :global(.header-actions) {
@@ -429,7 +433,13 @@
   }
 
   .conversationTabs button {
-    padding: 0 4px;
+    padding: 0 2px;
+  }
+}
+
+@media (min-width: 360px) and (max-width: 400px) {
+  :global(.workspace-grid .conversation-header) {
+    grid-template-columns: minmax(148px, 1fr) auto minmax(0, 1fr);
   }
 }
 

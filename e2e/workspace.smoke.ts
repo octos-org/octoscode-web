@@ -61,14 +61,17 @@ test("theme choice and keyboard Settings navigation work with reduced motion", a
 }) => {
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await connect(page);
-  await page.getByRole("button", { name: "Theme: Auto", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const settings = page.getByRole("button", { name: "Settings", exact: true });
   await settings.focus();
   await expect(settings).toBeFocused();
   await settings.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole("region", { name: "Light / dark appearance" })
+    .getByRole("radio", { name: "Dark", exact: true })
+    .check();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.keyboard.press("Tab");
   expect(
     await dialog.evaluate((el) => el.contains(document.activeElement)),
