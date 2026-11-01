@@ -1893,8 +1893,8 @@ const catalog: Readonly<Record<string, string>> = {
     "请输入大于零的整数分钟数。",
   "Enter a cron expression.": "请输入 Cron 表达式。",
   "Choose a future date and time.": "请选择未来的日期和时间。",
-  "Use a cron expression with seconds (six or seven fields).":
-    "请使用包含秒的 Cron 表达式（六段或七段）。",
+  "Use a cron expression with seconds (six fields).":
+    "请使用包含秒的六段 Cron 表达式。",
   "This enabled task has no next run and is not scheduled. Check its schedule and server version.":
     "此任务已启用但没有下次运行时间，不会被调度。请检查调度设置和服务器版本。",
 

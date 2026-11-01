@@ -236,9 +236,16 @@ test("keeps an empty list and retry state after invalid input and server refusal
     .fill("0 9 * * *");
   await settings.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(
-    settings.getByText(
-      "Use a cron expression with seconds (six or seven fields).",
-    ),
+    settings.getByText("Use a cron expression with seconds (six fields)."),
+  ).toBeVisible();
+  expect(createCalls).toBe(0);
+
+  await settings
+    .getByLabel("Cron expression", { exact: true })
+    .fill("0 0 9 * * * 2027");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(
+    settings.getByText("Use a cron expression with seconds (six fields)."),
   ).toBeVisible();
   expect(createCalls).toBe(0);
 

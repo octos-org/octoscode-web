@@ -535,8 +535,8 @@ function createParams(
   const expression = form.cronExpression.trim();
   if (!expression) return "Enter a cron expression.";
   const fields = expression.split(/\s+/).length;
-  if (fields !== 6 && fields !== 7) {
-    return "Use a cron expression with seconds (six or seven fields).";
+  if (fields !== 6) {
+    return "Use a cron expression with seconds (six fields).";
   }
   return {
     ...base,
