@@ -3,6 +3,8 @@ import { ModelsSettingsContent } from "../features/product-settings/ModelsSettin
 import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
 import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
 import { SettingsDialog } from "../features/product-controls/SettingsDialog.tsx";
+import { AppearanceSettings } from "../features/product-settings/AppearanceSettings.tsx";
+import { BrowserPreferencesSettings } from "../features/product-settings/BrowserPreferencesSettings.tsx";
 import { SessionConfigPane } from "../features/session-config/SessionConfigPane.tsx";
 import {
   PermissionControl,
@@ -464,7 +466,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     draftPrincipalRef,
     restoreConnectionRef,
     theme,
-    cycleTheme,
+    setTheme,
     disconnect,
     forgetConnection,
   } = gate;
@@ -1926,7 +1928,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       case "theme":
       case "language":
-        gate.openPreferences();
+        setSettingsSection("general");
+        setSettingsOpen(true);
         return;
       case "set-language":
         preferences.setLanguage(intent.value);
@@ -1936,7 +1939,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       case "save-config":
         showLocalReport({ kind: "save-config", saved: preferences.save() });
-        gate.openPreferences();
+        setSettingsSection("general");
+        setSettingsOpen(true);
         return;
       case "set-steer":
         conversation.setSteeringEnabled(intent.value);
@@ -3930,8 +3934,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
               }}
-              theme={theme}
-              onThemeToggle={cycleTheme}
               onRetry={() => {
                 void workspaceProduct.refresh();
               }}
@@ -3951,51 +3953,53 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
-              {remoteView === "session" ? (
-                <button
-                  type="button"
-                  className={productStyles.navigationTrigger}
-                  aria-label={t("Back to remote control")}
-                  onClick={() => {
-                    setRemoteError(null);
-                    setRemoteView("home");
-                  }}
-                >
-                  <ArrowLeftIcon size={20} />
-                </button>
-              ) : compact ? (
-                <button
-                  type="button"
-                  className={productStyles.navigationTrigger}
-                  aria-label={t("Open sessions")}
-                  aria-haspopup="dialog"
-                  aria-expanded={!sidebarCollapsed}
-                  onClick={() => setSidebarCollapsed(false)}
-                >
-                  <MenuIcon size={20} />
-                </button>
-              ) : null}
-              <div className={productStyles.titleGroup}>
-                <div className="workspace-title">
-                  <span>
-                    {workspaceName(activeWorkspacePath || t("Workspace"))}
-                  </span>
-                  <small>
-                    {activeWorkspacePath || t("Choose a workspace")}
-                  </small>
-                </div>
-                {!compact &&
-                session.opened?.active_profile_id &&
-                session.opened.workspace_root ? (
-                  <CopySessionLinkButton
-                    key={session.opened.session_id}
-                    reference={{
-                      workspaceRoot: session.opened.workspace_root,
-                      profileId: session.opened.active_profile_id,
-                      sessionId: session.opened.session_id,
+              <div className={productStyles.titleCluster}>
+                {remoteView === "session" ? (
+                  <button
+                    type="button"
+                    className={productStyles.navigationTrigger}
+                    aria-label={t("Back to remote control")}
+                    onClick={() => {
+                      setRemoteError(null);
+                      setRemoteView("home");
                     }}
-                  />
+                  >
+                    <ArrowLeftIcon size={20} />
+                  </button>
+                ) : compact ? (
+                  <button
+                    type="button"
+                    className={productStyles.navigationTrigger}
+                    aria-label={t("Open sessions")}
+                    aria-haspopup="dialog"
+                    aria-expanded={!sidebarCollapsed}
+                    onClick={() => setSidebarCollapsed(false)}
+                  >
+                    <MenuIcon size={20} />
+                  </button>
                 ) : null}
+                <div className={productStyles.titleGroup}>
+                  <div className="workspace-title">
+                    <span>
+                      {workspaceName(activeWorkspacePath || t("Workspace"))}
+                    </span>
+                    <small>
+                      {activeWorkspacePath || t("Choose a workspace")}
+                    </small>
+                  </div>
+                  {!compact &&
+                  session.opened?.active_profile_id &&
+                  session.opened.workspace_root ? (
+                    <CopySessionLinkButton
+                      key={session.opened.session_id}
+                      reference={{
+                        workspaceRoot: session.opened.workspace_root,
+                        profileId: session.opened.active_profile_id,
+                        sessionId: session.opened.session_id,
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
               {session.opened &&
               (work.supervision.planAvailable ||
@@ -4086,7 +4090,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                       : undefined
                   }
-                  onOpenPreferences={gate.openPreferences}
                   onOpenRemote={
                     compact ? () => setRemoteViewInUrl("home") : undefined
                   }
@@ -5635,6 +5638,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       );
                     }}
                   />
+                  <AppearanceSettings value={theme} onChange={setTheme} />
+                  <BrowserPreferencesSettings />
                   {models.state.available ? (
                     <Suspense
                       fallback={<DeferredSurface label="Loading defaults…" />}

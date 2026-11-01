@@ -98,8 +98,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -650,6 +650,12 @@
 .searchResultRow:hover,
 .searchResultRow.selected {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sessionRow.selected,
+.searchResultRow.selected {
+  box-shadow: inset 2px 0 var(--dsw-alias-state-business-primary);
+  font-weight: 550;
 }
 
 .rowMenuButton {

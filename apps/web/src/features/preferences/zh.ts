@@ -975,6 +975,14 @@ const catalog: Readonly<Record<string, string>> = {
   "— closed": "— 已关闭",
   "— result available": "— 结果可用",
   "Browser preferences": "浏览器偏好设置",
+  "Light / dark appearance": "明暗外观",
+  "Choose the shell appearance. This does not change server settings.":
+    "选择界面明暗，不修改服务器配置。",
+  "Available after the current workspace change finishes.":
+    "当前工作区切换完成后可用。",
+  "Available after the connection finishes.": "连接完成后可用。",
+  "Connect to a server before using connection actions.":
+    "连接服务器后才能使用这些操作。",
   Language: "语言",
   Theme: "主题",
   "Vim editing": "Vim 编辑",

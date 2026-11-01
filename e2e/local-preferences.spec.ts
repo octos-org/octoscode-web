@@ -145,7 +145,9 @@ async function command(page: Page, text: string) {
 }
 async function closePreferences(page: Page) {
   await preferences(page)
-    .getByRole("button", { name: /^(Close preferences|关闭偏好设置)$/ })
+    .getByRole("button", {
+      name: /Close preferences|关闭偏好设置|Close|关闭/,
+    })
     .click();
   await expect(preferences(page)).toHaveCount(0);
 }
@@ -279,7 +281,7 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
           ax.nodes
             .filter((node) => node.role?.value === "dialog")
             .map((node) => node.name?.value),
-        ).toEqual(["Browser preferences"]);
+        ).toEqual(["Settings"]);
         await testInfo.attach("preference-dialog-native-accessibility", {
           contentType: "application/json",
           body: JSON.stringify(

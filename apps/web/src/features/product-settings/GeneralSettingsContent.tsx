@@ -125,6 +125,14 @@ export function GeneralSettingsContent({
   const connectionBusy = connectionStatus === "connecting";
   const canDisconnect =
     connectionStatus === "connected" || connectionStatus === "error";
+  const connectionReason = locked
+    ? t("Available after the current workspace change finishes.")
+    : connectionBusy
+      ? t("Available after the connection finishes.")
+      : !canDisconnect
+        ? t("Connect to a server before using connection actions.")
+        : null;
+  const connectionReasonId = useId();
   const [stopConfirming, setStopConfirming] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
   const [stopFailed, setStopFailed] = useState(false);
@@ -266,6 +274,7 @@ export function GeneralSettingsContent({
               type="button"
               className={styles.secondaryButton}
               disabled={locked}
+              aria-describedby={locked ? connectionReasonId : undefined}
               onClick={async () => {
                 setDiagnosticsCopied(false);
                 setDiagnosticsError(false);
@@ -299,12 +308,18 @@ export function GeneralSettingsContent({
               "Disconnect keeps this server remembered. Forget removes the saved server and its tab-scoped credential.",
             )}
           </div>
+          {connectionReason ? (
+            <div id={connectionReasonId} className={styles.disabledReason}>
+              {connectionReason}
+            </div>
+          ) : null}
         </div>
         <div className={styles.actionGroup}>
           <button
             type="button"
             className={styles.secondaryButton}
             disabled={locked || connectionBusy || !canDisconnect}
+            aria-describedby={connectionReason ? connectionReasonId : undefined}
             onClick={onDisconnect}
           >
             {t("Disconnect")}
@@ -313,6 +328,7 @@ export function GeneralSettingsContent({
             type="button"
             className={styles.dangerButton}
             disabled={locked || connectionBusy}
+            aria-describedby={connectionReason ? connectionReasonId : undefined}
             onClick={onForgetConnection}
           >
             {t("Forget server")}
@@ -335,6 +351,7 @@ export function GeneralSettingsContent({
               type="button"
               className={styles.dangerButton}
               disabled={locked}
+              aria-describedby={locked ? connectionReasonId : undefined}
               onClick={() => setStopConfirming(true)}
             >
               {t("Stop server")}

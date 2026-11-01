@@ -296,6 +296,7 @@ function AttachmentItem({
         <div id={previewId} className={styles.previewPanel}>
           <ArtifactPreview
             name={name}
+            embedded
             path={reference}
             workspaceFile={workspaceFile}
             sizeRequired={!workspaceFile && !image}

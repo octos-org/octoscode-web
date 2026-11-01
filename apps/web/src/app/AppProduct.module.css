@@ -1,5 +1,6 @@
 .conversationTabs {
   display: flex;
+  grid-column: 2;
   align-items: center;
   align-self: stretch;
   gap: 2px;
@@ -205,6 +206,9 @@
 }
 
 .panelBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
   min-width: 18px;
   border-radius: 999px;
   padding: 0 5px;
@@ -215,12 +219,6 @@
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-}
-
-.compactReview .panelBadge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
 }
 
 .sessionControlsFallback {
@@ -419,8 +417,12 @@
     position: relative;
     z-index: 8;
     gap: 4px;
-    padding: 0 6px;
+    padding: 0 2px;
     background: var(--dsw-alias-bg-base);
+  }
+
+  .titleCluster {
+    gap: 4px;
   }
 
   :global(.header-actions) {
@@ -428,7 +430,13 @@
   }
 
   .conversationTabs button {
-    padding: 0 4px;
+    padding: 0 2px;
+  }
+}
+
+@media (min-width: 360px) and (max-width: 400px) {
+  :global(.workspace-grid .conversation-header) {
+    grid-template-columns: minmax(148px, 1fr) auto minmax(0, 1fr);
   }
 }
 
@@ -621,6 +629,14 @@
 
 .fleetEmptyAction:hover {
   background: var(--dsw-alias-button-info-hover);
+}
+
+.titleCluster {
+  display: flex;
+  grid-column: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 /* The workspace title and its copy-link action read as one unit. */
