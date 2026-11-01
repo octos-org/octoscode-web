@@ -4524,11 +4524,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       )}
                     </strong>
                     <small>
-                      {session.recovery.detail ??
-                        t(
-                          "Your session is reconnecting. Queued messages will wait until it is ready.",
-                        )}
+                      {t(
+                        session.recovery.phase === "reconnecting"
+                          ? "The connection to Octos was interrupted. Reconnecting; queued messages will wait until the session is ready."
+                          : session.recovery.phase === "hydrating"
+                            ? "The connection was restored. Reloading the session before accepting more work."
+                            : "Octos could not restore this session automatically. Check the technical details, then retry the connection.",
+                      )}
                     </small>
+                    {session.recovery.detail ? (
+                      <details className="recovery-technical-detail">
+                        <summary>{t("Technical details")}</summary>
+                        <code>{session.recovery.detail}</code>
+                      </details>
+                    ) : null}
                   </span>
                 </div>
               ) : interactions.approval ? (

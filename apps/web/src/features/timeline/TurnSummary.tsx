@@ -26,6 +26,16 @@ export function TurnSummary({
       : failed
         ? "failed"
         : "ended";
+  const terminalSummary = t(
+    terminal.latestTurnOutcome === "interrupted"
+      ? "This turn was stopped before it completed."
+      : "This turn failed before it completed.",
+  );
+  const terminalDetail =
+    terminal.body !== "This turn was stopped before it completed." &&
+    terminal.body !== "This turn failed before it completed."
+      ? terminal.body
+      : "";
   return (
     <section
       className={`${styles.summary}${failed ? ` ${styles.warning}` : ""}`}
@@ -85,9 +95,19 @@ export function TurnSummary({
           : t("No output files")}
       </p>
       {terminal.latestTurnOutcome !== "completed" && terminal.body ? (
-        <p className={failed ? styles.error : styles.meta}>
-          {t(terminal.body)}
-        </p>
+        <>
+          <p className={failed ? styles.error : styles.meta}>
+            {terminalSummary}
+          </p>
+          {terminalDetail ? (
+            <details>
+              <summary>{t("Technical details")}</summary>
+              <p className={failed ? styles.error : styles.meta}>
+                {terminalDetail}
+              </p>
+            </details>
+          ) : null}
+        </>
       ) : null}
     </section>
   );

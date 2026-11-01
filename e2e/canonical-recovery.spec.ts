@@ -151,6 +151,7 @@ for (const canonicalReplay of [false, true]) {
       await expect(
         timeline.getByText("The first finding is preserved.", { exact: true }),
       ).toHaveCount(1);
+      await timeline.getByText("Technical details", { exact: true }).click();
       await expect(timeline).toContainText(
         "The connection closed before the turn completed.",
       );
@@ -166,6 +167,9 @@ for (const canonicalReplay of [false, true]) {
     }
     const before = await timeline.innerText();
     await page.reload();
+    if (canonicalReplay) {
+      await timeline.getByText("Technical details", { exact: true }).click();
+    }
     await expect(timeline).toHaveText(before, { useInnerText: true });
     expect(starts).toHaveLength(1);
     expect(recoveryModuleRequests > 0).toBe(canonicalReplay);
