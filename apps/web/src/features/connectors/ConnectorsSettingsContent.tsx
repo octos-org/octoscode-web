@@ -103,6 +103,7 @@ export function ConnectorsSettingsContent({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [manageDenied, setManageDenied] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -126,6 +127,7 @@ export function ConnectorsSettingsContent({
     const ticket = ++generation.current;
     setRefreshing(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const commands = await client.inventoryCommands(
         sessionId,
@@ -137,6 +139,7 @@ export function ConnectorsSettingsContent({
     } catch (reason) {
       if (ticket === generation.current)
         setError(errorMessage(reason).slice(0, 512));
+      setErrorDetail(null);
     } finally {
       if (ticket === generation.current) {
         setLoading(false);
@@ -169,6 +172,7 @@ export function ConnectorsSettingsContent({
     const ticket = ++generation.current;
     setBusy(key);
     setError(null);
+    setErrorDetail(null);
     try {
       const commands = await client.inventoryCommands(
         sessionId,
@@ -183,13 +187,22 @@ export function ConnectorsSettingsContent({
     } catch (reason) {
       if (ticket !== generation.current) return;
       const message = errorMessage(reason).slice(0, 512);
-      if (PERMISSION_ERROR.test(message)) {
+      if (/private or loopback MCP endpoints are refused/i.test(message)) {
+        setError(
+          t(
+            "This connector uses a private or loopback address, which the server refuses. Use an approved public HTTP(S) endpoint.",
+          ),
+        );
+        setErrorDetail(message);
+      } else if (PERMISSION_ERROR.test(message)) {
         setManageDenied(true);
         setError(
           t("You do not have permission to manage this profile's connectors."),
         );
+        setErrorDetail(message);
       } else {
         setError(message);
+        setErrorDetail(null);
       }
     } finally {
       if (ticket === generation.current) setBusy(null);
@@ -202,6 +215,7 @@ export function ConnectorsSettingsContent({
     const url = editor.url.trim();
     if (!name) {
       setError(t("Enter a connector name."));
+      setErrorDetail(null);
       return;
     }
     if (editor.mode === "add" && editor.transport === "stdio") {
@@ -217,10 +231,12 @@ export function ConnectorsSettingsContent({
     }
     if (editor.mode === "add" && !validHttpUrl(url)) {
       setError(t("Enter a valid HTTP(S) URL without embedded credentials."));
+      setErrorDetail(null);
       return;
     }
     if (url && !validHttpUrl(url)) {
       setError(t("Enter a valid HTTP(S) URL without embedded credentials."));
+      setErrorDetail(null);
       return;
     }
     if (editor.mode === "add") {
@@ -291,6 +307,7 @@ export function ConnectorsSettingsContent({
               }
               onClick={() => {
                 setError(null);
+                setErrorDetail(null);
                 setConfirmDelete(null);
                 setEditor(addEditor("http", []));
               }}
@@ -343,9 +360,15 @@ export function ConnectorsSettingsContent({
         </p>
       )}
       {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
+        <div className={styles.error} role="alert">
+          <p>{error}</p>
+          {errorDetail ? (
+            <details>
+              <summary>{t("Technical details")}</summary>
+              <code>{errorDetail}</code>
+            </details>
+          ) : null}
+        </div>
       ) : null}
       {loading ? <p role="status">{t("Waiting for the server…")}</p> : null}
 
@@ -530,6 +553,7 @@ export function ConnectorsSettingsContent({
                         }
                         onClick={() => {
                           setError(null);
+                          setErrorDetail(null);
                           setConfirmDelete(null);
                           setEditor({
                             mode: "edit",
