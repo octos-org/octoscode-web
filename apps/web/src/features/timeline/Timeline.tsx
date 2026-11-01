@@ -700,6 +700,25 @@ function DefaultEntry({
   const running = entry.status === "running";
   const plan = entry.kind === "assistant" ? parseTextPlan(entry.body) : null;
   const markdown = plan ? streamingSafe(plan.rest, running) : entry.body;
+  const terminalNotice =
+    entry.kind === "system" &&
+    (entry.latestTurnOutcome === "interrupted" ||
+      entry.latestTurnOutcome === "failed")
+      ? entry.latestTurnOutcome
+      : null;
+  const terminalSummary = terminalNotice
+    ? t(
+        terminalNotice === "interrupted"
+          ? "This turn was stopped before it completed."
+          : "This turn failed before it completed.",
+      )
+    : null;
+  const terminalDetail =
+    terminalNotice &&
+    markdown !== "This turn was stopped before it completed." &&
+    markdown !== "This turn failed before it completed."
+      ? markdown
+      : "";
   return (
     <article
       data-timeline-entry={entry.id}
@@ -739,9 +758,19 @@ function DefaultEntry({
               <MarkdownBody text={markdown} streaming={running} />
             </Suspense>
           ) : (
-            <pre>
-              {entry.kind === "system" ? noticeText(t, markdown) : markdown}
-            </pre>
+            <>
+              <pre>
+                {entry.kind === "system"
+                  ? (terminalSummary ?? noticeText(t, markdown))
+                  : markdown}
+              </pre>
+              {terminalDetail ? (
+                <details>
+                  <summary>{t("Technical details")}</summary>
+                  <pre>{terminalDetail}</pre>
+                </details>
+              ) : null}
+            </>
           )
         ) : null}
         {entry.media?.length ? <AttachmentList media={entry.media} /> : null}

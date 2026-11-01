@@ -110,7 +110,7 @@ export function PeersPanel({ manager, readOnly = false }: PeersPanelProps) {
           {snapshot.peers.map((peer) => (
             <li key={peer.identity}>
               <span>
-                {peer.slug} — {peer.status}
+                {peer.slug} — {t(peer.status)}
               </span>
               {peer.error ? <p role="alert">{peer.error}</p> : null}
               {peer.canRetry && !readOnly ? (
