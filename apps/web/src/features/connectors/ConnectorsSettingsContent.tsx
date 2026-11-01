@@ -55,7 +55,8 @@ function manageUnavailableText(
     case "profile_unavailable":
       return t("This profile can't be changed right now.");
     default:
-      return t("Connector management is unavailable for this access.");
+      // An unknown reason says nothing about permissions; don't guess.
+      return t("Connector management isn't available right now.");
   }
 }
 
@@ -112,9 +113,12 @@ export function ConnectorsSettingsContent({
   // A server with the T-0056 facts says up front whether this access may
   // manage; an older one is only learned from a refused mutation.
   const serverDenied = state?.management?.canManage === false;
+  // Facts the server sent but in a broken shape (T-0138): management stays
+  // off and the page says why, instead of passing for an older server.
+  const factsInvalid = Boolean(state?.invalidFacts?.length);
   const managementDisabled =
-    !managementAvailable || manageDenied || serverDenied;
-  const allowlist = state?.stdioAllowlist;
+    !managementAvailable || manageDenied || serverDenied || factsInvalid;
+  const allowlist = factsInvalid ? undefined : state?.stdioAllowlist;
   const allowlistEntry = (entryId: string) =>
     allowlist?.find((entry) => entry.entryId === entryId);
 
@@ -160,7 +164,8 @@ export function ConnectorsSettingsContent({
       commands: Awaited<ReturnType<typeof client.inventoryCommands>>,
     ) => Promise<RuntimeMcp>,
   ) {
-    if (busy || refreshing) return;
+    // The buttons are already disabled; this also holds for a form left open.
+    if (busy || refreshing || managementDisabled) return;
     const ticket = ++generation.current;
     setBusy(key);
     setError(null);
@@ -300,6 +305,12 @@ export function ConnectorsSettingsContent({
         <p className={styles.notice}>
           {t(
             "This server provides read-only connector status. Management is unavailable.",
+          )}
+        </p>
+      ) : factsInvalid ? (
+        <p className={styles.error} role="alert">
+          {t(
+            "The server sent connector management details this page can't read, so management is turned off. Refresh, or check the server version.",
           )}
         </p>
       ) : serverDenied || manageDenied ? (

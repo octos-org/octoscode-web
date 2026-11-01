@@ -61,6 +61,12 @@ export interface RuntimeMcp {
   management?: McpManagementAvailability;
   /** Absent on a server without the T-0056 facts; `[]` when none is configured. */
   stdioAllowlist?: McpStdioAllowlistEntry[];
+  /**
+   * Facts the server sent in a shape this client can't trust (T-0138). Not
+   * the same as absent: an older server simply omits them, a broken one must
+   * not be mistaken for it.
+   */
+  invalidFacts?: string[];
 }
 export interface McpConnectorPatch {
   name?: string;
@@ -173,8 +179,21 @@ export function parseRuntimeMcp(
       ...(text(row.error) ? { error: row.error } : {}),
     });
   }
-  const management = parseManagement(value);
-  const stdioAllowlist = parseStdioAllowlist(value.stdio_allowlist);
+  // Absent facts mean an older server; present but malformed ones are
+  // reported, never silently treated as absent.
+  const invalidFacts: string[] = [];
+  let management: McpManagementAvailability | undefined;
+  if (value.can_manage !== undefined) {
+    const parsed = parseManagement(value);
+    if (parsed) management = parsed;
+    else invalidFacts.push("can_manage");
+  }
+  let stdioAllowlist: McpStdioAllowlistEntry[] | undefined;
+  if (value.stdio_allowlist !== undefined) {
+    const parsed = parseStdioAllowlist(value.stdio_allowlist);
+    if (parsed) stdioAllowlist = parsed;
+    else invalidFacts.push("stdio_allowlist");
+  }
   return {
     sessionId,
     profileId,
@@ -187,23 +206,20 @@ export function parseRuntimeMcp(
     },
     ...(management ? { management } : {}),
     ...(stdioAllowlist ? { stdioAllowlist } : {}),
+    ...(invalidFacts.length ? { invalidFacts } : {}),
   };
 }
 
-// The T-0056 facts are additive: a malformed one is dropped (the page falls
-// back to handling refusals) rather than failing the whole status.
+/** Null when `can_manage` or its reason has the wrong shape. */
 function parseManagement(
   value: Record<string, unknown>,
 ): McpManagementAvailability | null {
   if (typeof value.can_manage !== "boolean") return null;
   if (value.can_manage) return { canManage: true };
-  return {
-    canManage: false,
-    ...(nonempty(value.manage_unavailable_reason) &&
-    value.manage_unavailable_reason.length <= 64
-      ? { reason: value.manage_unavailable_reason }
-      : {}),
-  };
+  const reason = value.manage_unavailable_reason;
+  if (reason === undefined) return { canManage: false };
+  if (!nonempty(reason) || reason.length > 128) return null;
+  return { canManage: false, reason };
 }
 
 /** Only id, label and description enter the UI; nothing else is copied. */
