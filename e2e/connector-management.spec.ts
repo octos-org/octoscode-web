@@ -118,13 +118,108 @@ test("manages HTTP connectors and keeps existing stdio controls", async ({
   ).toEqual([]);
 });
 
-test("a forbidden mutation explains and disables management without losing status", async ({
+test("adds a stdio connector from the server's allowlist, never a command", async ({
+  page,
+}) => {
+  await start(page, "connector-management");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "Add HTTP connectors, or stdio connectors from the server's allowlist.",
+    ),
+  ).toBeVisible();
+  await settings.getByRole("button", { name: "Add stdio connector" }).click();
+  const add = settings.getByRole("form", { name: "Add stdio connector" });
+  const entry = add.getByLabel("Allowlist entry");
+  await expect(entry.locator("option")).toHaveText([
+    "Shared files",
+    "Echo tools",
+  ]);
+  await expect(entry).toHaveAccessibleDescription(
+    "Read-only access to the shared project folder",
+  );
+  // Only the name is typed; the server's operator fixed the command.
+  await expect(add.getByRole("textbox")).toHaveCount(1);
+  await expect(add.getByLabel("Connector name")).toHaveValue("Shared files");
+  await entry.selectOption("echo");
+  await expect(add.getByLabel("Connector name")).toHaveValue("Echo tools");
+  await expect(
+    add.getByText("Read-only access to the shared project folder"),
+  ).toHaveCount(0);
+  expect(
+    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+      .violations,
+  ).toEqual([]);
+  await add.getByRole("button", { name: "Save connector" }).click();
+  const created = connector(settings, "stdio-3");
+  await expect(created).toContainText("Echo tools");
+  await expect(created).toContainText("stdio");
+  await expect(created).toContainText("connected");
+});
+
+test("an empty allowlist says an operator has to configure it", async ({
+  page,
+}) => {
+  await start(page, "connector-management-empty");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "No stdio connectors can be added: an operator needs to configure the server allowlist first.",
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Add stdio connector" }),
+  ).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Add HTTP connector" }),
+  ).toBeEnabled();
+});
+
+test("session-only access sees management greyed out before trying", async ({
+  page,
+}) => {
+  const mutations: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const method = (JSON.parse(String(payload)) as { method?: string })
+        .method;
+      if (method?.startsWith("mcp/connector/")) mutations.push(method);
+    }),
+  );
+  await start(page, "connector-management-readonly");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "Management is disabled because this access can read sessions but cannot change the profile.",
+    ),
+  ).toBeVisible();
+  for (const name of ["Add HTTP connector", "Add stdio connector"])
+    await expect(settings.getByRole("button", { name })).toBeDisabled();
+  const docs = connector(settings, "docs");
+  await expect(docs).toContainText("Documentation MCP");
+  for (const name of ["Edit", "Disable", "Reconnect", "Delete"])
+    await expect(
+      docs.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  expect(mutations).toEqual([]);
+});
+
+test("an older server without the facts keeps the refusal fallback", async ({
   page,
 }) => {
   await start(page, "connector-management-denied");
   const settings = await openConnectors(page);
   const legacy = connector(settings, "legacy");
   await expect(legacy).toContainText("connection refused");
+  await expect(
+    settings.getByText(
+      "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.",
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Add stdio connector" }),
+  ).toHaveCount(0);
   await legacy.getByRole("button", { name: "Edit", exact: true }).click();
   const edit = settings.getByRole("form", { name: "Edit connector" });
   await edit.getByLabel("Connector name").fill("Should not be saved");
@@ -216,7 +311,7 @@ for (const viewport of [
       settings.getByText("已连接", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      settings.getByText("需要运维先在服务器上配置白名单"),
+      settings.getByText("或从服务器白名单里选择 stdio 连接器"),
     ).toBeVisible();
     expect(
       (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
