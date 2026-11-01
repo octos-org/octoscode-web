@@ -118,13 +118,108 @@ test("manages HTTP connectors and keeps existing stdio controls", async ({
   ).toEqual([]);
 });
 
-test("a forbidden mutation explains and disables management without losing status", async ({
+test("adds a stdio connector from the server's allowlist, never a command", async ({
+  page,
+}) => {
+  await start(page, "connector-management");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "Add HTTP connectors, or stdio connectors from the server's allowlist.",
+    ),
+  ).toBeVisible();
+  await settings.getByRole("button", { name: "Add stdio connector" }).click();
+  const add = settings.getByRole("form", { name: "Add stdio connector" });
+  const entry = add.getByLabel("Allowlist entry");
+  await expect(entry.locator("option")).toHaveText([
+    "Shared files",
+    "Echo tools",
+  ]);
+  await expect(entry).toHaveAccessibleDescription(
+    "Read-only access to the shared project folder",
+  );
+  // Only the name is typed; the server's operator fixed the command.
+  await expect(add.getByRole("textbox")).toHaveCount(1);
+  await expect(add.getByLabel("Connector name")).toHaveValue("Shared files");
+  await entry.selectOption("echo");
+  await expect(add.getByLabel("Connector name")).toHaveValue("Echo tools");
+  await expect(
+    add.getByText("Read-only access to the shared project folder"),
+  ).toHaveCount(0);
+  expect(
+    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+      .violations,
+  ).toEqual([]);
+  await add.getByRole("button", { name: "Save connector" }).click();
+  const created = connector(settings, "stdio-3");
+  await expect(created).toContainText("Echo tools");
+  await expect(created).toContainText("stdio");
+  await expect(created).toContainText("connected");
+});
+
+test("an empty allowlist says an operator has to configure it", async ({
+  page,
+}) => {
+  await start(page, "connector-management-empty");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "No stdio connectors can be added: an operator needs to configure the server allowlist first.",
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Add stdio connector" }),
+  ).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Add HTTP connector" }),
+  ).toBeEnabled();
+});
+
+test("session-only access sees management greyed out before trying", async ({
+  page,
+}) => {
+  const mutations: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const method = (JSON.parse(String(payload)) as { method?: string })
+        .method;
+      if (method?.startsWith("mcp/connector/")) mutations.push(method);
+    }),
+  );
+  await start(page, "connector-management-readonly");
+  const settings = await openConnectors(page);
+  await expect(
+    settings.getByText(
+      "Management is disabled because this access can read sessions but cannot change the profile.",
+    ),
+  ).toBeVisible();
+  for (const name of ["Add HTTP connector", "Add stdio connector"])
+    await expect(settings.getByRole("button", { name })).toBeDisabled();
+  const docs = connector(settings, "docs");
+  await expect(docs).toContainText("Documentation MCP");
+  for (const name of ["Edit", "Disable", "Reconnect", "Delete"])
+    await expect(
+      docs.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  expect(mutations).toEqual([]);
+});
+
+test("an older server without the facts keeps the refusal fallback", async ({
   page,
 }) => {
   await start(page, "connector-management-denied");
   const settings = await openConnectors(page);
   const legacy = connector(settings, "legacy");
   await expect(legacy).toContainText("connection refused");
+  await expect(
+    settings.getByText(
+      "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.",
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Add stdio connector" }),
+  ).toHaveCount(0);
   await legacy.getByRole("button", { name: "Edit", exact: true }).click();
   const edit = settings.getByRole("form", { name: "Edit connector" });
   await edit.getByLabel("Connector name").fill("Should not be saved");
@@ -140,6 +235,105 @@ test("a forbidden mutation explains and disables management without losing statu
   await expect(legacy.getByRole("button", { name: "Edit" })).toBeDisabled();
   await expect(legacy).toContainText("Legacy HTTP");
   await expect(legacy).toContainText("connection refused");
+});
+
+/**
+ * Rewrite only `mcp/status/list` results at the WebSocket boundary and record
+ * every connector mutation the page sends.
+ */
+async function patchStatus(
+  page: Page,
+  patch: (result: Record<string, unknown>) => Record<string, unknown>,
+) {
+  const mutations: string[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const lists = new Set<string>();
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        id?: string;
+        method?: string;
+      };
+      if (frame.method === "mcp/status/list" && frame.id) lists.add(frame.id);
+      if (frame.method?.startsWith("mcp/connector/"))
+        mutations.push(frame.method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as {
+        id?: string;
+        result?: Record<string, unknown>;
+      };
+      if (frame.id && lists.delete(frame.id) && frame.result)
+        socket.send(JSON.stringify({ ...frame, result: patch(frame.result) }));
+      else socket.send(message);
+    });
+  });
+  return mutations;
+}
+
+for (const [label, patch] of [
+  [
+    "a non-boolean can_manage",
+    (result: Record<string, unknown>) => ({ ...result, can_manage: "false" }),
+  ],
+  [
+    "a duplicated allowlist entry",
+    (result: Record<string, unknown>) => ({
+      ...result,
+      stdio_allowlist: [{ entry_id: "duplicate" }, { entry_id: "duplicate" }],
+    }),
+  ],
+] as const) {
+  test(`${label} is reported, and management stays off`, async ({ page }) => {
+    const mutations = await patchStatus(page, patch);
+    await start(page, "connector-management");
+    const settings = await openConnectors(page);
+    await expect(settings.getByRole("alert")).toContainText(
+      "The server sent connector management details this page can't read",
+    );
+    await expect(
+      settings.getByRole("button", { name: "Add HTTP connector" }),
+    ).toBeDisabled();
+    await expect(
+      settings.getByRole("button", { name: "Add stdio connector" }),
+    ).toHaveCount(0);
+    const docs = connector(settings, "docs");
+    await expect(docs).toContainText("Documentation MCP");
+    for (const name of ["Edit", "Disable", "Reconnect", "Delete"])
+      await expect(
+        docs.getByRole("button", { name, exact: true }),
+      ).toBeDisabled();
+    await expect(
+      settings.getByText(
+        "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.",
+      ),
+    ).toHaveCount(0);
+    expect(mutations).toEqual([]);
+  });
+}
+
+test("an unknown unavailable reason is not called a permission problem", async ({
+  page,
+}) => {
+  const mutations = await patchStatus(page, (result) => ({
+    ...result,
+    can_manage: false,
+    manage_unavailable_reason: "temporary_maintenance",
+  }));
+  await start(page, "connector-management");
+  await useChinese(page);
+  const settings = await openConnectors(page, true);
+  const notice = settings.getByText("当前无法管理连接器。", { exact: true });
+  await expect(notice).toBeVisible();
+  await expect(settings.getByText(/权限/)).toHaveCount(0);
+  for (const name of ["添加 HTTP 连接器", "添加 stdio 连接器"])
+    await expect(settings.getByRole("button", { name })).toBeDisabled();
+  for (const button of await connector(settings, "docs")
+    .getByRole("button")
+    .all())
+    await expect(button).toBeDisabled();
+  expect(mutations).toEqual([]);
 });
 
 test("a delayed refresh blocks mutations and always releases busy state", async ({
@@ -216,7 +410,7 @@ for (const viewport of [
       settings.getByText("已连接", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      settings.getByText("需要运维先在服务器上配置白名单"),
+      settings.getByText("或从服务器白名单里选择 stdio 连接器"),
     ).toBeVisible();
     expect(
       (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())

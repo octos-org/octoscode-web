@@ -2030,6 +2030,23 @@ const catalog: Readonly<Record<string, string>> = {
   "{count} tools": "{count} 个工具",
   connected: "已连接",
   connecting: "连接中",
+  // Connector allowlist and management facts (T-0057).
+  "Add stdio connector": "添加 stdio 连接器",
+  "Allowlist entry": "白名单条目",
+  "Choose an entry from the server's allowlist.":
+    "请从服务器白名单里选一个条目。",
+  "Add HTTP connectors, or stdio connectors from the server's allowlist.":
+    "可以添加 HTTP 连接器，或从服务器白名单里选择 stdio 连接器。",
+  "No stdio connectors can be added: an operator needs to configure the server allowlist first.":
+    "暂时不能添加 stdio 连接器：需要运维先在服务器上配置白名单。",
+  "This session is controlled by an external app, so its connectors can't be changed here.":
+    "这个会话由外部应用控制，不能在这里修改它的连接器。",
+  "Connector management is turned off on this server.":
+    "这台服务器关闭了连接器管理。",
+  "This profile can't be changed right now.": "这个配置档案暂时不能修改。",
+  "Connector management isn't available right now.": "当前无法管理连接器。",
+  "The server sent connector management details this page can't read, so management is turned off. Refresh, or check the server version.":
+    "服务器返回的连接器管理信息无法识别，已停用管理操作。请刷新，或检查服务器版本。",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
   // Phone remote control (T-0094).

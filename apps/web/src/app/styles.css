@@ -372,7 +372,7 @@ label > span {
 
 .connection-error {
   margin: -2px 0 12px;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .active .session-presence {
@@ -837,7 +837,7 @@ label > span {
 .recovery-banner.recovery-gap .recovery-banner-mark,
 .recovery-banner.recovery-lossy .recovery-banner-mark {
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .composer {
@@ -1176,7 +1176,7 @@ label > span {
 
 .takeover-button.reject:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .takeover-button.primary {
@@ -1227,7 +1227,7 @@ kbd {
 
 .takeover-error {
   display: block;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: 12px;
   line-height: 18px;
 }
@@ -1651,7 +1651,7 @@ kbd {
 .task-detail-error {
   padding: var(--dsw-space-2) var(--dsw-space-3);
   border-top: 1px solid var(--dsw-alias-border-l1);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: var(--dsw-font-size-micro);
 }
 
@@ -1705,7 +1705,7 @@ kbd {
 }
 
 .diff-totals em {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-style: normal;
 }
 
@@ -1756,7 +1756,7 @@ kbd {
 
 .review-error strong,
 .review-error span {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .diff-file {
@@ -1823,7 +1823,7 @@ kbd {
 }
 
 .file-status.status-deleted {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .diff-hunk {
