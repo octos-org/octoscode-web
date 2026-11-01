@@ -5050,7 +5050,16 @@ sockets.on("connection", (socket, request) => {
         request.params?.cwd ??
         openedWorkspaceBySocket.get(socket) ??
         defaultWorkspace;
-      const sessions = sessionsByWorkspace.get(workspaceRoot) ?? [];
+      // Core reports a live turn for every listed session from its
+      // process-global registry, opened by this connection or not.
+      const sessions = (sessionsByWorkspace.get(workspaceRoot) ?? []).map(
+        (session) => ({
+          ...session,
+          active_turn: Boolean(
+            sessionStateBySessionId.get(session.id)?.activeTurn,
+          ),
+        }),
+      );
       const listedProfile =
         request.params?.profile_id ?? openedProfileBySocket.get(socket);
       reply(

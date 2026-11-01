@@ -414,6 +414,11 @@ label > span {
   grid-template-rows: 52px minmax(0, 1fr);
 }
 
+/* The phone overview owns its whole column (header included). */
+.remote-pane {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .fleet-back {
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-button-elevated-fill);
@@ -932,6 +937,13 @@ label > span {
   opacity: 0.4;
 }
 
+@media (pointer: coarse) {
+  .send-button {
+    width: var(--dsw-control-h-lg);
+    height: var(--dsw-control-h-lg);
+  }
+}
+
 .command-palette {
   position: absolute;
   right: 0;
@@ -1142,6 +1154,29 @@ label > span {
 .takeover-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.approval-body .approval-remote-note {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Touch: full-height targets, decisions side by side, no keyboard hints. */
+@media (pointer: coarse) {
+  .approval-actions {
+    flex-wrap: wrap;
+  }
+
+  .approval-actions .takeover-button {
+    flex: 1 1 0;
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .approval-actions kbd {
+    display: none;
+  }
 }
 
 kbd {

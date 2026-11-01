@@ -9,6 +9,8 @@ import styles from "./ConversationActionsMenu.module.css";
 interface ConversationActionsMenuProps {
   copySource?: ConversationCopySource | undefined;
   onOpenPreferences: () => void;
+  /** Offered on phones: switch to the remote-control overview. */
+  onOpenRemote?: (() => void) | undefined;
   triggerClassName: string;
 }
 
@@ -16,6 +18,7 @@ interface ConversationActionsMenuProps {
 export function ConversationActionsMenu({
   copySource,
   onOpenPreferences,
+  onOpenRemote,
   triggerClassName,
 }: ConversationActionsMenuProps) {
   const t = useUiText();
@@ -97,6 +100,19 @@ export function ConversationActionsMenu({
               className={styles.menuItem ?? ""}
               role="menuitem"
             />
+          ) : null}
+          {onOpenRemote ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.menuItem}
+              onClick={() => {
+                close();
+                onOpenRemote();
+              }}
+            >
+              {t("Remote control")}
+            </button>
           ) : null}
           <button
             type="button"

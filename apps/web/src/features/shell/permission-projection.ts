@@ -104,3 +104,26 @@ function permissionDescription(
       return `Edit any file without sandbox limits. ${networkCopy}`;
   }
 }
+
+const MODE_RANK: Record<PermissionProfileMode, number> = {
+  read_only: 0,
+  workspace_write: 1,
+  danger_full_access: 2,
+};
+
+/**
+ * True when `next` grants more than `current`: a wider file mode, or network
+ * where there was none. Full access always counts, and so does anything when
+ * the current grant is unknown. The phone never offers an escalation.
+ */
+export function isPermissionEscalation(
+  next: PermissionProfileSelection,
+  current: PermissionProfileSelection | null | undefined,
+): boolean {
+  if (next.mode === "danger_full_access") return true;
+  if (!current) return true;
+  return (
+    MODE_RANK[next.mode] > MODE_RANK[current.mode] ||
+    (next.network === "allow" && current.network !== "allow")
+  );
+}
