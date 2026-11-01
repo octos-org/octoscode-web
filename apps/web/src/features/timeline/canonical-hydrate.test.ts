@@ -9,6 +9,7 @@ import { summarizeTurn } from "./turn-summary.ts";
 import { timelineFromCanonicalHydrate as timelineFromHydrate } from "./canonical-hydrate.ts";
 import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
 import attachmentRetryFixture from "./fixtures/t-0084-attachment-retry.json";
+import reconnectSummaryFixture from "./fixtures/t-0194-reconnect-summary.json";
 
 function event(
   seq: number,
@@ -65,6 +66,29 @@ describe("canonical hydrate recovery", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("keeps the real completed turn summary before the next prompt after reconnect", () => {
+    const hydrated = parseSessionHydrateResult(reconnectSummaryFixture)!;
+    const [completed, interrupted] = hydrated.turns!;
+    const entries = timelineFromHydrate(hydrated);
+    const completedTerminal = entries.findIndex(
+      (entry) => entry.id === `terminal:${completed.turn_id}`,
+    );
+    const nextPrompt = entries.findIndex(
+      (entry) => entry.kind === "user" && entry.turnId === interrupted.turn_id,
+    );
+    const interruptedTerminal = entries.findIndex(
+      (entry) => entry.id === `terminal:${interrupted.turn_id}`,
+    );
+
+    expect(completedTerminal).toBeGreaterThanOrEqual(0);
+    expect(nextPrompt).toBeGreaterThanOrEqual(0);
+    expect(completedTerminal).toBeLessThan(nextPrompt);
+    expect(interruptedTerminal).toBeGreaterThan(nextPrompt);
+    expect(entries[completedTerminal]?.turnId).toBe(completed.turn_id);
+    expect(entries[interruptedTerminal]?.turnId).toBe(interrupted.turn_id);
+    expect(timelineFromHydrate(hydrated)).toEqual(entries);
   });
 
   it("replays the real steered repair without moving its terminal before later tools", () => {
