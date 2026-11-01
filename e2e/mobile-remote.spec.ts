@@ -284,6 +284,16 @@ test("an unreachable server reads as offline, and the overview recovers", async 
   await watch(page, folder);
   const recent = section(page, /^最近/).getByRole("button").first();
   await expect(recent).toBeVisible();
+  // Open the session and come back first: the opened session's profile must
+  // not swap the overview's store, or the outage below starts from nothing.
+  await recent.tap();
+  await expect(
+    page.getByRole("region", { name: "对话" }).getByText("Offline drill", {
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "返回手机遥控" }).tap();
+  await expect(recent).toBeEnabled();
 
   refuse = true;
   await request.post(`${ORIGIN}/__test__/disconnect`);
