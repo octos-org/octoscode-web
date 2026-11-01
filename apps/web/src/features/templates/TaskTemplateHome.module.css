@@ -56,7 +56,8 @@
   cursor: pointer;
   transition:
     background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
-    border-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+    border-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .resume:hover {
@@ -174,13 +175,36 @@
   border-radius: 14px;
   background: var(--dsw-alias-bg-layer-2);
   transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
     border-color var(--dsw-motion-feedback) var(--dsw-ease-out),
     box-shadow var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
-.card:hover {
+@media (hover: hover) {
+  .card:hover:has(.use:not(:disabled)) {
+    border-color: var(--dsw-alias-border-l2);
+    box-shadow: var(--dsw-shadow-lv1);
+  }
+
+  /* Solid fill only where hover exists; on touch it would stick after a tap. */
+  .card:hover .use:not(:disabled) {
+    border-color: var(--dsw-alias-state-business-primary);
+    background: var(--dsw-alias-state-business-primary);
+    color: var(--dsw-alias-label-on-accent);
+  }
+}
+
+/* The card body is the button's hit area, so the card shows the press. */
+.card:has(.use:active:not(:disabled)) {
   border-color: var(--dsw-alias-border-l2);
-  box-shadow: var(--dsw-shadow-lv1);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  box-shadow: none;
+}
+
+.card:has(.use[data-pressed]:not(:disabled)) {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  box-shadow: none;
 }
 
 .card:has(.use:focus-visible),
@@ -251,9 +275,10 @@
 
 .use {
   flex: none;
-  padding: 5px 12px;
+  min-height: var(--dsw-control-h-sm);
+  padding: 4px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -275,11 +300,23 @@
   content: "";
 }
 
-.card:hover .use,
+/* No shrink here: any scale makes the button the containing block of its
+   card-sized ::after, so the hit area would collapse mid-click. The card
+   carries the press instead, as a fill change (no shrink either, so a press
+   at the card's edge still releases inside it). */
+.card .use {
+  --dsw-press-scale: none;
+}
+
 .use:focus-visible {
   border-color: var(--dsw-alias-state-business-primary);
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-on-accent);
+}
+
+.use:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .use:focus-visible {

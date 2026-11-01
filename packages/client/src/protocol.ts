@@ -1,6 +1,15 @@
 export { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 // Transport-free public protocol surface for render-time consumers.
 export type { OctosUiClient } from "./client.ts";
+export {
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
+  parseExecutionEnvironmentResult,
+} from "./execution-environment.ts";
+export type {
+  ExecutionEnvironmentReadParams,
+  ExecutionEnvironmentResult,
+} from "./execution-environment.ts";
 export { OctosUiProtocolError } from "./protocol-error.ts";
 export {
   coreProtocolCompatibilityError,
@@ -25,6 +34,7 @@ export {
 } from "./skill-methods.ts";
 export {
   APPUI_MEMORY_PROMOTE_METHOD,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   APPUI_MEMORY_REQUEST_METHOD,
 } from "./memory-methods.ts";
 export { APPUI_RESEARCH_METHODS } from "./research-methods.ts";
@@ -89,6 +99,7 @@ export {
   parseSessionDeleteResult,
   parseSessionFilesListResult,
   parseSessionListResult,
+  parseSessionTitleSetResult,
   parseTokenCostUpdate,
   parseUiProtocolCapabilities,
 } from "./workspace.ts";
@@ -175,6 +186,8 @@ export type {
   SessionCursorStatus,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
   SessionFileInfo,
   SessionFilesListParams,
   SessionFilesListResult,

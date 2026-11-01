@@ -9,7 +9,7 @@
 
 /** A product navigation entry another surface (the strip owner) mounts. */
 export interface FleetNavigationEntry {
-  /** The visible label ("Fleet"). */
+  /** The visible label ("Agents"). */
   readonly label: string;
   /** A visible glyph (never color-only — §8). */
   readonly icon: string;
@@ -19,7 +19,7 @@ export interface FleetNavigationEntry {
 
 /** The ONE descriptor the strip owner mounts next to Settings. */
 export const fleetNavigationEntry: FleetNavigationEntry = Object.freeze({
-  label: "Fleet",
+  label: "Agents",
   icon: "✦",
   routeKey: "fleet",
 });

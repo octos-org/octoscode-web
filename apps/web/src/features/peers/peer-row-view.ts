@@ -14,11 +14,9 @@ import type {
 } from "../control/peer-row-command.ts";
 
 /**
- * The peer-facing label (judge #4: "no raw slugs"): "Peer 2" per row, from
- * the row's 1-based position in the roster, plus the accepted dispatch's
- * resolved model when the row carries one ("Peer 2 · glm-5.3" — triage 4510
- * P2, Fleet §4.3 parity). The slug stays ONLY as the row's `data-peer-slug`
- * identity hook (diagnostics + Advanced), never as display copy.
+ * The positional role label used when a roster row has no slug: "Peer 2",
+ * plus the accepted dispatch's resolved model when one is available. Rows
+ * with a real slug display that slug directly so selection targets stay clear.
  */
 export function peerRowLabel(index: number, model?: string | null): string {
   return model && model !== ""
@@ -168,13 +166,14 @@ export function peerElapsed(peer: PeerRosterEntry, now: number): string | null {
 export function formatPeerDockPill(
   counts: PeerRosterCounts,
   landed: ReturnType<typeof fleetLanded>,
+  t: (source: string) => string = (source) => source,
 ): string {
   const parts = [
     `${counts.total}`,
-    `${counts.live} live`,
-    `${landed.landed}/${landed.total} landed`,
+    `${counts.live} ${t("live")}`,
+    `${landed.landed}/${landed.total} ${t("landed")}`,
   ];
-  if (counts.blocked > 0) parts.push(`${counts.blocked} blocked`);
-  if (counts.done > 0) parts.push(`${counts.done} done`);
+  if (counts.blocked > 0) parts.push(`${counts.blocked} ${t("blocked")}`);
+  if (counts.done > 0) parts.push(`${counts.done} ${t("done")}`);
   return parts.join(" · ");
 }

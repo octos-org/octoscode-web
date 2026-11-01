@@ -1,7 +1,10 @@
 import { isRecord } from "./rpc.ts";
 import { supportsMethod } from "./interaction.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
-import { APPUI_INVENTORY_METHODS } from "./inventory-methods.ts";
+import {
+  APPUI_INVENTORY_METHODS,
+  MCP_CONNECTOR_METHODS,
+} from "./inventory-methods.ts";
 
 export interface RuntimeTool {
   name: string;
@@ -23,6 +26,8 @@ export interface RuntimeMcpServer {
   displayName?: string;
   transport?: string;
   status: string;
+  enabled: boolean;
+  authorization?: string;
   toolCount: number;
   tools: string[];
   error?: string;
@@ -37,6 +42,10 @@ export interface RuntimeMcp {
     failed: number;
     disabled: number;
   };
+}
+export interface McpConnectorPatch {
+  name?: string;
+  url?: string;
 }
 
 const text = (value: unknown): value is string =>
@@ -127,6 +136,8 @@ export function parseRuntimeMcp(
       !strings(row.tools) ||
       !nullableText(row.display_name) ||
       !nullableText(row.transport) ||
+      (row.enabled !== undefined && typeof row.enabled !== "boolean") ||
+      !nullableText(row.authorization) ||
       !nullableText(row.error)
     )
       return null;
@@ -134,10 +145,12 @@ export function parseRuntimeMcp(
     servers.push({
       id: row.id,
       status: row.status,
+      enabled: row.enabled === undefined ? true : row.enabled,
       toolCount: row.tool_count,
       tools: row.tools,
       ...(text(row.display_name) ? { displayName: row.display_name } : {}),
       ...(text(row.transport) ? { transport: row.transport } : {}),
+      ...(text(row.authorization) ? { authorization: row.authorization } : {}),
       ...(text(row.error) ? { error: row.error } : {}),
     });
   }
@@ -154,7 +167,19 @@ export function parseRuntimeMcp(
   };
 }
 
-/** Read-only. rc11 has no MCP/tool configuration mutation API. */
+/**
+ * Core #2912 omits `mcp.connector.manage.v1` from SessionOpened's
+ * supported_features even when negotiated. Keep requesting the feature, but
+ * treat the five advertised methods as the availability contract.
+ */
+export function supportsMcpConnectorManagement(
+  capabilities: UiProtocolCapabilities | undefined,
+): boolean {
+  return Object.values(MCP_CONNECTOR_METHODS).every((method) =>
+    supportsMethod(capabilities, method),
+  );
+}
+
 export function createInventoryCommands(
   client: { request(method: string, params: unknown): Promise<unknown> },
   sessionId: string,
@@ -166,6 +191,35 @@ export function createInventoryCommands(
       throw new Error(`${method} is not advertised by this server`);
     if (!sessionId || !profileId)
       throw new Error("A confirmed session and profile are required");
+  }
+  function managementAvailable(method: string) {
+    // Core #2912: the method advertisement is authoritative; the negotiated
+    // feature is omitted from SessionOpened's supported_features response.
+    if (!supportsMethod(capabilities, method))
+      throw new Error(`${method} is not advertised by this server`);
+    if (!sessionId || !profileId)
+      throw new Error("A confirmed session and profile are required");
+  }
+  async function mcp(): Promise<RuntimeMcp> {
+    available(APPUI_INVENTORY_METHODS.MCP);
+    const value = await client.request(APPUI_INVENTORY_METHODS.MCP, {
+      session_id: sessionId,
+      profile_id: profileId,
+      include_disabled: true,
+    });
+    const result = parseRuntimeMcp(value, sessionId, profileId);
+    if (!result) throw new Error("Invalid or wrong-scope MCP status");
+    return result;
+  }
+  async function manage(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<RuntimeMcp> {
+    managementAvailable(method);
+    // finish_mutation returns one mutated server (or null), not a full
+    // mcp/status/list payload. Refresh the canonical inventory instead.
+    await client.request(method, params);
+    return mcp();
   }
   return {
     async tools(): Promise<RuntimeTools> {
@@ -179,16 +233,60 @@ export function createInventoryCommands(
       if (!result) throw new Error("Invalid or wrong-scope tool status");
       return result;
     },
-    async mcp(): Promise<RuntimeMcp> {
-      available(APPUI_INVENTORY_METHODS.MCP);
-      const value = await client.request(APPUI_INVENTORY_METHODS.MCP, {
+    mcp,
+    async createHttpConnector(name: string, url: string): Promise<RuntimeMcp> {
+      if (!nonempty(name) || !nonempty(url))
+        throw new Error("A connector name and URL are required");
+      return manage(MCP_CONNECTOR_METHODS.CREATE, {
         session_id: sessionId,
-        profile_id: profileId,
-        include_disabled: true,
+        connector: { transport: "http", name, url },
       });
-      const result = parseRuntimeMcp(value, sessionId, profileId);
-      if (!result) throw new Error("Invalid or wrong-scope MCP status");
-      return result;
+    },
+    async updateConnector(
+      connectorId: string,
+      patch: McpConnectorPatch,
+    ): Promise<RuntimeMcp> {
+      if (
+        !nonempty(connectorId) ||
+        !isRecord(patch) ||
+        (patch.name !== undefined && !nonempty(patch.name)) ||
+        (patch.url !== undefined && !nonempty(patch.url))
+      )
+        throw new Error("A valid connector id and patch are required");
+      return manage(MCP_CONNECTOR_METHODS.UPDATE, {
+        session_id: sessionId,
+        connector_id: connectorId,
+        patch: {
+          ...(patch.name === undefined ? {} : { name: patch.name }),
+          ...(patch.url === undefined ? {} : { url: patch.url }),
+        },
+      });
+    },
+    async deleteConnector(connectorId: string): Promise<RuntimeMcp> {
+      if (!nonempty(connectorId)) throw new Error("A connector id is required");
+      return manage(MCP_CONNECTOR_METHODS.DELETE, {
+        session_id: sessionId,
+        connector_id: connectorId,
+      });
+    },
+    async setConnectorEnabled(
+      connectorId: string,
+      enabled: boolean,
+    ): Promise<RuntimeMcp> {
+      if (!nonempty(connectorId) || typeof enabled !== "boolean")
+        throw new Error("A connector id and enabled state are required");
+      return manage(MCP_CONNECTOR_METHODS.SET_ENABLED, {
+        session_id: sessionId,
+        connector_id: connectorId,
+        enabled,
+      });
+    },
+    async reconnectConnector(connectorId: string): Promise<RuntimeMcp> {
+      if (!nonempty(connectorId)) throw new Error("A connector id is required");
+      return manage(MCP_CONNECTOR_METHODS.RECONNECT, {
+        session_id: sessionId,
+        connector_id: connectorId,
+      });
     },
   };
 }

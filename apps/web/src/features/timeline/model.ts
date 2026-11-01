@@ -324,7 +324,7 @@ export function timelineFromHydrate(
         }
       : entry;
   });
-  return withHydratedTurnOutcome(entries, result);
+  return withoutHydratedTiming(withHydratedTurnOutcome(entries, result));
 }
 
 export function withHydratedTurnOutcome(
@@ -343,6 +343,15 @@ export function withHydratedTurnOutcome(
       ? { latestTurnOutcome: latest.state }
       : {}),
   }));
+}
+
+/** Hydration has no reliable per-entry wall clock; never invent a zero duration. */
+export function withoutHydratedTiming(
+  entries: readonly TimelineEntry[],
+): TimelineEntry[] {
+  return entries.map(
+    ({ startedAtMs: _startedAtMs, endedAtMs: _endedAtMs, ...entry }) => entry,
+  );
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
@@ -444,7 +453,7 @@ export function foldNotification(
         pretty(params.arguments),
       );
       return startTool(settleReasoning(entries, turnId), {
-        id: `tool:${stringOf(params.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, params.tool_call_id),
         kind: "tool",
         title: toolName,
         body: pretty(params.arguments),
@@ -455,13 +464,9 @@ export function foldNotification(
       });
     }
     case CORE_UI_METHODS.TOOL_PROGRESS:
-      return progressTool(
-        entries,
-        `tool:${stringOf(params.tool_call_id, turnId)}`,
-        {
-          body: typeof params.message === "string" ? params.message : undefined,
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, params.tool_call_id), {
+        body: typeof params.message === "string" ? params.message : undefined,
+      });
     case CORE_UI_METHODS.TOOL_COMPLETED:
       return completeTool(entries, turnId, params.tool_call_id, {
         ...(typeof params.output_preview === "string"
@@ -476,6 +481,7 @@ export function foldNotification(
         turnId,
         "completed",
         usageText(params),
+        legacyUsageParts(params),
       );
     case CORE_UI_METHODS.TURN_ERROR:
       return settleTimelineTurn(
@@ -596,7 +602,7 @@ function foldProjection(
       // versions omit it: do not resurrect truncated-argument path guessing.
       const artifactPath = structuredWritePath(toolName, data.write_path);
       return startTool(settled, {
-        id: `tool:${stringOf(data.tool_call_id, turnId)}`,
+        id: toolEntryId(turnId, data.tool_call_id),
         kind: "tool",
         title: toolName,
         body: argumentsJson,
@@ -607,13 +613,9 @@ function foldProjection(
       });
     }
     case "tool_progress":
-      return progressTool(
-        entries,
-        `tool:${stringOf(data.tool_call_id, turnId)}`,
-        {
-          body: typeof data.message === "string" ? data.message : "",
-        },
-      );
+      return progressTool(entries, toolEntryId(turnId, data.tool_call_id), {
+        body: typeof data.message === "string" ? data.message : "",
+      });
     case "tool_end": {
       const raw = stringOf(data.output_preview ?? data.error ?? data.reason);
       return completeTool(entries, turnId, data.tool_call_id, {
@@ -640,6 +642,7 @@ function foldProjection(
         turnId,
         stringOf(data.outcome, "errored"),
         terminalErrorText(data.error),
+        projectionUsageParts(data.token_usage),
       );
     }
     case "background/spawn_complete": {
@@ -832,7 +835,14 @@ export function settleTimelineTurn(
   turnId: string,
   outcome: string,
   body = "",
+  usage?: { input: number; output: number },
 ): TimelineEntry[] {
+  const startedAtMs = entries
+    .filter((entry) => entry.turnId === turnId)
+    .map((entry) => entry.startedAtMs)
+    .filter((value): value is number => value !== undefined)
+    .sort((left, right) => left - right)[0];
+  const endedAtMs = Date.now();
   return upsert(sweepTurnStreamtails(entries, turnId, outcome), {
     id: `terminal:${turnId}`,
     kind: "system",
@@ -855,6 +865,9 @@ export function settleTimelineTurn(
             : "error",
     turnId,
     latestTurnOutcome: outcome,
+    startedAtMs: startedAtMs ?? endedAtMs,
+    endedAtMs,
+    ...(usage ? { turnUsage: usage } : {}),
   });
 }
 
@@ -868,6 +881,7 @@ function startTool(
   entries: readonly TimelineEntry[],
   entry: TimelineEntry,
 ): TimelineEntry[] {
+  entry = { ...entry, toolArguments: entry.toolArguments ?? entry.body };
   if (entries.find((current) => current.id === entry.id)?.toolSettled) {
     return entries.slice();
   }
@@ -906,6 +920,11 @@ function progressTool(
   });
 }
 
+/** Tool call ids are only unique within a turn; retries may reuse them. */
+function toolEntryId(turnId: string, toolCallId: unknown): string {
+  return `tool:${turnId}:${stringOf(toolCallId, turnId)}`;
+}
+
 function completeTool(
   entries: readonly TimelineEntry[],
   turnId: string,
@@ -916,7 +935,7 @@ function completeTool(
   // using its server-provided call identity; never invent an unscoped tool.
   if (typeof toolCallId !== "string" || !toolCallId.trim())
     return entries.slice();
-  const id = `tool:${toolCallId}`;
+  const id = toolEntryId(turnId, toolCallId);
   const existing = entries.find((entry) => entry.id === id);
   return upsert(entries, {
     ...(existing ?? {
@@ -931,6 +950,10 @@ function completeTool(
     toolSettled: true,
     ...(hasTerminal(entries, turnId) ? { turnSettled: true } : {}),
   });
+}
+
+function normalizedToolOutput(value: string): string {
+  return value.trim().replace(/^Error:\s*/, "");
 }
 
 function coalesceHydratedTools(
@@ -949,7 +972,7 @@ function coalesceHydratedTools(
       isRecord(data) &&
       typeof data.tool_call_id === "string"
     ) {
-      const id = `tool:${data.tool_call_id}`;
+      const id = toolEntryId(envelope.turn_id, data.tool_call_id);
       const previous = starts.get(id);
       starts.set(
         id,
@@ -966,10 +989,10 @@ function coalesceHydratedTools(
       typeof data.output_preview !== "string"
     )
       continue;
-    const preview = data.output_preview.trim();
+    const preview = normalizedToolOutput(data.output_preview);
     if (!preview) continue;
     const truncatedPrefix = toolPreviewPrefix(data.output_preview);
-    const toolId = `tool:${stringOf(data.tool_call_id, envelope.turn_id)}`;
+    const toolId = toolEntryId(envelope.turn_id, data.tool_call_id);
     const card = entries.find((entry) => entry.id === toolId);
     if (!card) continue;
     const candidates = entries.filter(
@@ -977,10 +1000,11 @@ function coalesceHydratedTools(
         entry.kind === "tool" &&
         entry.id.startsWith("hydrated:") &&
         entry.turnId === envelope.turn_id &&
-        (entry.body.trim() === preview ||
-          (preview.length >= 80 && entry.body.trim().startsWith(preview)) ||
+        (normalizedToolOutput(entry.body) === preview ||
+          (preview.length >= 80 &&
+            normalizedToolOutput(entry.body).startsWith(preview)) ||
           (truncatedPrefix !== null &&
-            entry.body.trim().startsWith(truncatedPrefix))),
+            normalizedToolOutput(entry.body).startsWith(truncatedPrefix))),
     );
     cards.set(toolId, { card, candidates });
   }
@@ -1172,6 +1196,29 @@ function pretty(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function legacyUsageParts(
+  value: Record<string, unknown>,
+): { input: number; output: number } | undefined {
+  const input = typeof value.tokens_in === "number" ? value.tokens_in : null;
+  const output = typeof value.tokens_out === "number" ? value.tokens_out : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
+}
+
+function projectionUsageParts(
+  value: unknown,
+): { input: number; output: number } | undefined {
+  if (!isRecord(value)) return undefined;
+  const input =
+    typeof value.input_tokens === "number" ? value.input_tokens : null;
+  const output =
+    typeof value.output_tokens === "number" ? value.output_tokens : null;
+  return input === null && output === null
+    ? undefined
+    : { input: input ?? 0, output: output ?? 0 };
 }
 
 function usageText(value: Record<string, unknown>): string {

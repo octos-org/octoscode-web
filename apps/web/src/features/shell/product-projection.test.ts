@@ -8,7 +8,7 @@ import {
 } from "./product-projection.ts";
 
 describe("product projections", () => {
-  it("projects whole permission presets and retains an unlisted current state", () => {
+  it("projects every legal combination and retains an unlisted current state", () => {
     expect(
       permissionOptions({
         session_id: "s1",
@@ -19,12 +19,13 @@ describe("product projections", () => {
         ],
       }),
     ).toMatchObject([
+      { id: "read_only:allow", modeLabel: "Read" },
+      { id: "read_only:deny" },
       {
         id: "workspace_write:allow",
         modeLabel: "Write",
         networkLabel: "Network allowed",
       },
-      { id: "read_only:deny" },
       { id: "workspace_write:deny" },
     ]);
   });

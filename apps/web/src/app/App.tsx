@@ -29,10 +29,12 @@ import {
   timelineActivity,
 } from "../features/timeline/entry-model.ts";
 import { useConversationScroll } from "../features/timeline/use-conversation-scroll.ts";
+import { waitingFeedback } from "../features/session/waiting-feedback.ts";
 import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { peerReadonlySlug } from "../features/composer/peer-readonly.ts";
 import { planCardVisible } from "../features/supervision/plan.ts";
 import {
   type ComponentType,
@@ -55,9 +57,13 @@ import {
   CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
+  type PermissionProfileSelection,
   type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
 import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
+import { useExecutionEnvironment } from "../features/session-config/use-execution-environment.ts";
 import {
   peerAnswerRequest,
   peerRowAttention,
@@ -73,8 +79,14 @@ import {
   collapseAll,
   expandAll,
   initialFoldState,
+  setFold,
   toggleFold,
 } from "../features/timeline/folds.ts";
+import { stepGroupIds } from "../features/timeline/step-groups.ts";
+import {
+  latestTextPlan,
+  parseTextPlan,
+} from "../features/timeline/text-plan.ts";
 import {
   initialActivityState,
   turnActivity,
@@ -116,9 +128,13 @@ import {
   saveDurableDraft,
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
-import { useWorkspaceSessionCatalog } from "../features/session/workspace-session-catalog.ts";
+import {
+  useWorkspaceSessionCatalog,
+  type WorkspaceSessionCatalogSnapshot,
+} from "../features/session/workspace-session-catalog.ts";
 import {
   browserStorage,
+  forgetKnownSession,
   loadComposerDrafts,
   loadKnownSessions,
   rememberKnownSession,
@@ -139,6 +155,24 @@ import {
   profileDefaultNeedsRestart,
   selectedModel,
 } from "../features/shell/product-projection.ts";
+import { isPermissionEscalation } from "../features/shell/permission-projection.ts";
+import {
+  forgetRemoteFolder,
+  loadRemoteFolders,
+  rememberRemoteFolder,
+} from "../features/remote/remote-folders.ts";
+import { useRemoteCatalog } from "../features/remote/remote-catalog.ts";
+import { remoteLink } from "../features/remote/remote-link.ts";
+import {
+  remoteKey,
+  remoteOverview,
+  type LiveSessionSnapshot,
+  type RemoteRow,
+} from "../features/remote/remote-model.ts";
+import {
+  isRemoteViewUrl,
+  withRemoteView,
+} from "../features/remote/remote-url.ts";
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
@@ -152,6 +186,7 @@ import {
 import {
   classifyConnectFailure,
   connectFailureCopy,
+  probeRejectedToken,
 } from "../features/connection/connect-failure.ts";
 import { shouldRouteNoModelSetup } from "../features/connection/no-model-setup.ts";
 import {
@@ -193,17 +228,22 @@ import {
   firstTemplateBlank,
   type TaskTemplate,
 } from "../features/templates/task-templates.ts";
+import {
+  applyTemplatePermission,
+  applyTemplateReadOnly,
+} from "../features/templates/template-permission.ts";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
-import { PanelRightIcon } from "../ui/Icon.tsx";
+import { ArrowLeftIcon, PanelRightIcon } from "../ui/Icon.tsx";
 import { CopySessionLinkButton } from "../features/session-links/CopySessionLinkButton.tsx";
 import {
   readPanelLayout,
   writePanelLayout,
   type SessionPanelTab,
 } from "../features/side-panel/panel-layout.ts";
-import { CopyConversationButton } from "../features/transcript-export/CopyConversationButton.tsx";
+import { SessionPanelHost } from "../features/side-panel/SessionPanelHost.tsx";
+import { ConversationActionsMenu } from "../features/shell/ConversationActionsMenu.tsx";
 import { contextUsage } from "../features/context/model.ts";
 import { ProfileMutationLeases } from "../features/product-settings/profile-mutation-leases.ts";
 import type {
@@ -354,6 +394,11 @@ const CronSettingsContent = lazyNamed(
   () => import("../features/cron/CronSettingsContent.tsx"),
   (module) => module.CronSettingsContent,
 );
+const REMOTE_REFRESH_MS = 15_000;
+const RemoteHome = lazyNamed(
+  () => import("../features/remote/RemoteHome.tsx"),
+  (module) => module.RemoteHome,
+);
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
   (module) => module.ApprovalPanel,
@@ -377,10 +422,6 @@ const modelManagementSettingsLoader = () =>
 const ModelManagementSettings = lazyNamed(
   modelManagementSettingsLoader,
   (module) => module.ModelManagementSettings,
-);
-const SessionPanelHost = lazyNamed(
-  () => import("../features/side-panel/SessionPanelHost.tsx"),
-  (module) => module.SessionPanelHost,
 );
 const TaskDetailDialog = lazyNamed(
   () => import("../features/supervision/TaskDetailDialog.tsx"),
@@ -493,6 +534,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [sendingNow, setSendingNow] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -609,6 +651,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // when the seat proof lands.
   const [fleetStartPending, setFleetStartPending] =
     useState<FleetStartSequencerState>({ kind: "idle" });
+  const [nativeFleetStartState, setNativeFleetStartState] = useState<
+    FleetStartState | undefined
+  >(undefined);
+  const [fleetGatherState, setFleetGatherState] = useState<
+    "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed"
+  >("idle");
   const [showThinkingPreference] = useState(() =>
     parseShowThinking(
       browserLocalStorage()?.getItem(SHOW_THINKING_KEY) ?? null,
@@ -639,6 +687,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   kind: "tool-start",
                   atMs: Date.now(),
                   toolName: last.title,
+                  argumentsJson: last.toolArguments ?? last.body,
                 } as const)
               : ({ kind: "tool-end", atMs: Date.now() } as const)
             : ({ kind: "assistant-delta", atMs: Date.now() } as const);
@@ -756,6 +805,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(browserStorage("sessionStorage"), connection),
   );
+  // Phone remote control (`?view=remote`): "home" is the overview, "session"
+  // is an opened conversation reached from it; null is the ordinary app.
+  const [remoteView, setRemoteView] = useState<"home" | "session" | null>(() =>
+    isRemoteViewUrl(window.location.href) ? "home" : null,
+  );
+  const remote = remoteView !== null;
+  const [remoteFolders, setRemoteFolders] = useState(() =>
+    loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+  );
+  const [remoteOpening, setRemoteOpening] = useState<string | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [remoteRefresh, setRemoteRefresh] = useState(0);
+  const [remoteNow, setRemoteNow] = useState(() => Date.now());
   // The session seam the entry's connect screen drives. Published during
   // render so every call sees this render's closures, and absent entirely
   // while the shell is unmounted (where each of these is a no-op anyway).
@@ -789,9 +851,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [savedLinkError, setSavedLinkError] = useState<string | null>(null);
   const autoLinkAttempted = useRef(false);
   const codingCapabilities = codingProductCapabilities(session.capabilities);
-  const fleetSupported =
+  const nativeFleetSupported =
+    supportsMethod(session.capabilities, "peer/prepare") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.SESSION_OPEN) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_START);
+  const nativeFleetControlsSupported =
+    supportsMethod(session.capabilities, "turn/steer") &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.TURN_INTERRUPT) &&
+    supportsMethod(session.capabilities, CORE_UI_METHODS.APPROVAL_RESPOND);
+  const nativeFleetGatherSupported = supportsMethod(
+    session.capabilities,
+    "peer/gather",
+  );
+  const externalFleetSupported =
     peerControlAdmitted(session.capabilities) &&
     peerDispatchAdmitted(session.capabilities);
+  const nativeFleetActive = nativeFleetSupported && !externalFleetSupported;
+  const fleetSupported = nativeFleetSupported || externalFleetSupported;
   // WEB-WORKSPACE-BROWSER-CONTRACT-5000 §Gate: null unless the server
   // advertises `onboarding.workspace_browse.v1`, and the picker shows no
   // browsing affordance at all without an adapter.
@@ -1094,6 +1170,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     "/",
     session.opened?.capabilities,
   ).some((command) => command.intent === "autonomy");
+  const [deletedSessionIds, setDeletedSessionIds] = useState<readonly string[]>(
+    [],
+  );
+  const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  useEffect(() => {
+    const reopened = session.opened?.session_id;
+    if (!reopened) return;
+    setDeletedSessionIds((current) =>
+      current.filter((sessionId) => sessionId !== reopened),
+    );
+  }, [session.opened?.session_id]);
   // The server's per-workspace history (`session/list { cwd, profile_id }`),
   // re-listed when the active session changes or a turn finishes so a new
   // conversation or a retitled one shows up without a reload. It is keyed to
@@ -1108,17 +1195,167 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
     refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
       conversation.queue.active?.turnId ?? ""
-    }`,
+    }\n${catalogRefreshNonce}`,
   });
+  // Deleted rows stay hidden while the catalog re-lists, so the old listing
+  // cannot flash them back into the sidebar.
+  const visibleCatalog = useMemo<WorkspaceSessionCatalogSnapshot>(
+    () =>
+      deletedSessionIds.length === 0
+        ? sessionCatalog
+        : new Map(
+            [...sessionCatalog].map(([path, workspace]) => [
+              path,
+              {
+                ...workspace,
+                sessions: workspace.sessions.filter(
+                  (row) => !deletedSessionIds.includes(row.sessionId),
+                ),
+              },
+            ]),
+          ),
+    [deletedSessionIds, sessionCatalog],
+  );
   const navigableSessions = useMemo(() => {
-    const catalogRefs = [...sessionCatalog.values()].flatMap(
+    const catalogRefs = [...visibleCatalog.values()].flatMap(
       (workspace) => workspace.sessions,
     );
     return mergeConfirmedRetainedSessions(knownSessions, [
       ...workspaceProduct.backgroundTurns,
       ...catalogRefs,
-    ]);
-  }, [knownSessions, sessionCatalog, workspaceProduct.backgroundTurns]);
+    ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
+  }, [
+    knownSessions,
+    visibleCatalog,
+    workspaceProduct.backgroundTurns,
+    deletedSessionIds,
+  ]);
+  // ---- Phone remote control -------------------------------------------
+  const remoteServerLink = remoteLink(session.server);
+  const remoteSelectedLive: LiveSessionSnapshot | null =
+    session.opened?.workspace_root && session.opened.active_profile_id
+      ? {
+          sessionId: session.opened.session_id,
+          profileId: session.opened.active_profile_id,
+          workspaceRoot: session.opened.workspace_root,
+          firstPrompt: null,
+          state:
+            interactions.approval || interactions.question
+              ? "waiting"
+              : conversation.queue.active
+                ? "running"
+                : "idle",
+          waitingFor: interactions.approval
+            ? {
+                kind: "approval",
+                title: interactions.approval.title,
+                toolName: interactions.approval.toolName || null,
+              }
+            : interactions.question
+              ? {
+                  kind: "question",
+                  title: interactions.question.title,
+                  toolName: null,
+                }
+              : null,
+        }
+      : null;
+  const remoteBackgroundKey = workspaceProduct.backgroundTurns
+    .map((turn) => `${turn.sessionId}:${turn.state}`)
+    .join("|");
+  const remoteCatalog = useRemoteCatalog({
+    client: remote && session.authenticated ? protocol.client : null,
+    profileId: catalogProfileId,
+    folders: remoteFolders.map((folder) => folder.path),
+    refreshKey: `${protocol.authorityKey}\n${remoteRefresh}\n${
+      conversation.queue.active?.turnId ?? ""
+    }\n${remoteBackgroundKey}`,
+  });
+  const remoteOverviewState = useMemo(
+    () =>
+      remoteOverview({
+        catalog: [...remoteCatalog.values()].flatMap(
+          (folder) => folder.sessions,
+        ),
+        live: [
+          ...workspaceProduct.backgroundTurns,
+          ...(remoteSelectedLive ? [remoteSelectedLive] : []),
+        ],
+      }),
+    // remoteSelectedLive is rebuilt every render; its fields are the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      remoteCatalog,
+      workspaceProduct.backgroundTurns,
+      remoteSelectedLive?.sessionId,
+      remoteSelectedLive?.state,
+      remoteSelectedLive?.waitingFor?.title,
+    ],
+  );
+  const remoteListedAt = (() => {
+    const times = [...remoteCatalog.values()]
+      .map((folder) => folder.listedAt)
+      .filter((value): value is number => value !== null);
+    return times.length ? Math.min(...times) : null;
+  })();
+  const remoteUnwatchedKey = remoteOverviewState.unwatched
+    .map(remoteKey)
+    .join("|");
+  useEffect(() => {
+    if (!remote || remoteServerLink.kind !== "online") return;
+    if (!remoteOverviewState.unwatched.length) return;
+    void workspaceProduct.watchSessions(remoteOverviewState.unwatched);
+    // The key is the identity of the unwatched set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, remoteServerLink.kind, remoteUnwatchedKey]);
+  useEffect(() => {
+    if (remoteView !== "home") return;
+    // Other clients start and finish work too: re-list while the overview is
+    // on screen, and keep its relative times honest.
+    const timer = window.setInterval(() => {
+      setRemoteNow(Date.now());
+      setRemoteRefresh((value) => value + 1);
+    }, REMOTE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [remoteView]);
+  useEffect(() => {
+    setRemoteFolders(
+      loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+    );
+  }, [connection.endpoint]);
+  const setRemoteViewInUrl = (next: "home" | "session" | null) => {
+    setRemoteView(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      withRemoteView(window.location.href, next !== null),
+    );
+  };
+  const openRemoteRow = async (row: RemoteRow) => {
+    setRemoteError(null);
+    const opened = session.opened;
+    if (
+      opened?.session_id === row.sessionId &&
+      opened.workspace_root === row.workspaceRoot
+    ) {
+      setRemoteView("session");
+      return;
+    }
+    setRemoteOpening(row.key);
+    try {
+      const outcome = await workspaceProduct.openSession({
+        sessionId: row.sessionId,
+        cwd: row.workspaceRoot,
+        profileId: row.profileId,
+        resolveLaunch: false,
+      });
+      if (outcome === "opened") setRemoteView("session");
+      else setRemoteError(t("This session could not be opened. Try again."));
+    } finally {
+      setRemoteOpening(null);
+    }
+  };
+  // -----------------------------------------------------------------------
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -1550,7 +1787,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
     string | null
   >(null);
-  const submit = (override?: string, queueOnly = false) => {
+  const readOnlyPeer =
+    peerReadonlySlug(
+      peers.manager?.snapshot().peers ?? [],
+      session.opened?.session_id ?? null,
+    ) !== null;
+  const submit = async (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     if (!text) {
       conversation.btw?.dismiss();
@@ -1560,6 +1802,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (
       !session.connected ||
       !opened ||
+      !activeSessionKey ||
+      readOnlyPeer ||
       !text ||
       // #56: another tab owns this session's lock — dispatching here
       // would interleave with it. Take over (banner button) to regain.
@@ -1580,6 +1824,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (intent.kind === "prompt" && conversation.turnRecovery) return;
     if (intent.kind === "prompt" && !codingCapabilities.turnStartAvailable)
       return;
+    if (
+      intent.kind === "prompt" &&
+      appliedTemplate?.access === "read" &&
+      currentPermission?.mode !== "read_only"
+    ) {
+      const confirmed = await ensureTemplateReadOnly(
+        appliedTemplate,
+        activeSessionKey,
+      );
+      if (!confirmed) {
+        if (activeSessionKeyRef.current === activeSessionKey) {
+          setCommandError(readOnlyPermissionError());
+        }
+        return;
+      }
+    }
+    if (
+      intent.kind === "prompt" &&
+      appliedTemplate?.access === "write" &&
+      currentPermission?.mode === "read_only"
+    ) {
+      setCommandError(
+        t("This template needs write permission. Switch before sending."),
+      );
+      return;
+    }
     // Local admission may reject an incomplete upload or a retired Session.
     // Keep the original text and image drafts until that admission succeeds.
     if (
@@ -1593,6 +1863,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     )
       return;
 
+    if (appliedTemplate) {
+      setTemplateNotice(null);
+      templatePermissionOriginRef.current = null;
+      templatePermissionRequestRef.current = null;
+      setTemplatePermission(null);
+    }
     draftRef.current = "";
     setDraft("");
     setCommandPaletteForced(false);
@@ -1951,7 +2227,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const retryPermissionDenied = async (turnId: string) => {
-    if (permissionRetryBusyTurnId || !safety.permission.editable) return;
+    if (
+      readOnlyPeer ||
+      permissionRetryBusyTurnId ||
+      !safety.permission.editable
+    )
+      return;
     const client = protocol.client;
     const opened = session.opened;
     const option = permissionRetryProfile;
@@ -1997,6 +2278,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
   const activityLabel = timelineActivity(conversation.timeline, activeTurnId);
+  const activeTurnWaitRef = useRef<{
+    turnId: string;
+    startedAtMs: number;
+  } | null>(null);
+  const [waitNow, setWaitNow] = useState(() => Date.now());
+  if (activeTurnId) {
+    if (activeTurnWaitRef.current?.turnId !== activeTurnId)
+      activeTurnWaitRef.current = {
+        turnId: activeTurnId,
+        startedAtMs: Date.now(),
+      };
+  } else activeTurnWaitRef.current = null;
+  useEffect(() => {
+    if (!activeTurnId) return;
+    const timer = window.setInterval(() => setWaitNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [activeTurnId]);
+  const longWait = activityLabel
+    ? waitingFeedback({
+        activityLabel,
+        turnStarting,
+        elapsedMs: activeTurnWaitRef.current
+          ? waitNow - activeTurnWaitRef.current.startedAtMs
+          : 0,
+      })
+    : null;
+  const localizedActivityLabel = activityLabel
+    ? activityLabel.startsWith("Running ") && activityLabel.endsWith("…")
+      ? t("Running {value0}…", {
+          value0: activityLabel.slice("Running ".length, -1),
+        })
+      : t(activityLabel)
+    : null;
+  const waitDuration = longWait
+    ? longWait.elapsedSeconds >= 60
+      ? t("{value0}m {value1}s", {
+          value0: Math.floor(longWait.elapsedSeconds / 60),
+          value1: longWait.elapsedSeconds % 60,
+        })
+      : t("{value0}s", { value0: longWait.elapsedSeconds })
+    : "";
   const hasUnfinishedWork = Boolean(
     activeTurnId ||
     conversation.queue.pending.length ||
@@ -2070,6 +2392,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     writePanelLayout(browserLocalStorage(), panelLayout);
   }, [panelLayout]);
   const panelOpen = compact ? panelDrawerOpen : panelLayout.open;
+  useEffect(() => {
+    if (panelLayout.tab === "automation" && !autonomyAvailable) {
+      setPanelLayout((current) => ({ ...current, tab: "overview" }));
+    }
+  }, [autonomyAvailable, panelLayout.tab]);
   const showPanel = (tab: SessionPanelTab, overlay = compact) => {
     setPanelLayout((current) => ({
       ...current,
@@ -2086,8 +2413,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (previewId) void safety.openDiffReview(previewId);
   };
   // A plan is dropped when its turn ends; the Overview keeps showing the last
-  // one this view saw, marked as ended, until a new plan replaces it.
-  const livePlan = work.supervision.plan;
+  // one this view saw, marked as ended, until a new plan replaces it. The
+  // model's opening "Plan:" checklist counts as a plan too, so the transcript
+  // and the panel never disagree about whether there is one.
+  const textPlan = useMemo(
+    () =>
+      latestTextPlan(conversation.timeline, session.opened?.session_id ?? ""),
+    [conversation.timeline, session.opened?.session_id],
+  );
+  const livePlan =
+    work.supervision.plan ??
+    (textPlan && !textPlan.ended ? textPlan.plan : null);
   const [lastPlan, setLastPlan] = useState<{
     key: string | null;
     plan: PlanUpdated;
@@ -2095,8 +2431,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   useEffect(() => {
     if (livePlan) setLastPlan({ key: activeSessionKey, plan: livePlan });
   }, [livePlan, activeSessionKey]);
-  const finishedPlan =
-    !livePlan && lastPlan?.key === activeSessionKey ? lastPlan.plan : null;
+  const finishedPlan = livePlan
+    ? null
+    : newerPlan(
+        lastPlan?.key === activeSessionKey ? lastPlan.plan : null,
+        textPlan?.ended ? textPlan.plan : null,
+      );
+  const planAvailable = work.supervision.planAvailable || Boolean(textPlan);
   // Files Octos sent with its replies (user uploads are inputs, not outputs).
   const deliveredFiles = useMemo(
     () => [
@@ -2145,7 +2486,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       onRefreshChanges={() => void safety.openDiffReview()}
       onChangesScope={(scope) => void safety.openDiffReview(undefined, scope)}
       onOpenChange={(change) => openChangePreview(change.previewId)}
-      planAvailable={work.supervision.planAvailable}
+      planAvailable={planAvailable}
       plan={livePlan}
       finishedPlan={finishedPlan}
       taskListAvailable={work.supervision.taskListAvailable}
@@ -2158,6 +2499,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
       delivered={deliveredFiles}
       access={attachmentAccess}
+      automation={
+        protocol.client &&
+        session.opened &&
+        session.opened.capabilities &&
+        autonomyAvailable
+          ? {
+              client: protocol.client,
+              sessionId: session.opened.session_id,
+              capabilities: session.opened.capabilities,
+              authorityKey: protocol.authorityKey,
+            }
+          : null
+      }
     />
   );
 
@@ -2280,6 +2634,171 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
     | null
   >(null);
+  const [templatePermission, setTemplatePermission] = useState<{
+    sessionKey: string;
+    action: "read" | "restore";
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
+  const templatePermissionRequestRef = useRef<{
+    key: string;
+    promise: Promise<boolean>;
+  } | null>(null);
+  const templatePermissionOriginRef = useRef<{
+    sessionKey: string;
+    selection: PermissionProfileSelection;
+  } | null>(null);
+  const readOnlyPermissionError = () =>
+    t(
+      "Read-only permission is not confirmed. Current permission is still workspace write; sending is blocked.",
+    );
+  const restorePermissionError = () =>
+    t("Could not restore the permission from before this template.");
+  const ensureTemplateReadOnly = (
+    template: TaskTemplate,
+    sessionKey: string,
+  ): Promise<boolean> => {
+    const key = `read:${sessionKey}:${template.id}`;
+    const existing = templatePermissionRequestRef.current;
+    if (existing?.key === key) return existing.promise;
+    const previous = existing?.promise;
+    if (!previous && currentPermission?.mode === "read_only") {
+      setTemplatePermission(null);
+      return Promise.resolve(true);
+    }
+    const client = protocol.client;
+    const opened = session.opened;
+    if (
+      !client ||
+      !opened ||
+      !supportsMethod(
+        opened.capabilities,
+        CORE_UI_METHODS.PERMISSION_PROFILE_SET,
+      )
+    ) {
+      setTemplatePermission({
+        sessionKey,
+        action: "read",
+        busy: false,
+        error: readOnlyPermissionError(),
+      });
+      return Promise.resolve(false);
+    }
+    setTemplatePermission({
+      sessionKey,
+      action: "read",
+      busy: true,
+      error: null,
+    });
+    const promise = (async () => {
+      const ownerIsCurrent = () =>
+        activeSessionClientRef.current === client &&
+        activeSessionKeyRef.current === sessionKey &&
+        templatePermissionRequestRef.current?.key === key;
+      if (previous) await previous;
+      try {
+        await applyTemplateReadOnly(client, opened.session_id);
+        if (!ownerIsCurrent()) return false;
+        await safety.refreshPermission();
+        if (!ownerIsCurrent()) return false;
+        templatePermissionRequestRef.current = null;
+        setTemplatePermission(null);
+        return true;
+      } catch {
+        if (ownerIsCurrent()) {
+          templatePermissionRequestRef.current = null;
+          setTemplatePermission({
+            sessionKey,
+            action: "read",
+            busy: false,
+            error: readOnlyPermissionError(),
+          });
+        }
+        return false;
+      }
+    })();
+    templatePermissionRequestRef.current = { key, promise };
+    return promise;
+  };
+  const restoreTemplatePermission = (
+    template: TaskTemplate,
+    sessionKey: string,
+  ): Promise<boolean> => {
+    const origin = templatePermissionOriginRef.current;
+    if (!origin || origin.sessionKey !== sessionKey)
+      return Promise.resolve(true);
+    const key = `restore:${sessionKey}:${template.id}`;
+    const existing = templatePermissionRequestRef.current;
+    if (existing?.key === key) return existing.promise;
+    const previous = existing?.promise;
+    if (
+      !previous &&
+      currentPermission?.mode === origin.selection.mode &&
+      currentPermission.network === origin.selection.network
+    ) {
+      templatePermissionOriginRef.current = null;
+      setTemplatePermission(null);
+      return Promise.resolve(true);
+    }
+    const client = protocol.client;
+    const opened = session.opened;
+    if (
+      !client ||
+      !opened ||
+      !supportsMethod(
+        opened.capabilities,
+        CORE_UI_METHODS.PERMISSION_PROFILE_SET,
+      )
+    ) {
+      setTemplatePermission({
+        sessionKey,
+        action: "restore",
+        busy: false,
+        error: restorePermissionError(),
+      });
+      return Promise.resolve(false);
+    }
+    setTemplatePermission({
+      sessionKey,
+      action: "restore",
+      busy: true,
+      error: null,
+    });
+    const promise = (async () => {
+      const ownerIsCurrent = () =>
+        activeSessionClientRef.current === client &&
+        activeSessionKeyRef.current === sessionKey &&
+        templatePermissionRequestRef.current?.key === key;
+      if (previous) await previous;
+      try {
+        await applyTemplatePermission(
+          client,
+          opened.session_id,
+          origin.selection,
+        );
+        if (!ownerIsCurrent()) return false;
+        await safety.refreshPermission();
+        if (!ownerIsCurrent()) return false;
+        templatePermissionOriginRef.current = null;
+        templatePermissionRequestRef.current = null;
+        setTemplatePermission(null);
+        return true;
+      } catch {
+        if (ownerIsCurrent()) {
+          templatePermissionRequestRef.current = null;
+          setTemplatePermission({
+            sessionKey,
+            action: "restore",
+            busy: false,
+            error: restorePermissionError(),
+          });
+        }
+        return false;
+      }
+    })();
+    templatePermissionRequestRef.current = { key, promise };
+    return promise;
+  };
   const heroPickerRef = useRef<HTMLDivElement>(null);
   const applyTemplate = (template: TaskTemplate, sessionKey: string) => {
     const text = template.copy[preferences.language].prompt;
@@ -2293,6 +2812,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       text,
       previousDraft,
     });
+    if (template.access === "read") {
+      if (!templatePermissionOriginRef.current && currentPermission) {
+        templatePermissionOriginRef.current = {
+          sessionKey,
+          selection: { ...currentPermission },
+        };
+      }
+      void ensureTemplateReadOnly(template, sessionKey);
+    } else if (templatePermissionOriginRef.current) {
+      void restoreTemplatePermission(template, sessionKey);
+    } else if (!templatePermissionRequestRef.current) {
+      setTemplatePermission(null);
+    }
     // Land on the first blank so typing replaces it.
     requestAnimationFrame(() => {
       const input = composerRef.current;
@@ -2353,6 +2885,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 ? () => {
                     draftRef.current = templateNotice.previousDraft;
                     setDraft(templateNotice.previousDraft);
+                    const template = findTaskTemplate(
+                      templateNotice.templateId,
+                    );
+                    if (template) {
+                      void restoreTemplatePermission(
+                        template,
+                        templateNotice.sessionKey,
+                      );
+                    }
                     setTemplateNotice(null);
                     composerRef.current?.focus();
                   }
@@ -2671,13 +3212,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       },
     });
   };
-  const requestNewSession = (workspaceId?: string) => {
+  const sessionWorkspaces = recentWorkspaces.filter(
+    (workspace, index, workspaces) =>
+      workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
+      index,
+  );
+  const requestNewSession = (workspaceId?: string, forcePicker = false) => {
     if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
       return;
     if (compact) setSidebarCollapsed(true);
     const workspace = workspaceId
-      ? recentWorkspaces.find((candidate) => candidate.id === workspaceId)
-      : null;
+      ? sessionWorkspaces.find((candidate) => candidate.id === workspaceId)
+      : forcePicker
+        ? null
+        : sessionWorkspaces.length === 1
+          ? sessionWorkspaces[0]
+          : null;
     if (workspace) {
       createSessionInWorkspace(workspace.path);
       return;
@@ -2688,14 +3238,41 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
     setWorkspacePicker({ open: true, view: "choose" });
   };
+  const initialPermissionsRef = useRef(
+    new Map<string, PermissionProfileSelection>(),
+  );
+  const defaultPermission = useMemo(() => {
+    const result = safety.permission.result;
+    if (!activeSessionKey || !result) return undefined;
+    const key = `${protocol.authorityKey}:${activeSessionKey}`;
+    const initial = initialPermissionsRef.current.get(key);
+    if (initial) return initial;
+    initialPermissionsRef.current.set(key, result.current);
+    return result.current;
+  }, [
+    activeSessionKey,
+    protocol.authorityKey,
+    safety.permission.result?.session_id,
+  ]);
+  const currentPermission = safety.permission.result?.current;
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
-  ).map((option) => ({
-    ...option,
-    modeLabel: t(option.modeLabel),
-    networkLabel: t(option.networkLabel),
-  }));
-  const currentPermission = safety.permission.result?.current;
+    defaultPermission,
+  )
+    // The phone may narrow a session's access, never widen it; raising
+    // permissions stays on the computer.
+    .filter(
+      (option) =>
+        !remote ||
+        (option.mode === currentPermission?.mode &&
+          option.network === currentPermission.network) ||
+        !isPermissionEscalation(option, currentPermission),
+    )
+    .map((option) => ({
+      ...option,
+      modeLabel: t(option.modeLabel),
+      networkLabel: t(option.networkLabel),
+    }));
   const projectedModelGroups = modelGroups(models.state.models);
   const currentProfileModel = selectedModel(models.state.models);
   const runtimeModel = work.supervision.runtimeStatus?.model;
@@ -2719,19 +3296,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         locked:
           runtimeMutationBlocked ||
           safety.permission.busy ||
+          (templatePermission?.sessionKey === activeSessionKey &&
+            templatePermission.busy) ||
           !safety.permission.editable,
         labels: translateLabels(PERMISSION_LABELS, t),
         riskCopy: translateLabels(PERMISSION_RISK_COPY, t),
         onSelect: (option: (typeof projectedPermissionOptions)[number]) => {
-          const selection = [
-            safety.permission.result?.current,
-            ...(safety.permission.result?.profiles ?? []),
-          ].find(
-            (candidate) =>
-              candidate?.mode === option.mode &&
-              candidate.network === option.network,
-          );
-          if (selection) void safety.updatePermission(selection);
+          void safety.updatePermission({
+            mode: option.mode,
+            network: option.network,
+          });
         },
         onRetry: () => void safety.refreshPermission(),
       }
@@ -2898,6 +3472,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
    * only the settled kind (plus the bounded refusal kind) off this value.
    */
   const fleetStartSettle = ((): FleetStartState | undefined => {
+    if (nativeFleetActive) return nativeFleetStartState;
     const state = session.peerController?.state;
     if (state === undefined) return undefined;
     if (state.kind === "accepted")
@@ -2974,7 +3549,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     carryDraftRef.current = draftRef.current.trim()
       ? { text: draftRef.current, fromKey: activeSessionKey }
       : null;
-    requestNewSession();
+    requestNewSession(undefined, true);
   };
   const imagesAvailable =
     session.connected && codingCapabilities.turnStartAvailable;
@@ -2999,11 +3574,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setImagesOpen(true);
   };
 
+  // Stop and Send now both interrupt the running turn; once one is on its
+  // way the buttons say so and stop taking clicks.
+  const stopping = Boolean(conversation.interruptingTurnId);
   const recoveryStop = conversation.interruptible ? (
-    <button type="button" onClick={() => void conversation.interrupt()}>
-      {t("Stop")}
+    <button
+      type="button"
+      disabled={stopping}
+      aria-busy={stopping || undefined}
+      onClick={() => void conversation.interrupt()}
+    >
+      {stopping ? t("Stopping…") : t("Stop")}
     </button>
   ) : null;
+  const sendPendingNow = () => {
+    if (sendingNow) return;
+    setSendingNow(true);
+    void conversation.sendPendingNow().finally(() => setSendingNow(false));
+  };
 
   const showProductShell = Boolean(
     session.authenticated || workspaceProduct.launch.decision,
@@ -3042,14 +3630,63 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.opened,
   ]);
 
+  const [tokenRejected, setTokenRejected] = useState(false);
+  useEffect(() => {
+    setTokenRejected(false);
+    if (
+      !session.error ||
+      classifyConnectFailure(session.error)?.kind !== "unreachable" ||
+      !gate.panel.value.token.trim()
+    )
+      return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4_000);
+    void probeRejectedToken(
+      connection.endpoint,
+      gate.panel.value.token,
+      controller.signal,
+    ).then((rejected) => {
+      if (!controller.signal.aborted) setTokenRejected(rejected);
+    });
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    connection.endpoint,
+    gate.panel.value.token,
+    session.error,
+    session.status,
+  ]);
+
+  const executionEnvironment = useExecutionEnvironment({
+    client: protocol.client,
+    sessionId: session.opened?.session_id ?? null,
+    profileId: session.opened?.active_profile_id ?? null,
+    available:
+      supportsFeature(
+        session.opened?.capabilities,
+        SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+      ) &&
+      supportsMethod(
+        session.opened?.capabilities,
+        SESSION_EXECUTION_ENVIRONMENT_READ,
+      ),
+    enabled: sessionConfigOpen,
+  });
+
   if (!showProductShell) {
     const gateStatus =
       session.status === "connected" ? "connecting" : session.status;
     // §5.1: a classified connect failure replaces the raw handshake error
     // with its own message + destination; anything else stays verbatim.
-    const classified = session.error
+    const transportFailure = session.error
       ? classifyConnectFailure(session.error)
       : null;
+    const classified =
+      tokenRejected && transportFailure?.kind === "unreachable"
+        ? ({ kind: "rejected-token" } as const)
+        : transportFailure;
     const failureCopy = classified
       ? connectFailureCopy(classified, connection.endpoint)
       : null;
@@ -3121,7 +3758,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               collapsed={sidebarCollapsed}
               recentWorkspaces={recentWorkspaces}
               knownSessions={navigableSessions}
-              sessionCatalog={sessionCatalog}
+              sessionCatalog={visibleCatalog}
               activeWorkspacePath={activeWorkspacePath}
               opened={session.opened}
               collapsedWorkspaceIds={collapsedWorkspaceIds}
@@ -3140,6 +3777,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
               selectedSessionId={activeSessionKey}
+              peerRoster={peers.roster}
+              peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
               error={workspaceProduct.state.error}
@@ -3150,6 +3789,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              onPeerDockSelect={(peer) => {
+                if (draftCapacityBlocked) return;
+                void workspaceProduct
+                  .openSession({
+                    sessionId: peer.identity,
+                    cwd: peer.cwd,
+                    profileId: peer.profileId,
+                    resolveLaunch: false,
+                  })
+                  .then((outcome) => {
+                    if (outcome === "opened" && compact)
+                      setSidebarCollapsed(true);
+                  });
+              }}
               peerDockCollapsed={peerDockCollapsed}
               onPeerDockToggle={() =>
                 setPeerDockCollapsed((collapsed) => !collapsed)
@@ -3177,6 +3830,80 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 });
               }}
               onSessionSelect={moveToProductSession}
+              onSessionRename={
+                workspaceProduct.state.renameAvailable
+                  ? async (rowKey, title) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not rename this session.");
+                      const outcome = await workspaceProduct.renameSession(
+                        reference.sessionId,
+                        title,
+                      );
+                      if (outcome.kind === "done") {
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not rename this session.");
+                    }
+                  : undefined
+              }
+              onSessionDelete={
+                workspaceProduct.state.deleteAvailable
+                  ? async (rowKey) => {
+                      const reference = parseSavedSessionReference(rowKey);
+                      if (!reference)
+                        return t("Could not delete this session.");
+                      const sessionId = reference.sessionId;
+                      // Another tab or client may be running it; the server
+                      // would keep writing to a conversation shown as gone.
+                      const running = [...sessionCatalog.values()].some(
+                        (workspace) =>
+                          workspace.sessions.some(
+                            (row) =>
+                              row.sessionId === sessionId && row.activeTurn,
+                          ),
+                      );
+                      if (running) return t("Stop this session’s work first.");
+                      const outcome =
+                        await workspaceProduct.deleteSession(sessionId);
+                      if (outcome.kind === "done") {
+                        if (
+                          session.opened?.session_id === sessionId &&
+                          resumeSession
+                        ) {
+                          await moveToProductSession(
+                            workspaceSessionKey(
+                              resumeSession.workspaceRoot,
+                              resumeSession.profileId,
+                              resumeSession.sessionId,
+                            ),
+                          );
+                        }
+                        workspaceProduct.evictSession(sessionId);
+                        setKnownSessions(
+                          forgetKnownSession(
+                            browserStorage("sessionStorage"),
+                            connection,
+                            sessionId,
+                          ),
+                        );
+                        setDeletedSessionIds((current) =>
+                          current.includes(sessionId)
+                            ? current
+                            : [...current, sessionId],
+                        );
+                        setCatalogRefreshNonce((current) => current + 1);
+                        return null;
+                      }
+                      return outcome.kind === "failed"
+                        ? outcome.error
+                        : t("Could not delete this session.");
+                    }
+                  : undefined
+              }
               onSettings={() => {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);
@@ -3202,10 +3929,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           className={`${productStyles.workspaceMain} ${panelColumn ? productStyles.workspaceMainWithPanel : ""}`}
           tabIndex={-1}
         >
-          <section className="conversation" hidden={fleetRouteActive}>
+          <section
+            className="conversation"
+            hidden={fleetRouteActive || remoteView === "home"}
+          >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
-              {compact ? (
+              {remoteView === "session" ? (
+                <button
+                  type="button"
+                  className={productStyles.navigationTrigger}
+                  aria-label={t("Back to remote control")}
+                  onClick={() => {
+                    setRemoteError(null);
+                    setRemoteView("home");
+                  }}
+                >
+                  <ArrowLeftIcon size={20} />
+                </button>
+              ) : compact ? (
                 <button
                   type="button"
                   className={productStyles.navigationTrigger}
@@ -3226,7 +3968,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     {activeWorkspacePath || t("Choose a workspace")}
                   </small>
                 </div>
-                {session.opened?.active_profile_id &&
+                {!compact &&
+                session.opened?.active_profile_id &&
                 session.opened.workspace_root ? (
                   <CopySessionLinkButton
                     key={session.opened.session_id}
@@ -3267,41 +4010,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 </nav>
               ) : null}
               <div className="header-actions">
-                {/* Desktop only: at phone width the header keeps its room
-                    for the workspace title and Review changes. */}
-                {!compact &&
-                protocol.client &&
-                session.opened &&
-                supportsMethod(
-                  session.capabilities,
-                  CORE_UI_METHODS.SESSION_HYDRATE,
-                ) ? (
-                  <CopyConversationButton
-                    key={session.opened.session_id}
-                    source={{
-                      client: protocol.client,
-                      sessionId: session.opened.session_id,
-                      workspaceRoot:
-                        session.opened.workspace_root ?? activeWorkspacePath,
-                    }}
-                    className={productStyles.preferencesTrigger ?? ""}
-                  />
-                ) : null}
-                <button
-                  className={productStyles.preferencesTrigger}
-                  type="button"
-                  aria-label={t("Browser preferences")}
-                  title={t("Browser preferences")}
-                  onClick={gate.openPreferences}
-                >
-                  {t("Browser preferences")}
-                </button>
                 {session.opened ? (
                   <button
                     className={
                       compact
                         ? productStyles.compactReview
-                        : productStyles.panelToggle
+                        : productStyles.headerAction
                     }
                     type="button"
                     aria-label={
@@ -3334,6 +4048,33 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ) : null}
                   </button>
                 ) : null}
+                <ConversationActionsMenu
+                  triggerClassName={
+                    compact
+                      ? (productStyles.compactReview ?? "")
+                      : (productStyles.headerAction ?? "")
+                  }
+                  copySource={
+                    protocol.client &&
+                    session.opened &&
+                    supportsMethod(
+                      session.capabilities,
+                      CORE_UI_METHODS.SESSION_HYDRATE,
+                    )
+                      ? {
+                          client: protocol.client,
+                          sessionId: session.opened.session_id,
+                          workspaceRoot:
+                            session.opened.workspace_root ??
+                            activeWorkspacePath,
+                        }
+                      : undefined
+                  }
+                  onOpenPreferences={gate.openPreferences}
+                  onOpenRemote={
+                    compact ? () => setRemoteViewInUrl("home") : undefined
+                  }
+                />
               </div>
             </header>
             {cleanupFailed ? (
@@ -3387,7 +4128,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         target={resumeTarget}
                       />
                     ) : null}
-                    {codingCapabilities.sessionCreationAvailable ? (
+                    {codingCapabilities.sessionCreationAvailable &&
+                    !workspacePicker.open ? (
                       <div
                         ref={heroPickerRef}
                         className={productStyles.heroPickerSlot}
@@ -3456,7 +4198,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     fallback={<DeferredSurface label="Loading trajectory…" />}
                   >
                     <SessionTrajectory
-                      state={work.supervision}
+                      state={{
+                        ...work.supervision,
+                        planAvailable,
+                        plan: livePlan ?? finishedPlan,
+                      }}
                       onRefresh={() => void work.refresh()}
                       onOpenTask={(taskId) => void work.openTask(taskId)}
                       onCancelTask={(taskId) => void work.cancelTask(taskId)}
@@ -3535,18 +4281,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onToggleFold={(id) =>
                             setTimelineFolds(toggleFold(timelineFolds, id))
                           }
+                          onSetFold={(id, open) =>
+                            setTimelineFolds(setFold(timelineFolds, id, open))
+                          }
                           onExpandAll={() =>
                             setTimelineFolds(
-                              expandAll(
-                                timelineFolds,
-                                conversation.timeline
+                              expandAll(timelineFolds, [
+                                ...conversation.timeline
                                   .filter(
                                     (entry) =>
                                       entry.kind === "reasoning" ||
                                       entry.kind === "tool",
                                   )
                                   .map((entry) => entry.id),
-                              ),
+                                ...stepGroupIds(conversation.timeline),
+                                ...conversation.timeline.flatMap((entry) =>
+                                  entry.kind === "assistant" &&
+                                  parseTextPlan(entry.body)
+                                    ? [`plan:${entry.id}`]
+                                    : [],
+                                ),
+                              ]),
                             )
                           }
                           onCollapseAll={() =>
@@ -3577,12 +4332,33 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                       }
                                     : null
                                 }
+                                readAccess={
+                                  appliedTemplate &&
+                                  templatePermission?.sessionKey ===
+                                    activeSessionKey
+                                    ? {
+                                        action: templatePermission.action,
+                                        busy: templatePermission.busy,
+                                        error: templatePermission.error,
+                                      }
+                                    : null
+                                }
+                                templatesDisabled={
+                                  templatePermission?.sessionKey ===
+                                    activeSessionKey && templatePermission.busy
+                                }
                                 onUse={chooseTemplate}
                               />
                             ) : undefined
                           }
                           onRetryPermission={
-                            permissionRetryProfile
+                            // Offered only while the Session is still read
+                            // only: once it can write, the button has nothing
+                            // left to switch.
+                            permissionRetryProfile &&
+                            !readOnlyPeer &&
+                            !remote &&
+                            currentPermission?.mode === "read_only"
                               ? (turnId) => void retryPermissionDenied(turnId)
                               : undefined
                           }
@@ -3616,7 +4392,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           className={productStyles.thinkingOctopus}
                         />
                         <span>
-                          {turnStarting ? t("Starting…") : activityLabel}
+                          {turnStarting
+                            ? t("Starting…")
+                            : localizedActivityLabel}
+                          {longWait ? (
+                            <small data-waiting-feedback="true">
+                              <br />
+                              {t(longWait.phase)} ·{" "}
+                              {t("Elapsed {value0}", { value0: waitDuration })}
+                              <br />
+                              {t(
+                                "You can stop this turn, check the connection, or retry.",
+                              )}
+                            </small>
+                          ) : null}
                         </span>
                       </div>
                     ) : null}
@@ -3750,7 +4539,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     busy={interactions.busy}
                     error={interactions.error}
                     onDecide={(decision, scope) =>
-                      void interactions.respondApproval(decision, scope)
+                      void interactions.respondApproval(
+                        decision,
+                        // The phone grants one request at most.
+                        remote ? "request" : scope,
+                      )
                     }
                     {...(conversation.interruptible
                       ? { onInterrupt: () => void conversation.interrupt() }
@@ -3759,6 +4552,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       // Above the approval, which keeps the keyboard otherwise.
                       openChangePreview(previewId, true)
                     }
+                    onceOnly={remote}
                   />
                 </SurfaceBoundary>
               ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
@@ -3951,10 +4745,27 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                         peerRoster={peers.manager?.snapshot().peers ?? []}
                         peerSessionId={session.opened?.session_id ?? null}
+                        onReturnToMaster={() => {
+                          if (draftCapacityBlocked) return;
+                          void peers.returnToMaster().then((outcome) => {
+                            if (outcome !== "opened") return;
+                            if (compact) setSidebarCollapsed(true);
+                            requestAnimationFrame(() =>
+                              composerRef.current?.focus(),
+                            );
+                          });
+                        }}
                         value={draft}
                         onChange={(value) => {
                           draftRef.current = value;
                           setDraft(value);
+                          if (!value && appliedTemplate && activeSessionKey) {
+                            void restoreTemplatePermission(
+                              appliedTemplate,
+                              activeSessionKey,
+                            );
+                            setTemplateNotice(null);
+                          }
                           setAttachNotice(null);
                           setSelectedCommandIndex(0);
                           setCommandPaletteDismissed(false);
@@ -3976,10 +4787,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           const selected =
                             suggestedCommands[selectedCommandIndex];
                           if (selected) chooseCommand(selected);
-                          else submit();
+                          else void submit();
                         }}
                         {...(activeTurnId
-                          ? { onQueue: () => submit(undefined, true) }
+                          ? { onQueue: () => void submit(undefined, true) }
                           : {})}
                         {...(conversation.canSendPendingNow &&
                         // #218: interrupting the running turn to flush
@@ -3988,8 +4799,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         // App.submit's held-elsewhere gate).
                         tabLock.state.kind !== "held-elsewhere"
                           ? {
-                              onSendPendingNow: () =>
-                                void conversation.sendPendingNow(),
+                              onSendPendingNow: sendPendingNow,
                             }
                           : {})}
                         onInterrupt={() => {
@@ -4087,7 +4897,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           available={conversation.interruptible}
                           onInterrupt={() => void conversation.interrupt()}
                         />
-                        {conversation.canSendPendingNow &&
+                        {(conversation.canSendPendingNow || sendingNow) &&
+                        !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
                         // locked (same as App.submit's held-elsewhere gate).
@@ -4097,12 +4908,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             title={t(
                               "Interrupt the current response and send pending input",
                             )}
-                            onClick={() => void conversation.sendPendingNow()}
+                            disabled={sendingNow}
+                            aria-busy={sendingNow || undefined}
+                            onClick={sendPendingNow}
                           >
-                            {t("Send now (Ctrl+X)")}
+                            {sendingNow
+                              ? t("Sending…")
+                              : t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
-                        {activeTurnId && draft.trim() ? (
+                        {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
                             disabled={
@@ -4120,7 +4935,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Queue")}
                           </button>
                         ) : null}
-                        {!activeTurnId || draft.trim() ? (
+                        {(!activeTurnId || draft.trim()) && !readOnlyPeer ? (
                           <button
                             className="send-button"
                             type="button"
@@ -4170,6 +4985,49 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
+          {remoteView === "home" && !fleetRouteActive ? (
+            <div className="conversation remote-pane">
+              <Suspense
+                fallback={<DeferredSurface label="Loading remote control…" />}
+              >
+                <RemoteHome
+                  overview={remoteOverviewState}
+                  folders={remoteFolders}
+                  folderStates={remoteCatalog}
+                  link={remoteServerLink}
+                  listedAt={remoteListedAt}
+                  openingKey={remoteOpening}
+                  openError={remoteError}
+                  now={remoteNow}
+                  onOpen={(row) => void openRemoteRow(row)}
+                  onAddFolder={(path) =>
+                    setRemoteFolders(
+                      rememberRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRemoveFolder={(path) =>
+                    setRemoteFolders(
+                      forgetRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRefresh={() => {
+                    setRemoteNow(Date.now());
+                    setRemoteRefresh((value) => value + 1);
+                  }}
+                  onOpenSessions={() => setSidebarCollapsed(false)}
+                  onOpenFull={() => setRemoteViewInUrl(null)}
+                />
+              </Suspense>
+            </div>
+          ) : null}
           <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button
@@ -4191,10 +5049,63 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   sessions={fleetSessions}
                   selectedSessionId={session.opened?.session_id ?? ""}
                   startState={fleetStartSettle}
+                  nativeStartAvailable={nativeFleetActive}
+                  nativeControlsAvailable={
+                    nativeFleetActive && nativeFleetControlsSupported
+                  }
                   onStart={(submit) => {
-                    // §4.3/§5.4: Start = acquire (CAS) → await proof → ONE
-                    // peer/dispatch. With no seat held, the FIRST call goes to
-                    // acquire and the dispatch is deferred to the effect below.
+                    if (nativeFleetActive) {
+                      const brief = submit.brief;
+                      const operationId = submit.operationId ?? randomUUID();
+                      const manager = peers.manager;
+                      setNativeFleetStartState(undefined);
+                      if (!manager) {
+                        setNativeFleetStartState({
+                          kind: "failed",
+                          laneKey: "native",
+                          brief,
+                          operationId,
+                          refusalKind: "peer_control_refused",
+                        });
+                        return;
+                      }
+                      void manager
+                        .kickoff({
+                          brief,
+                          n: 1,
+                          title: brief.split("\n", 1)[0]!.slice(0, 60),
+                        })
+                        .then((result) => {
+                          setNativeFleetStartState(
+                            result
+                              ? {
+                                  kind: "accepted",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  slug: result.peers[0]?.slug ?? result.slug,
+                                }
+                              : {
+                                  kind: "failed",
+                                  laneKey: "native",
+                                  brief,
+                                  operationId,
+                                  refusalKind: "peer_control_refused",
+                                },
+                          );
+                        })
+                        .catch(() => {
+                          setNativeFleetStartState({
+                            kind: "failed",
+                            laneKey: "native",
+                            brief,
+                            operationId,
+                            refusalKind: "peer_control_refused",
+                          });
+                        });
+                      return;
+                    }
+                    // External-driver remains an optional fallback only.
                     const next = fleetStartOnSubmit({
                       state: fleetStartPending,
                       seatHeld: session.peerController?.seatHeld === true,
@@ -4214,7 +5125,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     });
                     if (next !== null) setFleetStartPending(next);
                   }}
-                  {...(session.peerController?.onRowAction
+                  {...(nativeFleetActive && nativeFleetGatherSupported
+                    ? {
+                        onGather: () => {
+                          setFleetGatherState("busy");
+                          void peers
+                            .gather(undefined, () => !navigationBlocked)
+                            .then(setFleetGatherState)
+                            .catch(() => setFleetGatherState("failed"));
+                        },
+                        gatherState: fleetGatherState,
+                      }
+                    : {})}
+                  {...(session.peerController?.onRowAction ||
+                  (nativeFleetActive && nativeFleetControlsSupported)
                     ? {
                         onRowAction: (row, action, steerText) => {
                           // Judge r2 #4 (H4): bind the row's REAL pending ids —
@@ -4225,6 +5149,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               (candidate) => candidate.slug === row.slug,
                             );
                           if (!entry) return;
+                          if (
+                            nativeFleetActive &&
+                            nativeFleetControlsSupported
+                          ) {
+                            peers.rowAction(entry, action, steerText ?? "");
+                            return;
+                          }
                           if (
                             entry.activity === "blocked" &&
                             entry.requestKind === "question"
@@ -4249,13 +5180,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               // §3/4200b: pre-session Fleet destination — the entry stays
               // reachable, but there is nothing to start a peer against and
               // no roster: an empty state, NO Start form.
-              <div className="fleet-empty-session" role="status">
-                <p>{t("Open a project first")}</p>
-                <p>
+              <div
+                className={productStyles.fleetEmpty}
+                data-fleet-empty-session="true"
+              >
+                <span
+                  className={productStyles.fleetEmptyIcon}
+                  aria-hidden="true"
+                >
+                  <OctopusLogo size={40} />
+                </span>
+                <h2>{t("Agents")}</h2>
+                <p role="status">
                   {t(
                     "Peers run inside a session. Choose a workspace to continue.",
                   )}
                 </p>
+                {codingCapabilities.sessionCreationAvailable ? (
+                  <button
+                    type="button"
+                    className={productStyles.fleetEmptyAction}
+                    onClick={() => requestNewSession()}
+                  >
+                    {t("New session")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -4363,6 +5312,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 session.opened?.capabilities,
                 CORE_UI_FEATURES.SESSION_SANDBOX_V1,
               ),
+              executionEnvironment,
               effective: {
                 enabled: true,
                 networkAccess: null,
@@ -4501,17 +5451,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           <NewSessionWorkspacePicker
             open
             initialView={workspacePicker.view}
-            workspaces={recentWorkspaces.map((workspace) => ({
+            workspaces={sessionWorkspaces.map((workspace) => ({
               id: workspace.id,
               name: workspace.name,
               path: workspace.path,
             }))}
-            {...(serverWorkingDirectory ? { serverWorkingDirectory } : {})}
+            {...(serverWorkingDirectory &&
+            !sessionWorkspaces.some(
+              (workspace) => workspace.path === serverWorkingDirectory.path,
+            )
+              ? { serverWorkingDirectory }
+              : {})}
             {...(activeWorkspacePath
               ? { selectedWorkspaceId: activeWorkspacePath }
               : {})}
-            {...(recentWorkspaces[0]
-              ? { recentWorkspaceId: recentWorkspaces[0].id }
+            {...(sessionWorkspaces[0]
+              ? { recentWorkspaceId: sessionWorkspaces[0].id }
               : {})}
             {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
             error={workspaceProduct.state.error}
@@ -4738,6 +5693,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         fallback={<DeferredSurface label="Loading memory…" />}
                       >
                         <MemorySettingsContent
+                          key={`${session.opened.session_id}:${memoryProfileId}`}
+                          sessionId={session.opened.session_id}
                           client={protocol.client}
                           authenticatedProfileId={authenticatedMemoryProfileId}
                           sessionProfileId={memoryProfileId}
@@ -5231,4 +6188,13 @@ function translateLabels<T extends Record<string, string>>(
   return Object.fromEntries(
     Object.entries(labels).map(([key, value]) => [key, t(value)]),
   ) as { [K in keyof T]: string };
+}
+
+/** The more recently updated of two plans (either may be absent). */
+function newerPlan(
+  left: PlanUpdated | null,
+  right: PlanUpdated | null,
+): PlanUpdated | null {
+  if (!left || !right) return left ?? right;
+  return right.updatedAtMs > left.updatedAtMs ? right : left;
 }

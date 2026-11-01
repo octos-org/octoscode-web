@@ -99,7 +99,9 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  transition: background-color 160ms ease;
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .back:hover:not(:disabled) {
@@ -132,7 +134,7 @@
 
 .body {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   min-height: 150px;
   padding: 0 20px 10px;
@@ -149,6 +151,7 @@
 }
 
 .workspace {
+  --dsw-press-scale: none;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -211,7 +214,7 @@
 .workspacePath {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-font-family-code);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -236,7 +239,7 @@
   color: var(--dsw-alias-state-business-primary);
   font-size: 12px;
   line-height: 18px;
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .workspace:hover .rowAction,
@@ -300,7 +303,7 @@
 .refreshing {
   padding: 9px 10px 2px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -383,15 +386,17 @@
   justify-content: center;
   gap: 6px;
   min-width: 76px;
-  height: 40px;
+  height: var(--dsw-control-h-md);
   padding: 7px 14px;
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-control);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
   cursor: pointer;
-  transition: background-color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .addButton {

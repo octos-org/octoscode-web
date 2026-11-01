@@ -14,7 +14,7 @@ export interface PeerReadonlyRow {
 
 /** Hint shown in place of a peer's editable composer; `{slug}` names the peer. */
 export const PEER_READONLY_HINT =
-  "↳ read-only peer · {slug} · steer from the master";
+  "Peer {slug} is read-only. Return to the master to make changes.";
 
 /**
  * The slug of the peer whose native Session id equals `sessionId`, else null.

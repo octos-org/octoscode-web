@@ -80,6 +80,11 @@ export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Peer {value0}": "协作者 {value0}",
   "Session peers": "会话协作者",
   "Goal {value0}": "目标 {value0}",
+  "Gather results": "汇总协作者结果",
+  "Gathering…": "正在汇总…",
+  "Gather queued in this Session": "汇总请求已加入当前会话",
+  "No peer results yet": "还没有可汇总的协作者结果",
+  "Gather could not be queued": "汇总请求未能加入会话",
 });
 
 /** The bounded key list, so coverage tests never drift from the catalog. */

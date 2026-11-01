@@ -817,7 +817,7 @@ describe("streaming lifecycle regressions", () => {
     });
     const completed = entries;
     expect(entries.at(-1)).toMatchObject({
-      id: "tool:missing-start",
+      id: "tool:turn-1:missing-start",
       kind: "tool",
       title: "Tool output",
       body: "Durable tool result",
@@ -855,7 +855,7 @@ describe("streaming lifecycle regressions", () => {
       message: "Background stage finished",
     });
     expect(
-      entries.find((entry) => entry.id === "tool:continuing"),
+      entries.find((entry) => entry.id === "tool:turn-1:continuing"),
     ).toMatchObject({
       body: "Background stage finished",
       status: "info",
@@ -979,9 +979,9 @@ describe("hydrated tool presentation", () => {
     const result = timelineFromHydrate(freeze(hydrate));
     const tools = result.filter((entry) => entry.kind === "tool");
     expect(tools.map((entry) => entry.id)).toEqual([
-      "tool:read-call",
-      "tool:pwd-call",
-      "tool:status-call",
+      "tool:turn-1:read-call",
+      "tool:turn-1:pwd-call",
+      "tool:turn-1:status-call",
     ]);
     expect(tools.map((entry) => entry.body).sort()).toEqual(
       durable.map((message) => message.content).sort(),
@@ -1038,19 +1038,19 @@ describe("hydrated tool presentation", () => {
       const result = timelineFromHydrate(freeze(hydrate));
       const identified = result.filter((entry) => entry.id.startsWith("tool:"));
       expect(identified.map((entry) => entry.id)).toEqual([
-        "tool:status-call",
-        "tool:pwd-call",
+        "tool:turn-1:status-call",
+        "tool:turn-1:pwd-call",
       ]);
       if (boundary === "raw tool" || boundary === "reasoning") {
         expect(
           result.findIndex((entry) => entry.messageId === "boundary"),
         ).toBeGreaterThan(
-          result.findIndex((entry) => entry.id === "tool:status-call"),
+          result.findIndex((entry) => entry.id === "tool:turn-1:status-call"),
         );
         expect(
           result.findIndex((entry) => entry.messageId === "boundary"),
         ).toBeLessThan(
-          result.findIndex((entry) => entry.id === "tool:pwd-call"),
+          result.findIndex((entry) => entry.id === "tool:turn-1:pwd-call"),
         );
       }
     },
@@ -1100,14 +1100,14 @@ describe("hydrated tool presentation", () => {
     ]);
     expect(result.slice(1, 3)).toMatchObject([
       {
-        id: "tool:pwd-call",
+        id: "tool:turn-1:pwd-call",
         title: "bash",
         body: "/workspace/project",
         messageId: "pwd-message",
         turnId: "turn-1",
       },
       {
-        id: "tool:status-call",
+        id: "tool:turn-1:status-call",
         title: "bash",
         body: "## main\nNothing to commit",
         messageId: "status-message",
@@ -1160,7 +1160,7 @@ describe("hydrated tool presentation", () => {
       turnId: "explicit-other-turn",
     });
     expect(tools[1]).toMatchObject({
-      id: "tool:status-call",
+      id: "tool:turn-1:status-call",
       messageId: "status-message",
     });
   });
@@ -1229,7 +1229,7 @@ describe("hydrated tool presentation", () => {
       );
       expect(tools).toHaveLength(2);
       expect(tools[0]).toMatchObject({
-        id: "tool:pwd-call",
+        id: "tool:turn-1:pwd-call",
         messageId: "pwd-message",
         body: output,
       });
@@ -1337,7 +1337,7 @@ describe("hydrated tool presentation", () => {
     });
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      id: "tool:read-1",
+      id: "tool:turn-1:read-1",
       kind: "tool",
       title: "read_file",
       body: output,
@@ -1867,7 +1867,7 @@ describe("delivered attachments", () => {
   it("preserves an explicit tool path when hydrate truncates its preview", () => {
     const previous = [
       {
-        id: "tool:write-large",
+        id: "tool:turn-1:write-large",
         kind: "tool" as const,
         title: "write_file",
         body: "full arguments",

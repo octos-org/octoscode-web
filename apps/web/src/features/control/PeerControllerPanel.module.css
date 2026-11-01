@@ -103,7 +103,7 @@
 
 .slug {
   font-size: 0.8125rem;
-  font-family: var(--dsw-font-mono, monospace);
+  font-family: var(--dsw-font-family-code);
 }
 
 .refusal,

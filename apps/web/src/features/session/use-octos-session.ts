@@ -18,6 +18,7 @@ import type {
   ActiveSessionAuthority,
   ActiveSessionDiagnostic,
   ActiveSessionRuntimeEvent,
+  ActiveSessionRuntimeSnapshot,
 } from "./active-session-runtime.ts";
 import type { BackgroundTurnSnapshot } from "./background-turn-manager.ts";
 import { foregroundAttentionTurns } from "../attention/model.ts";
@@ -33,7 +34,9 @@ import {
 } from "./background-session-status.ts";
 import type { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
 import type { PeerRosterEntry } from "../peers/peer-manager.ts";
+import { peerReadonlySlug } from "../composer/peer-readonly.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
+import type { PeerRowAction } from "../control/peer-row-command.ts";
 import {
   sessionRuntimeScopeKey,
   type SessionRuntimeScope,
@@ -90,7 +93,10 @@ import {
   type ExternalDriverRefusalKind,
   type PeerDispatchReceiptView,
 } from "@octos-org/octoscode-client/external-driver-meta";
-import type { SessionInteractionSnapshot } from "./session-interaction-ledger.ts";
+import type {
+  SessionInteractionRecord,
+  SessionInteractionSnapshot,
+} from "./session-interaction-ledger.ts";
 import {
   SessionComposerDrafts,
   type ComposerRestore,
@@ -156,7 +162,10 @@ import type { SessionRecordRecoveryResult } from "./session-record-manager.ts";
 import { type SupervisionRuntimeState } from "../supervision/model.ts";
 import { useSupervision } from "../supervision/use-supervision.ts";
 import { type WorkspaceProductState } from "../workspace/model.ts";
-import { useWorkspaceProduct } from "../workspace/use-workspace-product.ts";
+import {
+  useWorkspaceProduct,
+  type SessionMutationOutcome,
+} from "../workspace/use-workspace-product.ts";
 import {
   EMPTY_LAUNCH_RUNTIME,
   type LaunchRuntimeState,
@@ -209,15 +218,34 @@ export interface BackgroundSessionSnapshot {
   workspaceRoot: string;
   /** Background work state derived from the record's own live queue. */
   state: BackgroundSessionState;
+  /** The retained record's own first prompt, used only for display naming. */
+  firstPrompt: string | null;
   activeTurnId: string | null;
   queuedCount: number;
   unread: boolean;
   waiting: boolean;
+  /** What the record is waiting on, for overviews that never select it. */
+  waitingFor: BackgroundWaitingFor | null;
+}
+
+export interface BackgroundWaitingFor {
+  kind: "approval" | "question";
+  title: string;
+  toolName: string | null;
+}
+
+/** A catalog session to keep live in the background (see watchSessions). */
+export interface WatchedSessionRef {
+  sessionId: string;
+  profileId: string;
+  workspaceRoot: string;
 }
 
 export interface OctosSessionRuntime {
   peers: {
     manager: LazyPeerManager | null;
+    roster: readonly PeerRosterEntry[];
+    returnToMaster(): Promise<WorkspaceOpenOutcome>;
     error: string | null;
     /**
      * `/peer clear` (TUI parity 2500 §2): prune the ACTIVE record's FINISHED
@@ -242,6 +270,12 @@ export interface OctosSessionRuntime {
       slugs: readonly string[] | undefined,
       canSubmit: () => boolean,
     ): Promise<GatherOutcome>;
+    /** Native peer controls: turn/steer, turn/interrupt, approval/respond. */
+    rowAction(
+      entry: PeerRosterEntry,
+      action: PeerRowAction,
+      steerText?: string,
+    ): void;
     /**
      * Gap 6b approval sink: answer ONE blocked roster row's pending approval.
      * Present ONLY when a control capability is acquired — the dock renders its
@@ -289,6 +323,11 @@ export interface OctosSessionRuntime {
     restoreRejected: boolean;
     connected: boolean;
     closed: boolean;
+    /**
+     * The shared server transport itself, independent of any selected
+     * Session: what an overview with nothing open reports as online/offline.
+     */
+    server: Pick<ActiveSessionRuntimeSnapshot, "phase" | "status" | "recovery">;
     /**
      * Non-fatal recovery notice for Sessions that failed while the live
      * Session survived. Null once dismissed or when nothing failed.
@@ -420,11 +459,23 @@ export interface OctosSessionRuntime {
     onboarding: OnboardingRuntimeState;
     refresh: () => Promise<void>;
     listWorkspaceSessions: (cwd: string) => Promise<SessionListEntry[]>;
+    /**
+     * Open the given catalog sessions as background records without selecting
+     * them, so their approvals, questions and terminals are observed live
+     * (the phone overview). Already-retained sessions are left alone; at most
+     * MAX_WATCHED_SESSIONS are opened per call.
+     */
+    watchSessions: (refs: readonly WatchedSessionRef[]) => Promise<void>;
     switchSession: (sessionId: string) => Promise<WorkspaceOpenOutcome>;
     openSession: (
       input: WorkspaceSessionOpenInput,
     ) => Promise<WorkspaceOpenOutcome>;
-    deleteSession: (sessionId: string) => Promise<void>;
+    deleteSession: (sessionId: string) => Promise<SessionMutationOutcome>;
+    evictSession: (sessionId: string) => void;
+    renameSession: (
+      sessionId: string,
+      title: string,
+    ) => Promise<SessionMutationOutcome>;
     chooseLaunchProfile: (profileId: string) => Promise<void>;
     cancelLaunch: () => void;
     retryOnboarding: () => Promise<void>;
@@ -516,6 +567,24 @@ export interface PeerDriverIdStorage {
  * value (hand-edited, or written by an older build) is NOT reused — it would
  * fail the Core's identity validation and permanently wedge the seat.
  */
+/** Background overviews open at most this many sessions per watch. */
+export const MAX_WATCHED_SESSIONS = 8;
+
+export function backgroundWaitingFor(
+  record: SessionInteractionRecord | null,
+): BackgroundWaitingFor | null {
+  if (!record) return null;
+  if (record.approval)
+    return {
+      kind: "approval",
+      title: record.approval.title || record.title,
+      toolName: record.approval.toolName || null,
+    };
+  if (record.question)
+    return { kind: "question", title: record.title, toolName: null };
+  return null;
+}
+
 function readStoredPeerDriverId(
   storage: PeerDriverIdStorage | null,
 ): string | null {
@@ -1273,6 +1342,7 @@ export function useOctosSession(): OctosSessionRuntime {
   // identity changes, NOT on a transport reconnect. Records keep this epoch so
   // an ordinary socket reconnect never invalidates their recovery.
   const authEpochRef = useRef(0);
+  const watchAbortRef = useRef<AbortController | null>(null);
   const launchTransitionRef = useRef(
     new LaunchTransitionCoordinator<
       SessionConnectionInput,
@@ -2260,6 +2330,15 @@ export function useOctosSession(): OctosSessionRuntime {
     readonly prompt: string | null;
   }> => {
     const record = viewRecord;
+    if (
+      record &&
+      peerReadonlySlug(
+        peerCoordinator.get(record)?.snapshot().peers ?? [],
+        record.scope.sessionId,
+      ) !== null
+    ) {
+      return { sent: false, message: null, prompt: null };
+    }
     const authority = record?.runtime.currentAuthority() ?? null;
     const client = authority?.client ?? null;
     const sessionId = authority?.sessionId ?? null;
@@ -2357,7 +2436,7 @@ export function useOctosSession(): OctosSessionRuntime {
     await recordManager.engineFor(record)?.refreshDriverInventory(record.scope);
     if (!isCurrent()) return { sent: false, message: null, prompt: null };
     if (!prompt.trim()) return { sent: true, message: null, prompt: null };
-    const accepted = composerDrafts.enqueue(record, prompt);
+    const accepted = turnController.enqueuePrompt(prompt);
     return { sent: accepted, message: null, prompt };
   };
 
@@ -2568,6 +2647,43 @@ export function useOctosSession(): OctosSessionRuntime {
     onRowAction: (row, command) => sendPeerRowControl(row, command),
   });
 
+  // Native peer controls use the peer's OWN retained record. `submitTurn`
+  // selects turn/steer when eligible (FIFO otherwise); interrupt and approval
+  // stay on the same record authority. No external-driver seat is required.
+  const nativePeerRowAction = (
+    entry: PeerRosterEntry,
+    action: PeerRowAction,
+    steerText = "",
+  ) => {
+    const record = recordManager
+      .records()
+      .find((candidate) => candidate.scope.sessionId === entry.identity);
+    if (!record || record.closed) return;
+    if (action === "steer") {
+      const text = steerText.trim();
+      if (text) record.controller.submitTurn({ turnId: randomUUID(), text });
+      return;
+    }
+    if (action === "stop") {
+      void record.controller.interrupt();
+      return;
+    }
+    if (!["approve", "approve_session", "deny"].includes(action)) return;
+    const authority = record.runtime.currentAuthority();
+    if (!authority || entry.requestKind !== "approval" || !entry.requestId)
+      return;
+    void authority.client
+      .respondApproval({
+        session_id: record.scope.sessionId,
+        approval_id: entry.requestId,
+        decision: action === "deny" ? "deny" : "approve",
+        ...(action === "approve_session"
+          ? { approval_scope: "session" as const }
+          : {}),
+      })
+      .catch(() => undefined);
+  };
+
   // Gap 6b: answer a BLOCKED peer's pending approval straight from its roster
   // row. Fail-closed exactly like the seat: no acquired control capability (or
   // no leaf) ⇒ no action is offered at all; a row that cannot form a target
@@ -2642,9 +2758,16 @@ export function useOctosSession(): OctosSessionRuntime {
       selectedRecord()?.controller.interruptibleNow(),
     ),
     enqueuePrompt: (text: string, queueOnly = false) => {
-      const accepted = viewRecord
-        ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+      const readOnlyPeer = viewRecord
+        ? peerReadonlySlug(
+            peerCoordinator.get(viewRecord)?.snapshot().peers ?? [],
+            viewRecord.scope.sessionId,
+          ) !== null
         : false;
+      const accepted =
+        viewRecord && !readOnlyPeer
+          ? composerDrafts.enqueue(viewRecord, text, queueOnly)
+          : false;
       if (accepted && viewRecord)
         btwControllersRef.current.get(viewRecord)?.clearSettled();
       return accepted;
@@ -2737,6 +2860,59 @@ export function useOctosSession(): OctosSessionRuntime {
     setTransitioning(next);
   };
 
+  /**
+   * Keep catalog sessions live in the background without selecting them: the
+   * same `openOnRecord` path a peer uses, on the pooled transport. A session
+   * whose record is already retained is skipped, so this never reopens (and
+   * never resends into) a Session the tab already holds.
+   */
+  async function watchSessions(
+    refs: readonly WatchedSessionRef[],
+  ): Promise<void> {
+    const authority = activeRuntime.currentAuthority();
+    const client = authority?.client ?? null;
+    if (!authority || !client || client.status !== "connected") return;
+    if (missingCodingSessionRequirements(authority.capabilities).length) return;
+    const retained = recordManager
+      .records()
+      .filter((record) => !record.closed)
+      .map(
+        (record) =>
+          `${record.scope.workspaceRoot}\n${record.scope.profileId}\n${record.scope.sessionId}`,
+      );
+    const pending = refs
+      .filter(
+        (ref) =>
+          !retained.includes(
+            `${ref.workspaceRoot}\n${ref.profileId}\n${ref.sessionId}`,
+          ),
+      )
+      .slice(0, MAX_WATCHED_SESSIONS);
+    if (!pending.length) return;
+    watchAbortRef.current?.abort();
+    const abort = new AbortController();
+    watchAbortRef.current = abort;
+    for (const ref of pending) {
+      if (abort.signal.aborted) return;
+      try {
+        await recordManager.openOnRecord(
+          {
+            ...authority.config,
+            sessionId: ref.sessionId,
+            profileId: ref.profileId,
+            cwd: ref.workspaceRoot,
+          },
+          client,
+          abort.signal,
+        );
+      } catch {
+        // An overview row that cannot be watched stays a plain catalog row.
+        continue;
+      }
+      publishBackgroundTurns();
+    }
+  }
+
   // Publish the persistent background records (every non-selected Session)
   // with their own live queue state — a terminal event advances a background
   // FIFO while another Session is selected.
@@ -2780,6 +2956,10 @@ export function useOctosSession(): OctosSessionRuntime {
       }
       return {
         ...scope,
+        firstPrompt:
+          record.timeline.find(
+            (entry) => entry.kind === "user" && entry.body.trim(),
+          )?.body ?? null,
         state: lost
           ? "failed"
           : backgroundSessionState(queue, waiting, record.timeline),
@@ -2787,6 +2967,9 @@ export function useOctosSession(): OctosSessionRuntime {
         queuedCount: queue.pending.length,
         unread: record.unread,
         waiting,
+        waitingFor: backgroundWaitingFor(
+          record.interactions.current(record.scope),
+        ),
       };
     });
     setBackgroundTurns(snapshots);
@@ -3432,6 +3615,19 @@ export function useOctosSession(): OctosSessionRuntime {
   return {
     peers: {
       manager: viewRecord ? peerCoordinator.get(viewRecord) : null,
+      roster: peerCoordinator.roster(),
+      returnToMaster: () => {
+        const master = viewRecord
+          ? peerCoordinator.getMaster(viewRecord)
+          : null;
+        if (!master) return Promise.resolve("failed");
+        return openWorkspaceSession({
+          sessionId: master.scope.sessionId,
+          cwd: master.scope.workspaceRoot,
+          profileId: master.scope.profileId,
+          resolveLaunch: false,
+        });
+      },
       error: viewRecord ? peerCoordinator.getError(viewRecord) : null,
       /**
        * `/peer clear` (TUI parity 2500 §2): the coordinator prune for the ACTIVE
@@ -3485,6 +3681,7 @@ export function useOctosSession(): OctosSessionRuntime {
           pooledClient: () => activeRuntime.currentAuthority()?.client ?? null,
         });
       },
+      rowAction: nativePeerRowAction,
       // Fail-closed: with no acquired control capability there is no sink, so
       // the dock keeps its row actions unmounted (`onApprovalRespond && …`).
       ...(controlAcquire === null ? {} : { approvalRespond }),
@@ -3510,6 +3707,11 @@ export function useOctosSession(): OctosSessionRuntime {
         connectionSnapshot.session !== null &&
         connectionSnapshot.recovery.phase === "healthy",
       authenticated: serverConnection.snapshot.authenticated,
+      server: {
+        phase: serverConnection.snapshot.phase,
+        status: serverConnection.snapshot.status,
+        recovery: serverConnection.snapshot.recovery,
+      },
       restoreRejected,
       recoveryNotice,
       dismissRecoveryNotice: () => setRecoveryNotice(null),
@@ -3690,9 +3892,18 @@ export function useOctosSession(): OctosSessionRuntime {
       onboarding: onboardingController.state,
       refresh: refreshWorkspace,
       listWorkspaceSessions: workspaceController.listWorkspaceSessions,
+      watchSessions,
       switchSession,
       openSession: openWorkspaceSession,
       deleteSession: workspaceController.deleteSession,
+      evictSession: (sessionId: string) => {
+        for (const record of recordManager.records()) {
+          if (record.scope.sessionId === sessionId) {
+            recordManager.evict(record.scope);
+          }
+        }
+      },
+      renameSession: workspaceController.renameSession,
       chooseLaunchProfile,
       cancelLaunch,
       retryOnboarding: onboardingController.prepare,

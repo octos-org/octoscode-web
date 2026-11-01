@@ -34,11 +34,10 @@
   height: 38px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 9px;
-  outline: none;
   padding: 0 10px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-primary);
-  font: 500 11px/1 var(--dsw-font-family-code);
+  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
 }
 
 .form input:focus,
@@ -48,14 +47,14 @@
 
 .form input:disabled,
 .form select:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.58;
 }
 
 .step {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -118,8 +117,23 @@
 
 .providerText small {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 14px;
+}
+
+.moreProviders {
+  margin-top: 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.moreProviders summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.moreProviders .providers {
+  margin-top: 8px;
 }
 
 .modelField {
@@ -139,7 +153,7 @@
 
 .advanced > p {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -160,7 +174,7 @@
 
 .selectionSummary span {
   color: var(--dsw-alias-label-tertiary);
-  font: 400 11px/1.4 var(--dsw-font-family-code);
+  font: 400 var(--dsw-font-size-micro)/1.4 var(--dsw-font-family-code);
   overflow-wrap: anywhere;
 }
 
@@ -190,7 +204,7 @@
 .recovery,
 .keyless {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -271,26 +285,17 @@
   font-family: var(--dsw-font-family-code);
 }
 
+.actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
 .actions > div {
   display: flex;
-  gap: 7px;
-}
-
-.actions .submit {
-  padding-right: 12px;
-  padding-left: 12px;
-  background: var(--dsw-alias-button-info-fill);
-  color: var(--dsw-alias-label-on-accent);
-}
-
-.actions .submit:hover:not(:disabled) {
-  background: var(--dsw-alias-button-info-hover);
-  color: var(--dsw-alias-label-on-accent);
-}
-
-.actions button:disabled {
-  cursor: wait;
-  opacity: 0.55;
+  gap: var(--dsw-space-2);
 }
 
 @keyframes onboarding-pulse {

@@ -31,7 +31,9 @@ async function prepareDeniedWrite(page: Page) {
     .filter({ hasText: /Write|Read/ })
     .first()
     .click();
-  await page.getByRole("menuitemradio", { name: /^Read/ }).click();
+  await page
+    .getByRole("menuitemradio", { name: /^Read · Network blocked/ })
+    .click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Session settings" }),
@@ -91,7 +93,14 @@ test("switches a permission-denied write to workspace-write and retries it", asy
 }) => {
   const { retry } = await prepareDeniedWrite(page);
   await retry.click();
-  await expect(page.getByText("report.md written").last()).toBeVisible();
+  const writes = page.locator("details").filter({
+    hasText: "Write file report.md",
+  });
+  await expect(writes).toHaveCount(2);
+  await expect(writes.first()).toContainText(
+    "write_file is not permitted by read-only filesystem access",
+  );
+  await expect(writes.last()).toContainText("report.md written");
   await expect(
     page.getByRole("button", { name: "Switch to write and retry" }),
   ).toHaveCount(0);
@@ -128,11 +137,11 @@ test("a late permission retry never starts in or clears another Session", async 
   armed = true;
   await retry.click();
   await expect.poll(() => Boolean(held)).toBe(true);
-  await page.getByRole("button", { name: "New session", exact: true }).click();
-  const picker = page.getByRole("dialog");
-  await picker
+  await page
+    .locator("aside")
     .getByRole("button", { name: "Add workspace", exact: true })
     .click();
+  const picker = page.getByRole("dialog");
   await picker
     .getByLabel("Server workspace path")
     .fill("/workspace/permission-retry-other");

@@ -28,7 +28,7 @@
   color: var(--dsw-alias-label-primary);
   background: transparent;
   font-family: var(--dsw-font-family);
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
@@ -57,6 +57,7 @@
 }
 
 .changed button {
+  --dsw-press-scale: none;
   display: flex;
   width: 100%;
   min-height: 36px;

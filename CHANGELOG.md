@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a capability-gated Automation tab to the Session panel for goals, loops,
+  monitors, and agents. Reuse the session-scoped autonomy controller for
+  controls and live updates, hide the tab on unsupported connections, and show
+  the remaining goal-ledger and monitor-sandbox limitations.
 - Support plain-http LAN origins by generating UUIDs through a shared
   `crypto.randomUUID`/`getRandomValues` fallback, guarded by an oxlint rule.
   Associate provider, model, and route selects with labels in first-run setup.
@@ -37,6 +41,9 @@
 - Clarify approval actions with directory/network/deletion impact and localized
   risk labels; use Deny / Allow for this session / Allow once while retaining
   shortcuts. Permission-denied tools can switch to workspace-write and retry.
+- Make execution legible: human-readable tool titles with raw names in details,
+  per-turn duration/file/token summaries, expanded failure reasons and amber
+  sidebar attention, plus streaming Markdown without raw incomplete markers.
 
 ## v0.20.0 — 2026-10-29
 

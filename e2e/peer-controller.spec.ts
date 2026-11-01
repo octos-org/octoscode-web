@@ -272,13 +272,10 @@ test.describe("Fleet view (migrated console semantics)", () => {
       .getByRole("button", { name: "New session in peer-control-nav" })
       .click();
     await expect(
-      sidebar.getByRole("treeitem", { name: /Session / }),
+      sidebar.locator('[role="treeitem"][data-session-id]'),
     ).toHaveCount(2);
     await openFleet(page);
-    await sidebar
-      .getByRole("treeitem", { name: /Session / })
-      .first()
-      .click();
+    await sidebar.locator('[role="treeitem"][data-session-id]').first().click();
     await expect(page.locator("section.conversation")).toBeVisible();
     await expect(composer(page)).toBeEnabled();
     await expect(fleet(page)).toBeHidden();
@@ -304,7 +301,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await expect(composer(page)).toBeEnabled();
     await expect(fleet(page)).toBeHidden();
     await expect(
-      sidebar.getByRole("treeitem", { name: /Session / }),
+      sidebar.locator('[role="treeitem"][data-session-id]'),
     ).toHaveCount(2);
   });
 
@@ -325,7 +322,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
   test("unsupported Fleet capability disables the entry and explains why", async ({
     page,
   }) => {
-    await connectAndStartWorkspace(page, cwd("no-method"));
+    await connectAndStartWorkspace(page, cwd("no-fleet"));
     await expect(fleetEntry(page)).toBeDisabled();
     await expect(
       productNavigation(page).getByText(

@@ -206,6 +206,24 @@ export function rememberKnownSession(
   return knownSessions;
 }
 
+/**
+ * Drop one deleted Session from this tab's registry so a reload does not
+ * bring back a row the server no longer has.
+ */
+export function forgetKnownSession(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+  sessionId: string,
+): KnownSessionRef[] {
+  const current = readTabConnection(tabStorage);
+  if (!current || !matchesIdentity(current, identity)) return [];
+  const knownSessions = current.knownSessions.filter(
+    (entry) => entry.sessionId !== sessionId,
+  );
+  writeTabConnection(tabStorage, { ...current, knownSessions });
+  return knownSessions;
+}
+
 /** Clear only the registry belonging to the supplied current identity. */
 export function clearKnownSessions(
   tabStorage: StorageLike,

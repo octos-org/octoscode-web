@@ -61,7 +61,7 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
   touch-action: manipulation;
 }
 
@@ -139,7 +139,7 @@
   background: transparent;
   color: var(--dsw-alias-state-business-primary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .loadMore:hover {

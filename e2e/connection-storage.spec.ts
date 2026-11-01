@@ -359,13 +359,10 @@ test("a 51st unsent draft evicts the oldest, stays saved, and never blocks navig
       .filter({ hasText: "already keeps 50 unsent drafts" }),
   ).toHaveCount(0);
   await expect.poll(() => warnsOnLeave(page)).toBe(false);
-  // Navigation is not blocked: the New session dialog opens...
-  const sidebar = page.getByRole("complementary", {
-    name: "Product navigation",
-  });
-  await sidebar
-    .getByRole("button", { name: "New session", exact: true })
-    .last()
+  // Navigation is not blocked: the explicit folder picker opens...
+  await page
+    .getByRole("group", { name: "Message settings" })
+    .getByRole("button", { name: /^Folder / })
     .click();
   const chooser = page.getByRole("dialog", {
     name: "Choose a workspace",

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { UiProtocolCapabilities } from "@octos-org/octoscode-client/protocol";
 import type { ModelSettingsClient } from "../models/model-settings.ts";
 import { useModelSettings } from "../models/use-model-settings.ts";
@@ -42,15 +42,17 @@ export function ModelManagementSettings({
     configureCapabilities(capabilities);
     if (client && profileId) void refresh();
     return reset;
-  }, [
-    capabilities,
-    client,
-    configureCapabilities,
-    profileDefaultKey,
-    profileId,
-    refresh,
-    reset,
-  ]);
+  }, [capabilities, client, configureCapabilities, profileId, refresh, reset]);
+  // A new Profile default changes which provider is primary, so re-read the
+  // configuration, but in place: the projection keeps the known providers on
+  // screen while it loads. Resetting here blanked the section to "Loading
+  // model providers…" after every model choice.
+  const profileDefaultKeyRef = useRef(profileDefaultKey);
+  useEffect(() => {
+    if (profileDefaultKeyRef.current === profileDefaultKey) return;
+    profileDefaultKeyRef.current = profileDefaultKey;
+    if (client && profileId) void refresh();
+  }, [client, profileDefaultKey, profileId, refresh]);
 
   const state = management.state;
   const projection = projectModelManagement(state);

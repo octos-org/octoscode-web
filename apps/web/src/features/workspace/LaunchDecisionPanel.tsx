@@ -106,7 +106,12 @@ export function LaunchDecisionPanel({
         <span>
           {opening ? t("Opening durable session…") : t("Server decision")}
         </span>
-        <button type="button" disabled={opening} onClick={onCancel}>
+        <button
+          className="button button-ghost"
+          type="button"
+          disabled={opening}
+          onClick={onCancel}
+        >
           {t("Cancel")}
         </button>
       </div>

@@ -28,3 +28,105 @@ export function closeOpenFence(text: string): string {
   if (open === null) return text;
   return `${text}${text.endsWith("\n") ? "" : "\n"}${open}`;
 }
+
+/** Hide incomplete inline markers without changing code or escapes. */
+export function prepareStreamingMarkdown(text: string): string {
+  let plain = "";
+  let rendered = "";
+  let open: string | null = null;
+  for (const line of closeOpenFence(text).split(/(?<=\n)/)) {
+    const marker = FENCE.exec(line)?.[1];
+    if (open) {
+      rendered += line;
+      if (marker && marker[0] === open[0] && marker.length >= open.length)
+        open = null;
+    } else if (marker) {
+      rendered += prepareInline(plain);
+      plain = "";
+      rendered += line;
+      open = marker;
+    } else {
+      plain += line;
+    }
+  }
+  return rendered + prepareInline(plain);
+}
+
+function prepareInline(text: string): string {
+  return prepareIndented(text);
+}
+
+function prepareIndented(text: string): string {
+  let plain = "";
+  let rendered = "";
+  let indentedCode = false;
+  let previousBlank = true;
+  const flushPlain = () => {
+    rendered += prepareInlineCode(plain);
+    plain = "";
+  };
+  for (const line of text.split(/(?<=\n)/)) {
+    const indented = /^(?: {4}|\t)/.test(line);
+    const blank = /^\s*$/.test(line);
+    if (indented && (indentedCode || previousBlank)) {
+      flushPlain();
+      indentedCode = true;
+      rendered += line;
+      previousBlank = blank;
+      continue;
+    }
+    if (indentedCode && (indented || blank)) {
+      flushPlain();
+      rendered += line;
+      previousBlank = blank;
+      continue;
+    }
+    indentedCode = false;
+    plain += line;
+    previousBlank = blank;
+  }
+  flushPlain();
+  return rendered;
+}
+
+function prepareInlineCode(text: string): string {
+  let rendered = "";
+  let consumed = 0;
+  for (const match of text.matchAll(/(`+)([\s\S]*?)\1/g)) {
+    const start = match.index;
+    rendered += preparePlain(text.slice(consumed, start));
+    rendered += match[0];
+    consumed = start + match[0].length;
+  }
+  return rendered + preparePlain(text.slice(consumed));
+}
+
+function preparePlain(text: string): string {
+  let prepared = text;
+  for (const marker of ["**", "__", "~~", "*", "`"]) {
+    prepared = hideOddMarker(prepared, marker);
+  }
+  return prepared;
+}
+
+function hideOddMarker(text: string, marker: string): string {
+  const positions: number[] = [];
+  for (let index = 0; index <= text.length - marker.length; index += 1) {
+    if (text[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (!text.startsWith(marker, index)) continue;
+    if (
+      marker === "*" &&
+      (text[index - 1] === "*" || text[index + 1] === "*")
+    ) {
+      continue;
+    }
+    positions.push(index);
+    index += marker.length - 1;
+  }
+  if (positions.length % 2 === 0) return text;
+  const last = positions.at(-1)!;
+  return text.slice(0, last) + text.slice(last + marker.length);
+}

@@ -10,6 +10,7 @@ import {
 import {
   orderedProviderFamilies,
   providerPresentation,
+  type CatalogFamily,
 } from "./provider-presentation.ts";
 import styles from "./OnboardingPanel.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
@@ -91,6 +92,38 @@ export function OnboardingPanel({
     });
   };
   const status = onboardingStatus(state.phase);
+  const recommendedFamilies = families.slice(0, 6);
+  const moreFamilies = families.slice(6);
+  const renderProvider = (candidate: CatalogFamily) => {
+    const presentation = providerPresentation(candidate.id);
+    return (
+      <label
+        key={candidate.id}
+        className={
+          candidate.id === familyId
+            ? `${styles.provider} ${styles.selected}`
+            : styles.provider
+        }
+      >
+        <input
+          type="radio"
+          name="provider"
+          value={candidate.id}
+          checked={candidate.id === familyId}
+          onChange={() => {
+            setFamilyId(candidate.id);
+            setModelId(candidate.models[0]?.id ?? "");
+            setCustomEndpoint(false);
+            setBaseUrl("");
+          }}
+        />
+        <span className={styles.providerText}>
+          <strong>{t(presentation.name)}</strong>
+          <small>{t(presentation.tag)}</small>
+        </span>
+      </label>
+    );
+  };
 
   return (
     <section
@@ -120,10 +153,14 @@ export function OnboardingPanel({
             {state.error ?? t("The server returned an invalid catalog.")}
           </span>
           <div className={`launch-actions ${styles.actions}`}>
-            <button type="button" onClick={onRetry}>
+            <button className="button" type="button" onClick={onRetry}>
               {t("Retry")}
             </button>
-            <button type="button" onClick={onCancel}>
+            <button
+              className="button button-ghost"
+              type="button"
+              onClick={onCancel}
+            >
               {t("Disconnect")}
             </button>
           </div>
@@ -140,37 +177,16 @@ export function OnboardingPanel({
               <fieldset className={styles.providerGroup} disabled={busy}>
                 <legend>{t("Choose a provider")}</legend>
                 <div className={styles.providers}>
-                  {families.map((candidate) => {
-                    const presentation = providerPresentation(candidate.id);
-                    return (
-                      <label
-                        key={candidate.id}
-                        className={
-                          candidate.id === familyId
-                            ? `${styles.provider} ${styles.selected}`
-                            : styles.provider
-                        }
-                      >
-                        <input
-                          type="radio"
-                          name="provider"
-                          value={candidate.id}
-                          checked={candidate.id === familyId}
-                          onChange={() => {
-                            setFamilyId(candidate.id);
-                            setModelId(candidate.models[0]?.id ?? "");
-                            setCustomEndpoint(false);
-                            setBaseUrl("");
-                          }}
-                        />
-                        <span className={styles.providerText}>
-                          <strong>{t(presentation.name)}</strong>
-                          <small>{t(presentation.tag)}</small>
-                        </span>
-                      </label>
-                    );
-                  })}
+                  {recommendedFamilies.map(renderProvider)}
                 </div>
+                {moreFamilies.length ? (
+                  <details className={styles.moreProviders}>
+                    <summary>{t("More providers")}</summary>
+                    <div className={styles.providers}>
+                      {moreFamilies.map(renderProvider)}
+                    </div>
+                  </details>
+                ) : null}
               </fieldset>
               <label className={styles.modelField}>
                 <span>{t("Model")}</span>
@@ -300,10 +316,11 @@ export function OnboardingPanel({
             </>
           )}
           <div className={`launch-actions ${styles.actions}`}>
-            <span>{status}</span>
+            <span>{t(status)}</span>
             <div>
               {step === "connect" ? (
                 <button
+                  className="button button-ghost"
                   type="button"
                   disabled={busy}
                   onClick={() => setStep("service")}
@@ -311,12 +328,18 @@ export function OnboardingPanel({
                   {t("Back")}
                 </button>
               ) : null}
-              <button type="button" disabled={busy} onClick={onCancel}>
+              <button
+                className="button button-ghost"
+                type="button"
+                disabled={busy}
+                onClick={onCancel}
+              >
                 {t("Disconnect")}
               </button>
               <button
-                className={styles.submit}
+                className="button button-primary"
                 type="submit"
+                aria-busy={busy || undefined}
                 disabled={
                   busy ||
                   !familyId ||
@@ -366,7 +389,7 @@ function OnboardingFallback({ onCancel }: { onCancel: () => void }) {
       </span>
       <code>octoscode onboard</code>
       <div className={`launch-actions ${styles.actions}`}>
-        <button type="button" autoFocus onClick={onCancel}>
+        <button className="button" type="button" autoFocus onClick={onCancel}>
           {t("Disconnect")}
         </button>
       </div>

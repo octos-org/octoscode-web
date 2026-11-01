@@ -765,6 +765,55 @@ describe("OctosUiClient", () => {
     await expect(Promise.all(pending)).resolves.toHaveLength(9);
   });
 
+  it("renames a session with session/title.set and validates the echo", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const renamed = client.setSessionTitle({
+      session_id: "coding:api:web-1",
+      title: "第44周周报",
+    });
+    const malformed = client.setSessionTitle({
+      session_id: "coding:api:web-2",
+      title: "x",
+    });
+    const frames = socket.send.mock.calls.map(([frame]) =>
+      JSON.parse(String(frame)),
+    ) as Array<{ id: string; method: string; params: unknown }>;
+    expect(frames).toMatchObject([
+      {
+        method: "session/title.set",
+        params: { session_id: "coding:api:web-1", title: "第44周周报" },
+      },
+      { method: "session/title.set" },
+    ]);
+    for (const [index, result] of [
+      { session_id: "coding:api:web-1", title: "第44周周报" },
+      { session_id: "coding:api:web-2" },
+    ].entries()) {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          id: frames[index]!.id,
+          result,
+        }),
+      } as MessageEvent);
+    }
+    await expect(renamed).resolves.toEqual({
+      session_id: "coding:api:web-1",
+      title: "第44周周报",
+    });
+    await expect(malformed).rejects.toThrow();
+    client.disconnect();
+  });
+
   it("emits the exact profile model-management wire contract", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({

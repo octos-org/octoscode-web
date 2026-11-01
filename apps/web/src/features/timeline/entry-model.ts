@@ -32,6 +32,8 @@ export interface TimelineEntry {
   turnSettled?: true;
   toolSettled?: true;
   latestTurnOutcome?: string;
+  turnUsage?: { input: number; output: number } | undefined;
+  toolArguments?: string | undefined;
   /** Explicit terminal state from this owner's hydrate/live lifecycle. */
   textTerminal?: "completed" | "errored" | "interrupted";
   omittedCount?: number;

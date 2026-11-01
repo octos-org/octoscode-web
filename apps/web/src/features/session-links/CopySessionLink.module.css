@@ -17,7 +17,9 @@
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-  transition: background-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .button:hover:not(:disabled) {

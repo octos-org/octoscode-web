@@ -17,6 +17,11 @@ interface ApprovalPanelProps {
   onDecide: (decision: ApprovalDecision, scope: ApprovalScope) => void;
   onInterrupt?: (() => void) | undefined;
   onReviewDiff?: (previewId: string) => void;
+  /**
+   * Phone remote control: only a one-time approve or a deny. Broader grants
+   * ("for this session") and sandbox escalations stay on the computer.
+   */
+  onceOnly?: boolean;
 }
 
 export function ApprovalPanel({
@@ -26,12 +31,24 @@ export function ApprovalPanel({
   onDecide,
   onInterrupt,
   onReviewDiff,
+  onceOnly = false,
 }: ApprovalPanelProps) {
   const t = useUiText();
+  const escalation = onceOnly && isSandboxEscalation(approval);
+  const allowSession = !onceOnly;
+  const allowOnce = !escalation;
   const command = approvalCommand(approval.typedDetails);
   const previewId = approvalDiffPreviewId(approval);
   const impact = approvalImpactDetails(approval);
   const risk = approval.risk?.toLowerCase();
+  const riskLabel =
+    risk === "high" || risk === "critical"
+      ? "High risk"
+      : risk === "medium"
+        ? "Medium risk"
+        : risk === "low"
+          ? "Low risk"
+          : "Risk not specified";
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (
@@ -46,10 +63,10 @@ export function ApprovalPanel({
     if (event.key.toLowerCase() === "d" && previewId && onReviewDiff) {
       event.preventDefault();
       onReviewDiff(previewId);
-    } else if (event.key.toLowerCase() === "y") {
+    } else if (event.key.toLowerCase() === "y" && allowOnce) {
       event.preventDefault();
       onDecide("approve", "request");
-    } else if (event.key.toLowerCase() === "s") {
+    } else if (event.key.toLowerCase() === "s" && allowSession) {
       event.preventDefault();
       onDecide("approve", "session");
     } else if (event.key.toLowerCase() === "n") {
@@ -71,20 +88,10 @@ export function ApprovalPanel({
       <div className="approval-strip">
         <span className="approval-dot" />
         <span>{t("Approval required")}</span>
-        {approval.risk ? (
-          <em data-risk={risk}>
-            {t(
-              risk === "high" || risk === "critical"
-                ? "High risk"
-                : risk === "medium"
-                  ? "Medium risk"
-                  : "Low risk",
-            )}
-          </em>
-        ) : null}
+        {approval.risk ? <em data-risk={risk}>{t(riskLabel)}</em> : null}
       </div>
       <div className="approval-body">
-        <strong id="approval-title">{approval.title}</strong>
+        <strong id="approval-title">{t(approval.title)}</strong>
         <p className="approval-impact">
           {t("Impact: {directory} · {network} · {deletion}", {
             directory: impact.directory
@@ -109,6 +116,17 @@ export function ApprovalPanel({
           {approval.approvalKind ? ` · ${t(approval.approvalKind)}` : ""}
         </span>
         {error ? <span className="takeover-error">{error}</span> : null}
+        {onceOnly ? (
+          <p className="approval-remote-note" role="note">
+            {escalation
+              ? t(
+                  "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.",
+                )
+              : t(
+                  "From the phone you can allow this one request. To allow it for the whole session or raise permissions, use your computer.",
+                )}
+          </p>
+        ) : null}
       </div>
       <div className="approval-actions">
         {previewId && onReviewDiff ? (
@@ -131,25 +149,41 @@ export function ApprovalPanel({
           {t("Deny") + " "}
           <kbd>N</kbd>
         </button>
-        <button
-          className="takeover-button"
-          type="button"
-          disabled={busy}
-          onClick={() => onDecide("approve", "session")}
-        >
-          {t("Allow for this session") + " "}
-          <kbd>S</kbd>
-        </button>
-        <button
-          className="takeover-button primary"
-          type="button"
-          disabled={busy}
-          onClick={() => onDecide("approve", "request")}
-        >
-          {busy ? t("Sending…") : t("Allow once")} <kbd>Y</kbd>
-        </button>
+        {allowSession ? (
+          <button
+            className="takeover-button"
+            type="button"
+            disabled={busy}
+            onClick={() => onDecide("approve", "session")}
+          >
+            {t("Allow for this session") + " "}
+            <kbd>S</kbd>
+          </button>
+        ) : null}
+        {allowOnce ? (
+          <button
+            className="takeover-button primary"
+            type="button"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={() => onDecide("approve", "request")}
+          >
+            {busy ? t("Sending…") : t("Allow once")} <kbd>Y</kbd>
+          </button>
+        ) : null}
       </div>
     </ModalSurface>
+  );
+}
+
+/** A typed sandbox escalation: more access than the sandbox grants. */
+export function isSandboxEscalation(approval: ApprovalRequested): boolean {
+  const kind = isRecord(approval.typedDetails)
+    ? approval.typedDetails.kind
+    : undefined;
+  return (
+    approval.approvalKind === "sandbox_escalation" ||
+    kind === "sandbox_escalation"
   );
 }
 

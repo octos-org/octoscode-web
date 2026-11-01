@@ -1,8 +1,16 @@
+import { APPUI_MEMORY_SESSION_SCOPE_FEATURE } from "./memory-methods.ts";
+import {
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
+  type ExecutionEnvironmentReadParams,
+  type ExecutionEnvironmentResult,
+} from "./execution-environment.ts";
 import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 import {
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
 } from "./skill-methods.ts";
+import { MCP_CONNECTOR_MANAGE_V1 } from "./inventory-methods.ts";
 import { createRequest, isRecord, parseIncomingFrame } from "./rpc.ts";
 import {
   CORE_UI_FEATURES,
@@ -28,6 +36,8 @@ import type {
   SessionOpenResult,
   SessionDeleteParams,
   SessionDeleteResult,
+  SessionTitleSetParams,
+  SessionTitleSetResult,
   SessionFileReadParams,
   SessionFileReadResult,
   SessionFilesListParams,
@@ -116,6 +126,7 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.SESSION_WORKSPACE_CWD_V1,
   CORE_UI_FEATURES.SESSION_FILES_READ_V1,
   CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1,
+  APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   CORE_UI_FEATURES.SESSION_HYDRATE_V1,
   CORE_UI_FEATURES.THREAD_GRAPH_V1,
   CORE_UI_FEATURES.TURN_STATE_GET_V1,
@@ -135,6 +146,8 @@ export const DEFAULT_UI_FEATURES = [
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
   EXTERNAL_DRIVER_V1_UI_FEATURE,
+  MCP_CONNECTOR_MANAGE_V1,
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -294,9 +307,12 @@ export class OctosUiClient {
     );
   }
 
-  async memoryCommands(capabilities: UiProtocolCapabilities) {
+  async memoryCommands(
+    capabilities: UiProtocolCapabilities,
+    sessionId?: string,
+  ) {
     const { createMemoryCommands } = await import("./memory.ts");
-    return createMemoryCommands(this.invoke, capabilities);
+    return createMemoryCommands(this.invoke, capabilities, sessionId);
   }
 
   async cronCommands(capabilities: UiProtocolCapabilities) {
@@ -702,6 +718,19 @@ export class OctosUiClient {
     );
   }
 
+  async readExecutionEnvironment(
+    params: ExecutionEnvironmentReadParams,
+  ): Promise<ExecutionEnvironmentResult> {
+    return this.validatedRequest(
+      SESSION_EXECUTION_ENVIRONMENT_READ,
+      params,
+      async (value) =>
+        (
+          await import("./execution-environment.ts")
+        ).parseExecutionEnvironmentResult(value),
+    );
+  }
+
   async listSessions(
     params: SessionListParams = {},
   ): Promise<SessionListResult> {
@@ -885,6 +914,17 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseSessionDeleteResult(value),
+    );
+  }
+
+  async setSessionTitle(
+    params: SessionTitleSetParams,
+  ): Promise<SessionTitleSetResult> {
+    return this.validatedRequest(
+      CORE_UI_METHODS.SESSION_TITLE_SET,
+      params,
+      async (value) =>
+        (await loadWorkspaceResults()).parseSessionTitleSetResult(value),
     );
   }
 

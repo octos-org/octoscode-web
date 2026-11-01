@@ -61,10 +61,16 @@ export interface PeerDockManager {
 export interface PeerDockProps {
   /** The peers manager, or null before one is built. */
   manager: PeerDockManager | null;
+  /** All retained masters' rows; defaults to the active manager's rows. */
+  roster?: readonly PeerRosterEntry[] | undefined;
+  /** Only these active-owner rows may render control actions. */
+  actionRoster?: readonly PeerRosterEntry[] | undefined;
   /** Controlled fold state; the pill replaces the rows when true. */
   collapsed?: boolean;
   /** Fold control. The dock stays keyboard-only; it never mutates roster state. */
   onToggle?(): void;
+  /** Opens the exact peer represented by the activated row. */
+  onSelect?: ((entry: PeerRosterEntry) => void) | undefined;
   /**
    * Answers a blocked peer's pending APPROVAL (console plan §3-§4). The dock
    * stays pure: it only forwards the roster entry and the decision, and renders
@@ -184,8 +190,11 @@ function refocusRowButton(event: MouseEvent<HTMLButtonElement>): void {
 
 export function PeerDock({
   manager,
+  roster,
+  actionRoster,
   collapsed = false,
   onToggle,
+  onSelect,
   onApprovalRespond,
   onRowAction,
 }: PeerDockProps) {
@@ -202,9 +211,12 @@ export function PeerDock({
     manager?.getSnapshot ?? snapshotNone,
     manager?.getSnapshot ?? snapshotNone,
   );
-  if (!manager) return null;
-  const peers = snapshot.peers;
+  if (!manager && roster === undefined) return null;
+  const peers = roster ?? snapshot.peers;
   if (peers.length === 0) return null;
+  const canAct = (peer: PeerRosterEntry) =>
+    actionRoster === undefined ||
+    actionRoster.some((row) => row.identity === peer.identity);
   // Counts come from the SHARED roster helpers (audit rows 2-3), never a local
   // re-derivation, so the dock cannot drift from the data layer.
   const counts = summarizeRoster(peers);
@@ -220,7 +232,7 @@ export function PeerDock({
           aria-expanded={false}
           onClick={() => onToggle?.()}
         >
-          {t("Peers")} {formatPeerDockPill(counts, landed)}
+          {t("Peers")} {formatPeerDockPill(counts, landed, t)}
         </button>
       </section>
     );
@@ -241,26 +253,30 @@ export function PeerDock({
       </div>
       <ul className={styles.rows} aria-label={t("Session peers")}>
         {peers.map((peer, index) => (
-          <li key={peer.identity} className={styles.row}>
+          <li key={peer.rowKey ?? peer.identity} className={styles.row}>
             {(() => {
-              const label = peerRowLabel(index, peer.model ?? null);
-              const actions = onRowAction ? peerRowActions(peer) : [];
+              const roleLabel = peerRowLabel(index, peer.model ?? null);
+              const label = peer.slug.trim() === "" ? roleLabel : peer.slug;
+              const actions =
+                onRowAction && canAct(peer) ? peerRowActions(peer) : [];
               const attention = peerRowAttention(peer);
               const ack = peer.acknowledgment ?? null;
               const renewed = peer.turnChangedSinceAck === true;
-              const draft = rowDrafts[peer.identity] ?? "";
+              const rowKey = peer.rowKey ?? peer.identity;
+              const draft = rowDrafts[rowKey] ?? "";
               return (
                 <>
                   <button
                     type="button"
                     className={styles.rowButton}
-                    aria-label={t("{value0} — {value1}", {
-                      value0: label,
-                      value1: t(ACTIVITY_LABEL[peer.activity]),
-                    })}
                     data-peer-slug={peer.slug}
+                    onClick={() => onSelect?.(peer)}
                     onKeyDown={(event) =>
-                      respondToRowKey(peer, event, onApprovalRespond)
+                      respondToRowKey(
+                        peer,
+                        event,
+                        canAct(peer) ? onApprovalRespond : undefined,
+                      )
                     }
                   >
                     <span
@@ -270,54 +286,83 @@ export function PeerDock({
                     >
                       {ACTIVITY_GLYPH[peer.activity]}
                     </span>
-                    <span className={styles.slug}>{label}</span>
-                    <span className={styles.status}>{peer.status}</span>
-                    {(() => {
-                      const elapsed = peerElapsed(peer, now);
-                      return elapsed === null ? null : (
-                        <span className={styles.status} data-peer-elapsed>
-                          {`· ${elapsed}`}
+                    <span className={styles.slug} title={label}>
+                      {label}
+                    </span>
+                    <span className="sr-only">
+                      {t(ACTIVITY_LABEL[peer.activity])}
+                    </span>
+                    <span className={styles.meta}>
+                      <span className={styles.status}>{t(peer.status)}</span>
+                      {(() => {
+                        const elapsed = peerElapsed(peer, now);
+                        return elapsed === null ? null : (
+                          <span
+                            className={styles.status}
+                            data-peer-elapsed
+                            title={t("Peer run time")}
+                          >
+                            <span className={styles.metricCompact}>
+                              {`· ${elapsed}`}
+                            </span>
+                            <span className={styles.metricLong}>
+                              {`· ${t("Run {value0}", { value0: elapsed })}`}
+                            </span>
+                          </span>
+                        );
+                      })()}
+                      {peer.outputTokens === undefined ? null : (
+                        <span
+                          className={styles.status}
+                          data-peer-tokens
+                          title={t("Output tokens")}
+                        >
+                          <span className={styles.metricCompact}>
+                            {formatPeerTokens(peer.outputTokens)}
+                          </span>
+                          <span className={styles.metricLong}>
+                            {`· ${t("Output {value0} tokens", {
+                              value0: peer.outputTokens,
+                            })}`}
+                          </span>
                         </span>
-                      );
-                    })()}
-                    {peer.outputTokens === undefined ? null : (
-                      <span className={styles.status} data-peer-tokens>
-                        {formatPeerTokens(peer.outputTokens)}
-                      </span>
-                    )}
-                    {/* §4.3 outcome words: Finished / Stopped / Failed ride the
+                      )}
+                      {/* §4.3 outcome words: Finished / Stopped / Failed ride the
                       row once its turn terminates; they are OUTCOMES, never
                       acknowledgments. */}
-                    {peer.activity === "done" && peer.outcome ? (
-                      <span className={styles.status} data-peer-outcome>
-                        {` · ${t(
-                          peer.outcome === "finished"
-                            ? "Finished"
-                            : peer.outcome === "stopped"
-                              ? "Stopped"
-                              : "Failed",
-                        )}`}
-                      </span>
-                    ) : null}
-                    {/* §4.3 acknowledgments: "Sent" / "Stop requested" — an
+                      {peer.activity === "done" && peer.outcome ? (
+                        <span className={styles.status} data-peer-outcome>
+                          {` · ${t(
+                            peer.outcome === "finished"
+                              ? "Finished"
+                              : peer.outcome === "stopped"
+                                ? "Stopped"
+                                : "Failed",
+                          )}`}
+                        </span>
+                      ) : null}
+                      {/* §4.3 acknowledgments: "Sent" / "Stop requested" — an
                       accepted frame, promising nothing further. Superseded by
                       a renewed intent ("Peer started a new turn"). */}
-                    {ack !== null && !renewed ? (
-                      <span className={styles.status} data-peer-ack>
-                        {` · ${t(
-                          ack.kind === "stop-requested"
-                            ? "Stop requested"
-                            : "Sent",
-                        )}`}
-                      </span>
-                    ) : null}
-                    {renewed ? (
-                      <span className={styles.status} data-peer-turn-changed>
-                        {` · ${t("Peer started a new turn")}`}
-                      </span>
-                    ) : null}
+                      {ack !== null && !renewed ? (
+                        <span className={styles.status} data-peer-ack>
+                          {` · ${t(
+                            ack.kind === "stop-requested"
+                              ? "Stop requested"
+                              : "Sent",
+                          )}`}
+                        </span>
+                      ) : null}
+                      {renewed ? (
+                        <span className={styles.status} data-peer-turn-changed>
+                          {` · ${t("Peer started a new turn")}`}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
-                  {onApprovalRespond && peerAcceptsApproval(peer) ? (
+                  {onApprovalRespond &&
+                  canAct(peer) &&
+                  peerAcceptsApproval(peer) ? (
                     <span className={styles.actions}>
                       <button
                         type="button"
@@ -417,7 +462,7 @@ export function PeerDock({
                             value0: label,
                           })}
                           onChange={(event) =>
-                            setDraft(peer.identity, event.target.value)
+                            setDraft(rowKey, event.target.value)
                           }
                         />
                       )}

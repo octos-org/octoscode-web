@@ -9,11 +9,12 @@
   color-scheme: light dark;
   --dsw-font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial,
-    sans-serif;
+    "Noto Sans CJK SC", "Source Han Sans SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --dsw-font-family-code:
     "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono",
-    Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+    Menlo, Courier, "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC",
+    "Microsoft YaHei";
   /* Numeric content (ids, timestamps, counters) — keeps digits aligned and
      visually distinct from prose (tasteskill numeric rule). */
   --dsw-font-numeric: var(--dsw-font-family-code);
@@ -38,6 +39,25 @@
   --dsw-transition-duration: 0.2s;
   --dsw-transition-duration-slow: 0.3s;
   --dsw-font-size-micro: 11px;
+  --dsw-font-size-xs: 12px;
+  --dsw-font-size-sm: 13px;
+  --dsw-font-size-body: 14px;
+  --dsw-font-size-base: 16px;
+  --dsw-font-size-button: 13px;
+  --dsw-radius-sm: 6px;
+  --dsw-radius-md: 10px;
+  /* Control scale: one height per density, one corner for every control. */
+  --dsw-control-h-sm: 28px;
+  --dsw-control-h-md: 36px;
+  --dsw-control-h-lg: 44px;
+  --dsw-radius-control: var(--dsw-radius-md);
+  /* Press feedback: a pressed control sits one step past hover and shrinks a
+     little. Wide rows set --dsw-press-scale: none and keep only the tint
+     (none, not 1: any scale value makes the element a containing block). */
+  --dsw-press-scale: 0.97;
+  --dsw-press-shadow: inset 0 0 0 100vmax
+    var(--dsw-alias-interactive-press-overlay);
+  --dsw-z-dialog: 100;
   --dsw-shadow-lv1: 0 2px 4px rgb(0 0 0 / 5%);
   --dsw-shadow-lv2: 0 4px 12px rgb(0 0 0 / 2%), 0 2px 8px rgb(0 0 0 / 4%);
   --dsw-shadow-composer: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 28px rgb(0 0 0 / 6%);
@@ -72,10 +92,20 @@
     rgb(255 255 255 / 8%)
   );
   --dsw-alias-interactive-bg-hover-solid: light-dark(#f1f3f5, #353638);
+  /* Painted over whatever fill the control has (hover included) while it is
+     held down, so every surface gets a press step without its own token. */
+  --dsw-alias-interactive-press-overlay: light-dark(
+    rgb(15 17 21 / 9%),
+    rgb(255 255 255 / 10%)
+  );
+  --dsw-alias-button-danger-fill: light-dark(#d11a1a, #e5484d);
+  --dsw-alias-button-danger-hover: light-dark(#b91515, #d13b40);
   --dsw-alias-interactive-bg-hover-danger: light-dark(
     rgb(236 19 19 / 5%),
     rgb(242 90 90 / 15%)
   );
+  --dsw-alias-highlight: light-dark(#ffe066, #8a6d00);
+  --dsw-alias-highlight-label: light-dark(#0f1115, #f9fafb);
   --dsw-alias-label-caption: light-dark(#646970, #81858c);
   --dsw-alias-label-primary: light-dark(#0f1115, #f9fafb);
   --dsw-alias-label-primary-dimmed: light-dark(#151517, #ebeef2);
@@ -117,6 +147,11 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
+}
+
+/* Han characters below 12px lose strokes; Chinese never goes under it. */
+:root:lang(zh) {
+  --dsw-font-size-micro: 12px;
 }
 
 /* Named colors follow the pinned native Octoscode Theme palettes. Terminal
@@ -165,6 +200,15 @@
   );
   --dsw-alias-interactive-bg-hover-solid: var(--display-frame);
   --dsw-alias-interactive-bg-hover-danger: var(--display-danger-bg);
+  --dsw-alias-interactive-press-overlay: rgb(255 255 255 / 10%);
+  --dsw-alias-button-danger-fill: var(--display-danger);
+  --dsw-alias-button-danger-hover: color-mix(
+    in srgb,
+    var(--display-danger) 85%,
+    white
+  );
+  --dsw-alias-highlight: var(--display-highlight);
+  --dsw-alias-highlight-label: var(--display-surface);
   --dsw-alias-label-caption: var(--display-muted);
   --dsw-alias-label-primary: var(--display-text);
   --dsw-alias-label-primary-dimmed: var(--display-text);

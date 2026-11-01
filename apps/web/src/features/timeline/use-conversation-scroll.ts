@@ -112,6 +112,14 @@ export function useConversationScroll(
         return;
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const attachmentPreview = target.closest("[data-attachment-preview]");
+      if (attachmentPreview?.getAttribute("aria-expanded") === "false") {
+        // Preview contents can grow substantially after the click. Do not let
+        // the transcript's follow-tail behavior pull the clicked card away.
+        following.current = false;
+        if (scrollRef.current) rememberPosition(scrollRef.current);
+        return;
+      }
       const details = target.closest("summary")?.parentElement;
       if (details instanceof HTMLDetailsElement && !details.open) {
         // User intent comes before the native toggle and its resize. Keep the

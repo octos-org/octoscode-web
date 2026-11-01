@@ -49,10 +49,10 @@
 }
 
 .actions button {
-  min-height: 44px;
+  min-height: var(--dsw-control-h-lg);
   padding: 10px 16px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-control);
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -61,15 +61,11 @@
   cursor: pointer;
   transition:
     background var(--dsw-motion-feedback) var(--dsw-ease-out),
-    transform var(--dsw-motion-feedback) var(--dsw-ease-out);
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .actions button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.actions button:active {
-  transform: scale(0.98);
 }
 
 .actions button:focus-visible {
@@ -103,9 +99,5 @@
 
   .actions button {
     transition: none;
-  }
-
-  .actions button:active {
-    transform: none;
   }
 }

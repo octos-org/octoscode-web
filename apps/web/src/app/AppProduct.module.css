@@ -66,7 +66,7 @@
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .conversationTabs button:hover,
@@ -116,7 +116,7 @@
 .pendingNavigationCopy small {
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -131,11 +131,11 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .pendingNavigation button:hover {
-  background: var(--dsw-alias-interactive-bg-hover-neutral);
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -145,20 +145,32 @@
   border-style: dashed;
 }
 
-.preferencesTrigger {
+.headerAction {
+  position: relative;
+  display: inline-flex;
+  box-sizing: border-box;
+  height: 32px;
   min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 0 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
-.preferencesTrigger:hover {
+.headerAction:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.headerAction[aria-expanded="true"] {
+  border-color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Skip-link target that hosts both routed panes (chat + Fleet) in the
@@ -192,38 +204,13 @@
   grid-area: 1 / 2;
 }
 
-.panelToggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 0 10px 0 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.panelToggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.panelToggle[aria-expanded="true"] {
-  border-color: var(--dsw-alias-label-secondary);
-  color: var(--dsw-alias-label-primary);
-}
-
 .panelBadge {
   min-width: 18px;
   border-radius: 999px;
   padding: 0 5px;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-bg-base);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 18px;
@@ -309,12 +296,6 @@
 }
 
 @media (max-width: 760px) {
-  /* Settings remains available from the session drawer; keep the compact
-     header to navigation, workspace context, tabs, and Review. */
-  .preferencesTrigger {
-    display: none;
-  }
-
   .conversationTabs {
     flex: none;
   }
@@ -382,18 +363,14 @@
   color: var(--dsw-alias-label-primary);
   box-shadow: var(--dsw-shadow-lv2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   line-height: 18px;
   font-weight: 500;
-  transition: transform 120ms var(--dsw-ease-in-out);
+  transition: scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .jumpLatest:hover {
   background: var(--dsw-alias-button-floating-hover);
-}
-
-.jumpLatest:active:not(:disabled) {
-  transform: translateX(-50%) scale(0.98);
 }
 
 /* Deep-thinking indicator: pulsing placeholder between send and the first
@@ -420,9 +397,8 @@
   :global(.header-actions):empty {
     display: none;
   }
-  /* Our compact header carries one control more than upstream's (the browser
-     preferences trigger) beside the review chip. Tighten the action gap so the
-     extra affordance is not paid for out of the workspace name's width. */
+  /* Keep the secondary-actions menu beside the panel switch without paying
+     for it out of the workspace name's width. */
   :global(.header-actions) {
     gap: var(--dsw-space-2);
   }
@@ -435,22 +411,20 @@
   }
 }
 
-/* Phone widths. The conversation header carries one control more than
-   upstream's (the browser preferences trigger), so at 320-400px the padding,
-   the gaps and the tab padding give way first — the workspace name never does,
-   because it is the only thing on screen that says which repository you are
-   about to change. */
+/* Phone widths. At 320-400px the padding, gaps and tab padding give way
+   first — the workspace name never does, because it is the only thing on
+   screen that says which repository you are about to change. */
 @media (max-width: 400px) {
   :global(.workspace-grid .conversation-header) {
     position: relative;
     z-index: 8;
-    gap: 6px;
-    padding: 0 8px;
+    gap: 4px;
+    padding: 0 6px;
     background: var(--dsw-alias-bg-base);
   }
 
   :global(.header-actions) {
-    gap: 6px;
+    gap: 4px;
   }
 
   .conversationTabs button {
@@ -600,6 +574,53 @@
       transform: scaleX(1);
     }
   }
+}
+
+.fleetEmpty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  min-height: calc(100dvh - 120px);
+  padding: 32px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: center;
+}
+
+.fleetEmpty h2,
+.fleetEmpty p {
+  margin: 0;
+}
+
+.fleetEmpty h2 {
+  color: var(--dsw-alias-label-primary);
+  font-size: 20px;
+}
+
+.fleetEmptyIcon {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.fleetEmptyAction {
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--dsw-alias-button-info-fill);
+  color: var(--dsw-alias-label-on-accent);
+  cursor: pointer;
+  font: 500 14px/22px var(--dsw-font-family);
+}
+
+.fleetEmptyAction:hover {
+  background: var(--dsw-alias-button-info-hover);
 }
 
 /* The workspace title and its copy-link action read as one unit. */

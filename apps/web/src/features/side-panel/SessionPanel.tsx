@@ -23,6 +23,7 @@ const TAB_LABELS: Record<SessionPanelTab, string> = {
   files: "Files",
   changes: "Changes",
   outputs: "Outputs",
+  automation: "Automation",
 };
 
 const RESIZE_STEP = 16;
@@ -36,6 +37,7 @@ export interface SessionPanelProps {
   availableWidth: () => number;
   /** A count shown after a tab's name, when it has one. */
   counts: Partial<Record<SessionPanelTab, number>>;
+  automationAvailable: boolean;
   onTabChange: (tab: SessionPanelTab) => void;
   onWidthChange: (width: number) => void;
   onClose: () => void;
@@ -53,6 +55,9 @@ export function SessionPanel(props: SessionPanelProps) {
   const tabIds = useId();
   const tabRefs = useRef(new Map<SessionPanelTab, HTMLButtonElement>());
   const drag = useRef<{ x: number; width: number } | null>(null);
+  const tabs = SESSION_PANEL_TABS.filter(
+    (tab) => tab !== "automation" || props.automationAvailable,
+  );
 
   const select = (tab: SessionPanelTab, focus = false) => {
     props.onTabChange(tab);
@@ -60,8 +65,8 @@ export function SessionPanel(props: SessionPanelProps) {
   };
 
   const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const index = SESSION_PANEL_TABS.indexOf(props.tab);
-    const last = SESSION_PANEL_TABS.length - 1;
+    const index = tabs.indexOf(props.tab);
+    const last = tabs.length - 1;
     const next =
       event.key === "ArrowRight"
         ? index === last
@@ -78,7 +83,7 @@ export function SessionPanel(props: SessionPanelProps) {
               : null;
     if (next === null) return;
     event.preventDefault();
-    select(SESSION_PANEL_TABS[next]!, true);
+    select(tabs[next]!, true);
   };
 
   const resize = (width: number) =>
@@ -124,7 +129,7 @@ export function SessionPanel(props: SessionPanelProps) {
           {t("Session panel")}
         </h2>
         <div className={styles.tabs} role="tablist" aria-labelledby={headingId}>
-          {SESSION_PANEL_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const selected = tab === props.tab;
             const count = props.counts[tab];
             return (

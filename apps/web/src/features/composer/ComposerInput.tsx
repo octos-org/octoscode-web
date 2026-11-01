@@ -7,6 +7,7 @@ import {
   type PeerReadonlyRow,
 } from "./peer-readonly.ts";
 import { clearVimPending, reduceVimEdit, resetVimMode } from "./vim-edit.ts";
+import styles from "./ComposerInput.module.css";
 
 interface ComposerInputProps {
   recordKey: string;
@@ -33,6 +34,7 @@ interface ComposerInputProps {
    */
   peerRoster?: readonly PeerReadonlyRow[] | undefined;
   peerSessionId?: string | null | undefined;
+  onReturnToMaster?: (() => void) | undefined;
   paletteId: string;
   commandCount: number;
   selectedCommandId: string | undefined;
@@ -61,7 +63,7 @@ export function ComposerInput(props: ComposerInputProps) {
   // a11y review 0800 §1: disabling a FOCUSED textarea drops focus to <body>.
   // Keep a legal landing (the status row) and the intent to use it — focus is
   // only moved on the read-only EDGE, so an unfocused composer is never stolen.
-  const statusRow = useRef<HTMLParagraphElement>(null);
+  const statusRow = useRef<HTMLDivElement>(null);
   const hadFocus = useRef(false);
   const peerReadOnly = useRef(false);
   const mode = useRef({
@@ -129,6 +131,29 @@ export function ComposerInput(props: ComposerInputProps) {
       statusRow.current?.focus();
     }
   }, [peerReadOnlyNow]);
+  if (readOnlyPeerSlug !== null) {
+    return (
+      <>
+        <div
+          ref={statusRow}
+          role="status"
+          tabIndex={-1}
+          className={styles.peerReadonly}
+        >
+          <span>{t(PEER_READONLY_HINT, { slug: readOnlyPeerSlug })}</span>
+          {props.onReturnToMaster ? (
+            <button
+              type="button"
+              className={styles.returnToMaster}
+              onClick={props.onReturnToMaster}
+            >
+              {t("Return to master")}
+            </button>
+          ) : null}
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <textarea
@@ -147,7 +172,10 @@ export function ComposerInput(props: ComposerInputProps) {
         }}
         onBlur={() => {
           hadFocus.current = false;
-          mode.current = { ...mode.current, ...clearVimPending(mode.current) };
+          mode.current = {
+            ...mode.current,
+            ...clearVimPending(mode.current),
+          };
           selection.current = null;
         }}
         onKeyDown={(event) => {
@@ -288,16 +316,6 @@ export function ComposerInput(props: ComposerInputProps) {
         aria-activedescendant={props.selectedCommandId}
         rows={3}
       />
-      {readOnlyPeerSlug !== null ? (
-        <p
-          ref={statusRow}
-          role="status"
-          tabIndex={-1}
-          className="peer-readonly-composer"
-        >
-          {t(PEER_READONLY_HINT, { slug: readOnlyPeerSlug })}
-        </p>
-      ) : null}
       {vimMode && readOnlyPeerSlug === null ? (
         <small className="field-note" aria-live="polite">
           {t(mode.current.mode === "insert" ? "Vim · Insert" : "Vim · Normal")}

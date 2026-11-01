@@ -7,7 +7,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: var(--dsw-shadow-lv1);
-  font-size: var(--dsw-font-size-body, 14px);
+  font-size: var(--dsw-font-size-body);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -31,7 +31,7 @@
 }
 
 .eyebrow {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dsw-alias-label-caption);
@@ -104,7 +104,7 @@
 }
 
 .meta dt {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -130,7 +130,8 @@
   cursor: pointer;
   transition:
     background var(--dsw-transition-duration) var(--dsw-ease-in-out),
-    color var(--dsw-transition-duration) var(--dsw-ease-in-out);
+    color var(--dsw-transition-duration) var(--dsw-ease-in-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .actions button:hover:not(:disabled),
@@ -146,7 +147,7 @@
 
 .danger {
   border-color: var(--dsw-alias-state-error-secondary) !important;
-  color: var(--dsw-alias-state-error-primary) !important;
+  color: var(--dsw-alias-state-error-text) !important;
 }
 
 .form {

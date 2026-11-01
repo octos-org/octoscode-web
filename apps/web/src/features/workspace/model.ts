@@ -22,10 +22,12 @@ export interface WorkspaceProductState {
   activitySessionLabels?: Readonly<Record<string, string>>;
   sessionsAvailable: boolean;
   deleteAvailable: boolean;
+  renameAvailable: boolean;
   filesAvailable: boolean;
   loading: boolean;
   filesLoading: boolean;
   deletingSessionId: string | null;
+  renamingSessionId: string | null;
   sessions: SessionListEntry[];
   files: SessionFileInfo[];
   tokenCost: TokenCostUpdate | null;
@@ -40,10 +42,12 @@ export interface WorkspaceProductState {
 export const EMPTY_WORKSPACE_PRODUCT: WorkspaceProductState = {
   sessionsAvailable: false,
   deleteAvailable: false,
+  renameAvailable: false,
   filesAvailable: false,
   loading: false,
   filesLoading: false,
   deletingSessionId: null,
+  renamingSessionId: null,
   sessions: [],
   files: [],
   tokenCost: null,

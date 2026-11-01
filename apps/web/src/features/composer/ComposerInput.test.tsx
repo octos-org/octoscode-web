@@ -79,9 +79,13 @@ function mount(text = "alpha\nbeta") {
     // A superseded render does not get a commit/layout phase.
     hooks.effects = [];
     const fragment = ComposerInput(props) as ReactElement<{
-      children: ReactElement<TextareaProps>[];
+      children: ReactElement<TextareaProps> | ReactElement<TextareaProps>[];
     }>;
-    rendered = fragment.props.children[0]!.props;
+    const children = Array.isArray(fragment.props.children)
+      ? fragment.props.children
+      : [fragment.props.children];
+    const input = children[0];
+    if (input) rendered = input.props;
     hooks.refs[0]!.current = target;
   }
   function layout() {
@@ -328,21 +332,34 @@ function surface(patch: Partial<Props> = {}) {
     ...patch,
   };
   const fragment = ComposerInput(base) as ReactElement<{
-    children: (SurfaceChild | null)[];
+    children: SurfaceChild | null | (SurfaceChild | null)[];
   }>;
-  const [textarea, hint] = fragment.props.children;
-  return { textarea: textarea!.props, hint };
+  const children = Array.isArray(fragment.props.children)
+    ? fragment.props.children
+    : [fragment.props.children];
+  const [primary] = children;
+  const input = primary?.type === "textarea" ? primary : null;
+  const hint = primary?.type === "div" ? primary : null;
+  return { input, textarea: primary!.props, hint };
 }
 
 describe("read-only peer composer surface (audit row 7)", () => {
-  it("disables the textarea and names the peer when the focused id is in the roster", () => {
-    const { textarea, hint } = surface({
+  it("replaces the textarea with a read-only status and a return-to-master action", () => {
+    const onReturnToMaster = vi.fn();
+    const { input, hint } = surface({
       peerRoster: PEER_ROSTER,
       peerSessionId: "dev:local:tui#peer-review",
+      onReturnToMaster,
     });
-    expect(textarea.disabled).toBe(true);
+    expect(input).toBeNull();
     expect(hint?.props.role).toBe("status");
-    expect(hint?.props.children).toContain("review");
+    const [copy, button] = hint!.props.children as [
+      ReactElement<{ children: string }>,
+      ReactElement<{ onClick: () => void }>,
+    ];
+    expect(copy.props.children).toContain("review");
+    button.props.onClick();
+    expect(onReturnToMaster).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the composer editable for an ordinary focused session", () => {

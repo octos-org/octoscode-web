@@ -40,11 +40,11 @@ const panel = (page: Page) =>
   page.getByRole("complementary", { name: "Session panel" });
 
 async function createWorkspace(page: Page, path: string) {
-  await page.getByRole("button", { name: "New session", exact: true }).click();
-  const picker = page.getByRole("dialog");
-  await picker
+  await page
+    .locator("aside")
     .getByRole("button", { name: "Add workspace", exact: true })
     .click();
+  const picker = page.getByRole("dialog");
   const manual = picker.getByRole("button", { name: "Enter path manually" });
   const pathInput = picker.getByLabel("Server workspace path");
   await expect(manual.or(pathInput).first()).toBeVisible();
@@ -305,17 +305,14 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
   });
   await start(page, "/workspace/review-output-a");
   const firstTitle = await navigation
-    .locator('button[role="treeitem"][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
   await createWorkspace(page, "/workspace/review-output-b");
   const secondTitle = await navigation
-    .locator('button[role="treeitem"][aria-current="page"]')
-    .locator('[class*="sessionTitle"]')
-    .textContent();
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
   await navigation
-    .locator('button[role="treeitem"]')
-    .filter({ hasText: firstTitle! })
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(firstTitle)}]`)
     .click();
   const reference = new URL(page.url()).searchParams.get("s");
   const sessionId = (JSON.parse(reference!) as string[])[2]!;
@@ -335,8 +332,9 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
     .click();
   await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
   await navigation
-    .locator('button[role="treeitem"]')
-    .filter({ hasText: secondTitle! })
+    .locator(
+      `[role="treeitem"][data-session-id=${JSON.stringify(secondTitle)}]`,
+    )
     .click();
   if ((await toggle(page).getAttribute("aria-expanded")) === "false") {
     await toggle(page).click();
@@ -348,4 +346,62 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
     panel(page).getByRole("button", { name: /summary\.md/ }),
   ).toHaveCount(0);
   await expect(panel(page).locator("pre")).toHaveCount(0);
+});
+
+test("Automation shows and controls goals, loops, monitors and agents with zero axe violations", async ({
+  page,
+}, testInfo) => {
+  await start(page, "/srv/work/native-workflows-automation");
+  await toggle(page).click();
+  await panel(page).getByRole("tab", { name: "Automation" }).click();
+  const automation = panel(page).getByRole("tabpanel", {
+    name: "Automation",
+  });
+  // Engineering status notes are not shown to users (T-0076).
+  await expect(automation).not.toContainText("sandboxed");
+
+  await automation
+    .getByLabel("Goal objective")
+    .fill("Ship the automation panel");
+  await automation.getByRole("button", { name: "Set session goal" }).click();
+  await expect(automation).toContainText("Ship the automation panel");
+
+  await automation.getByRole("button", { name: "Create loop" }).click();
+  await expect(
+    automation.getByRole("list", { name: "Loop list" }),
+  ).toBeVisible();
+  await automation.getByRole("button", { name: /^Pause loop / }).click();
+  await automation.getByRole("button", { name: /^Resume loop / }).click();
+
+  await automation.getByLabel("New monitor name").fill("watch-build");
+  await automation
+    .getByLabel("New monitor probe command")
+    .fill('["./scripts/watch.sh"]');
+  await automation.getByRole("button", { name: "Create monitor" }).click();
+  await expect(automation).toContainText("watch-build");
+  await automation.getByRole("button", { name: /^Pause monitor / }).click();
+  await automation.getByRole("button", { name: /^Resume monitor / }).click();
+
+  await automation
+    .getByRole("button", { name: "Read output of agent native-agent-1" })
+    .click();
+  await expect(automation).toContainText("Output — native-agent-1");
+  await automation
+    .getByRole("button", { name: "Interrupt agent native-agent-1" })
+    .click();
+  await expect(
+    automation.getByRole("button", { name: "Interrupt agent native-agent-1" }),
+  ).toBeDisabled();
+
+  expect(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
+      .violations,
+  ).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("automation-panel.png"),
+    fullPage: true,
+  });
+
+  await automation.getByRole("button", { name: "Clear session goal" }).click();
+  await expect(automation).toContainText("No active goal for this session.");
 });

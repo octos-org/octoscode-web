@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  ProjectionEnvelopeV2,
-  SessionHydrateResult,
+import {
+  parseSessionHydrateResult,
+  type ProjectionEnvelopeV2,
+  type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
 import { foldNotification } from "./model.ts";
+import { summarizeTurn } from "./turn-summary.ts";
 import { timelineFromCanonicalHydrate as timelineFromHydrate } from "./canonical-hydrate.ts";
+import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
+import attachmentRetryFixture from "./fixtures/t-0084-attachment-retry.json";
 
 function event(
   seq: number,
@@ -61,6 +65,74 @@ describe("canonical hydrate recovery", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("replays the real steered repair without moving its terminal before later tools", () => {
+    const entries = timelineFromHydrate(
+      parseSessionHydrateResult(steeredRepairFixture)!,
+    );
+    const finalResponse = entries.findIndex((entry) =>
+      entry.body.startsWith("竹叶验收"),
+    );
+    const terminal = entries.findIndex((entry) =>
+      entry.id.startsWith("terminal:"),
+    );
+    expect(finalResponse).toBeGreaterThanOrEqual(0);
+    expect(terminal).toBeGreaterThan(finalResponse);
+    expect(terminal).toBe(entries.length - 1);
+    expect(
+      entries.every(
+        (entry) =>
+          entry.startedAtMs === undefined && entry.endedAtMs === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      summarizeTurn(entries, entries[terminal]!.turnId!).seconds,
+    ).toBeUndefined();
+  });
+
+  it("replays the real attachment retry without duplicating or displacing its failure", () => {
+    const entries = timelineFromHydrate(
+      parseSessionHydrateResult(attachmentRetryFixture)!,
+    );
+    const prompt = entries.findIndex((entry) =>
+      entry.body.startsWith("把现有 附件预览.pdf"),
+    );
+    const failures = entries.flatMap((entry, index) =>
+      entry.body.includes("invalid send_file tool input") ? [index] : [],
+    );
+    const successfulDelivery = entries.findIndex((entry) =>
+      entry.body.includes("File '附件预览.pdf' sent"),
+    );
+    const finalResponse = entries.findIndex((entry) =>
+      entry.body.startsWith("两个文件已作为附件发送"),
+    );
+    const pdfAttachment = entries.findIndex(
+      (entry) => entry.body === "附件预览.pdf（原文件，未改动）",
+    );
+    const pngAttachment = entries.findIndex(
+      (entry) => entry.body === "示意图.png（原文件，未改动）",
+    );
+    expect(prompt).toBeGreaterThanOrEqual(0);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!).toBeGreaterThan(prompt);
+    expect(failures[0]!).toBeLessThan(successfulDelivery);
+    expect(successfulDelivery).toBeLessThan(finalResponse);
+    expect(pdfAttachment).toBeGreaterThan(prompt);
+    expect(pngAttachment).toBeGreaterThan(prompt);
+    const terminal = entries.findIndex(
+      (entry) => entry.id === "terminal:d340f94e-400a-4a4f-9c53-6b7d4953f528",
+    );
+    expect(terminal).toBeGreaterThan(finalResponse);
+    expect(
+      entries.every(
+        (entry) =>
+          entry.startedAtMs === undefined && entry.endedAtMs === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      summarizeTurn(entries, entries[terminal]!.turnId!).seconds,
+    ).toBeUndefined();
   });
 
   it("uses unique message identity to link a parent-client transcript to its background child and retains attachments", () => {
@@ -184,6 +256,77 @@ describe("canonical hydrate recovery", () => {
         }),
       ).map((entry) => entry.body),
     ).toEqual(["A question", "B question", "A answer", "B answer"]);
+  });
+
+  it("keeps same-id tool retries, attachments, and terminals in their own turns", () => {
+    const retry = (seq: number, type: string, data: unknown) =>
+      event(seq, type, data, {
+        thread_id: "thread-retry",
+        turn_id: "turn-retry",
+        cursor: { stream: "s", seq: seq + 5 },
+      });
+    const events = [
+      event(1, "user_message", { text: "First attempt" }),
+      event(2, "tool_start", {
+        tool_call_id: "shared-call",
+        name: "write_file",
+      }),
+      event(3, "tool_end", {
+        tool_call_id: "shared-call",
+        status: "error",
+        error: "denied",
+      }),
+      event(4, "file_attached", {
+        path: "first.md",
+        mime: "text/markdown",
+        size_bytes: 1,
+        attachment_owner: {
+          assistant_segment_id: null,
+          tool_call_id: "shared-call",
+        },
+      }),
+      event(5, "turn_terminal", { outcome: "completed" }),
+      retry(1, "user_message", { text: "Retry with permission" }),
+      retry(2, "tool_start", {
+        tool_call_id: "shared-call",
+        name: "write_file",
+      }),
+      retry(3, "tool_end", {
+        tool_call_id: "shared-call",
+        status: "complete",
+        output_preview: "written",
+      }),
+      retry(4, "file_attached", {
+        path: "second.md",
+        mime: "text/markdown",
+        size_bytes: 2,
+        attachment_owner: {
+          assistant_segment_id: null,
+          tool_call_id: "shared-call",
+        },
+      }),
+      retry(5, "turn_terminal", { outcome: "completed" }),
+    ];
+    const restored = timelineFromHydrate(
+      snapshot(events, {
+        projection_thread_sequences: { thread: 5, "thread-retry": 5 },
+      }),
+    );
+    expect(
+      restored.map((entry) => [entry.kind, entry.body, entry.turnId]),
+    ).toEqual([
+      ["user", "First attempt", "turn"],
+      ["tool", "denied", "turn"],
+      ["system", "first.md", "turn"],
+      ["system", "", "turn"],
+      ["user", "Retry with permission", "turn-retry"],
+      ["tool", "written", "turn-retry"],
+      ["system", "second.md", "turn-retry"],
+      ["system", "", "turn-retry"],
+    ]);
+    expect(new Set(restored.map((entry) => entry.id)).size).toBe(
+      restored.length,
+    );
   });
 
   it("places an unpersisted foreground question before an interleaved durable background completion", () => {

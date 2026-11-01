@@ -1,6 +1,7 @@
 /* Foldable transcript blocks (UX5). Colocated CSS module consuming DSH aliases. */
 
 .foldHeaderButton {
+  --dsw-press-scale: none;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -15,7 +16,7 @@
 }
 
 .foldHeaderButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-focus, currentColor);
+  outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
 
@@ -29,7 +30,7 @@
 .foldChevron {
   flex: none;
   /* 11px is the repository's floor for rendered text (policy:verify). */
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   color: var(--dsw-alias-label-caption, inherit);
   transition: transform 120ms ease-in-out;
 }
@@ -55,14 +56,14 @@
   border: none;
   color: var(--dsw-alias-label-caption, inherit);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   padding: 0;
   cursor: pointer;
   text-decoration: underline dotted;
 }
 
 .timelineFoldsButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-focus, currentColor);
+  outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
 

@@ -86,11 +86,11 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    // Folded by default; the header line carries tool name, target, status
+    // Folded by default; the header line carries a human title, status
     // mark (check glyph + label) and duration.
     expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
     const summary = summaryOf(html);
-    expect(summary).toContain("shell · cargo test");
+    expect(summary).toContain("Run command cargo test");
     expect(summary).toMatch(/completedGlyph/);
     expect(summary).toMatch(/data-status="complete"[^>]*>Done · 3 s</);
     expect(summary).not.toContain("<pre");
@@ -111,12 +111,12 @@ describe("Timeline foldable rendering", () => {
     const tools = html.indexOf("Expand all");
     expect(tools).toBeGreaterThanOrEqual(0);
     expect(html.indexOf("Expand all")).toBeLessThan(
-      html.indexOf("shell · cargo test"),
+      html.indexOf("Run command cargo test"),
     );
     expect(html).toContain("Collapse all");
   });
 
-  it("keeps errors visible in the folded tool header", () => {
+  it("folds a failed step but keeps the error in its header", () => {
     const failing: TimelineEntry = { ...toolEntry, status: "error" };
     const html = renderToStaticMarkup(
       <Timeline
@@ -129,9 +129,10 @@ describe("Timeline foldable rendering", () => {
         onCollapseAll={() => {}}
       />,
     );
-    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
+    // The raw tool error stays folded; the header still says it failed.
+    expect(html).not.toMatch(/<details[^>]*toolBlock[^>]*open/);
     const summary = summaryOf(html);
-    expect(summary).toContain("shell · cargo test");
+    expect(summary).toContain("Run command cargo test");
     expect(summary).toMatch(/data-status="error"[^>]*aria-hidden="true"/);
     expect(summary).toMatch(/data-status="error"[^>]*>Failed · 3 s</);
     expect(summary).not.toMatch(/completedGlyph/);

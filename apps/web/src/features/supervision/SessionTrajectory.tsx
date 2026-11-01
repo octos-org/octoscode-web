@@ -9,6 +9,21 @@ interface SessionTrajectoryProps {
   onCancelTask: (taskId: string) => void;
 }
 
+/** Server enums shown as words, never as identifiers. */
+const PERMISSION_LABELS: Readonly<Record<string, string>> = {
+  read_only: "Read only",
+  workspace_write: "Workspace write",
+  danger_full_access: "Full access",
+};
+
+const HEALTH_LABELS: Readonly<Record<string, string>> = {
+  ok: "Healthy",
+  healthy: "Healthy",
+  degraded: "Degraded",
+  error: "Unhealthy",
+  unhealthy: "Unhealthy",
+};
+
 /** Session-local plan and background work; never a cross-workspace Activity hub. */
 export function SessionTrajectory({
   state,
@@ -55,13 +70,24 @@ export function SessionTrajectory({
               <div>
                 <dt>{t("Permission")}</dt>
                 <dd>
-                  {state.runtimeStatus.permission_profile ?? t("Not reported")}
+                  {state.runtimeStatus.permission_profile
+                    ? t(
+                        PERMISSION_LABELS[
+                          state.runtimeStatus.permission_profile
+                        ] ?? state.runtimeStatus.permission_profile,
+                      )
+                    : t("Not reported")}
                 </dd>
               </div>
               <div>
                 <dt>{t("Health")}</dt>
                 <dd>
-                  {state.runtimeStatus.health?.status ?? t("Not reported")}
+                  {state.runtimeStatus.health?.status
+                    ? t(
+                        HEALTH_LABELS[state.runtimeStatus.health.status] ??
+                          state.runtimeStatus.health.status,
+                      )
+                    : t("Not reported")}
                 </dd>
               </div>
             </dl>

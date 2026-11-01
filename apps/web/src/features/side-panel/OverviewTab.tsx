@@ -32,10 +32,13 @@ export function OverviewTab(props: OverviewTabProps) {
           <h3 id="overview-plan">{t("Plan")}</h3>
           {progress ? (
             <span>
-              {t("{done} of {total} done", {
-                done: progress.completed,
-                total: progress.total,
-              })}
+              {/* An ended plan nobody ticked counts its items, not "0 done". */}
+              {!props.plan && progress.completed === 0
+                ? t("{count} plan items", { count: progress.total })
+                : t("{done} of {total} done", {
+                    done: progress.completed,
+                    total: progress.total,
+                  })}
             </span>
           ) : null}
         </div>

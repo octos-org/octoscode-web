@@ -64,6 +64,17 @@ const catalog: Readonly<Record<string, string>> = {
   "Back to workspaces": "返回工作区",
   Backend: "后端",
   "Backend:": "后端：",
+  Available: "可用",
+  Missing: "没有",
+  Unknown: "未知",
+  "Execution environment": "执行环境",
+  "Docker image": "Docker 镜像",
+  "No isolation": "无隔离",
+  "Reading execution environment…": "正在读取执行环境…",
+  "Execution environment is not available": "无法读取执行环境",
+  "This environment does not support probing": "这个环境不支持探测",
+  "Probe failed: {value0}": "探测失败：{value0}",
+  "Probed:": "探测时间：",
   "Background task state not loaded": "尚未加载后台任务状态",
   "Background tasks": "后台任务",
   "Background tasks: {value0}": "后台任务：{value0}",
@@ -200,6 +211,12 @@ const catalog: Readonly<Record<string, string>> = {
     "Octos 以此环境变量名称存储只写密钥；密钥值本身绝不会回读。",
   Cost: "费用",
   "Could not connect": "连接失败",
+  "Auth token is required.": "请输入认证令牌。",
+  "Re-enter the token": "重新输入令牌",
+  "Can't reach {value0}": "连不上 {value0}",
+  "check the address": "检查服务器地址",
+  "Could not open the Octos UI Protocol connection":
+    "无法打开 Octos UI 协议连接",
   "Could not delete this provider. The configuration was kept; try again.":
     "无法删除此提供商。配置已保留，请重试。",
   "Could not load autonomy controls. Close and try again.":
@@ -223,7 +240,34 @@ const catalog: Readonly<Record<string, string>> = {
   "Current turn": "当前轮次",
   "Current workspace": "当前工作区",
   "Decision:": "决定：",
+  Default: "默认",
+  "Read files without editing. Network allowed.": "只读文件，可联网。",
+  "Read files without editing. No network access.": "只读文件，禁止联网。",
+  "Edit workspace files. Network allowed.": "可修改工作区文件，可联网。",
+  "Edit workspace files. No network access.": "可修改工作区文件，禁止联网。",
+  "Edit any file without sandbox limits. Network allowed.":
+    "可修改任意文件，不受沙箱范围限制，可联网。",
+  "Edit any file without sandbox limits. No network access.":
+    "可修改任意文件，不受沙箱范围限制，禁止联网。",
+  "This template needs write permission. Switch before sending.":
+    "此模板需要写入权限，请先切换。",
+  "Could not restore the permission from before this template.":
+    "无法恢复使用模板前的权限。",
   Delete: "删除",
+  "Delete…": "删除…",
+  "Delete this session?": "删除这个会话？",
+  "Could not delete this session.": "无法删除这个会话。",
+  "Could not rename this session.": "无法重命名这个会话。",
+  "More actions for {title}": "更多操作：{title}",
+  "Enter a title.": "请输入标题。",
+  Rename: "重命名",
+  "Session actions": "会话操作",
+  "Session title": "会话标题",
+  "Stop this session’s work first.": "请先停止这个会话的工作。",
+  "Switch to another session first.": "请先切换到其他会话。",
+  "“{title}” and its conversation will be deleted from the server. This cannot be undone.":
+    "服务器上的「{title}」及其对话将被删除，且无法撤销。",
+  Del: "Del",
   "Delete loop {value0}": "删除循环任务 {value0}",
   "Delete model provider?": "删除模型提供商？",
   "Delete monitor {value0}": "删除监视器 {value0}",
@@ -358,8 +402,8 @@ const catalog: Readonly<Record<string, string>> = {
   Name: "名称",
   "Named provider routes for the server research pipeline. This is not a separate browser agent loop. Provider identity and API style are separate fields.":
     "用于服务器研究流程的命名提供商路由。这不是独立的浏览器智能体循环。提供商身份和 API 类型是不同字段。",
-  "Native /loop default. Leave the prompt empty to use the server's maintenance prompt and cadence.":
-    "原生 /loop 默认模式。提示词留空时使用服务器的维护指令和节奏。",
+  "Default mode. Leave the prompt empty to use the server's maintenance prompt and cadence.":
+    "默认模式。提示词留空时，使用服务器的维护指令和节奏。",
   "Native code review": "原生代码审查",
   "Native interval: {value0} seconds{value1}.":
     "原生间隔：{value0} 秒{value1}。",
@@ -378,7 +422,7 @@ const catalog: Readonly<Record<string, string>> = {
   "New monitor filter regex, optional": "新监视器筛选正则表达式（可选）",
   "New monitor name": "新监视器名称",
   "New monitor probe command": "新监视器探测命令",
-  "New session": "新建会话",
+  "New session": "新会话",
   "New session in {value0}": "在 {value0} 中新建会话",
   "Next run": "下次运行",
   No: "否",
@@ -455,7 +499,27 @@ const catalog: Readonly<Record<string, string>> = {
   "Pause monitor {value0}": "暂停监视器 {value0}",
   "Pause session goal": "暂停会话目标",
   "Peer brief": "协作任务简报",
-  Peers: "协作会话",
+  Peers: "协作者",
+  "Peer {slug} is read-only. Return to the master to make changes.":
+    "这是协作者 {slug}，只读；要调整请回到主会话。",
+  "Return to master": "回到主会话",
+  "Peer run time": "协作者运行时间",
+  "Run {value0}": "运行 {value0}",
+  "Output {value0} tokens": "输出 {value0} token",
+  "Output tokens": "输出 token",
+  started: "已启动",
+  opening: "正在打开",
+  closed: "已关闭",
+  live: "进行中",
+  landed: "已完成",
+  "needs you": "需要你",
+  streaming: "正在输出",
+  Answer: "回答",
+  "Answer {value0}": "回答 {value0}",
+  "Approve once": "仅此一次批准",
+  "Approve {value0} once": "仅此一次批准 {value0}",
+  "Approve for this session": "本次会话内批准",
+  "Approve {value0} for this session": "本次会话内批准 {value0}",
   "Peer controller": "协作会话控制器",
   "Model lane": "模型通道",
   Brief: "任务简述",
@@ -761,7 +825,7 @@ const catalog: Readonly<Record<string, string>> = {
   "This follows Octoscode’s solo onboarding: create a named profile, test a server-advertised model route, save it, then open the canonical coding session.":
     "遵循 Octoscode 的独立配置流程：创建命名配置档案，测试服务器声明支持的模型路由，保存后打开正式编程会话。",
   "This goal is over budget. Resuming does not increase its token budget.":
-    "此目标已超出预算。恢复不会增加令牌预算。",
+    "此目标已超出预算。恢复不会增加 token 预算。",
   "This is a path on the Octos server, not a folder in this browser.":
     "这是 Octos 服务器上的路径，而非浏览器中的文件夹。",
   "This provider uses its native or local authentication path.":
@@ -776,9 +840,9 @@ const catalog: Readonly<Record<string, string>> = {
     "此视图仅列出服务器保存的决策，不会清除或更改权限。",
   Thread: "线程",
   "Thread graph": "线程图",
-  "Token budget (optional)": "令牌预算（可选）",
+  "Token budget (optional)": "token 预算（可选）",
   "Token for this browser tab": "此浏览器标签页的令牌",
-  Tokens: "令牌",
+  Tokens: "token",
   Trajectory: "轨迹",
   "Try again": "重试",
   "Turn images": "轮次图片",
@@ -812,6 +876,19 @@ const catalog: Readonly<Record<string, string>> = {
   "What should this session keep driving toward?": "此会话应持续推进什么目标？",
   Wire: "协议",
   "Working…": "正在工作…",
+  "Preparing next step…": "正在准备下一步…",
+  "Writing response…": "正在撰写回复…",
+  "Thinking…": "思考中…",
+  "Running {value0}…": "正在运行 {value0}…",
+  "Waiting for the server to accept this turn": "正在等待服务器接受本轮请求",
+  "Waiting for the model’s first response": "正在等待模型首个响应",
+  "Elapsed {value0}": "已等待 {value0}",
+  "You can stop this turn, check the connection, or retry.":
+    "你可以停止本轮、检查连接，或稍后重试。",
+  "{value0}s": "{value0} 秒",
+  "{value0}m {value1}s": "{value0} 分 {value1} 秒",
+  "Risk not specified": "未说明风险",
+  "Approve command": "批准命令",
   Workspace: "工作区",
   "Workspace launch": "启动工作区",
   Workspaces: "工作区",
@@ -822,7 +899,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Z.AI requires thinking to stay enabled for this model and recommends preserving thinking across coding turns.":
     "Z.AI 要求此模型保持思考功能开启，并建议在编程轮次间保留思考内容。",
   ZAI_API_KEY: "ZAI_API_KEY",
-  "Zero-token monitors": "零令牌监视器",
+  "Zero-token monitors": "不耗 token 的监视器",
   "and rebuilds its server skill runtime.": "并重建其服务器技能运行时。",
   at: "于",
   "bytes ·": "字节 ·",
@@ -831,7 +908,7 @@ const catalog: Readonly<Record<string, string>> = {
   "conversation rewind": "对话回退",
   disabled: "已禁用",
   "dropped.": "已丢弃。",
-  "estimated tokens ·": "估算令牌 ·",
+  "estimated tokens ·": "估算 token ·",
   "exists. A retry only repeats provider test and save.":
     "已存在。重试仅重复提供商测试与保存。",
   "failed ·": "失败 ·",
@@ -873,8 +950,8 @@ const catalog: Readonly<Record<string, string>> = {
   text: "文本",
   "thread(s) · Cursor": "个线程 · 游标",
   "to confirm": "以确认",
-  tokens: "令牌",
-  "tokens ·": "令牌 ·",
+  tokens: "token",
+  "tokens ·": "token ·",
   tools: "工具",
   "tools reported · Policy": "个已报告工具 · 策略",
   "user messages. They belong to one thread and will be removed together.":
@@ -884,7 +961,7 @@ const catalog: Readonly<Record<string, string>> = {
   "{value0} could not be loaded.": "无法加载 {value0}。",
   "{value0} is not advertised by this server": "此服务器未声明支持 {value0}",
   "{value0} pending.": "{value0} 待处理。",
-  "{value0} tokens": "{value0} 个令牌",
+  "{value0} tokens": "{value0} token",
   "{value0} · branch {value1}": "{value0} · 分支 {value1}",
   "· Root sequence:": "· 根序号：",
   "· Session:": "· 会话：",
@@ -1063,7 +1140,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Copy the last assistant reply": "复制最近一条助手回复",
   "Show session and capability status": "显示会话和功能状态",
   "Inspect reported Session token usage and estimated cost":
-    "检查会话报告的令牌用量与估算费用",
+    "检查会话报告的 token 用量与估算费用",
   "Show runtime model and Profile model settings":
     "显示运行时模型和配置档案模型设置",
   "Inspect context, cache, and compaction controls":
@@ -1090,6 +1167,8 @@ const catalog: Readonly<Record<string, string>> = {
   High: "高",
   Maximum: "最高",
   "Read only": "只读",
+  "Read-only permission is not confirmed. Current permission is still workspace write; sending is blocked.":
+    "只读权限尚未确认，当前仍是写入权限；已阻止发送。",
   "Workspace write": "工作区写入",
   "Full access": "完全访问",
   "Session settings": "会话设置",
@@ -1194,7 +1273,7 @@ const catalog: Readonly<Record<string, string>> = {
   "API style": "API 类型",
   Description: "描述",
   "Context window (optional)": "上下文窗口（可选）",
-  "Max output tokens (optional)": "最大输出令牌数（可选）",
+  "Max output tokens (optional)": "最大输出 token 数（可选）",
   all: "全部",
   failed: "失败",
   done: "已完成",
@@ -1229,7 +1308,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Server's working directory": "服务器的工作目录",
   "Server's working directory (path not reported)":
     "服务器的工作目录（路径未报告）",
-  "The server refused this token": "服务器拒绝了此令牌",
+  "The server refused this token": "令牌不对，请重新输入。",
   "Streaming messages and tool activity will appear here.":
     "流式消息和工具活动将在此显示。",
   "Couldn't resume chat — nothing was sent": "无法恢复聊天 — 未发送任何内容",
@@ -1410,10 +1489,10 @@ const catalog: Readonly<Record<string, string>> = {
   Abandoned: "已中断",
   // Settings memory (T-0024).
   Memory: "记忆",
-  "Read and remember information in authenticated Profile {profileId}":
-    "查看并记住已认证配置文件 {profileId} 中的信息",
-  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Read and write are disabled.":
-    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。已禁用读写。",
+  "Read and remember information in Session Profile {profileId}":
+    "查看并记住会话配置文件 {profileId} 中的信息",
+  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Update the Octos server to use this Session’s memory. Read and write are disabled.":
+    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。请升级 Octos 服务端以使用此会话的记忆。已禁用读写。",
   unverified: "未验证",
   "This server cannot load entity details.": "此服务器无法加载实体详情。",
   "This server cannot load full record details.":
@@ -1594,6 +1673,9 @@ const catalog: Readonly<Record<string, string>> = {
   "Start session": "开始会话",
   "Starting your session…": "正在开始会话…",
   System: "跟随系统",
+  Auto: "跟随系统",
+  "More actions": "更多操作",
+  "Conversation actions": "会话操作",
   "The client could not recover this view. Closing its connection may have stopped running work. Octos keeps persisted history; unsent drafts and queued messages may be lost when you reload.":
     "界面没能恢复。关闭它的连接可能已经停止了正在运行的工作。Octos 会保留已保存的历史；重新加载时，未发送的草稿和排队的消息可能会丢失。",
   "The control command could not be confirmed.": "没能确认控制命令的结果。",
@@ -1680,6 +1762,8 @@ const catalog: Readonly<Record<string, string>> = {
   "This browser could not show a desktop notification. Tab counts still work.":
     "这个浏览器无法显示桌面通知，标签页计数仍然有效。",
 
+  Automation: "自动化",
+
   // Artifact preview (T-0012).
   Preview: "预览",
   "Hide preview": "收起预览",
@@ -1731,6 +1815,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Page {page} of {name}": "{name} · 第 {page} 页",
 
   // Connectors and scheduled tasks (T-0025).
+  Tool: "工具",
   Tools: "工具",
   Connectors: "连接器",
   "Read-only MCP server status for this Session.":
@@ -1776,6 +1861,27 @@ const catalog: Readonly<Record<string, string>> = {
   "Coding and agents": "擅长编程与智能体",
   "Multimodal and coding": "擅长多模态与编程",
   "Fast and cost-efficient": "高效、经济",
+  "Z.ai Coding Plan": "Z.ai 编程套餐",
+  "Kimi Coding Plan": "Kimi 编程套餐",
+  "GLM coding and agents": "GLM 编程与智能体",
+  "More providers": "更多提供商",
+  "Claude models from Anthropic": "Anthropic 的 Claude 模型",
+  "Gemini models from Google": "Google 的 Gemini 模型",
+  "Low-latency inference from Groq": "Groq 提供的低延迟推理",
+  "Local model server": "本地模型服务",
+  "A model server on your own machine": "运行在你自己机器上的模型服务",
+  "MiniMax models for the China region": "MiniMax 中国站模型",
+  "Kimi models for coding": "Kimi 编程模型",
+  "Inference with NVIDIA NIM": "通过 NVIDIA NIM 运行推理",
+  "Local models through Ollama": "通过 Ollama 运行本地模型",
+  "GPT models from OpenAI": "OpenAI 的 GPT 模型",
+  "Multiple model providers through OpenRouter":
+    "通过 OpenRouter 使用多家模型提供商",
+  "Custom model service configured as r9s": "配置为 r9s 的自定义模型服务",
+  "Models through Google Cloud Vertex AI":
+    "通过 Google Cloud Vertex AI 使用模型",
+  "An OpenAI-compatible vLLM server": "OpenAI 兼容的 vLLM 服务",
+  "Model service supplied by the server catalog": "服务器目录提供的模型服务",
   "OpenAI-compatible provider": "OpenAI 兼容提供商",
   "An ID and name are generated automatically. Change them only if needed.":
     "ID 和名称已自动生成，仅在需要时修改。",
@@ -1803,7 +1909,148 @@ const catalog: Readonly<Record<string, string>> = {
   "Switching to write and retrying…": "正在切换到可写并重试…",
   "Current server does not support Fleet yet": "当前服务器还不支持多智能体",
 
+  // Execution transparency (T-0018).
+  "Run a command": "运行命令",
+  "Run command {target}": "运行命令 {target}",
+  "Read a file": "查看文件",
+  "Read file {target}": "查看文件 {target}",
+  "Write a file": "写入文件",
+  "Write file {target}": "写入 {target}",
+  "Edit a file": "编辑文件",
+  "Edit file {target}": "编辑 {target}",
+  "Apply a patch": "应用补丁",
+  "Find files": "查找文件",
+  "Find files {target}": "查找文件 {target}",
+  "Search in files": "在文件中搜索",
+  "Search files for {target}": "在文件中搜索 {target}",
+  "Fetch a web page": "获取网页",
+  "Fetch {target}": "获取 {target}",
+  "Search the web": "搜索网络",
+  "Search the web for {target}": "搜索网络：{target}",
+  "Deliver a file": "交付文件",
+  "Deliver file {target}": "交付文件 {target}",
+  "Turn summary": "本轮汇总",
+  "⚠ {count} steps failed": "⚠ {count} 步失败",
+  "Duration {seconds}s": "用时 {seconds} 秒",
+  "{count} files changed": "改动 {count} 个文件",
+  "{input} tokens in · {output} tokens out":
+    "输入 {input} token · 输出 {output} token",
+  "Output files: {files}": "产出文件：{files}",
+  "No output files": "无产出文件",
+  "Completed with failed steps": "已完成，但有步骤失败",
+  // Quieter turn close and folded steps (T-0076).
+  "Ran {count} steps": "执行了 {count} 步",
+  "Retried automatically {count} times": "已自动重试 {count} 次",
+  "{count} steps failed": "{count} 步失败",
+  "Turn ended": "本轮已结束",
+  "{count} plan items": "{count} 项",
+  "Turn rejected": "本轮未被接受",
+  "Turn start unconfirmed": "未确认本轮已开始",
+  "Turn start timed out": "启动本轮超时",
+  "Turn is still starting": "本轮还在启动",
+  "Nothing to stop": "没有可以停止的内容",
+  "Native review rejected": "代码审查未被接受",
+  "Native review outcome unknown": "代码审查结果未知",
+  "Review requested for current project changes.": "已请求审查当前项目的改动。",
+  "Steering accepted": "插话已被接受",
+  "Steering queued": "插话已排队",
+  "Steering returned to queue": "插话已退回队列",
+  "Steering outcome unknown": "插话结果未知",
+  "Steering delivery not confirmed": "未确认插话送达",
+  "Native steering started a new turn": "插话开始了新的一轮",
+  "The prior turn ended before admission. Core started the submitted text as a new turn.":
+    "上一轮在插话送达前已结束，这段话已作为新的一轮发出。",
+  "Steering was not admitted. The text remains ahead of later pending prompts.":
+    "插话没有被接受，这段话排在其他待发消息前面。",
+  "There is no active foreground turn, so no server command was sent.":
+    "当前没有正在运行的任务，所以没有向服务器发送停止。",
+  "Octos has not accepted this turn yet, so no interrupt was sent.":
+    "Octos 还没有接受这一轮，所以没有发送停止。",
+  "The server had accepted the turn after all — no resubmission needed.":
+    "服务器其实已经接受了这一轮，不需要重新发送。",
+  "The server did not acknowledge the turn. It may still be running — do not resubmit; check its status after reconnecting.":
+    "服务器没有确认这一轮，它可能仍在运行。请不要重新发送，重新连接后查看状态。",
+  "The turn finished without confirming delivery. Check the final response before deciding whether to send this text again; it was not resent automatically: ":
+    "这一轮结束时没有确认插话已送达。请先看最终回复，再决定是否重发；系统不会自动重发：",
+  "The request may have been consumed or started a new turn. It will not be resent automatically. Use the Retry queued delivery control above — or reconnect from Settings to restore queued prompt delivery. Submitted text: ":
+    "这条插话可能已被使用，也可能开始了新的一轮，系统不会自动重发。请用上方的「重试排队发送」，或在设置里重新连接以恢复排队发送。提交的内容：",
+  "Transport changed before consumption could be confirmed. This text will not be resent automatically: ":
+    "确认送达前连接发生了变化，这段话不会自动重发：",
+  "Loading memory…": "正在加载记忆…",
+  Healthy: "正常",
+  Degraded: "部分可用",
+  Unhealthy: "异常",
+  "turn interrupted": "本轮已被中断",
+  "turn interrupted by client": "本轮已由你停止",
+  "connection closed before turn completed": "连接在本轮完成前断开了",
+  // Connector management (T-0051).
+  "Manage MCP connectors for this profile.": "管理此配置档案的 MCP 连接器。",
+  "This server provides read-only connector status. Management is unavailable.":
+    "此服务器仅提供连接器状态，不支持管理操作。",
+  "HTTP connectors can be added here. stdio connectors require an operator-configured server allowlist.":
+    "这里可以添加 HTTP 连接器；stdio 连接器需要运维先在服务器上配置白名单。",
+  "Management is disabled because this access can read sessions but cannot change the profile.":
+    "当前权限只能读取会话，不能修改配置档案，管理操作已停用。",
+  "You do not have permission to manage this profile's connectors.":
+    "你没有管理此配置档案连接器的权限。",
+  "Add HTTP connector": "添加 HTTP 连接器",
+  "Edit connector": "编辑连接器",
+  "Connector name": "连接器名称",
+  "HTTP URL": "HTTP URL",
+  HTTP: "HTTP",
+  "Leave blank to keep the current URL.": "留空则保持当前 URL。",
+  "Save connector": "保存连接器",
+  "Enter a connector name.": "请输入连接器名称。",
+  "Enter a valid HTTP(S) URL without embedded credentials.":
+    "请输入有效的 HTTP(S) URL，不要在 URL 中嵌入凭据。",
+  "Delete {name}? Its tools will no longer be available.":
+    "确定删除 {name} 吗？删除后无法继续使用它的工具。",
+  "Confirm delete": "确认删除",
+  Disable: "停用",
+  Reconnect: "重新连接",
+  "Reconnecting…": "正在重新连接…",
+  "Enable the connector before reconnecting.": "请先启用连接器，再重新连接。",
+  "Authorization required": "需要授权",
+  "{count} tools": "{count} 个工具",
+  connected: "已连接",
+  connecting: "连接中",
+
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
+  // Phone remote control (T-0094).
+  "Remote control": "手机遥控",
+  "Connected to Octos": "已连接 Octos",
+  "Connected to Octos · updated {time}": "已连接 Octos · {time} 更新",
+  "Connection lost. Reconnecting (attempt {count})…":
+    "连接断了，正在重连（第 {count} 次）…",
+  "Can't reach Octos. The server on your computer may be off, or this phone lost its network. Nothing is sent until it is back.":
+    "连不上 Octos：电脑上的服务可能没开，或者手机断网了。恢复之前不会发送任何内容。",
+  "The list below is from {time}.": "下面的列表停在 {time}。",
+  "Pick the folders to watch": "选择要盯的文件夹",
+  "Add a project folder from this server. Its running sessions, approvals and recent results then show up here.":
+    "添加服务器上的项目文件夹，它里面正在运行的会话、待审批的操作和最近的结果就会显示在这里。",
+  "Waiting for you": "等你处理",
+  "Nothing is waiting for your approval or answer.": "没有等你批准或回答的事。",
+  "No session is running.": "没有正在运行的会话。",
+  "No recent sessions in these folders.": "这些文件夹里还没有会话。",
+  "Open the full workspace": "打开完整版",
+  "Untitled session": "未命名会话",
+  Review: "去处理",
+  Open: "打开",
+  Failed: "失败",
+  "Asks you: {title}": "在问你：{title}",
+  "Watched folders": "盯着的文件夹",
+  "Could not list: {reason}": "无法列出：{reason}",
+  "Stop watching {name}": "不再盯 {name}",
+  "Server folder path": "服务器上的文件夹路径",
+  "/path/to/project on the server": "服务器上的路径，如 /srv/project",
+  Watch: "盯住",
+  "Back to remote control": "返回手机遥控",
+  "This session could not be opened. Try again.": "这个会话打不开，请重试。",
+  "Loading remote control…": "正在加载手机遥控…",
+  "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.":
+    "这一步要的权限超出了沙箱。请回到电脑上处理；在手机上只能拒绝。",
+  "From the phone you can allow this one request. To allow it for the whole session or raise permissions, use your computer.":
+    "在手机上只能批准这一次。要在整个会话里允许或者提升权限，请回到电脑上操作。",
 };
 
 const zh: Readonly<Record<string, string>> = { ...catalog, ...FLEET_ZH_COPY };

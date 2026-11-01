@@ -54,5 +54,6 @@ export {
   parseSessionListResult,
   parseSessionDeleteResult,
   parseSessionFilesListResult,
+  parseSessionTitleSetResult,
 } from "./workspace-results.ts";
 export { parseTokenCostUpdate } from "./workspace-events.ts";
