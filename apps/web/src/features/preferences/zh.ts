@@ -1823,8 +1823,8 @@ const catalog: Readonly<Record<string, string>> = {
   "No MCP servers are configured for this Session.":
     "此会话未配置 MCP 服务器。",
   "Scheduled tasks": "定时任务",
-  "Cron jobs for this server Profile and current Session.":
-    "此服务器配置文件与当前会话的定时任务。",
+  "Cron jobs for this server Profile; new jobs use the current Session.":
+    "此服务器配置文件的定时任务；新任务使用当前会话。",
   "New scheduled task": "新建定时任务",
   "Schedule type": "时间类型",
   "At a specific time": "指定时间",
@@ -1865,6 +1865,14 @@ const catalog: Readonly<Record<string, string>> = {
   "Enter a whole number of minutes greater than zero.":
     "请输入大于零的整数分钟数。",
   "Enter a cron expression.": "请输入 Cron 表达式。",
+  "Choose a future date and time.": "请选择未来的日期和时间。",
+  "Use a cron expression with seconds (six or seven fields).":
+    "请使用包含秒的 Cron 表达式（六段或七段）。",
+  "The server returned an enabled task without a next run. It is not scheduled to run.":
+    "服务器返回了已启用但没有下次运行时间的任务，该任务不会被调度。",
+  "This enabled task has no next run and is not scheduled. Check its schedule and server version.":
+    "此任务已启用但没有下次运行时间，不会被调度。请检查调度设置和服务器版本。",
+  "Technical details": "技术细节",
 
   // First-run setup (T-0017).
   "Set up your coding assistant": "设置你的编程助手",

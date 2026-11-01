@@ -5559,6 +5559,12 @@ sockets.on("connection", (socket, request) => {
         replyError(socket, request.id, -32_602, "Invalid cron create params");
         return;
       }
+      const cronFields =
+        schedule.kind === "Cron" ? schedule.expr.trim().split(/\s+/) : [];
+      const cronSchedulable =
+        schedule.kind !== "Cron" ||
+        ((cronFields.length === 6 || cronFields.length === 7) &&
+          cronFields.slice(0, 3).every((field) => /^\d+$/.test(field)));
       const job = {
         id: `cron-${nextCronJobId++}`,
         name: params.message.trim().slice(0, 32),
@@ -5574,8 +5580,10 @@ sockets.on("connection", (socket, request) => {
             ? schedule.at_ms
             : schedule.kind === "Every"
               ? Date.now() + schedule.every_ms
-              : Date.now() + 3_600_000,
-        next_in: "scheduled",
+              : cronSchedulable
+                ? Date.now() + 3_600_000
+                : null,
+        next_in: cronSchedulable ? "scheduled" : null,
         timezone: params.timezone ?? "UTC",
       };
       cronJobs.unshift(job);

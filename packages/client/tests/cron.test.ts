@@ -69,7 +69,7 @@ describe("cron protocol", () => {
     for (const schedule of [
       { kind: "At", at_ms: 1_800_000_000_000 },
       { kind: "Every", every_ms: 60_000 },
-      { kind: "Cron", expr: "0 9 * * *" },
+      { kind: "Cron", expr: "0 0 9 * * *" },
     ] as const) {
       expect(
         (

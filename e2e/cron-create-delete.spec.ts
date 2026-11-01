@@ -98,7 +98,7 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   await settings.getByLabel("Schedule type").selectOption("Cron");
   await settings
     .getByLabel("Cron expression", { exact: true })
-    .fill("0 9 * * *");
+    .fill("0 0 9 * * *");
   await settings.getByLabel("Timezone (optional)").fill("UTC");
   await settings
     .getByRole("textbox", { name: "Message", exact: true })
@@ -108,7 +108,7 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   expect(created.map((params) => params.schedule)).toEqual([
     { kind: "At", at_ms: created[0]!.schedule.at_ms },
     { kind: "Every", every_ms: 2_700_000 },
-    { kind: "Cron", expr: "0 9 * * *" },
+    { kind: "Cron", expr: "0 0 9 * * *" },
   ]);
   expect(
     created.every(
@@ -147,7 +147,11 @@ test("keeps an empty list and retry state after invalid input and server refusal
           JSON.stringify({
             jsonrpc: "2.0",
             id: frame.id,
-            error: { code: -32000, message: "permission denied" },
+            error: {
+              code: -32000,
+              message: "permission denied",
+              data: { detail: "auth_scope_violation" },
+            },
           }),
         );
         return;
@@ -172,15 +176,127 @@ test("keeps an empty list and retry state after invalid input and server refusal
   ).toBeVisible();
   expect(createCalls).toBe(0);
 
+  await settings.getByLabel("Schedule type").selectOption("At");
+  await settings.getByLabel("Run at").fill("2020-01-01T00:00");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(
+    settings.getByText("Choose a future date and time."),
+  ).toBeVisible();
+  expect(createCalls).toBe(0);
+
+  await settings.getByLabel("Schedule type").selectOption("Cron");
+  await settings
+    .getByLabel("Cron expression", { exact: true })
+    .fill("0 9 * * *");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(
+    settings.getByText(
+      "Use a cron expression with seconds (six or seven fields).",
+    ),
+  ).toBeVisible();
+  expect(createCalls).toBe(0);
+
+  await settings.getByLabel("Schedule type").selectOption("Every");
   await settings.getByLabel("Every (minutes)").fill("30");
   await settings.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(settings.getByText("permission denied")).toBeVisible();
+  await settings.getByText("Technical details", { exact: true }).click();
+  await expect(
+    settings.getByText("auth_scope_violation", { exact: true }),
+  ).toBeVisible();
   await expect(settings.getByText("No scheduled tasks yet.")).toBeVisible();
   await expect(
     settings.getByRole("textbox", { name: "Message", exact: true }),
   ).toHaveValue("Keep this message");
   await expect(
     settings.getByRole("button", { name: "Create scheduled task" }),
+  ).toBeEnabled();
+});
+
+test("reports an enabled job without a next run as unschedulable", async ({
+  page,
+}) => {
+  await start(page);
+  const settings = await openCron(page);
+  await openCreate(settings);
+  await settings.getByLabel("Schedule type").selectOption("Cron");
+  await settings
+    .getByLabel("Cron expression", { exact: true })
+    .fill("x x x x x x");
+  await settings
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("Unschedulable job");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  const row = settings.locator('[data-cron-job="cron-2"]');
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("alert")).toHaveText(
+    "This enabled task has no next run and is not scheduled. Check its schedule and server version.",
+  );
+});
+
+test("refetches and releases loading when create/delete invalidate a list", async ({
+  page,
+}) => {
+  const control = {
+    holdFrom: 1,
+    lists: 0,
+    held: [] as (() => void)[],
+  };
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    const lists = new Set<string>();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "cron/list") {
+        control.lists += 1;
+        if (control.lists >= control.holdFrom) lists.add(String(frame.id));
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (lists.delete(String(frame.id))) {
+        control.held.push(() => socket.send(message));
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await start(page);
+  await page
+    .locator("aside")
+    .getByRole("button", { name: /^Settings$/ })
+    .click();
+  const settings = page.getByRole("dialog", { name: /Settings|设置/ });
+  await settings.getByRole("button", { name: /Scheduled tasks/ }).click();
+  await expect.poll(() => control.held.length).toBe(1);
+  await openCreate(settings);
+  await settings.getByLabel("Schedule type").selectOption("Every");
+  await settings.getByLabel("Every (minutes)").fill("45");
+  await settings
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("Made while loading");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect.poll(() => control.held.length).toBe(2);
+  for (const release of control.held.splice(0)) release();
+  const row = settings.locator('[data-cron-job="cron-2"]');
+  await expect(row).toBeVisible();
+  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Refresh", exact: true }),
+  ).toBeEnabled();
+
+  control.holdFrom = control.lists + 1;
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect.poll(() => control.held.length).toBe(1);
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
+  await row.getByRole("button", { name: "Delete scheduled task" }).click();
+  await expect.poll(() => control.held.length).toBe(2);
+  for (const release of control.held.splice(0)) release();
+  await expect(row).toHaveCount(0);
+  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeEnabled();
 });
 

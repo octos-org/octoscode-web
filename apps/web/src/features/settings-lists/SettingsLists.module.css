@@ -232,6 +232,11 @@
   font-size: 12px;
 }
 
+.error code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 560px) {
   .fields {
     grid-template-columns: 1fr;

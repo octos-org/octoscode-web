@@ -59,6 +59,7 @@ export function CronSettingsContent({
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [form, setForm] = useState<CreateForm>(INITIAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const listGeneration = useRef(0);
   const mutationGeneration = useRef(0);
   const mutationBusy = creating || busyJob !== null;
@@ -78,6 +79,7 @@ export function CronSettingsContent({
     const generation = ++listGeneration.current;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     void client
       .cronCommands(capabilities)
       .then((commands) => commands.list())
@@ -91,6 +93,7 @@ export function CronSettingsContent({
         (reason: unknown) => {
           if (current && generation === listGeneration.current) {
             setError(errorMessage(reason));
+            setErrorDetail(errorDetails(reason));
             setLoading(false);
           }
         },
@@ -129,6 +132,7 @@ export function CronSettingsContent({
     } catch (reason) {
       if (generation === mutationGeneration.current)
         setError(errorMessage(reason));
+      setErrorDetail(errorDetails(reason));
     } finally {
       if (generation === mutationGeneration.current) setBusyJob(null);
     }
@@ -140,12 +144,15 @@ export function CronSettingsContent({
     const params = createParams(form, sessionId);
     if (typeof params === "string") {
       setError(t(params));
+      setErrorDetail(null);
       return;
     }
     const generation = ++mutationGeneration.current;
     const listVersion = ++listGeneration.current;
+    setLoading(false);
     setCreating(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const commands = await client.cronCommands(capabilities);
       const created = await commands.create(params);
@@ -164,9 +171,18 @@ export function CronSettingsContent({
           : current,
       );
       setForm(INITIAL_FORM);
+      if (created.enabled && created.nextRun === null) {
+        setError(
+          t(
+            "The server returned an enabled task without a next run. It is not scheduled to run.",
+          ),
+        );
+      }
+      setRefreshToken((current) => current + 1);
     } catch (reason) {
       if (generation === mutationGeneration.current)
         setError(errorMessage(reason));
+      setErrorDetail(errorDetails(reason));
     } finally {
       if (generation === mutationGeneration.current) setCreating(false);
     }
@@ -176,8 +192,10 @@ export function CronSettingsContent({
     if (writesBlocked || !canDelete) return;
     const generation = ++mutationGeneration.current;
     const listVersion = ++listGeneration.current;
+    setLoading(false);
     setBusyJob(job.id);
     setError(null);
+    setErrorDetail(null);
     try {
       const commands = await client.cronCommands(capabilities);
       await commands.delete(sessionId, job.id);
@@ -196,9 +214,11 @@ export function CronSettingsContent({
           : current,
       );
       setDeleteJobId(null);
+      setRefreshToken((current) => current + 1);
     } catch (reason) {
       if (generation === mutationGeneration.current)
         setError(errorMessage(reason));
+      setErrorDetail(errorDetails(reason));
     } finally {
       if (generation === mutationGeneration.current) setBusyJob(null);
     }
@@ -209,7 +229,11 @@ export function CronSettingsContent({
       <header className={styles.heading}>
         <div>
           <h2>{t("Scheduled tasks")}</h2>
-          <p>{t("Cron jobs for this server Profile and current Session.")}</p>
+          <p>
+            {t(
+              "Cron jobs for this server Profile; new jobs use the current Session.",
+            )}
+          </p>
         </div>
         <button
           type="button"
@@ -283,7 +307,7 @@ export function CronSettingsContent({
                       type="text"
                       value={form.cronExpression}
                       disabled={writesBlocked}
-                      placeholder="0 9 * * *"
+                      placeholder="0 0 9 * * *"
                       onChange={(event) =>
                         setForm((current) => ({
                           ...current,
@@ -368,9 +392,15 @@ export function CronSettingsContent({
         </p>
       ) : null}
       {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
+        <div className={styles.error} role="alert">
+          <p>{error}</p>
+          {errorDetail ? (
+            <details>
+              <summary>{t("Technical details")}</summary>
+              <code>{errorDetail}</code>
+            </details>
+          ) : null}
+        </div>
       ) : null}
       {loading ? <p role="status">{t("Waiting for the server…")}</p> : null}
       {state ? (
@@ -404,6 +434,13 @@ export function CronSettingsContent({
                   {job.channel ?? t("No channel")} · {t("Next run:")}{" "}
                   {formatNextRun(job) ?? t("No next run")}
                 </p>
+                {job.enabled && job.nextRun === null ? (
+                  <p className={styles.error} role="alert">
+                    {t(
+                      "This enabled task has no next run and is not scheduled. Check its schedule and server version.",
+                    )}
+                  </p>
+                ) : null}
                 <p className={styles.meta}>
                   {t("Last run:")} {job.lastRun ?? t("Never")}
                 </p>
@@ -429,7 +466,7 @@ export function CronSettingsContent({
                       <div>
                         <button
                           type="button"
-                          disabled={busyJob !== null}
+                          disabled={writesBlocked}
                           onClick={() => setDeleteJobId(null)}
                         >
                           {t("Cancel")}
@@ -437,7 +474,7 @@ export function CronSettingsContent({
                         <button
                           type="button"
                           className={styles.dangerButton}
-                          disabled={busyJob !== null}
+                          disabled={writesBlocked}
                           onClick={() => void deleteJob(job)}
                         >
                           {busyJob === job.id
@@ -487,6 +524,7 @@ function createParams(
     if (!form.at || !Number.isSafeInteger(atMs)) {
       return "Choose a valid date and time.";
     }
+    if (atMs <= Date.now()) return "Choose a future date and time.";
     return { ...base, schedule: { kind: "At", at_ms: atMs } };
   }
   if (form.kind === "Every") {
@@ -503,11 +541,34 @@ function createParams(
       schedule: { kind: "Every", every_ms: minutes * 60_000 },
     };
   }
-  if (!form.cronExpression.trim()) return "Enter a cron expression.";
+  const expression = form.cronExpression.trim();
+  if (!expression) return "Enter a cron expression.";
+  const fields = expression.split(/\s+/).length;
+  if (fields !== 6 && fields !== 7) {
+    return "Use a cron expression with seconds (six or seven fields).";
+  }
   return {
     ...base,
-    schedule: { kind: "Cron", expr: form.cronExpression.trim() },
+    schedule: { kind: "Cron", expr: expression },
   };
+}
+
+function errorDetails(reason: unknown): string | null {
+  if (!reason || typeof reason !== "object" || !("data" in reason)) {
+    return null;
+  }
+  const data = (reason as { data?: unknown }).data;
+  if (data === undefined || data === null) return null;
+  if (typeof data === "string") return data;
+  if (typeof data === "object") {
+    const detail = (data as Record<string, unknown>).detail;
+    if (typeof detail === "string" && detail) return detail;
+  }
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return String(data);
+  }
 }
 
 function formatNextRun(job: CronJob) {
