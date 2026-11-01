@@ -217,6 +217,9 @@ const catalog: Readonly<Record<string, string>> = {
   "check the address": "检查服务器地址",
   "Could not open the Octos UI Protocol connection":
     "无法打开 Octos UI 协议连接",
+  "Octos UI Protocol connection closed": "Octos UI 协议连接已关闭",
+  "This account can't open the Profile for this folder. Choose another folder, or ask the server admin for access and try again.":
+    "此账号无权打开这个文件夹对应的配置档案。请换一个文件夹，或请服务器管理员开通权限后重试。",
   "Could not delete this provider. The configuration was kept; try again.":
     "无法删除此提供商。配置已保留，请重试。",
   "Could not load autonomy controls. Close and try again.":

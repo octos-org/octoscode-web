@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_UI_FEATURES,
   OctosUiClient,
+  OctosUiConnectionClosedError,
   OctosUiRequestTimeoutError,
 } from "../src/client.ts";
 import type { PermissionProfileSetParams } from "../src/types.ts";
@@ -73,6 +74,44 @@ describe("OctosUiClient", () => {
 
     await expect(connecting).rejects.toThrow("connection closed");
     expect(client.status).toBe("error");
+  });
+
+  it("carries the close frame when the socket closes before opening", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+
+    const connecting = client.connect();
+    socket.onclose?.({ code: 1013, reason: "try later" } as CloseEvent);
+
+    await expect(connecting).rejects.toMatchObject({
+      name: "OctosUiConnectionClosedError",
+      message: "Octos UI Protocol connection closed",
+      code: 1013,
+      closeReason: "try later",
+    });
+  });
+
+  it("rejects pending requests with the close frame of an open socket", async () => {
+    const socket = createSocket();
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => socket as unknown as WebSocket,
+    });
+    const connecting = client.connect();
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await connecting;
+
+    const pending = client.resolveLaunch({ cwd: "/workspace/a" });
+    socket.onclose?.({ code: 1008, reason: "auth_expired" } as CloseEvent);
+
+    const error = await pending.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(OctosUiConnectionClosedError);
+    expect(error).toMatchObject({ code: 1008, closeReason: "auth_expired" });
+    expect(client.status).toBe("disconnected");
   });
 
   it("bounds a silent handshake and ignores its late callbacks after retry", async () => {

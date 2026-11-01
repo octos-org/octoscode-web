@@ -3113,6 +3113,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     activeSessionKey,
     knownSessions,
   ]);
+  const workspaceError =
+    workspaceProduct.state.error === null
+      ? null
+      : t(workspaceProduct.state.error);
+  // A launch surface shows the failure beside the action that retries it. The
+  // sidebar's copy would announce it twice and pair it with a catalog Retry,
+  // which clears the error without retrying the launch.
+  const launchSurfaceShowsError =
+    Boolean(workspaceProduct.launch.decision) ||
+    (codingCapabilities.sessionCreationAvailable &&
+      (workspacePicker.open || !session.opened));
+  const sidebarError = launchSurfaceShowsError ? null : workspaceError;
   const savedLinkPanel = savedLink ? (
     savedLink.reference ? (
       <SurfaceBoundary
@@ -3122,7 +3134,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           reference={savedLink.reference}
           serverOrigin={connection.endpoint}
           opening={savedLinkOpening}
-          error={savedLinkError ?? workspaceProduct.state.error}
+          error={savedLinkError ?? workspaceError}
           onOpen={() => void openSavedLink()}
           onDismiss={dismissSavedLink}
         />
@@ -3789,7 +3801,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               loading={workspaceProduct.state.loading}
-              error={workspaceProduct.state.error}
+              error={sidebarError}
               settingsActive={settingsOpen}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
@@ -4111,7 +4123,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     <LaunchDecisionPanel
                       state={workspaceProduct.launch}
                       onboarding={workspaceProduct.onboarding}
-                      error={workspaceProduct.state.error}
+                      error={workspaceError}
                       onSubmitOnboarding={(submission) =>
                         void workspaceProduct.submitOnboarding(submission)
                       }
@@ -4163,7 +4175,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {...(workspaceBrowse
                               ? { browse: workspaceBrowse }
                               : {})}
-                            error={workspaceProduct.state.error}
+                            error={workspaceError}
                             creating={
                               session.status === "connecting" ||
                               workspaceProduct.transitioning
@@ -5518,7 +5530,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               ? { recentWorkspaceId: sessionWorkspaces[0].id }
               : {})}
             {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
-            error={workspaceProduct.state.error}
+            error={workspaceError}
             creating={
               session.status === "connecting" || workspaceProduct.transitioning
             }
