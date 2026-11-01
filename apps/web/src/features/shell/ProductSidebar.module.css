@@ -789,7 +789,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .catalogProgress {

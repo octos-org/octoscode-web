@@ -123,7 +123,7 @@
   gap: var(--dsw-space-3);
   padding: var(--dsw-space-2) var(--dsw-space-3);
   border-bottom: 1px solid var(--dsw-alias-border-l1);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: var(--dsw-font-size-micro);
 }
 

@@ -233,6 +233,6 @@
   border-radius: 10px;
   padding: 10px 12px;
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: 12px;
 }

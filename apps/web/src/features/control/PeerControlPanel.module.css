@@ -52,7 +52,7 @@
 }
 
 .refusal {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .receipt {

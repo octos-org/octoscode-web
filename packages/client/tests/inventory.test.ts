@@ -154,23 +154,62 @@ describe("runtime inventory contracts", () => {
     });
     expect(result?.stdioAllowlist).toEqual([]);
   });
-  it("leaves the facts absent on an older server or when they are malformed", () => {
+  it("leaves the facts absent on an older server", () => {
     const legacy = parseRuntimeMcp(mcpStatus, "s1", "p1");
     expect(legacy).not.toBeNull();
     expect(legacy).not.toHaveProperty("management");
     expect(legacy).not.toHaveProperty("stdioAllowlist");
-    const malformed = parseRuntimeMcp(
+    expect(legacy).not.toHaveProperty("invalidFacts");
+  });
+  it.each([
+    [{ can_manage: "false" }, ["can_manage"]],
+    [{ can_manage: null }, ["can_manage"]],
+    [{ can_manage: false, manage_unavailable_reason: 7 }, ["can_manage"]],
+    [
+      { stdio_allowlist: [{ entry_id: "a" }, { entry_id: "a" }] },
+      ["stdio_allowlist"],
+    ],
+    [{ stdio_allowlist: { entry_id: "a" } }, ["stdio_allowlist"]],
+    [{ stdio_allowlist: [{ entry_id: 3 }] }, ["stdio_allowlist"]],
+    [
       {
-        ...mcpStatus,
+        stdio_allowlist: Array.from({ length: 1001 }, (_, i) => ({
+          entry_id: `e${i}`,
+        })),
+      },
+      ["stdio_allowlist"],
+    ],
+    [
+      {
         can_manage: "yes",
         stdio_allowlist: [{ entry_id: "a" }, { entry_id: "a" }],
       },
-      "s1",
-      "p1",
-    );
-    expect(malformed?.servers).toEqual([]);
-    expect(malformed).not.toHaveProperty("management");
-    expect(malformed).not.toHaveProperty("stdioAllowlist");
+      ["can_manage", "stdio_allowlist"],
+    ],
+  ])(
+    "reports malformed facts %j instead of passing for an older server",
+    (facts, invalid) => {
+      const result = parseRuntimeMcp({ ...mcpStatus, ...facts }, "s1", "p1");
+      expect(result?.servers).toEqual([]);
+      expect(result?.invalidFacts).toEqual(invalid);
+      if (invalid.includes("can_manage"))
+        expect(result).not.toHaveProperty("management");
+      if (invalid.includes("stdio_allowlist"))
+        expect(result).not.toHaveProperty("stdioAllowlist");
+    },
+  );
+  it("keeps an unknown reason as reported", () => {
+    expect(
+      parseRuntimeMcp(
+        {
+          ...mcpStatus,
+          can_manage: false,
+          manage_unavailable_reason: "temporary_maintenance",
+        },
+        "s1",
+        "p1",
+      )?.management,
+    ).toEqual({ canManage: false, reason: "temporary_maintenance" });
   });
   it("projects only status fields and rejects duplicate or wrong-scope rows", () => {
     const result = parseRuntimeTools(
