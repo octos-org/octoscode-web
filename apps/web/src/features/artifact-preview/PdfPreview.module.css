@@ -77,7 +77,7 @@
 
 .error {
   padding: var(--dsw-space-3);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
   font-size: 12px;
 }
 
