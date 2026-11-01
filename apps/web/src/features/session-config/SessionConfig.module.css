@@ -1,6 +1,8 @@
 /* §4.1 session status strip: one full-width read-only button under the
    composer; wraps to two lines at narrow widths. */
 .session-status-strip {
+  /* Full-width strip: press tints, it does not shrink. */
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -121,7 +123,7 @@
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   font-weight: 500;
 }
 

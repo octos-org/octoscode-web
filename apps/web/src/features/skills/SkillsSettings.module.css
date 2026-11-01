@@ -52,7 +52,7 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .heading button:hover:not(:disabled),
@@ -117,7 +117,7 @@
 .skillHeading span {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-variant-numeric: tabular-nums;
 }
 

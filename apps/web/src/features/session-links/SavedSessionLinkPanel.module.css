@@ -78,10 +78,10 @@
 }
 
 .actions button {
-  min-height: 40px;
+  min-height: var(--dsw-control-h-lg);
   padding: 8px 14px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
@@ -89,15 +89,11 @@
   font-size: 14px;
   transition:
     background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
-    transform var(--dsw-motion-feedback) var(--dsw-ease-out);
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .actions button:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.actions button:active:not(:disabled) {
-  transform: translateY(1px);
 }
 
 .actions .primary {
@@ -130,9 +126,5 @@
 @media (prefers-reduced-motion: reduce) {
   .actions button {
     transition: none;
-  }
-
-  .actions button:active:not(:disabled) {
-    transform: none;
   }
 }

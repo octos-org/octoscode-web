@@ -103,7 +103,7 @@
   padding: 0 5px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-variant-numeric: tabular-nums;
   line-height: 18px;
   text-align: center;

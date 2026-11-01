@@ -162,7 +162,7 @@
 .action,
 .disclosure {
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--dsw-font-size-button);
   padding: 4px 10px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -197,7 +197,7 @@
 }
 
 .reason {
-  font-size: 0.6875rem;
+  font-size: var(--dsw-font-size-micro);
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
 
@@ -222,7 +222,7 @@
 .advancedSummary {
   cursor: pointer;
   padding: 6px 12px;
-  font-size: 0.75rem;
+  font-size: var(--dsw-font-size-button);
   font-weight: 600;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
   list-style: revert;

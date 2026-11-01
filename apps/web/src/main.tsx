@@ -4,6 +4,7 @@ import { ConnectionGate } from "./app/ConnectionGate.tsx";
 import { FatalErrorBoundary } from "./features/error/FatalErrorBoundary.tsx";
 import { PreferencesProvider } from "./features/preferences/preferences.tsx";
 import { consumePairingLink } from "./features/connection/pairing.ts";
+import { installTouchPress } from "./app/touch-press.ts";
 import "./app/theme.css";
 import "./app/styles.css";
 
@@ -11,6 +12,7 @@ import "./app/styles.css";
 // address before the first render. The HTML referrer policy also protects
 // the resource requests made before this module runs.
 consumePairingLink();
+installTouchPress();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root mount point");
