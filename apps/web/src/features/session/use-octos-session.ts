@@ -1355,6 +1355,7 @@ export function useOctosSession(): OctosSessionRuntime {
     >(),
   );
   const pendingRestoreConfigRef = useRef<SessionConnectionInput | null>(null);
+  const resumeHydrateRef = useRef(false);
   const [restoreRejected, setRestoreRejected] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [backgroundTurns, setBackgroundTurns] = useState<
@@ -3037,6 +3038,7 @@ export function useOctosSession(): OctosSessionRuntime {
     record: ReturnType<SessionRecordManager<OctosUiClient>["selected"]>,
   ): void {
     if (!record) return;
+    resumeHydrateRef.current = false;
     // These are selected-only read projections, not retained execution owners.
     // Reset them before reading B so A's settings/tasks cannot be shown in B.
     codingSafetyController.reset();
@@ -3106,6 +3108,7 @@ export function useOctosSession(): OctosSessionRuntime {
   }
 
   function resetProductSessionState(): void {
+    resumeHydrateRef.current = false;
     setTimeline([]);
     codingSafetyController.reset();
     supervisionController.reset();
@@ -3123,6 +3126,7 @@ export function useOctosSession(): OctosSessionRuntime {
       // executable controller must be preserved — only the presentation
       // projection is replaced by the fresh hydrate that follows.
       if (event.reason === "resume") {
+        resumeHydrateRef.current = true;
         setLaunch(EMPTY_LAUNCH_RUNTIME);
         return;
       }
@@ -3146,6 +3150,8 @@ export function useOctosSession(): OctosSessionRuntime {
       return;
     }
     if (event.type === "session-hydrate") {
+      const resumeHydrate = resumeHydrateRef.current;
+      resumeHydrateRef.current = false;
       if (event.reason === "candidate") {
         // Candidate adoption emits session-cleared before its raw diagnostics,
         // so resetting here would erase the new Session's staged event log.
@@ -3167,7 +3173,9 @@ export function useOctosSession(): OctosSessionRuntime {
       if (event.reason !== "recovery") {
         configureCodingSurfaces(event.authority.capabilities);
       }
-      if (record)
+      // Cold candidates install the selected record's changes. A retained
+      // resume also emits a candidate hydrate: keep the current view instead.
+      if (record && event.reason === "candidate" && !resumeHydrate)
         codingSafetyController.restoreChanges(
           record.scope.sessionId,
           record.changes,
