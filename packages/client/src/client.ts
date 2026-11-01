@@ -1,4 +1,10 @@
 import { APPUI_MEMORY_SESSION_SCOPE_FEATURE } from "./memory-methods.ts";
+import {
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
+  type ExecutionEnvironmentReadParams,
+  type ExecutionEnvironmentResult,
+} from "./execution-environment.ts";
 import { DIFF_WORKSPACE_GET } from "./diff-methods.ts";
 import {
   SKILL_ACTIONS_UI_FEATURE,
@@ -141,6 +147,7 @@ export const DEFAULT_UI_FEATURES = [
   SKILL_ACTION_JOBS_UI_FEATURE,
   EXTERNAL_DRIVER_V1_UI_FEATURE,
   MCP_CONNECTOR_MANAGE_V1,
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
 ] as const;
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -708,6 +715,19 @@ export class OctosUiClient {
       { session_id: sessionId },
       async (value) =>
         (await loadSessionStatus()).parseSessionStatusReadResult(value),
+    );
+  }
+
+  async readExecutionEnvironment(
+    params: ExecutionEnvironmentReadParams,
+  ): Promise<ExecutionEnvironmentResult> {
+    return this.validatedRequest(
+      SESSION_EXECUTION_ENVIRONMENT_READ,
+      params,
+      async (value) =>
+        (
+          await import("./execution-environment.ts")
+        ).parseExecutionEnvironmentResult(value),
     );
   }
 

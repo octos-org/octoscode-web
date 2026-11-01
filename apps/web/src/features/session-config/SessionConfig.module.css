@@ -162,6 +162,27 @@
   overflow-wrap: anywhere;
 }
 
+.execution-environment {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.execution-environment h4 {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.environment-muted {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.environment-time {
+  font-variant-numeric: tabular-nums;
+}
+
 .session-config-select {
   box-sizing: border-box;
   min-width: 160px;
