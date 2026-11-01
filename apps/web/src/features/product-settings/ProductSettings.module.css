@@ -160,11 +160,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: var(--dsw-control-h-md);
   box-sizing: border-box;
   padding: 0 14px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--dsw-radius-control);
   font-family: inherit;
   font-size: 14px;
   line-height: 22px;
@@ -189,13 +189,6 @@
 
 .dangerButton:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover-danger);
-}
-
-.secondaryButton:focus-visible,
-.dangerButton:focus-visible,
-.modelRow:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
 
 .secondaryButton:disabled,
@@ -307,6 +300,7 @@
 }
 
 .modelRow {
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
   gap: 12px;

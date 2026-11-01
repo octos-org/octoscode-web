@@ -26,7 +26,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .toolbar button:hover:not(:disabled) {

@@ -48,6 +48,13 @@
   font-size: var(--dsw-font-size-sm);
 }
 
+@media (pointer: coarse) {
+  .navButton {
+    width: var(--dsw-control-h-lg);
+    height: var(--dsw-control-h-lg);
+  }
+}
+
 .navButton:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);

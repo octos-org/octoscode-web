@@ -112,8 +112,15 @@
   padding: 3px 0;
   background: transparent;
   color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
+}
+
+/* 交-12: a link-styled button still gets a finger-sized target. */
+@media (pointer: coarse) {
+  .usePage {
+    min-height: var(--dsw-control-h-lg);
+  }
 }
 
 .usePage:hover:not(:disabled) {
@@ -149,7 +156,7 @@
 
 .fieldHelp {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -181,7 +188,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
@@ -215,17 +222,17 @@
 }
 
 .connect {
-  height: 44px;
+  height: var(--dsw-control-h-lg);
   border: 0;
-  border-radius: 13px;
+  border-radius: var(--dsw-radius-control);
   background: var(--dsw-alias-button-info-fill);
   color: var(--dsw-alias-label-on-accent);
   cursor: pointer;
   font-size: 14px;
   font-weight: 550;
   transition:
-    background-color 160ms ease,
-    transform 160ms ease;
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .connect:hover:not(:disabled) {
@@ -235,10 +242,6 @@
 .connect:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-.connect:active {
-  transform: scale(0.99);
 }
 
 .connecting {
@@ -293,7 +296,7 @@
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .forget:hover {
@@ -364,7 +367,7 @@
   background: var(--dsw-alias-interactive-bg-hover-solid);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .discovered button:disabled {

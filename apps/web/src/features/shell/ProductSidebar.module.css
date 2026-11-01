@@ -21,7 +21,8 @@
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family);
   font-size: 14px;
-  transition: width var(--dsw-transition-duration-slow) var(--dsw-ease-in-out);
+  /* 反-8: collapse is frequent and animating width reflows the whole
+     conversation every frame, so it snaps. */
 }
 
 .collapsed {
@@ -131,6 +132,15 @@
 .collapsed .iconButton {
   width: 36px;
   height: 36px;
+}
+
+@media (pointer: coarse) {
+  .iconButton,
+  .railButton,
+  .collapsed .iconButton {
+    width: var(--dsw-control-h-lg);
+    height: var(--dsw-control-h-lg);
+  }
 }
 
 .toggle {
@@ -414,6 +424,7 @@
 }
 
 .viewOptionsItem {
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -505,6 +516,7 @@
 }
 
 .workspaceToggle {
+  --dsw-press-scale: none;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -725,6 +737,7 @@
 }
 
 .showMore {
+  --dsw-press-scale: none;
   width: 100%;
   height: 28px;
   padding: 0 12px 0 28px;
@@ -733,7 +746,7 @@
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   text-align: left;
   cursor: pointer;
 }
@@ -835,6 +848,7 @@
 }
 
 .searchResultRow {
+  --dsw-press-scale: none;
   display: flex;
   min-width: 0;
   overflow: hidden;
@@ -888,6 +902,7 @@
 }
 
 .settings {
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -918,7 +933,7 @@
 .fleetUnavailable {
   padding: 0 10px 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 15px;
 }
 

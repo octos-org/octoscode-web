@@ -68,7 +68,7 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
   touch-action: manipulation;
 }
 
@@ -81,6 +81,13 @@
 .actions button:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+@media (pointer: coarse) {
+  .actions button,
+  .error button {
+    min-height: var(--dsw-control-h-lg);
+  }
 }
 
 .body {
@@ -146,7 +153,7 @@
   background: transparent;
   color: var(--dsw-alias-state-business-primary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .loadMore:hover {

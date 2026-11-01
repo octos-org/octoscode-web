@@ -6,10 +6,9 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // client has nothing to recover with when the row is dropped server-side.
 //
 // Both variants FAILED on core v2.0.3 (2026-10-26, clean workspace).
-// The post-stop variant is enabled against a Core containing octos#2849.
-// The still-running variant remains fixme pending octos#2881: disconnect abort
-// must also persist the dispatched prompt instead of ending with only
-// connection_closed.
+// The post-stop variant needs a Core containing octos#2849; the
+// still-running variant needs octos#2881 (fixed by #2882, fe3f36c1e): a
+// refresh ends the socket, and the server-owned turn must keep its prompt.
 const endpoint = `http://127.0.0.1:${process.env.OCTOSCODE_LIVE_WEB_PORT ?? "4174"}`;
 const token = required("OCTOSCODE_LIVE_TOKEN");
 const cwd = required("OCTOSCODE_LIVE_WORKSPACE");
@@ -32,8 +31,14 @@ async function sendInFlight(page: Page, marker: string): Promise<void> {
   await page.getByLabel("Auth token").fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
+  // A real server opens its folder browser first; type the path instead.
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await expect(addWorkspace).toBeVisible({ timeout: 30_000 });
+  const manual = page.getByRole("button", { name: "Enter path manually" });
+  await expect(addWorkspace.or(manual).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  if (await manual.isVisible()) await manual.click();
+  await expect(addWorkspace).toBeVisible();
   await addWorkspace.getByLabel("Server workspace path").fill(cwd);
   await addWorkspace.getByRole("button", { name: "Start session" }).click();
 
@@ -51,7 +56,7 @@ async function sendInFlight(page: Page, marker: string): Promise<void> {
   ).toBeVisible({ timeout: 60_000 });
 }
 
-test.fixme("the prompt survives a refresh while the turn is still running", async ({
+test("the prompt survives a refresh while the turn is still running", async ({
   page,
 }) => {
   const marker = `DURABILITY_PROBE_MIDTURN_${Date.now()}`;

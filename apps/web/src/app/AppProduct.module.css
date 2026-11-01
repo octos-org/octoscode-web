@@ -67,7 +67,7 @@
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .conversationTabs button:hover,
@@ -117,7 +117,7 @@
 .pendingNavigationCopy small {
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -132,7 +132,7 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .pendingNavigation button:hover {
@@ -161,7 +161,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
@@ -211,7 +211,7 @@
   padding: 0 5px;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-bg-base);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 18px;
@@ -364,18 +364,14 @@
   color: var(--dsw-alias-label-primary);
   box-shadow: var(--dsw-shadow-lv2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   line-height: 18px;
   font-weight: 500;
-  transition: transform 120ms var(--dsw-ease-in-out);
+  transition: scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
 .jumpLatest:hover {
   background: var(--dsw-alias-button-floating-hover);
-}
-
-.jumpLatest:active:not(:disabled) {
-  transform: translateX(-50%) scale(0.98);
 }
 
 /* Deep-thinking indicator: pulsing placeholder between send and the first

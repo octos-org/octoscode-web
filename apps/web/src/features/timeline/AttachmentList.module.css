@@ -81,7 +81,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
@@ -92,6 +92,12 @@
 .download:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+@media (pointer: coarse) {
+  .download {
+    min-height: var(--dsw-control-h-lg);
+  }
 }
 
 .error {

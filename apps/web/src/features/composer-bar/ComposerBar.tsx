@@ -81,18 +81,25 @@ export function FolderChip({
   name,
   path,
   disabled,
+  iconOnly = false,
   onChoose,
 }: {
   name: string;
   path: string;
   disabled: boolean;
+  /** Phones: the header already names the folder, so the chip is its icon. */
+  iconOnly?: boolean;
   onChoose: () => void;
 }) {
   const t = useUiText();
   return (
     <button
       type="button"
-      className={controlStyles.trigger}
+      className={
+        iconOnly
+          ? `${controlStyles.trigger} ${styles.iconTrigger}`
+          : controlStyles.trigger
+      }
       title={path}
       aria-label={t("Folder {path}. Start a new session in another folder", {
         path,
@@ -103,7 +110,9 @@ export function FolderChip({
       <span className={controlStyles.triggerIcon}>
         <FolderIcon size={14} />
       </span>
-      <span className={controlStyles.triggerLabel}>{name}</span>
+      {iconOnly ? null : (
+        <span className={controlStyles.triggerLabel}>{name}</span>
+      )}
     </button>
   );
 }
@@ -194,6 +203,92 @@ type SkillsLoad =
   | { status: "ready"; skills: InstalledSkill[] }
   | { status: "error" };
 
+/** Loads the Profile's skills each time the owning menu opens. */
+function useSkillsList(open: boolean, load: () => Promise<InstalledSkill[]>) {
+  const [list, setList] = useState<SkillsLoad>({ status: "idle" });
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    setList({ status: "loading" });
+    loadRef.current().then(
+      (skills) => current && setList({ status: "ready", skills }),
+      () => current && setList({ status: "error" }),
+    );
+    return () => {
+      current = false;
+    };
+  }, [open]);
+  return list;
+}
+
+/** The skills menu body, shared by the Skills chip and the phone's + menu. */
+function SkillsMenuItems({
+  list,
+  onUse,
+  onManage,
+}: {
+  list: SkillsLoad;
+  onUse: (name: string) => void;
+  onManage: () => void;
+}) {
+  const t = useUiText();
+  return (
+    <>
+      <p className={controlStyles.status}>
+        {t("Adds a line asking Octos to use the skill. You can edit it.")}
+      </p>
+      {list.status === "loading" ? (
+        <p className={controlStyles.status}>{t("Loading skills…")}</p>
+      ) : null}
+      {list.status === "error" ? (
+        <p className={controlStyles.status} role="alert">
+          {t("Couldn't load this Profile's skills.")}
+        </p>
+      ) : null}
+      {list.status === "ready" && list.skills.length === 0 ? (
+        <p className={controlStyles.status}>
+          {t("No skills are installed in this Profile.")}
+        </p>
+      ) : null}
+      {list.status === "ready"
+        ? list.skills.map((skill) => (
+            <button
+              key={skill.name}
+              type="button"
+              role="menuitem"
+              className={controlStyles.option}
+              onClick={() => onUse(skill.name)}
+            >
+              <span className={controlStyles.optionCopy}>
+                <span className={controlStyles.optionName}>{skill.name}</span>
+                <span className={controlStyles.optionDescription}>
+                  {[
+                    skill.version ? `v${skill.version}` : null,
+                    skill.toolCount > 0
+                      ? t("{count} tool(s)", { count: skill.toolCount })
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </span>
+            </button>
+          ))
+        : null}
+      <button
+        type="button"
+        role="menuitem"
+        className={`${controlStyles.option} ${styles.menuFooter}`}
+        onClick={onManage}
+      >
+        {t("Manage skills…")}
+      </button>
+    </>
+  );
+}
+
 export function SkillsChip({
   load,
   onUse,
@@ -206,21 +301,7 @@ export function SkillsChip({
   const t = useUiText();
   const popover = usePopover();
   const menuId = useId();
-  const [list, setList] = useState<SkillsLoad>({ status: "idle" });
-  const loadRef = useRef(load);
-  loadRef.current = load;
-  useEffect(() => {
-    if (!popover.open) return;
-    let current = true;
-    setList({ status: "loading" });
-    loadRef.current().then(
-      (skills) => current && setList({ status: "ready", skills }),
-      () => current && setList({ status: "error" }),
-    );
-    return () => {
-      current = false;
-    };
-  }, [popover.open]);
+  const list = useSkillsList(popover.open, load);
   return (
     <div
       ref={popover.rootRef}
@@ -250,63 +331,17 @@ export function SkillsChip({
           aria-label={t("Skills")}
           aria-busy={list.status === "loading"}
         >
-          <p className={controlStyles.status}>
-            {t("Adds a line asking Octos to use the skill. You can edit it.")}
-          </p>
-          {list.status === "loading" ? (
-            <p className={controlStyles.status}>{t("Loading skills…")}</p>
-          ) : null}
-          {list.status === "error" ? (
-            <p className={controlStyles.status} role="alert">
-              {t("Couldn't load this Profile's skills.")}
-            </p>
-          ) : null}
-          {list.status === "ready" && list.skills.length === 0 ? (
-            <p className={controlStyles.status}>
-              {t("No skills are installed in this Profile.")}
-            </p>
-          ) : null}
-          {list.status === "ready"
-            ? list.skills.map((skill) => (
-                <button
-                  key={skill.name}
-                  type="button"
-                  role="menuitem"
-                  className={controlStyles.option}
-                  onClick={() => {
-                    popover.close(false);
-                    onUse(skill.name);
-                  }}
-                >
-                  <span className={controlStyles.optionCopy}>
-                    <span className={controlStyles.optionName}>
-                      {skill.name}
-                    </span>
-                    <span className={controlStyles.optionDescription}>
-                      {[
-                        skill.version ? `v${skill.version}` : null,
-                        skill.toolCount > 0
-                          ? t("{count} tool(s)", { count: skill.toolCount })
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </span>
-                </button>
-              ))
-            : null}
-          <button
-            type="button"
-            role="menuitem"
-            className={`${controlStyles.option} ${styles.menuFooter}`}
-            onClick={() => {
+          <SkillsMenuItems
+            list={list}
+            onUse={(name) => {
+              popover.close(false);
+              onUse(name);
+            }}
+            onManage={() => {
               popover.close(false);
               onManage();
             }}
-          >
-            {t("Manage skills…")}
-          </button>
+          />
         </div>
       ) : null}
     </div>
@@ -327,6 +362,109 @@ export function AttachChip({ onOpen }: { onOpen: () => void }) {
       </span>
       <span className={controlStyles.triggerLabel}>{t("Images")}</span>
     </button>
+  );
+}
+
+/**
+ * Phones (美-9): Skills and Images fold into one "+" so the settings row fits
+ * a line. One level deep: images first, then the skills list in place.
+ */
+export function ComposerAddMenu({
+  skills,
+  onAttachImages,
+}: {
+  skills: {
+    load: () => Promise<InstalledSkill[]>;
+    onUse: (name: string) => void;
+    onManage: () => void;
+  } | null;
+  onAttachImages: (() => void) | null;
+}) {
+  const t = useUiText();
+  const popover = usePopover();
+  const menuId = useId();
+  const skillsHeadingId = useId();
+  const list = useSkillsList(popover.open && skills !== null, () =>
+    skills ? skills.load() : Promise.resolve([]),
+  );
+  return (
+    <div
+      ref={popover.rootRef}
+      className={controlStyles.control}
+      onKeyDown={popover.onKeyDown}
+    >
+      <button
+        ref={popover.triggerRef}
+        type="button"
+        className={`${controlStyles.trigger} ${styles.iconTrigger}`}
+        aria-label={
+          skills && onAttachImages
+            ? t("Add skills or images")
+            : skills
+              ? t("Skills")
+              : t("Attach images")
+        }
+        title={
+          skills && onAttachImages
+            ? t("Add skills or images")
+            : skills
+              ? t("Skills")
+              : t("Attach images")
+        }
+        aria-haspopup="menu"
+        aria-expanded={popover.open}
+        aria-controls={popover.open ? menuId : undefined}
+        onClick={() => popover.setOpen((value) => !value)}
+      >
+        <PlusIcon />
+      </button>
+      {popover.open ? (
+        <div
+          id={menuId}
+          className={`${controlStyles.menu} ${styles.leftMenu}`}
+          role="menu"
+          aria-label={t("Add")}
+          aria-busy={list.status === "loading"}
+        >
+          {onAttachImages ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={`${controlStyles.option} ${styles.addOption}`}
+              onClick={() => {
+                popover.close(false);
+                onAttachImages();
+              }}
+            >
+              <PaperclipIcon />
+              {t("Attach images")}
+            </button>
+          ) : null}
+          {skills ? (
+            <div
+              role="group"
+              aria-labelledby={skillsHeadingId}
+              className={styles.addSection}
+            >
+              <p id={skillsHeadingId} className={styles.addHeading}>
+                {t("Skills")}
+              </p>
+              <SkillsMenuItems
+                list={list}
+                onUse={(name) => {
+                  popover.close(false);
+                  skills.onUse(name);
+                }}
+                onManage={() => {
+                  popover.close(false);
+                  skills.onManage();
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -429,6 +567,23 @@ function SkillIcon() {
       aria-hidden="true"
     >
       <path d="M8 1.75 9.6 5.9l4.15.35-3.15 2.75.95 4.25L8 11 4.45 13.25l.95-4.25L2.25 6.25 6.4 5.9 8 1.75Z" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3v10M3 8h10" />
     </svg>
   );
 }

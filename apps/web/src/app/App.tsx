@@ -13,6 +13,7 @@ import {
 } from "../features/product-controls/SessionControlBar.tsx";
 import {
   AttachChip,
+  ComposerAddMenu,
   ComposerSettingsRow,
   FolderChip,
   ModelChip,
@@ -157,6 +158,24 @@ import {
   profileDefaultNeedsRestart,
   selectedModel,
 } from "../features/shell/product-projection.ts";
+import { isPermissionEscalation } from "../features/shell/permission-projection.ts";
+import {
+  forgetRemoteFolder,
+  loadRemoteFolders,
+  rememberRemoteFolder,
+} from "../features/remote/remote-folders.ts";
+import { useRemoteCatalog } from "../features/remote/remote-catalog.ts";
+import { remoteLink } from "../features/remote/remote-link.ts";
+import {
+  remoteKey,
+  remoteOverview,
+  type LiveSessionSnapshot,
+  type RemoteRow,
+} from "../features/remote/remote-model.ts";
+import {
+  isRemoteViewUrl,
+  withRemoteView,
+} from "../features/remote/remote-url.ts";
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
@@ -219,7 +238,7 @@ import {
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
-import { PanelRightIcon } from "../ui/Icon.tsx";
+import { ArrowLeftIcon, PanelRightIcon } from "../ui/Icon.tsx";
 import { CopySessionLinkButton } from "../features/session-links/CopySessionLinkButton.tsx";
 import {
   readPanelLayout,
@@ -378,6 +397,11 @@ const CronSettingsContent = lazyNamed(
   () => import("../features/cron/CronSettingsContent.tsx"),
   (module) => module.CronSettingsContent,
 );
+const REMOTE_REFRESH_MS = 15_000;
+const RemoteHome = lazyNamed(
+  () => import("../features/remote/RemoteHome.tsx"),
+  (module) => module.RemoteHome,
+);
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
   (module) => module.ApprovalPanel,
@@ -513,6 +537,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [sendingNow, setSendingNow] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -783,6 +808,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(browserStorage("sessionStorage"), connection),
   );
+  // Phone remote control (`?view=remote`): "home" is the overview, "session"
+  // is an opened conversation reached from it; null is the ordinary app.
+  const [remoteView, setRemoteView] = useState<"home" | "session" | null>(() =>
+    isRemoteViewUrl(window.location.href) ? "home" : null,
+  );
+  const remote = remoteView !== null;
+  const [remoteFolders, setRemoteFolders] = useState(() =>
+    loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+  );
+  const [remoteOpening, setRemoteOpening] = useState<string | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [remoteRefresh, setRemoteRefresh] = useState(0);
+  const [remoteNow, setRemoteNow] = useState(() => Date.now());
   // The session seam the entry's connect screen drives. Published during
   // render so every call sees this render's closures, and absent entirely
   // while the shell is unmounted (where each of these is a no-op anyway).
@@ -1195,6 +1233,132 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspaceProduct.backgroundTurns,
     deletedSessionIds,
   ]);
+  // ---- Phone remote control -------------------------------------------
+  const remoteServerLink = remoteLink(session.server);
+  const remoteSelectedLive: LiveSessionSnapshot | null =
+    session.opened?.workspace_root && session.opened.active_profile_id
+      ? {
+          sessionId: session.opened.session_id,
+          profileId: session.opened.active_profile_id,
+          workspaceRoot: session.opened.workspace_root,
+          firstPrompt: null,
+          state:
+            interactions.approval || interactions.question
+              ? "waiting"
+              : conversation.queue.active
+                ? "running"
+                : "idle",
+          waitingFor: interactions.approval
+            ? {
+                kind: "approval",
+                title: interactions.approval.title,
+                toolName: interactions.approval.toolName || null,
+              }
+            : interactions.question
+              ? {
+                  kind: "question",
+                  title: interactions.question.title,
+                  toolName: null,
+                }
+              : null,
+        }
+      : null;
+  const remoteBackgroundKey = workspaceProduct.backgroundTurns
+    .map((turn) => `${turn.sessionId}:${turn.state}`)
+    .join("|");
+  const remoteCatalog = useRemoteCatalog({
+    client: remote && session.authenticated ? protocol.client : null,
+    profileId: catalogProfileId,
+    folders: remoteFolders.map((folder) => folder.path),
+    refreshKey: `${protocol.authorityKey}\n${remoteRefresh}\n${
+      conversation.queue.active?.turnId ?? ""
+    }\n${remoteBackgroundKey}`,
+  });
+  const remoteOverviewState = useMemo(
+    () =>
+      remoteOverview({
+        catalog: [...remoteCatalog.values()].flatMap(
+          (folder) => folder.sessions,
+        ),
+        live: [
+          ...workspaceProduct.backgroundTurns,
+          ...(remoteSelectedLive ? [remoteSelectedLive] : []),
+        ],
+      }),
+    // remoteSelectedLive is rebuilt every render; its fields are the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      remoteCatalog,
+      workspaceProduct.backgroundTurns,
+      remoteSelectedLive?.sessionId,
+      remoteSelectedLive?.state,
+      remoteSelectedLive?.waitingFor?.title,
+    ],
+  );
+  const remoteListedAt = (() => {
+    const times = [...remoteCatalog.values()]
+      .map((folder) => folder.listedAt)
+      .filter((value): value is number => value !== null);
+    return times.length ? Math.min(...times) : null;
+  })();
+  const remoteUnwatchedKey = remoteOverviewState.unwatched
+    .map(remoteKey)
+    .join("|");
+  useEffect(() => {
+    if (!remote || remoteServerLink.kind !== "online") return;
+    if (!remoteOverviewState.unwatched.length) return;
+    void workspaceProduct.watchSessions(remoteOverviewState.unwatched);
+    // The key is the identity of the unwatched set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, remoteServerLink.kind, remoteUnwatchedKey]);
+  useEffect(() => {
+    if (remoteView !== "home") return;
+    // Other clients start and finish work too: re-list while the overview is
+    // on screen, and keep its relative times honest.
+    const timer = window.setInterval(() => {
+      setRemoteNow(Date.now());
+      setRemoteRefresh((value) => value + 1);
+    }, REMOTE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [remoteView]);
+  useEffect(() => {
+    setRemoteFolders(
+      loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+    );
+  }, [connection.endpoint]);
+  const setRemoteViewInUrl = (next: "home" | "session" | null) => {
+    setRemoteView(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      withRemoteView(window.location.href, next !== null),
+    );
+  };
+  const openRemoteRow = async (row: RemoteRow) => {
+    setRemoteError(null);
+    const opened = session.opened;
+    if (
+      opened?.session_id === row.sessionId &&
+      opened.workspace_root === row.workspaceRoot
+    ) {
+      setRemoteView("session");
+      return;
+    }
+    setRemoteOpening(row.key);
+    try {
+      const outcome = await workspaceProduct.openSession({
+        sessionId: row.sessionId,
+        cwd: row.workspaceRoot,
+        profileId: row.profileId,
+        resolveLaunch: false,
+      });
+      if (outcome === "opened") setRemoteView("session");
+      else setRemoteError(t("This session could not be opened. Try again."));
+    } finally {
+      setRemoteOpening(null);
+    }
+  };
+  // -----------------------------------------------------------------------
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -2115,6 +2279,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const activeTurnId = conversation.queue.active?.turnId ?? null;
+  // 美-9: the steering note only matters mid-turn with a draft; the
+  // inconclusive latch carries an action, so it stays up on its own.
+  const steerDraft = Boolean(activeTurnId && draft.trim());
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
@@ -3095,15 +3262,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     protocol.authorityKey,
     safety.permission.result?.session_id,
   ]);
+  const currentPermission = safety.permission.result?.current;
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
     defaultPermission,
-  ).map((option) => ({
-    ...option,
-    modeLabel: t(option.modeLabel),
-    networkLabel: t(option.networkLabel),
-  }));
-  const currentPermission = safety.permission.result?.current;
+  )
+    // The phone may narrow a session's access, never widen it; raising
+    // permissions stays on the computer.
+    .filter(
+      (option) =>
+        !remote ||
+        (option.mode === currentPermission?.mode &&
+          option.network === currentPermission.network) ||
+        !isPermissionEscalation(option, currentPermission),
+    )
+    .map((option) => ({
+      ...option,
+      modeLabel: t(option.modeLabel),
+      networkLabel: t(option.networkLabel),
+    }));
   const projectedModelGroups = modelGroups(models.state.models);
   const currentProfileModel = selectedModel(models.state.models);
   const runtimeModel = work.supervision.runtimeStatus?.model;
@@ -3405,11 +3582,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setImagesOpen(true);
   };
 
+  // Stop and Send now both interrupt the running turn; once one is on its
+  // way the buttons say so and stop taking clicks.
+  const stopping = Boolean(conversation.interruptingTurnId);
   const recoveryStop = conversation.interruptible ? (
-    <button type="button" onClick={() => void conversation.interrupt()}>
-      {t("Stop")}
+    <button
+      type="button"
+      disabled={stopping}
+      aria-busy={stopping || undefined}
+      onClick={() => void conversation.interrupt()}
+    >
+      {stopping ? t("Stopping…") : t("Stop")}
     </button>
   ) : null;
+  const sendPendingNow = () => {
+    if (sendingNow) return;
+    setSendingNow(true);
+    void conversation.sendPendingNow().finally(() => setSendingNow(false));
+  };
 
   const showProductShell = Boolean(
     session.authenticated || workspaceProduct.launch.decision,
@@ -3745,11 +3935,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           className={`${productStyles.workspaceMain} ${panelColumn ? productStyles.workspaceMainWithPanel : ""}`}
           tabIndex={-1}
         >
-          <section className="conversation" hidden={fleetRouteActive}>
+          <section
+            className="conversation"
+            hidden={fleetRouteActive || remoteView === "home"}
+          >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
               <div className={productStyles.titleCluster}>
-                {compact ? (
+                {remoteView === "session" ? (
+                  <button
+                    type="button"
+                    className={productStyles.navigationTrigger}
+                    aria-label={t("Back to remote control")}
+                    onClick={() => {
+                      setRemoteError(null);
+                      setRemoteView("home");
+                    }}
+                  >
+                    <ArrowLeftIcon size={20} />
+                  </button>
+                ) : compact ? (
                   <button
                     type="button"
                     className={productStyles.navigationTrigger}
@@ -3872,6 +4077,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             activeWorkspacePath,
                         }
                       : undefined
+                  }
+                  onOpenRemote={
+                    compact ? () => setRemoteViewInUrl("home") : undefined
                   }
                 />
               </div>
@@ -4156,6 +4364,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             // left to switch.
                             permissionRetryProfile &&
                             !readOnlyPeer &&
+                            !remote &&
                             currentPermission?.mode === "read_only"
                               ? (turnId) => void retryPermissionDenied(turnId)
                               : undefined
@@ -4337,7 +4546,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     busy={interactions.busy}
                     error={interactions.error}
                     onDecide={(decision, scope) =>
-                      void interactions.respondApproval(decision, scope)
+                      void interactions.respondApproval(
+                        decision,
+                        // The phone grants one request at most.
+                        remote ? "request" : scope,
+                      )
                     }
                     {...(conversation.interruptible
                       ? { onInterrupt: () => void conversation.interrupt() }
@@ -4346,6 +4559,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       // Above the approval, which keeps the keyboard otherwise.
                       openChangePreview(previewId, true)
                     }
+                    onceOnly={remote}
                   />
                 </SurfaceBoundary>
               ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
@@ -4457,19 +4671,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                       : {})}
                   >
-                    {conversation.steeringEnabled ? (
+                    {conversation.steeringEnabled &&
+                    (steerDraft || conversation.steerUnknown) ? (
                       <p className="field-note" role="status">
-                        {session.capabilities &&
-                        supportsMethod(session.capabilities, "turn/steer") &&
-                        session.capabilities.supported_features?.includes(
-                          CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
-                        )
-                          ? t(
-                              "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
-                            )
-                          : t(
-                              "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
-                            )}
+                        {!steerDraft
+                          ? null
+                          : session.capabilities &&
+                              supportsMethod(
+                                session.capabilities,
+                                "turn/steer",
+                              ) &&
+                              session.capabilities.supported_features?.includes(
+                                CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
+                              )
+                            ? t(
+                                "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
+                              )
+                            : t(
+                                "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
+                              )}
                         {conversation.steerUnknown ? (
                           <>
                             {" "}
@@ -4592,8 +4812,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         // App.submit's held-elsewhere gate).
                         tabLock.state.kind !== "held-elsewhere"
                           ? {
-                              onSendPendingNow: () =>
-                                void conversation.sendPendingNow(),
+                              onSendPendingNow: sendPendingNow,
                             }
                           : {})}
                         onInterrupt={() => {
@@ -4638,6 +4857,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             <FolderChip
                               name={workspaceName(activeWorkspacePath)}
                               path={activeWorkspacePath}
+                              iconOnly={compact}
                               disabled={
                                 navigationBlocked ||
                                 !codingCapabilities.sessionCreationAvailable
@@ -4652,7 +4872,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {permissionControl ? (
                               <PermissionControl {...permissionControl} />
                             ) : null}
-                            {skillsCapabilities ? (
+                            {!compact && skillsCapabilities ? (
                               <SkillsChip
                                 load={loadSkills}
                                 onUse={askForSkill}
@@ -4661,16 +4881,40 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 }
                               />
                             ) : null}
-                            {imagesAvailable ? (
+                            {!compact && imagesAvailable ? (
                               <AttachChip onOpen={openImages} />
                             ) : null}
                           </ComposerSettingsRow>
                         </SurfaceBoundary>
                       ) : null}
                       <div className="composer-actions">
+                        {/* 美-9: on phones "+" opens the row the way chat
+                            apps do, bottom left, and Skills and Images fold
+                            into it. */}
+                        {compact &&
+                        session.opened &&
+                        (skillsCapabilities || imagesAvailable) ? (
+                          <div className="composer-add">
+                            <ComposerAddMenu
+                              skills={
+                                skillsCapabilities
+                                  ? {
+                                      load: loadSkills,
+                                      onUse: askForSkill,
+                                      onManage: () =>
+                                        setProfileExtensionsMode("skills"),
+                                    }
+                                  : null
+                              }
+                              onAttachImages={
+                                imagesAvailable ? openImages : null
+                              }
+                            />
+                          </div>
+                        ) : null}
                         {session.opened ? (
                           <SessionStatusStrip
-                            stateOnly
+                            compact
                             model={runtimeModelLabel}
                             permissionMode={permissionModeLabel}
                             state={sessionStripState}
@@ -4691,7 +4935,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           available={conversation.interruptible}
                           onInterrupt={() => void conversation.interrupt()}
                         />
-                        {conversation.canSendPendingNow &&
+                        {(conversation.canSendPendingNow || sendingNow) &&
                         !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
@@ -4699,17 +4943,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         tabLock.state.kind !== "held-elsewhere" ? (
                           <button
                             type="button"
+                            className="button button-sm"
                             title={t(
                               "Interrupt the current response and send pending input",
                             )}
-                            onClick={() => void conversation.sendPendingNow()}
+                            disabled={sendingNow}
+                            aria-busy={sendingNow || undefined}
+                            onClick={sendPendingNow}
                           >
-                            {t("Send now (Ctrl+X)")}
+                            {sendingNow
+                              ? t("Sending…")
+                              : t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
                         {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
+                            className="button button-sm"
                             disabled={
                               !session.connected ||
                               profileMutationBusy ||
@@ -4775,6 +5025,49 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
+          {remoteView === "home" && !fleetRouteActive ? (
+            <div className="conversation remote-pane">
+              <Suspense
+                fallback={<DeferredSurface label="Loading remote control…" />}
+              >
+                <RemoteHome
+                  overview={remoteOverviewState}
+                  folders={remoteFolders}
+                  folderStates={remoteCatalog}
+                  link={remoteServerLink}
+                  listedAt={remoteListedAt}
+                  openingKey={remoteOpening}
+                  openError={remoteError}
+                  now={remoteNow}
+                  onOpen={(row) => void openRemoteRow(row)}
+                  onAddFolder={(path) =>
+                    setRemoteFolders(
+                      rememberRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRemoveFolder={(path) =>
+                    setRemoteFolders(
+                      forgetRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRefresh={() => {
+                    setRemoteNow(Date.now());
+                    setRemoteRefresh((value) => value + 1);
+                  }}
+                  onOpenSessions={() => setSidebarCollapsed(false)}
+                  onOpenFull={() => setRemoteViewInUrl(null)}
+                />
+              </Suspense>
+            </div>
+          ) : null}
           <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button

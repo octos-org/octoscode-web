@@ -153,10 +153,14 @@ export function OnboardingPanel({
             {state.error ?? t("The server returned an invalid catalog.")}
           </span>
           <div className={`launch-actions ${styles.actions}`}>
-            <button type="button" onClick={onRetry}>
+            <button className="button" type="button" onClick={onRetry}>
               {t("Retry")}
             </button>
-            <button type="button" onClick={onCancel}>
+            <button
+              className="button button-ghost"
+              type="button"
+              onClick={onCancel}
+            >
               {t("Disconnect")}
             </button>
           </div>
@@ -316,6 +320,7 @@ export function OnboardingPanel({
             <div>
               {step === "connect" ? (
                 <button
+                  className="button button-ghost"
                   type="button"
                   disabled={busy}
                   onClick={() => setStep("service")}
@@ -323,12 +328,18 @@ export function OnboardingPanel({
                   {t("Back")}
                 </button>
               ) : null}
-              <button type="button" disabled={busy} onClick={onCancel}>
+              <button
+                className="button button-ghost"
+                type="button"
+                disabled={busy}
+                onClick={onCancel}
+              >
                 {t("Disconnect")}
               </button>
               <button
-                className={styles.submit}
+                className="button button-primary"
                 type="submit"
+                aria-busy={busy || undefined}
                 disabled={
                   busy ||
                   !familyId ||
@@ -378,7 +389,7 @@ function OnboardingFallback({ onCancel }: { onCancel: () => void }) {
       </span>
       <code>octoscode onboard</code>
       <div className={`launch-actions ${styles.actions}`}>
-        <button type="button" autoFocus onClick={onCancel}>
+        <button className="button" type="button" autoFocus onClick={onCancel}>
           {t("Disconnect")}
         </button>
       </div>

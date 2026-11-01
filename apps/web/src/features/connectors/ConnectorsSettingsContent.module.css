@@ -12,15 +12,15 @@
 
 .headingActions button,
 .actions button {
-  min-height: 32px;
+  min-height: var(--dsw-control-h-md);
   padding: 0 var(--dsw-space-3);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .headingActions button:hover:not(:disabled),

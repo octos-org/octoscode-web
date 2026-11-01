@@ -8,12 +8,15 @@ import styles from "./ConversationActionsMenu.module.css";
 
 interface ConversationActionsMenuProps {
   copySource?: ConversationCopySource | undefined;
+  /** Offered on phones: switch to the remote-control overview. */
+  onOpenRemote?: (() => void) | undefined;
   triggerClassName: string;
 }
 
 /** Secondary conversation actions leave the header's primary space to Panel. */
 export function ConversationActionsMenu({
   copySource,
+  onOpenRemote,
   triggerClassName,
 }: ConversationActionsMenuProps) {
   const t = useUiText();
@@ -65,7 +68,7 @@ export function ConversationActionsMenu({
     items[next]?.focus();
   };
 
-  if (!copySource) return null;
+  if (!copySource && !onOpenRemote) return null;
   return (
     <div ref={rootRef} className={styles.root} onKeyDown={onKeyDown}>
       <button
@@ -96,6 +99,19 @@ export function ConversationActionsMenu({
               className={styles.menuItem ?? ""}
               role="menuitem"
             />
+          ) : null}
+          {onOpenRemote ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.menuItem}
+              onClick={() => {
+                close();
+                onOpenRemote();
+              }}
+            >
+              {t("Remote control")}
+            </button>
           ) : null}
         </div>
       ) : null}
