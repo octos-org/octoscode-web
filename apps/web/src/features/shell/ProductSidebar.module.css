@@ -21,7 +21,8 @@
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family);
   font-size: 14px;
-  transition: width var(--dsw-transition-duration-slow) var(--dsw-ease-in-out);
+  /* 反-8: collapse is frequent and animating width reflows the whole
+     conversation every frame, so it snaps. */
 }
 
 .collapsed {
@@ -131,6 +132,15 @@
 .collapsed .iconButton {
   width: 36px;
   height: 36px;
+}
+
+@media (pointer: coarse) {
+  .iconButton,
+  .railButton,
+  .collapsed .iconButton {
+    width: var(--dsw-control-h-lg);
+    height: var(--dsw-control-h-lg);
+  }
 }
 
 .toggle {

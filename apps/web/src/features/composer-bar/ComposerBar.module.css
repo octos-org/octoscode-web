@@ -20,7 +20,7 @@
 }
 
 .menuFooter {
-  min-height: 36px;
+  min-height: var(--dsw-control-h-md);
   margin-top: 4px;
   border-top: 1px solid var(--dsw-alias-border-l1);
   border-radius: 0 0 10px 10px;
@@ -69,4 +69,54 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* 美-9: icon-only chips on phones (the folder, the "+" that folds Skills and
+   Images). */
+.iconTrigger {
+  justify-content: center;
+  width: var(--dsw-control-h-sm);
+  padding: 0;
+}
+
+.addOption {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+}
+
+.addOption svg {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The skills list scrolls inside the menu's height cap. */
+.addSection {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.addOption + .addSection {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.addHeading {
+  margin: 0;
+  padding: 6px 10px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+@media (pointer: coarse) {
+  .iconTrigger {
+    width: var(--dsw-control-h-lg);
+  }
+
+  .menuFooter {
+    min-height: var(--dsw-control-h-lg);
+  }
 }

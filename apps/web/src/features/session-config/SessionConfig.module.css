@@ -76,6 +76,40 @@
   }
 }
 
+/* 美-9: the composer's form is a settings icon; it grows into a pill with
+   words only when the state needs the user (waiting, reconnecting, held). */
+.session-status-compact {
+  /* A small control again, so it takes the shared press shrink. */
+  --dsw-press-scale: inherit;
+  flex: 0 1 auto;
+  justify-content: center;
+  min-width: var(--dsw-control-h-sm);
+  min-height: var(--dsw-control-h-sm);
+  padding: 0 6px;
+  border-radius: 999px;
+}
+
+.session-status-compact > svg {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.session-status-compact .session-status-strip-state {
+  /* Icon first, then the words (the full strip's phone rule puts its state
+     line first). */
+  order: 0;
+  flex-shrink: 1;
+  padding-right: 2px;
+  color: var(--dsw-alias-label-primary);
+  line-height: 18px;
+}
+
+@media (pointer: coarse) {
+  .session-status-compact {
+    min-width: var(--dsw-control-h-lg);
+    min-height: var(--dsw-control-h-lg);
+  }
+}
+
 .session-config-pane {
   position: fixed;
   inset: 0 0 0 auto;
@@ -194,7 +228,8 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  color-scheme: light dark;
+  /* 美-14: inherit the root's scheme. "light dark" here let the OS choose,
+     so a manual dark or named theme got a light select and dropdown. */
   font: 500 12px/20px var(--dsw-font-family);
 }
 
