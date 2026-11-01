@@ -213,6 +213,7 @@ export type {
   TaskRuntimeState,
   TaskUpdated,
   ReplayLossyEvent,
+  HydratedFileMutation,
   HydratedMessage,
   HydratedTurn,
   LaunchDecisionKind,

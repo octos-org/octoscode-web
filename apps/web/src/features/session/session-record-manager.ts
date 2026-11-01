@@ -1,9 +1,15 @@
 import {
+  applyFileMutation,
+  restoreSessionChanges,
+  type SessionFileChange,
+} from "../side-panel/session-changes.ts";
+import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
   supportsFeature,
   isRecord,
   parseProjectionEnvelope,
+  parseFileMutationNotice,
   type SessionHydrateResult,
   type SessionOpened,
   type UiProtocolCapabilities,
@@ -129,6 +135,8 @@ export interface SessionRecord<Client extends ActiveSessionClient> {
    * selected record's timeline. A background A2 must never mutate B's view.
    */
   timeline: TimelineEntry[];
+  /** Retained file changes, including mutations received while in the background. */
+  changes: SessionFileChange[];
   /**
    * Read-only driver-inventory observation for THIS record. Presentation
    * of server facts only — never execution ownership, scheduling or
@@ -368,6 +376,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       closed: false,
       payload: null,
       timeline: [],
+      changes: [],
       driverInventory: { kind: "unavailable" },
       get controlReadiness(): SessionControlReadiness {
         return deriveControlReadiness({
@@ -1036,6 +1045,12 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     event: ActiveSessionRuntimeEvent<Client>,
   ): void {
     if (event.type === "session-hydrate") {
+      if (event.hydrated.file_mutations !== undefined) {
+        record.changes = restoreSessionChanges(
+          event.hydrated.file_mutations,
+          record.scope.workspaceRoot,
+        );
+      }
       // Retain the authoritative presentation payload so selection can install
       // this Session's canonical transcript + interactions even though its
       // hydrate/ready emitted BEFORE it was selected.
@@ -1161,6 +1176,17 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     );
     // Fold the live notification into the record's OWN timeline so background
     // activity is preserved and the selected UI mirrors this record.
+    const mutation = parseFileMutationNotice(notification);
+    if (
+      mutation &&
+      (!mutation.sessionId || mutation.sessionId === record.scope.sessionId)
+    ) {
+      record.changes = applyFileMutation(
+        record.changes,
+        mutation,
+        record.scope.workspaceRoot,
+      );
+    }
     record.timeline = foldNotification(record.timeline, notification);
     if (notification.method === CORE_UI_METHODS.PROJECTION_ENVELOPE) {
       const envelope = parseProjectionEnvelope(notification.params);

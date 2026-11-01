@@ -1,6 +1,9 @@
+import { parseFileMutationNotice } from "./interaction.ts";
+import { CORE_UI_METHODS } from "./generated/core-contract.ts";
 import { isRecord } from "./rpc.ts";
 import { parseProjectionEnvelope } from "./projection.ts";
 import type {
+  HydratedFileMutation,
   HydratedMessage,
   HydratedTurn,
   ProjectionEnvelopeV2,
@@ -18,6 +21,7 @@ export function parseSessionHydrateResult(
 
   const messages = parseOptionalArray(value.messages, parseHydratedMessage);
   const turns = parseOptionalArray(value.turns, parseHydratedTurn);
+  const fileMutations = parseHydratedFileMutations(value.file_mutations);
   const replayedEnvelopes = parseOptionalArray(
     value.replayed_envelopes,
     (entry) => parseHydratedEnvelope(entry, sessionId),
@@ -34,6 +38,7 @@ export function parseSessionHydrateResult(
     value.projection_thread_sequences,
   );
   if (
+    fileMutations === null ||
     messages === null ||
     turns === null ||
     replayedEnvelopes === null ||
@@ -65,6 +70,7 @@ export function parseSessionHydrateResult(
       ? {}
       : { context_state: value.context_state }),
     ...(messages === undefined ? {} : { messages }),
+    ...(fileMutations === undefined ? {} : { file_mutations: fileMutations }),
     ...(value.threads === undefined ? {} : { threads: value.threads }),
     ...(turns === undefined ? {} : { turns }),
     ...(value.pending_approvals === undefined
@@ -85,6 +91,39 @@ export function parseSessionHydrateResult(
     ...(threadSequences === undefined
       ? {}
       : { projection_thread_sequences: threadSequences }),
+  };
+}
+
+/**
+ * Paths are whatever a tool wrote, and retained history keeps replaying them:
+ * one this build can't read drops that entry, as on the live path, rather than
+ * making the Session impossible to open.
+ */
+function parseHydratedFileMutations(
+  value: unknown,
+): HydratedFileMutation[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  return value.flatMap((entry) => parseHydratedFileMutation(entry) ?? []);
+}
+
+function parseHydratedFileMutation(
+  value: unknown,
+): HydratedFileMutation | null {
+  // Apply the same path, operation and preview-ID rules as live progress.
+  const mutation = parseFileMutationNotice({
+    jsonrpc: "2.0",
+    method: CORE_UI_METHODS.PROGRESS_UPDATED,
+    params: { metadata: { file_mutation: value } },
+  });
+  if (!mutation) return null;
+  return {
+    path: mutation.path,
+    operation: mutation.operation,
+    ...(mutation.previewId === null ? {} : { preview_id: mutation.previewId }),
+    ...(mutation.bytesWritten === null
+      ? {}
+      : { bytes_written: mutation.bytesWritten }),
   };
 }
 
