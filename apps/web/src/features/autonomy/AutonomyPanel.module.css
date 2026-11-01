@@ -193,7 +193,7 @@
 .error {
   margin: 0;
   font-size: 12px;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .output {

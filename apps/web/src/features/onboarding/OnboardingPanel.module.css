@@ -261,7 +261,7 @@
     var(--dsw-alias-state-error-primary) 7%,
     transparent
   );
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .recovery,
