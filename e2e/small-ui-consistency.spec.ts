@@ -53,6 +53,61 @@ test("keeps Chat and Trajectory fixed when the panel badge appears", async ({
   );
 });
 
+test("keeps Trajectory clickable beside header actions at narrow and resized widths", async ({
+  page,
+}) => {
+  await start(page, "/workspace/diff-review");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Review syntax fixture");
+  await composer.press("Enter");
+  const panelButton = page.getByRole("button", {
+    name: "Session panel, 1 changed",
+  });
+  await panelButton.click();
+  const trajectory = page.getByRole("button", {
+    name: "Trajectory",
+    exact: true,
+  });
+  const expectClickable = async () => {
+    expect(
+      await trajectory.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return (
+          document
+            .elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+            ?.closest("button") === element
+        );
+      }),
+    ).toBe(true);
+    await trajectory.click();
+    await expect(trajectory).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+  };
+
+  for (const width of [900, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expectClickable();
+  }
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const edge = page.getByRole("separator", { name: "Resize session panel" });
+  const before = Number(await edge.getAttribute("aria-valuenow"));
+  const box = await edge.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box!.x + box!.width / 2 - 180,
+    box!.y + box!.height / 2,
+    { steps: 12 },
+  );
+  await page.mouse.up();
+  await expect
+    .poll(async () => Number(await edge.getAttribute("aria-valuenow")))
+    .toBeGreaterThan(before + 150);
+  await expectClickable();
+});
+
 test("consolidates appearance and browser preferences in Settings", async ({
   page,
 }) => {

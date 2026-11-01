@@ -319,6 +319,13 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
         </div>
       ) : null}
       <div className={styles.body}>{content}</div>
+      {props.embedded && props.path ? (
+        <div className={`${styles.actions} ${styles.embeddedActions}`}>
+          <button type="button" onClick={() => void copyPath()}>
+            {copyState === "copied" ? t("Path copied") : t("Copy path")}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

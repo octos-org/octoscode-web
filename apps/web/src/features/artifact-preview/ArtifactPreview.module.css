@@ -90,6 +90,11 @@
   }
 }
 
+.embeddedActions {
+  padding: var(--dsw-space-1) var(--dsw-space-3);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
 .body {
   flex: 1;
   min-width: 0;

@@ -120,6 +120,28 @@ test("previews and pages large CSV files", async ({ page }) => {
   await expect(csv.preview.locator("strong")).toHaveCount(0);
 });
 
+test("embedded previews retain exactly one working Copy path action", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const sessionId = await openConversation(page);
+  for (const name of ["large.csv", "report.pdf", "index.html", "photo.png"]) {
+    const { item, preview } = await deliver(page, sessionId, name);
+    const copy = preview.getByRole("button", {
+      name: "Copy path",
+      exact: true,
+    });
+    await expect(copy).toHaveCount(1);
+    await expect(
+      item.getByRole("button", { name: "Copy path", exact: true }),
+    ).toHaveCount(1);
+    await copy.click();
+    await expect(
+      preview.getByRole("button", { name: "Path copied", exact: true }),
+    ).toBeVisible();
+  }
+});
+
 test("keeps HTML and SVG scripts and network access inert", async ({
   page,
 }) => {
