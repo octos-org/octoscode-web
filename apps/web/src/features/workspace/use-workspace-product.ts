@@ -47,6 +47,8 @@ export interface WorkspaceProductController {
     title: string,
   ) => Promise<SessionMutationOutcome>;
   setError: (message: string | null) => void;
+  /** Clears the current error only if `owned` claims it, against the latest state. */
+  clearError: (owned: (message: string) => boolean) => void;
   observeTokenCost: (update: TokenCostUpdate) => void;
 }
 
@@ -207,6 +209,14 @@ export function useWorkspaceProduct(
     renameSession,
     setError: (message) =>
       setState((current) => ({ ...current, error: message })),
+    // Returning `current` untouched skips the render: an unconditional clear
+    // re-renders the sidebar tree on every healthy recovery.
+    clearError: (owned) =>
+      setState((current) =>
+        current.error !== null && owned(current.error)
+          ? { ...current, error: null }
+          : current,
+      ),
     observeTokenCost: (update) =>
       setState((current) => ({
         ...current,
