@@ -1,6 +1,7 @@
 export {
   DEFAULT_UI_FEATURES,
   OctosUiClient,
+  OctosUiConnectionClosedError,
   OctosUiRequestTimeoutError,
 } from "./client.ts";
 export * from "./protocol.ts";

@@ -18,6 +18,7 @@ import {
   LaunchTransitionCoordinator,
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
+import { launchFailureMessage } from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
 import type {
   ActiveSessionAuthority,
@@ -1329,6 +1330,9 @@ export function useOctosSession(): OctosSessionRuntime {
   const activeRuntime = serverConnection.runtime;
   const candidateAbortRef = useRef<AbortController | null>(null);
   const recoveryAbortRef = useRef<AbortController | null>(null);
+  // The fatal message recovery put in `state.error`, so a later healthy recovery
+  // can retire exactly that one.
+  const recoveryErrorRef = useRef<string | null>(null);
   const [recoveryNotice, setRecoveryNotice] = useState<{
     message: string;
     failedSessionIds: string[];
@@ -3094,14 +3098,16 @@ export function useOctosSession(): OctosSessionRuntime {
     // one record whose composer surface the user is actually on. A failure in
     // ANY OTHER record must not tear down the live Session.
     if (surfacing.fatal) {
+      recoveryErrorRef.current = surfacing.fatal;
       workspaceController.setError(surfacing.fatal);
     } else {
-      // Only clear a previous fatal error; an unconditional setError(null)
-      // allocates a fresh workspace state on EVERY healthy recovery and
-      // re-renders the sidebar tree (regressed native-workflows :249/:505).
-      if (workspaceController.state.error !== null) {
-        workspaceController.setError(null);
-      }
+      // A launch that failed because this very socket dropped is still a failed
+      // launch: nobody retried it, so the reconnect must not erase the reason.
+      const ownFatal = recoveryErrorRef.current;
+      recoveryErrorRef.current = null;
+      workspaceController.clearError((error) =>
+        recoveryMayClearError(error, ownFatal),
+      );
       setRecoveryNotice(surfacing.notice);
     }
     publishBackgroundTurns();
@@ -3193,7 +3199,6 @@ export function useOctosSession(): OctosSessionRuntime {
     if (event.reason !== "recovery") {
       void codingSafetyController.refreshPermission(event.authority.client);
       void supervisionController.refresh(event.authority.client);
-      void workspaceController.refresh(event.authority.client);
       void modelController.refresh(event.authority.client);
     }
   }
@@ -3218,7 +3223,7 @@ export function useOctosSession(): OctosSessionRuntime {
     // error (notably the retained-owner capacity boundary). Do not replace it
     // with a generic transition failure while still cleaning up the lease.
     if (reason !== undefined)
-      workspaceController.setError(errorMessage(reason));
+      workspaceController.setError(launchFailureMessage(reason));
     if (!restoreLaunchChoice(lease)) {
       launchTransitionRef.current.discard(lease);
       setLaunch(EMPTY_LAUNCH_RUNTIME);
@@ -4142,6 +4147,18 @@ export interface RecoverySurfacing {
   fatal: string | null;
   /** Non-fatal, dismissible notice, or null when nothing failed. */
   notice: { message: string; failedSessionIds: string[] } | null;
+}
+
+/**
+ * What a healthy recovery may retire: the fatal it set itself, and the
+ * navigation block the recovered turn may have just resolved. Anything else in
+ * `state.error` (a failed launch) still stands.
+ */
+export function recoveryMayClearError(
+  error: string,
+  ownFatal: string | null,
+): boolean {
+  return error === ownFatal || error === TURN_RECOVERY_NAVIGATION_MESSAGE;
 }
 
 export function planRecoverySurfacing(

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { SessionRecordRecoveryResult } from "./session-record-manager.ts";
-import { planRecoverySurfacing } from "./use-octos-session.ts";
+import {
+  planRecoverySurfacing,
+  recoveryMayClearError,
+} from "./use-octos-session.ts";
 
 /**
  * A pooled-transport reconnect recovers EVERY managed record. When some records
@@ -63,5 +66,32 @@ describe("partial session recovery surfacing", () => {
     );
     expect(surfacing.fatal).toBeNull();
     expect(surfacing.notice?.failedSessionIds).toEqual(["other-a", "other-b"]);
+  });
+});
+
+describe("which errors a healthy recovery may clear", () => {
+  const OWN_FATAL = "1 Session(s) could not be recovered";
+
+  it("retires the fatal this recovery loop set", () => {
+    expect(recoveryMayClearError(OWN_FATAL, OWN_FATAL)).toBe(true);
+  });
+
+  it("keeps a failed launch, which the reconnect did not retry", () => {
+    for (const launch of [
+      "Octos UI Protocol connection closed",
+      "session/open requires the routed profile to have an LLM selection",
+    ]) {
+      expect(recoveryMayClearError(launch, null)).toBe(false);
+      expect(recoveryMayClearError(launch, OWN_FATAL)).toBe(false);
+    }
+  });
+
+  it("retires the navigation block the recovered turn may have resolved", () => {
+    expect(
+      recoveryMayClearError(
+        "Check the current turn status before switching Sessions, or disconnect in Settings.",
+        null,
+      ),
+    ).toBe(true);
   });
 });
