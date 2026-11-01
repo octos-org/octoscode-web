@@ -94,6 +94,9 @@
 }
 
 .session-status-compact .session-status-strip-state {
+  /* Icon first, then the words (the full strip's phone rule puts its state
+     line first). */
+  order: 0;
   flex-shrink: 1;
   padding-right: 2px;
   color: var(--dsw-alias-label-primary);
