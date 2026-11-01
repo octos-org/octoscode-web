@@ -57,10 +57,13 @@ import {
   CORE_UI_METHODS,
   supportsFeature,
   supportsMethod,
+  SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+  SESSION_EXECUTION_ENVIRONMENT_READ,
   type PermissionProfileSelection,
   type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
 import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
+import { useExecutionEnvironment } from "../features/session-config/use-execution-environment.ts";
 import {
   peerAnswerRequest,
   peerRowAttention,
@@ -3484,6 +3487,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.status,
   ]);
 
+  const executionEnvironment = useExecutionEnvironment({
+    client: protocol.client,
+    sessionId: session.opened?.session_id ?? null,
+    profileId: session.opened?.active_profile_id ?? null,
+    available:
+      supportsFeature(
+        session.opened?.capabilities,
+        SESSION_EXECUTION_ENVIRONMENT_FEATURE,
+      ) &&
+      supportsMethod(
+        session.opened?.capabilities,
+        SESSION_EXECUTION_ENVIRONMENT_READ,
+      ),
+    enabled: sessionConfigOpen,
+  });
+
   if (!showProductShell) {
     const gateStatus =
       session.status === "connected" ? "connecting" : session.status;
@@ -5054,6 +5073,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 session.opened?.capabilities,
                 CORE_UI_FEATURES.SESSION_SANDBOX_V1,
               ),
+              executionEnvironment,
               effective: {
                 enabled: true,
                 networkAccess: null,
