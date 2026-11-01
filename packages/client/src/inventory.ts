@@ -32,6 +32,21 @@ export interface RuntimeMcpServer {
   tools: string[];
   error?: string;
 }
+/** One operator-configured stdio entry, as projected by the server (T-0056). */
+export interface McpStdioAllowlistEntry {
+  entryId: string;
+  displayName: string;
+  description?: string;
+}
+/**
+ * Whether this requester may run connector mutations, judged by the server
+ * with the same checks as the mutations themselves (T-0056).
+ */
+export interface McpManagementAvailability {
+  canManage: boolean;
+  /** Present when `canManage` is false, e.g. `requires_profile_write`. */
+  reason?: string;
+}
 export interface RuntimeMcp {
   sessionId: string;
   profileId: string;
@@ -42,6 +57,10 @@ export interface RuntimeMcp {
     failed: number;
     disabled: number;
   };
+  /** Absent on a server without the T-0056 facts: handle refusals passively. */
+  management?: McpManagementAvailability;
+  /** Absent on a server without the T-0056 facts; `[]` when none is configured. */
+  stdioAllowlist?: McpStdioAllowlistEntry[];
 }
 export interface McpConnectorPatch {
   name?: string;
@@ -154,6 +173,8 @@ export function parseRuntimeMcp(
       ...(text(row.error) ? { error: row.error } : {}),
     });
   }
+  const management = parseManagement(value);
+  const stdioAllowlist = parseStdioAllowlist(value.stdio_allowlist);
   return {
     sessionId,
     profileId,
@@ -164,7 +185,49 @@ export function parseRuntimeMcp(
       failed: summary.failed,
       disabled: summary.disabled,
     },
+    ...(management ? { management } : {}),
+    ...(stdioAllowlist ? { stdioAllowlist } : {}),
   };
+}
+
+// The T-0056 facts are additive: a malformed one is dropped (the page falls
+// back to handling refusals) rather than failing the whole status.
+function parseManagement(
+  value: Record<string, unknown>,
+): McpManagementAvailability | null {
+  if (typeof value.can_manage !== "boolean") return null;
+  if (value.can_manage) return { canManage: true };
+  return {
+    canManage: false,
+    ...(nonempty(value.manage_unavailable_reason) &&
+    value.manage_unavailable_reason.length <= 64
+      ? { reason: value.manage_unavailable_reason }
+      : {}),
+  };
+}
+
+/** Only id, label and description enter the UI; nothing else is copied. */
+function parseStdioAllowlist(value: unknown): McpStdioAllowlistEntry[] | null {
+  if (!Array.isArray(value) || value.length > 1000) return null;
+  const ids = new Set<string>();
+  const entries: McpStdioAllowlistEntry[] = [];
+  for (const row of value) {
+    if (
+      !isRecord(row) ||
+      !nonempty(row.entry_id) ||
+      ids.has(row.entry_id) ||
+      !nullableText(row.display_name) ||
+      !nullableText(row.description)
+    )
+      return null;
+    ids.add(row.entry_id);
+    entries.push({
+      entryId: row.entry_id,
+      displayName: nonempty(row.display_name) ? row.display_name : row.entry_id,
+      ...(nonempty(row.description) ? { description: row.description } : {}),
+    });
+  }
+  return entries;
 }
 
 /**
@@ -240,6 +303,22 @@ export function createInventoryCommands(
       return manage(MCP_CONNECTOR_METHODS.CREATE, {
         session_id: sessionId,
         connector: { transport: "http", name, url },
+      });
+    },
+    /** Stdio takes only an operator allowlist entry, never a command. */
+    async createStdioConnector(
+      name: string,
+      allowlistEntryId: string,
+    ): Promise<RuntimeMcp> {
+      if (!nonempty(name) || !nonempty(allowlistEntryId))
+        throw new Error("A connector name and allowlist entry are required");
+      return manage(MCP_CONNECTOR_METHODS.CREATE, {
+        session_id: sessionId,
+        connector: {
+          transport: "stdio",
+          name,
+          allowlist_entry_id: allowlistEntryId,
+        },
       });
     },
     async updateConnector(

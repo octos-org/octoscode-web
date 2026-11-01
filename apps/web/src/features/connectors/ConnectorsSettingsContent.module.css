@@ -30,7 +30,8 @@
 
 .headingActions button:disabled,
 .actions button:disabled,
-.editor input:disabled {
+.editor input:disabled,
+.editor select:disabled {
   cursor: default;
   opacity: 0.5;
 }
@@ -75,7 +76,8 @@
   line-height: 18px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   min-height: 38px;
   box-sizing: border-box;
@@ -89,6 +91,7 @@
 }
 
 .field input:focus-visible,
+.field select:focus-visible,
 .headingActions button:focus-visible,
 .actions button:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
