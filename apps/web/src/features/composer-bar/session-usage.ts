@@ -15,7 +15,8 @@ export interface SessionUsage {
 /**
  * Prefer the live `token_cost_update` for this Session (session-cumulative
  * tokens and cost), else the last `session/status/read` usage. Null when the
- * server has reported neither, so the composer shows nothing rather than zero.
+ * server has reported neither, or reports nothing used yet: the composer shows
+ * nothing rather than zero (美-9).
  */
 export function sessionUsage(
   sessionId: string | null | undefined,
@@ -25,25 +26,32 @@ export function sessionUsage(
   if (!sessionId) return null;
   if (live && live.sessionId === sessionId) {
     const usd = !live.currency || live.currency.toUpperCase() === "USD";
-    return {
+    return anythingUsed({
       inputTokens: live.inputTokens ?? 0,
       outputTokens: live.outputTokens ?? 0,
       cachedTokens: live.cacheReadTokens ?? 0,
       ...(usd && live.sessionCost !== undefined
         ? { costUsd: live.sessionCost }
         : {}),
-    };
+    });
   }
   if (!status || status.session_id !== sessionId) return null;
   const usage = status.usage ?? {};
-  return {
+  return anythingUsed({
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     cachedTokens: usage.cached_input_tokens ?? 0,
     ...(usage.estimated_cost_micros_usd !== undefined
       ? { costUsd: usage.estimated_cost_micros_usd / 1_000_000 }
       : {}),
-  };
+  });
+}
+
+/** The chip counts input + output; cached tokens are part of the input. */
+function anythingUsed(usage: SessionUsage): SessionUsage | null {
+  return usage.inputTokens + usage.outputTokens > 0 || (usage.costUsd ?? 0) > 0
+    ? usage
+    : null;
 }
 
 export function formatTokenCount(value: number, locale: string): string {

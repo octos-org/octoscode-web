@@ -44,9 +44,9 @@ function fakeClient(options: { failList?: boolean; unscoped?: boolean } = {}) {
 describe("remote catalog", () => {
   it("resolves the folder's profile once, then lists by folder", async () => {
     const fake = fakeClient();
-    const catalog = createRemoteCatalog({ profileId: "", now: () => 42 });
-    await catalog.refresh(fake.client, ["/work/app"]);
-    await catalog.refresh(fake.client, ["/work/app"]);
+    const catalog = createRemoteCatalog({ now: () => 42 });
+    await catalog.refresh(fake.client, ["/work/app"], "");
+    await catalog.refresh(fake.client, ["/work/app"], "");
     expect(fake.calls).toEqual([
       "resolve /work/app",
       "list /work/app _main",
@@ -64,18 +64,18 @@ describe("remote catalog", () => {
 
   it("uses the connection's profile when it has one", async () => {
     const fake = fakeClient();
-    const catalog = createRemoteCatalog({ profileId: "_main" });
-    await catalog.refresh(fake.client, ["/work/app"]);
+    const catalog = createRemoteCatalog();
+    await catalog.refresh(fake.client, ["/work/app"], "_main");
     expect(fake.calls).toEqual(["list /work/app _main"]);
   });
 
   it("keeps the last rows when a refresh fails", async () => {
     const good = fakeClient();
-    const catalog = createRemoteCatalog({ profileId: "_main" });
-    await catalog.refresh(good.client, ["/work/app"]);
+    const catalog = createRemoteCatalog();
+    await catalog.refresh(good.client, ["/work/app"], "_main");
     // A reconnect hands the store a new transport that fails.
     const broken = fakeClient({ failList: true });
-    await catalog.refresh(broken.client, ["/work/app"]);
+    await catalog.refresh(broken.client, ["/work/app"], "_main");
     expect(catalog.getSnapshot().get("/work/app")).toMatchObject({
       status: "error",
       error: "socket closed",
@@ -83,10 +83,24 @@ describe("remote catalog", () => {
     });
   });
 
+  it("keeps the rows when the profile changes and the next refresh fails", async () => {
+    // The phone opened a session (profile "_main"), then lost the server; the
+    // profile falls back to "" right as the refresh fails.
+    const good = fakeClient();
+    const catalog = createRemoteCatalog();
+    await catalog.refresh(good.client, ["/work/app"], "_main");
+    const broken = fakeClient({ failList: true });
+    await catalog.refresh(broken.client, ["/work/app"], "");
+    expect(catalog.getSnapshot().get("/work/app")).toMatchObject({
+      status: "error",
+      sessions: [{ sessionId: SESSION }],
+    });
+  });
+
   it("reports a server that cannot list by folder", async () => {
     const fake = fakeClient({ unscoped: true });
-    const catalog = createRemoteCatalog({ profileId: "_main" });
-    await catalog.refresh(fake.client, ["/work/app"]);
+    const catalog = createRemoteCatalog();
+    await catalog.refresh(fake.client, ["/work/app"], "_main");
     expect(catalog.getSnapshot().get("/work/app")).toMatchObject({
       status: "error",
       sessions: [],
