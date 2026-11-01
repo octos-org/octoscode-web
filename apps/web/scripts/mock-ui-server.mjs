@@ -82,9 +82,32 @@ function connectorRows(workspaceRoot) {
   }
   return connectorRowsByWorkspace.get(workspaceRoot);
 }
+// T-0056 facts by workspace name: "-denied" plays an older core without them,
+// "-readonly" a session-only access, "-empty" a server with no stdio allowlist.
+const MOCK_STDIO_ALLOWLIST = [
+  {
+    entry_id: "local-fs",
+    display_name: "Shared files",
+    description: "Read-only access to the shared project folder",
+  },
+  { entry_id: "echo", display_name: "Echo tools" },
+];
+function connectorFacts(workspaceRoot) {
+  if (workspaceRoot.includes("connector-management-denied")) return {};
+  return {
+    can_manage: !workspaceRoot.includes("connector-management-readonly"),
+    ...(workspaceRoot.includes("connector-management-readonly")
+      ? { manage_unavailable_reason: "requires_profile_write" }
+      : {}),
+    stdio_allowlist: workspaceRoot.includes("connector-management-empty")
+      ? []
+      : MOCK_STDIO_ALLOWLIST,
+  };
+}
 function connectorPayload(sessionId, profileId, workspaceRoot) {
   const rows = connectorRows(workspaceRoot);
   return {
+    ...connectorFacts(workspaceRoot),
     session_id: sessionId,
     profile_id: profileId,
     servers: rows.map((row) => ({
@@ -5383,7 +5406,10 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method.startsWith("mcp/connector/")) {
       const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
-      if (workspaceRoot.includes("connector-management-denied")) {
+      if (
+        workspaceRoot.includes("connector-management-denied") ||
+        workspaceRoot.includes("connector-management-readonly")
+      ) {
         replyError(
           socket,
           request.id,
@@ -5398,16 +5424,46 @@ sockets.on("connection", (socket, request) => {
       let row = rows.find((item) => item.id === connectorId);
       if (request.method === "mcp/connector/create") {
         const input = request.params.connector;
-        row = {
-          id: `http-${rows.length + 1}`,
-          display_name: input.name,
-          transport: "http",
-          enabled: true,
-          status: "connected",
-          tool_count: 1,
-          tools: ["fetch"],
-          url: input.url,
-        };
+        if (input.transport === "stdio") {
+          const allowlist = connectorFacts(workspaceRoot).stdio_allowlist ?? [];
+          if (
+            "command" in input ||
+            !allowlist.some(
+              (entry) => entry.entry_id === input.allowlist_entry_id,
+            )
+          ) {
+            replyError(
+              socket,
+              request.id,
+              -32602,
+              "stdio entry is not allowlisted",
+              {
+                kind: "stdio_not_allowlisted",
+              },
+            );
+            return;
+          }
+          row = {
+            id: `stdio-${rows.length + 1}`,
+            display_name: input.name,
+            transport: "stdio",
+            enabled: true,
+            status: "connected",
+            tool_count: 1,
+            tools: ["read"],
+          };
+        } else {
+          row = {
+            id: `http-${rows.length + 1}`,
+            display_name: input.name,
+            transport: "http",
+            enabled: true,
+            status: "connected",
+            tool_count: 1,
+            tools: ["fetch"],
+            url: input.url,
+          };
+        }
         rows.push(row);
       } else if (request.method === "mcp/connector/delete") {
         const index = rows.findIndex((item) => item.id === connectorId);
