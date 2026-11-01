@@ -17,6 +17,76 @@ import {
 import { PromptTurnQueue, type PromptTurn } from "./turn-queue.ts";
 
 describe("queue-backed turn controller async authority", () => {
+  it("restores local presentation from a sent receipt without reclaiming a transport lease or resending", async () => {
+    const receipt = new Set<string>();
+    const start = deferred<void>();
+    const oldClient = fakeClient({ start: () => start.promise });
+    const old = renderController(oldClient, {
+      onTurnSent: (id) => receipt.add(id),
+    });
+    old.controller.enqueuePrompt("original prompt");
+    const turnId = old.activeTurnId();
+    expect(receipt.has(turnId)).toBe(true); // Recorded even before the ACK.
+    const client = fakeClient();
+    const restored = renderController(client, {
+      wasTurnSentHere: (id) => receipt.has(id),
+    });
+    restored.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 1 },
+      turns: [{ turn_id: turnId, state: "active" }],
+    });
+    expect(restored.controller.snapshot().active).toEqual({
+      turnId,
+      text: "",
+      origin: "local",
+    });
+    expect(restored.controller.activeTurnOwnership()).toBe("observed");
+    expect(restored.controller.backgroundHandoffTurn()).toBeNull();
+    expect(client.startTurn).not.toHaveBeenCalled();
+    // A replaced connection's delayed ACK cannot replace a newer foreign turn.
+    old.setClient(client);
+    old.controller.reconcileFromHydrate({
+      session_id: "session-a",
+      cursor: { stream: "session-a", seq: 2 },
+      turns: [
+        { turn_id: turnId, state: "completed" },
+        { turn_id: "foreign", state: "active" },
+      ],
+    });
+    start.resolve(undefined);
+    await start.promise;
+    expect(old.controller.snapshot().active).toEqual({
+      turnId: "foreign",
+      text: "",
+      origin: "adopted",
+    });
+    expect(old.controller.activeTurnOwnership()).toBe("observed");
+    expect(old.controller.backgroundHandoffTurn()).toBeNull();
+    expect(receipt).toEqual(new Set([turnId]));
+    expect(client.startTurn).not.toHaveBeenCalled();
+  });
+
+  it("recognizes a sent turn from replay before hydrate, but not the next foreign turn", () => {
+    const h = renderController(fakeClient(), {
+      wasTurnSentHere: (id) => id === "sent-here",
+    });
+    h.controller.observeSteerDropped({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { session_id: "session-a", turn_id: "sent-here" },
+    });
+    expect(h.controller.snapshot().active?.origin).toBe("local");
+    expect(h.controller.activeTurnOwnership()).toBe("observed");
+    h.controller.settleTurn("sent-here", "completed");
+    h.controller.observeSteerDropped({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { session_id: "session-a", turn_id: "other" },
+    });
+    expect(h.controller.snapshot().active?.origin).toBe("adopted");
+  });
+
   it("returns local admission before consuming caller input and rejects repeated native UUIDs", () => {
     let allowed = false;
     const client = fakeClient();
