@@ -2001,6 +2001,41 @@ const catalog: Readonly<Record<string, string>> = {
   connecting: "连接中",
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
+  // Phone remote control (T-0094).
+  "Remote control": "手机遥控",
+  "Connected to Octos": "已连接 Octos",
+  "Connected to Octos · updated {time}": "已连接 Octos · {time} 更新",
+  "Connection lost. Reconnecting (attempt {count})…":
+    "连接断了，正在重连（第 {count} 次）…",
+  "Can't reach Octos. The server on your computer may be off, or this phone lost its network. Nothing is sent until it is back.":
+    "连不上 Octos：电脑上的服务可能没开，或者手机断网了。恢复之前不会发送任何内容。",
+  "The list below is from {time}.": "下面的列表停在 {time}。",
+  "Pick the folders to watch": "选择要盯的文件夹",
+  "Add a project folder from this server. Its running sessions, approvals and recent results then show up here.":
+    "添加服务器上的项目文件夹，它里面正在运行的会话、待审批的操作和最近的结果就会显示在这里。",
+  "Waiting for you": "等你处理",
+  "Nothing is waiting for your approval or answer.": "没有等你批准或回答的事。",
+  "No session is running.": "没有正在运行的会话。",
+  "No recent sessions in these folders.": "这些文件夹里还没有会话。",
+  "Open the full workspace": "打开完整版",
+  "Untitled session": "未命名会话",
+  Review: "去处理",
+  Open: "打开",
+  Failed: "失败",
+  "Asks you: {title}": "在问你：{title}",
+  "Watched folders": "盯着的文件夹",
+  "Could not list: {reason}": "无法列出：{reason}",
+  "Stop watching {name}": "不再盯 {name}",
+  "Server folder path": "服务器上的文件夹路径",
+  "/path/to/project on the server": "服务器上的路径，如 /srv/project",
+  Watch: "盯住",
+  "Back to remote control": "返回手机遥控",
+  "This session could not be opened. Try again.": "这个会话打不开，请重试。",
+  "Loading remote control…": "正在加载手机遥控…",
+  "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.":
+    "这一步要的权限超出了沙箱。请回到电脑上处理；在手机上只能拒绝。",
+  "From the phone you can allow this one request. To allow it for the whole session or raise permissions, use your computer.":
+    "在手机上只能批准这一次。要在整个会话里允许或者提升权限，请回到电脑上操作。",
 };
 
 const zh: Readonly<Record<string, string>> = { ...catalog, ...FLEET_ZH_COPY };

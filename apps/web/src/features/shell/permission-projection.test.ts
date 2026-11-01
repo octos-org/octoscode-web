@@ -1,6 +1,9 @@
 import type { PermissionProfileListResult } from "@octos-org/octoscode-client/protocol";
 import { describe, expect, it } from "vitest";
-import { permissionOptions } from "./permission-projection.ts";
+import {
+  isPermissionEscalation,
+  permissionOptions,
+} from "./permission-projection.ts";
 
 const result: PermissionProfileListResult = {
   session_id: "session-a",
@@ -37,5 +40,38 @@ describe("permission options", () => {
     expect(
       options.find((option) => option.id === "read_only:allow")?.isDefault,
     ).toBe(false);
+  });
+});
+
+describe("permission escalation", () => {
+  it("counts wider modes, new network and full access as escalation", () => {
+    const current = { mode: "workspace_write", network: "deny" } as const;
+    expect(
+      isPermissionEscalation({ mode: "read_only", network: "deny" }, current),
+    ).toBe(false);
+    expect(
+      isPermissionEscalation(
+        { mode: "workspace_write", network: "deny" },
+        current,
+      ),
+    ).toBe(false);
+    expect(
+      isPermissionEscalation(
+        { mode: "workspace_write", network: "allow" },
+        current,
+      ),
+    ).toBe(true);
+    expect(
+      isPermissionEscalation(
+        { mode: "danger_full_access", network: "deny" },
+        {
+          mode: "danger_full_access",
+          network: "deny",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      isPermissionEscalation({ mode: "read_only", network: "deny" }, null),
+    ).toBe(true);
   });
 });

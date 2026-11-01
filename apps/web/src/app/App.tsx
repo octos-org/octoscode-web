@@ -152,6 +152,24 @@ import {
   profileDefaultNeedsRestart,
   selectedModel,
 } from "../features/shell/product-projection.ts";
+import { isPermissionEscalation } from "../features/shell/permission-projection.ts";
+import {
+  forgetRemoteFolder,
+  loadRemoteFolders,
+  rememberRemoteFolder,
+} from "../features/remote/remote-folders.ts";
+import { useRemoteCatalog } from "../features/remote/remote-catalog.ts";
+import { remoteLink } from "../features/remote/remote-link.ts";
+import {
+  remoteKey,
+  remoteOverview,
+  type LiveSessionSnapshot,
+  type RemoteRow,
+} from "../features/remote/remote-model.ts";
+import {
+  isRemoteViewUrl,
+  withRemoteView,
+} from "../features/remote/remote-url.ts";
 import { TurnStopButton } from "../features/product-controls/TurnStopButton.tsx";
 import type { SessionStripState } from "../features/session-config/SessionStatusStrip.tsx";
 import { fleetNavigationEntry } from "../features/fleet/fleet-navigation.ts";
@@ -214,7 +232,7 @@ import {
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { OctopusLogo } from "../ui/OctopusLogo.tsx";
 import { RefreshIcon, MenuIcon } from "../ui/ShellIcons.tsx";
-import { PanelRightIcon } from "../ui/Icon.tsx";
+import { ArrowLeftIcon, PanelRightIcon } from "../ui/Icon.tsx";
 import { CopySessionLinkButton } from "../features/session-links/CopySessionLinkButton.tsx";
 import {
   readPanelLayout,
@@ -372,6 +390,11 @@ const ConnectorsSettingsContent = lazyNamed(
 const CronSettingsContent = lazyNamed(
   () => import("../features/cron/CronSettingsContent.tsx"),
   (module) => module.CronSettingsContent,
+);
+const REMOTE_REFRESH_MS = 15_000;
+const RemoteHome = lazyNamed(
+  () => import("../features/remote/RemoteHome.tsx"),
+  (module) => module.RemoteHome,
 );
 const ApprovalPanel = lazyNamed(
   () => import("../features/approval/ApprovalPanel.tsx"),
@@ -778,6 +801,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [knownSessions, setKnownSessions] = useState<KnownSessionRef[]>(() =>
     loadKnownSessions(browserStorage("sessionStorage"), connection),
   );
+  // Phone remote control (`?view=remote`): "home" is the overview, "session"
+  // is an opened conversation reached from it; null is the ordinary app.
+  const [remoteView, setRemoteView] = useState<"home" | "session" | null>(() =>
+    isRemoteViewUrl(window.location.href) ? "home" : null,
+  );
+  const remote = remoteView !== null;
+  const [remoteFolders, setRemoteFolders] = useState(() =>
+    loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+  );
+  const [remoteOpening, setRemoteOpening] = useState<string | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [remoteRefresh, setRemoteRefresh] = useState(0);
+  const [remoteNow, setRemoteNow] = useState(() => Date.now());
   // The session seam the entry's connect screen drives. Published during
   // render so every call sees this render's closures, and absent entirely
   // while the shell is unmounted (where each of these is a no-op anyway).
@@ -1190,6 +1226,132 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspaceProduct.backgroundTurns,
     deletedSessionIds,
   ]);
+  // ---- Phone remote control -------------------------------------------
+  const remoteServerLink = remoteLink(session.server);
+  const remoteSelectedLive: LiveSessionSnapshot | null =
+    session.opened?.workspace_root && session.opened.active_profile_id
+      ? {
+          sessionId: session.opened.session_id,
+          profileId: session.opened.active_profile_id,
+          workspaceRoot: session.opened.workspace_root,
+          firstPrompt: null,
+          state:
+            interactions.approval || interactions.question
+              ? "waiting"
+              : conversation.queue.active
+                ? "running"
+                : "idle",
+          waitingFor: interactions.approval
+            ? {
+                kind: "approval",
+                title: interactions.approval.title,
+                toolName: interactions.approval.toolName || null,
+              }
+            : interactions.question
+              ? {
+                  kind: "question",
+                  title: interactions.question.title,
+                  toolName: null,
+                }
+              : null,
+        }
+      : null;
+  const remoteBackgroundKey = workspaceProduct.backgroundTurns
+    .map((turn) => `${turn.sessionId}:${turn.state}`)
+    .join("|");
+  const remoteCatalog = useRemoteCatalog({
+    client: remote && session.authenticated ? protocol.client : null,
+    profileId: catalogProfileId,
+    folders: remoteFolders.map((folder) => folder.path),
+    refreshKey: `${protocol.authorityKey}\n${remoteRefresh}\n${
+      conversation.queue.active?.turnId ?? ""
+    }\n${remoteBackgroundKey}`,
+  });
+  const remoteOverviewState = useMemo(
+    () =>
+      remoteOverview({
+        catalog: [...remoteCatalog.values()].flatMap(
+          (folder) => folder.sessions,
+        ),
+        live: [
+          ...workspaceProduct.backgroundTurns,
+          ...(remoteSelectedLive ? [remoteSelectedLive] : []),
+        ],
+      }),
+    // remoteSelectedLive is rebuilt every render; its fields are the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      remoteCatalog,
+      workspaceProduct.backgroundTurns,
+      remoteSelectedLive?.sessionId,
+      remoteSelectedLive?.state,
+      remoteSelectedLive?.waitingFor?.title,
+    ],
+  );
+  const remoteListedAt = (() => {
+    const times = [...remoteCatalog.values()]
+      .map((folder) => folder.listedAt)
+      .filter((value): value is number => value !== null);
+    return times.length ? Math.min(...times) : null;
+  })();
+  const remoteUnwatchedKey = remoteOverviewState.unwatched
+    .map(remoteKey)
+    .join("|");
+  useEffect(() => {
+    if (!remote || remoteServerLink.kind !== "online") return;
+    if (!remoteOverviewState.unwatched.length) return;
+    void workspaceProduct.watchSessions(remoteOverviewState.unwatched);
+    // The key is the identity of the unwatched set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, remoteServerLink.kind, remoteUnwatchedKey]);
+  useEffect(() => {
+    if (remoteView !== "home") return;
+    // Other clients start and finish work too: re-list while the overview is
+    // on screen, and keep its relative times honest.
+    const timer = window.setInterval(() => {
+      setRemoteNow(Date.now());
+      setRemoteRefresh((value) => value + 1);
+    }, REMOTE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [remoteView]);
+  useEffect(() => {
+    setRemoteFolders(
+      loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
+    );
+  }, [connection.endpoint]);
+  const setRemoteViewInUrl = (next: "home" | "session" | null) => {
+    setRemoteView(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      withRemoteView(window.location.href, next !== null),
+    );
+  };
+  const openRemoteRow = async (row: RemoteRow) => {
+    setRemoteError(null);
+    const opened = session.opened;
+    if (
+      opened?.session_id === row.sessionId &&
+      opened.workspace_root === row.workspaceRoot
+    ) {
+      setRemoteView("session");
+      return;
+    }
+    setRemoteOpening(row.key);
+    try {
+      const outcome = await workspaceProduct.openSession({
+        sessionId: row.sessionId,
+        cwd: row.workspaceRoot,
+        profileId: row.profileId,
+        resolveLaunch: false,
+      });
+      if (outcome === "opened") setRemoteView("session");
+      else setRemoteError(t("This session could not be opened. Try again."));
+    } finally {
+      setRemoteOpening(null);
+    }
+  };
+  // -----------------------------------------------------------------------
   const activityTargets = navigableSessions.filter(
     (ref) =>
       ref.profileId === session.opened?.active_profile_id &&
@@ -3088,15 +3250,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     protocol.authorityKey,
     safety.permission.result?.session_id,
   ]);
+  const currentPermission = safety.permission.result?.current;
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
     defaultPermission,
-  ).map((option) => ({
-    ...option,
-    modeLabel: t(option.modeLabel),
-    networkLabel: t(option.networkLabel),
-  }));
-  const currentPermission = safety.permission.result?.current;
+  )
+    // The phone may narrow a session's access, never widen it; raising
+    // permissions stays on the computer.
+    .filter(
+      (option) =>
+        !remote ||
+        (option.mode === currentPermission?.mode &&
+          option.network === currentPermission.network) ||
+        !isPermissionEscalation(option, currentPermission),
+    )
+    .map((option) => ({
+      ...option,
+      modeLabel: t(option.modeLabel),
+      networkLabel: t(option.networkLabel),
+    }));
   const projectedModelGroups = modelGroups(models.state.models);
   const currentProfileModel = selectedModel(models.state.models);
   const runtimeModel = work.supervision.runtimeStatus?.model;
@@ -3724,10 +3896,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           className={`${productStyles.workspaceMain} ${panelColumn ? productStyles.workspaceMainWithPanel : ""}`}
           tabIndex={-1}
         >
-          <section className="conversation" hidden={fleetRouteActive}>
+          <section
+            className="conversation"
+            hidden={fleetRouteActive || remoteView === "home"}
+          >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
-              {compact ? (
+              {remoteView === "session" ? (
+                <button
+                  type="button"
+                  className={productStyles.navigationTrigger}
+                  aria-label={t("Back to remote control")}
+                  onClick={() => {
+                    setRemoteError(null);
+                    setRemoteView("home");
+                  }}
+                >
+                  <ArrowLeftIcon size={20} />
+                </button>
+              ) : compact ? (
                 <button
                   type="button"
                   className={productStyles.navigationTrigger}
@@ -3851,6 +4038,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       : undefined
                   }
                   onOpenPreferences={gate.openPreferences}
+                  onOpenRemote={
+                    compact ? () => setRemoteViewInUrl("home") : undefined
+                  }
                 />
               </div>
             </header>
@@ -4134,6 +4324,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             // left to switch.
                             permissionRetryProfile &&
                             !readOnlyPeer &&
+                            !remote &&
                             currentPermission?.mode === "read_only"
                               ? (turnId) => void retryPermissionDenied(turnId)
                               : undefined
@@ -4315,7 +4506,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     busy={interactions.busy}
                     error={interactions.error}
                     onDecide={(decision, scope) =>
-                      void interactions.respondApproval(decision, scope)
+                      void interactions.respondApproval(
+                        decision,
+                        // The phone grants one request at most.
+                        remote ? "request" : scope,
+                      )
                     }
                     {...(conversation.interruptible
                       ? { onInterrupt: () => void conversation.interrupt() }
@@ -4324,6 +4519,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       // Above the approval, which keeps the keyboard otherwise.
                       openChangePreview(previewId, true)
                     }
+                    onceOnly={remote}
                   />
                 </SurfaceBoundary>
               ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
@@ -4753,6 +4949,49 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
+          {remoteView === "home" && !fleetRouteActive ? (
+            <div className="conversation remote-pane">
+              <Suspense
+                fallback={<DeferredSurface label="Loading remote control…" />}
+              >
+                <RemoteHome
+                  overview={remoteOverviewState}
+                  folders={remoteFolders}
+                  folderStates={remoteCatalog}
+                  link={remoteServerLink}
+                  listedAt={remoteListedAt}
+                  openingKey={remoteOpening}
+                  openError={remoteError}
+                  now={remoteNow}
+                  onOpen={(row) => void openRemoteRow(row)}
+                  onAddFolder={(path) =>
+                    setRemoteFolders(
+                      rememberRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRemoveFolder={(path) =>
+                    setRemoteFolders(
+                      forgetRemoteFolder(
+                        browserStorage("localStorage"),
+                        connection.endpoint,
+                        path,
+                      ),
+                    )
+                  }
+                  onRefresh={() => {
+                    setRemoteNow(Date.now());
+                    setRemoteRefresh((value) => value + 1);
+                  }}
+                  onOpenSessions={() => setSidebarCollapsed(false)}
+                  onOpenFull={() => setRemoteViewInUrl(null)}
+                />
+              </Suspense>
+            </div>
+          ) : null}
           <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button
