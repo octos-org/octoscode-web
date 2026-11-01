@@ -1,10 +1,7 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import styles from "./NavigationSurface.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
-
-const ModalSurface = lazy(async () => ({
-  default: (await import("../../ui/ModalSurface.tsx")).ModalSurface,
-}));
+import { ModalSurface } from "../../ui/ModalSurface.tsx";
 
 export function NavigationSurface({
   compact,
@@ -21,19 +18,17 @@ export function NavigationSurface({
   if (!compact) return children;
   if (!open) return null;
   return (
-    <Suspense fallback={null}>
-      <ModalSurface
-        backdropClassName={styles.backdrop!}
-        dialogClassName={styles.drawer!}
-        labelledBy="navigation-drawer-title"
-        onEscape={onClose}
-        closeOnBackdrop
-      >
-        <h2 className="sr-only" id="navigation-drawer-title">
-          {t("Sessions and workspaces")}
-        </h2>
-        {children}
-      </ModalSurface>
-    </Suspense>
+    <ModalSurface
+      backdropClassName={styles.backdrop!}
+      dialogClassName={styles.drawer!}
+      labelledBy="navigation-drawer-title"
+      onEscape={onClose}
+      closeOnBackdrop
+    >
+      <h2 className="sr-only" id="navigation-drawer-title">
+        {t("Sessions and workspaces")}
+      </h2>
+      {children}
+    </ModalSurface>
   );
 }

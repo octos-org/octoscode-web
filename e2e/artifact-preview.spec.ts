@@ -58,6 +58,34 @@ test("keeps a structured write artifact and its preview after reload", async ({
   await expect(preview.getByText("Formatted safely")).toBeVisible();
 });
 
+test("keeps the artifact header near its original position after preview expands", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const sessionId = await openConversation(page);
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=large.csv&valid=1`,
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator('[data-attachment="large.csv"]');
+  const button = item.getByRole("button", { name: "Preview", exact: true });
+  await button.evaluate((element) =>
+    element.scrollIntoView({ block: "center" }),
+  );
+  const before = await button.boundingBox();
+  expect(before).not.toBeNull();
+  await button.click();
+  await expect(
+    item.getByRole("cell", { name: "row-1", exact: true }),
+  ).toBeVisible();
+  const after = await item
+    .getByRole("button", { name: "Hide preview", exact: true })
+    .boundingBox();
+  expect(after).not.toBeNull();
+  expect(after!.y).toBeGreaterThan(48);
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(100);
+});
+
 test("previews and pages PDF artifacts", async ({ page }) => {
   const sessionId = await openConversation(page);
 
