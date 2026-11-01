@@ -1029,6 +1029,24 @@ const catalog: Readonly<Record<string, string>> = {
   "Waiting for input": "等待输入",
   Starting: "正在启动",
   Working: "正在工作",
+  "Peer started": "协作者已启动",
+  Finished: "已完成",
+  "Finished ({value0})": "已完成（{value0}）",
+  finished: "已完成",
+  "{value0} is waiting for your approval": "{value0} 正在等待你的批准",
+  "{value0} is waiting for your answer": "{value0} 正在等待你的回答",
+  "{value0} finished": "{value0} 已完成",
+  "{value0} stopped": "{value0} 已停止",
+  "{value0} failed": "{value0} 失败",
+  "Technical details": "技术详情",
+  "The connection to Octos was interrupted. Reconnecting; queued messages will wait until the session is ready.":
+    "与 Octos 的连接已中断，正在重连；排队的消息会等到会话恢复后再发送。",
+  "The connection was restored. Reloading the session before accepting more work.":
+    "连接已恢复，正在重新加载会话，完成后才能继续工作。",
+  "Octos could not restore this session automatically. Check the technical details, then retry the connection.":
+    "Octos 无法自动恢复此会话。请查看技术详情，然后重试连接。",
+  "This connector uses a private or loopback address, which the server refuses. Use an approved public HTTP(S) endpoint.":
+    "连接器使用了服务器拒绝的私有或回环地址，请改用获准的公网 HTTP(S) 地址。",
   "saved model": "已保存的模型",
   "Session views": "会话视图",
   Chat: "聊天",
@@ -1737,6 +1755,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Connecting…": "正在连接…",
   "Turn complete": "本轮完成",
   "Turn stopped": "本轮已停止",
+  "This turn was stopped before it completed.": "本轮在完成前已停止。",
+  "This turn failed before it completed.": "本轮在完成前失败。",
   "Turn failed": "本轮失败",
   "Turn rate limited": "本轮被限流",
   "Copy as Markdown": "复制为 Markdown",

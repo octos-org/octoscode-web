@@ -276,7 +276,7 @@ export function fleetRowTitle(brief: string): string {
  */
 export function fleetRowFallbackTitle(
   peerName: string,
-  statusWord: FleetStatusWord,
+  statusWord: string,
 ): string {
   return `${peerName} — ${statusWord}`;
 }
@@ -439,21 +439,33 @@ export function fleetRosterFromController(input: {
  * terminal outcome. Returns null when nothing the design asks to announce
  * changed between the previous and current rows.
  */
+type AnnouncementText = (key: string, values: { value0: string }) => string;
+const englishAnnouncement: AnnouncementText = (key, values) =>
+  key.replace("{value0}", values.value0);
+
 export function fleetAnnouncement(
   previous: readonly FleetRosterPeer[] | null,
   current: readonly FleetRosterPeer[],
+  text: AnnouncementText = englishAnnouncement,
 ): string | null {
   if (previous === null) return null;
   const before = new Map(previous.map((peer) => [peer.slug, peer.statusWord]));
   for (const peer of current) {
     if (before.get(peer.slug) === peer.statusWord) continue;
     if (peer.statusWord === "Waiting for your approval")
-      return `${peer.label} is waiting for your approval`;
+      return text("{value0} is waiting for your approval", {
+        value0: peer.label,
+      });
     if (peer.statusWord === "Waiting for your answer")
-      return `${peer.label} is waiting for your answer`;
-    if (peer.statusWord === "Finished") return `${peer.label} finished`;
-    if (peer.statusWord === "Stopped") return `${peer.label} stopped`;
-    if (peer.statusWord === "Failed") return `${peer.label} failed`;
+      return text("{value0} is waiting for your answer", {
+        value0: peer.label,
+      });
+    if (peer.statusWord === "Finished")
+      return text("{value0} finished", { value0: peer.label });
+    if (peer.statusWord === "Stopped")
+      return text("{value0} stopped", { value0: peer.label });
+    if (peer.statusWord === "Failed")
+      return text("{value0} failed", { value0: peer.label });
   }
   return null;
 }
