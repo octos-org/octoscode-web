@@ -132,7 +132,7 @@
 }
 
 .glyph[data-activity="live"] {
-  color: var(--dsw-alias-accent, var(--dsw-alias-label-primary));
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .glyph[data-activity="done"] {

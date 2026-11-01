@@ -1,21 +1,20 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--dsw-z-dialog, 100);
+  z-index: var(--dsw-z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--display-surface) 72%, transparent);
+  background: var(--dsw-alias-bg-mask-1);
   padding: var(--dsw-space-3);
 }
 
 .card {
   width: min(26rem, 100%);
-  border: 1px solid var(--dsw-border);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
-  background: var(--dsw-surface-raised);
-  box-shadow: 0 12px 32px
-    color-mix(in srgb, var(--display-surface) 60%, transparent);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-shadow-dialog);
   overflow: hidden;
 }
 
@@ -24,27 +23,27 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--dsw-space-2) var(--dsw-space-3);
-  border-bottom: 1px solid var(--dsw-border);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 
 .title {
   margin: 0;
   font-size: var(--dsw-font-size-base);
   font-weight: 600;
-  color: var(--dsw-text);
+  color: var(--dsw-alias-label-primary);
 }
 
 .close {
   border: none;
   background: transparent;
-  color: var(--dsw-text-muted);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   font-size: var(--dsw-font-size-sm);
   padding: var(--dsw-space-1);
 }
 
 .close:hover {
-  color: var(--dsw-text);
+  color: var(--dsw-alias-label-primary);
 }
 
 .list {
@@ -63,11 +62,11 @@
 
 .keys {
   margin: 0;
-  font-family: var(--dsw-font-mono, monospace);
+  font-family: var(--dsw-font-family-code);
   font-size: var(--dsw-font-size-xs);
-  color: var(--dsw-text);
-  background: var(--dsw-surface);
-  border: 1px solid var(--dsw-border);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-tip);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-sm);
   padding: 0 var(--dsw-space-1);
   white-space: nowrap;
@@ -76,7 +75,7 @@
 .label {
   margin: 0;
   font-size: var(--dsw-font-size-sm);
-  color: var(--dsw-text-muted);
+  color: var(--dsw-alias-label-tertiary);
   text-align: right;
 }
 
@@ -86,7 +85,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--dsw-text-muted);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .list + .sectionTitle {

@@ -37,9 +37,9 @@
 
 .headingActions .primary,
 .actions .primary {
-  background: var(--dsw-alias-button-primary-fill);
-  border-color: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-button-primary-label);
+  background: var(--dsw-alias-button-info-fill);
+  border-color: var(--dsw-alias-button-info-fill);
+  color: var(--dsw-alias-label-on-accent);
 }
 
 .actions .danger {
