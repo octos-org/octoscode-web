@@ -91,7 +91,7 @@ noscript {
 .fatal-card > a {
   width: fit-content;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   text-decoration: none;
 }
 
@@ -105,28 +105,74 @@ textarea {
   font: inherit;
 }
 
+/* Touch gets the app's own press state below, not the grey system flash. */
 button,
-a {
+a,
+summary,
+label,
+[role="button"],
+[role="treeitem"] {
   -webkit-tap-highlight-color: transparent;
 }
 
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
 
-/* Tactile press feedback for every button (tasteskill interactive-state
-   rule); transform-only so it composes with module hover transitions. */
+/* Press feedback for everything clickable: while held, the fill goes one step
+   past hover (an overlay, so it works on any fill and on touch, where there is
+   no hover) and buttons shrink a little. The individual `scale` property
+   composes with layout transforms such as translateX(-50%). */
 button {
-  transition: transform 120ms var(--dsw-ease-in-out);
+  transition: scale var(--dsw-motion-feedback) var(--dsw-ease-out);
+  user-select: none;
 }
 
-button:active:not(:disabled) {
-  transform: scale(0.98);
+/* [data-pressed] is the touch twin of :active (app/touch-press.ts). */
+button:active:not(:disabled),
+button[data-pressed]:not(:disabled) {
+  scale: var(--dsw-press-scale);
+  box-shadow: var(--dsw-press-shadow);
+}
+
+/* One rule per :has() selector: the CSS minifier drops :has() selectors that
+   share a list with plain ones when it merges rules for older targets. */
+summary:active:not(:has(button:active)) {
+  box-shadow: var(--dsw-press-shadow);
+}
+
+[role="treeitem"]:active:not(:has(button:active)) {
+  box-shadow: var(--dsw-press-shadow);
+}
+
+label:has(input:is([type="radio"], [type="checkbox"]):not(:disabled)):active {
+  box-shadow: var(--dsw-press-shadow);
+}
+
+summary[data-pressed],
+[role="treeitem"][data-pressed],
+label[data-pressed] {
+  box-shadow: var(--dsw-press-shadow);
+}
+
+/* Menu entries and rows fill their container; they take the tint, not the
+   shrink. */
+:is([role^="menuitem"], [role="option"], [role="tab"]) {
+  --dsw-press-scale: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active:not(:disabled),
+  button[data-pressed]:not(:disabled) {
+    scale: none;
+  }
 }
 
 .sr-only {
@@ -198,32 +244,65 @@ label > span {
   font-weight: 500;
 }
 
+/* The one button system: `.button` plus a variant (secondary is the default
+   look) and an optional size. Heights 28/36/44, one corner, 13px minimum. */
 .button {
-  width: 100%;
-  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--dsw-control-h-md);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  padding: 0 16px;
+  border-radius: var(--dsw-radius-control);
+  padding: 0 14px;
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--dsw-font-size-button);
   font-weight: 500;
-  transition: transform 120ms var(--dsw-ease-in-out);
+  line-height: 18px;
+  white-space: nowrap;
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    border-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
 }
 
-.button:hover:not(:disabled) {
-  background: var(--dsw-alias-button-floating-hover);
+.button-sm {
+  min-height: var(--dsw-control-h-sm);
+  padding: 0 10px;
 }
 
-/* Tactile press feedback (tasteskill interactive-state rule). */
-.button:active:not(:disabled) {
-  transform: scale(0.98);
+.button-lg {
+  min-height: var(--dsw-control-h-lg);
+  padding: 0 18px;
+  font-size: var(--dsw-font-size-body);
 }
 
-.button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.button-block {
+  width: 100%;
+}
+
+@media (hover: hover) {
+  .button:hover:not(:disabled) {
+    background: var(--dsw-alias-button-floating-hover);
+  }
+
+  .button-primary:hover:not(:disabled) {
+    border-color: var(--dsw-alias-button-info-hover);
+    background: var(--dsw-alias-button-info-hover);
+  }
+
+  .button-danger:hover:not(:disabled) {
+    border-color: var(--dsw-alias-button-danger-hover);
+    background: var(--dsw-alias-button-danger-hover);
+  }
+
+  .button-ghost:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
 }
 
 .button-primary {
@@ -232,15 +311,35 @@ label > span {
   color: var(--dsw-alias-label-on-accent);
 }
 
-.button-primary:hover:not(:disabled) {
-  background: var(--dsw-alias-button-info-hover);
+.button-danger {
+  border-color: var(--dsw-alias-button-danger-fill);
+  background: var(--dsw-alias-button-danger-fill);
+  color: var(--dsw-alias-label-on-accent);
+}
+
+.button-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Disabled means "not now": no hover, no press, no hourglass. Busy is the
+   only state that shows progress, and it says so with aria-busy. */
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button[aria-busy="true"]:disabled {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .field-note,
 .connection-error,
 .muted {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 1.55;
 }
 
@@ -278,7 +377,7 @@ label > span {
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .review-header-actions button:hover:not(:disabled),
@@ -321,7 +420,7 @@ label > span {
   color: var(--dsw-alias-label-primary);
   border-radius: var(--dsw-radius-sm);
   padding: 4px 12px;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
   cursor: pointer;
 }
 
@@ -370,7 +469,7 @@ label > span {
   border-radius: 9px;
   padding: 0 10px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .header-actions {
@@ -458,7 +557,7 @@ label > span {
   border-radius: 8px;
   background: var(--dsw-specific-tip);
   color: var(--dsw-alias-label-secondary);
-  font: 500 11px/1.4 var(--dsw-font-family-code);
+  font: 500 var(--dsw-font-size-micro)/1.4 var(--dsw-font-family-code);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -481,6 +580,7 @@ label > span {
 }
 
 .launch-profile-list button {
+  --dsw-press-scale: none;
   display: grid;
   gap: var(--dsw-space-1);
   width: 100%;
@@ -525,21 +625,6 @@ label > span {
   color: var(--dsw-alias-label-caption);
   font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
   text-transform: uppercase;
-}
-
-.launch-actions button {
-  border: 0;
-  border-radius: 7px;
-  padding: 6px 9px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
-}
-
-.launch-actions button:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 .timeline {
@@ -613,7 +698,7 @@ label > span {
 
 .running-label {
   color: var(--dsw-alias-state-warn-text);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .entry-content pre {
@@ -684,7 +769,7 @@ label > span {
 .recovery-banner small {
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -803,7 +888,7 @@ label > span {
 .composer-footer > span {
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -832,16 +917,14 @@ label > span {
   cursor: pointer;
   font-size: 18px;
   transition:
-    background-color var(--dsw-motion-feedback) ease,
-    transform var(--dsw-motion-feedback) ease;
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    scale var(--dsw-motion-feedback) var(--dsw-ease-out);
+  /* Small and round: a deeper press reads at this size. */
+  --dsw-press-scale: 0.94;
 }
 
 .send-button:hover:not(:disabled) {
   background: var(--dsw-alias-button-info-hover);
-}
-
-.send-button:active:not(:disabled) {
-  transform: scale(0.94);
 }
 
 .send-button:disabled {
@@ -865,6 +948,7 @@ label > span {
 }
 
 .command-palette button {
+  --dsw-press-scale: none;
   display: flex;
   width: 100%;
   align-items: center;
@@ -897,7 +981,7 @@ label > span {
 .command-palette small,
 .command-palette em {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .command-palette em {
@@ -950,7 +1034,7 @@ label > span {
 
 .approval-strip em {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-style: normal;
 }
 
@@ -1012,7 +1096,7 @@ label > span {
 
 .approval-tool {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .approval-actions {
@@ -1025,14 +1109,14 @@ label > span {
 }
 
 .takeover-button {
-  min-height: 34px;
+  min-height: var(--dsw-control-h-md);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-control);
   padding: 0 12px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   font-weight: 500;
 }
 
@@ -1199,7 +1283,7 @@ kbd {
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
   text-transform: capitalize;
 }
 
@@ -1258,7 +1342,7 @@ kbd {
 }
 
 .activity-results strong {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-weight: 550;
 }
 
@@ -1300,7 +1384,7 @@ kbd {
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .activity-results article > button:hover:not(:disabled) {
@@ -1408,7 +1492,7 @@ kbd {
   padding: var(--dsw-space-2) var(--dsw-space-3);
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .task-pane-heading small {
@@ -1426,7 +1510,7 @@ kbd {
   overflow: auto;
   padding: var(--dsw-space-4);
   color: var(--dsw-alias-label-secondary);
-  font: 400 11px/18px var(--dsw-font-family-code);
+  font: 400 var(--dsw-font-size-micro)/18px var(--dsw-font-family-code);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1438,7 +1522,7 @@ kbd {
   background: transparent;
   color: var(--dsw-alias-state-business-primary);
   cursor: pointer;
-  font-size: var(--dsw-font-size-micro);
+  font-size: var(--dsw-font-size-button);
 }
 
 .artifact-list {
@@ -1448,6 +1532,7 @@ kbd {
 }
 
 .artifact-list > button {
+  --dsw-press-scale: none;
   display: grid;
   width: 100%;
   gap: 2px;
@@ -1524,7 +1609,7 @@ kbd {
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 9px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: var(--dsw-font-size-button);
 }
 
 .review-header-actions button:last-child {
@@ -1538,7 +1623,7 @@ kbd {
   display: flex;
   gap: var(--dsw-space-2);
   padding-right: var(--dsw-space-1);
-  font: 500 11px/1 var(--dsw-font-family-code);
+  font: 500 var(--dsw-font-size-micro)/1 var(--dsw-font-family-code);
 }
 
 .diff-totals strong {
@@ -1627,7 +1712,7 @@ kbd {
 .diff-file > summary strong {
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font: 500 11px/1.4 var(--dsw-font-family-code);
+  font: 500 var(--dsw-font-size-micro)/1.4 var(--dsw-font-family-code);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1691,7 +1776,7 @@ kbd {
   grid-template-columns: 44px 44px 20px minmax(400px, 1fr);
   min-height: 22px;
   align-items: stretch;
-  font: 400 11px/22px var(--dsw-font-family-code);
+  font: 400 var(--dsw-font-size-micro)/22px var(--dsw-font-family-code);
 }
 
 .diff-line > span:first-child,
@@ -1753,7 +1838,7 @@ kbd {
   border-top: 1px solid var(--dsw-alias-border-l1);
   padding: var(--dsw-space-4);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 @keyframes pulse {

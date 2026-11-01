@@ -65,11 +65,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
+  min-height: var(--dsw-control-h-md);
   box-sizing: border-box;
   padding: 0 14px;
   border: none;
-  border-radius: 17px;
+  border-radius: var(--dsw-radius-control);
   font: inherit;
   font-size: 13px;
   line-height: 20px;
@@ -120,18 +120,6 @@
 .dangerButton:hover:not(:disabled),
 .deleteButton:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover-danger);
-}
-
-.addButton:focus-visible,
-.primaryButton:focus-visible,
-.secondaryButton:focus-visible,
-.textButton:focus-visible,
-.dangerButton:focus-visible,
-.deleteButton:focus-visible,
-.suggestionButton:focus-visible,
-.input:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
 
 .addButton:disabled,
@@ -248,7 +236,7 @@
   border-radius: 8px;
   background: var(--dsw-specific-bubble);
   color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -280,7 +268,7 @@
 
 .providerMutationWarning {
   color: var(--dsw-alias-state-warn-text);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -371,7 +359,7 @@
 .fieldHint,
 .fieldError,
 .validationHint {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -460,7 +448,7 @@
 .suggestionHeading h4,
 .suggestionHeading span {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   font-weight: 500;
   line-height: 17px;
 }
@@ -474,6 +462,7 @@
 }
 
 .suggestionButton {
+  --dsw-press-scale: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -485,7 +474,7 @@
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-size-button);
   line-height: 18px;
   text-align: left;
   cursor: pointer;
@@ -506,7 +495,7 @@
 .suggestionButton code {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-font-family-code);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
 }
 
 .parameterBoundary,
@@ -549,7 +538,7 @@
 
 .guidanceHeading span,
 .guidanceHeading a {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 
@@ -593,12 +582,12 @@
 
 .guidanceGrid dt {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 15px;
 }
 
 .guidanceGrid dd {
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 17px;
 }
 

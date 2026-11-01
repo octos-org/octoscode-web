@@ -44,7 +44,6 @@
   padding: 0 4px 0 8px;
   border: none;
   border-radius: 24px;
-  outline: none;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
@@ -56,10 +55,6 @@
 
 .trigger:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.trigger:focus-visible {
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
 
 .trigger:disabled {
@@ -252,7 +247,7 @@
   border-radius: 4px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dsw-font-size-micro);
   line-height: 16px;
 }
 
@@ -385,9 +380,9 @@
 .secondaryAction,
 .dangerAction {
   box-sizing: border-box;
-  height: 36px;
+  height: var(--dsw-control-h-md);
   padding: 0 16px;
-  border-radius: 18px;
+  border-radius: var(--dsw-radius-control);
   font-family: inherit;
   font-size: 14px;
   line-height: 22px;
@@ -455,7 +450,6 @@
   padding: 4px 8px;
   overflow: hidden;
   border-radius: 24px;
-  outline: none;
   color: inherit;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -470,10 +464,6 @@
 
 .disclosureSummary:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.disclosureSummary:focus-visible {
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
 
 .disclosure[open] .disclosureSummary {

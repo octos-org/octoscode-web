@@ -511,6 +511,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [sendingNow, setSendingNow] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -3401,11 +3402,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setImagesOpen(true);
   };
 
+  // Stop and Send now both interrupt the running turn; once one is on its
+  // way the buttons say so and stop taking clicks.
+  const stopping = Boolean(conversation.interruptingTurnId);
   const recoveryStop = conversation.interruptible ? (
-    <button type="button" onClick={() => void conversation.interrupt()}>
-      {t("Stop")}
+    <button
+      type="button"
+      disabled={stopping}
+      aria-busy={stopping || undefined}
+      onClick={() => void conversation.interrupt()}
+    >
+      {stopping ? t("Stopping…") : t("Stop")}
     </button>
   ) : null;
+  const sendPendingNow = () => {
+    if (sendingNow) return;
+    setSendingNow(true);
+    void conversation.sendPendingNow().finally(() => setSendingNow(false));
+  };
 
   const showProductShell = Boolean(
     session.authenticated || workspaceProduct.launch.decision,
@@ -4589,8 +4603,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         // App.submit's held-elsewhere gate).
                         tabLock.state.kind !== "held-elsewhere"
                           ? {
-                              onSendPendingNow: () =>
-                                void conversation.sendPendingNow(),
+                              onSendPendingNow: sendPendingNow,
                             }
                           : {})}
                         onInterrupt={() => {
@@ -4688,7 +4701,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           available={conversation.interruptible}
                           onInterrupt={() => void conversation.interrupt()}
                         />
-                        {conversation.canSendPendingNow &&
+                        {(conversation.canSendPendingNow || sendingNow) &&
                         !readOnlyPeer &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
@@ -4699,9 +4712,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             title={t(
                               "Interrupt the current response and send pending input",
                             )}
-                            onClick={() => void conversation.sendPendingNow()}
+                            disabled={sendingNow}
+                            aria-busy={sendingNow || undefined}
+                            onClick={sendPendingNow}
                           >
-                            {t("Send now (Ctrl+X)")}
+                            {sendingNow
+                              ? t("Sending…")
+                              : t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
                         {activeTurnId && draft.trim() && !readOnlyPeer ? (
