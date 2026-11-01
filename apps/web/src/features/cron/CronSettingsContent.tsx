@@ -130,9 +130,10 @@ export function CronSettingsContent({
           : current,
       );
     } catch (reason) {
-      if (generation === mutationGeneration.current)
+      if (generation === mutationGeneration.current) {
         setError(errorMessage(reason));
-      setErrorDetail(errorDetails(reason));
+        setErrorDetail(errorDetails(reason));
+      }
     } finally {
       if (generation === mutationGeneration.current) setBusyJob(null);
     }
@@ -148,7 +149,7 @@ export function CronSettingsContent({
       return;
     }
     const generation = ++mutationGeneration.current;
-    const listVersion = ++listGeneration.current;
+    ++listGeneration.current;
     setLoading(false);
     setCreating(true);
     setError(null);
@@ -156,33 +157,26 @@ export function CronSettingsContent({
     try {
       const commands = await client.cronCommands(capabilities);
       const created = await commands.create(params);
-      if (
-        generation !== mutationGeneration.current ||
-        listVersion !== listGeneration.current
-      )
-        return;
-      setState((current) =>
-        current
-          ? {
-              ...current,
-              jobs: [created, ...current.jobs],
-              count: current.count + 1,
-            }
-          : current,
-      );
+      if (generation !== mutationGeneration.current) return;
+      setState((current) => {
+        if (!current) return current;
+        const exists = current.jobs.some((job) => job.id === created.id);
+        return {
+          ...current,
+          jobs: [
+            created,
+            ...current.jobs.filter((job) => job.id !== created.id),
+          ],
+          count: current.count + (exists ? 0 : 1),
+        };
+      });
       setForm(INITIAL_FORM);
-      if (created.enabled && created.nextRun === null) {
-        setError(
-          t(
-            "The server returned an enabled task without a next run. It is not scheduled to run.",
-          ),
-        );
-      }
       setRefreshToken((current) => current + 1);
     } catch (reason) {
-      if (generation === mutationGeneration.current)
+      if (generation === mutationGeneration.current) {
         setError(errorMessage(reason));
-      setErrorDetail(errorDetails(reason));
+        setErrorDetail(errorDetails(reason));
+      }
     } finally {
       if (generation === mutationGeneration.current) setCreating(false);
     }
@@ -191,7 +185,7 @@ export function CronSettingsContent({
   const deleteJob = async (job: CronJob) => {
     if (writesBlocked || !canDelete) return;
     const generation = ++mutationGeneration.current;
-    const listVersion = ++listGeneration.current;
+    ++listGeneration.current;
     setLoading(false);
     setBusyJob(job.id);
     setError(null);
@@ -199,11 +193,7 @@ export function CronSettingsContent({
     try {
       const commands = await client.cronCommands(capabilities);
       await commands.delete(sessionId, job.id);
-      if (
-        generation !== mutationGeneration.current ||
-        listVersion !== listGeneration.current
-      )
-        return;
+      if (generation !== mutationGeneration.current) return;
       setState((current) =>
         current
           ? {
@@ -216,9 +206,10 @@ export function CronSettingsContent({
       setDeleteJobId(null);
       setRefreshToken((current) => current + 1);
     } catch (reason) {
-      if (generation === mutationGeneration.current)
+      if (generation === mutationGeneration.current) {
         setError(errorMessage(reason));
-      setErrorDetail(errorDetails(reason));
+        setErrorDetail(errorDetails(reason));
+      }
     } finally {
       if (generation === mutationGeneration.current) setBusyJob(null);
     }

@@ -346,6 +346,110 @@ test("refetches and releases loading when create/delete invalidate a list", asyn
   ).toBeEnabled();
 });
 
+test("keeps a create success when Refresh serves the list first", async ({
+  page,
+}) => {
+  let release: (() => void) | undefined;
+  let listRequests = 0;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "cron/list") listRequests += 1;
+      if (frame.method === "cron/create" && !release) {
+        release = () => server.send(message);
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  await start(page);
+  const settings = await openCron(page);
+  await openCreate(settings);
+  await settings.getByLabel("Schedule type").selectOption("Every");
+  const message = settings.getByRole("textbox", {
+    name: "Message",
+    exact: true,
+  });
+  await message.fill("Refreshed during create");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(settings.locator('[data-cron-job="cron-2"]')).toHaveCount(0);
+  const before = listRequests;
+  release!();
+  const row = settings.locator('[data-cron-job="cron-2"]');
+  await expect(row).toBeVisible();
+  await expect(row).toHaveCount(1);
+  await expect(message).toHaveValue("");
+  await expect.poll(() => listRequests).toBeGreaterThan(before);
+});
+
+test("keeps create/delete success when a committed list lands first", async ({
+  page,
+}) => {
+  const requests = new Map<string, string>();
+  let heldMethod: string | null = "cron/create";
+  let release: (() => void) | undefined;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      requests.set(String(frame.id), frame.method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (requests.get(String(frame.id)) === heldMethod) {
+        const method = heldMethod;
+        heldMethod = null;
+        release = () => socket.send(message);
+        expect(method).toMatch(/^cron\/(create|delete)$/);
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await start(page);
+  const settings = await openCron(page);
+  await openCreate(settings);
+  await settings.getByLabel("Schedule type").selectOption("Every");
+  const message = settings.getByRole("textbox", {
+    name: "Message",
+    exact: true,
+  });
+  await message.fill("Refreshed after commit");
+  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  const row = settings.locator('[data-cron-job="cron-2"]');
+  await expect(row).toBeVisible();
+  release!();
+  await expect(message).toHaveValue("");
+  await expect(row).toHaveCount(1);
+  await expect(
+    settings.getByRole("button", { name: "Create scheduled task" }),
+  ).toBeEnabled();
+
+  heldMethod = "cron/delete";
+  release = undefined;
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
+  await row.getByRole("button", { name: "Delete scheduled task" }).click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  release!();
+  await expect(row).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Delete scheduled task" }),
+  ).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Refresh", exact: true }),
+  ).toBeEnabled();
+});
+
 test("ignores a late create response after the session view changes", async ({
   page,
 }) => {
