@@ -63,6 +63,110 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.create {
+  margin-bottom: var(--dsw-space-4);
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.create summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.form {
+  display: grid;
+  gap: var(--dsw-space-3);
+  margin-top: var(--dsw-space-3);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dsw-space-3);
+}
+
+.form label {
+  display: grid;
+  gap: var(--dsw-space-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.form input,
+.form select,
+.form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.form textarea {
+  resize: vertical;
+}
+
+.formActions,
+.deleteConfirm,
+.deleteConfirm > div {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+}
+
+.deleteConfirm {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.formActions button,
+.deleteConfirm button,
+.deleteButton {
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 0 var(--dsw-space-3);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--dsw-font-size-button);
+}
+
+.deleteButton {
+  justify-self: start;
+}
+
+.dangerButton {
+  color: var(--dsw-alias-state-error-text) !important;
+}
+
+.formActions button:hover:not(:disabled),
+.deleteConfirm button:hover:not(:disabled),
+.deleteButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.formActions button:disabled,
+.deleteConfirm button:disabled,
+.deleteButton:disabled,
+.form input:disabled,
+.form select:disabled,
+.form textarea:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .rows {
   display: grid;
   gap: var(--dsw-space-3);
@@ -129,6 +233,10 @@
 }
 
 @media (max-width: 560px) {
+  .fields {
+    grid-template-columns: 1fr;
+  }
+
   .heading {
     align-items: flex-start;
     flex-direction: column;

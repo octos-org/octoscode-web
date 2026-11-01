@@ -6,6 +6,25 @@ import {
 } from "./generated/core-contract.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
 
+export const CRON_CREATE = "cron/create";
+export const CRON_DELETE = "cron/delete";
+
+export type CronCreateSchedule =
+  | { kind: "At"; at_ms: number }
+  | { kind: "Every"; every_ms: number }
+  | { kind: "Cron"; expr: string };
+
+export interface CronCreateParams {
+  session_id: string;
+  schedule: CronCreateSchedule;
+  message: string;
+  deliver?: boolean;
+  channel?: string;
+  chat_id?: string;
+  mode?: "agent" | "notify";
+  timezone?: string;
+}
+
 export interface CronJob {
   id: string;
   name: string;
@@ -15,6 +34,8 @@ export interface CronJob {
   channel?: string | null | undefined;
   lastRun?: string | null | undefined;
   lastStatus?: string | null | undefined;
+  lastError?: string | null | undefined;
+  nextRun?: number | null | undefined;
   nextIn?: string | null | undefined;
   timezone?: string | null | undefined;
 }
@@ -31,6 +52,8 @@ const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const nullable = (value: unknown) =>
   value === undefined || value === null || text(value);
+const nullableTimestamp = (value: unknown) =>
+  value === undefined || value === null || count(value);
 
 export function parseCronJob(value: unknown): CronJob | null {
   if (
@@ -42,6 +65,8 @@ export function parseCronJob(value: unknown): CronJob | null {
     !nullable(value.channel) ||
     !nullable(value.last_run) ||
     !nullable(value.last_status) ||
+    !nullable(value.last_error) ||
+    !nullableTimestamp(value.next_run) ||
     !nullable(value.next_in) ||
     !nullable(value.timezone)
   ) {
@@ -56,6 +81,8 @@ export function parseCronJob(value: unknown): CronJob | null {
     channel: value.channel as string | null | undefined,
     lastRun: value.last_run as string | null | undefined,
     lastStatus: value.last_status as string | null | undefined,
+    lastError: value.last_error as string | null | undefined,
+    nextRun: value.next_run as number | null | undefined,
     nextIn: value.next_in as string | null | undefined,
     timezone: value.timezone as string | null | undefined,
   };
@@ -118,6 +145,30 @@ export function createCronCommands(
         throw new Error("Invalid or mismatched cron job");
       }
       return job;
+    },
+    async create(params: CronCreateParams): Promise<CronJob> {
+      available(CRON_CREATE);
+      if (!text(params.session_id) || !params.message.trim()) {
+        throw new Error("A session and non-empty cron message are required");
+      }
+      const value = await client.request(CRON_CREATE, params);
+      if (!isRecord(value)) throw new Error("Invalid cron create result");
+      const job = parseCronJob(value.job);
+      if (!job) throw new Error("Invalid cron job returned by create");
+      return job;
+    },
+    async delete(sessionId: string, jobId: string): Promise<void> {
+      available(CRON_DELETE);
+      if (!text(sessionId) || !text(jobId)) {
+        throw new Error("A session and cron job id are required");
+      }
+      const value = await client.request(CRON_DELETE, {
+        session_id: sessionId,
+        job_id: jobId,
+      });
+      if (!isRecord(value) || value.deleted !== true) {
+        throw new Error("Invalid cron delete result");
+      }
     },
   };
 }

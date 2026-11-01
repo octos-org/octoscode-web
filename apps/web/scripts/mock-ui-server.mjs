@@ -30,20 +30,22 @@ const memoryRecords = new Map([
     },
   ],
 ]);
-const cronJobs = [
-  {
-    id: "cron-1",
-    name: "Queue check",
-    enabled: false,
-    schedule: { every_ms: 1800000 },
-    message: "check the queue",
-    channel: "system",
-    last_run: null,
-    last_status: null,
-    next_in: "30m",
-    timezone: "UTC",
-  },
-];
+const defaultCronJob = () => ({
+  id: "cron-1",
+  name: "Queue check",
+  enabled: false,
+  schedule: { every_ms: 1800000 },
+  message: "check the queue",
+  channel: "system",
+  last_run: null,
+  last_status: null,
+  last_error: null,
+  next_run: 1_800_000_000_000,
+  next_in: "30m",
+  timezone: "UTC",
+});
+const cronJobs = [defaultCronJob()];
+let nextCronJobId = 2;
 const MCP_CONNECTOR_FEATURE = "mcp.connector.manage.v1";
 const MCP_CONNECTOR_METHODS = [
   "mcp/connector/create",
@@ -2344,6 +2346,19 @@ const http = createServer(async (request, response) => {
   }
   if (
     request.method === "POST" &&
+    ["/__test__/cron/reset", "/__test__/cron/empty"].includes(request.url)
+  ) {
+    cronJobs.splice(
+      0,
+      cronJobs.length,
+      ...(request.url === "/__test__/cron/reset" ? [defaultCronJob()] : []),
+    );
+    nextCronJobId = 2;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
     request.url === "/__test__/turn-start/reset"
   ) {
     holdNextTurnStartAcknowledgement = false;
@@ -2787,6 +2802,8 @@ const baseCapabilities = {
     "mcp/status/list",
     "cron/list",
     "cron/toggle",
+    "cron/create",
+    "cron/delete",
     "session/list",
     "session/delete",
     "session/title.set",
@@ -5465,6 +5482,60 @@ sockets.on("connection", (socket, request) => {
         ],
         summary: { connected: 1, connecting: 0, failed: 1, disabled: 0 },
       });
+      return;
+    }
+    if (request.method === "cron/create") {
+      const params = request.params;
+      const schedule = params.schedule;
+      const validSchedule =
+        schedule &&
+        ((schedule.kind === "At" && Number.isSafeInteger(schedule.at_ms)) ||
+          (schedule.kind === "Every" &&
+            Number.isSafeInteger(schedule.every_ms) &&
+            schedule.every_ms > 0) ||
+          (schedule.kind === "Cron" && schedule.expr?.trim()));
+      if (
+        params.session_id !== sessionId ||
+        !params.message?.trim() ||
+        !["agent", "notify"].includes(params.mode) ||
+        !validSchedule
+      ) {
+        replyError(socket, request.id, -32_602, "Invalid cron create params");
+        return;
+      }
+      const job = {
+        id: `cron-${nextCronJobId++}`,
+        name: params.message.trim().slice(0, 32),
+        enabled: true,
+        schedule,
+        message: params.message.trim(),
+        channel: params.mode,
+        last_run: null,
+        last_status: null,
+        last_error: null,
+        next_run:
+          schedule.kind === "At"
+            ? schedule.at_ms
+            : schedule.kind === "Every"
+              ? Date.now() + schedule.every_ms
+              : Date.now() + 3_600_000,
+        next_in: "scheduled",
+        timezone: params.timezone ?? "UTC",
+      };
+      cronJobs.unshift(job);
+      reply(socket, request.id, { job });
+      return;
+    }
+    if (request.method === "cron/delete") {
+      if (request.params.session_id !== sessionId) {
+        replyError(socket, request.id, -32_602, "Invalid cron session");
+        return;
+      }
+      const index = cronJobs.findIndex(
+        (entry) => entry.id === request.params.job_id,
+      );
+      if (index >= 0) cronJobs.splice(index, 1);
+      reply(socket, request.id, { deleted: true });
       return;
     }
     if (request.method === "cron/list") {

@@ -24,7 +24,8 @@
     "./external-driver": "./src/external-driver.ts",
     "./external-driver-meta": "./src/external-driver-meta.ts",
     "./onboarding": "./src/onboarding.ts",
-    "./workspace-browse": "./src/workspace-browse.ts"
+    "./workspace-browse": "./src/workspace-browse.ts",
+    "./cron": "./src/cron.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
