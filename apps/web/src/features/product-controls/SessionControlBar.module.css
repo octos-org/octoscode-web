@@ -53,6 +53,13 @@
   cursor: pointer;
 }
 
+/* 交-12: the composer's chips stay compact, but a finger gets 44px. */
+@media (pointer: coarse) {
+  .trigger {
+    height: var(--dsw-control-h-lg);
+  }
+}
+
 .trigger:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
 }
@@ -208,6 +215,12 @@
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .option {
+    min-height: var(--dsw-control-h-lg);
+  }
 }
 
 .option:hover:not(:disabled),

@@ -38,22 +38,23 @@ export interface RemoteCatalog {
   subscribe(listener: () => void): () => void;
   getSnapshot(): RemoteCatalogSnapshot;
   /**
-   * Re-list through `client`, the CURRENT transport. The store outlives any
-   * one transport, so a reconnect lists into the same rows instead of
-   * starting from an empty overview.
+   * Re-list through `client`, the CURRENT transport, under `profileId` (the
+   * connection's profile; empty means resolve each folder). The store
+   * outlives any one transport AND any one profile, so a reconnect or a
+   * profile change lists into the same rows instead of starting from an
+   * empty overview.
    */
   refresh(
     client: RemoteCatalogClient,
     folders: readonly string[],
+    profileId: string,
   ): Promise<void>;
   dispose(): void;
 }
 
-export function createRemoteCatalog(deps: {
-  /** The connection's profile; empty means resolve each folder. */
-  profileId: string;
-  now?: () => number;
-}): RemoteCatalog {
+export function createRemoteCatalog(
+  deps: { now?: () => number } = {},
+): RemoteCatalog {
   const now = deps.now ?? Date.now;
   const listeners = new Set<() => void>();
   const resolved = new Map<string, string>();
@@ -67,8 +68,9 @@ export function createRemoteCatalog(deps: {
   const profileFor = async (
     client: RemoteCatalogClient,
     folder: string,
+    profileId: string,
   ): Promise<string> => {
-    if (deps.profileId) return deps.profileId;
+    if (profileId) return profileId;
     const known = resolved.get(folder);
     if (known) return known;
     const result = await client.resolveLaunch({ cwd: folder });
@@ -84,7 +86,7 @@ export function createRemoteCatalog(deps: {
       return () => listeners.delete(listener);
     },
     getSnapshot: () => snapshot,
-    async refresh(client, folders) {
+    async refresh(client, folders, profileId) {
       if (disposed) return;
       const generation = ++epoch;
       const paths = [...new Set(folders.map((folder) => folder.trim()))].filter(
@@ -107,19 +109,19 @@ export function createRemoteCatalog(deps: {
           const previous = next.get(path)!;
           let state: RemoteFolderState;
           try {
-            const profileId = await profileFor(client, path);
+            const folderProfile = await profileFor(client, path, profileId);
             const result = await client.listSessions({
               cwd: path,
-              profile_id: profileId,
+              profile_id: folderProfile,
             });
             state =
-              result.workspace_root && result.profile_id === profileId
+              result.workspace_root && result.profile_id === folderProfile
                 ? {
                     status: "loaded",
-                    profileId,
+                    profileId: folderProfile,
                     sessions: catalogSessionsFromList(
                       result.workspace_root,
-                      profileId,
+                      folderProfile,
                       result.sessions,
                     ),
                     listedAt: now(),
@@ -127,7 +129,7 @@ export function createRemoteCatalog(deps: {
                 : {
                     ...previous,
                     status: "error",
-                    profileId,
+                    profileId: folderProfile,
                     error: "This server cannot list sessions by folder.",
                   };
           } catch (reason) {
@@ -161,17 +163,20 @@ export function useRemoteCatalog(options: {
   refreshKey: string;
 }): RemoteCatalogSnapshot {
   const { client, profileId } = options;
-  // One store per profile, NOT per transport: while the server is
-  // unreachable (no client) the last rows stay on screen.
-  const catalog = useMemo(
-    () => createRemoteCatalog({ profileId }),
-    [profileId],
-  );
+  // One store for the page, NOT per transport or per profile: the profile
+  // follows the opened session and drops back when the connection does, and
+  // a fresh store at that moment emptied the overview exactly when the
+  // server became unreachable (found on the demo, T-0094).
+  const catalog = useMemo(() => createRemoteCatalog(), []);
   useEffect(() => () => catalog.dispose(), [catalog]);
   const foldersKey = options.folders.join("\n");
   useEffect(() => {
     if (!client) return;
-    void catalog.refresh(client, foldersKey ? foldersKey.split("\n") : []);
-  }, [catalog, client, foldersKey, options.refreshKey]);
+    void catalog.refresh(
+      client,
+      foldersKey ? foldersKey.split("\n") : [],
+      profileId,
+    );
+  }, [catalog, client, foldersKey, profileId, options.refreshKey]);
   return useSyncExternalStore(catalog.subscribe, catalog.getSnapshot);
 }

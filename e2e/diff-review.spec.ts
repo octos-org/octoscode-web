@@ -346,22 +346,21 @@ test("session changes recover on selection and reload without unsupported Git re
   const navigation = page.getByRole("complementary", {
     name: "Product navigation",
   });
-  const first = await navigation
-    .locator(
-      'button[role="treeitem"][aria-current="page"] [class*="sessionTitle"]',
-    )
-    .textContent();
-  await page.getByRole("button", { name: "New session", exact: true }).click();
-  await page
-    .getByRole("button", {
-      name: "Start a new session in Server's working directory",
-      exact: true,
-    })
+  const selected = navigation.locator(
+    '[role="treeitem"][data-session-id][aria-current="page"]',
+  );
+  const first = await selected.getAttribute("data-session-id");
+  expect(first).toBeTruthy();
+  await navigation
+    .getByRole("button", { name: "diff-review", exact: true })
+    .hover();
+  await navigation
+    .getByRole("button", { name: "New session in diff-review", exact: true })
     .click();
+  await expect(selected).not.toHaveAttribute("data-session-id", first!);
   await expect(panelToggle(page)).toHaveAccessibleName("Session panel");
   await navigation
-    .locator('button[role="treeitem"]')
-    .filter({ hasText: first! })
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(first)}]`)
     .click();
   await expect(panelToggle(page)).toHaveAccessibleName(
     "Session panel, 1 changed",

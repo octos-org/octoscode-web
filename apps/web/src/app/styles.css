@@ -284,6 +284,14 @@ label > span {
   width: 100%;
 }
 
+/* 交-12: on touch every shared button is at least a finger tall. */
+@media (pointer: coarse) {
+  .button,
+  .button-sm {
+    min-height: var(--dsw-control-h-lg);
+  }
+}
+
 @media (hover: hover) {
   .button:hover:not(:disabled) {
     background: var(--dsw-alias-button-floating-hover);
@@ -427,6 +435,12 @@ label > span {
   padding: 4px 12px;
   font-size: var(--dsw-font-size-button);
   cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .fleet-back {
+    min-height: var(--dsw-control-h-lg);
+  }
 }
 
 .fleet-back:hover:not(:disabled) {
@@ -907,6 +921,17 @@ label > span {
   align-items: center;
   justify-content: flex-end;
   gap: var(--dsw-space-2);
+}
+
+/* 美-9: phones give the actions their own full line, "+" at its start. */
+.composer-add {
+  margin-right: auto;
+}
+
+@media (max-width: 760px) {
+  .composer-actions:has(.composer-add) {
+    flex: 1 1 100%;
+  }
 }
 
 .send-button {

@@ -116,6 +116,13 @@
   cursor: pointer;
 }
 
+/* 交-12: a link-styled button still gets a finger-sized target. */
+@media (pointer: coarse) {
+  .usePage {
+    min-height: var(--dsw-control-h-lg);
+  }
+}
+
 .usePage:hover:not(:disabled) {
   text-decoration: underline;
 }

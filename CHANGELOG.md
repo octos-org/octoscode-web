@@ -2,48 +2,55 @@
 
 ## Unreleased
 
-- Add a capability-gated Automation tab to the Session panel for goals, loops,
-  monitors, and agents. Reuse the session-scoped autonomy controller for
-  controls and live updates, hide the tab on unsupported connections, and show
-  the remaining goal-ledger and monitor-sandbox limitations.
-- Support plain-http LAN origins by generating UUIDs through a shared
-  `crypto.randomUUID`/`getRandomValues` fallback, guarded by an oxlint rule.
-  Associate provider, model, and route selects with labels in first-run setup.
-- Keep approval and question takeovers inside the viewport without scrolling the
-  workspace header out of view. Preserve compact-header button spacing on
-  phones, and cover all three audit viewports with layout, axe, and full-page
-  visual regression checks.
-- Add a capability-gated Skills section to Settings. List installed Profile
-  skills and their source/version, invoke typed skill actions with required
-  arguments, and show live background job progress/results. Negotiate
-  `skill.actions.v1` and `skill.action_jobs.v1`, and keep remote one-click
-  installation explicitly unavailable while its supply-chain review is open.
-- Add a capability-gated Memory section to Settings: overview, entity pages,
-  search/result details, and an optional Remember-this ingest form. Request and
-  Promote controls appear only when the server advertises those methods, and the
-  page explicitly notes that edit/delete are not available in the protocol.
-- Add a reusable, localized artifact preview for delivered files, supervised
-  task artifacts, and explicit write/edit-file results. PDF, CSV, images,
-  HTML/SVG, Markdown, code, and plain text render inline; DOCX, XLSX, PPTX, and
-  other unsupported or oversized files retain a clear download path. Path copy
-  and download actions sit beside the preview. File cards retain the extension
-  and show a type icon and server-reported size when available.
-- Parse CSV in a bounded, on-demand worker and render one PDF page at a time.
-  HTML/SVG frames use an opaque-origin, script-free offline sandbox without
-  weakening the application CSP. Include browser, component, security, and axe
-  coverage for the new surface.
-- Add read-only MCP connector status and existing cron job controls to Settings.
-  Cron jobs can be enabled/disabled only when the server permits it;
-  add/remove/edit/OAuth and cron creation remain explicitly unavailable.
-- Replace first-run developer fields with a two-step model setup: domestic
-  provider recommendations, generated identity under Advanced, custom
-  OpenAI-compatible endpoints, and a folder-first workspace picker.
-- Clarify approval actions with directory/network/deletion impact and localized
-  risk labels; use Deny / Allow for this session / Allow once while retaining
-  shortcuts. Permission-denied tools can switch to workspace-write and retry.
-- Make execution legible: human-readable tool titles with raw names in details,
-  per-turn duration/file/token summaries, expanded failure reasons and amber
-  sidebar attention, plus streaming Markdown without raw incomplete markers.
+## v0.21.0 — 2026-11-01
+
+### 产物预览
+
+- 交付文件和后台任务产物可以直接预览 PDF、CSV、图片、HTML/SVG、Markdown、代码和纯文本；Office、过大或无法预览的文件仍保留下载入口。
+- CSV 使用有界工作线程解析，PDF 逐页渲染；HTML/SVG 在禁脚本、禁网络的沙箱中打开。文件卡保留类型、大小和清晰的展开/收起操作。
+
+### 连接器管理
+
+- 设置里可以查看 MCP 连接器状态，并按服务器能力启用或停用已有定时任务。
+- 新增、删除、编辑、OAuth 和新建定时任务在协议未提供时明确显示为不可用，不伪造成功状态。
+
+### 自动化标签
+
+- 会话面板新增自动化标签，集中查看和控制目标、循环、监视器与智能体，并接收实时进度。
+- 标签只在服务器支持时出现；尚未打通的目标账本和监视器沙箱限制会如实说明。
+
+### 会话整理
+
+- 侧栏支持按工作区浏览、搜索、排序，以及会话重命名和删除；操作后同步服务器目录并恢复焦点。
+- 长标题、运行状态和手机布局保持一致，重命名/删除只在对应内核能力存在时显示。
+
+### 执行过程更清楚
+
+- 工具名称、每轮耗时、文件与 token 摘要、失败原因和等待状态更易读；计划、步骤和回放顺序保持清晰。
+- 审批说明列出目录、联网和删除影响，可以直接处理权限不足后的重试。
+- 会话设置可显示实际执行后端、Docker 镜像以及 Node.js、npm、Git、Python 是否可用。
+
+### 第一眼和交互打磨
+
+- 修复快捷键帮助、搜索、菜单等表面的缺失设计变量，补齐中文字体回退和明暗主题。
+- 按钮、卡片和会话行新增一致按压反馈、可见焦点和真实忙碌状态；模板权限与只读提示更清楚。
+
+### 首次向导
+
+- 模型服务改为两步设置，保留少量推荐提供商，其余收入“更多提供商”，并支持自定义 OpenAI 兼容地址。
+- 服务器文件夹可浏览、新建并一步启动会话；手机不再叠加两层工作区界面，重复目录会合并。
+
+### 手机遥控
+
+- 打开 `?view=remote`
+  即可在手机上查看等待处理、运行中和最近完成的会话，并进入对应会话。
+- 支持允许一次或拒绝审批、发送追问和停止运行；断线时保留列表但禁止操作，恢复后继续，不重复发送。
+- 手机端不会提供更宽权限；提权和联网等操作仍留在电脑上完成。
+
+### 内核要求
+
+- “执行环境”显示需要 octos main `2510fb827`
+  之后的版本（octos#2928）；老内核会自动隐藏这一块，不会报错。其他能力同样按服务器广告启用。
 
 ## v0.20.0 — 2026-10-29
 

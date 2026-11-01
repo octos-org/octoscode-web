@@ -4,6 +4,7 @@
  * state in words; clicking/Enter/Space opens the configuration pane.
  */
 import { useId } from "react";
+import { SlidersIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { stripStateThinking } from "../timeline/strip-thinking.ts";
 import type { TurnActivity } from "../timeline/turn-activity.ts";
@@ -39,10 +40,13 @@ export interface SessionStatusStripProps {
   /** Live turn activity; while responding, its word replaces the third segment. */
   activity?: TurnActivity | null;
   /**
-   * Show only the live state. The composer's own chips already show the
-   * model and permission; the accessible name still carries all three.
+   * The composer's form (美-9): a settings icon, with words beside it only
+   * when the state asks something of the user or explains why input waits.
+   * The composer's chips already show the model and permission, and the
+   * conversation's status line shows live progress; the accessible name and
+   * the tooltip still carry the full state.
    */
-  stateOnly?: boolean;
+  compact?: boolean;
   onOpenPane: () => void;
 }
 
@@ -74,12 +78,17 @@ export function stripStateWords(
   }
 }
 
+/** Ready and plain progress need no words in the composer; the rest do. */
+export function stripStateNeedsWords(state: SessionStripState): boolean {
+  return state.kind !== "ready" && state.kind !== "responding";
+}
+
 export function SessionStatusStrip({
   model,
   permissionMode,
   state,
   activity = null,
-  stateOnly = false,
+  compact = false,
   onOpenPane,
 }: SessionStatusStripProps) {
   const t = useUiText();
@@ -102,6 +111,32 @@ export function SessionStatusStrip({
     liveLabel ?? stripStateWords(state, t),
   ];
   const text = segments.join(" · ");
+  if (compact) {
+    const words = stripStateNeedsWords(state) ? segments[2] : null;
+    return (
+      <button
+        type="button"
+        className={`${styles["session-status-strip"]} ${styles["session-status-compact"]}`}
+        data-testid="session-status-strip"
+        data-state={state.kind}
+        aria-label={`${t("Session settings")}: ${text}`}
+        aria-describedby={`${tooltipId} ${descriptionId}`}
+        title={`${t("Session settings")}: ${segments[2]}`}
+        onClick={onOpenPane}
+      >
+        <span id={tooltipId} hidden>
+          {t("Model, permissions, sandbox")}
+        </span>
+        <span id={descriptionId} hidden>
+          {text}
+        </span>
+        <SlidersIcon />
+        {words ? (
+          <span className={styles["session-status-strip-state"]}>{words}</span>
+        ) : null}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -121,18 +156,11 @@ export function SessionStatusStrip({
         {text}
       </span>
       <span className={styles["session-status-strip-text"]}>
-        {stateOnly ? null : (
-          <span className={styles["session-status-strip-context"]}>
-            {segments[0]} · {segments[1]}
-          </span>
-        )}
+        <span className={styles["session-status-strip-context"]}>
+          {segments[0]} · {segments[1]}
+        </span>
         <span className={styles["session-status-strip-state"]}>
-          {stateOnly ? null : (
-            <span className={styles["session-status-strip-separator"]}>
-              {" "}
-              ·{" "}
-            </span>
-          )}
+          <span className={styles["session-status-strip-separator"]}> · </span>
           {liveLabel ? (
             <span className="thinking-spinner" aria-hidden="true">
               ◠

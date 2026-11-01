@@ -16,6 +16,17 @@ export function GearIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Session settings: model, permissions, sandbox. */
+export function SlidersIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6" />
+      <circle cx="10" cy="5" r="1.5" />
+      <circle cx="6" cy="11" r="1.5" />
+    </svg>
+  );
+}
+
 export function SkillsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>

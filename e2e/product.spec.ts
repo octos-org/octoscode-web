@@ -1817,9 +1817,10 @@ test("automatically activates an unambiguous fresh coding Workspace", async ({
   await expect(
     page.getByRole("button", { name: /Session settings/ }),
   ).toBeVisible();
+  // 美-9: the composer shows it as an icon; the state lives in its name.
   await expect(
     page.getByRole("button", { name: /Session settings/ }),
-  ).toContainText(/Ready$/);
+  ).toHaveAccessibleName(/Ready$/);
 });
 
 test("onboards an empty solo server from workspace creation", async ({

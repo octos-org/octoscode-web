@@ -157,6 +157,43 @@ test("a skill adds an editable line and never sends", async ({ page }) => {
   expect(turnStarts).toEqual([]);
 });
 
+test("phones fold skills and images into one +", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const turnStarts = await offerSkills(page);
+  await start(page, "/workspace/composer-phone");
+  const row = settings(page);
+  await expect(
+    row.getByRole("button", { name: "Skills", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    row.getByRole("button", { name: "Attach images", exact: true }),
+  ).toHaveCount(0);
+  const add = page.getByRole("button", { name: "Add skills or images" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("Draft the Q4 summary");
+  await add.click();
+  const menu = page.getByRole("menu", { name: "Add" });
+  await expect(
+    menu.getByRole("menuitem", { name: "Attach images" }),
+  ).toBeVisible();
+  await expect(menu.getByRole("group", { name: "Skills" })).toBeVisible();
+  expect(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
+      .violations,
+  ).toEqual([]);
+  await menu.getByRole("menuitem", { name: /office-docx/ }).click();
+  await expect(menu).toBeHidden();
+  await expect(composer).toHaveValue(
+    "Use the office-docx skill: Draft the Q4 summary",
+  );
+  await expect(composer).toBeFocused();
+
+  await add.click();
+  await menu.getByRole("menuitem", { name: "Attach images" }).click();
+  await expect(page.getByRole("dialog", { name: /image/i })).toBeVisible();
+  expect(turnStarts).toEqual([]);
+});
+
 test("another folder starts a new session that keeps the unsent text", async ({
   page,
 }) => {
