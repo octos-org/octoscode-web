@@ -234,7 +234,7 @@
   justify-content: space-between;
   gap: 12px;
   background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-text);
 }
 
 .providerList {
