@@ -50,9 +50,33 @@ describe("cron protocol", () => {
     const commands = createCronCommands({ request }, capabilities);
     expect((await commands.list()).jobs[0]?.enabled).toBe(false);
     expect((await commands.toggle("cron-1", true)).enabled).toBe(true);
+    expect(request).toHaveBeenNthCalledWith(1, "cron/list", {});
     expect(request).toHaveBeenLastCalledWith("cron/toggle", {
       job_id: "cron-1",
       enabled: true,
+    });
+  });
+
+  it("adds the optional current session to list and toggle", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jobs: [job],
+        count: 1,
+        gateway_running: false,
+        truncated: false,
+      })
+      .mockResolvedValueOnce({ job: { ...job, enabled: true } });
+    const commands = createCronCommands({ request }, capabilities);
+    await commands.list("coding:api:web-current");
+    await commands.toggle("cron-1", true, "coding:api:web-current");
+    expect(request).toHaveBeenNthCalledWith(1, "cron/list", {
+      session_id: "coding:api:web-current",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "cron/toggle", {
+      job_id: "cron-1",
+      enabled: true,
+      session_id: "coding:api:web-current",
     });
   });
 

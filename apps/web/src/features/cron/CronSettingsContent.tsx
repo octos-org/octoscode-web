@@ -82,7 +82,7 @@ export function CronSettingsContent({
     setErrorDetail(null);
     void client
       .cronCommands(capabilities)
-      .then((commands) => commands.list())
+      .then((commands) => commands.list(sessionId))
       .then(
         (result) => {
           if (current && generation === listGeneration.current) {
@@ -113,7 +113,7 @@ export function CronSettingsContent({
     setError(null);
     try {
       const commands = await client.cronCommands(capabilities);
-      const updated = await commands.toggle(job.id, !job.enabled);
+      const updated = await commands.toggle(job.id, !job.enabled, sessionId);
       if (
         generation !== mutationGeneration.current ||
         listVersion !== listGeneration.current

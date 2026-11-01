@@ -125,19 +125,27 @@ export function createCronCommands(
     }
   }
   return {
-    async list(): Promise<CronListResult> {
+    async list(sessionId?: string): Promise<CronListResult> {
       available(CORE_UI_METHODS.CRON_LIST);
-      const value = await client.request(CORE_UI_METHODS.CRON_LIST, {});
+      const value = await client.request(
+        CORE_UI_METHODS.CRON_LIST,
+        sessionId ? { session_id: sessionId } : {},
+      );
       const parsed = parseCronList(value);
       if (!parsed) throw new Error("Invalid cron job list");
       return parsed;
     },
-    async toggle(jobId: string, enabled: boolean): Promise<CronJob> {
+    async toggle(
+      jobId: string,
+      enabled: boolean,
+      sessionId?: string,
+    ): Promise<CronJob> {
       available(CORE_UI_METHODS.CRON_TOGGLE);
       if (!text(jobId)) throw new Error("A cron job id is required");
       const value = await client.request(CORE_UI_METHODS.CRON_TOGGLE, {
         job_id: jobId,
         enabled,
+        ...(sessionId ? { session_id: sessionId } : {}),
       });
       if (!isRecord(value)) throw new Error("Invalid cron toggle result");
       const job = parseCronJob(value.job);
