@@ -796,6 +796,19 @@ label > span {
   font-variant-numeric: tabular-nums;
 }
 
+.recovery-technical-detail {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+}
+
+.recovery-technical-detail summary {
+  cursor: pointer;
+}
+
+.recovery-technical-detail code {
+  overflow-wrap: anywhere;
+}
+
 .recovery-banner.recovery-error,
 .recovery-banner.recovery-gap,
 .recovery-banner.recovery-lossy {

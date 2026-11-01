@@ -168,8 +168,13 @@ function statusWord(peer: FleetRosterPeer): FleetStatusWord {
   return peer.statusWord;
 }
 
-function ariaLabel(peer: FleetRosterPeer): string {
-  return `${peer.label}, ${statusWord(peer).toLowerCase()}, ${peer.title}`;
+function ariaLabel(
+  peer: FleetRosterPeer,
+  text: (key: string) => string,
+): string {
+  const title =
+    peer.title === "Peer started" ? text("Peer started") : peer.title;
+  return `${peer.label}, ${text(statusWord(peer)).toLowerCase()}, ${title}`;
 }
 
 function sessionNameFor(
@@ -269,7 +274,7 @@ export function FleetView({
   // region actually announces"). First observation (no previousPeers) treats
   // the past as EMPTY — a row already waiting when Fleet opens announces
   // (the pure model keeps `null` as its explicit announce-nothing sentinel).
-  const announcement = fleetAnnouncement(previousPeers ?? [], peers);
+  const announcement = fleetAnnouncement(previousPeers ?? [], peers, t);
   // Fixes 4210 (§4.3): Start does NOT require a pre-held seat — Start IS the
   // implicit acquisition (acquire → await proof → dispatch once). The old
   // `seatHeld &&` term kept Start disabled in every product surface
@@ -683,14 +688,14 @@ function renderFleetRow({
       className={styles.row}
       data-fleet-row={peer.slug}
       data-fleet-status={peer.statusWord}
-      aria-label={ariaLabel(peer)}
+      aria-label={ariaLabel(peer, t)}
     >
       <div className={styles.rowTitle}>
         <h4 className={styles.title}>
           {/* Round 4 C2: never render the stale "Peer started" placeholder —
               one status word everywhere, derived from events. */}
           {peer.title === "Peer started"
-            ? fleetRowFallbackTitle(peer.label, peer.statusWord)
+            ? fleetRowFallbackTitle(peer.label, t(peer.statusWord))
             : peer.title}
         </h4>
         <span className={styles.meta}>{peer.label}</span>
