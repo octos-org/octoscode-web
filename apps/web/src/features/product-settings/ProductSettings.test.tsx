@@ -44,6 +44,10 @@ describe("GeneralSettingsContent", () => {
 
     expect(html).toContain("Disconnected");
     expect(html).toMatch(/disabled=""[^>]*>Disconnect<\/button>/);
+    expect(html).toContain(
+      "Connect to a server before using connection actions.",
+    );
+    expect(html).toContain("aria-describedby=");
     expect(html).not.toContain("Current workspace");
   });
 });

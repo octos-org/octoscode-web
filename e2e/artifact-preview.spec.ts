@@ -110,6 +110,14 @@ test("previews and pages large CSV files", async ({ page }) => {
   await expect(csv.preview.getByText("Rows 1–100 of 126")).toBeVisible();
   await csv.preview.getByRole("button", { name: "Next rows" }).click();
   await expect(csv.preview.getByText("row-125", { exact: true })).toBeVisible();
+  // The attachment row owns the only file header and download action.
+  await expect(csv.item.getByRole("button", { name: /Download/ })).toHaveCount(
+    1,
+  );
+  await expect(
+    csv.preview.getByRole("button", { name: "Download", exact: true }),
+  ).toHaveCount(0);
+  await expect(csv.preview.locator("strong")).toHaveCount(0);
 });
 
 test("keeps HTML and SVG scripts and network access inert", async ({
@@ -184,9 +192,7 @@ test("previews Markdown, code, and text and offers download for unknown types", 
     unknown.preview.getByText("This file type doesn't have an inline preview."),
   ).toBeVisible();
   await expect(
-    unknown.preview
-      .getByRole("button", { name: "Download", exact: true })
-      .last(),
+    unknown.item.getByRole("button", { name: /Download/ }).last(),
   ).toBeEnabled();
 
   for (const name of ["report.docx", "budget.xlsx", "pilot.pptx"]) {
@@ -197,7 +203,7 @@ test("previews Markdown, code, and text and offers download for unknown types", 
       ),
     ).toBeVisible();
     await expect(
-      office.preview.getByRole("button", { name: "Download", exact: true }),
+      office.item.getByRole("button", { name: /Download/ }),
     ).toBeEnabled();
   }
 });
@@ -306,12 +312,13 @@ test("retries an unsupported file with Download after a failed request", async (
     return requests === 1 ? route.abort() : route.continue();
   });
   const unknown = await deliver(page, sessionId, "archive.zip");
-  const downloadButton = unknown.preview.getByRole("button", {
-    name: "Download",
-    exact: true,
+  const downloadButton = unknown.item.getByRole("button", {
+    name: /Download/,
   });
   await downloadButton.click();
-  await expect(unknown.preview.getByRole("alert")).toBeVisible();
+  await expect(
+    unknown.item.getByText("This file could not be loaded."),
+  ).toBeVisible();
   await expect(
     unknown.preview.getByRole("button", { name: "Try again" }),
   ).toHaveCount(0);

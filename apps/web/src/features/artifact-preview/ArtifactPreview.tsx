@@ -48,6 +48,8 @@ const MAX_TEXT_PREVIEW_BYTES = 10 * 1024 * 1024;
 export interface ArtifactPreviewProps {
   /** Display name and download filename. */
   name: string;
+  /** Used inside an attachment row that already owns the file chrome. */
+  embedded?: boolean | undefined;
   kind?: ArtifactKind | undefined;
   /** Tool-written workspace files use the 32 MiB session reader limit. */
   workspaceFile?: boolean;
@@ -252,37 +254,46 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
 
   return (
     <section
-      className={styles.preview}
+      className={
+        props.embedded ? `${styles.preview} ${styles.embedded}` : styles.preview
+      }
       aria-label={t("Preview {name}", { name: props.name })}
       data-artifact-kind={kind}
     >
-      <header className={styles.header}>
-        <div className={styles.identity}>
-          <strong title={props.name} translate="no">
-            {props.name}
-          </strong>
-          <span>{artifactExtension(reference).toUpperCase() || t("File")}</span>
-        </div>
-        <div className={styles.actions}>
-          {props.path && props.onReveal ? (
-            <button type="button" onClick={() => props.onReveal?.(props.path!)}>
-              {t("Show in folder")}
+      {props.embedded ? null : (
+        <header className={styles.header}>
+          <div className={styles.identity}>
+            <strong title={props.name} translate="no">
+              {props.name}
+            </strong>
+            <span>
+              {artifactExtension(reference).toUpperCase() || t("File")}
+            </span>
+          </div>
+          <div className={styles.actions}>
+            {props.path && props.onReveal ? (
+              <button
+                type="button"
+                onClick={() => props.onReveal?.(props.path!)}
+              >
+                {t("Show in folder")}
+              </button>
+            ) : null}
+            {props.path ? (
+              <button type="button" onClick={() => void copyPath()}>
+                {copyState === "copied" ? t("Path copied") : t("Copy path")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={!canDownload || downloading}
+              onClick={() => void download()}
+            >
+              {downloading ? t("Downloading…") : t("Download")}
             </button>
-          ) : null}
-          {props.path ? (
-            <button type="button" onClick={() => void copyPath()}>
-              {copyState === "copied" ? t("Path copied") : t("Copy path")}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            disabled={!canDownload || downloading}
-            onClick={() => void download()}
-          >
-            {downloading ? t("Downloading…") : t("Download")}
-          </button>
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
       {copyState ? (
         <span className={styles.srOnly} role="status" aria-live="polite">
           {copyState === "copied"

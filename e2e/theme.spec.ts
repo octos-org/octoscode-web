@@ -10,7 +10,16 @@ async function connect(page: Page) {
     .getByLabel("Auth token", { exact: true })
     .fill("tab-scoped-e2e-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(page.getByRole("button", { name: /^Theme:/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Settings", exact: true }),
+  ).toBeVisible();
+}
+
+async function chooseTheme(page: Page, name: "Auto" | "Light" | "Dark") {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings", exact: true });
+  await settings.getByRole("radio", { name, exact: true }).check();
+  await settings.getByRole("button", { name: /Close/ }).click();
 }
 
 async function resolvedColors(page: Page) {
@@ -31,7 +40,7 @@ async function resolvedColors(page: Page) {
   });
 }
 
-test("theme cycle preserves one palette across manual and system modes", async ({
+test("theme choices preserve one palette across manual and system modes", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
@@ -40,26 +49,26 @@ test("theme cycle preserves one palette across manual and system modes", async (
   expect(Object.keys(light).length).toBeGreaterThan(50);
   expect(light["--dsw-alias-bg-base"]).toBe("rgb(255, 255, 255)");
 
-  await page.getByRole("button", { name: "Theme: Auto", exact: true }).click();
+  await chooseTheme(page, "Dark");
   const dark = await resolvedColors(page);
   expect(dark["--dsw-alias-bg-base"]).toBe("rgb(21, 21, 23)");
   expect(dark).not.toEqual(light);
   await page.emulateMedia({ colorScheme: "dark" });
   expect(await resolvedColors(page)).toEqual(dark);
 
-  await page.getByRole("button", { name: "Theme: dark", exact: true }).click();
+  await chooseTheme(page, "Light");
   expect(await resolvedColors(page)).toEqual(light);
   await page.emulateMedia({ colorScheme: "light" });
   expect(await resolvedColors(page)).toEqual(light);
 
-  await page.getByRole("button", { name: "Theme: light", exact: true }).click();
+  await chooseTheme(page, "Auto");
   await expect(page.locator("html")).not.toHaveAttribute("data-theme");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect.poll(() => resolvedColors(page)).toEqual(dark);
   await page.emulateMedia({ colorScheme: "light" });
   await expect.poll(() => resolvedColors(page)).toEqual(light);
 
-  await page.getByRole("button", { name: "Theme: Auto", exact: true }).click();
+  await chooseTheme(page, "Dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(await resolvedColors(page)).toEqual(dark);
@@ -129,17 +138,11 @@ for (const method of ["getItem", "setItem", "removeItem"] as const) {
       };
     }, method);
     await connect(page);
-    await page
-      .getByRole("button", { name: "Theme: Auto", exact: true })
-      .click();
+    await chooseTheme(page, "Dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await page
-      .getByRole("button", { name: "Theme: dark", exact: true })
-      .click();
+    await chooseTheme(page, "Light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await page
-      .getByRole("button", { name: "Theme: light", exact: true })
-      .click();
+    await chooseTheme(page, "Auto");
     await expect(page.locator("html")).not.toHaveAttribute("data-theme");
     await expect(page.getByLabel("Server workspace path")).toBeVisible();
     await expect(
@@ -193,17 +196,11 @@ for (const storageKind of ["localStorage", "sessionStorage"] as const) {
     ).toBeVisible();
     await composer.fill("Keep this draft while changing the theme.");
 
-    await page
-      .getByRole("button", { name: "Theme: Auto", exact: true })
-      .click();
+    await chooseTheme(page, "Dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await page
-      .getByRole("button", { name: "Theme: dark", exact: true })
-      .click();
+    await chooseTheme(page, "Light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await page
-      .getByRole("button", { name: "Theme: light", exact: true })
-      .click();
+    await chooseTheme(page, "Auto");
     await expect(page.locator("html")).not.toHaveAttribute("data-theme");
     await expect(composer).toHaveValue(
       "Keep this draft while changing the theme.",

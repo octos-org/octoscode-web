@@ -243,6 +243,44 @@ test("Outputs previews a file Octos sent", async ({ page, request }) => {
   await expect(outputs).toContainText("Sent to you");
 });
 
+test("Outputs renders the same CSV as a table on mobile", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, `/workspace/session-panel-csv-${Date.now()}`);
+  let reference: string | null = null;
+  await expect
+    .poll(() => (reference = new URL(page.url()).searchParams.get("s")))
+    .not.toBeNull();
+  const sessionId = (JSON.parse(reference!) as string[])[2]!;
+  expect(
+    (
+      await request.post(
+        `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=large.csv&valid=1`,
+      )
+    ).ok(),
+  ).toBe(true);
+
+  await toggle(page).click();
+  const mobilePanel = page.getByRole("dialog", { name: "Session panel" });
+  await mobilePanel.getByRole("tab", { name: /^Outputs/ }).click();
+  const outputs = mobilePanel.getByRole("tabpanel");
+  await outputs.getByRole("button", { name: /large\.csv/ }).click();
+  await expect(
+    outputs.getByRole("columnheader", { name: "A", exact: true }),
+  ).toBeVisible();
+  await expect(
+    outputs.getByRole("cell", { name: "row-1", exact: true }),
+  ).toBeVisible();
+  await expect(outputs.getByRole("button", { name: "Download" })).toBeVisible();
+  await expect(outputs).toHaveScreenshot("mobile-csv-preview.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: 0.01,
+  });
+});
+
 test("Files loads the new workspace root after switching Sessions", async ({
   page,
 }) => {

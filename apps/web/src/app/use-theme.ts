@@ -41,11 +41,5 @@ export function useTheme() {
     saveThemePreference(theme);
   }, [theme]);
 
-  const cycleTheme = () => {
-    setTheme((current) =>
-      current === "system" ? "dark" : current === "dark" ? "light" : "system",
-    );
-  };
-
-  return { theme, cycleTheme };
+  return { theme, setTheme };
 }

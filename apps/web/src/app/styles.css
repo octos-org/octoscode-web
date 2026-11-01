@@ -330,9 +330,9 @@ label > span {
 }
 
 .conversation-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 20px;
   min-width: 0;
   padding: 0 24px;
@@ -375,8 +375,10 @@ label > span {
 
 .header-actions {
   display: flex;
+  grid-column: 3;
   flex: none;
   align-items: center;
+  justify-self: end;
   gap: var(--dsw-space-2);
 }
 

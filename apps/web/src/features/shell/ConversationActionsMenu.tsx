@@ -8,14 +8,12 @@ import styles from "./ConversationActionsMenu.module.css";
 
 interface ConversationActionsMenuProps {
   copySource?: ConversationCopySource | undefined;
-  onOpenPreferences: () => void;
   triggerClassName: string;
 }
 
 /** Secondary conversation actions leave the header's primary space to Panel. */
 export function ConversationActionsMenu({
   copySource,
-  onOpenPreferences,
   triggerClassName,
 }: ConversationActionsMenuProps) {
   const t = useUiText();
@@ -67,6 +65,7 @@ export function ConversationActionsMenu({
     items[next]?.focus();
   };
 
+  if (!copySource) return null;
   return (
     <div ref={rootRef} className={styles.root} onKeyDown={onKeyDown}>
       <button
@@ -98,17 +97,6 @@ export function ConversationActionsMenu({
               role="menuitem"
             />
           ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.menuItem}
-            onClick={() => {
-              close();
-              onOpenPreferences();
-            }}
-          >
-            {t("Browser preferences")}
-          </button>
         </div>
       ) : null}
     </div>
