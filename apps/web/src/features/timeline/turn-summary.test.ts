@@ -42,8 +42,22 @@ describe("turn summary", () => {
       changedFiles: ["report.md"],
       outputFiles: ["report.md"],
       failedSteps: 1,
+      retriedSteps: 0,
       usage: { input: 12, output: 9 },
     });
+  });
+
+  it("counts a failure a later call of the same tool succeeded at as retried", () => {
+    const summary = summarizeTurn(
+      [
+        tool("write_file", "notes.md", "error", 1000),
+        tool("exec_command", "ls", "error", 2000),
+        tool("write_file", "notes.md", "complete", 3000),
+      ],
+      "turn-1",
+    );
+    expect(summary.retriedSteps).toBe(1);
+    expect(summary.failedSteps).toBe(1);
   });
 
   it("counts distinct long paths before truncating display targets", () => {

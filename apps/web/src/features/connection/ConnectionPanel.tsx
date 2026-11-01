@@ -68,7 +68,6 @@ export function ConnectionPanel({
   const t = useUiText();
   const connected = status === "connected";
   const connecting = status === "connecting";
-  const tokenRef = useRef<HTMLInputElement>(null);
   const endpointRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
@@ -76,13 +75,21 @@ export function ConnectionPanel({
     typeof window === "undefined" ? null : window.location.origin;
   const tokenInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (focusTokenField && !connecting) tokenInputRef.current?.focus();
+    if (focusTokenField && !connecting) {
+      tokenInputRef.current?.focus({ preventScroll: true });
+    }
   }, [focusTokenField, connecting]);
 
   const field = (key: keyof ConnectionDraft, next: string) => {
     if (key === "endpoint") setValidationError(null);
     onChange({ ...value, [key]: next });
   };
+  const errorText = (message: string) =>
+    message.startsWith("Can't reach ")
+      ? t("Can't reach {value0}", {
+          value0: message.slice("Can't reach ".length),
+        })
+      : t(message);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -90,12 +97,12 @@ export function ConnectionPanel({
     const invalid = connectionEndpointError(value.endpoint);
     setValidationError(invalid);
     if (invalid) {
-      endpointRef.current?.focus();
+      endpointRef.current?.focus({ preventScroll: true });
       return;
     }
     if (!value.token.trim()) {
       setValidationError("Auth token is required.");
-      tokenRef.current?.focus();
+      tokenInputRef.current?.focus({ preventScroll: true });
       return;
     }
     onConnect();
@@ -224,21 +231,26 @@ export function ConnectionPanel({
               spellCheck={false}
               inputMode="url"
               autoComplete="url"
-              aria-invalid={validationError ? "true" : undefined}
-              aria-describedby={`connection-origin-help${validationError ? " connection-origin-error" : ""}`}
+              aria-invalid={
+                validationError && validationError !== "Auth token is required."
+                  ? "true"
+                  : undefined
+              }
+              aria-describedby={`connection-origin-help${validationError && validationError !== "Auth token is required." ? " connection-origin-error" : ""}`}
             />
             <small id="connection-origin-help" className={styles.fieldHelp}>
               {t(
                 "Usually the address of this page. Change it to use another server.",
               )}
             </small>
-            {validationError ? (
+            {validationError &&
+            validationError !== "Auth token is required." ? (
               <small
                 id="connection-origin-error"
                 className={styles.validation}
                 role="alert"
               >
-                {validationError}
+                {t(validationError)}
               </small>
             ) : null}
           </div>
@@ -257,7 +269,12 @@ export function ConnectionPanel({
                 autoCapitalize="none"
                 spellCheck={false}
                 disabled={connecting}
-                aria-describedby="connection-token-help"
+                aria-invalid={
+                  validationError === "Auth token is required."
+                    ? "true"
+                    : undefined
+                }
+                aria-describedby={`connection-token-help${validationError === "Auth token is required." ? " connection-token-error" : ""}`}
               />
               <button
                 className={styles.showToken}
@@ -272,6 +289,15 @@ export function ConnectionPanel({
             <small id="connection-token-help" className={styles.fieldHelp}>
               {t("Required only if your server uses authentication.")}
             </small>
+            {validationError === "Auth token is required." ? (
+              <small
+                id="connection-token-error"
+                className={styles.validation}
+                role="alert"
+              >
+                {t(validationError)}
+              </small>
+            ) : null}
           </div>
         </div>
         {error ? (
@@ -279,7 +305,9 @@ export function ConnectionPanel({
             <strong>{t("Could not connect")}</strong>
             {isHandshakeError(error) || handshakeAmbiguous ? (
               <>
-                {isHandshakeError(error) ? null : <span>{error}</span>}
+                {isHandshakeError(error) ? null : (
+                  <span>{errorText(error)}</span>
+                )}
                 <span>
                   {value.token.trim()
                     ? t(
@@ -294,16 +322,18 @@ export function ConnectionPanel({
                   <p>
                     {t(
                       "{value0}. The browser cannot distinguish an unavailable server from a rejected token. If these are correct, check allowed Web origins and WebSocket proxy forwarding.",
-                      { value0: error },
+                      { value0: errorText(error) },
                     )}
                   </p>
                 </details>
               </>
             ) : (
-              <span>{error}</span>
+              <span>{errorText(error)}</span>
             )}
             {failureActions && failureActions.length > 0 ? (
-              <small>{failureActions.join(" · ")}</small>
+              <small>
+                {failureActions.map((action) => t(action)).join(" · ")}
+              </small>
             ) : null}
           </div>
         ) : null}

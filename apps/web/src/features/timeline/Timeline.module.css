@@ -24,8 +24,10 @@
   outline-offset: 3px;
 }
 
-.assistantEntry :global(.markdown-body > :where(p, ul, ol, blockquote)) {
-  max-width: 75ch;
+/* Prose, cards and the turn summary share one column: the answer no longer
+   stops short of the cards above and below it. */
+.assistantEntry :global(.entry-content) {
+  padding-left: 0;
 }
 
 .reasoningBlock,
@@ -303,7 +305,9 @@
 }
 
 .reasoningBlock[open] .chevron,
-.toolBlock[open] .chevron {
+.toolBlock[open] .chevron,
+.stepGroup[open] > summary .chevron,
+.planBlock[open] > summary .chevron {
   transform: rotate(0deg);
 }
 
@@ -377,4 +381,125 @@
     animation: none;
     transition: none;
   }
+}
+
+/* A finished turn's steps, folded as one row. */
+.stepGroup,
+.planBlock {
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: transparent;
+  interpolate-size: allow-keywords;
+}
+
+.stepGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: inherit;
+  cursor: pointer;
+  list-style: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  transition: background 160ms ease;
+}
+
+.stepGroupHeader strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.stepGroupHeader::-webkit-details-marker {
+  display: none;
+}
+
+.stepGroupHeader:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.stepGroupHeader:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+.stepGroupNote {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.stepGroupNote[data-tone="error"] {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.stepGroupBody {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.stepRetry {
+  justify-self: start;
+  min-height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.stepRetry:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.stepRetry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.planItems {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  list-style: none;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.planItems li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.planMark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 4px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.planItems li[data-done] .planMark {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.planBlock:not(:last-child) {
+  margin-bottom: var(--dsw-space-3);
 }

@@ -40,11 +40,11 @@ const panel = (page: Page) =>
   page.getByRole("complementary", { name: "Session panel" });
 
 async function createWorkspace(page: Page, path: string) {
-  await page.getByRole("button", { name: "New session", exact: true }).click();
-  const picker = page.getByRole("dialog");
-  await picker
+  await page
+    .locator("aside")
     .getByRole("button", { name: "Add workspace", exact: true })
     .click();
+  const picker = page.getByRole("dialog");
   const manual = picker.getByRole("button", { name: "Enter path manually" });
   const pathInput = picker.getByLabel("Server workspace path");
   await expect(manual.or(pathInput).first()).toBeVisible();
@@ -357,16 +357,14 @@ test("Automation shows and controls goals, loops, monitors and agents with zero 
   const automation = panel(page).getByRole("tabpanel", {
     name: "Automation",
   });
-  await expect(automation).toContainText(
-    "Monitor probes are not fully sandboxed yet.",
-  );
+  // Engineering status notes are not shown to users (T-0076).
+  await expect(automation).not.toContainText("sandboxed");
 
   await automation
     .getByLabel("Goal objective")
     .fill("Ship the automation panel");
   await automation.getByRole("button", { name: "Set session goal" }).click();
   await expect(automation).toContainText("Ship the automation panel");
-  await expect(automation).toContainText("Goal history and budget accounting");
 
   await automation.getByRole("button", { name: "Create loop" }).click();
   await expect(

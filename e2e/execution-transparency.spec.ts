@@ -19,7 +19,7 @@ async function connect(page: import("@playwright/test").Page): Promise<void> {
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
-test("expands a failed write, summarizes the turn, and marks the sidebar with zero axe violations", async ({
+test("folds a failed write, summarizes the turn, and marks the sidebar with zero axe violations", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
@@ -41,11 +41,18 @@ test("expands a failed write, summarizes the turn, and marks the sidebar with ze
     hasText: "Write file report.md",
   });
   await expect(failed).toBeVisible();
+  // The raw error stays folded until the reader opens the step (T-0076).
+  await expect(failed).not.toHaveAttribute("open");
+  await failed.locator("summary").click();
   await expect(failed).toHaveAttribute("open", "");
   await expect(failed).toContainText("permission denied: read-only workspace");
   await expect(failed).toContainText("write_file");
   const summary = page.getByLabel("Turn summary");
-  await expect(summary).toContainText("⚠ 1 steps failed");
+  // The turn completed, so its summary is not a warning; the unrecovered
+  // step is still named.
+  await expect(summary).toHaveAttribute("data-outcome", "complete");
+  await expect(summary).toContainText("1 steps failed");
+  await expect(summary).not.toContainText("⚠");
   await expect(summary).toContainText("0 files changed");
   await expect(summary).toContainText("12 tokens in · 9 tokens out");
   await expect(summary).toContainText("No output files");

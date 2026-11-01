@@ -1,3 +1,4 @@
+/* Completed and stopped turns stay neutral; only a failed turn is a warning. */
 .summary {
   display: grid;
   gap: var(--dsw-space-2);
@@ -32,6 +33,11 @@
 .heading strong {
   font-size: 12px;
   font-weight: 500;
+}
+
+.retried {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
 }
 
 .failure {

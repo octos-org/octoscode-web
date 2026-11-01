@@ -22,6 +22,13 @@ import {
 } from "./folds.ts";
 import { toolTitle } from "./tool-presentation.ts";
 import { TurnSummary } from "./TurnSummary.tsx";
+import { recoveredFailuresByTurn } from "./turn-summary.ts";
+import {
+  endedTurnIds,
+  summarizeSteps,
+  timelineRenderItems,
+} from "./step-groups.ts";
+import { parseTextPlan, type TextPlan } from "./text-plan.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
 import { permissionDeniedReason } from "../approval/approval-presentation.ts";
 import type { TurnActivity } from "./turn-activity.ts";
@@ -48,6 +55,8 @@ interface TimelineProps {
    */
   folds?: FoldState;
   onToggleFold?: (id: string) => void;
+  /** Explicit open/closed choice for blocks whose default is derived. */
+  onSetFold?: (id: string, open: boolean) => void;
   onExpandAll?: () => void;
   onCollapseAll?: () => void;
   /** Live turn activity; rendered at the transcript bottom while streaming. */
@@ -70,6 +79,7 @@ export const Timeline = memo(function Timeline({
   showThinking = true,
   folds,
   onToggleFold,
+  onSetFold,
   onExpandAll,
   onCollapseAll,
   activity = null,
@@ -99,6 +109,13 @@ export const Timeline = memo(function Timeline({
   const toggleRef = useRef(onToggleFold);
   toggleRef.current = onToggleFold;
   const toggleFold = useCallback((id: string) => toggleRef.current?.(id), []);
+  const setRef = useRef(onSetFold);
+  setRef.current = onSetFold;
+  const setFold = useCallback(
+    (id: string, open: boolean) =>
+      setRef.current ? setRef.current(id, open) : toggleRef.current?.(id),
+    [],
+  );
   // Keep the server-provided projection intact; only bound the initial DOM.
   // Anchoring by identity prevents incoming messages evicting a reader's row.
   const [firstVisibleId, setFirstVisibleId] = useState<string | null>(
@@ -127,6 +144,17 @@ export const Timeline = memo(function Timeline({
       revealAnchor.current = null;
     }
   });
+  const endedTurns = endedTurnIds(entries);
+  const recovered = recoveredFailuresByTurn(entries);
+  const failedTurns = new Set(
+    entries.flatMap((entry) =>
+      entry.kind === "system" &&
+      entry.id.startsWith("terminal:") &&
+      entry.status === "error"
+        ? [entry.id.slice("terminal:".length)]
+        : [],
+    ),
+  );
   if (renderableEntries.length === 0) {
     if (connected && emptyState) return <>{emptyState}</>;
     return (
@@ -204,33 +232,46 @@ export const Timeline = memo(function Timeline({
           })}
         </button>
       ) : null}
-      {visibleEntries
-        .slice(startIndex)
-        .map((entry) =>
-          entry.kind === "system" && entry.id.startsWith("terminal:") ? (
+      {timelineRenderItems(visibleEntries.slice(startIndex), endedTurns).map(
+        (item) =>
+          item.type === "summary" ? (
             <TurnSummary
-              key={entry.id}
-              turnId={entry.id.slice("terminal:".length)}
+              key={item.entry.id}
+              turnId={item.turnId}
               entries={visibleEntries}
+            />
+          ) : item.type === "steps" ? (
+            <StepGroup
+              key={item.id}
+              id={item.id}
+              entries={item.entries}
+              failedTurn={failedTurns.has(item.turnId)}
+              recovered={recovered}
+              folds={folds}
+              onToggleFold={toggleFold}
+              onSetFold={setFold}
+              workspaceFileReadAvailable={workspaceFileReadAvailable}
+              onRetryPermission={onRetryPermission}
+              retryBusy={permissionRetryBusyTurnId === item.turnId}
             />
           ) : (
             <TimelineEntryView
-              key={entry.id}
-              entry={entry}
-              expanded={
-                folds
-                  ? (folds[entry.id] ??
-                    folds[COLLAPSED_ALL] ??
-                    entry.status === "error")
-                  : undefined
-              }
+              key={item.entry.id}
+              entry={item.entry}
+              expanded={entryExpanded(folds, item.entry.id)}
               onToggleFold={toggleFold}
+              onSetFold={setFold}
+              planOpen={folds?.[`plan:${item.entry.id}`]}
+              turnEnded={
+                item.entry.turnId === undefined ||
+                endedTurns.has(item.entry.turnId)
+              }
               workspaceFileReadAvailable={workspaceFileReadAvailable}
               onRetryPermission={onRetryPermission}
-              retryBusy={permissionRetryBusyTurnId === entry.turnId}
+              retryBusy={permissionRetryBusyTurnId === item.entry.turnId}
             />
           ),
-        )}
+      )}
       <TurnActivityIndicator activity={activity} />
     </div>
   );
@@ -245,6 +286,9 @@ const TimelineEntryView = memo(function TimelineEntryView({
   entry,
   expanded,
   onToggleFold,
+  onSetFold,
+  planOpen,
+  turnEnded,
   workspaceFileReadAvailable,
   onRetryPermission,
   retryBusy,
@@ -252,6 +296,9 @@ const TimelineEntryView = memo(function TimelineEntryView({
   entry: TimelineEntry;
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
+  onSetFold: (id: string, open: boolean) => void;
+  planOpen: boolean | undefined;
+  turnEnded: boolean;
   workspaceFileReadAvailable: boolean;
   onRetryPermission?: ((turnId: string) => void) | undefined;
   retryBusy: boolean;
@@ -277,9 +324,24 @@ const TimelineEntryView = memo(function TimelineEntryView({
         />
       );
     default:
-      return <DefaultEntry entry={entry} />;
+      return (
+        <DefaultEntry
+          entry={entry}
+          turnEnded={turnEnded}
+          planOpen={planOpen}
+          onSetFold={onSetFold}
+        />
+      );
   }
 });
+
+/** Folded unless the reader opened it (or chose "Expand all"). */
+function entryExpanded(
+  folds: FoldState | undefined,
+  id: string,
+): boolean | undefined {
+  return folds ? (folds[id] ?? folds[COLLAPSED_ALL] ?? false) : undefined;
+}
 
 interface FoldableBlockProps {
   entry: TimelineEntry;
@@ -300,9 +362,7 @@ function disclosureProps({
   expanded,
   onToggleFold,
 }: FoldableBlockProps) {
-  if (expanded === undefined) {
-    return entry.status === "error" ? { defaultOpen: true } : {};
-  }
+  if (expanded === undefined) return {};
   return {
     open: expanded,
     onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => {
@@ -334,9 +394,9 @@ function ReasoningBlock(props: FoldableBlockProps) {
         <strong>{running ? t("Thinking…") : t("Thought process")}</strong>
         {words > 0 ? (
           <span className={styles.toolStatusLabel}>
-            {seconds === undefined
-              ? countLabel
-              : `${t("{seconds} s", { seconds })} · ${countLabel}`}
+            {seconds
+              ? `${t("{seconds} s", { seconds })} · ${countLabel}`
+              : countLabel}
           </span>
         ) : null}
         <ChevronDownIcon className={styles.chevron} />
@@ -354,9 +414,13 @@ function ReasoningBlock(props: FoldableBlockProps) {
 
 /** Tool details stay available without pushing the response down as output arrives. */
 function ToolBlock(
-  props: FoldableBlockProps & { workspaceFileReadAvailable: boolean },
+  props: FoldableBlockProps & {
+    workspaceFileReadAvailable: boolean;
+    /** Inside a step group, which renders the retry and files itself. */
+    grouped?: boolean;
+  },
 ) {
-  const { entry, onRetryPermission, retryBusy = false } = props;
+  const { entry, onRetryPermission, retryBusy = false, grouped } = props;
   const t = useUiText();
   const running = entry.status === "running";
   const presentation = toolTitle(
@@ -394,7 +458,7 @@ function ToolBlock(
                       ? "Failed"
                       : "Finished"),
               )}
-              {seconds === undefined ? null : ` · ${seconds} s`}
+              {seconds ? ` · ${t("{seconds} s", { seconds })}` : null}
             </span>
           )}
           {entry.status === "complete" ? (
@@ -403,19 +467,6 @@ function ToolBlock(
           <ChevronDownIcon className={styles.chevron} />
         </summary>
         <div className={styles.toolBody}>
-          {entry.turnId &&
-          onRetryPermission &&
-          permissionDeniedReason(entry.status, entry.body) ? (
-            <button
-              type="button"
-              disabled={retryBusy}
-              onClick={() => onRetryPermission(entry.turnId!)}
-            >
-              {retryBusy
-                ? t("Switching to write and retrying…")
-                : t("Switch to write and retry")}
-            </button>
-          ) : null}
           <div className="muted">
             {t("Tool")}: <code>{entry.title}</code>
           </div>
@@ -430,11 +481,179 @@ function ToolBlock(
           )}
         </div>
       </details>
-      {entry.status === "complete" &&
-      entry.artifactPath &&
-      props.workspaceFileReadAvailable ? (
-        <AttachmentList media={[entry.artifactPath]} workspaceFile />
+      {grouped ? null : (
+        <StepFollowUps
+          entries={[entry]}
+          workspaceFileReadAvailable={props.workspaceFileReadAvailable}
+          onRetryPermission={onRetryPermission}
+          retryBusy={retryBusy}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * What a reader must still reach when the step itself is folded: the
+ * permission retry and any file a step wrote.
+ */
+function StepFollowUps({
+  entries,
+  workspaceFileReadAvailable,
+  onRetryPermission,
+  retryBusy,
+}: {
+  entries: readonly TimelineEntry[];
+  workspaceFileReadAvailable: boolean;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy: boolean;
+}) {
+  const t = useUiText();
+  const denied = entries.find(
+    (entry) =>
+      entry.kind === "tool" &&
+      entry.turnId &&
+      permissionDeniedReason(entry.status, entry.body),
+  );
+  const files = entries.flatMap((entry) =>
+    entry.kind === "tool" &&
+    entry.status === "complete" &&
+    entry.artifactPath &&
+    workspaceFileReadAvailable
+      ? [entry.artifactPath]
+      : [],
+  );
+  return (
+    <>
+      {denied && onRetryPermission ? (
+        <button
+          type="button"
+          className={styles.stepRetry}
+          disabled={retryBusy}
+          onClick={() => onRetryPermission(denied.turnId!)}
+        >
+          {retryBusy
+            ? t("Switching to write and retrying…")
+            : t("Switch to write and retry")}
+        </button>
       ) : null}
+      {files.map((path) => (
+        <AttachmentList key={path} media={[path]} workspaceFile />
+      ))}
+    </>
+  );
+}
+
+/** A finished turn's consecutive thinking and tool blocks, folded as one. */
+function StepGroup({
+  id,
+  entries,
+  failedTurn,
+  recovered,
+  folds,
+  onToggleFold,
+  onSetFold,
+  workspaceFileReadAvailable,
+  onRetryPermission,
+  retryBusy,
+}: {
+  id: string;
+  entries: readonly TimelineEntry[];
+  failedTurn: boolean;
+  recovered: ReadonlySet<string>;
+  folds: FoldState | undefined;
+  onToggleFold: (id: string) => void;
+  onSetFold: (id: string, open: boolean) => void;
+  workspaceFileReadAvailable: boolean;
+  onRetryPermission?: ((turnId: string) => void) | undefined;
+  retryBusy: boolean;
+}) {
+  const t = useUiText();
+  const summary = summarizeSteps(entries, recovered);
+  // A block the reader opened before the turn ended keeps its group open, so
+  // ending a turn never hides what someone is reading.
+  const expanded = folds
+    ? (folds[id] ??
+      (folds[COLLAPSED_ALL] === false
+        ? false
+        : entries.some((entry) => folds[entry.id] === true)))
+    : undefined;
+  return (
+    <>
+      <details
+        className={styles.stepGroup}
+        data-step-group={id}
+        {...(expanded === undefined
+          ? {}
+          : {
+              open: expanded,
+              onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => {
+                if (event.currentTarget.open !== expanded)
+                  onSetFold(id, event.currentTarget.open);
+              },
+            })}
+      >
+        <summary className={styles.stepGroupHeader}>
+          <strong>{t("Ran {count} steps", { count: summary.steps })}</strong>
+          {summary.seconds ? (
+            <span className={styles.toolStatusLabel}>
+              {t("{seconds} s", { seconds: summary.seconds })}
+            </span>
+          ) : null}
+          {failedTurn ? (
+            summary.failed + summary.retried ? (
+              <span className={styles.stepGroupNote} data-tone="error">
+                {t("{count} steps failed", {
+                  count: summary.failed + summary.retried,
+                })}
+              </span>
+            ) : null
+          ) : (
+            <>
+              {summary.retried ? (
+                <span className={styles.stepGroupNote}>
+                  {t("Retried automatically {count} times", {
+                    count: summary.retried,
+                  })}
+                </span>
+              ) : null}
+              {summary.failed ? (
+                <span className={styles.stepGroupNote} data-tone="error">
+                  {t("{count} steps failed", { count: summary.failed })}
+                </span>
+              ) : null}
+            </>
+          )}
+          <ChevronDownIcon className={styles.chevron} />
+        </summary>
+        <div className={styles.stepGroupBody}>
+          {entries.map((entry) =>
+            entry.kind === "tool" ? (
+              <ToolBlock
+                key={entry.id}
+                entry={entry}
+                expanded={entryExpanded(folds, entry.id)}
+                onToggleFold={onToggleFold}
+                workspaceFileReadAvailable={workspaceFileReadAvailable}
+                grouped
+              />
+            ) : (
+              <ReasoningBlock
+                key={entry.id}
+                entry={entry}
+                expanded={entryExpanded(folds, entry.id)}
+                onToggleFold={onToggleFold}
+              />
+            ),
+          )}
+        </div>
+      </details>
+      <StepFollowUps
+        entries={entries}
+        workspaceFileReadAvailable={workspaceFileReadAvailable}
+        onRetryPermission={onRetryPermission}
+        retryBusy={retryBusy}
+      />
     </>
   );
 }
@@ -465,16 +684,22 @@ function ActivityGlyph({
   );
 }
 
-const SYSTEM_NOTICE_TITLES = new Set([
-  "Turn complete",
-  "Turn stopped",
-  "Turn failed",
-  "Turn rate limited",
-]);
-
 /** Assistant and user messages: full markdown rendering. */
-function DefaultEntry({ entry }: { entry: TimelineEntry }) {
+function DefaultEntry({
+  entry,
+  turnEnded,
+  planOpen,
+  onSetFold,
+}: {
+  entry: TimelineEntry;
+  turnEnded: boolean;
+  planOpen: boolean | undefined;
+  onSetFold: (id: string, open: boolean) => void;
+}) {
   const t = useUiText();
+  const running = entry.status === "running";
+  const plan = entry.kind === "assistant" ? parseTextPlan(entry.body) : null;
+  const markdown = plan ? streamingSafe(plan.rest, running) : entry.body;
   return (
     <article
       data-timeline-entry={entry.id}
@@ -489,31 +714,119 @@ function DefaultEntry({ entry }: { entry: TimelineEntry }) {
       <div className="entry-content">
         {entry.kind !== "assistant" ? (
           <div className="entry-heading">
-            {/* System rows carry the client's own notices; translate those. */}
+            {/* System rows are the client's own notices; translate them.
+                t() returns anything it does not know unchanged. */}
             <strong>
-              {entry.kind === "system" && SYSTEM_NOTICE_TITLES.has(entry.title)
-                ? t(entry.title)
-                : entry.title}
+              {entry.kind === "system" ? t(entry.title) : entry.title}
             </strong>
             {entry.status === "running" ? (
               <span className="running-label">{t("running")}</span>
             ) : null}
           </div>
         ) : null}
-        {entry.body ? (
+        {plan ? (
+          <PlanBlock
+            id={`plan:${entry.id}`}
+            plan={plan}
+            ended={turnEnded}
+            open={planOpen}
+            onSetFold={onSetFold}
+          />
+        ) : null}
+        {markdown ? (
           entry.kind === "assistant" ? (
-            <Suspense fallback={<pre>{entry.body}</pre>}>
-              <MarkdownBody
-                text={entry.body}
-                streaming={entry.status === "running"}
-              />
+            <Suspense fallback={<pre>{markdown}</pre>}>
+              <MarkdownBody text={markdown} streaming={running} />
             </Suspense>
           ) : (
-            <pre>{entry.body}</pre>
+            <pre>
+              {entry.kind === "system" ? noticeText(t, markdown) : markdown}
+            </pre>
           )
         ) : null}
         {entry.media?.length ? <AttachmentList media={entry.media} /> : null}
       </div>
     </article>
+  );
+}
+
+/**
+ * Client notices whose body ends with the user's own text: translate the
+ * fixed lead-in and keep what follows as typed.
+ */
+const NOTICE_PREFIXES = [
+  "The turn finished without confirming delivery. Check the final response before deciding whether to send this text again; it was not resent automatically: ",
+  "The request may have been consumed or started a new turn. It will not be resent automatically. Use the Retry queued delivery control above — or reconnect from Settings to restore queued prompt delivery. Submitted text: ",
+  "Transport changed before consumption could be confirmed. This text will not be resent automatically: ",
+];
+
+function noticeText(t: ReturnType<typeof useUiText>, body: string): string {
+  const prefix = NOTICE_PREFIXES.find((lead) => body.startsWith(lead));
+  return prefix ? t(prefix) + body.slice(prefix.length) : t(body);
+}
+
+/** While streaming, a half-written checklist line is not shown as text. */
+function streamingSafe(rest: string, running: boolean): string {
+  if (!running) return rest;
+  return rest.replace(/(^|\n)\s*[-*]\s*(\[[ xX]?\]?\s*)?$/, "").trim();
+}
+
+/**
+ * The model's opening checklist, read as the turn's plan. Open while the turn
+ * runs; folded once it ends, unless the reader opens it again.
+ */
+function PlanBlock({
+  id,
+  plan,
+  ended,
+  open,
+  onSetFold,
+}: {
+  id: string;
+  plan: TextPlan;
+  ended: boolean;
+  open: boolean | undefined;
+  onSetFold: (id: string, open: boolean) => void;
+}) {
+  const t = useUiText();
+  const expanded = open ?? !ended;
+  const done = plan.items.filter((item) => item.done).length;
+  return (
+    <details
+      className={styles.planBlock}
+      data-plan-block={id}
+      open={expanded}
+      onToggle={(event) => {
+        if (event.currentTarget.open !== expanded)
+          onSetFold(id, event.currentTarget.open);
+      }}
+    >
+      <summary className={styles.stepGroupHeader}>
+        <strong>{t("Plan")}</strong>
+        <span className={styles.toolStatusLabel}>
+          {ended && done === 0
+            ? t("{count} plan items", { count: plan.items.length })
+            : t("{done} of {total} done", { done, total: plan.items.length })}
+        </span>
+        {ended ? (
+          <span className={styles.toolStatusLabel}>{t("Turn ended")}</span>
+        ) : null}
+        <ChevronDownIcon className={styles.chevron} />
+      </summary>
+      <ol className={styles.planItems}>
+        {plan.items.map((item, index) => (
+          <li key={index} data-done={item.done || undefined}>
+            <span className={styles.planMark} aria-hidden="true">
+              {item.done ? <CheckIcon size={12} /> : null}
+            </span>
+            <span>{item.title}</span>
+            <span className="sr-only">
+              {", "}
+              {t(item.done ? "Done" : "Pending")}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }

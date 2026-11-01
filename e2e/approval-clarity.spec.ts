@@ -31,7 +31,9 @@ async function prepareDeniedWrite(page: Page) {
     .filter({ hasText: /Write|Read/ })
     .first()
     .click();
-  await page.getByRole("menuitemradio", { name: /^Read/ }).click();
+  await page
+    .getByRole("menuitemradio", { name: /^Read · Network blocked/ })
+    .click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Session settings" }),
@@ -135,11 +137,11 @@ test("a late permission retry never starts in or clears another Session", async 
   armed = true;
   await retry.click();
   await expect.poll(() => Boolean(held)).toBe(true);
-  await page.getByRole("button", { name: "New session", exact: true }).click();
-  const picker = page.getByRole("dialog");
-  await picker
+  await page
+    .locator("aside")
     .getByRole("button", { name: "Add workspace", exact: true })
     .click();
+  const picker = page.getByRole("dialog");
   await picker
     .getByLabel("Server workspace path")
     .fill("/workspace/permission-retry-other");
