@@ -23,6 +23,8 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
     "Use the {name} skill: ": "使用「{name}」技能：",
     Images: "图片",
     "Attach images": "附加图片",
+    "Add skills or images": "添加技能或图片",
+    Add: "添加",
     "Only images can be attached for now (PNG, JPEG, GIF, WebP).":
       "目前只能附加图片（PNG、JPEG、GIF、WebP）。",
     "{count} tokens": "{count} token",

@@ -67,10 +67,32 @@ describe("session usage", () => {
     expect(
       sessionUsage("s1", null, {
         sessionId: "s1",
+        inputTokens: 12,
         sessionCost: 2,
         currency: "CNY",
       }),
-    ).toEqual({ inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
+    ).toEqual({ inputTokens: 12, outputTokens: 0, cachedTokens: 0 });
+  });
+
+  it("shows nothing until the session has used something", () => {
+    expect(
+      sessionUsage(
+        "s1",
+        { session_id: "s1", mcp_servers: [], usage: {} },
+        null,
+      ),
+    ).toBeNull();
+    expect(
+      sessionUsage("s1", null, {
+        sessionId: "s1",
+        inputTokens: 0,
+        outputTokens: 0,
+        sessionCost: 0,
+      }),
+    ).toBeNull();
+    expect(
+      sessionUsage("s1", null, { sessionId: "s1", outputTokens: 1 }),
+    ).toEqual({ inputTokens: 0, outputTokens: 1, cachedTokens: 0 });
   });
 
   it("keeps small costs readable", () => {

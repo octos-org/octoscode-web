@@ -67,6 +67,14 @@
   outline-offset: 2px;
 }
 
+/* 交-12: a finger-sized hit area; the margin keeps the bar's height. */
+@media (pointer: coarse) {
+  .timelineFoldsButton {
+    min-height: var(--dsw-control-h-lg);
+    margin: -12px 0;
+  }
+}
+
 /* The TUI's galaxy-swirl spinner, as a CSS animation. */
 .thinkingSpinner {
   display: inline-block;

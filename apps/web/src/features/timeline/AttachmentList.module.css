@@ -94,6 +94,12 @@
   opacity: 0.6;
 }
 
+@media (pointer: coarse) {
+  .download {
+    min-height: var(--dsw-control-h-lg);
+  }
+}
+
 .error {
   margin: 0;
   color: var(--dsw-alias-state-error-text);

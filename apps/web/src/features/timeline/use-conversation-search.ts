@@ -171,7 +171,15 @@ export function useConversationSearch(
       if (range === null) return;
       const element =
         range.startContainer.parentElement ?? (range.startContainer as Element);
-      element.scrollIntoView({ block: "center", behavior: "smooth" });
+      // 反-8: the CSS reduced-motion rule cannot reach a scripted smooth
+      // scroll, so ask the media query directly.
+      const reduce = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      element.scrollIntoView({
+        block: "center",
+        behavior: reduce ? "auto" : "smooth",
+      });
     });
   }, []);
 

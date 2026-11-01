@@ -173,8 +173,12 @@
 }
 
 .md-code-banner button {
+  /* 交-12: padding widens the hit area to 24px (44px on touch); the
+     negative margin keeps the banner's height and the label's place. */
+  margin: -3px -6px;
   border: 0;
-  padding: 0;
+  padding: 3px 6px;
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -187,7 +191,14 @@
 
 .md-code-banner button:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: 3px;
+  outline-offset: 0;
+}
+
+@media (pointer: coarse) {
+  .md-code-banner button {
+    margin: -13px -13px -13px 0;
+    padding: 13px;
+  }
 }
 
 .md-copy-error {

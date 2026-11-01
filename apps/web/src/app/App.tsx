@@ -11,6 +11,7 @@ import {
 } from "../features/product-controls/SessionControlBar.tsx";
 import {
   AttachChip,
+  ComposerAddMenu,
   ComposerSettingsRow,
   FolderChip,
   ModelChip,
@@ -2274,6 +2275,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
 
   const activeTurnId = conversation.queue.active?.turnId ?? null;
+  // 美-9: the steering note only matters mid-turn with a draft; the
+  // inconclusive latch carries an action, so it stays up on its own.
+  const steerDraft = Boolean(activeTurnId && draft.trim());
   const turnStarting = Boolean(
     activeTurnId && conversation.dispatchingTurnId === activeTurnId,
   );
@@ -4664,19 +4668,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                       : {})}
                   >
-                    {conversation.steeringEnabled ? (
+                    {conversation.steeringEnabled &&
+                    (steerDraft || conversation.steerUnknown) ? (
                       <p className="field-note" role="status">
-                        {session.capabilities &&
-                        supportsMethod(session.capabilities, "turn/steer") &&
-                        session.capabilities.supported_features?.includes(
-                          CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
-                        )
-                          ? t(
-                              "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
-                            )
-                          : t(
-                              "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
-                            )}
+                        {!steerDraft
+                          ? null
+                          : session.capabilities &&
+                              supportsMethod(
+                                session.capabilities,
+                                "turn/steer",
+                              ) &&
+                              session.capabilities.supported_features?.includes(
+                                CORE_UI_FEATURES.TURN_STEER_DROPPED_V1,
+                              )
+                            ? t(
+                                "Steering enabled for this Session. Eligible mid-turn text is sent to the active turn; other inputs remain queued.",
+                              )
+                            : t(
+                                "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.",
+                              )}
                         {conversation.steerUnknown ? (
                           <>
                             {" "}
@@ -4844,6 +4854,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             <FolderChip
                               name={workspaceName(activeWorkspacePath)}
                               path={activeWorkspacePath}
+                              iconOnly={compact}
                               disabled={
                                 navigationBlocked ||
                                 !codingCapabilities.sessionCreationAvailable
@@ -4858,7 +4869,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {permissionControl ? (
                               <PermissionControl {...permissionControl} />
                             ) : null}
-                            {skillsCapabilities ? (
+                            {!compact && skillsCapabilities ? (
                               <SkillsChip
                                 load={loadSkills}
                                 onUse={askForSkill}
@@ -4867,16 +4878,40 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 }
                               />
                             ) : null}
-                            {imagesAvailable ? (
+                            {!compact && imagesAvailable ? (
                               <AttachChip onOpen={openImages} />
                             ) : null}
                           </ComposerSettingsRow>
                         </SurfaceBoundary>
                       ) : null}
                       <div className="composer-actions">
+                        {/* 美-9: on phones "+" opens the row the way chat
+                            apps do, bottom left, and Skills and Images fold
+                            into it. */}
+                        {compact &&
+                        session.opened &&
+                        (skillsCapabilities || imagesAvailable) ? (
+                          <div className="composer-add">
+                            <ComposerAddMenu
+                              skills={
+                                skillsCapabilities
+                                  ? {
+                                      load: loadSkills,
+                                      onUse: askForSkill,
+                                      onManage: () =>
+                                        setProfileExtensionsMode("skills"),
+                                    }
+                                  : null
+                              }
+                              onAttachImages={
+                                imagesAvailable ? openImages : null
+                              }
+                            />
+                          </div>
+                        ) : null}
                         {session.opened ? (
                           <SessionStatusStrip
-                            stateOnly
+                            compact
                             model={runtimeModelLabel}
                             permissionMode={permissionModeLabel}
                             state={sessionStripState}
@@ -4905,6 +4940,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         tabLock.state.kind !== "held-elsewhere" ? (
                           <button
                             type="button"
+                            className="button button-sm"
                             title={t(
                               "Interrupt the current response and send pending input",
                             )}
@@ -4920,6 +4956,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         {activeTurnId && draft.trim() && !readOnlyPeer ? (
                           <button
                             type="button"
+                            className="button button-sm"
                             disabled={
                               !session.connected ||
                               profileMutationBusy ||

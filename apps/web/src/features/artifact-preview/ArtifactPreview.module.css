@@ -76,6 +76,13 @@
   opacity: 0.55;
 }
 
+@media (pointer: coarse) {
+  .actions button,
+  .error button {
+    min-height: var(--dsw-control-h-lg);
+  }
+}
+
 .body {
   flex: 1;
   min-width: 0;
