@@ -21,10 +21,7 @@ export function parseSessionHydrateResult(
 
   const messages = parseOptionalArray(value.messages, parseHydratedMessage);
   const turns = parseOptionalArray(value.turns, parseHydratedTurn);
-  const fileMutations = parseOptionalArray(
-    value.file_mutations,
-    parseHydratedFileMutation,
-  );
+  const fileMutations = parseHydratedFileMutations(value.file_mutations);
   const replayedEnvelopes = parseOptionalArray(
     value.replayed_envelopes,
     (entry) => parseHydratedEnvelope(entry, sessionId),
@@ -95,6 +92,19 @@ export function parseSessionHydrateResult(
       ? {}
       : { projection_thread_sequences: threadSequences }),
   };
+}
+
+/**
+ * Paths are whatever a tool wrote, and retained history keeps replaying them:
+ * one this build can't read drops that entry, as on the live path, rather than
+ * making the Session impossible to open.
+ */
+function parseHydratedFileMutations(
+  value: unknown,
+): HydratedFileMutation[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  return value.flatMap((entry) => parseHydratedFileMutation(entry) ?? []);
 }
 
 function parseHydratedFileMutation(

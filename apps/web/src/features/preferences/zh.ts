@@ -670,6 +670,9 @@ const catalog: Readonly<Record<string, string>> = {
     "此服务器不支持查看 Git 未提交改动。",
   "No session change preview yet. You can also inspect uncommitted Git changes.":
     "暂无会话改动预览，也可以查看 Git 未提交改动。",
+  "No session change preview yet.": "暂无会话改动预览。",
+  "No session change preview is available. Check the files in your workspace.":
+    "暂无会话改动预览，可查看工作区中的文件。",
   "No session change preview is available. Select a changed file above, or check the files in your workspace.":
     "暂无会话改动预览。可选择上方的改动文件，或查看工作区中的文件。",
   "Review changes": "审查更改",

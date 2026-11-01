@@ -202,7 +202,12 @@ export function ChangesView({
               !preview && state.scope === "turn"
                 ? state.workspaceAvailable
                   ? "No session change preview yet. You can also inspect uncommitted Git changes."
-                  : "No session change preview is available. Select a changed file above, or check the files in your workspace."
+                  : !changes.length
+                    ? "No session change preview yet."
+                    : state.available &&
+                        changes.some((change) => change.previewId)
+                      ? "No session change preview is available. Select a changed file above, or check the files in your workspace."
+                      : "No session change preview is available. Check the files in your workspace."
                 : "The preview is ready, but it contains no changed files.",
             )}
           </div>

@@ -38,17 +38,43 @@ describe("session hydrate contract", () => {
       },
       { path: "future.js", operation: "modify" },
     ]);
-    for (const file_mutations of [
-      null,
-      {},
-      [{ path: "" }],
-      [{ path: "x".repeat(4097) }],
-      [{ path: "bad\npath" }],
-    ]) {
+    for (const file_mutations of [null, {}, "sum.js"]) {
       expect(
         parseSessionHydrateResult({ ...snapshot, file_mutations }),
       ).toBeNull();
     }
+  });
+
+  it("drops only the file mutation entries it cannot read", () => {
+    const snapshot = {
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 12 },
+    };
+    expect(
+      parseSessionHydrateResult({
+        ...snapshot,
+        file_mutations: [
+          { path: "first.js", operation: "modify" },
+          { path: "" },
+          { path: "x".repeat(4097) },
+          { path: "bad\npath" },
+          { path: "tab\tname.md", operation: "create" },
+          { operation: "modify" },
+          42,
+          null,
+          { path: "last.js", operation: "create" },
+        ],
+      })?.file_mutations,
+    ).toEqual([
+      { path: "first.js", operation: "modify" },
+      { path: "last.js", operation: "create" },
+    ]);
+    expect(
+      parseSessionHydrateResult({
+        ...snapshot,
+        file_mutations: [{ path: "bad\tpath" }],
+      })?.file_mutations,
+    ).toEqual([]);
   });
 
   it("parses authoritative messages and injects session scope into replay envelopes", () => {
