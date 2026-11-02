@@ -1044,6 +1044,12 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     record: SessionRecord<Client>,
     event: ActiveSessionRuntimeEvent<Client>,
   ): void {
+    if (event.type === "session-error") {
+      // The retained record did not change; only its restored authority/error
+      // did. Re-publish without replaying a hydrate or resuming the queue.
+      this.#recordChanged(record);
+      return;
+    }
     if (event.type === "session-hydrate") {
       if (event.hydrated.file_mutations !== undefined) {
         record.changes = restoreSessionChanges(
@@ -1444,15 +1450,15 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
         profileId: record.scope.profileId,
         cwd: record.scope.workspaceRoot,
       };
+      const isCurrent = () =>
+        !signal.aborted &&
+        this.#recoveryEpoch === recoveryEpoch &&
+        this.#options.authorityEpoch() === authorityEpoch &&
+        record.scope.authorityEpoch === authorityEpoch &&
+        this.#options.pooledClient() === pooled &&
+        pooled.status === "connected" &&
+        this.get(record.scope) === record;
       try {
-        const isCurrent = () =>
-          !signal.aborted &&
-          this.#recoveryEpoch === recoveryEpoch &&
-          this.#options.authorityEpoch() === authorityEpoch &&
-          record.scope.authorityEpoch === authorityEpoch &&
-          this.#options.pooledClient() === pooled &&
-          pooled.status === "connected" &&
-          this.get(record.scope) === record;
         if (!isCurrent()) throw new Error("Session recovery was superseded");
         // Resume replay from the record's durable cursor, never from scratch.
         const resumeCursor = this.#options.cursorFor(record.scope);
@@ -1517,6 +1523,10 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
           hydrated: candidate.hydrated,
         });
       } catch (reason) {
+        // A failed candidate never replaces the retained record. Restore its
+        // previous binding so the selected timeline, Changes and composer stay
+        // attached to the same Session while the error is surfaced for retry.
+        if (isCurrent()) record.runtime.restoreSuspendedSession(reason, pooled);
         results.push({
           sessionId: record.scope.sessionId,
           state: "failed",

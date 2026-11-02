@@ -305,6 +305,12 @@ export type ActiveSessionRuntimeEvent<
       reason: ActiveSessionHydrateReason;
       authority: ActiveSessionAuthority<Client>;
     }
+  | {
+      type: "session-error";
+      reason: "recovery";
+      authority: ActiveSessionAuthority<Client>;
+      error: string;
+    }
   | { type: "session-cleared"; reason: "select" | "resume" | "disconnect" };
 
 export interface ActiveSessionRuntimeOptions<
@@ -421,6 +427,7 @@ export class ActiveSessionRuntime<
 
   #generation = 0;
   #authority: ActiveSessionAuthority<Client> | null = null;
+  #suspendedAuthority: ActiveSessionAuthority<Client> | null = null;
   #binding: ClientBinding | null = null;
   #target: RuntimeTarget | null = null;
   #retryEnabled = false;
@@ -781,6 +788,7 @@ export class ActiveSessionRuntime<
     // a start/interrupt RPC captured against the OLD authority cannot dispatch
     // while the record is detached. The Session's server-side work continues;
     // this client simply stops being an authority until resume.
+    if (this.#authority) this.#suspendedAuthority = this.#authority;
     this.#authority = null;
     // Freeze dispatch: the record is detached and unhealthy until resume.
     this.#phase = "disconnected";
@@ -804,11 +812,63 @@ export class ActiveSessionRuntime<
     }
     // After suspendTransport the authority is null; this is a re-install on the
     // shared pooled socket (never a new transport). authorizeCommit still gates.
-    return this.#adoptFirst(
+    const resumed = this.#adoptFirst(
       options.config,
       options.candidate,
       options.authorizeCommit,
     );
+    this.#suspendedAuthority = null;
+    return resumed;
+  }
+
+  /**
+   * A reconnect hydrate can fail before a candidate exists. Restore only the
+   * previously confirmed binding so the retained record keeps its identity and
+   * presentation state; do not replay a stale hydrate or emit a new selection.
+   */
+  restoreSuspendedSession(reason: unknown, client: Client): void {
+    if (!this.#managed) {
+      throw new Error(
+        "restoreSuspendedSession requires managed-transport mode",
+      );
+    }
+    const previous = this.#suspendedAuthority;
+    if (this.#authority || !previous?.opened) return;
+    const message = errorMessage(reason);
+    const fatal =
+      reason instanceof HydrateSessionMismatchError ||
+      (this.#options.isFatalSessionError?.(reason) ?? false) ||
+      message.startsWith("session/open returned ");
+    if (fatal) return;
+    const authority = this.#createAuthority(client, previous.config, {
+      opened: previous.opened,
+      capabilities: previous.capabilities,
+    });
+    const binding = this.#bind(authority);
+    this.#suspendedAuthority = null;
+    this.#authority = authority;
+    this.#binding = binding;
+    binding.active = true;
+    this.#target = { kind: "session", config: authority.config };
+    this.#retryEnabled = false;
+    this.#opened = previous.opened;
+    this.#sessionCapabilities = previous.capabilities;
+    this.#identityValidated = true;
+    this.#recovering = false;
+    this.#recoveryBuffer = [];
+    // Keep the previous cursor/healthy projection: replacing it with a recovery
+    // banner would hide the retained composer. The workspace recovery alert
+    // carries the failed hydrate and the next retry still uses this cursor.
+    this.#phase = "error";
+    this.#error = message;
+    this.#status = authority.client.status;
+    this.#publish();
+    this.#emit({
+      type: "session-error",
+      reason: "recovery",
+      authority,
+      error: message,
+    });
   }
 
   disconnect(): void {
@@ -831,6 +891,7 @@ export class ActiveSessionRuntime<
     this.#phase = "disconnected";
     this.#status = "disconnected";
     this.#error = null;
+    this.#suspendedAuthority = null;
     this.#disposeBinding(previousBinding);
     if (!this.#managed) {
       try {
