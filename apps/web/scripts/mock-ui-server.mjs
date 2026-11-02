@@ -1048,6 +1048,14 @@ function peerSessionIdForSlug(slug) {
     if (peer.slug === slug && !peer.closed) return sessionId;
   return null;
 }
+// Core `ApprovalTypedDetails` with `kind: "sandbox_escalation"`.
+const SANDBOX_ESCALATION_DETAILS = {
+  kind: "sandbox_escalation",
+  sandbox_escalation: {
+    requested_permissions: ["network"],
+    justification: "Fetch a dependency",
+  },
+};
 function peerApprovalId(slug) {
   return `peer-approval-${slug}`;
 }
@@ -1074,6 +1082,18 @@ function emitPeerActivityFrame(socket, kind, slug) {
       body: "A staged peer wants to run the repository checks.",
       approval_kind: "command",
       risk: "medium",
+    });
+  else if (kind === "approval-escalation")
+    send("approval/requested", {
+      session_id: peerSessionId,
+      approval_id: peerApprovalId(slug),
+      turn_id: randomUUID(),
+      tool_name: "shell",
+      title: "Peer asks to leave the sandbox",
+      body: "A staged peer wants more access than the sandbox grants.",
+      approval_kind: "sandbox_escalation",
+      risk: "high",
+      typed_details: SANDBOX_ESCALATION_DETAILS,
     });
   else if (kind === "resolve")
     send("approval/decided", {
@@ -1939,7 +1959,7 @@ const http = createServer(async (request, response) => {
       );
     } else if (url.pathname === "/__test__/peer-control/peer-activity") {
       // Drive a DISPATCHED peer's own Session lifecycle (turn | approval |
-      // resolve | complete). The root-composer trigger (PEER_ACTIVITY_TRIGGER)
+      // approval-escalation | resolve | complete). The root-composer trigger (PEER_ACTIVITY_TRIGGER)
       // cannot reach a peer-control workspace: Start's acquire makes the
       // binding external-held, and `turn/start` is then refused with
       // ExternalMasterHeld — so this is the ONLY way to observe an adopted row
@@ -1952,7 +1972,13 @@ const http = createServer(async (request, response) => {
           owner = client;
       if (
         owner === null ||
-        !["turn", "approval", "resolve", "complete"].includes(kind) ||
+        ![
+          "turn",
+          "approval",
+          "approval-escalation",
+          "resolve",
+          "complete",
+        ].includes(kind) ||
         !emitPeerActivityFrame(owner, kind, slug)
       ) {
         response.writeHead(409).end("No staged peer for this fixture Session");
@@ -4397,7 +4423,14 @@ sockets.on("connection", (socket, request) => {
           !parkedInteraction
             ? [approvalRequest(sessionId, heldForSession.turnId)]
             : parkedInteraction?.kind === "approval"
-              ? [approvalRequest(sessionId, parkedInteraction.turnId)]
+              ? [
+                  parkedInteraction.escalation
+                    ? sandboxEscalationRequest(
+                        sessionId,
+                        parkedInteraction.turnId,
+                      )
+                    : approvalRequest(sessionId, parkedInteraction.turnId),
+                ]
               : [],
         pending_questions:
           parkedInteraction?.kind === "question"
@@ -5873,6 +5906,24 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       nextCursor,
     };
   }
+  if (text === "Request sandbox escalation fixture") {
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "approval/requested",
+        params: sandboxEscalationRequest(sessionId, turnId),
+      }),
+    );
+    return {
+      kind: "approval",
+      escalation: true,
+      id: `approval-${turnId}`,
+      sessionId,
+      threadId,
+      turnId,
+      nextCursor,
+    };
+  }
   if (
     text === "Topic scope approval fixture" ||
     text === "Topic scope question fixture"
@@ -6158,6 +6209,20 @@ function approvalRequest(sessionId, turnId) {
     typed_details: {
       command: { command_line: "pnpm check" },
     },
+  };
+}
+
+function sandboxEscalationRequest(sessionId, turnId) {
+  return {
+    session_id: sessionId,
+    approval_id: `approval-${turnId}`,
+    turn_id: turnId,
+    tool_name: "shell",
+    title: "Leave the sandbox?",
+    body: "The agent wants more access than the sandbox grants.",
+    approval_kind: "sandbox_escalation",
+    risk: "high",
+    typed_details: SANDBOX_ESCALATION_DETAILS,
   };
 }
 

@@ -180,6 +180,12 @@ explicit. Existing confirmed sidebar rows bypass launch resolution and open
 their exact server identity and Profile. The Web client never aliases or
 overwrites Octoscode TUI's `<profile>:local:tui#coding` conversation.
 
+A launch whose socket closes keeps its error after the automatic reconnect,
+because the reconnect does not retry it. Core closes with 1008 `auth_expired`
+when a launch asks for a Profile outside the authenticated identity. The token
+is still valid in that case, so the client reports a Profile permission failure
+and keeps the token; a token that is really bad fails the reconnect handshake.
+
 This profile-bearing Web id is a compatibility requirement, not proof that Core
 has one unified Session resolver. Current Core can accept a raw id with an
 explicit Profile during `session/open` and then route hydrate/status elsewhere;

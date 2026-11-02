@@ -39,6 +39,7 @@ describe("SessionStatusStrip (§4.1)", () => {
     ["external-held", "Another app is using this session"],
     ["busy-elsewhere", "Another client is working in this session"],
     ["reconnecting", "Reconnecting"],
+    ["retry-needed", "Retry needed"],
   ] as const)("maps %s to its task word", (kind, words) => {
     const html = renderToStaticMarkup(
       <SessionStatusStrip
@@ -108,6 +109,7 @@ describe("SessionStatusStrip (§4.1)", () => {
       [{ kind: "waiting-approval" }, "Waiting for your approval"],
       [{ kind: "waiting-answer" }, "Waiting for your answer"],
       [{ kind: "reconnecting" }, "Reconnecting"],
+      [{ kind: "retry-needed" }, "Retry needed"],
       [{ kind: "external-held" }, "Another app is using this session"],
       [{ kind: "peers-running", count: 2 }, "Peers running (2)"],
     ] as const)("shows words when %o needs the user", (state, words) => {

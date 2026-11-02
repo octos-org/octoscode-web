@@ -45,7 +45,7 @@ test("keeps the panel switch primary and moves secondary header actions into an 
   ).toBeVisible();
   await expect(
     menu.getByRole("menuitem", { name: "Browser preferences", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   expect(
     (
       await new AxeBuilder({ page })
@@ -61,10 +61,7 @@ test("keeps the panel switch primary and moves secondary header actions into an 
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(more).toBeFocused();
-  await more.click();
-  await page
-    .getByRole("menuitem", { name: "Browser preferences", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Browser preferences", exact: true }),
   ).toBeVisible();

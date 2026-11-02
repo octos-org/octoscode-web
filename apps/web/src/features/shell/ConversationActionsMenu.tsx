@@ -8,7 +8,6 @@ import styles from "./ConversationActionsMenu.module.css";
 
 interface ConversationActionsMenuProps {
   copySource?: ConversationCopySource | undefined;
-  onOpenPreferences: () => void;
   /** Offered on phones: switch to the remote-control overview. */
   onOpenRemote?: (() => void) | undefined;
   triggerClassName: string;
@@ -17,7 +16,6 @@ interface ConversationActionsMenuProps {
 /** Secondary conversation actions leave the header's primary space to Panel. */
 export function ConversationActionsMenu({
   copySource,
-  onOpenPreferences,
   onOpenRemote,
   triggerClassName,
 }: ConversationActionsMenuProps) {
@@ -70,6 +68,7 @@ export function ConversationActionsMenu({
     items[next]?.focus();
   };
 
+  if (!copySource && !onOpenRemote) return null;
   return (
     <div ref={rootRef} className={styles.root} onKeyDown={onKeyDown}>
       <button
@@ -114,17 +113,6 @@ export function ConversationActionsMenu({
               {t("Remote control")}
             </button>
           ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.menuItem}
-            onClick={() => {
-              close();
-              onOpenPreferences();
-            }}
-          >
-            {t("Browser preferences")}
-          </button>
         </div>
       ) : null}
     </div>

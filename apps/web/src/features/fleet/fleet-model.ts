@@ -95,6 +95,8 @@ export interface FleetRosterPeer {
   readonly tokens: number;
   /** Whether the server advertised the control methods the actions need. */
   readonly controlSupported: boolean;
+  /** Phone remote control: its pending sandbox escalation can only be denied. */
+  readonly approvalDenyOnly?: boolean;
 }
 
 /**

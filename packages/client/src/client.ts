@@ -189,6 +189,23 @@ export class OctosUiRequestTimeoutError extends Error {
   }
 }
 
+/**
+ * The socket closed under a handshake or open connection. Carries the close
+ * frame so a caller can tell a policy close (1008) from a dropped connection;
+ * it says nothing about whether the token is still valid.
+ */
+export class OctosUiConnectionClosedError extends Error {
+  readonly code: number | undefined;
+  readonly closeReason: string | undefined;
+
+  constructor(close: { code?: number; reason?: string }) {
+    super("Octos UI Protocol connection closed");
+    this.name = "OctosUiConnectionClosedError";
+    this.code = close.code;
+    this.closeReason = close.reason;
+  }
+}
+
 export class OctosUiClient {
   private readonly options: Required<
     Pick<OctosUiClientOptions, "requestTimeoutMs">
@@ -440,9 +457,9 @@ export class OctosUiClient {
           reject(error);
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         clearTimeout(timeout);
-        const error = new Error("Octos UI Protocol connection closed");
+        const error = new OctosUiConnectionClosedError(event);
         // disconnect() may already have started another connection on this
         // client. The old close still rejects its own pending connect, but
         // cannot reject RPCs or change state on the replacement transport.

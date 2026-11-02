@@ -217,6 +217,9 @@ const catalog: Readonly<Record<string, string>> = {
   "check the address": "检查服务器地址",
   "Could not open the Octos UI Protocol connection":
     "无法打开 Octos UI 协议连接",
+  "Octos UI Protocol connection closed": "Octos UI 协议连接已关闭",
+  "This account can't open the Profile for this folder. Choose another folder, or ask the server admin for access and try again.":
+    "此账号无权打开这个文件夹对应的配置档案。请换一个文件夹，或请服务器管理员开通权限后重试。",
   "Could not delete this provider. The configuration was kept; try again.":
     "无法删除此提供商。配置已保留，请重试。",
   "Could not load autonomy controls. Close and try again.":
@@ -972,6 +975,14 @@ const catalog: Readonly<Record<string, string>> = {
   "— closed": "— 已关闭",
   "— result available": "— 结果可用",
   "Browser preferences": "浏览器偏好设置",
+  "Light / dark appearance": "明暗外观",
+  "Choose the shell appearance. This does not change server settings.":
+    "选择界面明暗，不修改服务器配置。",
+  "Available after the current workspace change finishes.":
+    "当前工作区切换完成后可用。",
+  "Available after the connection finishes.": "连接完成后可用。",
+  "Connect to a server before using connection actions.":
+    "连接服务器后才能使用这些操作。",
   Language: "语言",
   Theme: "主题",
   "Vim editing": "Vim 编辑",
@@ -1206,6 +1217,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Another client was working in this session, so this message was not sent. It was kept for retry and will return when the composer is empty. Send it again when the running turn finishes, or Stop that turn to take over.":
     "另一个客户端当时正在此会话中工作，因此此消息未发送。消息已保留待重试，将在输入框的文字和图片都清空后恢复。当前回复结束后可再次发送，也可点击“停止”结束该回复后接手。",
   Reconnecting: "正在重新连接",
+  "Retry needed": "需要重试",
   "Model, permissions, sandbox": "模型、权限、沙箱",
   "Model not reported": "模型未报告",
   "Permissions not reported": "权限未报告",

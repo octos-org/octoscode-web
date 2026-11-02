@@ -143,6 +143,32 @@ describe("peerSessionEventFor — request contents survive (J3)", () => {
     });
   });
 
+  it("approval/requested says when it escalates past the sandbox", () => {
+    const approval = (fields: Record<string, unknown>) =>
+      peerSessionEventFor(
+        frame("approval/requested", {
+          session_id: "dev:local:tui#peer-a",
+          approval_id: "appr-1",
+          turn_id: "turn-1",
+          tool_name: "shell",
+          title: "Leave the sandbox?",
+          body: "More access than the sandbox grants.",
+          ...fields,
+        }),
+        OPENED,
+      );
+    const escalates = { approval: { sandboxEscalation: true } };
+    expect(approval({ approval_kind: "sandbox_escalation" })).toMatchObject(
+      escalates,
+    );
+    expect(
+      approval({ typed_details: { kind: "sandbox_escalation" } }),
+    ).toMatchObject(escalates);
+    expect(approval({ approval_kind: "command" })).toMatchObject({
+      approval: { sandboxEscalation: false },
+    });
+  });
+
   it("user_question/requested carries header, question, options and flags", () => {
     const event = peerSessionEventFor(
       frame("user_question/requested", {

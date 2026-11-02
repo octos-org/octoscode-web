@@ -11,6 +11,13 @@
   flex-direction: column;
 }
 
+.embedded {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .header {
   display: flex;
   min-width: 0;
@@ -81,6 +88,11 @@
   .error button {
     min-height: var(--dsw-control-h-lg);
   }
+}
+
+.embeddedActions {
+  padding: var(--dsw-space-1) var(--dsw-space-3);
+  border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
 .body {

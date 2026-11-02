@@ -16,6 +16,7 @@
 import { useSyncExternalStore, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import type { ApprovalDecision } from "@octos-org/octoscode-client/protocol";
+import { ESCALATION_DENY_ONLY_NOTE } from "../approval/approval-presentation.ts";
 import {
   EMPTY_PEER_SNAPSHOT,
   fleetLanded,
@@ -34,6 +35,7 @@ import {
   formatPeerDockPill,
   formatPeerTokens,
   peerElapsed,
+  peerApprovalEscalates,
   peerRowActions,
   peerRowAttention,
   peerRowLabel,
@@ -86,6 +88,11 @@ export interface PeerDockProps {
    * (bound to the row's REAL pending ids) to the App wiring. When absent the
    * rows render no actions at all (fail-closed, no dead controls).
    */
+  /**
+   * Phone remote control: rows allow one request at most and a sandbox
+   * escalation can only be denied.
+   */
+  onceOnly?: boolean | undefined;
   onRowAction?:
     | ((
         entry: PeerRosterEntry,
@@ -164,11 +171,12 @@ function respondToRowKey(
   peer: PeerRosterEntry,
   event: KeyboardEvent<HTMLButtonElement>,
   onApprovalRespond: PeerDockProps["onApprovalRespond"],
+  denyOnly: boolean,
 ): void {
   if (!event.altKey) return;
   if (!peerAcceptsApproval(peer)) return;
   const decision = rowDecision(event);
-  if (!decision) return;
+  if (!decision || (denyOnly && decision === "approve")) return;
   event.preventDefault();
   event.stopPropagation();
   onApprovalRespond?.(peer, decision);
@@ -197,6 +205,7 @@ export function PeerDock({
   onSelect,
   onApprovalRespond,
   onRowAction,
+  onceOnly = false,
 }: PeerDockProps) {
   const t = useUiText();
   // Round 2 (§4.1/§4.3 parity): Answer needs the operator's free text and
@@ -258,7 +267,10 @@ export function PeerDock({
               const roleLabel = peerRowLabel(index, peer.model ?? null);
               const label = peer.slug.trim() === "" ? roleLabel : peer.slug;
               const actions =
-                onRowAction && canAct(peer) ? peerRowActions(peer) : [];
+                onRowAction && canAct(peer)
+                  ? peerRowActions(peer, { onceOnly })
+                  : [];
+              const denyOnly = onceOnly && peerApprovalEscalates(peer);
               const attention = peerRowAttention(peer);
               const ack = peer.acknowledgment ?? null;
               const renewed = peer.turnChangedSinceAck === true;
@@ -276,6 +288,7 @@ export function PeerDock({
                         peer,
                         event,
                         canAct(peer) ? onApprovalRespond : undefined,
+                        denyOnly,
                       )
                     }
                   >
@@ -364,20 +377,22 @@ export function PeerDock({
                   canAct(peer) &&
                   peerAcceptsApproval(peer) ? (
                     <span className={styles.actions}>
-                      <button
-                        type="button"
-                        className={styles.action}
-                        data-row-action="approve"
-                        aria-label={t("Approve {value0}", {
-                          value0: peer.slug,
-                        })}
-                        onClick={(event) => {
-                          refocusRowButton(event);
-                          onApprovalRespond(peer, "approve");
-                        }}
-                      >
-                        {t("Approve")}
-                      </button>
+                      {denyOnly ? null : (
+                        <button
+                          type="button"
+                          className={styles.action}
+                          data-row-action="approve"
+                          aria-label={t("Approve {value0}", {
+                            value0: peer.slug,
+                          })}
+                          onClick={(event) => {
+                            refocusRowButton(event);
+                            onApprovalRespond(peer, "approve");
+                          }}
+                        >
+                          {t("Approve")}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={styles.action}
@@ -411,6 +426,11 @@ export function PeerDock({
                                   .target
                               }
                             </code>
+                          ) : null}
+                          {denyOnly ? (
+                            <span className={styles.status} role="note">
+                              {t(ESCALATION_DENY_ONLY_NOTE)}
+                            </span>
                           ) : null}
                         </>
                       ) : peer.requestKind === "question" ? (

@@ -8,7 +8,11 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
-import { approvalImpactDetails } from "./approval-presentation.ts";
+import {
+  approvalImpactDetails,
+  ESCALATION_DENY_ONLY_NOTE,
+  isSandboxEscalation,
+} from "./approval-presentation.ts";
 
 interface ApprovalPanelProps {
   approval: ApprovalRequested;
@@ -119,9 +123,7 @@ export function ApprovalPanel({
         {onceOnly ? (
           <p className="approval-remote-note" role="note">
             {escalation
-              ? t(
-                  "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.",
-                )
+              ? t(ESCALATION_DENY_ONLY_NOTE)
               : t(
                   "From the phone you can allow this one request. To allow it for the whole session or raise permissions, use your computer.",
                 )}
@@ -173,17 +175,6 @@ export function ApprovalPanel({
         ) : null}
       </div>
     </ModalSurface>
-  );
-}
-
-/** A typed sandbox escalation: more access than the sandbox grants. */
-export function isSandboxEscalation(approval: ApprovalRequested): boolean {
-  const kind = isRecord(approval.typedDetails)
-    ? approval.typedDetails.kind
-    : undefined;
-  return (
-    approval.approvalKind === "sandbox_escalation" ||
-    kind === "sandbox_escalation"
   );
 }
 

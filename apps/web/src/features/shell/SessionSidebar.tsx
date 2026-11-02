@@ -46,6 +46,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   turnStarting: boolean;
   timeline: readonly TimelineEntry[];
   openingSessionId: string | null;
+  sessionError?: string | null | undefined;
 }
 
 /** Session rows are presentation of server-confirmed references in this tab. */
@@ -64,6 +65,7 @@ export function SessionSidebar({
   turnStarting,
   timeline,
   openingSessionId,
+  sessionError,
   selectedSessionId,
   ...sidebarProps
 }: SessionSidebarProps) {
@@ -163,6 +165,7 @@ export function SessionSidebar({
                 : backgroundPrompt
                   ? sessionTitleFromPrompt(backgroundPrompt)
                   : null) ??
+              (selected && sessionError ? item.sessionId : null) ??
               t("New session"),
             updatedAt: item.updatedAt,
           };
@@ -243,6 +246,7 @@ export function SessionSidebar({
     activePromptTitle,
     openingSessionId,
     peerRoster,
+    sessionError,
     t,
   ]);
 

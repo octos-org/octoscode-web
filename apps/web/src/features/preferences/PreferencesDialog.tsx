@@ -14,26 +14,14 @@ const themeLabels = {
   solarized: "Solarized",
 } as const;
 
-/** Imported lazily by the application; no rendering/highlighter code in the hot store. */
-export function PreferencesDialog({ onClose }: { onClose: () => void }) {
+/** Shared by the standalone dialog and Settings › General. */
+export function BrowserPreferencesContent() {
   const preferences = usePreferences();
   const t = useUiText();
-  const id = useId();
   const [saved, setSaved] = useState(false);
   return (
-    <ModalSurface
-      backdropClassName={styles.backdrop!}
-      dialogClassName={styles.dialog!}
-      labelledBy={`${id}-title`}
-      describedBy={`${id}-scope`}
-      onEscape={onClose}
-      closeOnBackdrop
-    >
-      <header className={styles.header}>
-        <h2 id={`${id}-title`}>{t("Browser preferences")}</h2>
-        <CloseButton label={t("Close preferences")} onClick={onClose} />
-      </header>
-      <p id={`${id}-scope`} className={styles.note}>
+    <>
+      <p className={styles.note}>
         {t(
           "Display settings apply immediately. Save remembers them only in this browser; no server configuration, credentials or conversations are stored.",
         )}
@@ -98,6 +86,27 @@ export function PreferencesDialog({ onClose }: { onClose: () => void }) {
           {t("Save browser preferences")}
         </button>
       </footer>
+    </>
+  );
+}
+
+/** Imported lazily by the application; no rendering/highlighter code in the hot store. */
+export function PreferencesDialog({ onClose }: { onClose: () => void }) {
+  const t = useUiText();
+  const id = useId();
+  return (
+    <ModalSurface
+      backdropClassName={styles.backdrop!}
+      dialogClassName={styles.dialog!}
+      labelledBy={`${id}-title`}
+      onEscape={onClose}
+      closeOnBackdrop
+    >
+      <header className={styles.header}>
+        <h2 id={`${id}-title`}>{t("Browser preferences")}</h2>
+        <CloseButton label={t("Close preferences")} onClick={onClose} />
+      </header>
+      <BrowserPreferencesContent />
     </ModalSurface>
   );
 }

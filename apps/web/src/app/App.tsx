@@ -3,6 +3,8 @@ import { ModelsSettingsContent } from "../features/product-settings/ModelsSettin
 import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
 import { GeneralSettingsContent } from "../features/product-settings/GeneralSettingsContent.tsx";
 import { SettingsDialog } from "../features/product-controls/SettingsDialog.tsx";
+import { AppearanceSettings } from "../features/product-settings/AppearanceSettings.tsx";
+import { BrowserPreferencesSettings } from "../features/product-settings/BrowserPreferencesSettings.tsx";
 import { SessionConfigPane } from "../features/session-config/SessionConfigPane.tsx";
 import {
   PermissionControl,
@@ -63,7 +65,10 @@ import {
   type PermissionProfileSelection,
   type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
-import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
+import {
+  buildRowControlCommand,
+  onceOnlyRowCommand,
+} from "../features/control/peer-row-command.ts";
 import { useExecutionEnvironment } from "../features/session-config/use-execution-environment.ts";
 import {
   peerAnswerRequest,
@@ -464,7 +469,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     draftPrincipalRef,
     restoreConnectionRef,
     theme,
-    cycleTheme,
+    setTheme,
     disconnect,
     forgetConnection,
   } = gate;
@@ -732,7 +737,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const controller = session.peerController;
     const target = controller?.roster.find((row) => row.slug === entry.slug);
     if (!controller || !target) return;
-    controller.onRowAction?.(target, command);
+    controller.onRowAction?.(
+      target,
+      // The phone grants one request at most.
+      remote ? onceOnlyRowCommand(command) : command,
+    );
   };
   // H6: drop a stale Answer row once its request resolved (requestId cleared).
   useEffect(() => {
@@ -1332,6 +1341,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       withRemoteView(window.location.href, next !== null),
     );
   };
+  // The overview hides the conversation, so a session opened from over it (the
+  // drawer) has to take its place.
+  const revealRemoteSession = () => {
+    if (remoteView !== "home") return;
+    setRemoteError(null);
+    setRemoteView("session");
+    if (compact) setSidebarCollapsed(true);
+  };
   const openRemoteRow = async (row: RemoteRow) => {
     setRemoteError(null);
     const opened = session.opened;
@@ -1926,7 +1943,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       case "theme":
       case "language":
-        gate.openPreferences();
+        setSettingsSection("general");
+        setSettingsOpen(true);
         return;
       case "set-language":
         preferences.setLanguage(intent.value);
@@ -1936,7 +1954,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         return;
       case "save-config":
         showLocalReport({ kind: "save-config", saved: preferences.save() });
-        gate.openPreferences();
+        setSettingsSection("general");
+        setSettingsOpen(true);
         return;
       case "set-steer":
         conversation.setSteeringEnabled(intent.value);
@@ -3000,7 +3019,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       });
   };
 
-  const moveToProductSession = async (productSessionId: string) => {
+  /** Resolves whether `productSessionId` ended up the active session. */
+  const moveToProductSession = async (
+    productSessionId: string,
+  ): Promise<boolean> => {
     setFleetRouteActive(false);
     const target = navigableSessions.find(
       (item) =>
@@ -3010,25 +3032,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           item.sessionId,
         ) === productSessionId,
     );
-    if (!target || productSessionId === openingSessionKey) return;
+    if (!target || productSessionId === openingSessionKey) return false;
     if (productSessionId === activeSessionKey) {
       workspaceProduct.cancelPendingNavigation();
       if (workspaceProduct.transitioning) workspaceProduct.cancelLaunch();
-      return;
+      return true;
     }
     if (
       draftCapacityBlocked &&
       productSessionId !== previousActiveSessionKeyRef.current
     )
-      return;
+      return false;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
       cwd: target.workspaceRoot,
       profileId: target.profileId,
       resolveLaunch: false,
     });
-    if (outcome !== "opened") return;
+    if (outcome !== "opened") return false;
     if (compact) setSidebarCollapsed(true);
+    return true;
   };
   const dismissSavedLink = () => {
     setSavedLink(null);
@@ -3109,6 +3132,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     activeSessionKey,
     knownSessions,
   ]);
+  const workspaceError =
+    workspaceProduct.state.error === null
+      ? null
+      : t(workspaceProduct.state.error);
+  // A launch surface shows the failure beside its exact Session retry action;
+  // the sidebar would announce the same failure a second time.
+  const launchSurfaceShowsError =
+    Boolean(workspaceProduct.launch.decision) ||
+    (codingCapabilities.sessionCreationAvailable &&
+      (workspacePicker.open || !session.opened));
+  const sidebarError = launchSurfaceShowsError ? null : workspaceError;
   const savedLinkPanel = savedLink ? (
     savedLink.reference ? (
       <SurfaceBoundary
@@ -3118,7 +3152,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           reference={savedLink.reference}
           serverOrigin={connection.endpoint}
           opening={savedLinkOpening}
-          error={savedLinkError ?? workspaceProduct.state.error}
+          error={savedLinkError ?? workspaceError}
           onOpen={() => void openSavedLink()}
           onDismiss={dismissSavedLink}
         />
@@ -3148,11 +3182,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const outcome = await openSessionWithDefaults(sessionId, workspacePath);
     if (outcome === "awaiting_choice") {
       setWorkspacePicker((current) => ({ ...current, open: false }));
+      revealRemoteSession();
       return;
     }
     if (outcome !== "opened") return;
     if (compact) setSidebarCollapsed(true);
     setWorkspacePicker((current) => ({ ...current, open: false }));
+    revealRemoteSession();
   };
   /**
    * §4.4 creation-only defaults (case 22): the sandbox draft rides the open
@@ -3375,48 +3411,51 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       )
     : null;
   // §4.1 strip state, derived from live interaction/turn/peer facts.
-  const sessionStripState: SessionStripState = !session.connected
-    ? { kind: "reconnecting" }
-    : session.recovery.phase !== "healthy"
-      ? { kind: "reconnecting" }
-      : conversation.seatHandover === "Resuming chat…" ||
-          conversation.seatHandover === "Handing back control…"
-        ? conversation.seatHandover === "Resuming chat…"
-          ? { kind: "resuming-chat" }
-          : { kind: "handing-back" }
-        : interactions.approval
-          ? { kind: "waiting-approval" }
-          : interactions.question
-            ? { kind: "waiting-answer" }
-            : foreignSeatHeld
-              ? { kind: "external-held" }
-              : conversation.queue.active
-                ? // The live turn is not ours: another attached client owns it.
-                  // Guarded by `selfSeatHeld` for the same reason §4.3 guards
-                  // the other-app copy — a peer THIS app started is SELF, so
-                  // its turn is never "another client".
-                  conversation.queue.active.origin === "adopted" &&
-                  !selfSeatHeld
-                  ? { kind: "busy-elsewhere" }
-                  : { kind: "responding" }
-                : peers.manager
-                      ?.snapshot()
-                      .peers.some((peer) =>
-                        ["opening", "started"].includes(peer.status),
-                      )
-                  ? {
-                      kind: "peers-running",
-                      count: peers.manager
-                        ?.snapshot()
-                        .peers.filter(
-                          (peer) =>
-                            peer.status === "opening" ||
-                            peer.status === "started",
-                        ).length,
-                    }
-                  : selfSeatHeld
-                    ? { kind: "peers-running", count: 1 }
-                    : { kind: "ready" };
+  const sessionStripState: SessionStripState =
+    session.error && session.opened && !session.recoveryPending
+      ? { kind: "retry-needed" }
+      : !session.connected
+        ? { kind: "reconnecting" }
+        : session.recovery.phase !== "healthy"
+          ? { kind: "reconnecting" }
+          : conversation.seatHandover === "Resuming chat…" ||
+              conversation.seatHandover === "Handing back control…"
+            ? conversation.seatHandover === "Resuming chat…"
+              ? { kind: "resuming-chat" }
+              : { kind: "handing-back" }
+            : interactions.approval
+              ? { kind: "waiting-approval" }
+              : interactions.question
+                ? { kind: "waiting-answer" }
+                : foreignSeatHeld
+                  ? { kind: "external-held" }
+                  : conversation.queue.active
+                    ? // The live turn is not ours: another attached client owns it.
+                      // Guarded by `selfSeatHeld` for the same reason §4.3 guards
+                      // the other-app copy — a peer THIS app started is SELF, so
+                      // its turn is never "another client".
+                      conversation.queue.active.origin === "adopted" &&
+                      !selfSeatHeld
+                      ? { kind: "busy-elsewhere" }
+                      : { kind: "responding" }
+                    : peers.manager
+                          ?.snapshot()
+                          .peers.some((peer) =>
+                            ["opening", "started"].includes(peer.status),
+                          )
+                      ? {
+                          kind: "peers-running",
+                          count: peers.manager
+                            ?.snapshot()
+                            .peers.filter(
+                              (peer) =>
+                                peer.status === "opening" ||
+                                peer.status === "started",
+                            ).length,
+                        }
+                      : selfSeatHeld
+                        ? { kind: "peers-running", count: 1 }
+                        : { kind: "ready" };
   const showModelsSettings = Boolean(
     session.opened && (models.state.available || models.management.available),
   );
@@ -3780,12 +3819,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               recoveryPhase={conversation.turnRecovery?.phase ?? null}
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
-              selectedSessionId={activeSessionKey}
+              selectedSessionId={
+                activeSessionKey ??
+                (workspaceError && savedLink ? savedLink.key : null)
+              }
               peerRoster={peers.roster}
               peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
+              sessionError={workspaceProduct.state.error}
               loading={workspaceProduct.state.loading}
-              error={workspaceProduct.state.error}
+              error={sidebarError}
               settingsActive={settingsOpen}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
@@ -3793,6 +3836,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              peerDockOnceOnly={remote}
               onPeerDockSelect={(peer) => {
                 if (draftCapacityBlocked) return;
                 void workspaceProduct
@@ -3803,8 +3847,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     resolveLaunch: false,
                   })
                   .then((outcome) => {
-                    if (outcome === "opened" && compact)
-                      setSidebarCollapsed(true);
+                    if (outcome !== "opened") return;
+                    if (compact) setSidebarCollapsed(true);
+                    revealRemoteSession();
                   });
               }}
               peerDockCollapsed={peerDockCollapsed}
@@ -3833,7 +3878,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   return next;
                 });
               }}
-              onSessionSelect={moveToProductSession}
+              onSessionSelect={(sessionId) => {
+                void moveToProductSession(sessionId).then((moved) => {
+                  if (moved) revealRemoteSession();
+                });
+              }}
               onSessionRename={
                 workspaceProduct.state.renameAvailable
                   ? async (rowKey, title) => {
@@ -3918,11 +3967,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
               }}
-              theme={theme}
-              onThemeToggle={cycleTheme}
-              onRetry={() => {
-                void workspaceProduct.refresh();
-              }}
+              {...(!session.recoveryPending
+                ? {
+                    onRetry: () => {
+                      void session.retryRecovery();
+                    },
+                  }
+                : {})}
             />
           </SurfaceBoundary>
         </NavigationSurface>
@@ -3939,51 +3990,53 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
-              {remoteView === "session" ? (
-                <button
-                  type="button"
-                  className={productStyles.navigationTrigger}
-                  aria-label={t("Back to remote control")}
-                  onClick={() => {
-                    setRemoteError(null);
-                    setRemoteView("home");
-                  }}
-                >
-                  <ArrowLeftIcon size={20} />
-                </button>
-              ) : compact ? (
-                <button
-                  type="button"
-                  className={productStyles.navigationTrigger}
-                  aria-label={t("Open sessions")}
-                  aria-haspopup="dialog"
-                  aria-expanded={!sidebarCollapsed}
-                  onClick={() => setSidebarCollapsed(false)}
-                >
-                  <MenuIcon size={20} />
-                </button>
-              ) : null}
-              <div className={productStyles.titleGroup}>
-                <div className="workspace-title">
-                  <span>
-                    {workspaceName(activeWorkspacePath || t("Workspace"))}
-                  </span>
-                  <small>
-                    {activeWorkspacePath || t("Choose a workspace")}
-                  </small>
-                </div>
-                {!compact &&
-                session.opened?.active_profile_id &&
-                session.opened.workspace_root ? (
-                  <CopySessionLinkButton
-                    key={session.opened.session_id}
-                    reference={{
-                      workspaceRoot: session.opened.workspace_root,
-                      profileId: session.opened.active_profile_id,
-                      sessionId: session.opened.session_id,
+              <div className={productStyles.titleCluster}>
+                {remoteView === "session" ? (
+                  <button
+                    type="button"
+                    className={productStyles.navigationTrigger}
+                    aria-label={t("Back to remote control")}
+                    onClick={() => {
+                      setRemoteError(null);
+                      setRemoteView("home");
                     }}
-                  />
+                  >
+                    <ArrowLeftIcon size={20} />
+                  </button>
+                ) : compact ? (
+                  <button
+                    type="button"
+                    className={productStyles.navigationTrigger}
+                    aria-label={t("Open sessions")}
+                    aria-haspopup="dialog"
+                    aria-expanded={!sidebarCollapsed}
+                    onClick={() => setSidebarCollapsed(false)}
+                  >
+                    <MenuIcon size={20} />
+                  </button>
                 ) : null}
+                <div className={productStyles.titleGroup}>
+                  <div className="workspace-title">
+                    <span>
+                      {workspaceName(activeWorkspacePath || t("Workspace"))}
+                    </span>
+                    <small>
+                      {activeWorkspacePath || t("Choose a workspace")}
+                    </small>
+                  </div>
+                  {!compact &&
+                  session.opened?.active_profile_id &&
+                  session.opened.workspace_root ? (
+                    <CopySessionLinkButton
+                      key={session.opened.session_id}
+                      reference={{
+                        workspaceRoot: session.opened.workspace_root,
+                        profileId: session.opened.active_profile_id,
+                        sessionId: session.opened.session_id,
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
               {session.opened &&
               (work.supervision.planAvailable ||
@@ -4074,7 +4127,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                       : undefined
                   }
-                  onOpenPreferences={gate.openPreferences}
                   onOpenRemote={
                     compact ? () => setRemoteViewInUrl("home") : undefined
                   }
@@ -4108,7 +4160,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     <LaunchDecisionPanel
                       state={workspaceProduct.launch}
                       onboarding={workspaceProduct.onboarding}
-                      error={workspaceProduct.state.error}
+                      error={workspaceError}
                       onSubmitOnboarding={(submission) =>
                         void workspaceProduct.submitOnboarding(submission)
                       }
@@ -4160,7 +4212,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {...(workspaceBrowse
                               ? { browse: workspaceBrowse }
                               : {})}
-                            error={workspaceProduct.state.error}
+                            error={workspaceError}
                             creating={
                               session.status === "connecting" ||
                               workspaceProduct.transitioning
@@ -4826,7 +4878,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             void conversation.interrupt();
                         }}
                         placeholder={
-                          session.connected &&
+                          (session.connected || session.opened) &&
                           codingCapabilities.turnStartAvailable
                             ? t("Ask Octos to change, explain, or review code…")
                             : session.connected
@@ -5099,6 +5151,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   nativeControlsAvailable={
                     nativeFleetActive && nativeFleetControlsSupported
                   }
+                  onceOnly={remote}
                   onStart={(submit) => {
                     if (nativeFleetActive) {
                       const brief = submit.brief;
@@ -5515,7 +5568,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               ? { recentWorkspaceId: sessionWorkspaces[0].id }
               : {})}
             {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
-            error={workspaceProduct.state.error}
+            error={workspaceError}
             creating={
               session.status === "connecting" || workspaceProduct.transitioning
             }
@@ -5623,6 +5676,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       );
                     }}
                   />
+                  <AppearanceSettings value={theme} onChange={setTheme} />
+                  <BrowserPreferencesSettings />
                   {models.state.available ? (
                     <Suspense
                       fallback={<DeferredSurface label="Loading defaults…" />}

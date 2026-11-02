@@ -29,7 +29,8 @@ export type SessionStripState =
   | { kind: "external-held" }
   | { kind: "handing-back" }
   | { kind: "resuming-chat" }
-  | { kind: "reconnecting" };
+  | { kind: "reconnecting" }
+  | { kind: "retry-needed" };
 
 export interface SessionStatusStripProps {
   /** Effective model label, or null when not reported. */
@@ -75,6 +76,8 @@ export function stripStateWords(
       return t("Resuming chat…");
     case "reconnecting":
       return t("Reconnecting");
+    case "retry-needed":
+      return t("Retry needed");
   }
 }
 

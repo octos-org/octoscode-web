@@ -18,6 +18,7 @@ import {
   LaunchTransitionCoordinator,
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
+import { launchFailureMessage } from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
 import type {
   ActiveSessionAuthority,
@@ -339,6 +340,8 @@ export interface OctosSessionRuntime {
      */
     recoveryNotice: { message: string; failedSessionIds: string[] } | null;
     dismissRecoveryNotice: () => void;
+    recoveryPending: boolean;
+    retryRecovery: () => void;
     connect: (input: SessionConnectionInput) => void;
     restore: (input: SessionConnectionInput) => void;
     disconnect: () => void;
@@ -1328,7 +1331,12 @@ export function useOctosSession(): OctosSessionRuntime {
   });
   const activeRuntime = serverConnection.runtime;
   const candidateAbortRef = useRef<AbortController | null>(null);
+  const candidateFailureRef = useRef<unknown>(null);
   const recoveryAbortRef = useRef<AbortController | null>(null);
+  const [recoveryPending, setRecoveryPending] = useState(false);
+  // The fatal message recovery put in `state.error`, so a later healthy recovery
+  // can retire exactly that one.
+  const recoveryErrorRef = useRef<string | null>(null);
   const [recoveryNotice, setRecoveryNotice] = useState<{
     message: string;
     failedSessionIds: string[];
@@ -3083,28 +3091,37 @@ export function useOctosSession(): OctosSessionRuntime {
     recoveryAbortRef.current?.abort();
     const abort = new AbortController();
     recoveryAbortRef.current = abort;
-    const results = await recordManager.recoverRecords(abort.signal);
-    if (abort.signal.aborted || recoveryAbortRef.current !== abort) return;
-    recoveryAbortRef.current = null;
-    const surfacing = planRecoverySurfacing(
-      results,
-      recordManager.selected()?.scope.sessionId ?? null,
-    );
-    // Only the SELECTED record's failure is fatal for the workspace: it is the
-    // one record whose composer surface the user is actually on. A failure in
-    // ANY OTHER record must not tear down the live Session.
-    if (surfacing.fatal) {
-      workspaceController.setError(surfacing.fatal);
-    } else {
-      // Only clear a previous fatal error; an unconditional setError(null)
-      // allocates a fresh workspace state on EVERY healthy recovery and
-      // re-renders the sidebar tree (regressed native-workflows :249/:505).
-      if (workspaceController.state.error !== null) {
-        workspaceController.setError(null);
+    setRecoveryPending(true);
+    try {
+      const results = await recordManager.recoverRecords(abort.signal);
+      if (abort.signal.aborted || recoveryAbortRef.current !== abort) return;
+      const surfacing = planRecoverySurfacing(
+        results,
+        recordManager.selected()?.scope.sessionId ?? null,
+      );
+      // Only the SELECTED record's failure is fatal for the workspace: it is the
+      // one record whose composer surface the user is actually on. A failure in
+      // ANY OTHER record must not tear down the live Session.
+      if (surfacing.fatal) {
+        recoveryErrorRef.current = surfacing.fatal;
+        workspaceController.setError(surfacing.fatal);
+      } else {
+        // A launch that failed because this very socket dropped is still a failed
+        // launch: nobody retried it, so the reconnect must not erase the reason.
+        const ownFatal = recoveryErrorRef.current;
+        recoveryErrorRef.current = null;
+        workspaceController.clearError((error) =>
+          recoveryMayClearError(error, ownFatal),
+        );
+        setRecoveryNotice(surfacing.notice);
       }
-      setRecoveryNotice(surfacing.notice);
+      publishBackgroundTurns();
+    } finally {
+      if (recoveryAbortRef.current === abort) {
+        recoveryAbortRef.current = null;
+        setRecoveryPending(false);
+      }
     }
-    publishBackgroundTurns();
   }
 
   function resetProductSessionState(): void {
@@ -3193,7 +3210,6 @@ export function useOctosSession(): OctosSessionRuntime {
     if (event.reason !== "recovery") {
       void codingSafetyController.refreshPermission(event.authority.client);
       void supervisionController.refresh(event.authority.client);
-      void workspaceController.refresh(event.authority.client);
       void modelController.refresh(event.authority.client);
     }
   }
@@ -3218,7 +3234,7 @@ export function useOctosSession(): OctosSessionRuntime {
     // error (notably the retained-owner capacity boundary). Do not replace it
     // with a generic transition failure while still cleaning up the lease.
     if (reason !== undefined)
-      workspaceController.setError(errorMessage(reason));
+      workspaceController.setError(launchFailureMessage(reason));
     if (!restoreLaunchChoice(lease)) {
       launchTransitionRef.current.discard(lease);
       setLaunch(EMPTY_LAUNCH_RUNTIME);
@@ -3254,6 +3270,7 @@ export function useOctosSession(): OctosSessionRuntime {
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    candidateFailureRef.current = null;
     const config = normalizeConnectionInput(input);
     pendingRestoreConfigRef.current =
       restoreAfterAuthentication && config.sessionId && config.cwd
@@ -3273,7 +3290,8 @@ export function useOctosSession(): OctosSessionRuntime {
           if (outcome === "opened") return;
           if (
             activeRuntime.isCurrent(authority) &&
-            authority.client.status === "connected"
+            authority.client.status === "connected" &&
+            !isRetryableHydrateFailure(candidateFailureRef.current)
           ) {
             setRestoreRejected(true);
           }
@@ -3284,6 +3302,32 @@ export function useOctosSession(): OctosSessionRuntime {
         setLaunch(EMPTY_LAUNCH_RUNTIME);
         markTransitioning(false);
       });
+  };
+
+  const retryRecovery = () => {
+    if (
+      recoveryErrorRef.current &&
+      selectedRecord()?.runtime.getSnapshot().session
+    ) {
+      void recoverSessionRecords();
+      return;
+    }
+    // A reload has no retained record yet. The authenticated pool still owns
+    // the original restore config, so retry that exact Session rather than
+    // clearing its identity or minting a new empty Session.
+    const config = activeRuntime.currentAuthority()?.config;
+    if (
+      !selectedRecord() &&
+      isRetryableHydrateFailure(candidateFailureRef.current) &&
+      config
+    ) {
+      beginConnection(config, true);
+      return;
+    }
+    // An unrelated candidate session/open failure owns no record recovery.
+    // Keep its established dismiss-and-choose-again behavior instead of
+    // rehydrating the still-healthy selected Session.
+    void workspaceController.refresh();
   };
 
   async function resolveInitialLaunch(
@@ -3343,6 +3387,7 @@ export function useOctosSession(): OctosSessionRuntime {
     existingLease?: LaunchTransitionLease,
     requireExactWorkspace = false,
   ): Promise<WorkspaceOpenOutcome> {
+    candidateFailureRef.current = null;
     const lease = existingLease ?? launchTransitionRef.current.begin(config);
     if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
     // The record manager already requires the confirmed workspace root to
@@ -3419,6 +3464,7 @@ export function useOctosSession(): OctosSessionRuntime {
         candidateAbortRef.current === abortController &&
         launchTransitionRef.current.isCurrent(lease)
       ) {
+        candidateFailureRef.current = reason;
         failLaunchTransition(lease, reason);
       }
       return "failed";
@@ -3773,6 +3819,8 @@ export function useOctosSession(): OctosSessionRuntime {
       restoreRejected,
       recoveryNotice,
       dismissRecoveryNotice: () => setRecoveryNotice(null),
+      recoveryPending,
+      retryRecovery,
       connect,
       restore,
       disconnect,
@@ -4111,6 +4159,15 @@ function isFatalSessionContractError(message: string): boolean {
   );
 }
 
+function isRetryableHydrateFailure(reason: unknown): boolean {
+  const message = errorMessage(reason);
+  return (
+    message.includes("response_bytes_limit") ||
+    message.includes("mutation_count_limit") ||
+    message.includes("event_count_limit")
+  );
+}
+
 function assertCompatibleProtocol(
   capabilities: UiProtocolCapabilities | undefined,
 ): void {
@@ -4142,6 +4199,18 @@ export interface RecoverySurfacing {
   fatal: string | null;
   /** Non-fatal, dismissible notice, or null when nothing failed. */
   notice: { message: string; failedSessionIds: string[] } | null;
+}
+
+/**
+ * What a healthy recovery may retire: the fatal it set itself, and the
+ * navigation block the recovered turn may have just resolved. Anything else in
+ * `state.error` (a failed launch) still stands.
+ */
+export function recoveryMayClearError(
+  error: string,
+  ownFatal: string | null,
+): boolean {
+  return error === ownFatal || error === TURN_RECOVERY_NAVIGATION_MESSAGE;
 }
 
 export function planRecoverySurfacing(

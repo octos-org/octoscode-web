@@ -21,7 +21,6 @@ import {
   type ReactNode,
 } from "react";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
-import { ThemeIcon } from "../../ui/ThemeIcon.tsx";
 import styles from "./ProductSidebar.module.css";
 import {
   DeleteSessionDialog,
@@ -116,8 +115,6 @@ export interface ProductSidebarProps {
    */
   onSessionDelete?: ((sessionId: string) => Promise<string | null>) | undefined;
   onSettings: () => void;
-  theme?: "system" | "light" | "dark";
-  onThemeToggle?: () => void;
   onFleet?: (() => void) | undefined;
   onRetry?: () => void;
   /**
@@ -139,6 +136,8 @@ export interface ProductSidebarProps {
   /** Round 3 item 6 (judge #4): the dock rows' real-id action seam. */
   onPeerDockRowAction?: PeerDockProps["onRowAction"];
   onPeerDockSelect?: PeerDockProps["onSelect"];
+  /** Phone remote control: the dock's rows allow one request at most. */
+  peerDockOnceOnly?: boolean;
   /**
    * Controlled PeerDock fold (reference TUI `peer_dock_collapsed`). The shell
    * owns the state (Alt+P flips it in App) and the sidebar is again a pure
@@ -190,8 +189,6 @@ export function ProductSidebar({
   onSessionRename,
   onSessionDelete,
   onSettings,
-  theme = "system",
-  onThemeToggle,
   onFleet,
   onRetry,
   peerDock = null,
@@ -200,13 +197,11 @@ export function ProductSidebar({
   onApprovalRespond,
   onPeerDockRowAction,
   onPeerDockSelect,
+  peerDockOnceOnly,
   peerDockCollapsed = false,
   onPeerDockToggle,
 }: ProductSidebarProps) {
   const t = useUiText();
-  const themeLabel =
-    theme === "dark" ? t("Dark") : theme === "light" ? t("Light") : t("Auto");
-  const themeAccessibleLabel = theme === "system" ? t("Auto") : t(theme);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
@@ -1265,6 +1260,7 @@ export function ProductSidebar({
         actionRoster={peerActionRoster}
         onApprovalRespond={onApprovalRespond}
         onRowAction={onPeerDockRowAction}
+        onceOnly={peerDockOnceOnly}
         {...(onPeerDockSelect ? { onSelect: onPeerDockSelect } : {})}
         collapsed={peerDockCollapsed}
         // PeerDock's `onToggle?` omits `| undefined` (exactOptionalPropertyTypes),
@@ -1300,24 +1296,6 @@ export function ProductSidebar({
               </small>
             ) : null}
           </>
-        ) : null}
-        {onThemeToggle ? (
-          <button
-            type="button"
-            className={styles.settings}
-            aria-label={t("Theme: {value0}", {
-              value0: themeAccessibleLabel,
-            })}
-            title={
-              collapsed
-                ? t("Theme: {value0}", { value0: themeAccessibleLabel })
-                : undefined
-            }
-            onClick={onThemeToggle}
-          >
-            <ThemeIcon mode={theme} />
-            {!collapsed ? <span>{themeLabel}</span> : null}
-          </button>
         ) : null}
         <button
           type="button"
