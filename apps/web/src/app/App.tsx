@@ -65,7 +65,10 @@ import {
   type PermissionProfileSelection,
   type PlanUpdated,
 } from "@octos-org/octoscode-client/protocol";
-import { buildRowControlCommand } from "../features/control/peer-row-command.ts";
+import {
+  buildRowControlCommand,
+  onceOnlyRowCommand,
+} from "../features/control/peer-row-command.ts";
 import { useExecutionEnvironment } from "../features/session-config/use-execution-environment.ts";
 import {
   peerAnswerRequest,
@@ -734,7 +737,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const controller = session.peerController;
     const target = controller?.roster.find((row) => row.slug === entry.slug);
     if (!controller || !target) return;
-    controller.onRowAction?.(target, command);
+    controller.onRowAction?.(
+      target,
+      // The phone grants one request at most.
+      remote ? onceOnlyRowCommand(command) : command,
+    );
   };
   // H6: drop a stale Answer row once its request resolved (requestId cleared).
   useEffect(() => {
@@ -1333,6 +1340,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       "",
       withRemoteView(window.location.href, next !== null),
     );
+  };
+  // The overview hides the conversation, so a session opened from over it (the
+  // drawer) has to take its place.
+  const revealRemoteSession = () => {
+    if (remoteView !== "home") return;
+    setRemoteError(null);
+    setRemoteView("session");
+    if (compact) setSidebarCollapsed(true);
   };
   const openRemoteRow = async (row: RemoteRow) => {
     setRemoteError(null);
@@ -3004,7 +3019,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       });
   };
 
-  const moveToProductSession = async (productSessionId: string) => {
+  /** Resolves whether `productSessionId` ended up the active session. */
+  const moveToProductSession = async (
+    productSessionId: string,
+  ): Promise<boolean> => {
     setFleetRouteActive(false);
     const target = navigableSessions.find(
       (item) =>
@@ -3014,25 +3032,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           item.sessionId,
         ) === productSessionId,
     );
-    if (!target || productSessionId === openingSessionKey) return;
+    if (!target || productSessionId === openingSessionKey) return false;
     if (productSessionId === activeSessionKey) {
       workspaceProduct.cancelPendingNavigation();
       if (workspaceProduct.transitioning) workspaceProduct.cancelLaunch();
-      return;
+      return true;
     }
     if (
       draftCapacityBlocked &&
       productSessionId !== previousActiveSessionKeyRef.current
     )
-      return;
+      return false;
     const outcome = await workspaceProduct.openSession({
       sessionId: target.sessionId,
       cwd: target.workspaceRoot,
       profileId: target.profileId,
       resolveLaunch: false,
     });
-    if (outcome !== "opened") return;
+    if (outcome !== "opened") return false;
     if (compact) setSidebarCollapsed(true);
+    return true;
   };
   const dismissSavedLink = () => {
     setSavedLink(null);
@@ -3164,11 +3183,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const outcome = await openSessionWithDefaults(sessionId, workspacePath);
     if (outcome === "awaiting_choice") {
       setWorkspacePicker((current) => ({ ...current, open: false }));
+      revealRemoteSession();
       return;
     }
     if (outcome !== "opened") return;
     if (compact) setSidebarCollapsed(true);
     setWorkspacePicker((current) => ({ ...current, open: false }));
+    revealRemoteSession();
   };
   /**
    * §4.4 creation-only defaults (case 22): the sandbox draft rides the open
@@ -3809,6 +3830,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               peerDock={peers.manager}
               onApprovalRespond={peers.approvalRespond}
               onPeerDockRowAction={sendProductRowAction}
+              peerDockOnceOnly={remote}
               onPeerDockSelect={(peer) => {
                 if (draftCapacityBlocked) return;
                 void workspaceProduct
@@ -3819,8 +3841,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     resolveLaunch: false,
                   })
                   .then((outcome) => {
-                    if (outcome === "opened" && compact)
-                      setSidebarCollapsed(true);
+                    if (outcome !== "opened") return;
+                    if (compact) setSidebarCollapsed(true);
+                    revealRemoteSession();
                   });
               }}
               peerDockCollapsed={peerDockCollapsed}
@@ -3849,7 +3872,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   return next;
                 });
               }}
-              onSessionSelect={moveToProductSession}
+              onSessionSelect={(sessionId) => {
+                void moveToProductSession(sessionId).then((moved) => {
+                  if (moved) revealRemoteSession();
+                });
+              }}
               onSessionRename={
                 workspaceProduct.state.renameAvailable
                   ? async (rowKey, title) => {
@@ -5114,6 +5141,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   nativeControlsAvailable={
                     nativeFleetActive && nativeFleetControlsSupported
                   }
+                  onceOnly={remote}
                   onStart={(submit) => {
                     if (nativeFleetActive) {
                       const brief = submit.brief;

@@ -16,6 +16,7 @@ import {
   samePeerScope,
   type PeerCommands,
 } from "@octos-org/octoscode-client/peer-protocol";
+import { isSandboxEscalation } from "../approval/approval-presentation.ts";
 import { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
 import type {
   PeerOpenOutcome,
@@ -247,6 +248,7 @@ export function peerSessionEventFor(
               scope: approval.approvalKind ?? null,
               title: approval.title,
               body: approval.body,
+              sandboxEscalation: isSandboxEscalation(approval),
             },
           }
         : {}),

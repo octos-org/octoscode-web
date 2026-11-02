@@ -61,6 +61,15 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === "string" && value !== "";
 }
 
+/** The phone grants one request at most: a wider approval scope is dropped. */
+export function onceOnlyRowCommand(
+  command: PeerControlCommand,
+): PeerControlCommand {
+  if (command.kind !== "approval_respond") return command;
+  const { approvalScope: _wider, ...once } = command;
+  return once;
+}
+
 /**
  * Build ONE product row command from the row's REAL attention facts.
  * Fail-closed: NULL whenever a required id is missing, the attention kind

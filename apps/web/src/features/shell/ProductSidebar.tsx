@@ -136,6 +136,8 @@ export interface ProductSidebarProps {
   /** Round 3 item 6 (judge #4): the dock rows' real-id action seam. */
   onPeerDockRowAction?: PeerDockProps["onRowAction"];
   onPeerDockSelect?: PeerDockProps["onSelect"];
+  /** Phone remote control: the dock's rows allow one request at most. */
+  peerDockOnceOnly?: boolean;
   /**
    * Controlled PeerDock fold (reference TUI `peer_dock_collapsed`). The shell
    * owns the state (Alt+P flips it in App) and the sidebar is again a pure
@@ -195,6 +197,7 @@ export function ProductSidebar({
   onApprovalRespond,
   onPeerDockRowAction,
   onPeerDockSelect,
+  peerDockOnceOnly,
   peerDockCollapsed = false,
   onPeerDockToggle,
 }: ProductSidebarProps) {
@@ -1257,6 +1260,7 @@ export function ProductSidebar({
         actionRoster={peerActionRoster}
         onApprovalRespond={onApprovalRespond}
         onRowAction={onPeerDockRowAction}
+        onceOnly={peerDockOnceOnly}
         {...(onPeerDockSelect ? { onSelect: onPeerDockSelect } : {})}
         collapsed={peerDockCollapsed}
         // PeerDock's `onToggle?` omits `| undefined` (exactOptionalPropertyTypes),

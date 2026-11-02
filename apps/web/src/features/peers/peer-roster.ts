@@ -84,6 +84,8 @@ export interface PeerApprovalDetail {
   readonly scope: string | null;
   readonly title: string | null;
   readonly body: string | null;
+  /** It asks for more access than the sandbox grants. */
+  readonly sandboxEscalation?: boolean;
 }
 
 /** The CONTENTS of a pending question, for the row's answer card. */
