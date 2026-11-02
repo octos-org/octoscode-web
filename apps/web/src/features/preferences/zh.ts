@@ -1862,21 +1862,53 @@ const catalog: Readonly<Record<string, string>> = {
   "No MCP servers are configured for this Session.":
     "此会话未配置 MCP 服务器。",
   "Scheduled tasks": "定时任务",
-  "Existing cron jobs for this server Profile.":
-    "此服务器配置文件中的已有定时任务。",
-  "New scheduled tasks are unavailable until cron/create lands (T-0014).":
-    "新建定时任务需等待 cron/create（T-0014）实现。",
-  "The gateway owns cron writes. Stop it before enabling or disabling a job.":
-    "网关正在管理定时任务，请先停止网关再启用或停用任务。",
+  "Cron jobs for this server Profile; new jobs use the current Session.":
+    "此服务器配置文件的定时任务；新任务使用当前会话。",
+  "New scheduled task": "新建定时任务",
+  "Schedule type": "时间类型",
+  "At a specific time": "指定时间",
+  "At an interval": "间隔重复",
+  "Cron expression": "Cron 表达式",
+  "Run at": "运行时间",
+  "Every (minutes)": "每隔（分钟）",
+  "Timezone (optional)": "时区（可选）",
+  UTC: "UTC",
+  Delivery: "投递方式",
+  "Agent (runs a turn)": "智能体（运行一轮）",
+  "Notify (message only)": "仅通知（消息）",
+  Message: "消息",
+  "Create scheduled task": "创建定时任务",
+  "Creating scheduled tasks is not supported by this server.":
+    "当前服务器不支持创建定时任务。",
+  "Deleting scheduled tasks is not supported by this server.":
+    "当前服务器不支持删除定时任务。",
+  "The gateway owns cron writes. Stop it before changing a job.":
+    "网关正在管理定时任务，请先停止网关再修改任务。",
   "This server exposes cron jobs read-only.":
     "此服务器仅支持只读查看定时任务。",
   "No scheduled tasks yet.": "暂无定时任务。",
   Enabled: "已启用",
   Disabled: "已停用",
   "No channel": "无频道",
+  "Next run:": "下次运行：",
+  "Last run:": "上次运行：",
+  Never: "从未",
+  "Last error:": "最近错误：",
   "No next run": "无下次运行",
   "Schedule and status": "调度与状态",
+  "Delete this scheduled task?": "删除这个定时任务？",
+  "Delete scheduled task": "删除定时任务",
   "Only the first jobs are shown.": "仅显示部分任务。",
+  "Enter a message for this scheduled task.": "请输入定时任务的消息。",
+  "Choose a valid date and time.": "请选择有效的日期和时间。",
+  "Enter a whole number of minutes greater than zero.":
+    "请输入大于零的整数分钟数。",
+  "Enter a cron expression.": "请输入 Cron 表达式。",
+  "Choose a future date and time.": "请选择未来的日期和时间。",
+  "Use a cron expression with seconds (six fields).":
+    "请使用包含秒的六段 Cron 表达式。",
+  "This enabled task has no next run and is not scheduled. Check its schedule and server version.":
+    "此任务已启用但没有下次运行时间，不会被调度。请检查调度设置和服务器版本。",
 
   // First-run setup (T-0017).
   "Set up your coding assistant": "设置你的编程助手",

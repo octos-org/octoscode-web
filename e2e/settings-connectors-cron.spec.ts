@@ -3,6 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
+test.beforeEach(async ({ request }) => {
+  await request.post(`${FIXTURE_ORIGIN}/__test__/cron/reset`);
+});
+
 async function start(page: Page) {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
@@ -50,14 +54,44 @@ test("shows read-only MCP status without add/edit/OAuth controls and passes axe"
   expect(results.violations).toEqual([]);
 });
 
-test("enables and disables an existing cron job without a create control and passes axe", async ({
+test("keeps legacy cron list and toggles without create/delete methods", async ({
   page,
 }) => {
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      const scrub = (value) => {
+        if (value === "cron/create" || value === "cron/delete") return null;
+        if (Array.isArray(value))
+          return value.map(scrub).filter((entry) => entry !== null);
+        if (value && typeof value === "object") {
+          return Object.fromEntries(
+            Object.entries(value)
+              .map(([key, entry]) => [key, scrub(entry)])
+              .filter(([, entry]) => entry !== null),
+          );
+        }
+        return value;
+      };
+      socket.send(JSON.stringify(scrub(frame)));
+    });
+  });
   await start(page);
   const settings = await openSection(page, "Scheduled tasks");
   await expect(settings.getByText("Queue check")).toBeVisible();
+  await expect(settings.getByText("New scheduled task")).toHaveCount(0);
+  await expect(settings.getByRole("button", { name: "Delete" })).toHaveCount(0);
   await expect(
-    settings.getByText(/New scheduled tasks are unavailable/),
+    settings.getByText(
+      "Creating scheduled tasks is not supported by this server.",
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByText(
+      "Deleting scheduled tasks is not supported by this server.",
+    ),
   ).toBeVisible();
   const toggle = settings.getByRole("checkbox");
   await expect(toggle).not.toBeChecked();

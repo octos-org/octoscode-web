@@ -5836,6 +5836,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         <CronSettingsContent
                           client={protocol.client}
                           capabilities={session.capabilities!}
+                          sessionId={session.opened!.session_id}
                         />
                       </Suspense>
                     ),
