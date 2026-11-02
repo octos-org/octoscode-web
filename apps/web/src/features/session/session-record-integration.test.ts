@@ -776,6 +776,61 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     expect(replacement.closed).toBe(false);
   });
 
+  it("retains the selected record view across a failed reconnect hydrate and later recovery", async () => {
+    const h = harness();
+    const a = await open(h, "A");
+    const b = await open(h, "B");
+    h.manager.select(a.scope);
+    a.changes = [
+      {
+        path: "note.txt",
+        operation: "modify",
+        previewId: null,
+        bytesWritten: 1,
+      },
+    ];
+    const timeline = a.timeline;
+    const changes = a.changes;
+    const previousGeneration = a.runtime.currentAuthority()!.generation;
+    const pooled = new PooledClient();
+    h.pool.client = pooled;
+    pooled.hydratedFor = (id) =>
+      id === "A"
+        ? Promise.reject(new Error("response_bytes_limit"))
+        : hydrate(id);
+
+    expect(
+      await h.manager.recoverRecords(new AbortController().signal),
+    ).toEqual([
+      { sessionId: "A", state: "failed", error: "response_bytes_limit" },
+      expect.objectContaining({ sessionId: "B", state: "rehydrated" }),
+    ]);
+    expect(h.manager.selected()).toBe(a);
+    expect(a.timeline).toBe(timeline);
+    expect(a.changes).toBe(changes);
+    expect(a.runtime.getSnapshot()).toMatchObject({
+      phase: "error",
+      error: "response_bytes_limit",
+      session: { opened: expect.objectContaining({ session_id: "A" }) },
+    });
+    expect(a.runtime.currentAuthority()!.generation).toBeGreaterThan(
+      previousGeneration,
+    );
+    expect(a.runtime.currentAuthority()!.client).toBe(pooled);
+
+    pooled.hydratedFor = (id) => hydrate(id);
+    expect(
+      await h.manager.recoverRecords(new AbortController().signal),
+    ).toEqual([
+      expect.objectContaining({ sessionId: "A", state: "rehydrated" }),
+      expect.objectContaining({ sessionId: "B", state: "rehydrated" }),
+    ]);
+    expect(a.runtime.getSnapshot().phase).toBe("ready");
+    expect(a.timeline).toEqual(timeline);
+    expect(a.changes).toEqual(changes);
+    expect(b.runtime.getSnapshot().phase).toBe("ready");
+  });
+
   it("retains a failed history refresh lease and notification binding for a refresh-only retry", async () => {
     const h = harness();
     const a = await open(h, "A");
