@@ -45,6 +45,40 @@ describe("session hydrate contract", () => {
     }
   });
 
+  it("parses the optional durable terminal marker with legacy null compatibility", () => {
+    const snapshot = {
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 12 },
+    };
+    const turn = (completed_at_durable?: boolean | null | string) => ({
+      ...snapshot,
+      turns: [
+        {
+          turn_id: "turn",
+          state: "completed",
+          started_at: "2026-11-01T19:59:00Z",
+          completed_at: "2026-11-01T20:00:10Z",
+          ...(completed_at_durable === undefined
+            ? {}
+            : { completed_at_durable }),
+        },
+      ],
+    });
+    expect(parseSessionHydrateResult(turn())?.turns?.[0]).not.toHaveProperty(
+      "completed_at_durable",
+    );
+    expect(
+      parseSessionHydrateResult(turn(null))?.turns?.[0],
+    ).not.toHaveProperty("completed_at_durable");
+    expect(parseSessionHydrateResult(turn(true))?.turns?.[0]).toMatchObject({
+      completed_at_durable: true,
+    });
+    expect(parseSessionHydrateResult(turn(false))?.turns?.[0]).toMatchObject({
+      completed_at_durable: false,
+    });
+    expect(parseSessionHydrateResult(turn("true"))).toBeNull();
+  });
+
   it("drops only the file mutation entries it cannot read", () => {
     const snapshot = {
       session_id: "coding:local:main",

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import reconnectSummaryFixture from "../apps/web/src/features/timeline/fixtures/t-0194-reconnect-summary.json" with { type: "json" };
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 
@@ -174,4 +175,68 @@ test("continues past an unknown turn without replaying it or losing the queue an
     "Keep this draft while the status is unknown",
   );
   expect(interrupts).toEqual([]);
+});
+
+test("keeps durable turn duration across reconnect and cold reload", async ({
+  page,
+  request,
+}) => {
+  let durable = false;
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    const requests = new Map<string, string>();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      requests.set(String(frame.id), frame.method);
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (requests.get(String(frame.id)) === "session/hydrate") {
+        const sessionId = frame.result.session_id as string;
+        const result = structuredClone(reconnectSummaryFixture);
+        result.session_id = sessionId;
+        result.cursor.stream = sessionId;
+        result.turns[0]!.completed_at = "2026-11-01T20:00:10.997Z";
+        result.turns[1]!.completed_at = "2026-11-01T20:01:55.993Z";
+        if (durable) {
+          Object.assign(result.turns[0]!, { completed_at_durable: true });
+          Object.assign(result.turns[1]!, { completed_at_durable: true });
+        }
+        for (const envelope of result.replayed_projection_envelopes)
+          envelope.cursor.stream = sessionId;
+        frame.result = result;
+        socket.send(JSON.stringify(frame));
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page
+    .getByLabel("Server workspace path")
+    .fill("/workspace/runtime-recovery");
+  await page.getByLabel("Server workspace path").press("Enter");
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeEnabled();
+  await expect(page.getByText(/Duration \d+s/)).toHaveCount(0);
+  await expect(page.getByText("Turn complete", { exact: true })).toBeVisible();
+
+  durable = true;
+  await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
+  await expect(page.getByText("Duration 71s", { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("Duration 69s", { exact: false })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Duration 71s", { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("Duration 69s", { exact: false })).toBeVisible();
 });

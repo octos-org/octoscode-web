@@ -4,7 +4,7 @@ import {
   type ProjectionEnvelopeV2,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
-import { foldNotification } from "./model.ts";
+import { foldNotification, settleTimelineTurn } from "./model.ts";
 import { summarizeTurn } from "./turn-summary.ts";
 import { timelineFromCanonicalHydrate as timelineFromHydrate } from "./canonical-hydrate.ts";
 import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
@@ -118,7 +118,14 @@ describe("canonical hydrate recovery", () => {
   });
 
   it("keeps the real completed turn summary before the next prompt after reconnect", () => {
-    const hydrated = parseSessionHydrateResult(reconnectSummaryFixture)!;
+    const input = structuredClone(reconnectSummaryFixture);
+    // T-0196's durable append times, from the corresponding real terminal
+    // frames; the old Core snapshot stamped both turns at 20:02:35 instead.
+    input.turns[0]!.completed_at = "2026-11-01T20:00:10.997Z";
+    Object.assign(input.turns[0]!, { completed_at_durable: true });
+    input.turns[1]!.completed_at = "2026-11-01T20:01:55.993Z";
+    Object.assign(input.turns[1]!, { completed_at_durable: true });
+    const hydrated = parseSessionHydrateResult(input)!;
     const completed = hydrated.turns![0]!;
     const interrupted = hydrated.turns![1]!;
     const entries = timelineFromHydrate(hydrated);
@@ -138,13 +145,82 @@ describe("canonical hydrate recovery", () => {
     expect(interruptedTerminal).toBeGreaterThan(nextPrompt);
     expect(entries[completedTerminal]?.turnId).toBe(completed.turn_id);
     expect(entries[interruptedTerminal]?.turnId).toBe(interrupted.turn_id);
+    expect(summarizeTurn(entries, completed.turn_id).seconds).toBe(71);
+    expect(summarizeTurn(entries, interrupted.turn_id).seconds).toBe(69);
+    expect(entries[completedTerminal]).toMatchObject({
+      turnStartedAtMs: Date.parse(completed.started_at!),
+      turnEndedAtMs: Date.parse(completed.completed_at!),
+    });
     expect(timelineFromHydrate(hydrated)).toEqual(entries);
   });
 
-  it("replays the real steered repair without moving its terminal before later tools", () => {
-    const entries = timelineFromHydrate(
-      parseSessionHydrateResult(steeredRepairFixture)!,
+  it("does not overwrite durable turn timing when a late settle arrives", () => {
+    const hydrated = snapshot(
+      [
+        event(1, "user_message", { text: "Durable" }),
+        event(2, "turn_terminal", { outcome: "completed" }),
+      ],
+      {
+        turns: [
+          {
+            turn_id: "turn",
+            thread_id: "thread",
+            state: "completed",
+            started_at: "2026-11-01T19:59:00.477226945Z",
+            completed_at: "2026-11-01T20:00:10.997Z",
+            completed_at_durable: true,
+          },
+        ],
+      },
     );
+    const entries = timelineFromHydrate(hydrated);
+    const terminal = entries.find((entry) => entry.id === "terminal:turn")!;
+    const settled = settleTimelineTurn(entries, "turn", "completed");
+    expect(settled.find((entry) => entry.id === "terminal:turn")).toMatchObject(
+      {
+        turnStartedAtMs: terminal.turnStartedAtMs,
+        turnEndedAtMs: terminal.turnEndedAtMs,
+      },
+    );
+    expect(summarizeTurn(settled, "turn").seconds).toBe(71);
+  });
+
+  it("does not invent a terminal duration for an old-Core snapshot timestamp", () => {
+    const hydrated = snapshot(
+      [
+        event(1, "user_message", { text: "Legacy" }),
+        event(2, "turn_terminal", { outcome: "completed" }),
+      ],
+      {
+        turns: [
+          {
+            turn_id: "turn",
+            thread_id: "thread",
+            state: "completed",
+            started_at: "2026-11-01T19:59:00Z",
+            completed_at: "2026-11-01T20:02:35Z",
+          },
+        ],
+      },
+    );
+    const entries = timelineFromHydrate(hydrated);
+    expect(summarizeTurn(entries, "turn").seconds).toBeUndefined();
+    const terminal = entries.find((entry) => entry.id === "terminal:turn");
+    expect(terminal?.turnStartedAtMs).toBe(Date.parse("2026-11-01T19:59:00Z"));
+    expect(terminal?.turnEndedAtMs).toBeUndefined();
+    vi.setSystemTime(1_700_000_060_000);
+    const reopened = timelineFromHydrate(hydrated);
+    expect(summarizeTurn(reopened, "turn").seconds).toBeUndefined();
+    const lateSettled = settleTimelineTurn(reopened, "turn", "completed");
+    expect(summarizeTurn(lateSettled, "turn").seconds).toBeUndefined();
+    expect(
+      lateSettled.find((entry) => entry.id === "terminal:turn")?.turnEndedAtMs,
+    ).toBeUndefined();
+  });
+
+  it("replays the real steered repair without moving its terminal before later tools", () => {
+    const hydrated = parseSessionHydrateResult(steeredRepairFixture)!;
+    const entries = timelineFromHydrate(hydrated);
     const finalResponse = entries.findIndex((entry) =>
       entry.body.startsWith("竹叶验收"),
     );
@@ -166,9 +242,8 @@ describe("canonical hydrate recovery", () => {
   });
 
   it("replays the real attachment retry without duplicating or displacing its failure", () => {
-    const entries = timelineFromHydrate(
-      parseSessionHydrateResult(attachmentRetryFixture)!,
-    );
+    const hydrated = parseSessionHydrateResult(attachmentRetryFixture)!;
+    const entries = timelineFromHydrate(hydrated);
     const prompt = entries.findIndex((entry) =>
       entry.body.startsWith("把现有 附件预览.pdf"),
     );

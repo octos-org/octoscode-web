@@ -176,10 +176,12 @@ function parseHydratedTurn(value: unknown): HydratedTurn | null {
     return null;
   }
   const optionalStrings = ["started_at", "completed_at", "thread_id"] as const;
+  const durable = value.completed_at_durable;
   if (
     optionalStrings.some(
       (key) => value[key] !== undefined && typeof value[key] !== "string",
-    )
+    ) ||
+    (durable !== undefined && durable !== null && typeof durable !== "boolean")
   ) {
     return null;
   }
@@ -187,6 +189,7 @@ function parseHydratedTurn(value: unknown): HydratedTurn | null {
     turn_id: value.turn_id,
     state: value.state,
     ...copyOptionalStrings(value, optionalStrings),
+    ...(typeof durable === "boolean" ? { completed_at_durable: durable } : {}),
   };
 }
 
