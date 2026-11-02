@@ -341,11 +341,14 @@ test.describe("Fleet view (migrated console semantics)", () => {
       .locator("label")
       .filter({ hasText: "Session" })
       .locator("select");
+    const back = page.locator(".fleet-back");
+    expect((await back.boundingBox())!.width).toBeLessThanOrEqual(80);
     await expect(page.locator(".fleet-pane")).toHaveScreenshot(
       "fleet-empty-desktop.png",
       { mask: [dynamicSession] },
     );
     await page.setViewportSize({ width: 390, height: 844 });
+    expect((await back.boundingBox())!.width).toBeLessThanOrEqual(80);
     await expect(page.locator(".fleet-pane")).toHaveScreenshot(
       "fleet-empty-mobile.png",
       { mask: [dynamicSession] },

@@ -142,25 +142,13 @@
     {
       "thread_id": "41b44738-416e-4ad3-9e00-ae44de3b9720",
       "root_seq": 0,
-      "message_seqs": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8
-      ],
+      "message_seqs": [0, 1, 2, 3, 4, 5, 6, 7, 8],
       "status": "unknown"
     },
     {
       "thread_id": "74bda319-9b01-4202-af44-ba380342ef32",
       "root_seq": 9,
-      "message_seqs": [
-        9
-      ],
+      "message_seqs": [9],
       "status": "unknown"
     }
   ],

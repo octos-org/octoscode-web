@@ -261,21 +261,14 @@ for (const colorScheme of ["light", "dark"] as const) {
     );
     if (colorScheme === "light") {
       await page.keyboard.press("Escape");
-      await page
-        .getByRole("button", { name: "More actions", exact: true })
-        .click();
-      await page
-        .getByRole("menuitem", { name: "Browser preferences", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
       const preferences = page.locator('[role="dialog"]').filter({
         has: page.getByRole("heading", { name: "Browser preferences" }),
       });
       await preferences
         .locator('label:has-text("Language") select')
         .selectOption("zh");
-      await page
-        .getByRole("button", { name: "关闭偏好设置", exact: true })
-        .click();
+      await page.getByRole("button", { name: /关闭/ }).click();
       await page.locator("#workspace-main").focus();
       await page.keyboard.type("?");
       const chinese = page.getByRole("dialog", { name: "键盘快捷键" });
@@ -328,7 +321,7 @@ test("conversation actions have a visible hover background", async ({
   await startDefaultWorkspace(page);
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Conversation actions" });
-  const item = menu.getByRole("menuitem", { name: "Browser preferences" });
+  const item = menu.getByRole("menuitem", { name: "Copy as Markdown" });
   await item.hover();
   await expect(item).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   expect(

@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { isPreviewableImage } from "../timeline/attachments.ts";
 import styles from "./SessionPanelTabs.module.css";
+
+const CsvPreview = lazy(() =>
+  import("../artifact-preview/CsvPreview.tsx").then((module) => ({
+    default: module.CsvPreview,
+  })),
+);
 
 /**
  * Integration point for T-0012's ArtifactPreview, which takes the same props
@@ -91,9 +97,21 @@ export function FilePreview({ name, path, loadBlob }: FilePreviewProps) {
       ) : loaded.kind === "image" ? (
         <img className={styles.previewImage} src={loaded.url} alt={name} />
       ) : loaded.kind === "text" ? (
-        <pre className={styles.previewText} tabIndex={0}>
-          {loaded.text}
-        </pre>
+        /\.csv$/i.test(name) ? (
+          <Suspense
+            fallback={
+              <p className={styles.empty} role="status">
+                {t("Loading preview…")}
+              </p>
+            }
+          >
+            <CsvPreview blob={loaded.blob} />
+          </Suspense>
+        ) : (
+          <pre className={styles.previewText} tabIndex={0}>
+            {loaded.text}
+          </pre>
+        )
       ) : (
         <p className={styles.empty}>
           {t("No preview for this kind of file yet. Download it to open it.")}

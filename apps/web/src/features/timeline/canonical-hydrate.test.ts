@@ -70,7 +70,8 @@ describe("canonical hydrate recovery", () => {
 
   it("keeps the real completed turn summary before the next prompt after reconnect", () => {
     const hydrated = parseSessionHydrateResult(reconnectSummaryFixture)!;
-    const [completed, interrupted] = hydrated.turns!;
+    const completed = hydrated.turns![0]!;
+    const interrupted = hydrated.turns![1]!;
     const entries = timelineFromHydrate(hydrated);
     const completedTerminal = entries.findIndex(
       (entry) => entry.id === `terminal:${completed.turn_id}`,

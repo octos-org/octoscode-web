@@ -57,7 +57,7 @@ async function useChinese(page: Page) {
     .locator('label:has-text("Language") select')
     .selectOption("zh");
   await preferences
-    .getByRole("button", { name: "关闭偏好设置", exact: true })
+    .getByRole("button", { name: /Close settings|关闭设置/ })
     .click();
   await expect(preferences).toHaveCount(0);
 }

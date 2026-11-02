@@ -117,7 +117,7 @@ export interface ConnectionGateApi {
   readonly disconnect: () => void;
   readonly forgetConnection: () => void;
   readonly theme: ThemePreference;
-  readonly cycleTheme: () => void;
+  readonly setTheme: (theme: ThemePreference) => void;
   readonly openPreferences: () => void;
 }
 
@@ -130,7 +130,7 @@ export interface ConnectionGateApi {
 export function ConnectionGate() {
   // Applied before the first paint, so the connect screen is already in the
   // remembered theme rather than flashing the system one.
-  const { theme, cycleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const restoreConnectionRef = useRef<boolean | null>(null);
   if (restoreConnectionRef.current === null) {
@@ -393,7 +393,7 @@ export function ConnectionGate() {
     disconnect,
     forgetConnection,
     theme,
-    cycleTheme,
+    setTheme,
     openPreferences: () => setPreferencesOpen(true),
   };
 
