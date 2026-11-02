@@ -3136,9 +3136,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspaceProduct.state.error === null
       ? null
       : t(workspaceProduct.state.error);
-  // A launch surface shows the failure beside the action that retries it. The
-  // sidebar's copy would announce it twice and pair it with a catalog Retry,
-  // which clears the error without retrying the launch.
+  // A launch surface shows the failure beside its exact Session retry action;
+  // the sidebar would announce the same failure a second time.
   const launchSurfaceShowsError =
     Boolean(workspaceProduct.launch.decision) ||
     (codingCapabilities.sessionCreationAvailable &&
@@ -3412,48 +3411,51 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       )
     : null;
   // §4.1 strip state, derived from live interaction/turn/peer facts.
-  const sessionStripState: SessionStripState = !session.connected
-    ? { kind: "reconnecting" }
-    : session.recovery.phase !== "healthy"
-      ? { kind: "reconnecting" }
-      : conversation.seatHandover === "Resuming chat…" ||
-          conversation.seatHandover === "Handing back control…"
-        ? conversation.seatHandover === "Resuming chat…"
-          ? { kind: "resuming-chat" }
-          : { kind: "handing-back" }
-        : interactions.approval
-          ? { kind: "waiting-approval" }
-          : interactions.question
-            ? { kind: "waiting-answer" }
-            : foreignSeatHeld
-              ? { kind: "external-held" }
-              : conversation.queue.active
-                ? // The live turn is not ours: another attached client owns it.
-                  // Guarded by `selfSeatHeld` for the same reason §4.3 guards
-                  // the other-app copy — a peer THIS app started is SELF, so
-                  // its turn is never "another client".
-                  conversation.queue.active.origin === "adopted" &&
-                  !selfSeatHeld
-                  ? { kind: "busy-elsewhere" }
-                  : { kind: "responding" }
-                : peers.manager
-                      ?.snapshot()
-                      .peers.some((peer) =>
-                        ["opening", "started"].includes(peer.status),
-                      )
-                  ? {
-                      kind: "peers-running",
-                      count: peers.manager
-                        ?.snapshot()
-                        .peers.filter(
-                          (peer) =>
-                            peer.status === "opening" ||
-                            peer.status === "started",
-                        ).length,
-                    }
-                  : selfSeatHeld
-                    ? { kind: "peers-running", count: 1 }
-                    : { kind: "ready" };
+  const sessionStripState: SessionStripState =
+    session.error && session.opened && !session.recoveryPending
+      ? { kind: "retry-needed" }
+      : !session.connected
+        ? { kind: "reconnecting" }
+        : session.recovery.phase !== "healthy"
+          ? { kind: "reconnecting" }
+          : conversation.seatHandover === "Resuming chat…" ||
+              conversation.seatHandover === "Handing back control…"
+            ? conversation.seatHandover === "Resuming chat…"
+              ? { kind: "resuming-chat" }
+              : { kind: "handing-back" }
+            : interactions.approval
+              ? { kind: "waiting-approval" }
+              : interactions.question
+                ? { kind: "waiting-answer" }
+                : foreignSeatHeld
+                  ? { kind: "external-held" }
+                  : conversation.queue.active
+                    ? // The live turn is not ours: another attached client owns it.
+                      // Guarded by `selfSeatHeld` for the same reason §4.3 guards
+                      // the other-app copy — a peer THIS app started is SELF, so
+                      // its turn is never "another client".
+                      conversation.queue.active.origin === "adopted" &&
+                      !selfSeatHeld
+                      ? { kind: "busy-elsewhere" }
+                      : { kind: "responding" }
+                    : peers.manager
+                          ?.snapshot()
+                          .peers.some((peer) =>
+                            ["opening", "started"].includes(peer.status),
+                          )
+                      ? {
+                          kind: "peers-running",
+                          count: peers.manager
+                            ?.snapshot()
+                            .peers.filter(
+                              (peer) =>
+                                peer.status === "opening" ||
+                                peer.status === "started",
+                            ).length,
+                        }
+                      : selfSeatHeld
+                        ? { kind: "peers-running", count: 1 }
+                        : { kind: "ready" };
   const showModelsSettings = Boolean(
     session.opened && (models.state.available || models.management.available),
   );
@@ -3817,10 +3819,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               recoveryPhase={conversation.turnRecovery?.phase ?? null}
               activeTurnId={activeTurnId}
               turnStarting={turnStarting}
-              selectedSessionId={activeSessionKey}
+              selectedSessionId={
+                activeSessionKey ??
+                (workspaceError && savedLink ? savedLink.key : null)
+              }
               peerRoster={peers.roster}
               peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
+              sessionError={workspaceProduct.state.error}
               loading={workspaceProduct.state.loading}
               error={sidebarError}
               settingsActive={settingsOpen}
@@ -3961,9 +3967,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setFleetRouteActive(true);
                 setSettingsOpen(false);
               }}
-              onRetry={() => {
-                void workspaceProduct.refresh();
-              }}
+              {...(!session.recoveryPending
+                ? {
+                    onRetry: () => {
+                      void session.retryRecovery();
+                    },
+                  }
+                : {})}
             />
           </SurfaceBoundary>
         </NavigationSurface>
@@ -4868,7 +4878,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             void conversation.interrupt();
                         }}
                         placeholder={
-                          session.connected &&
+                          (session.connected || session.opened) &&
                           codingCapabilities.turnStartAvailable
                             ? t("Ask Octos to change, explain, or review code…")
                             : session.connected
