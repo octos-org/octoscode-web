@@ -5,6 +5,7 @@ const fixture = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "5
 async function controlledHydrates(page: Page) {
   const sockets: WebSocketRoute[] = [];
   const opens: string[] = [];
+  const hydrates: string[] = [];
   const control = { failures: 0 };
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     sockets.push(socket);
@@ -15,6 +16,8 @@ async function controlledHydrates(page: Page) {
       requests.set(String(request.id), request.method);
       if (request.method === "session/open")
         opens.push(request.params.session_id);
+      if (request.method === "session/hydrate")
+        hydrates.push(request.params.session_id);
       server.send(message);
     });
     server.onMessage((message) => {
@@ -40,7 +43,7 @@ async function controlledHydrates(page: Page) {
       socket.send(message);
     });
   });
-  return { sockets, opens, control };
+  return { sockets, opens, hydrates, control };
 }
 
 async function start(page: Page, workspace: string) {
@@ -108,6 +111,86 @@ test("a failed reconnect hydrate retains the current Session, Changes and draft"
   );
   expect(probe.opens.length).toBeGreaterThan(1);
   expect(new Set(probe.opens).size).toBe(1);
+});
+
+test("Retry rehydrates the same Session across repeated failure and reload", async ({
+  page,
+}) => {
+  const probe = await controlledHydrates(page);
+  await start(page, "/workspace/diff-review");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
+  await composer.fill("Review syntax fixture");
+  await composer.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Session panel, 1 changed" }),
+  ).toBeVisible();
+  const original = await page
+    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+    .getAttribute("data-session-id");
+  expect(original).toBeTruthy();
+  await composer.fill("Draft survives every retry");
+
+  probe.control.failures = 1;
+  probe.sockets.at(-1)?.close({ code: 1012, reason: "first hydrate failure" });
+  await expect(page.getByText(/could not be recovered/).first()).toBeVisible({
+    timeout: 15_000,
+  });
+  const retry = page.getByRole("button", { name: "Retry", exact: true });
+  await expect(retry).toBeVisible();
+  await expect(composer).toHaveValue("Draft survives every retry");
+  await expect(composer).toHaveAttribute(
+    "placeholder",
+    "Ask Octos to change, explain, or review code…",
+  );
+
+  const beforeRetry = probe.hydrates.length;
+  probe.control.failures = 1;
+  await retry.click();
+  await expect.poll(() => probe.hydrates.length).toBe(beforeRetry + 1);
+  await expect(page.getByText(/could not be recovered/).first()).toBeVisible();
+  expect(new Set(probe.opens).size).toBe(1);
+
+  probe.control.failures = 1;
+  await page.reload();
+  await expect(
+    page.getByText("response_bytes_limit", { exact: true }),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("treeitem", { name: /New session/ })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator(
+      `[role="treeitem"][data-session-id=${JSON.stringify(original)}]`,
+    ),
+  ).toBeVisible();
+  const beforeReloadRetry = probe.hydrates.length;
+  await page
+    .getByRole("button", { name: "Open conversation", exact: true })
+    .click();
+  await expect.poll(() => probe.hydrates.length).toBe(beforeReloadRetry + 1);
+  await expect(composer).toBeEnabled();
+  await expect(composer).toHaveValue("Draft survives every retry");
+  expect(new Set(probe.opens).size).toBe(1);
+
+  const workspace = page.getByRole("button", {
+    name: "diff-review",
+    exact: true,
+  });
+  await workspace.hover();
+  await page
+    .getByRole("button", { name: "New session in diff-review" })
+    .click();
+  await expect(composer).toBeEnabled();
+  await expect(composer).toHaveValue("");
+  expect(new Set(probe.opens).size).toBe(2);
+  await page
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(original)}]`)
+    .click();
+  await expect(composer).toHaveValue("Draft survives every retry");
+  expect(new Set(probe.opens).size).toBe(2);
 });
 
 test("a cold hydrate failure stays honest and Start retries without a phantom record", async ({

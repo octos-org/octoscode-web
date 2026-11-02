@@ -1217,6 +1217,7 @@ const catalog: Readonly<Record<string, string>> = {
   "Another client was working in this session, so this message was not sent. It was kept for retry and will return when the composer is empty. Send it again when the running turn finishes, or Stop that turn to take over.":
     "另一个客户端当时正在此会话中工作，因此此消息未发送。消息已保留待重试，将在输入框的文字和图片都清空后恢复。当前回复结束后可再次发送，也可点击“停止”结束该回复后接手。",
   Reconnecting: "正在重新连接",
+  "Retry needed": "需要重试",
   "Model, permissions, sandbox": "模型、权限、沙箱",
   "Model not reported": "模型未报告",
   "Permissions not reported": "权限未报告",
