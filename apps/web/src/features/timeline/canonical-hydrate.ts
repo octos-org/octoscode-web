@@ -283,7 +283,50 @@ export function restoreCanonicalHydrate(
   }
   // A not-yet-persisted active/interrupted thread has no durable anchor.
   // Its original question and stream still belong after prior history.
-  return [...entries, ...unanchored];
+  return placeRecoveredTerminalsBeforeNextPrompt(
+    [...entries, ...unanchored],
+    replayOrder,
+    new Set(
+      extras
+        .filter((entry) => entry.id.startsWith("terminal:"))
+        .map((entry) => entry.id),
+    ),
+  );
+}
+
+/**
+ * Durable user rows are deliberately not general anchors: Core can retain their
+ * execution position differently. A recovered terminal is narrower: when its
+ * canonical cursor predates another turn's prompt, it must not be left below
+ * that prompt merely because the next non-user anchor belongs to the new turn.
+ */
+function placeRecoveredTerminalsBeforeNextPrompt(
+  entries: TimelineEntry[],
+  replayOrder: ReadonlyMap<string, number>,
+  recoveredTerminalIds: ReadonlySet<string>,
+): TimelineEntry[] {
+  const placed = entries.slice();
+  for (const id of recoveredTerminalIds) {
+    const from = placed.findIndex((entry) => entry.id === id);
+    const terminal = placed[from];
+    const terminalOrder = replayOrder.get(id);
+    if (!terminal || terminalOrder === undefined) continue;
+    const before = placed.findIndex((entry, index) => {
+      if (
+        index >= from ||
+        entry.kind !== "user" ||
+        !entry.turnId ||
+        entry.turnId === terminal.turnId
+      )
+        return false;
+      const promptOrder = replayOrder.get(entry.id);
+      return promptOrder !== undefined && promptOrder > terminalOrder;
+    });
+    if (before < 0) continue;
+    placed.splice(from, 1);
+    placed.splice(before, 0, terminal);
+  }
+  return placed;
 }
 
 function fold(
