@@ -22,6 +22,7 @@ import {
 import type { FleetRosterPeer, FleetStatusWord } from "./fleet-model.ts";
 import type { PeerManagerSnapshot } from "../peers/peer-roster.ts";
 import { EMPTY_PEER_SNAPSHOT } from "../peers/peer-roster.ts";
+import { peerApprovalEscalates } from "../peers/peer-row-view.ts";
 import { workspaceName } from "../workspace/workspace-recents.ts";
 import type { DriverInventoryState } from "../session/driver-discovery.ts";
 
@@ -48,6 +49,8 @@ export interface FleetPaneProps {
   readonly nativeControlsAvailable?: boolean | undefined;
   readonly onGather?: FleetViewProps["onGather"] | undefined;
   readonly gatherState?: FleetViewProps["gatherState"] | undefined;
+  /** Phone remote control: a peer's sandbox escalation can only be denied. */
+  readonly onceOnly?: boolean | undefined;
 }
 
 const subscribeNoPeerRoster = () => () => undefined;
@@ -67,6 +70,7 @@ export function FleetPane({
   nativeControlsAvailable,
   onGather,
   gatherState,
+  onceOnly = false,
 }: FleetPaneProps) {
   // Fleet rows: the SAME roster the controller value carries, projected
   // through ux-fleet-02's fleetRosterFromController (goal 3 mount).
@@ -127,8 +131,21 @@ export function FleetPane({
         fleetRosterPeers,
         workspacePath,
         nativeControlsAvailable ?? false,
+        new Set(
+          onceOnly
+            ? peerRosterSnapshot.peers
+                .filter(peerApprovalEscalates)
+                .map((peer) => peer.slug)
+            : [],
+        ),
       ),
-    [fleetRosterPeers, workspacePath, nativeControlsAvailable],
+    [
+      fleetRosterPeers,
+      workspacePath,
+      nativeControlsAvailable,
+      onceOnly,
+      peerRosterSnapshot,
+    ],
   );
   return (
     <FleetView
@@ -158,6 +175,7 @@ function fleetRosterFromUnion(
   union: ReturnType<typeof unionFleetFacts>,
   workspacePath: string,
   nativeControlsAvailable: boolean,
+  denyOnlySlugs: ReadonlySet<string>,
 ): FleetRosterPeer[] {
   const now = Date.now();
   return union.rows.map((row) => {
@@ -176,6 +194,7 @@ function fleetRosterFromUnion(
       controlSupported: nativeControlsAvailable
         ? row.status === "started"
         : row.operationId !== null,
+      ...(denyOnlySlugs.has(row.slug) ? { approvalDenyOnly: true } : {}),
     } satisfies FleetRosterPeer;
   });
 }

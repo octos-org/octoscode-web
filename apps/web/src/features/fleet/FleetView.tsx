@@ -50,6 +50,7 @@ import {
   fleetStartRetryFromUncertain,
   type FleetStartState,
 } from "../control/fleet-actions.ts";
+import { ESCALATION_DENY_ONLY_NOTE } from "../approval/approval-presentation.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./FleetView.module.css";
 
@@ -713,6 +714,11 @@ function renderFleetRow({
         </span>
         {sessionName !== "" ? <span> · {sessionName}</span> : null}
       </div>
+      {controlSupported && !terminal && peer.approvalDenyOnly ? (
+        <p className={styles.reason} role="note">
+          {t(ESCALATION_DENY_ONLY_NOTE)}
+        </p>
+      ) : null}
       {controlSupported && !terminal ? (
         <div className={styles.actions} role="group" aria-label={peer.label}>
           {(["approve", "deny", "stop"] as const).map((action) => {
@@ -725,6 +731,7 @@ function renderFleetRow({
               peer.statusWord !== "Waiting for your approval"
             )
               return null;
+            if (action === "approve" && peer.approvalDenyOnly) return null;
             const enabled = availability[action];
             const reasonId = `${peer.slug}-${action}-reason`;
             return (

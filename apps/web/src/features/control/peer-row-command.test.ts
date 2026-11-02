@@ -11,7 +11,10 @@
  *  - Steer carries the operator's trimmed text; Stop is a bare interrupt.
  */
 import { describe, expect, it } from "vitest";
-import { buildRowControlCommand } from "./peer-row-command.ts";
+import {
+  buildRowControlCommand,
+  onceOnlyRowCommand,
+} from "./peer-row-command.ts";
 import type { PeerRowAttention } from "./peer-row-command.ts";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
@@ -121,5 +124,26 @@ describe("buildRowControlCommand — real pending ids, fail-closed (judge #4)", 
     expect(
       buildRowControlCommand("stop", "", attention({ turnId: "" })),
     ).toBeNull();
+  });
+});
+
+describe("onceOnlyRowCommand (phone remote control)", () => {
+  it("drops a session-wide scope and keeps the decision on its real id", () => {
+    const wide = buildRowControlCommand(
+      "approve_session",
+      "",
+      attention({ requestKind: "approval", requestId: "approval-1" }),
+    )!;
+    expect(wide).toHaveProperty("approvalScope", "session");
+    expect(onceOnlyRowCommand(wide)).toEqual({
+      kind: "approval_respond",
+      approvalId: "approval-1",
+      decision: "approve",
+    });
+  });
+
+  it("leaves everything else as it was", () => {
+    const stop = { kind: "interrupt" } as const;
+    expect(onceOnlyRowCommand(stop)).toBe(stop);
   });
 });

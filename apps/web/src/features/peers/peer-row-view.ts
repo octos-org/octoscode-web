@@ -6,7 +6,11 @@
  * on screen. Keeping them out of `PeerDock.tsx` keeps the dock component, its
  * stylesheet and the peer manager behind the shell's lazy boundary.
  */
-import type { PeerQuestionDetail, PeerRosterEntry } from "./peer-roster.ts";
+import type {
+  PeerApprovalDetail,
+  PeerQuestionDetail,
+  PeerRosterEntry,
+} from "./peer-roster.ts";
 import type { PeerRosterCounts, fleetLanded } from "./peer-manager.ts";
 import type {
   PeerRowAction,
@@ -24,6 +28,15 @@ export function peerRowLabel(index: number, model?: string | null): string {
     : `Peer ${index + 1}`;
 }
 
+/** The row waits on an approval for more access than the sandbox grants. */
+export function peerApprovalEscalates(peer: PeerRosterEntry): boolean {
+  return (
+    peer.requestKind === "approval" &&
+    (peer.requestDetail as PeerApprovalDetail | null | undefined)
+      ?.sandboxEscalation === true
+  );
+}
+
 /**
  * The actions a row offers, in design §4.3 order. Availability follows the
  * SAME rules as Fleet rows: Approve/Deny (and the session-scoped Approve)
@@ -31,15 +44,25 @@ export function peerRowLabel(index: number, model?: string | null): string {
  * answer; Steer while Working; Stop while Starting/Working/Waiting. A row
  * without an accepted dispatch operation id is terminal/unaddressable — the
  * dock renders its status but no affordance.
+ *
+ * `onceOnly` is the phone remote control's limit, the same one its
+ * `ApprovalPanel` applies: one request at most, and a sandbox escalation can
+ * only be denied.
  */
 export function peerRowActions(
   peer: PeerRosterEntry,
+  { onceOnly = false }: { readonly onceOnly?: boolean } = {},
 ): readonly PeerRowAction[] {
   const addressable =
     typeof peer.operationId === "string" && peer.operationId !== "";
   if (peer.activity === "blocked") {
-    if (peer.requestKind === "approval")
-      return addressable ? ["approve", "approve_session", "deny", "stop"] : [];
+    if (peer.requestKind === "approval") {
+      if (!addressable) return [];
+      if (!onceOnly) return ["approve", "approve_session", "deny", "stop"];
+      return peerApprovalEscalates(peer)
+        ? ["deny", "stop"]
+        : ["approve", "deny", "stop"];
+    }
     if (peer.requestKind === "question")
       return addressable ? ["answer", "stop"] : [];
     return addressable ? ["stop"] : [];

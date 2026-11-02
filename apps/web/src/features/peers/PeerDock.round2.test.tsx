@@ -313,6 +313,53 @@ describe("PeerDock request contents + consequences (judge r2 #4)", () => {
   });
 });
 
+describe("PeerDock on the phone remote control", () => {
+  const render = (row: PeerRosterEntry, onceOnly: boolean) =>
+    renderToStaticMarkup(
+      <PeerDock
+        manager={managerFor([row])}
+        onceOnly={onceOnly}
+        onRowAction={() => undefined}
+        onApprovalRespond={() => undefined}
+      />,
+    );
+  const ESCALATION_ROW = entry({
+    ...APPROVAL_ROW,
+    requestDetail: {
+      toolName: "shell",
+      target: null,
+      scope: "sandbox_escalation",
+      title: null,
+      body: null,
+      sandboxEscalation: true,
+    },
+  });
+
+  it("an approval allows one request, never the whole session", () => {
+    const markup = render(APPROVAL_ROW, true);
+    expect(markup).toContain('data-row-action="approve"');
+    expect(markup).toContain('data-row-action="deny"');
+    expect(markup).toContain('data-row-action="stop"');
+    expect(markup).not.toContain('data-row-action="approve_session"');
+  });
+
+  it("a sandbox escalation can only be denied, and says why", () => {
+    const markup = render(ESCALATION_ROW, true);
+    expect(markup).toContain('data-row-action="deny"');
+    expect(markup).toContain('data-row-action="stop"');
+    expect(markup).not.toContain('data-row-action="approve"');
+    expect(markup).not.toContain('data-row-action="approve_session"');
+    expect(markup).toContain("from the phone you can only deny it");
+  });
+
+  it("the computer keeps every decision on the same request", () => {
+    const markup = render(ESCALATION_ROW, false);
+    expect(markup).toContain('data-row-action="approve"');
+    expect(markup).toContain('data-row-action="approve_session"');
+    expect(markup).not.toContain("from the phone you can only deny it");
+  });
+});
+
 describe("PeerDock row answer card (stateless, §4.3)", () => {
   it("renders the question card's radio choices inline on the row", () => {
     const markup = renderToStaticMarkup(

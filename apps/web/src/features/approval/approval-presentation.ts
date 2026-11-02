@@ -9,6 +9,21 @@ export interface ApprovalImpactDetails {
   destructive: boolean;
 }
 
+/** Why a phone can only deny a sandbox escalation. */
+export const ESCALATION_DENY_ONLY_NOTE =
+  "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.";
+
+/** A typed sandbox escalation: more access than the sandbox grants. */
+export function isSandboxEscalation(approval: ApprovalRequested): boolean {
+  const kind = isRecord(approval.typedDetails)
+    ? approval.typedDetails.kind
+    : undefined;
+  return (
+    approval.approvalKind === "sandbox_escalation" ||
+    kind === "sandbox_escalation"
+  );
+}
+
 export function approvalImpactDetails(
   approval: ApprovalRequested,
 ): ApprovalImpactDetails {
