@@ -2113,6 +2113,18 @@ const catalog: Readonly<Record<string, string>> = {
 
   // Spread LAST so fleet values win collisions (fleet-02's round-2 vocabulary).
   // Phone remote control (T-0094).
+  "Continue on phone": "在手机上继续",
+  "Copy link": "复制链接",
+  "Phone link": "手机接续链接",
+  "Phone link copied.": "手机接续链接已复制。",
+  "Open this link on your phone, then enter your server token. The link includes these folder paths, but no token.":
+    "在手机上打开链接，再输入服务器令牌。链接包含以下文件夹路径，不含令牌。",
+  "Could not create a phone link. Check the server address and the number of folders.":
+    "无法生成手机接续链接，请检查服务器地址和文件夹数量。",
+  "This phone link is invalid. Copy a new link from your computer.":
+    "手机接续链接无效，请从电脑重新复制。",
+  "The phone link is for a different server. Browse this server's folders instead.":
+    "此链接的文件夹属于另一台服务器，请浏览选择当前服务器的文件夹。",
   "Remote control": "手机遥控",
   "Connected to Octos": "已连接 Octos",
   "Connected to Octos · updated {time}": "已连接 Octos · {time} 更新",

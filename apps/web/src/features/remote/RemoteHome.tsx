@@ -7,10 +7,13 @@ import { CloseIcon, MenuIcon, RefreshIcon } from "../../ui/ShellIcons.tsx";
 import type { RemoteCatalogSnapshot } from "./remote-catalog.ts";
 import type { RemoteLink } from "./remote-link.ts";
 import type { RemoteOverview, RemoteRow } from "./remote-model.ts";
+import { WorkspaceFolderBrowser } from "../workspace-create/WorkspaceFolderBrowser.tsx";
+import type { WorkspaceBrowseAdapter } from "../workspace-create/workspace-browse.ts";
 import styles from "./RemoteHome.module.css";
 
 export interface RemoteHomeProps {
   overview: RemoteOverview;
+  browse: WorkspaceBrowseAdapter | null;
   folders: readonly RecentWorkspace[];
   folderStates: RemoteCatalogSnapshot;
   link: RemoteLink;
@@ -142,6 +145,8 @@ export function RemoteHome(props: RemoteHomeProps) {
         <FolderList
           folders={folders}
           states={props.folderStates}
+          browse={props.browse}
+          online={link.kind === "online"}
           onAdd={props.onAddFolder}
           onRemove={props.onRemoveFolder}
         />
@@ -252,12 +257,15 @@ function rowDetail(
 function FolderList(props: {
   folders: readonly RecentWorkspace[];
   states: RemoteCatalogSnapshot;
+  browse: WorkspaceBrowseAdapter | null;
+  online: boolean;
   onAdd: (path: string) => void;
   onRemove: (path: string) => void;
 }) {
   const t = useUiText();
   const inputId = useId();
   const [draft, setDraft] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const path = draft.trim();
@@ -297,6 +305,29 @@ function FolderList(props: {
             );
           })}
         </ul>
+      ) : null}
+      {props.browse ? (
+        <button
+          type="button"
+          className={styles.addButton}
+          disabled={!props.online}
+          onClick={() => setBrowsing((value) => !value)}
+        >
+          {t("Browse server folders")}
+        </button>
+      ) : null}
+      {browsing && props.browse ? (
+        <WorkspaceFolderBrowser
+          adapter={props.browse}
+          initialPath={null}
+          titleId={inputId}
+          disabled={!props.online}
+          onChoose={(path) => {
+            props.onAdd(path);
+            setBrowsing(false);
+          }}
+          onBack={() => setBrowsing(false)}
+        />
       ) : null}
       <form className={styles.addFolder} onSubmit={submit}>
         <label htmlFor={inputId} className="sr-only">

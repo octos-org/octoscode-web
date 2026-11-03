@@ -1,0 +1,36 @@
+.content {
+  display: grid;
+  gap: var(--dsw-space-3);
+  padding: var(--dsw-space-4);
+  min-width: 0;
+}
+.content h2,
+.content p {
+  margin: 0;
+}
+.content ul {
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding-left: var(--dsw-space-5);
+}
+.content textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--dsw-space-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-control);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+.content button {
+  min-height: var(--dsw-control-h-lg);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-control);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}

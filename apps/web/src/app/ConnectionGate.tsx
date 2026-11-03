@@ -41,6 +41,7 @@ import {
   probePairingInfo,
   type PairingLink,
 } from "../features/connection/pairing.ts";
+import { readRemoteHandoff } from "../features/remote/remote-handoff.ts";
 import { clearRememberedTokens } from "../features/connection/remembered-token.ts";
 import { clearRecentWorkspaces } from "../features/workspace/workspace-recents.ts";
 import { useTheme, type ThemePreference } from "./use-theme.ts";
@@ -132,17 +133,30 @@ export function ConnectionGate() {
   // remembered theme rather than flashing the system one.
   const { theme, setTheme } = useTheme();
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [handoff] = useState(() => readRemoteHandoff(window.location.href));
+  const [handoffError, setHandoffError] = useState(handoff.kind === "invalid");
   const restoreConnectionRef = useRef<boolean | null>(null);
   if (restoreConnectionRef.current === null) {
-    restoreConnectionRef.current = loadAutoConnect(
-      browserStorage("sessionStorage"),
-    );
+    restoreConnectionRef.current =
+      handoff.kind === "none" &&
+      loadAutoConnect(browserStorage("sessionStorage"));
   }
   // WEB-PAIRING-CONTRACT-5100 §Client: main.tsx already read `octos`/`pair` and
   // rewrote the address before this first render; this reads what it captured.
   // The code lives only in memory.
-  const [pairingLink] = useState(() => consumePairingLink());
+  const [pairingLink] = useState(() => {
+    const pairing = consumePairingLink();
+    return handoff.kind === "none" ? pairing : null;
+  });
   const [connection, setConnection] = useState(() => {
+    if (handoff.kind !== "none")
+      return {
+        ...initialConnection,
+        endpoint:
+          handoff.kind === "valid"
+            ? handoff.endpoint
+            : initialConnection.endpoint,
+      };
     const loaded = loadConnectionPreferences(
       initialConnection,
       browserStorage("localStorage"),
@@ -183,6 +197,7 @@ export function ConnectionGate() {
    * the chunk is still in flight is neither lost nor sent twice.
    */
   const requestConnect = (next: ConnectionDraft) => {
+    setHandoffError(false);
     setShellArmed(true);
     const bridge = bridgeRef.current;
     if (bridge) bridge.connect(next);
@@ -246,7 +261,7 @@ export function ConnectionGate() {
 
   // Probe only the last saved origin when this tab has no credential.
   useEffect(() => {
-    if (pairingLink) return;
+    if (pairingLink || handoff.kind !== "none") return;
     if (restoreConnectionRef.current || connection.token.trim()) return;
     const last = loadDurableEndpoint(browserStorage("localStorage"));
     if (!last) return;
@@ -418,7 +433,15 @@ export function ConnectionGate() {
       ) : (
         <>
           <SurfaceBoundary name="Connection" fallback={null}>
-            <ConnectionPanel {...panel} status="idle" error={null} />
+            <ConnectionPanel
+              {...panel}
+              status="idle"
+              error={
+                handoffError
+                  ? "This phone link is invalid. Copy a new link from your computer."
+                  : null
+              }
+            />
           </SurfaceBoundary>
         </>
       )}
