@@ -381,28 +381,6 @@
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
-.stepRetry {
-  justify-self: start;
-  min-height: 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 0 12px;
-  background: var(--dsw-specific-tip);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.stepRetry:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.stepRetry:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .planItems {
   display: grid;
   gap: 6px;

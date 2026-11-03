@@ -19,7 +19,7 @@ async function start(page: Page) {
   ).toBeEnabled();
 }
 
-async function prepareDeniedWrite(page: Page) {
+async function prepareReadOnly(page: Page, network = "Network blocked") {
   await start(page);
   await page
     .getByRole("button", { name: /Session settings|Workspace write/ })
@@ -32,7 +32,7 @@ async function prepareDeniedWrite(page: Page) {
     .first()
     .click();
   await page
-    .getByRole("menuitemradio", { name: /^Read · Network blocked/ })
+    .getByRole("menuitemradio", { name: new RegExp(`^Read · ${network}`) })
     .click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
@@ -41,15 +41,15 @@ async function prepareDeniedWrite(page: Page) {
   await page.reload();
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
+  return composer;
+}
+
+async function prepareDeniedWrite(page: Page) {
+  const composer = await prepareReadOnly(page);
   await composer.fill("Fail a write fixture");
   await composer.press("Enter");
-  await page
-    .locator("details")
-    .filter({ hasText: "write_file" })
-    .locator("summary")
-    .click();
   const retry = page.getByRole("button", {
-    name: "Switch to write and retry",
+    name: "Switch to write and continue",
   });
   await expect(retry).toBeVisible();
   return { composer, retry };
@@ -88,10 +88,10 @@ test("shows action, impact, risk, and explicit approval choices with zero axe vi
   await expect(approval).toBeHidden();
 });
 
-test("switches a permission-denied write to workspace-write and retries it", async ({
+test("switches a read-only denied write to workspace-write and redoes it", async ({
   page,
 }) => {
-  const { retry } = await prepareDeniedWrite(page);
+  const { composer, retry } = await prepareDeniedWrite(page);
   await retry.click();
   const writes = page.locator("details").filter({
     hasText: "Write file report.md",
@@ -101,9 +101,113 @@ test("switches a permission-denied write to workspace-write and retries it", asy
     "write_file is not permitted by read-only filesystem access",
   );
   await expect(writes.last()).toContainText("report.md written");
+  await expect(retry).toHaveCount(0);
+  await expect(composer).toBeFocused();
+});
+
+test("switching stops the running workaround, then redoes the request with write access", async ({
+  page,
+}) => {
+  const sent: string[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const { method } = JSON.parse(String(message));
+      if (
+        method === "permission/profile/set" ||
+        method === "turn/interrupt" ||
+        method === "turn/start"
+      )
+        sent.push(method);
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  const composer = await prepareReadOnly(page);
+  await composer.fill("Fail a write and ask to work around it");
+  await composer.press("Enter");
+  // The approval card covers the dock, so the way out has to live inside it.
+  const approval = page.getByRole("dialog", { name: "Run product checks?" });
+  const retry = approval.getByRole("button", {
+    name: "Switch to write and continue",
+  });
+  await expect(retry).toBeVisible();
+  await expect(approval.getByRole("status")).toContainText(
+    "This stops the current response",
+  );
+  sent.length = 0;
+  await retry.click();
+  await expect(approval).toBeHidden();
   await expect(
-    page.getByRole("button", { name: "Switch to write and retry" }),
-  ).toHaveCount(0);
+    page.locator("details").filter({ hasText: "report.md written" }),
+  ).toHaveCount(1);
+  expect(sent).toEqual([
+    "permission/profile/set",
+    "turn/interrupt",
+    "turn/start",
+  ]);
+});
+
+test("switching keeps network access when the server lists no matching write profile", async ({
+  page,
+}) => {
+  // Core advertises one pairing per mode, and read-only sessions start with
+  // the network allowed: { workspace_write, allow } is valid but never listed.
+  let update: unknown = null;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "permission/profile/set") {
+        update = frame.params.update;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (Array.isArray(frame.result?.profiles)) {
+        frame.result.profiles = [
+          { mode: "read_only", network: "deny" },
+          { mode: "workspace_write", network: "deny" },
+          { mode: "danger_full_access", network: "allow" },
+        ];
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  const composer = await prepareReadOnly(page, "Network allowed");
+  await composer.fill("Fail a write fixture");
+  await composer.press("Enter");
+  await page
+    .getByRole("button", { name: "Switch to write and continue" })
+    .click();
+  await expect(
+    page.locator("details").filter({ hasText: "report.md written" }),
+  ).toHaveCount(1);
+  expect(update).toEqual({ mode: "workspace_write", network: "allow" });
+});
+
+test("staying read only dismisses the offer until a later request is denied", async ({
+  page,
+}) => {
+  let sets = 0;
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      if (JSON.parse(String(message)).method === "permission/profile/set")
+        sets += 1;
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  const { composer, retry } = await prepareDeniedWrite(page);
+  const before = sets;
+  await page.getByRole("button", { name: "Stay read only" }).click();
+  await expect(retry).toHaveCount(0);
+  expect(sets).toBe(before);
+  await composer.fill("Fail a write fixture");
+  await composer.press("Enter");
+  await expect(retry).toBeVisible();
 });
 
 test("a late permission retry never starts in or clears another Session", async ({
@@ -206,13 +310,11 @@ test("permission retry is hidden without the SET capability", async ({
   await page.reload();
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
-  await page
-    .locator("details")
-    .filter({ hasText: "write_file" })
-    .locator("summary")
-    .click();
   await expect(
-    page.getByRole("button", { name: "Switch to write and retry" }),
+    page.locator("details").filter({ hasText: "write_file" }),
+  ).not.toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Switch to write and continue" }),
   ).toHaveCount(0);
   expect(blockedWrites).toBe(0);
 });

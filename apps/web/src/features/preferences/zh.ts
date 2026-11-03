@@ -1972,8 +1972,17 @@ const catalog: Readonly<Record<string, string>> = {
   "No deletion indicated": "未要求删除",
   "Allow for this session": "本会话都允许",
   "Allow once": "允许一次",
-  "Switch to write and retry": "切换到可写后重试",
-  "Switching to write and retrying…": "正在切换到可写并重试…",
+  "This Session is read only, so Octos can't change files":
+    "现在是只读，Octos 改不了文件",
+  "This stops the current response, switches to write, and redoes your request. Network access stays the same.":
+    "点按钮会停下这一轮，切到写入，再按原要求重做。联网设置不变。",
+  "This switches to write and redoes your request. Network access stays the same.":
+    "点按钮会切到写入，再按原要求重做。联网设置不变。",
+  "Switch to write and continue": "切到写入并继续",
+  "Switching to write…": "正在切到写入…",
+  "Stay read only": "保持只读",
+  "The server did not apply workspace write permission.":
+    "服务器没有切换到工作区写入，当前仍是只读。",
   "Current server does not support Fleet yet": "当前服务器还不支持多智能体",
 
   // Execution transparency (T-0018).

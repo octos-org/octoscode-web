@@ -22,6 +22,7 @@ interface HomeCopy {
   use: string;
   resume: string;
   applied: string;
+  appliedReadOnly: string;
   undo: string;
   pending: string;
   cancel: string;
@@ -46,6 +47,8 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     resume: "Continue where you left off",
     applied:
       "“{title}” is in the message box. Fill in the bracketed parts, then send.",
+    appliedReadOnly:
+      "“{title}” is in the message box, and this session is now read only. Fill in the bracketed parts, then send.",
     undo: "Undo",
     pending: "“{title}” is ready. Choose a folder to start.",
     cancel: "Cancel",
@@ -66,6 +69,8 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     use: "做同款",
     resume: "继续上次的会话",
     applied: "已把「{title}」填进输入框，改好【】里的内容再发送。",
+    appliedReadOnly:
+      "已把「{title}」填进输入框，这个会话现在是只读。改好【】里的内容再发送。",
     undo: "撤销",
     pending: "已选「{title}」，选好文件夹就开始。",
     cancel: "取消",
@@ -217,9 +222,14 @@ export function TaskTemplateHome({
         {notice && noticeTemplate ? (
           <p>
             <span>
-              {fill(notice.kind === "applied" ? copy.applied : copy.pending, {
-                title: noticeTitle,
-              })}
+              {fill(
+                notice.kind === "pending"
+                  ? copy.pending
+                  : noticeTemplate.access === "read" && !readAccess?.error
+                    ? copy.appliedReadOnly
+                    : copy.applied,
+                { title: noticeTitle },
+              )}
             </span>
             {notice.kind === "applied" && notice.onUndo ? (
               <button type="button" onClick={notice.onUndo}>
