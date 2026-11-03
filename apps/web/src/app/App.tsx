@@ -176,6 +176,10 @@ import {
   rememberRemoteFolder,
 } from "../features/remote/remote-folders.ts";
 import { useRemoteCatalog } from "../features/remote/remote-catalog.ts";
+import {
+  readRemoteHandoff,
+  handoffMatchesEndpoint,
+} from "../features/remote/remote-handoff.ts";
 import { remoteLink } from "../features/remote/remote-link.ts";
 import {
   remoteKey,
@@ -828,6 +832,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [remoteFolders, setRemoteFolders] = useState(() =>
     loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
   );
+  const [remoteHandoff] = useState(() =>
+    readRemoteHandoff(window.location.href),
+  );
+  const remoteHandoffImported = useRef(false);
   const [remoteOpening, setRemoteOpening] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [remoteRefresh, setRemoteRefresh] = useState(0);
@@ -1337,6 +1345,43 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       loadRemoteFolders(browserStorage("localStorage"), connection.endpoint),
     );
   }, [connection.endpoint]);
+  useEffect(() => {
+    if (
+      !session.authenticated ||
+      remoteHandoff.kind !== "valid" ||
+      remoteHandoffImported.current
+    )
+      return;
+    remoteHandoffImported.current = true;
+    if (!handoffMatchesEndpoint(remoteHandoff, connection.endpoint)) {
+      setRemoteError(
+        t(
+          "The phone link is for a different server. Browse this server's folders instead.",
+        ),
+      );
+      return;
+    }
+    const storage = browserStorage("localStorage");
+    for (const path of [...remoteHandoff.folders].reverse())
+      rememberRemoteFolder(storage, connection.endpoint, path);
+    setRemoteFolders((current) => {
+      const paths = [
+        ...new Set([
+          ...remoteHandoff.folders,
+          ...current.map((folder) => folder.path),
+        ]),
+      ];
+      return paths.map((path) => ({
+        id: path,
+        name: workspaceName(path),
+        path,
+        lastOpenedAt: Date.now(),
+      }));
+    });
+    const url = new URL(window.location.href);
+    url.hash = "";
+    window.history.replaceState(window.history.state, "", url.href);
+  }, [session.authenticated, connection.endpoint, remoteHandoff, t]);
   const setRemoteViewInUrl = (next: "home" | "session" | null) => {
     setRemoteView(next);
     window.history.replaceState(
@@ -4239,6 +4284,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         }
                       : undefined
                   }
+                  phoneHandoff={
+                    !compact && session.opened
+                      ? {
+                          endpoint: connection.endpoint,
+                          folders: [
+                            activeWorkspacePath,
+                            ...recentWorkspaces.map((folder) => folder.path),
+                            ...remoteFolders.map((folder) => folder.path),
+                          ],
+                        }
+                      : undefined
+                  }
                   onOpenRemote={
                     compact ? () => setRemoteViewInUrl("home") : undefined
                   }
@@ -5196,6 +5253,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 fallback={<DeferredSurface label="Loading remote control…" />}
               >
                 <RemoteHome
+                  browse={workspaceBrowse}
                   overview={remoteOverviewState}
                   folders={remoteFolders}
                   folderStates={remoteCatalog}

@@ -4,12 +4,14 @@ import { useUiText } from "../preferences/ui-text.tsx";
 import { CopyConversationButton } from "../transcript-export/CopyConversationButton.tsx";
 import type { ConversationCopySource } from "../transcript-export/copy-conversation.ts";
 import { MoreIcon } from "../../ui/ShellIcons.tsx";
+import { PhoneHandoffDialog } from "../remote/PhoneHandoffDialog.tsx";
 import styles from "./ConversationActionsMenu.module.css";
 
 interface ConversationActionsMenuProps {
   copySource?: ConversationCopySource | undefined;
   /** Offered on phones: switch to the remote-control overview. */
   onOpenRemote?: (() => void) | undefined;
+  phoneHandoff?: { endpoint: string; folders: readonly string[] } | undefined;
   triggerClassName: string;
 }
 
@@ -17,10 +19,12 @@ interface ConversationActionsMenuProps {
 export function ConversationActionsMenu({
   copySource,
   onOpenRemote,
+  phoneHandoff,
   triggerClassName,
 }: ConversationActionsMenuProps) {
   const t = useUiText();
   const [open, setOpen] = useState(false);
+  const [handoffOpen, setHandoffOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -37,6 +41,7 @@ export function ConversationActionsMenu({
   }, [open]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (handoffOpen) return;
     if (event.key === "Escape" && open) {
       event.preventDefault();
       event.stopPropagation();
@@ -68,7 +73,7 @@ export function ConversationActionsMenu({
     items[next]?.focus();
   };
 
-  if (!copySource && !onOpenRemote) return null;
+  if (!copySource && !onOpenRemote && !phoneHandoff) return null;
   return (
     <div ref={rootRef} className={styles.root} onKeyDown={onKeyDown}>
       <button
@@ -100,6 +105,19 @@ export function ConversationActionsMenu({
               role="menuitem"
             />
           ) : null}
+          {phoneHandoff ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.menuItem}
+              onClick={() => {
+                close();
+                setHandoffOpen(true);
+              }}
+            >
+              {t("Continue on phone")}
+            </button>
+          ) : null}
           {onOpenRemote ? (
             <button
               type="button"
@@ -114,6 +132,15 @@ export function ConversationActionsMenu({
             </button>
           ) : null}
         </div>
+      ) : null}
+      {handoffOpen && phoneHandoff ? (
+        <PhoneHandoffDialog
+          {...phoneHandoff}
+          onClose={() => {
+            setHandoffOpen(false);
+            triggerRef.current?.focus();
+          }}
+        />
       ) : null}
     </div>
   );
