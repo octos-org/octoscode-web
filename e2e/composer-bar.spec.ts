@@ -389,9 +389,16 @@ test("sending waits for uploads, then carries the files and shows them on the me
   await composer.press("Enter");
   await expect.poll(() => turnStarts.length).toBe(1);
   await expect(attached(page)).toHaveCount(0);
-  await expect(
-    page.locator("article").filter({ hasText: "Clean this up" }),
-  ).toContainText("sales.csv");
+  const message = page.locator("article").filter({ hasText: "Clean this up" });
+  await expect(message).toContainText("sales.csv");
+  // A short message must not squeeze the file row onto two lines.
+  const preview = await message
+    .getByRole("button", { name: "Preview" })
+    .boundingBox();
+  const download = await message
+    .getByRole("button", { name: /^Download / })
+    .boundingBox();
+  expect(download!.y).toBe(preview!.y);
 });
 
 test("/attach opens the file picker", async ({ page }) => {

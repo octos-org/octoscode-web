@@ -1,5 +1,9 @@
 .attachments {
   display: grid;
+  /* A message bubble shrinks to its text; a short message must not squeeze the
+     file row into two lines. In vw because a percentage has nothing to resolve
+     against while the bubble is sizing itself. */
+  min-width: min(320px, 60vw);
   gap: 8px;
   margin: 8px 0 0;
   padding: 0;
