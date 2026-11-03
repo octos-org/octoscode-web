@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TurnMedia } from "@octos-org/octoscode-client/media";
+import {
+  MAX_UPLOAD_BYTES,
+  type TurnMedia,
+} from "@octos-org/octoscode-client/media";
 import {
   AttachmentDraftStore,
   MAX_IMAGE_BYTES,
+  MAX_TURN_FILES,
   type AttachmentScope,
   type AttachmentUploadCommands,
 } from "./attachment-drafts.ts";
@@ -127,39 +131,102 @@ describe("per-Session attachment drafts", () => {
     expect(store.getSnapshot().entries[0]!.status).toBe("ready");
   });
 
-  it("validates each batch atomically, rejects nonimages, empty images and MIME disguises", () => {
+  it("stages what it can and reports every refusal with its reason", () => {
     const { store } = fixture();
-    store.selectFiles([file()]);
-    for (const invalid of [
-      file("notes.txt", "text/plain"),
-      file("photo.png", "image/svg+xml"),
-      new File([], "empty.png", { type: "image/png" }),
-    ]) {
-      expect(() =>
-        store.selectFiles([file("valid.webp", "image/webp"), invalid]),
-      ).toThrow();
-      expect(store.getSnapshot().entries).toHaveLength(1);
-    }
-    expect(() =>
-      store.selectFiles(Array.from({ length: 4 }, () => file())),
-    ).toThrow("four");
-    expect(store.getSnapshot().entries).toHaveLength(1);
+    expect(
+      store.selectFiles([
+        file("销售.csv", "text/csv"),
+        file("季度报告.docx", "application/vnd.ms-word"),
+        file("明细.XLSX", ""),
+        file("photo.png", "image/svg+xml"),
+        file("archive.zip", "application/zip"),
+        file("README", "text/plain"),
+        new File([], "empty.md", { type: "text/markdown" }),
+      ]),
+    ).toEqual([
+      { name: "季度报告.docx", reason: "office" },
+      { name: "明细.XLSX", reason: "office" },
+      { name: "photo.png", reason: "unsupported" },
+      { name: "archive.zip", reason: "unsupported" },
+      { name: "README", reason: "unsupported" },
+      { name: "empty.md", reason: "empty" },
+    ]);
+    expect(store.getSnapshot().entries.map((entry) => entry.name)).toEqual([
+      "销售.csv",
+    ]);
   });
 
-  it("enforces the 20 MiB per-image boundary and accepts all four TUI image formats", () => {
+  it("decides a document's type by extension, whatever the browser reported", () => {
     const { store } = fixture();
-    const boundary = file("large.png");
-    Object.defineProperty(boundary, "size", { value: MAX_IMAGE_BYTES });
-    store.selectFiles([
-      boundary,
-      file("photo.JPEG", "image/jpeg"),
-      file("anim.gif", "image/gif"),
-      file("web.webp", "image/webp"),
+    expect(
+      store.selectFiles([
+        file("orders.csv", "application/vnd.ms-excel"),
+        file("notes.md", ""),
+        file("report.PDF", "application/octet-stream"),
+        file("run.log", ""),
+      ]),
+    ).toEqual([]);
+    expect(store.getSnapshot().entries.map((entry) => entry.mime)).toEqual([
+      "text/csv",
+      "text/markdown",
+      "application/pdf",
+      "text/plain",
     ]);
+  });
+
+  it("enforces the per-type size limits at their boundaries", () => {
+    const sized = (name: string, type: string, size: number) => {
+      const sizedFile = file(name, type);
+      Object.defineProperty(sizedFile, "size", { value: size });
+      return sizedFile;
+    };
+    const { store } = fixture();
+    expect(
+      store.selectFiles([
+        sized("large.png", "image/png", MAX_IMAGE_BYTES),
+        sized("over.png", "image/png", MAX_IMAGE_BYTES + 1),
+        sized("large.pdf", "application/pdf", MAX_UPLOAD_BYTES),
+        sized("over.pdf", "application/pdf", MAX_UPLOAD_BYTES + 1),
+      ]),
+    ).toEqual([
+      { name: "over.png", reason: "too-large" },
+      { name: "over.pdf", reason: "too-large" },
+    ]);
+    expect(store.getSnapshot().entries.map((entry) => entry.name)).toEqual([
+      "large.png",
+      "large.pdf",
+    ]);
+  });
+
+  it("holds ten files per message, four of them images", () => {
+    const { store } = fixture();
+    const images = Array.from({ length: 5 }, (_, index) =>
+      file(`image-${index}.png`),
+    );
+    const documents = Array.from({ length: 8 }, (_, index) =>
+      file(`doc-${index}.txt`, "text/plain"),
+    );
+    expect(store.selectFiles(images)).toEqual([
+      { name: "image-4.png", reason: "too-many" },
+    ]);
+    expect(store.selectFiles(documents)).toEqual([
+      { name: "doc-6.txt", reason: "too-many" },
+      { name: "doc-7.txt", reason: "too-many" },
+    ]);
+    expect(store.getSnapshot().entries).toHaveLength(MAX_TURN_FILES);
+  });
+
+  it("accepts all four TUI image formats", () => {
+    const { store } = fixture();
+    expect(
+      store.selectFiles([
+        file("large.png"),
+        file("photo.JPEG", "image/jpeg"),
+        file("anim.gif", "image/gif"),
+        file("web.webp", "image/webp"),
+      ]),
+    ).toEqual([]);
     expect(store.getSnapshot().entries).toHaveLength(4);
-    const tooLarge = file();
-    Object.defineProperty(tooLarge, "size", { value: MAX_IMAGE_BYTES + 1 });
-    expect(() => fixture().store.selectFiles([tooLarge])).toThrow("20 MiB");
   });
 
   it("normalizes an absent browser MIME before the explicitly requested upload", async () => {

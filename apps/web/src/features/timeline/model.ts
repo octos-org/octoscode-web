@@ -397,6 +397,7 @@ export function addOptimisticUser(
     turnId,
     ...(media.length
       ? {
+          media: media.map((item) => item.path),
           attachmentSizes: Object.fromEntries(
             media.map((item) => [item.path, item.size_bytes]),
           ),
@@ -429,6 +430,7 @@ export function foldNotification(
         envelope.turn_id,
         `user-event:${JSON.stringify([envelope.thread_id, envelope.seq])}`,
         textOf(envelope.payload.data),
+        envelope.payload.data.files,
       );
     }
     return foldProjection(
@@ -1125,6 +1127,7 @@ function upsertCanonicalUser(
   turnId: string,
   eventId: string,
   text: string,
+  files: unknown,
 ): TimelineEntry[] {
   const replayed = entries.find((entry) => entry.streamId === eventId);
   const users = entries.filter(
@@ -1148,11 +1151,37 @@ function upsertCanonicalUser(
     ...(optimistic?.attachmentSizes
       ? { attachmentSizes: optimistic.attachmentSizes }
       : {}),
+    ...canonicalUserFiles(files, optimistic),
   };
   // A drained steer can precede persistence of the original prompt. Match an
   // optimistic prompt by its text; never replace it with an unrelated input.
   // Only the first observed question may need moving before its replies.
   return users.length ? upsert(entries, user) : upsertUser(entries, user);
+}
+
+/** Core echoes where each upload landed; the upload handle was only a stand-in. */
+function canonicalUserFiles(
+  files: unknown,
+  optimistic: TimelineEntry | undefined,
+): Pick<TimelineEntry, "media" | "attachmentSizes"> {
+  const landed = Array.isArray(files)
+    ? files.filter(
+        (file): file is { path: string; size_bytes?: unknown } =>
+          isRecord(file) && typeof file.path === "string",
+      )
+    : [];
+  if (!landed.length)
+    return optimistic?.media ? { media: optimistic.media } : {};
+  return {
+    media: landed.map((file) => file.path),
+    attachmentSizes: Object.fromEntries(
+      landed.flatMap((file) =>
+        typeof file.size_bytes === "number"
+          ? [[file.path, file.size_bytes] as const]
+          : [],
+      ),
+    ),
+  };
 }
 
 function upsertUser(
@@ -1161,10 +1190,13 @@ function upsertUser(
 ): TimelineEntry[] {
   const existing = entries.findIndex((entry) => entry.id === user.id);
   const previous = existing >= 0 ? entries[existing] : undefined;
-  const nextUser =
-    previous?.attachmentSizes && !user.attachmentSizes
-      ? { ...user, attachmentSizes: previous.attachmentSizes }
-      : user;
+  const nextUser = {
+    ...user,
+    ...(previous?.attachmentSizes && !user.attachmentSizes
+      ? { attachmentSizes: previous.attachmentSizes }
+      : {}),
+    ...(previous?.media && !user.media ? { media: previous.media } : {}),
+  };
   const firstReply = entries.findIndex(
     (entry) =>
       entry.turnId === user.turnId &&

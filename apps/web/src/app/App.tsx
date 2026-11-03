@@ -1,3 +1,4 @@
+import { errorMessage } from "../shared/errors.ts";
 import { randomUUID } from "../shared/uuid.ts";
 import { ModelsSettingsContent } from "../features/product-settings/ModelsSettingsContent.tsx";
 import { SettingsDefaultsSection } from "../features/session-config/SettingsDefaultsSection.tsx";
@@ -37,6 +38,8 @@ import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { AttachmentTray } from "../features/media/AttachmentTray.tsx";
+import { attachmentRejectionNotice } from "../features/media/rejection-notice.ts";
 import { ReadOnlyDeniedNotice } from "../features/approval/ReadOnlyDeniedNotice.tsx";
 import {
   latestReadOnlyDenial,
@@ -355,10 +358,6 @@ const ReasoningDialog = lazyNamed(
   () => import("../features/reasoning/ReasoningDialog.tsx"),
   (module) => module.ReasoningDialog,
 );
-const AttachmentsDialog = lazyNamed(
-  () => import("../features/media/AttachmentsDialog.tsx"),
-  (module) => module.AttachmentsDialog,
-);
 const PeersDialog = lazyNamed(
   () => import("../features/peers/PeersDialog.tsx"),
   (module) => module.PeersDialog,
@@ -585,7 +584,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [contextOpen, setContextOpen] = useState(false);
   const [autonomyOpen, setAutonomyOpen] = useState(false);
   const [reasoningOpen, setReasoningOpen] = useState(false);
-  const [imagesOpen, setImagesOpen] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [peersOpen, setPeersOpen] = useState(false);
   // Reference TUI `peer_dock_collapsed` (event_loop.rs:1544-1551): the shell owns
   // the fold, the dock only renders it. The Alt+P handler below flips it.
@@ -1824,8 +1823,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     ) !== null;
   const submit = async (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
+    const attachedFiles = conversation.attachments?.getSnapshot().entries ?? [];
     if (!text) {
       conversation.btw?.dismiss();
+      if (attachedFiles.length)
+        noteAttachment(t("Tell Octos what to do with the attached files."));
       return;
     }
     const opened = session.opened;
@@ -1852,6 +1854,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     );
     if (intent.kind === "empty-command") return;
     if (intent.kind === "prompt" && conversation.turnRecovery) return;
+    if (
+      intent.kind === "prompt" &&
+      attachedFiles.some((file) => file.status !== "ready")
+    ) {
+      noteAttachment(
+        t(
+          "Some files aren't uploaded yet. Wait for them, or retry or remove them, then send.",
+        ),
+        true,
+      );
+      return;
+    }
     if (intent.kind === "prompt" && !codingCapabilities.turnStartAvailable)
       return;
     if (
@@ -1887,6 +1901,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !conversation.enqueuePrompt(intent.text, queueOnly)
     )
       return;
+    if (intent.kind === "prompt") noteAttachment(null);
     if (
       intent.kind === "btw" &&
       conversation.askBtw(intent.question) !== "accepted"
@@ -2046,9 +2061,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       case "set-thinking":
         conversation.setReasoningEffort(intent.value);
         return;
-      case "images":
-        setImagesOpen(true);
-        void conversation.prepareAttachments();
+      case "attach":
+        attachInputRef.current?.click();
         return;
       case "peers":
         // TUI parity 2500 §2 `/peer clear`: prune the ACTIVE record's FINISHED
@@ -2956,7 +2970,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionKey, session.opened]);
   const [composerDropping, setComposerDropping] = useState(false);
-  const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [attachNotice, setAttachNotice] = useState<{
+    sessionKey: string | null;
+    text: string;
+    /** Answers a send that came too early, so it ends with the uploads. */
+    untilUploaded: boolean;
+  } | null>(null);
   const resumeSession = navigableSessions.reduce<
     (typeof navigableSessions)[number] | undefined
   >((latest, ref) => {
@@ -3638,28 +3657,53 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       : null;
     requestNewSession(undefined, true);
   };
-  const imagesAvailable =
+  const attachmentsAvailable =
     session.connected && codingCapabilities.turnStartAvailable;
-  const openImages = () => {
-    setImagesOpen(true);
-    void conversation.prepareAttachments();
-  };
-  /** Dropped or pasted files go through the same staged image draft as /images. */
-  const attachFiles = async (files: readonly File[]) => {
-    const images = files.filter((file) =>
-      /^image\/(png|jpeg|gif|webp)$/.test(file.type),
-    );
+  const noteAttachment = (text: string | null, untilUploaded = false) =>
     setAttachNotice(
-      images.length < files.length
-        ? t("Only images can be attached for now (PNG, JPEG, GIF, WebP).")
-        : null,
+      text ? { sessionKey: activeSessionKey, text, untilUploaded } : null,
     );
-    if (images.length === 0) return;
+  /** Picked, dropped and pasted files all land in this Session's tray. */
+  const attachFiles = async (files: readonly File[]) => {
+    noteAttachment(null);
+    if (files.length === 0) return;
     const store = await conversation.prepareAttachments();
-    if (!store) return;
-    store.selectFiles(images);
-    setImagesOpen(true);
+    if (!store) {
+      noteAttachment(t("Files can't be attached to this Session right now."));
+      return;
+    }
+    try {
+      noteAttachment(attachmentRejectionNotice(store.selectFiles(files), t));
+      await store.uploadSelected();
+    } catch (reason) {
+      noteAttachment(errorMessage(reason));
+    }
   };
+  const retryAttachments = () => {
+    void conversation.attachments
+      ?.uploadSelected()
+      .catch((reason: unknown) => noteAttachment(errorMessage(reason)));
+  };
+  // A missed drop would otherwise navigate away and lose the Session view.
+  useEffect(() => {
+    const refuseDrop = (event: DragEvent) => {
+      if (
+        event.defaultPrevented ||
+        !event.dataTransfer?.types.includes("Files") ||
+        (event.target instanceof HTMLInputElement &&
+          event.target.type === "file")
+      )
+        return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "none";
+    };
+    document.addEventListener("dragover", refuseDrop);
+    document.addEventListener("drop", refuseDrop);
+    return () => {
+      document.removeEventListener("dragover", refuseDrop);
+      document.removeEventListener("drop", refuseDrop);
+    };
+  }, []);
 
   // Stop and Send now both interrupt the running turn; once one is on its
   // way the buttons say so and stop taking clicks.
@@ -4031,6 +4075,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           <section
             className="conversation"
             hidden={fleetRouteActive || remoteView === "home"}
+            {...(attachmentsAvailable
+              ? {
+                  onDragOver: (event: ReactDragEvent) => {
+                    if (!event.dataTransfer.types.includes("Files")) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "copy";
+                    setComposerDropping(true);
+                  },
+                  onDragLeave: (event: ReactDragEvent) => {
+                    if (
+                      !event.currentTarget.contains(
+                        event.relatedTarget as Node | null,
+                      )
+                    )
+                      setComposerDropping(false);
+                  },
+                  onDrop: (event: ReactDragEvent) => {
+                    setComposerDropping(false);
+                    if (!event.dataTransfer.files.length) return;
+                    event.preventDefault();
+                    void attachFiles([...event.dataTransfer.files]);
+                  },
+                }
+              : {})}
           >
             <h1 className="sr-only">{t("Octoscode workspace")}</h1>
             <header className="conversation-header">
@@ -4738,28 +4806,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         ? `composer ${productStyles.composerDropping}`
                         : "composer"
                     }
-                    {...(imagesAvailable
+                    {...(attachmentsAvailable
                       ? {
-                          onDragOver: (event: ReactDragEvent) => {
-                            if (!event.dataTransfer.types.includes("Files"))
-                              return;
-                            event.preventDefault();
-                            setComposerDropping(true);
-                          },
-                          onDragLeave: (event: ReactDragEvent) => {
-                            if (
-                              !event.currentTarget.contains(
-                                event.relatedTarget as Node | null,
-                              )
-                            )
-                              setComposerDropping(false);
-                          },
-                          onDrop: (event: ReactDragEvent) => {
-                            setComposerDropping(false);
-                            if (!event.dataTransfer.files.length) return;
-                            event.preventDefault();
-                            void attachFiles([...event.dataTransfer.files]);
-                          },
                           onPaste: (event: ReactClipboardEvent) => {
                             if (!event.clipboardData.files.length) return;
                             event.preventDefault();
@@ -4805,21 +4853,37 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       </p>
                     ) : null}
                     {conversation.inputError ? (
-                      <p role="alert">{conversation.inputError}</p>
+                      <p role="alert">{t(conversation.inputError)}</p>
                     ) : null}
-                    {attachNotice ? (
+                    {attachNotice?.sessionKey === activeSessionKey &&
+                    (!attachNotice.untilUploaded ||
+                      conversation.attachments
+                        ?.getSnapshot()
+                        .entries.some((file) => file.status !== "ready")) ? (
                       <p className="field-note" role="status">
-                        {attachNotice}
+                        {attachNotice.text}
                       </p>
                     ) : null}
-                    {conversation.attachments?.getSnapshot().entries.length ? (
-                      <button type="button" onClick={() => setImagesOpen(true)}>
-                        {t("{count} image(s) attached · inspect", {
-                          count:
-                            conversation.attachments.getSnapshot().entries
-                              .length,
-                        })}
-                      </button>
+                    {conversation.attachments ? (
+                      <AttachmentTray
+                        store={conversation.attachments}
+                        onRetry={retryAttachments}
+                        onRemoved={() => composerRef.current?.focus()}
+                      />
+                    ) : null}
+                    {attachmentsAvailable ? (
+                      <input
+                        ref={attachInputRef}
+                        type="file"
+                        multiple
+                        hidden
+                        aria-label={t("Choose files to attach")}
+                        onChange={(event) => {
+                          const files = [...(event.target.files ?? [])];
+                          event.target.value = "";
+                          void attachFiles(files);
+                        }}
+                      />
                     ) : null}
                     {suggestedCommands.length > 0 ? (
                       <Suspense fallback={null}>
@@ -4978,8 +5042,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 }
                               />
                             ) : null}
-                            {!compact && imagesAvailable ? (
-                              <AttachChip onOpen={openImages} />
+                            {!compact && attachmentsAvailable ? (
+                              <AttachChip
+                                onOpen={() => attachInputRef.current?.click()}
+                              />
                             ) : null}
                           </ComposerSettingsRow>
                         </SurfaceBoundary>
@@ -4990,7 +5056,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             into it. */}
                         {compact &&
                         session.opened &&
-                        (skillsCapabilities || imagesAvailable) ? (
+                        (skillsCapabilities || attachmentsAvailable) ? (
                           <div className="composer-add">
                             <ComposerAddMenu
                               skills={
@@ -5003,8 +5069,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                     }
                                   : null
                               }
-                              onAttachImages={
-                                imagesAvailable ? openImages : null
+                              onAttachFiles={
+                                attachmentsAvailable
+                                  ? () => attachInputRef.current?.click()
+                                  : null
                               }
                             />
                           </div>
@@ -6086,15 +6154,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             binding={nativeReview.binding}
             initialPrompt={nativeReview.prompt}
             onClose={() => setNativeReview(null)}
-          />
-        </Suspense>
-      ) : null}
-      {imagesOpen && session.connected && conversation.attachments ? (
-        <Suspense fallback={<DeferredSurface label="Loading images…" />}>
-          <AttachmentsDialog
-            key={protocol.authorityKey}
-            store={conversation.attachments}
-            onClose={() => setImagesOpen(false)}
           />
         </Suspense>
       ) : null}

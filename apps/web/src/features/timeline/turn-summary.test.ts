@@ -47,6 +47,25 @@ describe("turn summary", () => {
     });
   });
 
+  it("never lists what the user attached as an output", () => {
+    const summary = summarizeTurn(
+      [
+        {
+          id: "user:turn-1",
+          kind: "user",
+          title: "You",
+          body: "Clean it",
+          status: "complete",
+          turnId: "turn-1",
+          media: ["uploads/sales.csv"],
+        },
+        tool("write_file", "sales-clean.csv", "complete", 1000),
+      ],
+      "turn-1",
+    );
+    expect(summary.outputFiles).toEqual(["sales-clean.csv"]);
+  });
+
   it("counts a failure a later call of the same tool succeeded at as retried", () => {
     const summary = summarizeTurn(
       [

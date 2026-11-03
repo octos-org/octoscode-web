@@ -89,8 +89,6 @@ const catalog: Readonly<Record<string, string>> = {
   Cancel: "取消",
   "Cancel lane change": "取消通道更改",
   "Cancel skill change": "取消技能更改",
-  "Cancel uploads": "取消上传",
-  "Cancel uploads and close": "取消上传并关闭",
   "Cancel {value0}": "取消 {value0}",
   Capabilities: "可用能力",
   "Catalog rows are unverified candidates, not confirmed workspace sessions. The server may return a legacy global list even when a workspace is requested. Bare IDs cannot safely identify a historical conversation.":
@@ -100,10 +98,7 @@ const catalog: Readonly<Record<string, string>> = {
     "请检查服务器地址、令牌、允许的网页来源及反向代理的 WebSocket 转发设置。",
   "Choose a protocol": "选择协议",
   "Choose a workspace": "选择工作区",
-  "Choose image files": "选择图片文件",
   "Choose this workspace’s profile": "选择此工作区的配置档案",
-  "Choose up to four PNG, JPEG, GIF or WebP images, at most 20 MiB each. Selecting a file does not upload it. Upload explicitly to the server, then send it with this Session’s next prompt. Image understanding depends on the selected server model.":
-    "最多选择四张 PNG、JPEG、GIF 或 WebP 图片，每张不超过 20 MiB。选择文件不会自动上传。请先明确上传至服务器，再随此会话的下一条请求发送。图片理解能力取决于所选服务器模型。",
   "Choose where this coding session will run.": "选择此编程会话的运行位置。",
   "Clear goal": "清除目标",
   "Clear lane draft": "清空通道草稿",
@@ -117,7 +112,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Close context": "关闭上下文",
   "Close history": "关闭历史记录",
   "Close history picker": "关闭历史选择器",
-  "Close images": "关闭图片",
   "Close inspector": "关闭检查器",
   "Close inventory": "关闭清单",
   "Close peers": "关闭协作会话",
@@ -128,8 +122,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Close task output": "关闭任务输出",
   "Close thinking effort": "关闭思考设置",
   "Close work inspector": "关闭工作检查器",
-  "Closing cancels pending transfers and keeps local draft selections. Removing a draft does not delete an uploaded server file. A canceled transfer may already have reached the server.":
-    "关闭会取消待完成的传输，但保留本地已选草稿。移除草稿不会删除已上传的服务器文件。取消的传输也可能已经到达服务器。",
   Code: "代码",
   "Coding workspace": "编程工作区",
   "Collapse sidebar": "收起侧栏",
@@ -331,8 +323,6 @@ const catalog: Readonly<Record<string, string>> = {
   "I confirm this Session should open in Profile":
     "我确认应在以下配置档案中打开此会话",
   Image: "图片",
-  "Image uploads are not advertised by this server.":
-    "此服务器未声明支持图片上传。",
   "In one list": "统一列表",
   "Incomplete task": "未完成任务",
   Inspect: "查看",
@@ -387,7 +377,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Master:": "主会话：",
   "Match:": "匹配：",
   "Message sequences:": "消息序号：",
-  "MiB ·": "MiB ·",
   Mode: "模式",
   Model: "模型",
   "Model ID": "模型 ID",
@@ -570,7 +559,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Profile name": "配置档案名称",
   "Profile peer blackboard": "配置档案协作看板",
   "Profile skills": "配置档案技能",
-  "Profile:": "配置档案：",
   Prompt: "提示词",
   "Prompt normalization:": "提示词规范化：",
   "Protocol diagnostics ·": "协议诊断 ·",
@@ -639,7 +627,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Remembered approval scopes": "已记住的批准范围",
   "Remembered approvals": "已记住的批准",
   Remove: "移除",
-  "Remove image {value0}": "移除图片 {value0}",
   "Remove the selected user-rooted thread and all later user turns, then edit and resend its initial prompt. Workspace files and unthreaded system messages are not restored or removed.":
     "移除所选用户线程及之后的所有用户轮次，然后编辑并重新发送其初始请求。工作区文件和未归属线程的系统消息不会被恢复或移除。",
   "Report this crash ↗": "报告此崩溃 ↗",
@@ -718,8 +705,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Search sessions": "搜索会话",
   "Search sessions…": "搜索会话…",
   "Selected full identity:": "所选完整身份：",
-  "Selected images": "已选图片",
-  "Selected; not uploaded": "已选择；尚未上传",
   "Self-paced": "自定节奏",
   "Semantic boundary": "语义边界",
   "Sending…": "正在发送…",
@@ -820,8 +805,6 @@ const catalog: Readonly<Record<string, string>> = {
     "此 Octos 服务器未声明支持配置档案模型管理。",
   "This Octos server does not advertise provider management.":
     "此 Octos 服务器未声明支持提供商管理。",
-  "This Session authority is no longer current. Reopen images from the current Session.":
-    "此会话的授权已失效。请从当前会话重新打开图片。",
   "This Web client keeps the agent, tools, and sandbox on the server where they belong.":
     "此网页客户端将智能体、工具和沙箱保留在服务器端。",
   "This aside is not saved to the conversation.": "此旁问不会保存到对话。",
@@ -851,7 +834,6 @@ const catalog: Readonly<Record<string, string>> = {
   Tokens: "token",
   Trajectory: "轨迹",
   "Try again": "重试",
-  "Turn images": "轮次图片",
   "Turn state": "轮次状态",
   "Turn:": "轮次：",
   Type: "类型",
@@ -861,9 +843,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Up to 50 UTF-8 bytes. No #, :, /, control characters, or the reserved name “default”.":
     "最多 50 个 UTF-8 字节。不能包含 #、:、/、控制字符，也不能使用保留名称“default”。",
   "Updating…": "正在更新…",
-  "Upload not confirmed": "上传未确认",
-  "Upload selected images": "上传所选图片",
-  "Uploaded; ready for this turn": "已上传，可用于此轮次",
   "Uploading…": "正在上传…",
   "Use a path on the server running Octos.":
     "请输入运行 Octos 的服务器上的路径。",
@@ -920,7 +899,6 @@ const catalog: Readonly<Record<string, string>> = {
   "failed ·": "失败 ·",
   from: "来自",
   here: "此处",
-  "image slots used": "个图片位置已用",
   "in ·": "输入 ·",
   is: "为",
   "is marked keyless by the Core catalog.": "在 Octos 目录中被标记为无需密钥。",
@@ -970,7 +948,6 @@ const catalog: Readonly<Record<string, string>> = {
   "{value0} tokens": "{value0} token",
   "{value0} · branch {value1}": "{value0} · 分支 {value1}",
   "· Root sequence:": "· 根序号：",
-  "· Session:": "· 会话：",
   "— awaiting result": "— 等待结果",
   "— closed": "— 已关闭",
   "— result available": "— 结果可用",
@@ -1079,7 +1056,6 @@ const catalog: Readonly<Record<string, string>> = {
     "此会话已启用插话。符合条件的轮中输入将发送到当前轮次，其他输入仍会排队。",
   "Steering enabled, but safe steering is unavailable on this server. Inputs remain queued.":
     "已启用插话，但此服务器不支持安全插话。输入仍会排队。",
-  "{count} image(s) attached · inspect": "已附加 {count} 张图片 · 检查",
   "{count} queued": "{count} 条排队中",
   "This server cannot start coding turns": "此服务器无法启动编程轮次",
   "Connect a workspace to begin": "连接工作区以开始",
@@ -1162,7 +1138,6 @@ const catalog: Readonly<Record<string, string>> = {
     "将协作结果汇总到此会话的提示队列",
   "Set thinking effort for this Session’s new prompts":
     "设置此会话新提示的思考强度",
-  "Attach images to this Session’s next prompt": "为此会话的下一条提示附加图片",
   "Show foreground and queued work": "显示前台与排队任务",
   Runtime: "运行时",
   "Stop the active foreground turn": "停止当前前台轮次",
@@ -1972,6 +1947,32 @@ const catalog: Readonly<Record<string, string>> = {
   "No deletion indicated": "未要求删除",
   "Allow for this session": "本会话都允许",
   "Allow once": "允许一次",
+  "Attached files": "已附加的文件",
+  ", ": "、",
+  "Attach files to this Session’s next prompt": "为此会话的下一条消息附加文件",
+  "Choose files to attach": "选择要附加的文件",
+  "Upload failed": "上传失败",
+  "Not uploaded": "未上传",
+  "Retry uploading {name}": "重新上传 {name}",
+  "Remove {name}": "移除 {name}",
+  "Files can't be attached to this Session right now.":
+    "现在不能给这个会话附加文件。",
+  "File controls could not be loaded. Try again.": "文件控件加载失败，请重试。",
+  "Upload or remove every selected file before sending. Your draft was kept.":
+    "请先上传或移除所选文件再发送。你写的内容还在。",
+  "Some files aren't uploaded yet. Wait for them, or retry or remove them, then send.":
+    "还有文件没传完。等它传完，或者重试、移除后再发送。",
+  "Tell Octos what to do with the attached files.":
+    "写一句要 Octos 怎么处理这些文件。",
+  "Office files aren't supported: {names}. Save them as PDF or CSV and attach those.":
+    "暂不支持 Office 文件：{names}。可以先另存为 PDF 或 CSV 再附加。",
+  "This file type can't be attached: {names}. Use CSV, Markdown, text, PDF or images.":
+    "这种文件不能附加：{names}。可以用 CSV、Markdown、文本、PDF 或图片。",
+  "These files are empty: {names}.": "这些文件是空的：{names}。",
+  "Too large to attach: {names}. Files can be up to 50 MiB and images up to 20 MiB.":
+    "文件太大，没有附加：{names}。文件最大 50 MiB，图片最大 20 MiB。",
+  "Not attached, because one message holds 10 files and 4 images at most: {names}.":
+    "没有附加：{names}。一条消息最多 10 个文件，其中图片最多 4 张。",
   "This Session is read only, so Octos can't change files":
     "现在是只读，Octos 改不了文件",
   "This stops the current response, switches to write, and redoes your request. Network access stays the same.":

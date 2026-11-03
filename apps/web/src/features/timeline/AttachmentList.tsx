@@ -18,6 +18,7 @@ import {
   attachmentNameParts,
   formatAttachmentSize,
   isPreviewableImage,
+  isWorkspaceUpload,
 } from "./attachments.ts";
 import { FileIcon } from "../../ui/Icon.tsx";
 import styles from "./AttachmentList.module.css";
@@ -39,7 +40,7 @@ export function AttachmentList({
           key={`${index}:${reference}`}
           reference={reference}
           access={access}
-          workspaceFile={workspaceFile}
+          workspaceFile={workspaceFile || isWorkspaceUpload(reference)}
         />
       ))}
     </ul>

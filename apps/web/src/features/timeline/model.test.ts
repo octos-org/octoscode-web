@@ -1568,6 +1568,27 @@ describe("late canonical user messages", () => {
     ).toEqual(result);
   });
 
+  it("shows what a prompt carried, then where Core put it", () => {
+    const handle = "up/ZGV2L3g/销售.csv";
+    const optimistic = addOptimisticUser([], "turn-1", "Clean it", [
+      { path: handle, mime: "text/csv", size_bytes: 67 },
+    ]);
+    expect(optimistic[0]?.media).toEqual([handle]);
+    const landed = project(optimistic, "user_message", {
+      text: "Clean it",
+      files: [{ path: "uploads/销售.csv", mime: "text/csv", size_bytes: 67 }],
+    });
+    expect(landed).toHaveLength(1);
+    expect(landed[0]).toMatchObject({
+      media: ["uploads/销售.csv"],
+      attachmentSizes: { "uploads/销售.csv": 67 },
+    });
+    // An echo that names no files must not erase what the row already shows.
+    expect(
+      project(optimistic, "user_message", { text: "Clean it" })[0]?.media,
+    ).toEqual([handle]);
+  });
+
   it("confirms an optimistic prompt in place when its canonical message arrives", () => {
     let entries = addOptimisticUser([], "turn-1", "Local question");
     entries = project(entries, "assistant_delta", { text: "Answer" });

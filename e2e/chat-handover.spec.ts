@@ -101,36 +101,37 @@ async function sendPrompt(page: Page, text: string) {
     .click();
 }
 
-async function uploadedDraft(page: Page) {
-  let uploads = 0;
-  let handle = "";
-  const buffer = Buffer.from("fixture image bytes");
-  await page.route("**/api/upload", async (route) => {
-    uploads++;
-    const profile = route.request().headers()["x-profile-id"];
-    expect(profile).toBeTruthy();
-    handle = `up/${Buffer.from(`${profile}/fixture-image`).toString("base64url")}/original.png`;
-    await route.fulfill({ json: [handle] });
-  });
-  await sendPrompt(page, "/thinking high");
-  await sendPrompt(page, "/images");
-  const images = page.getByRole("dialog", { name: "Turn images" });
-  await images.getByLabel("Choose image files").setInputFiles({
-    name: "original.png",
+function attached(page: Page) {
+  return page.getByRole("list", { name: "Attached files" });
+}
+
+async function chooseFile(page: Page, name: string, buffer: Buffer) {
+  await page.getByLabel("Choose files to attach").setInputFiles({
+    name,
     mimeType: "image/png",
     buffer,
   });
-  await images.getByRole("button", { name: "Upload selected images" }).click();
-  await expect(
-    images.getByText("Uploaded; ready for this turn", { exact: true }),
-  ).toBeVisible();
-  await images
-    .getByRole("button", { name: "Close images", exact: true })
-    .click();
+}
+
+async function uploadedDraft(page: Page) {
+  const handles: string[] = [];
+  const buffer = Buffer.from("fixture image bytes");
+  await page.route("**/api/upload", async (route) => {
+    const profile = route.request().headers()["x-profile-id"];
+    expect(profile).toBeTruthy();
+    const handle = `up/${Buffer.from(`${profile}/fixture-${handles.length}`).toString("base64url")}/original.png`;
+    handles.push(handle);
+    await route.fulfill({ json: [handle] });
+  });
+  await sendPrompt(page, "/thinking high");
+  await chooseFile(page, "original.png", buffer);
+  await expect(attached(page).locator('li[data-status="ready"]')).toContainText(
+    "original.png",
+  );
   return {
-    uploads: () => uploads,
+    uploads: () => handles.length,
     media: () => [
-      { path: handle, mime: "image/png", size_bytes: buffer.length },
+      { path: handles[0]!, mime: "image/png", size_bytes: buffer.length },
     ],
   };
 }
@@ -159,22 +160,9 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     await expect(composer(page)).toHaveValue("keep this draft");
     expect(w.calls(START_METHOD)).toHaveLength(0);
     expect(w.calls(RELEASE_METHOD)).toHaveLength(0);
-    await page
-      .getByRole("button", {
-        name: "1 image(s) attached · inspect",
-        exact: true,
-      })
-      .click();
-    const images = page.getByRole("dialog", { name: "Turn images" });
     await expect(
-      images.getByText("original.png", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      images.getByText("Uploaded; ready for this turn", { exact: true }),
-    ).toBeVisible();
-    await images
-      .getByRole("button", { name: "Close images", exact: true })
-      .click();
+      attached(page).locator('li[data-status="ready"]'),
+    ).toContainText("original.png");
     const retryPane = await openAdvanced(page);
     await retryPane
       .locator('[data-session-config-action="resume-chat"]')
@@ -188,9 +176,7 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     });
     expect(upload.uploads()).toBe(1);
     await expect(composer(page)).toHaveValue("");
-    await expect(
-      page.getByRole("button", { name: /image\(s\) attached/ }),
-    ).toHaveCount(0);
+    await expect(attached(page)).toHaveCount(0);
   });
 
   test("Resume chat and an owned seat release control before sending once", async ({
@@ -288,16 +274,7 @@ test("a late collision cannot replace newer text or images, then restores the co
   await expect.poll(() => Boolean(refuse)).toBe(true);
   await expect(composer(page)).toHaveValue("");
   await sendPrompt(page, "/thinking low");
-  await sendPrompt(page, "/images");
-  const images = page.getByRole("dialog", { name: "Turn images" });
-  await images.getByLabel("Choose image files").setInputFiles({
-    name: "new.png",
-    mimeType: "image/png",
-    buffer: Buffer.from("new selection"),
-  });
-  await images
-    .getByRole("button", { name: "Close images", exact: true })
-    .click();
+  await chooseFile(page, "new.png", Buffer.from("new selection"));
   await composer(page).fill("newer text stays");
   refuse!();
   await expect(page.getByText("Session busy", { exact: true })).toBeVisible();
@@ -306,26 +283,17 @@ test("a late collision cannot replace newer text or images, then restores the co
   );
   await expect(composer(page)).toHaveValue("newer text stays");
   await composer(page).fill("");
-  await page
-    .getByRole("button", { name: "1 image(s) attached · inspect", exact: true })
-    .click();
-  await expect(images.getByText("new.png", { exact: true })).toBeVisible();
-  await expect(
-    images.getByText("Selected; not uploaded", { exact: true }),
-  ).toBeVisible();
+  await expect(attached(page)).toContainText("new.png");
   await expect(composer(page)).toHaveValue("");
-  await images
-    .getByRole("button", { name: "Remove image new.png", exact: true })
+  await attached(page)
+    .getByRole("button", { name: "Remove new.png", exact: true })
     .click();
-  await expect(images.getByText("original.png", { exact: true })).toBeVisible();
-  await expect(
-    images.getByText("Uploaded; ready for this turn", { exact: true }),
-  ).toBeVisible();
-  await images
-    .getByRole("button", { name: "Close images", exact: true })
-    .click();
+  await expect(attached(page).locator('li[data-status="ready"]')).toContainText(
+    "original.png",
+  );
   await expect(composer(page)).toHaveValue("return this complete draft");
-  expect(upload.uploads()).toBe(1);
+  // The returned draft keeps its upload: only the new selection was sent.
+  expect(upload.uploads()).toBe(2);
   await testInfo.attach("returned-media-draft", {
     body: await page.screenshot({
       path: testInfo.outputPath("returned-media-draft.png"),
