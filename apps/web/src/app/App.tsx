@@ -37,6 +37,11 @@ import { useCompactLayout } from "../features/shell/use-compact-layout.ts";
 import { NavigationSurface } from "../features/shell/NavigationSurface.tsx";
 import { parseSavedSessionReference } from "../features/session-links/saved-session-link.ts";
 import { QueuedPrompts } from "../features/composer/QueuedPrompts.tsx";
+import { ReadOnlyDeniedNotice } from "../features/approval/ReadOnlyDeniedNotice.tsx";
+import {
+  latestReadOnlyDenial,
+  type ReadOnlyDenial,
+} from "../features/approval/read-only-denial.ts";
 import { peerReadonlySlug } from "../features/composer/peer-readonly.ts";
 import { planCardVisible } from "../features/supervision/plan.ts";
 import {
@@ -1805,6 +1810,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [permissionRetryBusyTurnId, setPermissionRetryBusyTurnId] = useState<
     string | null
   >(null);
+  const [readOnlyNoticeDismissed, setReadOnlyNoticeDismissed] = useState<
+    string | null
+  >(null);
+  const [readOnlyNoticeError, setReadOnlyNoticeError] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
   const readOnlyPeer =
     peerReadonlySlug(
       peers.manager?.snapshot().peers ?? [],
@@ -2246,7 +2258,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }
   };
 
-  const retryPermissionDenied = async (turnId: string) => {
+  const switchToWriteAndContinue = async (denial: ReadOnlyDenial) => {
     if (
       readOnlyPeer ||
       permissionRetryBusyTurnId ||
@@ -2255,18 +2267,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       return;
     const client = protocol.client;
     const opened = session.opened;
-    const option = permissionRetryProfile;
-    const prompt = conversation.timeline.find(
-      (entry) =>
-        entry.kind === "user" && entry.turnId === turnId && entry.body.trim(),
-    )?.body;
-    if (!client || !opened || !option || !prompt) return;
+    const option = writeOption;
+    if (!client || !opened || !option) return;
     const retryKey = activeSessionKey;
+    const noticeKey = `${opened.session_id}:${denial.turnId}`;
     const ownerIsCurrent = () =>
       activeSessionClientRef.current === client &&
       openedSessionIdRef.current === opened.session_id &&
       activeSessionKeyRef.current === retryKey;
-    setPermissionRetryBusyTurnId(turnId);
+    setPermissionRetryBusyTurnId(denial.turnId);
+    setReadOnlyNoticeError(null);
     try {
       const result = await client.setPermissionProfile({
         session_id: opened.session_id,
@@ -2278,16 +2288,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         result.current.mode !== "workspace_write" ||
         result.current.network !== option.network
       ) {
-        throw new Error("The server did not apply workspace write permission.");
+        throw new Error(
+          t("The server did not apply workspace write permission."),
+        );
       }
       if (!ownerIsCurrent()) return;
       await safety.refreshPermission();
       if (!ownerIsCurrent()) return;
-      conversation.enqueuePrompt(prompt);
+      // Queued, not steered: a steer would feed the running response, which
+      // keeps its read-only access. Stopping it starts the queued request.
+      if (conversation.enqueuePrompt(denial.prompt, true)) {
+        await conversation.sendPendingNow();
+      }
+      if (ownerIsCurrent()) composerRef.current?.focus();
     } catch (reason) {
-      setCommandError(
-        reason instanceof Error ? reason.message : String(reason),
-      );
+      setReadOnlyNoticeError({
+        key: noticeKey,
+        message: reason instanceof Error ? reason.message : String(reason),
+      });
     } finally {
       setPermissionRetryBusyTurnId(null);
     }
@@ -3384,23 +3402,49 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     templateNotice.sessionKey === activeSessionKey
       ? findTaskTemplate(templateNotice.templateId)
       : undefined;
-  const templateWriteProfile =
-    appliedTemplate?.access === "write" &&
-    currentPermission?.mode === "read_only" &&
-    safety.permission.editable
-      ? safety.permission.result?.profiles.find(
-          (profile) =>
-            profile.mode === "workspace_write" &&
-            profile.network === currentPermission.network,
-        )
-      : undefined;
-  const permissionRetryProfile = safety.permission.editable
-    ? safety.permission.result?.profiles.find(
-        (profile) =>
-          profile.mode === "workspace_write" &&
-          profile.network === currentPermission?.network,
+  // Write access at the current network policy, from the same list as the
+  // permission menu: a server need not advertise every mode and network pair.
+  const writeOption = safety.permission.editable
+    ? projectedPermissionOptions.find(
+        (option) =>
+          option.mode === "workspace_write" &&
+          option.network === currentPermission?.network,
       )
     : undefined;
+  const templateWriteProfile =
+    appliedTemplate?.access === "write" &&
+    currentPermission?.mode === "read_only"
+      ? writeOption
+      : undefined;
+  const readOnlyDenial =
+    currentPermission?.mode === "read_only" &&
+    writeOption &&
+    !readOnlyPeer &&
+    !remote &&
+    tabLock.state.kind !== "held-elsewhere" &&
+    session.opened &&
+    !session.closed &&
+    session.recovery.phase === "healthy"
+      ? latestReadOnlyDenial(conversation.timeline)
+      : null;
+  const readOnlyNoticeKey = readOnlyDenial
+    ? `${session.opened?.session_id}:${readOnlyDenial.turnId}`
+    : null;
+  const readOnlyNotice = (embedded: boolean) =>
+    readOnlyDenial && readOnlyNoticeDismissed !== readOnlyNoticeKey ? (
+      <ReadOnlyDeniedNotice
+        stopsResponse={conversation.interruptible}
+        busy={permissionRetryBusyTurnId === readOnlyDenial.turnId}
+        error={
+          readOnlyNoticeError?.key === readOnlyNoticeKey
+            ? readOnlyNoticeError.message
+            : null
+        }
+        embedded={embedded}
+        onSwitch={() => void switchToWriteAndContinue(readOnlyDenial)}
+        onDismiss={() => setReadOnlyNoticeDismissed(readOnlyNoticeKey)}
+      />
+    ) : null;
   const permissionModeLabel = currentPermission
     ? t(
         currentPermission.mode === "read_only"
@@ -4407,18 +4451,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               />
                             ) : undefined
                           }
-                          onRetryPermission={
-                            // Offered only while the Session is still read
-                            // only: once it can write, the button has nothing
-                            // left to switch.
-                            permissionRetryProfile &&
-                            !readOnlyPeer &&
-                            !remote &&
-                            currentPermission?.mode === "read_only"
-                              ? (turnId) => void retryPermissionDenied(turnId)
-                              : undefined
-                          }
-                          permissionRetryBusyTurnId={permissionRetryBusyTurnId}
                         />
                       </AttachmentAccessContext.Provider>
                     </SurfaceBoundary>
@@ -4555,6 +4587,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   )}
                 </p>
               ) : null}
+              {interactions.approval ||
+              interactions.question ||
+              (peerAnswerRow && peerAnswerRequest(peerAnswerRow))
+                ? null
+                : readOnlyNotice(false)}
               {session.opened &&
               !session.closed &&
               session.recovery.phase !== "healthy" ? (
@@ -4618,6 +4655,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       openChangePreview(previewId, true)
                     }
                     onceOnly={remote}
+                    notice={readOnlyNotice(true)}
                   />
                 </SurfaceBoundary>
               ) : peerAnswerRow && peerAnswerRequest(peerAnswerRow) ? (
@@ -4669,6 +4707,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     {...(conversation.interruptible
                       ? { onInterrupt: () => void conversation.interrupt() }
                       : {})}
+                    notice={readOnlyNotice(true)}
                   />
                 </SurfaceBoundary>
               ) : conversationTab === "trajectory" ? null : (

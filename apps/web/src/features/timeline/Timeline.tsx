@@ -30,7 +30,6 @@ import {
 } from "./step-groups.ts";
 import { parseTextPlan, type TextPlan } from "./text-plan.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
-import { permissionDeniedReason } from "../approval/approval-presentation.ts";
 import type { TurnActivity } from "./turn-activity.ts";
 import { AttachmentList } from "./AttachmentList.tsx";
 import foldStyles from "./TimelineFolds.module.css";
@@ -67,8 +66,6 @@ interface TimelineProps {
    * only while the Session is empty so the memoized transcript stays stable.
    */
   emptyState?: ReactNode;
-  onRetryPermission?: ((turnId: string) => void) | undefined;
-  permissionRetryBusyTurnId?: string | null | undefined;
 }
 
 export const Timeline = memo(function Timeline({
@@ -85,8 +82,6 @@ export const Timeline = memo(function Timeline({
   activity = null,
   workspaceFileReadAvailable = false,
   emptyState,
-  onRetryPermission,
-  permissionRetryBusyTurnId = null,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -251,8 +246,6 @@ export const Timeline = memo(function Timeline({
               onToggleFold={toggleFold}
               onSetFold={setFold}
               workspaceFileReadAvailable={workspaceFileReadAvailable}
-              onRetryPermission={onRetryPermission}
-              retryBusy={permissionRetryBusyTurnId === item.turnId}
             />
           ) : (
             <TimelineEntryView
@@ -267,8 +260,6 @@ export const Timeline = memo(function Timeline({
                 endedTurns.has(item.entry.turnId)
               }
               workspaceFileReadAvailable={workspaceFileReadAvailable}
-              onRetryPermission={onRetryPermission}
-              retryBusy={permissionRetryBusyTurnId === item.entry.turnId}
             />
           ),
       )}
@@ -290,8 +281,6 @@ const TimelineEntryView = memo(function TimelineEntryView({
   planOpen,
   turnEnded,
   workspaceFileReadAvailable,
-  onRetryPermission,
-  retryBusy,
 }: {
   entry: TimelineEntry;
   expanded: boolean | undefined;
@@ -300,8 +289,6 @@ const TimelineEntryView = memo(function TimelineEntryView({
   planOpen: boolean | undefined;
   turnEnded: boolean;
   workspaceFileReadAvailable: boolean;
-  onRetryPermission?: ((turnId: string) => void) | undefined;
-  retryBusy: boolean;
 }) {
   switch (entry.kind) {
     case "reasoning":
@@ -319,8 +306,6 @@ const TimelineEntryView = memo(function TimelineEntryView({
           expanded={expanded}
           onToggleFold={onToggleFold}
           workspaceFileReadAvailable={workspaceFileReadAvailable}
-          onRetryPermission={onRetryPermission}
-          retryBusy={retryBusy}
         />
       );
     default:
@@ -348,8 +333,6 @@ interface FoldableBlockProps {
   /** undefined = reader-controlled native disclosure; boolean = folds state. */
   expanded: boolean | undefined;
   onToggleFold: (id: string) => void;
-  onRetryPermission?: ((turnId: string) => void) | undefined;
-  retryBusy?: boolean;
 }
 
 /**
@@ -416,11 +399,11 @@ function ReasoningBlock(props: FoldableBlockProps) {
 function ToolBlock(
   props: FoldableBlockProps & {
     workspaceFileReadAvailable: boolean;
-    /** Inside a step group, which renders the retry and files itself. */
+    /** Inside a step group, which renders the files itself. */
     grouped?: boolean;
   },
 ) {
-  const { entry, onRetryPermission, retryBusy = false, grouped } = props;
+  const { entry, grouped } = props;
   const t = useUiText();
   const running = entry.status === "running";
   const presentation = toolTitle(
@@ -485,36 +468,20 @@ function ToolBlock(
         <StepFollowUps
           entries={[entry]}
           workspaceFileReadAvailable={props.workspaceFileReadAvailable}
-          onRetryPermission={onRetryPermission}
-          retryBusy={retryBusy}
         />
       )}
     </>
   );
 }
 
-/**
- * What a reader must still reach when the step itself is folded: the
- * permission retry and any file a step wrote.
- */
+/** The files a step wrote, still reachable when the step itself is folded. */
 function StepFollowUps({
   entries,
   workspaceFileReadAvailable,
-  onRetryPermission,
-  retryBusy,
 }: {
   entries: readonly TimelineEntry[];
   workspaceFileReadAvailable: boolean;
-  onRetryPermission?: ((turnId: string) => void) | undefined;
-  retryBusy: boolean;
 }) {
-  const t = useUiText();
-  const denied = entries.find(
-    (entry) =>
-      entry.kind === "tool" &&
-      entry.turnId &&
-      permissionDeniedReason(entry.status, entry.body),
-  );
   const files = entries.flatMap((entry) =>
     entry.kind === "tool" &&
     entry.status === "complete" &&
@@ -525,18 +492,6 @@ function StepFollowUps({
   );
   return (
     <>
-      {denied && onRetryPermission ? (
-        <button
-          type="button"
-          className={styles.stepRetry}
-          disabled={retryBusy}
-          onClick={() => onRetryPermission(denied.turnId!)}
-        >
-          {retryBusy
-            ? t("Switching to write and retrying…")
-            : t("Switch to write and retry")}
-        </button>
-      ) : null}
       {files.map((path) => (
         <AttachmentList key={path} media={[path]} workspaceFile />
       ))}
@@ -554,8 +509,6 @@ function StepGroup({
   onToggleFold,
   onSetFold,
   workspaceFileReadAvailable,
-  onRetryPermission,
-  retryBusy,
 }: {
   id: string;
   entries: readonly TimelineEntry[];
@@ -565,8 +518,6 @@ function StepGroup({
   onToggleFold: (id: string) => void;
   onSetFold: (id: string, open: boolean) => void;
   workspaceFileReadAvailable: boolean;
-  onRetryPermission?: ((turnId: string) => void) | undefined;
-  retryBusy: boolean;
 }) {
   const t = useUiText();
   const summary = summarizeSteps(entries, recovered);
@@ -651,8 +602,6 @@ function StepGroup({
       <StepFollowUps
         entries={entries}
         workspaceFileReadAvailable={workspaceFileReadAvailable}
-        onRetryPermission={onRetryPermission}
-        retryBusy={retryBusy}
       />
     </>
   );

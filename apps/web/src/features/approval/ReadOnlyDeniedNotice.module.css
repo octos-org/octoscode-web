@@ -1,0 +1,53 @@
+.docked,
+.embedded {
+  display: flex;
+  flex-wrap: wrap;
+  flex: none;
+  align-items: center;
+  gap: var(--dsw-space-3);
+}
+
+.docked {
+  width: 100%;
+  max-width: var(--dsw-layout-chat-wide);
+  margin: 0 auto;
+  border: 1px solid var(--dsw-alias-state-warn-secondary);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.embedded {
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  padding: 12px 16px;
+}
+
+.copy {
+  display: grid;
+  flex: 1 1 280px;
+  gap: var(--dsw-space-1);
+  min-width: 0;
+}
+
+.copy strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.copy span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-size-micro);
+}
+
+.copy .error {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  flex: none;
+  gap: var(--dsw-space-2);
+}

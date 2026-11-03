@@ -69,12 +69,3 @@ function networkValue(value: unknown): ApprovalImpactDetails["network"] {
     return "blocked";
   return "unspecified";
 }
-
-export function permissionDeniedReason(status: string, body: string): boolean {
-  return (
-    status === "error" &&
-    /permission|permitted|read-only|read_only|denied|forbidden|not allowed/i.test(
-      body,
-    )
-  );
-}

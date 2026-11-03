@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import type {
   UserQuestionAnswer,
   UserQuestionRequested,
@@ -26,6 +26,8 @@ interface UserQuestionPanelProps {
   error: string | null;
   onSubmit: (answers: UserQuestionAnswer[]) => void;
   onInterrupt?: (() => void) | undefined;
+  /** Stays in reach here: the card covers the dock while it waits. */
+  notice?: ReactNode;
 }
 
 export function UserQuestionPanel({
@@ -34,6 +36,7 @@ export function UserQuestionPanel({
   error,
   onSubmit,
   onInterrupt,
+  notice,
 }: UserQuestionPanelProps) {
   const t = useUiText();
   const reasonId = useId();
@@ -78,6 +81,7 @@ export function UserQuestionPanel({
       onKeyDown={onCardKeyDown}
       {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
     >
+      {notice}
       <div className={styles.heading}>
         <span className={styles.eyebrow}>{t("Octos needs input")}</span>
         <strong id="question-title" className={styles.title}>

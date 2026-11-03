@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import {
   approvalDiffPreviewId,
   isRecord,
@@ -26,6 +26,8 @@ interface ApprovalPanelProps {
    * ("for this session") and sandbox escalations stay on the computer.
    */
   onceOnly?: boolean;
+  /** Stays in reach here: the card covers the dock while it waits. */
+  notice?: ReactNode;
 }
 
 export function ApprovalPanel({
@@ -36,6 +38,7 @@ export function ApprovalPanel({
   onInterrupt,
   onReviewDiff,
   onceOnly = false,
+  notice,
 }: ApprovalPanelProps) {
   const t = useUiText();
   const escalation = onceOnly && isSandboxEscalation(approval);
@@ -89,6 +92,7 @@ export function ApprovalPanel({
       {...(busy || !onInterrupt ? {} : { onEscape: onInterrupt })}
       onKeyDown={handleKeyDown}
     >
+      {notice}
       <div className="approval-strip">
         <span className="approval-dot" />
         <span>{t("Approval required")}</span>

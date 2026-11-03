@@ -5836,7 +5836,14 @@ function streamTurn(socket, sessionId, params, nextCursor) {
   }
   const unconditionalWriteFailure =
     text === "Fail a write fixture unconditionally";
-  if (text === "Fail a write fixture" || unconditionalWriteFailure) {
+  // Read-only Core keeps going after a denied write: this one stays running,
+  // asking to work around the denial, until the operator stops it.
+  const workaroundWrite = text === "Fail a write and ask to work around it";
+  if (
+    text === "Fail a write fixture" ||
+    unconditionalWriteFailure ||
+    workaroundWrite
+  ) {
     const permissionDenied =
       sessionState(sessionId).permission.mode === "read_only";
     const denied = permissionDenied || unconditionalWriteFailure;
@@ -5860,6 +5867,23 @@ function streamTurn(socket, sessionId, params, nextCursor) {
           }
         : { output_preview: "report.md written" }),
     });
+    if (workaroundWrite && denied) {
+      socket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "approval/requested",
+          params: approvalRequest(sessionId, turnId),
+        }),
+      );
+      return {
+        kind: "approval",
+        id: `approval-${turnId}`,
+        sessionId,
+        threadId,
+        turnId,
+        nextCursor,
+      };
+    }
     notify(
       socket,
       sessionId,
