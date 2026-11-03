@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeTurn } from "./turn-summary.ts";
+import { commandReceipt, summarizeTurn } from "./turn-summary.ts";
 import type { TimelineEntry } from "./entry-model.ts";
 
 const tool = (
@@ -39,11 +39,124 @@ describe("turn summary", () => {
     ];
     expect(summarizeTurn(entries, "turn-1")).toEqual({
       seconds: 4,
+      unlistedChanges: 0,
+      commandChangesUnknown: false,
       changedFiles: ["report.md"],
       outputFiles: ["report.md"],
       failedSteps: 1,
       retriedSteps: 0,
       usage: { input: 12, output: 9 },
+    });
+  });
+
+  describe("what commands changed", () => {
+    const command = (body: string, startedAtMs = 1000): TimelineEntry => ({
+      ...tool("exec_command", "", "complete", startedAtMs),
+      body,
+      toolArguments: JSON.stringify({ cmd: "x" }),
+    });
+    const inGit = (receipt: string) =>
+      `(no output)\n\nExit code: 0\n${receipt}\nscope: workdir`;
+
+    it("counts what Core measured, and trusts its zero", () => {
+      const summary = summarizeTurn(
+        [
+          command(inGit("files_changed: 1\n  a.txt")),
+          command(inGit("files_changed: 0"), 2000),
+        ],
+        "turn-1",
+      );
+      expect(summary.changedFiles).toEqual(["a.txt"]);
+      expect(summary.commandChangesUnknown).toBe(false);
+    });
+
+    it("says it does not know when a command left no measurement", () => {
+      expect(
+        summarizeTurn([command("(no output)\n\nExit code: 0")], "turn-1"),
+      ).toMatchObject({ changedFiles: [], commandChangesUnknown: true });
+      // A long output's preview is cut before the receipt.
+      expect(
+        summarizeTurn([command("1\n2\n3\n4...")], "turn-1")
+          .commandChangesUnknown,
+      ).toBe(true);
+    });
+
+    it("keeps what file tools recorded beside an unmeasured command", () => {
+      expect(
+        summarizeTurn(
+          [
+            tool("write_file", "a.txt", "complete", 1000),
+            command("(no output)\n\nExit code: 0", 2000),
+          ],
+          "turn-1",
+        ),
+      ).toMatchObject({
+        changedFiles: ["a.txt"],
+        commandChangesUnknown: true,
+      });
+    });
+
+    it("does not count a file twice when a command touches it after a file tool", () => {
+      expect(
+        summarizeTurn(
+          [
+            tool("write_file", "a.txt", "complete", 1000),
+            command(inGit("files_changed: 1\n  a.txt"), 2000),
+          ],
+          "turn-1",
+        ).changedFiles,
+      ).toEqual(["a.txt"]);
+    });
+
+    it("ignores a command that never ran", () => {
+      expect(
+        summarizeTurn(
+          [
+            {
+              ...command("Command denied by user approval: rm -rf /tmp/x"),
+              status: "error",
+            },
+          ],
+          "turn-1",
+        ).commandChangesUnknown,
+      ).toBe(false);
+    });
+
+    it("leaves other tools out of it", () => {
+      expect(
+        summarizeTurn([tool("read_file", "a.txt", "complete", 1000)], "turn-1")
+          .commandChangesUnknown,
+      ).toBe(false);
+    });
+  });
+
+  describe("commandReceipt", () => {
+    it("reads the count and the paths", () => {
+      expect(
+        commandReceipt(
+          "ok\n\nExit code: 0\nfiles_changed: 2\n  a.txt\n  src/b.txt\nscope: workdir",
+        ),
+      ).toEqual({ count: 2, paths: ["a.txt", "src/b.txt"] });
+    });
+
+    it("keeps unlisted files in the count", () => {
+      expect(
+        commandReceipt("files_changed: 25\n  a.txt\n  (+24 more; not listed)"),
+      ).toEqual({ count: 25, paths: ["a.txt"] });
+      expect(commandReceipt("files_changed: 2\n  a.txt\n  src/b.t...")).toEqual(
+        { count: 2, paths: ["a.txt"] },
+      );
+    });
+
+    it("takes the last one, because a command can print anything first", () => {
+      expect(
+        commandReceipt("files_changed: 9\n  fake\nmore\nfiles_changed: 0"),
+      ).toEqual({ count: 0, paths: [] });
+    });
+
+    it("finds nothing without one", () => {
+      expect(commandReceipt("Exit code: 0")).toBeNull();
+      expect(commandReceipt("no files_changed: 3 here")).toBeNull();
     });
   });
 

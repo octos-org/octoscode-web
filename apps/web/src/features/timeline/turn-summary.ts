@@ -4,12 +4,38 @@ import { toolTargetFull } from "./folds.ts";
 export interface TurnSummaryData {
   seconds?: number | undefined;
   changedFiles: string[];
+  /** Files Core counted as changed by a command without naming them. */
+  unlistedChanges: number;
+  /** A command ran and nothing says what it did to the files. */
+  commandChangesUnknown: boolean;
   outputFiles: string[];
   /** Failed steps the turn never recovered from. */
   failedSteps: number;
   /** Failed steps a later call of the same tool in the turn succeeded at. */
   retriedSteps: number;
   usage?: { input: number; output: number } | undefined;
+}
+
+const COMMAND_TOOLS = new Set(["exec_command", "write_stdin", "shell", "bash"]);
+
+/**
+ * Core appends what a command changed to its output: `files_changed: 1`, then
+ * the paths, indented. It can only measure inside a git project, and a long
+ * output's preview is cut before it reaches that tail, so often there is none.
+ */
+export function commandReceipt(
+  output: string,
+): { count: number; paths: string[] } | null {
+  const last = [
+    ...output.matchAll(/^files_changed: (\d+)((?:\n {2}.*)*)/gm),
+  ].at(-1);
+  if (!last) return null;
+  const paths = last[2]!
+    .split("\n")
+    .map((line) => line.trim())
+    // A path cut off by the preview names nothing; it stays in the count.
+    .filter((line) => line && !/^\(\+\d+ more|(\.\.\.|…)$/.test(line));
+  return { count: Number(last[1]), paths };
 }
 
 export function summarizeTurn(
@@ -23,6 +49,8 @@ export function summarizeTurn(
   const recovered = recoveredFailures(turn);
   let failedSteps = 0;
   let retriedSteps = 0;
+  let unlistedChanges = 0;
+  let commandChangesUnknown = false;
   for (const entry of turn) {
     // What the user attached is an input, however the turn used it.
     if (entry.kind !== "user")
@@ -45,6 +73,18 @@ export function summarizeTurn(
       (name === "write_file" || name === "send_file")
     ) {
       if (target) output.add(target);
+    }
+    if (
+      COMMAND_TOOLS.has(name) &&
+      entry.status !== "info" &&
+      // Refused before it ran, so it changed nothing.
+      !entry.body.startsWith("Command denied by ")
+    ) {
+      const receipt = commandReceipt(entry.body);
+      if (receipt) {
+        for (const path of receipt.paths) changed.add(path);
+        unlistedChanges += Math.max(0, receipt.count - receipt.paths.length);
+      } else commandChangesUnknown = true;
     }
   }
   const starts = turn.flatMap((entry) =>
@@ -74,6 +114,8 @@ export function summarizeTurn(
         ? undefined
         : Math.max(0, Math.round((end - start) / 1000)),
     changedFiles: [...changed],
+    unlistedChanges,
+    commandChangesUnknown,
     outputFiles: [...output],
     failedSteps,
     retriedSteps,
