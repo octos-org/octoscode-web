@@ -210,18 +210,16 @@ export function restoreCanonicalHydrate(
       if (source.kind === "reasoning" && replacedReasoning)
         updates.set(source.id, null);
     }
-    // Existing rows are global durable anchors. Do not gather a thread into
-    // a block: background threads can interleave A/question, B/question,
-    // A/answer, B/answer. Only insert newly reconstructed rows at an anchor.
+    // Keep durable identities and full bodies; a complete projection supplies
+    // their execution order, which can differ from transcript append order.
     for (const entry of merged) {
       if (matched.has(entry.id)) {
         updates.set(entry.id, entry);
       } else extras.push(entry);
     }
   }
-  // Preserve the global canonical order of newly recovered rows, including a
-  // foreground question that predates a persisted background-child reply.
-  // Existing durable anchors still never move across another thread's rows.
+  // Use global cursors so interleaved foreground/background threads stay
+  // interleaved rather than being gathered into per-thread blocks.
   completeEvents.sort((a, b) =>
     a.cursor && b.cursor
       ? a.cursor.seq - b.cursor.seq
@@ -274,8 +272,17 @@ export function restoreCanonicalHydrate(
     rows.push(entry);
     target.set(anchor.id, rows);
   }
+  // send_file persists immediately, before the agent appends earlier buffered
+  // messages. Reorder only uniquely matched non-user anchors using the complete
+  // projection. User inputs, ambiguous rows and compacted histories keep their
+  // durable slots; retained user events can arrive later than their execution.
+  const anchorIds = new Set(anchors.map((entry) => entry.id));
+  let nextAnchor = 0;
+  const ordered = fallback.map((entry) =>
+    anchorIds.has(entry.id) ? anchors[nextAnchor++]! : entry,
+  );
   const entries: TimelineEntry[] = [];
-  for (const entry of fallback) {
+  for (const entry of ordered) {
     entries.push(...(before.get(entry.id) ?? []));
     const update = updates.get(entry.id);
     if (update !== null) entries.push(update ?? entry);

@@ -9,6 +9,7 @@ import { summarizeTurn } from "./turn-summary.ts";
 import { timelineFromCanonicalHydrate as timelineFromHydrate } from "./canonical-hydrate.ts";
 import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
 import attachmentRetryFixture from "./fixtures/t-0084-attachment-retry.json";
+import sendFileRecoveryFixture from "./fixtures/t-0301-send-file-recovery.json";
 import reconnectSummaryFixture from "./fixtures/t-0194-reconnect-summary.json";
 
 function event(
@@ -66,6 +67,54 @@ describe("canonical hydrate recovery", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("keeps the real failed send_file and retry before their delivered attachment after reload", () => {
+    const data = parseSessionHydrateResult(sendFileRecoveryFixture)!;
+    const live = data.replayed_projection_envelopes!.reduce(
+      (entries, event) =>
+        foldNotification(entries, {
+          jsonrpc: "2.0",
+          method: "projection/envelope",
+          params: event,
+        }),
+      [] as ReturnType<typeof timelineFromHydrate>,
+    );
+    const visible = (entries: typeof live) =>
+      entries
+        .filter(
+          (entry) =>
+            entry.kind !== "reasoning" &&
+            (entry.kind !== "assistant" || entry.body || entry.media?.length),
+        )
+        .map((entry) =>
+          entry.kind === "tool"
+            ? [entry.kind, entry.id, entry.status]
+            : [entry.kind, entry.body, entry.media ?? []],
+        );
+    const restored = timelineFromHydrate(data);
+    expect(visible(restored)).toEqual(visible(live));
+    expect(
+      restored.filter(
+        (entry) => entry.kind === "tool" && entry.status === "error",
+      ),
+    ).toHaveLength(2);
+    expect(
+      restored.find((entry) =>
+        entry.id.endsWith(":call_7b6f63508fe4425b91222452"),
+      )?.body,
+    ).toContain("invalid send_file tool input");
+    expect(
+      restored.find((entry) =>
+        entry.id.endsWith(":call_fa51ae21f6814601afd08f5f"),
+      )?.status,
+    ).toBe("complete");
+    expect(new Set(restored.map((entry) => entry.id)).size).toBe(
+      restored.length,
+    );
+    expect(
+      summarizeTurn(restored, data.turns![0]!.turn_id).failedSteps,
+    ).toEqual(summarizeTurn(live, data.turns![0]!.turn_id).failedSteps);
   });
 
   it("keeps the real completed turn summary before the next prompt after reconnect", () => {
@@ -396,64 +445,69 @@ describe("canonical hydrate recovery", () => {
     ]);
   });
 
-  it("preserves interleaved durable anchors from different threads", () => {
-    const events = [
-      event(
-        1,
-        "user_message",
-        { text: "A question" },
-        { client_message_id: "ua" },
-      ),
-      event(
-        1,
-        "user_message",
-        { text: "B question" },
-        {
-          thread_id: "thread-b",
-          turn_id: "turn-b",
-          client_message_id: "ub",
-          cursor: { stream: "s", seq: 2 },
-        },
-      ),
-      event(
-        2,
-        "assistant_persisted",
-        { text: "A answer", meta: { message_id: "ma" } },
-        { cursor: { stream: "s", seq: 3 } },
-      ),
-      event(
-        2,
-        "assistant_persisted",
-        { text: "B answer", meta: { message_id: "mb" } },
-        {
-          thread_id: "thread-b",
-          turn_id: "turn-b",
-          cursor: { stream: "s", seq: 4 },
-        },
-      ),
-    ];
-    const data = snapshot(events, {
-      projection_thread_sequences: { thread: 2, "thread-b": 2 },
-      messages: [
-        message(0, "user", "A question", { client_message_id: "ua" }),
-        message(1, "user", "B question", {
-          client_message_id: "ub",
-          thread_id: "thread-b",
-        }),
-        message(2, "assistant", "A answer", { message_id: "ma" }),
-        message(3, "assistant", "B answer", {
-          message_id: "mb",
-          thread_id: "thread-b",
-        }),
-      ],
-    });
-    expect(timelineFromHydrate(data).map((entry) => entry.body)).toEqual([
-      "A question",
-      "B question",
-      "A answer",
-      "B answer",
-    ]);
-  });
+  it.each([false, true])(
+    "preserves interleaved durable anchors (reverse append order: %s)",
+    (reverse) => {
+      const events = [
+        event(
+          1,
+          "user_message",
+          { text: "A question" },
+          { client_message_id: "ua" },
+        ),
+        event(
+          1,
+          "user_message",
+          { text: "B question" },
+          {
+            thread_id: "thread-b",
+            turn_id: "turn-b",
+            client_message_id: "ub",
+            cursor: { stream: "s", seq: 2 },
+          },
+        ),
+        event(
+          2,
+          "assistant_persisted",
+          { text: "A answer", meta: { message_id: "ma" } },
+          { cursor: { stream: "s", seq: 3 } },
+        ),
+        event(
+          2,
+          "assistant_persisted",
+          { text: "B answer", meta: { message_id: "mb" } },
+          {
+            thread_id: "thread-b",
+            turn_id: "turn-b",
+            cursor: { stream: "s", seq: 4 },
+          },
+        ),
+      ];
+      const data = snapshot(events, {
+        projection_thread_sequences: { thread: 2, "thread-b": 2 },
+        messages: [
+          message(0, "user", "A question", { client_message_id: "ua" }),
+          message(1, "user", "B question", {
+            client_message_id: "ub",
+            thread_id: "thread-b",
+          }),
+          message(reverse ? 3 : 2, "assistant", "A answer", {
+            message_id: "ma",
+          }),
+          message(reverse ? 2 : 3, "assistant", "B answer", {
+            message_id: "mb",
+            thread_id: "thread-b",
+          }),
+        ],
+      });
+      expect(timelineFromHydrate(data).map((entry) => entry.body)).toEqual([
+        "A question",
+        "B question",
+        "A answer",
+        "B answer",
+      ]);
+    },
+  );
 
   it("restores an interrupted unpersisted prompt, partial answer, and error instead of an empty conversation", () => {
     const data = snapshot(
