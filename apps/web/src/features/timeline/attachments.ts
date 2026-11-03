@@ -7,9 +7,20 @@ const PREVIEWABLE_IMAGE = /\.(png|jpe?g|gif|webp)$/i;
  * path segment of a server path, or an upload handle's display name.
  */
 export function attachmentName(reference: string): string {
-  return (
-    reference.split(/[\\/]/).filter(Boolean).at(-1) ?? (reference || "file")
-  );
+  const name =
+    reference.split(/[\\/]/).filter(Boolean).at(-1) ?? (reference || "file");
+  return isWorkspaceUpload(reference)
+    ? name.replace(UPLOAD_COLLISION_PREFIX, "")
+    : name;
+}
+
+// Core keeps a repeated upload apart as uploads/<uuid>-<name>.
+const UPLOAD_COLLISION_PREFIX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
+
+/** Core copies an upload into the workspace; only the workspace route reads it. */
+export function isWorkspaceUpload(reference: string): boolean {
+  return reference.startsWith("uploads/");
 }
 
 export interface AttachmentFileMetadata {

@@ -109,9 +109,7 @@ test("the composer shows where, who, and what it may do, at a glance", async ({
   await expect(
     row.getByRole("button", { name: /^Permission: / }),
   ).toBeVisible();
-  await expect(
-    row.getByRole("button", { name: "Attach images" }),
-  ).toBeVisible();
+  await expect(row.getByRole("button", { name: "Attach files" })).toBeVisible();
   // The fixture advertises no skills methods, so there is no dead entry.
   await expect(
     row.getByRole("button", { name: "Skills", exact: true }),
@@ -157,7 +155,7 @@ test("a skill adds an editable line and never sends", async ({ page }) => {
   expect(turnStarts).toEqual([]);
 });
 
-test("phones fold skills and images into one +", async ({ page }) => {
+test("phones fold skills and files into one +", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const turnStarts = await offerSkills(page);
   await start(page, "/workspace/composer-phone");
@@ -166,15 +164,15 @@ test("phones fold skills and images into one +", async ({ page }) => {
     row.getByRole("button", { name: "Skills", exact: true }),
   ).toHaveCount(0);
   await expect(
-    row.getByRole("button", { name: "Attach images", exact: true }),
+    row.getByRole("button", { name: "Attach files", exact: true }),
   ).toHaveCount(0);
-  const add = page.getByRole("button", { name: "Add skills or images" });
+  const add = page.getByRole("button", { name: "Add skills or files" });
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Draft the Q4 summary");
   await add.click();
   const menu = page.getByRole("menu", { name: "Add" });
   await expect(
-    menu.getByRole("menuitem", { name: "Attach images" }),
+    menu.getByRole("menuitem", { name: "Attach files" }),
   ).toBeVisible();
   await expect(menu.getByRole("group", { name: "Skills" })).toBeVisible();
   expect(
@@ -189,8 +187,9 @@ test("phones fold skills and images into one +", async ({ page }) => {
   await expect(composer).toBeFocused();
 
   await add.click();
-  await menu.getByRole("menuitem", { name: "Attach images" }).click();
-  await expect(page.getByRole("dialog", { name: /image/i })).toBeVisible();
+  const chooser = page.waitForEvent("filechooser");
+  await menu.getByRole("menuitem", { name: "Attach files" }).click();
+  await chooser;
   expect(turnStarts).toEqual([]);
 });
 
@@ -226,35 +225,180 @@ test("another folder starts a new session that keeps the unsent text", async ({
   await expect(composer).toHaveValue("Summarise the sales data");
 });
 
-test("dropped files stage images and explain what cannot be attached", async ({
+function attached(page: Page) {
+  return page.getByRole("list", { name: "Attached files" });
+}
+
+function dropOn(page: Page, selector: string) {
+  return (files: { name: string; type: string }[]) =>
+    page.evaluate(
+      ({ files, selector }) => {
+        const transfer = new DataTransfer();
+        for (const file of files)
+          transfer.items.add(new File(["x"], file.name, { type: file.type }));
+        const target = document.querySelector(selector)!;
+        return ["dragover", "drop"].map(
+          // dispatchEvent is false once a listener claimed the event, which
+          // is what keeps the browser from opening the dropped file.
+          (type) =>
+            !target.dispatchEvent(
+              new DragEvent(type, {
+                dataTransfer: transfer,
+                bubbles: true,
+                cancelable: true,
+              }),
+            ),
+        );
+      },
+      { files, selector },
+    );
+}
+
+async function acceptUploads(page: Page) {
+  await page.route("**/api/upload", async (route) => {
+    const profile = route.request().headers()["x-profile-id"];
+    const name = /filename="([^"]+)"/.exec(
+      route.request().postData() ?? "",
+    )?.[1];
+    await route.fulfill({
+      json: [
+        `up/${Buffer.from(`${profile}/${name}`).toString("base64url")}/${name}`,
+      ],
+    });
+  });
+}
+
+test("dropped files land in the tray, and what cannot be attached is explained", async ({
   page,
 }) => {
+  await acceptUploads(page);
   await start(page, "/workspace/composer-drop");
-  const drop = (files: { name: string; type: string }[]) =>
-    page.evaluate((files) => {
-      const transfer = new DataTransfer();
-      for (const file of files)
-        transfer.items.add(new File(["x"], file.name, { type: file.type }));
-      const target = document.querySelector(".composer")!;
-      for (const type of ["dragover", "drop"])
-        target.dispatchEvent(
-          new DragEvent(type, {
-            dataTransfer: transfer,
-            bubbles: true,
-            cancelable: true,
-          }),
-        );
-    }, files);
+  const drop = dropOn(page, ".composer");
 
-  await drop([{ name: "report.pdf", type: "application/pdf" }]);
+  await drop([
+    { name: "report.pdf", type: "application/pdf" },
+    { name: "sales.csv", type: "application/vnd.ms-excel" },
+  ]);
+  await expect(attached(page).locator('li[data-status="ready"]')).toHaveCount(
+    2,
+  );
+  await expect(attached(page)).toContainText("report.pdf");
+  await expect(attached(page)).toContainText("sales.csv");
+
+  await drop([
+    { name: "budget.xlsx", type: "" },
+    { name: "chart.png", type: "image/png" },
+  ]);
   await expect(page.locator(".composer")).toContainText(
-    "Only images can be attached for now",
+    "Office files aren't supported: budget.xlsx.",
   );
-  await expect(page.getByRole("dialog", { name: "Turn images" })).toHaveCount(
-    0,
+  await expect(attached(page).locator('li[data-status="ready"]')).toHaveCount(
+    3,
   );
 
-  await drop([{ name: "chart.png", type: "image/png" }]);
-  const images = page.getByRole("dialog", { name: "Turn images" });
-  await expect(images).toContainText("chart.png");
+  await attached(page)
+    .getByRole("button", { name: "Remove report.pdf", exact: true })
+    .click();
+  await expect(attached(page).getByRole("listitem")).toHaveCount(2);
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeFocused();
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .include(".composer")
+        .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+});
+
+test("a drop anywhere in the conversation attaches, and a missed drop stays on the page", async ({
+  page,
+}) => {
+  await acceptUploads(page);
+  await start(page, "/workspace/composer-drop-wide");
+  const csv = [{ name: "sales.csv", type: "text/csv" }];
+
+  await expect(dropOn(page, ".conversation-scroll")(csv)).resolves.toEqual([
+    true,
+    true,
+  ]);
+  await expect(attached(page).locator('li[data-status="ready"]')).toHaveCount(
+    1,
+  );
+
+  await expect(dropOn(page, "aside")(csv)).resolves.toEqual([true, true]);
+  await expect(attached(page).getByRole("listitem")).toHaveCount(1);
+});
+
+test("sending waits for uploads, then carries the files and shows them on the message", async ({
+  page,
+}) => {
+  let finishUpload: () => void = () => {};
+  const uploadHeld = new Promise<void>((resolve) => {
+    finishUpload = resolve;
+  });
+  await page.route("**/api/upload", async (route) => {
+    await uploadHeld;
+    const profile = route.request().headers()["x-profile-id"];
+    await route.fulfill({
+      json: [
+        `up/${Buffer.from(`${profile}/sales`).toString("base64url")}/sales.csv`,
+      ],
+    });
+  });
+  const turnStarts = await offerSkills(page);
+  await start(page, "/workspace/composer-send-files");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+
+  const chooser = page.waitForEvent("filechooser");
+  await settings(page)
+    .getByRole("button", { name: "Attach files", exact: true })
+    .click();
+  await (
+    await chooser
+  ).setFiles({
+    name: "sales.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("a,b\n1,2\n"),
+  });
+  await expect(
+    attached(page).locator('li[data-status="uploading"]'),
+  ).toHaveCount(1);
+
+  await composer.press("Enter");
+  await expect(page.locator(".composer")).toContainText(
+    "Tell Octos what to do with the attached files.",
+  );
+  await composer.fill("Clean this up");
+  await composer.press("Enter");
+  await expect(page.locator(".composer")).toContainText(
+    "Some files aren't uploaded yet.",
+  );
+  expect(turnStarts).toEqual([]);
+  await expect(composer).toHaveValue("Clean this up");
+
+  finishUpload();
+  await expect(attached(page).locator('li[data-status="ready"]')).toHaveCount(
+    1,
+  );
+  await expect(page.locator(".composer")).not.toContainText(
+    "Some files aren't uploaded yet.",
+  );
+  await composer.press("Enter");
+  await expect.poll(() => turnStarts.length).toBe(1);
+  await expect(attached(page)).toHaveCount(0);
+  await expect(
+    page.locator("article").filter({ hasText: "Clean this up" }),
+  ).toContainText("sales.csv");
+});
+
+test("/attach opens the file picker", async ({ page }) => {
+  await start(page, "/workspace/composer-attach-command");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await composer.fill("/attach");
+  const chooser = page.waitForEvent("filechooser");
+  await composer.press("Enter");
+  await chooser;
 });

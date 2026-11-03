@@ -1,12 +1,54 @@
 import { randomUUID } from "../../shared/uuid.ts";
 import {
+  MAX_UPLOAD_BYTES,
   uploadedHandleForProfile,
   type TurnMedia,
 } from "@octos-org/octoscode-client/media";
 
+export const MAX_TURN_FILES = 10;
 export const MAX_TURN_IMAGES = 4;
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-export const IMAGE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp";
+
+const IMAGE_MIME: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+// Decided by extension, not by the browser's type: Windows reports a .csv as
+// application/vnd.ms-excel wherever Excel is installed, and .md often as "".
+const DOCUMENT_MIME: Readonly<Record<string, string>> = {
+  pdf: "application/pdf",
+  csv: "text/csv",
+  tsv: "text/tab-separated-values",
+  md: "text/markdown",
+  markdown: "text/markdown",
+  json: "application/json",
+  html: "text/html",
+  htm: "text/html",
+  xml: "text/xml",
+  yaml: "text/yaml",
+  yml: "text/yaml",
+  ...Object.fromEntries(
+    [
+      "txt",
+      "log",
+      "jsonl",
+      "toml",
+      "ini",
+      "sql",
+      "py",
+      "js",
+      "ts",
+      "css",
+      "sh",
+    ].map((extension) => [extension, "text/plain"]),
+  ),
+};
+/** Office formats are out by product decision, so they get their own answer. */
+const OFFICE_EXTENSION =
+  /^(docx?|docm|xlsx?|xlsm|xlsb|pptx?|pptm|odt|ods|odp|rtf|wps|et|dps)$/;
 
 /** Opaque authenticated runtime identity; never put a credential in this key. */
 export interface AttachmentScope {
@@ -25,6 +67,12 @@ export interface AttachmentDraft {
   readonly status: "selected" | "uploading" | "ready" | "error";
   readonly error: string | null;
 }
+export type AttachmentRejection =
+  "office" | "unsupported" | "empty" | "too-large" | "too-many";
+export interface RejectedAttachment {
+  readonly name: string;
+  readonly reason: AttachmentRejection;
+}
 export interface AttachmentSnapshot {
   readonly entries: readonly AttachmentDraft[];
   readonly uploading: boolean;
@@ -36,26 +84,23 @@ interface Entry {
   media: TurnMedia | null;
 }
 
-function imageMime(file: File): string {
-  const extension = /\.(png|jpe?g|gif|webp)$/i
-    .exec(file.name)?.[1]
-    ?.toLowerCase();
-  const mime = extension
-    ? `image/${extension === "jpg" || extension === "jpeg" ? "jpeg" : extension}`
-    : null;
-  if (!mime || (file.type && file.type.toLowerCase() !== mime))
-    throw new Error(
-      "Choose PNG, JPEG, GIF or WebP images with matching file types.",
-    );
-  if (!file.size || file.size > MAX_IMAGE_BYTES)
-    throw new Error("Each image must be nonempty and at most 20 MiB.");
+function attachmentMime(file: File): string | AttachmentRejection {
+  const extension = /\.([^.]+)$/.exec(file.name)?.[1]?.toLowerCase() ?? "";
+  if (OFFICE_EXTENSION.test(extension)) return "office";
+  const image = IMAGE_MIME[extension];
+  const mime = image ?? DOCUMENT_MIME[extension];
+  if (!mime || (image && file.type && file.type.toLowerCase() !== image))
+    return "unsupported";
+  if (!file.size) return "empty";
+  if (file.size > (image ? MAX_IMAGE_BYTES : MAX_UPLOAD_BYTES))
+    return "too-large";
   return mime;
 }
 
 /**
  * Keep ONE store on each persistent Session
- * record. Selection never reads a path or uploads. Files live only in this
- * bounded, in-memory draft; no storage, previews, object URLs or credentials.
+ * record. Selection never reads a path. Files live only in this bounded,
+ * in-memory draft; no storage, previews, object URLs or credentials.
  * Keep the store on ordinary Session switches; invalidate it when its full
  * authenticated runtime authority is retired. Do not move drafts across scopes.
  */
@@ -121,27 +166,48 @@ export class AttachmentDraftStore {
     );
   }
 
-  /** Atomic selection: an invalid/oversized batch leaves the existing draft intact. */
-  selectFiles(files: readonly File[]): void {
+  /**
+   * Stage what can be attached and report the rest, so one unsupported file in
+   * a dropped batch does not cost the others. No bytes are read or sent here.
+   */
+  selectFiles(files: readonly File[]): RejectedAttachment[] {
     this.#assertCurrent();
     if (!this.uploadAvailable)
-      throw new Error("Image uploads are unavailable on this server.");
-    if (files.length + this.#entries.size > MAX_TURN_IMAGES)
-      throw new Error("Attach at most four images per turn.");
-    const validated = files.map((file) => ({ file, mime: imageMime(file) }));
+      throw new Error("File uploads are unavailable on this server.");
+    const drafts = [...this.#entries.values()].map((entry) => entry.draft);
     // Re-adding a draft already on this Session is an idempotent no-op; only a
     // genuinely new (name, size, mime) triple becomes a draft.
     const seen = new Set(
-      [...this.#entries.values()].map((entry) =>
-        JSON.stringify([entry.draft.name, entry.draft.bytes, entry.draft.mime]),
+      drafts.map((draft) =>
+        JSON.stringify([draft.name, draft.bytes, draft.mime]),
       ),
     );
+    let count = drafts.length;
+    let images = drafts.filter((draft) =>
+      draft.mime.startsWith("image/"),
+    ).length;
+    const rejected: RejectedAttachment[] = [];
     let added = false;
-    for (const { file, mime } of validated) {
+    for (const file of files) {
+      const mime = attachmentMime(file);
+      if (!mime.includes("/")) {
+        rejected.push({
+          name: file.name,
+          reason: mime as AttachmentRejection,
+        });
+        continue;
+      }
       const key = JSON.stringify([file.name, file.size, mime]);
       if (seen.has(key)) continue;
+      const image = mime.startsWith("image/");
+      if (count >= MAX_TURN_FILES || (image && images >= MAX_TURN_IMAGES)) {
+        rejected.push({ name: file.name, reason: "too-many" });
+        continue;
+      }
       seen.add(key);
       added = true;
+      count += 1;
+      if (image) images += 1;
       const id = randomUUID();
       this.#entries.set(id, {
         draft: Object.freeze({
@@ -152,8 +218,8 @@ export class AttachmentDraftStore {
           status: "selected",
           error: null,
         }),
-        // An absent browser MIME is normalized from the supported extension;
-        // no bytes are read, decoded or sent until the explicit upload action.
+        // The upload receipt must carry the normalized type, whatever the
+        // browser reported for this file.
         file:
           file.type === mime
             ? file
@@ -165,13 +231,14 @@ export class AttachmentDraftStore {
       });
     }
     if (added) this.#publish();
+    return rejected;
   }
 
   /** Upload only selected/failed entries; same-tick repeated clicks cannot duplicate work. */
   async uploadSelected(): Promise<void> {
     this.#assertCurrent();
     if (!this.uploadAvailable)
-      throw new Error("Image uploads are unavailable on this server.");
+      throw new Error("File uploads are unavailable on this server.");
     const selected = [...this.#entries.entries()].filter(
       ([, entry]) =>
         entry.draft.status === "selected" || entry.draft.status === "error",
@@ -227,8 +294,7 @@ export class AttachmentDraftStore {
       entry.draft = Object.freeze({
         ...entry.draft,
         status: "error",
-        error:
-          "Upload was not confirmed. Retry explicitly; the server may retain an earlier upload.",
+        error: "Upload failed. Retry it or remove it.",
       });
     } finally {
       if (this.#uploads.get(id) === abort) {
@@ -328,7 +394,7 @@ export class AttachmentDraftStore {
       )
     )
       throw new Error(
-        "Upload or remove every selected image before sending this turn.",
+        "Upload or remove every selected file before sending this turn.",
       );
     const media = [...this.#entries.values()].map((entry) => ({
       ...entry.media!,

@@ -24,7 +24,9 @@ export function summarizeTurn(
   let failedSteps = 0;
   let retriedSteps = 0;
   for (const entry of turn) {
-    for (const path of entry.media ?? []) output.add(path);
+    // What the user attached is an input, however the turn used it.
+    if (entry.kind !== "user")
+      for (const path of entry.media ?? []) output.add(path);
     if (entry.kind !== "tool") continue;
     if (entry.status === "error") {
       if (recovered.has(entry.id)) retriedSteps += 1;

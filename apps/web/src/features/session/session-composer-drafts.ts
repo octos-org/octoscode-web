@@ -107,7 +107,7 @@ export class SessionComposerDrafts {
       })
       .catch(() => {
         if (current())
-          draft.error = "Image controls could not be loaded. Try again.";
+          draft.error = "File controls could not be loaded. Try again.";
         return null;
       })
       .finally(() => {
@@ -188,7 +188,7 @@ export class SessionComposerDrafts {
       return accepted;
     } catch {
       draft.error =
-        "Upload or remove every selected image before sending. Your draft was kept.";
+        "Upload or remove every selected file before sending. Your draft was kept.";
       this.options.changed();
       return false;
     }

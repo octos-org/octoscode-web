@@ -273,7 +273,7 @@ describe("TUI-only commands fail closed in the browser", () => {
   it("keeps Web-only names gated by server capability, not TUI-only marking", () => {
     expect(commandAvailability(findCommand("monitor")!).available).toBe(false);
     expect(commandAvailability(findCommand("fork")!).available).toBe(false);
-    expect(commandAvailability(findCommand("images")!).available).toBe(false);
+    expect(commandAvailability(findCommand("attach")!).available).toBe(false);
     expect(
       commandAvailability(
         findCommand("monitor")!,
@@ -298,7 +298,7 @@ describe("TUI-only commands fail closed in the browser", () => {
     ).toBe(true);
     expect(
       commandAvailability(
-        findCommand("images")!,
+        findCommand("attach")!,
         capabilities([CORE_UI_METHODS.TURN_START]),
       ).available,
     ).toBe(true);

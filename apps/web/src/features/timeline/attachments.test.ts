@@ -16,6 +16,13 @@ describe("attachment naming", () => {
     expect(attachmentName("C:\\work\\deck.pptx")).toBe("deck.pptx");
   });
 
+  it("hides Core's collision prefix on a repeated upload, and nowhere else", () => {
+    const uuid = "01a1a332-1a37-7431-840b-28715fd8ff88";
+    expect(attachmentName(`uploads/${uuid}-销售.csv`)).toBe("销售.csv");
+    expect(attachmentName("uploads/销售.csv")).toBe("销售.csv");
+    expect(attachmentName(`reports/${uuid}-销售.csv`)).toBe(`${uuid}-销售.csv`);
+  });
+
   it("names an upload handle by its display segment", () => {
     expect(attachmentName("up/ZGV2L3VwLnR4dA/notes.txt")).toBe("notes.txt");
   });

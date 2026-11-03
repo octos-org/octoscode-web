@@ -354,31 +354,32 @@ export function AttachChip({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       className={controlStyles.trigger}
-      aria-label={t("Attach images")}
+      aria-label={t("Attach files")}
+      title={t("Attach CSV, Markdown, text, PDF or image files")}
       onClick={onOpen}
     >
       <span className={controlStyles.triggerIcon}>
         <PaperclipIcon />
       </span>
-      <span className={controlStyles.triggerLabel}>{t("Images")}</span>
+      <span className={controlStyles.triggerLabel}>{t("Files")}</span>
     </button>
   );
 }
 
 /**
  * Phones (美-9): Skills and Images fold into one "+" so the settings row fits
- * a line. One level deep: images first, then the skills list in place.
+ * a line. One level deep: files first, then the skills list in place.
  */
 export function ComposerAddMenu({
   skills,
-  onAttachImages,
+  onAttachFiles,
 }: {
   skills: {
     load: () => Promise<InstalledSkill[]>;
     onUse: (name: string) => void;
     onManage: () => void;
   } | null;
-  onAttachImages: (() => void) | null;
+  onAttachFiles: (() => void) | null;
 }) {
   const t = useUiText();
   const popover = usePopover();
@@ -398,18 +399,18 @@ export function ComposerAddMenu({
         type="button"
         className={`${controlStyles.trigger} ${styles.iconTrigger}`}
         aria-label={
-          skills && onAttachImages
-            ? t("Add skills or images")
+          skills && onAttachFiles
+            ? t("Add skills or files")
             : skills
               ? t("Skills")
-              : t("Attach images")
+              : t("Attach files")
         }
         title={
-          skills && onAttachImages
-            ? t("Add skills or images")
+          skills && onAttachFiles
+            ? t("Add skills or files")
             : skills
               ? t("Skills")
-              : t("Attach images")
+              : t("Attach files")
         }
         aria-haspopup="menu"
         aria-expanded={popover.open}
@@ -426,18 +427,18 @@ export function ComposerAddMenu({
           aria-label={t("Add")}
           aria-busy={list.status === "loading"}
         >
-          {onAttachImages ? (
+          {onAttachFiles ? (
             <button
               type="button"
               role="menuitem"
               className={`${controlStyles.option} ${styles.addOption}`}
               onClick={() => {
                 popover.close(false);
-                onAttachImages();
+                onAttachFiles();
               }}
             >
               <PaperclipIcon />
-              {t("Attach images")}
+              {t("Attach files")}
             </button>
           ) : null}
           {skills ? (

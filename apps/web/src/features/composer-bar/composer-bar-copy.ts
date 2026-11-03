@@ -21,12 +21,12 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
     "{count} tool(s)": "{count} 个工具",
     "Manage skills…": "管理技能…",
     "Use the {name} skill: ": "使用「{name}」技能：",
-    Images: "图片",
-    "Attach images": "附加图片",
-    "Add skills or images": "添加技能或图片",
+    Files: "文件",
+    "Attach files": "附加文件",
+    "Attach CSV, Markdown, text, PDF or image files":
+      "附加 CSV、Markdown、文本、PDF 或图片",
+    "Add skills or files": "添加技能或文件",
     Add: "添加",
-    "Only images can be attached for now (PNG, JPEG, GIF, WebP).":
-      "目前只能附加图片（PNG、JPEG、GIF、WebP）。",
     "{count} tokens": "{count} token",
     "This session used {summary}": "本会话已用 {summary}",
     "Input tokens": "输入 token",

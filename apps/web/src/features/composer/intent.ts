@@ -18,7 +18,7 @@ export type ComposerIntent =
   | { kind: "autonomy" }
   | { kind: "thinking" }
   | { kind: "set-thinking"; value: ReasoningEffort | undefined }
-  | { kind: "images" }
+  | { kind: "attach" }
   | { kind: "peers"; clear?: boolean }
   | { kind: "gather"; slugs?: string[] }
   | { kind: "btw"; question: string }
@@ -207,7 +207,7 @@ function implementedIntent(intent: CommandIntent): ComposerIntent | null {
     case "autonomy":
     case "thinking":
     case "approval-scopes":
-    case "images":
+    case "attach":
     case "peers":
     case "undo":
     case "rewind":

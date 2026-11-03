@@ -32,7 +32,7 @@ export type CommandIntent =
   | "research"
   | "autonomy"
   | "thinking"
-  | "images"
+  | "attach"
   | "peers"
   | "gather"
   | "btw"
@@ -253,11 +253,11 @@ export const WEB_COMMANDS: readonly WebCommandSpec[] = [
     requirement: { methodsAll: [CORE_UI_METHODS.TURN_START] },
   },
   {
-    name: "images",
-    aliases: [],
-    description: "Attach images to this Session’s next prompt",
+    name: "attach",
+    aliases: ["images"],
+    description: "Attach files to this Session’s next prompt",
     category: "Session",
-    intent: "images",
+    intent: "attach",
     implemented: true,
     requirement: { methodsAll: [CORE_UI_METHODS.TURN_START] },
   },

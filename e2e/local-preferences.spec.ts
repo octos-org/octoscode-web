@@ -118,7 +118,7 @@ async function command(page: Page, text: string) {
   // or queued), OR the composer unmounts/is replaced by the approval/question
   // takeover the instant its frame arrives (App.tsx swaps in
   // ApprovalPanel/UserQuestionPanel), OR ANY modal dialog mounts (an approval or
-  // question takeover, or a /theme | /language | /images surface). In the modal
+  // question takeover, or a /theme | /language surface). In the modal
   // cases the clear is not observable, so a bare `toHaveValue("")` times out with
   // "element(s) not found". Accept any of these signals; no fixed sleeps. The
   // 15 s ceiling absorbs the nondeterministic helper race observed under host load.
@@ -126,7 +126,7 @@ async function command(page: Page, text: string) {
     .poll(
       async () => {
         // Any mounted modal (approval/question takeover, or a /theme |
-        // /language | /images surface) also counts as acceptance.
+        // /language surface) also counts as acceptance.
         if ((await page.getByRole("dialog").count()) > 0) return true;
         const composer = input(page);
         if ((await composer.count()) === 0) return true; // taken over by a modal
@@ -206,9 +206,7 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
     await expect(promptQueue(page)).toContainText(
       "Preference A second queued turn",
     );
-    await command(page, "/images");
-    const images = page.getByRole("dialog", { name: "Turn images" });
-    await images.getByLabel("Choose image files").setInputFiles({
+    await page.getByLabel("Choose files to attach").setInputFiles({
       name: "local-only.png",
       mimeType: "image/png",
       buffer: Buffer.from(
@@ -216,9 +214,9 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
         "base64",
       ),
     });
-    await images
-      .getByRole("button", { name: "Close images", exact: true })
-      .click();
+    await expect(
+      page.getByRole("list", { name: "Attached files" }),
+    ).toContainText("local-only.png");
     await sibling(page, workspace);
     const b = await title(page),
       bOwner = wire.calls("session/open").at(-1)!.params!.session_id!;
@@ -378,16 +376,9 @@ test("five themes and live language/Vim changes preserve two busy Sessions, queu
     await expect(promptQueue(page)).toContainText(
       "Preference A second queued turn",
     );
-    await command(page, "/images");
     await expect(
-      images.getByRole("list", { name: "Selected images" }),
+      page.getByRole("list", { name: "Attached files" }),
     ).toContainText("local-only.png");
-    await expect(
-      images.getByText("Selected; not uploaded", { exact: true }),
-    ).toBeVisible();
-    await images
-      .getByRole("button", { name: "Close images", exact: true })
-      .click();
     await row(page, b).click();
     await expect(input(page)).toHaveValue("B untouched draft");
     await expect(promptQueue(page)).toHaveCount(0);

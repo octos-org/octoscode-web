@@ -221,7 +221,8 @@ describe("resolveComposerIntent", () => {
     expect(resolveComposerIntent("/thinking max").kind).toBe(
       "unsupported-command",
     );
-    expect(resolveComposerIntent("/images", caps)).toEqual({ kind: "images" });
+    expect(resolveComposerIntent("/attach", caps)).toEqual({ kind: "attach" });
+    expect(resolveComposerIntent("/images", caps)).toEqual({ kind: "attach" });
     expect(resolveComposerIntent("/images /private/path", caps).kind).toBe(
       "unsupported-command",
     );

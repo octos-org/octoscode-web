@@ -77,10 +77,12 @@ not describe either surface as full management.
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,
 rewind/fork, native review, tool/MCP inventory, skills, and research lanes.
-`/thinking` captures per-Session reasoning effort in new queued turns; `/images`
-explicitly uploads up to four supported images, each at most 20 MiB. These
-controls do not imply full TUI parity or a passed live soak; acceptance is
-tracked in [Feature parity](feature-parity.md).
+`/thinking` captures per-Session reasoning effort in new queued turns; files
+dropped, pasted or picked (also `/attach`) upload straight away and wait in the
+composer: up to ten per message, four of them images (20 MiB each), the rest
+PDF, CSV, Markdown or plain text (50 MiB each). Office files are refused with an
+explanation. These controls do not imply full TUI parity or a passed live soak;
+acceptance is tracked in [Feature parity](feature-parity.md).
 
 Transcript rows are a bounded browser rendering projection, not the durable
 history store. When older rows fall outside that window the first visible row
