@@ -2010,6 +2010,8 @@ const catalog: Readonly<Record<string, string>> = {
   "⚠ {count} steps failed": "⚠ {count} 步失败",
   "Duration {seconds}s": "用时 {seconds} 秒",
   "{count} files changed": "改动 {count} 个文件",
+  "{count} files recorded; command-line changes not counted":
+    "记录到 {count} 个文件，命令行改动未统计",
   "{input} tokens in · {output} tokens out":
     "输入 {input} token · 输出 {output} token",
   "Output files: {files}": "产出文件：{files}",

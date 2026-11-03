@@ -76,7 +76,12 @@ export function TurnSummary({
           summary.seconds
             ? t("Duration {seconds}s", { seconds: summary.seconds })
             : null,
-          t("{count} files changed", { count: summary.changedFiles.length }),
+          t(
+            summary.commandChangesUnknown
+              ? "{count} files recorded; command-line changes not counted"
+              : "{count} files changed",
+            { count: summary.changedFiles.length + summary.unlistedChanges },
+          ),
           summary.usage
             ? t("{input} tokens in · {output} tokens out", {
                 input: summary.usage.input,

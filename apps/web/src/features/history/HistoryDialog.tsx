@@ -38,7 +38,6 @@ function BoundHistoryDialog({ mode, binding, onClose }: HistoryDialogProps) {
     coordinator.getSnapshot,
   );
   const { snapshots, checkpoints, loading, mutating, error, notice } = state;
-  const sessionId = binding.scope.sessionId;
   const [selectedSnapshot, setSelectedSnapshot] =
     useState<WorkspaceSnapshot | null>(null);
   const [selectedCheckpoint, setSelectedCheckpoint] =
@@ -92,7 +91,6 @@ function BoundHistoryDialog({ mode, binding, onClose }: HistoryDialogProps) {
           {t("Close history")}
         </button>
       </header>
-      <p className={styles.scope}>{sessionId}</p>
       <p>
         {mode === "undo"
           ? t(
