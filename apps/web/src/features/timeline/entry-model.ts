@@ -46,6 +46,9 @@ export interface TimelineEntry {
   attachmentSizes?: Readonly<Record<string, number>>;
   /** Explicit path argument of a successful write_file/edit_file call. */
   artifactPath?: string;
+  /** Durable turn timing from session/hydrate, independent of tool card time. */
+  turnStartedAtMs?: number;
+  turnEndedAtMs?: number;
   /** First-seen wall-clock for a streamed block (duration in fold headers). */
   startedAtMs?: number;
   /** Latest stream time while running; final time once settled. */

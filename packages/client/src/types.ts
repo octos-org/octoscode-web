@@ -586,6 +586,8 @@ export interface HydratedTurn {
     | string;
   started_at?: string;
   completed_at?: string;
+  /** True only when completed_at came from the durable terminal record. */
+  completed_at_durable?: boolean;
   thread_id?: string;
 }
 

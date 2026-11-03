@@ -46,15 +46,26 @@ export function summarizeTurn(
     }
   }
   const starts = turn.flatMap((entry) =>
-    entry.startedAtMs === undefined ? [] : [entry.startedAtMs],
+    [entry.turnStartedAtMs, entry.startedAtMs].filter(
+      (value): value is number => value !== undefined,
+    ),
   );
   const ends = turn.flatMap((entry) =>
-    entry.endedAtMs === undefined ? [] : [entry.endedAtMs],
+    [entry.turnEndedAtMs, entry.endedAtMs].filter(
+      (value): value is number => value !== undefined,
+    ),
   );
-  const start =
-    terminal?.startedAtMs ?? (starts.length ? Math.min(...starts) : undefined);
-  const end =
-    terminal?.endedAtMs ?? (ends.length ? Math.max(...ends) : undefined);
+  const hydratedTerminal =
+    terminal &&
+    (terminal.turnStartedAtMs !== undefined ||
+      terminal.turnEndedAtMs !== undefined);
+  const start = hydratedTerminal
+    ? terminal.turnStartedAtMs
+    : (terminal?.startedAtMs ??
+      (starts.length ? Math.min(...starts) : undefined));
+  const end = hydratedTerminal
+    ? terminal.turnEndedAtMs
+    : (terminal?.endedAtMs ?? (ends.length ? Math.max(...ends) : undefined));
   return {
     seconds:
       start === undefined || end === undefined

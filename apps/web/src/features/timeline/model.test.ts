@@ -8,11 +8,13 @@ import {
   addOptimisticUser,
   addSystemMessage,
   foldNotification,
+  settleTimelineTurn,
   terminalTurnOutcome,
   timelineActivity,
   timelineFromHydrate,
   type TimelineEntry,
 } from "./model.ts";
+import { summarizeTurn } from "./turn-summary.ts";
 
 describe("timeline projection", () => {
   const projection = (
@@ -1077,6 +1079,57 @@ describe("hydrated tool presentation", () => {
     expect(
       tools.filter((entry) => entry.id.startsWith("hydrated:")),
     ).toHaveLength(1);
+  });
+
+  it("keeps the hydrated turn start when one second of live output arrives before terminal", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const started = "2026-11-01T19:59:00.477226945Z";
+    const ended = "2026-11-01T20:00:10.997Z";
+    const hydrated = freeze({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 0 },
+      messages: [
+        {
+          seq: 0,
+          role: "user",
+          kind: "prompt",
+          message_id: "prompt",
+          thread_id: "turn-1",
+          turn_id: "turn-1",
+          content: "Review the repair",
+          persisted_at: started,
+          media: [],
+          tags: [],
+        },
+      ],
+      turns: [
+        {
+          turn_id: "turn-1",
+          thread_id: "turn-1",
+          state: "active",
+          started_at: started,
+        },
+      ],
+    });
+    const entries = timelineFromHydrate(hydrated);
+    vi.setSystemTime(Date.parse(ended) - 1000);
+    const streaming = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: {
+        session_id: "coding:local:main",
+        thread_id: "turn-1",
+        turn_id: "turn-1",
+        seq: 1,
+        payload: { type: "assistant_delta", data: { text: "Done" } },
+      },
+    });
+    vi.setSystemTime(Date.parse(ended));
+    const completed = settleTimelineTurn(streaming, "turn-1", "completed");
+    expect(summarizeTurn(completed, "turn-1").seconds).toBe(71);
   });
 
   it("restores rc.9 tools without message turn IDs in their original transcript order", () => {

@@ -324,7 +324,10 @@ export function timelineFromHydrate(
         }
       : entry;
   });
-  return withoutHydratedTiming(withHydratedTurnOutcome(entries, result));
+  return withHydratedTurnTiming(
+    withoutHydratedTiming(withHydratedTurnOutcome(entries, result)),
+    result,
+  );
 }
 
 export function withHydratedTurnOutcome(
@@ -352,6 +355,30 @@ export function withoutHydratedTiming(
   return entries.map(
     ({ startedAtMs: _startedAtMs, endedAtMs: _endedAtMs, ...entry }) => entry,
   );
+}
+
+/** Keep durable turn timing separate from per-tool presentation timestamps. */
+export function withHydratedTurnTiming(
+  entries: readonly TimelineEntry[],
+  hydrated: SessionHydrateResult,
+): TimelineEntry[] {
+  const timing = new Map(
+    (hydrated.turns ?? []).map((turn) => [turn.turn_id, turn] as const),
+  );
+  return entries.map((entry) => {
+    const turn = entry.turnId ? timing.get(entry.turnId) : undefined;
+    if (!turn) return entry;
+    const startedAtMs = turn.started_at ? Date.parse(turn.started_at) : NaN;
+    const endedAtMs =
+      turn.completed_at_durable === true && turn.completed_at
+        ? Date.parse(turn.completed_at)
+        : NaN;
+    return {
+      ...entry,
+      ...(Number.isFinite(startedAtMs) ? { turnStartedAtMs: startedAtMs } : {}),
+      ...(Number.isFinite(endedAtMs) ? { turnEndedAtMs: endedAtMs } : {}),
+    };
+  });
 }
 
 /** Activity is about what is happening now, not whether a turn ever used a tool. */
@@ -837,9 +864,14 @@ export function settleTimelineTurn(
   body = "",
   usage?: { input: number; output: number },
 ): TimelineEntry[] {
+  const previousTerminal = entries.find(
+    (entry) => entry.id === `terminal:${turnId}`,
+  );
+  const durableStartedAtMs = previousTerminal?.turnStartedAtMs;
+  const durableEndedAtMs = previousTerminal?.turnEndedAtMs;
   const startedAtMs = entries
     .filter((entry) => entry.turnId === turnId)
-    .map((entry) => entry.startedAtMs)
+    .flatMap((entry) => [entry.turnStartedAtMs, entry.startedAtMs])
     .filter((value): value is number => value !== undefined)
     .sort((left, right) => left - right)[0];
   const endedAtMs = Date.now();
@@ -865,8 +897,14 @@ export function settleTimelineTurn(
             : "error",
     turnId,
     latestTurnOutcome: outcome,
-    startedAtMs: startedAtMs ?? endedAtMs,
-    endedAtMs,
+    ...(durableStartedAtMs !== undefined
+      ? { turnStartedAtMs: durableStartedAtMs }
+      : {}),
+    ...(durableEndedAtMs !== undefined
+      ? { turnEndedAtMs: durableEndedAtMs }
+      : {}),
+    startedAtMs: durableStartedAtMs ?? startedAtMs ?? endedAtMs,
+    endedAtMs: durableEndedAtMs ?? endedAtMs,
     ...(usage ? { turnUsage: usage } : {}),
   });
 }
