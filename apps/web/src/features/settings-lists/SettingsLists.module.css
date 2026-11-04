@@ -100,6 +100,10 @@
   color: var(--dsw-alias-state-error-text);
 }
 
+.rowHeading > span[data-status="waiting"] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .row code {
   display: block;
   overflow: auto;

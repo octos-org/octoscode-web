@@ -47,6 +47,12 @@
   color: var(--dsw-alias-state-error-text);
 }
 
+.savedState {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .editor {
   display: grid;
   gap: var(--dsw-space-3);

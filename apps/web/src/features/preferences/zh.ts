@@ -1834,8 +1834,24 @@ const catalog: Readonly<Record<string, string>> = {
     "当前协议不支持添加、删除、编辑或 OAuth。",
   "{connected} connected · {connecting} connecting · {failed} failed · {disabled} disabled":
     "已连接 {connected} · 连接中 {connecting} · 失败 {failed} · 已停用 {disabled}",
-  "No MCP servers are configured for this Session.":
-    "此会话未配置 MCP 服务器。",
+  "No connectors are loaded for this Session. One that was saved but hasn't taken effect isn't listed here.":
+    "此会话还没有加载连接器。已保存但还没生效的连接器不会列在这里。",
+  "{count} waiting to take effect": "{count} 个待生效",
+  "Waiting to take effect": "待生效",
+  "Saved, takes effect after the server restarts": "已保存，重启服务后生效",
+  "Saved, takes effect from the next turn": "已保存，下次回合生效",
+  "Saved, not in effect yet": "已保存，还没有生效",
+  "Saved as disabled, won't run": "已保存为停用，不会运行",
+  "It isn't running yet. This row is only kept on this page: after a page refresh it won't show until the connector loads, but the saved setup stays.":
+    "它还没有运行。这一行只记在当前页面：刷新页面后，要等连接器加载出来才会再显示，但保存的配置还在。",
+  "Delete {name}? Its saved setup will be removed.":
+    "删除 {name}？保存的配置会被移除。",
+  "This connector is no longer in the saved setup.":
+    "这个连接器已经不在保存的配置里了。",
+  "This server only reconnects connectors when it restarts.":
+    "这台服务只有重启时才会重新连接连接器。",
+  "Saved. This server only loads connector changes when it restarts, so this list still shows what is running now.":
+    "已保存。这台服务要重启才会加载连接器的改动，所以这里显示的还是现在运行的状态。",
   "Scheduled tasks": "定时任务",
   "New scheduled task": "新建定时任务",
   "Octos does these on schedule, even with this page closed, and posts each result to the conversation it was created in.":

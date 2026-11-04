@@ -336,6 +336,165 @@ test("an unknown unavailable reason is not called a permission problem", async (
   expect(mutations).toEqual([]);
 });
 
+async function addHttpConnector(
+  settings: ReturnType<Page["getByRole"]>,
+  name: string,
+  url: string,
+) {
+  await settings.getByRole("button", { name: "Add HTTP connector" }).click();
+  const add = settings.getByRole("form", { name: "Add HTTP connector" });
+  await add.getByLabel("Connector name").fill(name);
+  await add.getByLabel("HTTP URL").fill(url);
+  await add.getByRole("button", { name: "Save connector" }).click();
+  return add;
+}
+
+const NOTHING_LOADED =
+  "No connectors are loaded for this Session. One that was saved but hasn't taken effect isn't listed here.";
+const AFTER_RESTART = "Saved, takes effect after the server restarts";
+
+test("a connector saved but not loaded stays visible and manageable", async ({
+  page,
+}) => {
+  await start(page, "connector-management-pinned");
+  const settings = await openConnectors(page);
+  await expect(settings.getByText(NOTHING_LOADED)).toBeVisible();
+
+  const add = await addHttpConnector(
+    settings,
+    "Team docs",
+    "https://team-docs.invalid/mcp",
+  );
+  await expect(add).toHaveCount(0);
+  const row = connector(settings, "mcp-1");
+  await expect(row).toContainText("Team docs");
+  await expect(row).toContainText(AFTER_RESTART);
+  await expect(row).toContainText("https://team-docs.invalid/mcp");
+  await expect(row).toContainText("Waiting to take effect");
+  // It has never run, so nothing may claim otherwise.
+  await expect(row).not.toContainText("connected");
+  await expect(row).not.toContainText("tools");
+  await expect(row.getByRole("button", { name: "Reconnect" })).toHaveCount(0);
+  await expect(settings.getByText(NOTHING_LOADED)).toHaveCount(0);
+  await expect(settings).toContainText("1 waiting to take effect");
+
+  // The list stays empty until the server loads it, so neither refreshing nor
+  // leaving the page may lose the row.
+  await settings.getByRole("button", { name: "Refresh" }).click();
+  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  await expect(row).toContainText(AFTER_RESTART);
+  await settings.getByRole("button", { name: "Skills", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await settings
+    .getByRole("button", { name: "Connectors", exact: true })
+    .click();
+  await expect(row).toContainText(AFTER_RESTART);
+
+  await row.getByRole("button", { name: "Disable", exact: true }).click();
+  await expect(row).toContainText("Saved as disabled, won't run");
+  await expect(row).not.toContainText(AFTER_RESTART);
+  await row.getByRole("button", { name: "Enable", exact: true }).click();
+  await expect(row).toContainText(AFTER_RESTART);
+
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  const edit = settings.getByRole("form", { name: "Edit connector" });
+  await expect(edit.getByLabel("Connector name")).toHaveValue("Team docs");
+  await edit.getByLabel("Connector name").fill("Team docs renamed");
+  await edit.getByLabel("HTTP URL").fill("https://renamed.invalid/mcp");
+  await edit.getByRole("button", { name: "Save connector" }).click();
+  await expect(row).toContainText("Team docs renamed");
+  await expect(row).toContainText("https://renamed.invalid/mcp");
+
+  expect(
+    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+      .violations,
+  ).toEqual([]);
+
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
+  await row.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(row).toHaveCount(0);
+  await expect(settings.getByText(NOTHING_LOADED)).toBeVisible();
+});
+
+test("a failed create leaves no row and keeps what was typed", async ({
+  page,
+}) => {
+  await start(page, "connector-management-pinned");
+  const settings = await openConnectors(page);
+  const add = await addHttpConnector(
+    settings,
+    "Refused",
+    "https://refused.invalid/mcp",
+  );
+  await expect(settings.getByRole("alert")).toContainText("url was refused");
+  await expect(settings.locator("[data-connector-id]")).toHaveCount(0);
+  await expect(settings).not.toContainText("waiting to take effect");
+  await expect(add.getByLabel("Connector name")).toHaveValue("Refused");
+  await expect(settings.getByText(NOTHING_LOADED)).toBeVisible();
+});
+
+test("a promise of the next turn only appears when the server makes it", async ({
+  page,
+}) => {
+  await start(page, "connector-management-pinned-deferred");
+  const settings = await openConnectors(page);
+  await addHttpConnector(settings, "Deferred", "https://deferred.invalid/mcp");
+  await expect(connector(settings, "mcp-1")).toContainText(
+    "Saved, takes effect from the next turn",
+  );
+});
+
+test("once the server loads a saved connector, its own row takes over", async ({
+  page,
+}) => {
+  await start(page, "connector-management-pinned");
+  const settings = await openConnectors(page);
+  await addHttpConnector(
+    settings,
+    "Team docs",
+    "https://team-docs.invalid/mcp",
+  );
+  const row = connector(settings, "mcp-1");
+  await expect(row).toContainText(AFTER_RESTART);
+  await page.request.post(`${origin}/__test__/connectors/restart`);
+  await settings.getByRole("button", { name: "Refresh" }).click();
+  await expect(row).toContainText("failed");
+  await expect(row).not.toContainText(AFTER_RESTART);
+  await expect(row).toHaveCount(1);
+  await expect(settings).not.toContainText("waiting to take effect");
+
+  // A listed row keeps showing what runs now, so the page has to say why.
+  await row.getByRole("button", { name: "Disable", exact: true }).click();
+  await expect(settings.getByRole("status")).toContainText(
+    "This server only loads connector changes when it restarts",
+  );
+  await expect(row).toContainText("failed");
+  await row.getByRole("button", { name: "Reconnect", exact: true }).click();
+  await expect(settings.getByRole("status")).toContainText(
+    "This server only reconnects connectors when it restarts",
+  );
+});
+
+test("a saved connector removed elsewhere leaves when the server says so", async ({
+  page,
+}) => {
+  await start(page, "connector-management-pinned");
+  const settings = await openConnectors(page);
+  await addHttpConnector(
+    settings,
+    "Team docs",
+    "https://team-docs.invalid/mcp",
+  );
+  const row = connector(settings, "mcp-1");
+  await expect(row).toContainText(AFTER_RESTART);
+  await page.request.post(`${origin}/__test__/connectors/reset`);
+  await row.getByRole("button", { name: "Disable", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(settings.getByRole("alert")).toContainText(
+    "This connector is no longer in the saved setup.",
+  );
+});
+
 test("a delayed refresh blocks mutations and always releases busy state", async ({
   page,
 }) => {

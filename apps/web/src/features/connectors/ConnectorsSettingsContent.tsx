@@ -5,6 +5,7 @@ import type {
 } from "@octos-org/octoscode-client/protocol";
 import {
   supportsMcpConnectorManagement,
+  type McpConnectorMutation,
   type McpStdioAllowlistEntry,
   type RuntimeMcp,
   type RuntimeMcpServer,
@@ -13,6 +14,13 @@ import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "../settings-lists/SettingsLists.module.css";
 import local from "./ConnectorsSettingsContent.module.css";
+import {
+  afterMutation,
+  readSavedConnectors,
+  withoutListed,
+  writeSavedConnectors,
+  type SavedConnector,
+} from "./saved-connectors.ts";
 
 interface ConnectorsSettingsContentProps {
   client: OctosUiClient;
@@ -35,6 +43,7 @@ type Editor = {
 
 const PERMISSION_ERROR =
   /forbidden|permission denied|not authorized|unauthorized|session ingress|host-managed|profile.*write/i;
+const NOT_FOUND_ERROR = /mcp_connector not found/i;
 
 /** Why the server says this access cannot manage connectors (T-0056). */
 function manageUnavailableText(
@@ -79,6 +88,21 @@ function connectorName(server: RuntimeMcpServer): string {
   return server.displayName?.trim() || server.id;
 }
 
+function savedConnectorText(
+  row: SavedConnector,
+  t: ReturnType<typeof useUiText>,
+): string {
+  if (!row.enabled) return t("Saved as disabled, won't run");
+  switch (row.takesEffect) {
+    case "restart":
+      return t("Saved, takes effect after the server restarts");
+    case "next_turn":
+      return t("Saved, takes effect from the next turn");
+    default:
+      return t("Saved, not in effect yet");
+  }
+}
+
 function validHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -108,6 +132,10 @@ export function ConnectorsSettingsContent({
   const [editor, setEditor] = useState<Editor | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [saved, setSaved] = useState(() =>
+    readSavedConnectors(client, profileId),
+  );
+  const [restartNotice, setRestartNotice] = useState<string | null>(null);
   const generation = useRef(0);
   const entryDescriptionId = useId();
   const managementAvailable = supportsMcpConnectorManagement(capabilities);
@@ -123,6 +151,20 @@ export function ConnectorsSettingsContent({
   const allowlistEntry = (entryId: string) =>
     allowlist?.find((entry) => entry.entryId === entryId);
 
+  // Written through to the store: the server has saved it whether or not this
+  // page is still open when the answer arrives.
+  const updateSaved = useCallback(
+    (
+      change: (rows: readonly SavedConnector[]) => readonly SavedConnector[],
+      visible: boolean,
+    ) => {
+      const next = change(readSavedConnectors(client, profileId));
+      writeSavedConnectors(client, profileId, next);
+      if (visible) setSaved(next);
+    },
+    [client, profileId],
+  );
+
   const refresh = useCallback(async () => {
     const ticket = ++generation.current;
     setRefreshing(true);
@@ -135,7 +177,10 @@ export function ConnectorsSettingsContent({
         capabilities,
       );
       const result = await commands.mcp();
-      if (ticket === generation.current) setState(result);
+      if (ticket === generation.current) {
+        setState(result);
+        updateSaved((rows) => withoutListed(rows, result.servers), true);
+      }
     } catch (reason) {
       if (ticket === generation.current)
         setError(errorMessage(reason).slice(0, 512));
@@ -146,7 +191,7 @@ export function ConnectorsSettingsContent({
         setRefreshing(false);
       }
     }
-  }, [capabilities, client, profileId, sessionId]);
+  }, [capabilities, client, profileId, sessionId, updateSaved]);
 
   useEffect(() => {
     setState(null);
@@ -155,39 +200,70 @@ export function ConnectorsSettingsContent({
     setEditor(null);
     setConfirmDelete(null);
     setBusy(null);
+    setRestartNotice(null);
+    setSaved(readSavedConnectors(client, profileId));
     void refresh();
     return () => {
       generation.current += 1;
     };
-  }, [refresh]);
+  }, [client, profileId, refresh]);
 
   async function runMutation(
     key: string,
     operation: (
       commands: Awaited<ReturnType<typeof client.inventoryCommands>>,
-    ) => Promise<RuntimeMcp>,
+    ) => Promise<McpConnectorMutation>,
+    connectorId?: string,
   ) {
     // The buttons are already disabled; this also holds for a form left open.
     if (busy || refreshing || managementDisabled) return;
     const ticket = ++generation.current;
+    const savedRow = saved.some((row) => row.id === connectorId);
     setBusy(key);
     setError(null);
     setErrorDetail(null);
+    setRestartNotice(null);
     try {
       const commands = await client.inventoryCommands(
         sessionId,
         profileId,
         capabilities,
       );
-      const result = await operation(commands);
-      if (ticket !== generation.current) return;
-      setState(result);
+      const mutation = await operation(commands);
+      const open = ticket === generation.current;
+      updateSaved((rows) => afterMutation(rows, mutation, connectorId), open);
+      if (!open) return;
       setEditor(null);
       setConfirmDelete(null);
+      // A listed row keeps showing what runs now, so the page has to say why.
+      if (mutation.runtime?.restartRequired && connectorId && !savedRow) {
+        setRestartNotice(
+          key.startsWith("reconnect:")
+            ? t("This server only reconnects connectors when it restarts.")
+            : t(
+                "Saved. This server only loads connector changes when it restarts, so this list still shows what is running now.",
+              ),
+        );
+      }
+      const result = await commands.mcp();
+      if (ticket !== generation.current) return;
+      setState(result);
+      updateSaved((rows) => withoutListed(rows, result.servers), true);
     } catch (reason) {
       if (ticket !== generation.current) return;
       const message = errorMessage(reason).slice(0, 512);
-      if (/private or loopback MCP endpoints are refused/i.test(message)) {
+      if (savedRow && NOT_FOUND_ERROR.test(message)) {
+        updateSaved(
+          (rows) => rows.filter((row) => row.id !== connectorId),
+          true,
+        );
+        setConfirmDelete(null);
+        setEditor(null);
+        setError(t("This connector is no longer in the saved setup."));
+        setErrorDetail(null);
+      } else if (
+        /private or loopback MCP endpoints are refused/i.test(message)
+      ) {
         setError(
           t(
             "This connector uses a private or loopback address, which the server refuses. Use an approved public HTTP(S) endpoint.",
@@ -248,19 +324,43 @@ export function ConnectorsSettingsContent({
     if (!editor.connectorId) return;
     const connectorId = editor.connectorId;
     const server = state?.servers.find((row) => row.id === connectorId);
+    const savedRow = saved.find((row) => row.id === connectorId);
+    const currentName = savedRow?.name ?? (server && connectorName(server));
     const patch: { name?: string; url?: string } = {};
-    if (!server || name !== connectorName(server)) patch.name = name;
-    if (server?.transport === "http" && url) patch.url = url;
+    if (name !== currentName) patch.name = name;
+    if ((savedRow ?? server)?.transport === "http" && url) patch.url = url;
     if (!patch.name && !patch.url) {
       setEditor(null);
       return;
     }
-    void runMutation(`edit:${connectorId}`, (commands) =>
-      commands.updateConnector(connectorId, patch),
+    void runMutation(
+      `edit:${connectorId}`,
+      (commands) => commands.updateConnector(connectorId, patch),
+      connectorId,
     );
   }
 
+  function openEditor(
+    connectorId: string,
+    name: string,
+    transport: string | undefined,
+  ) {
+    setError(null);
+    setErrorDetail(null);
+    setConfirmDelete(null);
+    setEditor({
+      mode: "edit",
+      transport: transport === "http" ? "http" : "stdio",
+      connectorId,
+      name,
+      url: "",
+      entryId: "",
+      nameTouched: true,
+    });
+  }
+
   const formBusy = busy === "add" || busy?.startsWith("edit:") === true;
+  const managementLocked = managementDisabled || Boolean(busy) || refreshing;
   return (
     <div
       className={styles.page}
@@ -370,6 +470,11 @@ export function ConnectorsSettingsContent({
           ) : null}
         </div>
       ) : null}
+      {restartNotice ? (
+        <p className={styles.notice} role="status">
+          {restartNotice}
+        </p>
+      ) : null}
       {loading ? <p role="status">{t("Waiting for the server…")}</p> : null}
 
       {editor ? (
@@ -442,9 +547,7 @@ export function ConnectorsSettingsContent({
               }
             />
           </label>
-          {(editor.mode === "add" && editor.transport === "http") ||
-          state?.servers.find((row) => row.id === editor.connectorId)
-            ?.transport === "http" ? (
+          {editor.transport === "http" ? (
             <label className={local.field}>
               <span>{t("HTTP URL")}</span>
               <input
@@ -483,24 +586,35 @@ export function ConnectorsSettingsContent({
         </form>
       ) : null}
 
-      {state ? (
+      {state || saved.length ? (
         <>
-          <p className={styles.meta}>
-            {t(
-              "{connected} connected · {connecting} connecting · {failed} failed · {disabled} disabled",
-              {
-                connected: state.summary.connected,
-                connecting: state.summary.connecting,
-                failed: state.summary.failed,
-                disabled: state.summary.disabled,
-              },
-            )}
-          </p>
-          {!state.servers.length ? (
-            <p>{t("No MCP servers are configured for this Session.")}</p>
+          {state ? (
+            <p className={styles.meta}>
+              {t(
+                "{connected} connected · {connecting} connecting · {failed} failed · {disabled} disabled",
+                {
+                  connected: state.summary.connected,
+                  connecting: state.summary.connecting,
+                  failed: state.summary.failed,
+                  disabled: state.summary.disabled,
+                },
+              )}
+              {saved.length
+                ? ` · ${t("{count} waiting to take effect", {
+                    count: saved.length,
+                  })}`
+                : ""}
+            </p>
+          ) : null}
+          {state && !state.servers.length && !saved.length ? (
+            <p>
+              {t(
+                "No connectors are loaded for this Session. One that was saved but hasn't taken effect isn't listed here.",
+              )}
+            </p>
           ) : null}
           <div className={styles.rows}>
-            {state.servers.map((server) => {
+            {(state?.servers ?? []).map((server) => {
               const name = connectorName(server);
               const rowBusy = busy?.endsWith(`:${server.id}`) === true;
               const needsAuthorization =
@@ -551,21 +665,9 @@ export function ConnectorsSettingsContent({
                         disabled={
                           managementDisabled || Boolean(busy) || refreshing
                         }
-                        onClick={() => {
-                          setError(null);
-                          setErrorDetail(null);
-                          setConfirmDelete(null);
-                          setEditor({
-                            mode: "edit",
-                            transport:
-                              server.transport === "http" ? "http" : "stdio",
-                            connectorId: server.id,
-                            name,
-                            url: "",
-                            entryId: "",
-                            nameTouched: true,
-                          });
-                        }}
+                        onClick={() =>
+                          openEditor(server.id, name, server.transport)
+                        }
                       >
                         {t("Edit")}
                       </button>
@@ -575,11 +677,14 @@ export function ConnectorsSettingsContent({
                           managementDisabled || Boolean(busy) || refreshing
                         }
                         onClick={() =>
-                          void runMutation(`enabled:${server.id}`, (commands) =>
-                            commands.setConnectorEnabled(
-                              server.id,
-                              !server.enabled,
-                            ),
+                          void runMutation(
+                            `enabled:${server.id}`,
+                            (commands) =>
+                              commands.setConnectorEnabled(
+                                server.id,
+                                !server.enabled,
+                              ),
+                            server.id,
                           )
                         }
                       >
@@ -607,6 +712,7 @@ export function ConnectorsSettingsContent({
                             `reconnect:${server.id}`,
                             (commands) =>
                               commands.reconnectConnector(server.id),
+                            server.id,
                           )
                         }
                       >
@@ -648,6 +754,7 @@ export function ConnectorsSettingsContent({
                             void runMutation(
                               `delete:${server.id}`,
                               (commands) => commands.deleteConnector(server.id),
+                              server.id,
                             )
                           }
                         >
@@ -668,6 +775,111 @@ export function ConnectorsSettingsContent({
                 </article>
               );
             })}
+            {saved.map((row) => (
+              <article
+                key={row.id}
+                className={styles.row}
+                aria-busy={busy?.endsWith(`:${row.id}`) === true}
+                data-connector-id={row.id}
+                data-connector-saved
+              >
+                <div className={styles.rowHeading}>
+                  <strong>{row.name}</strong>
+                  <span data-status={row.enabled ? "waiting" : "disabled"}>
+                    {row.enabled ? t("Waiting to take effect") : t("disabled")}
+                  </span>
+                </div>
+                <p className={local.savedState} role="status">
+                  {savedConnectorText(row, t)}
+                </p>
+                <p className={styles.meta}>
+                  {row.transport === "http"
+                    ? t("HTTP")
+                    : (row.transport ?? row.id)}
+                  {row.url ? ` · ${row.url}` : ""}
+                </p>
+                {row.error ? (
+                  <p className={styles.error}>{row.error.slice(0, 512)}</p>
+                ) : null}
+                <p className={styles.meta}>
+                  {t(
+                    "It isn't running yet. This row is only kept on this page: after a page refresh it won't show until the connector loads, but the saved setup stays.",
+                  )}
+                </p>
+                <div className={local.actions}>
+                  <button
+                    type="button"
+                    disabled={managementLocked}
+                    onClick={() => openEditor(row.id, row.name, row.transport)}
+                  >
+                    {t("Edit")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={managementLocked}
+                    onClick={() =>
+                      void runMutation(
+                        `enabled:${row.id}`,
+                        (commands) =>
+                          commands.setConnectorEnabled(row.id, !row.enabled),
+                        row.id,
+                      )
+                    }
+                  >
+                    {busy === `enabled:${row.id}`
+                      ? t("Updating…")
+                      : row.enabled
+                        ? t("Disable")
+                        : t("Enable")}
+                  </button>
+                  <button
+                    type="button"
+                    className={local.danger}
+                    disabled={managementLocked}
+                    onClick={() => {
+                      setEditor(null);
+                      setConfirmDelete(row.id);
+                    }}
+                  >
+                    {t("Delete")}
+                  </button>
+                </div>
+                {confirmDelete === row.id ? (
+                  <div className={local.confirm} role="alert">
+                    <p>
+                      {t("Delete {name}? Its saved setup will be removed.", {
+                        name: row.name,
+                      })}
+                    </p>
+                    <div className={local.actions}>
+                      <button
+                        type="button"
+                        className={local.danger}
+                        disabled={managementLocked}
+                        onClick={() =>
+                          void runMutation(
+                            `delete:${row.id}`,
+                            (commands) => commands.deleteConnector(row.id),
+                            row.id,
+                          )
+                        }
+                      >
+                        {busy === `delete:${row.id}`
+                          ? t("Deleting…")
+                          : t("Confirm delete")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(busy)}
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        {t("Cancel")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            ))}
           </div>
         </>
       ) : null}

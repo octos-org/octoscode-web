@@ -72,6 +72,32 @@ export interface McpConnectorPatch {
   name?: string;
   url?: string;
 }
+/** A connector as the server saved it, which may not be what it is running. */
+export interface McpConnectorSaved {
+  id: string;
+  name: string;
+  transport?: string;
+  enabled: boolean;
+  url?: string;
+}
+export interface McpConnectorRuntime {
+  /**
+   * The server keeps its startup config until it restarts. Core sends
+   * `effective_from: "next_turn"` alongside this, but turns do not load the
+   * change, so this one wins.
+   */
+  restartRequired: boolean;
+  effectiveFrom?: string;
+  error?: string;
+}
+export interface McpConnectorMutation {
+  connector?: McpConnectorSaved;
+  runtime?: McpConnectorRuntime;
+  created: boolean;
+  deleted: boolean;
+  /** The server already lists this connector, so nothing is waiting to load. */
+  listed: boolean;
+}
 
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 4096;
@@ -247,6 +273,51 @@ function parseStdioAllowlist(value: unknown): McpStdioAllowlistEntry[] | null {
 }
 
 /**
+ * Only projected fields enter the UI. The mutation already happened, so a shape
+ * this client can't read yields no connector instead of an error.
+ */
+export function parseMcpConnectorMutation(
+  value: unknown,
+): McpConnectorMutation {
+  if (!isRecord(value))
+    return { created: false, deleted: false, listed: false };
+  const connector = parseSavedConnector(value.connector);
+  const runtime = parseConnectorRuntime(value.runtime);
+  return {
+    ...(connector ? { connector } : {}),
+    ...(runtime ? { runtime } : {}),
+    created: value.created === true,
+    deleted: value.deleted === true,
+    listed: isRecord(value.status),
+  };
+}
+
+function parseSavedConnector(value: unknown): McpConnectorSaved | null {
+  if (!isRecord(value) || !nonempty(value.id)) return null;
+  const name = nonempty(value.name) ? value.name : value.display_name;
+  if (!nonempty(name) || typeof value.enabled !== "boolean") return null;
+  return {
+    id: value.id,
+    name,
+    enabled: value.enabled,
+    ...(nonempty(value.transport) ? { transport: value.transport } : {}),
+    ...(nonempty(value.url) ? { url: value.url } : {}),
+  };
+}
+
+function parseConnectorRuntime(value: unknown): McpConnectorRuntime | null {
+  if (!isRecord(value) || typeof value.restart_required !== "boolean")
+    return null;
+  return {
+    restartRequired: value.restart_required,
+    ...(nonempty(value.effective_from)
+      ? { effectiveFrom: value.effective_from }
+      : {}),
+    ...(nonempty(value.runtime_error) ? { error: value.runtime_error } : {}),
+  };
+}
+
+/**
  * Core #2912 omits `mcp.connector.manage.v1` from SessionOpened's
  * supported_features even when negotiated. Keep requesting the feature, but
  * treat the five advertised methods as the availability contract.
@@ -293,12 +364,12 @@ export function createInventoryCommands(
   async function manage(
     method: string,
     params: Record<string, unknown>,
-  ): Promise<RuntimeMcp> {
+  ): Promise<McpConnectorMutation> {
     managementAvailable(method);
     // finish_mutation returns one mutated server (or null), not a full
-    // mcp/status/list payload. Refresh the canonical inventory instead.
-    await client.request(method, params);
-    return mcp();
+    // mcp/status/list payload; read the inventory with mcp() afterwards. They
+    // stay apart because a failed read must not hide a save that went through.
+    return parseMcpConnectorMutation(await client.request(method, params));
   }
   return {
     async tools(): Promise<RuntimeTools> {
@@ -313,7 +384,10 @@ export function createInventoryCommands(
       return result;
     },
     mcp,
-    async createHttpConnector(name: string, url: string): Promise<RuntimeMcp> {
+    async createHttpConnector(
+      name: string,
+      url: string,
+    ): Promise<McpConnectorMutation> {
       if (!nonempty(name) || !nonempty(url))
         throw new Error("A connector name and URL are required");
       return manage(MCP_CONNECTOR_METHODS.CREATE, {
@@ -325,7 +399,7 @@ export function createInventoryCommands(
     async createStdioConnector(
       name: string,
       allowlistEntryId: string,
-    ): Promise<RuntimeMcp> {
+    ): Promise<McpConnectorMutation> {
       if (!nonempty(name) || !nonempty(allowlistEntryId))
         throw new Error("A connector name and allowlist entry are required");
       return manage(MCP_CONNECTOR_METHODS.CREATE, {
@@ -340,7 +414,7 @@ export function createInventoryCommands(
     async updateConnector(
       connectorId: string,
       patch: McpConnectorPatch,
-    ): Promise<RuntimeMcp> {
+    ): Promise<McpConnectorMutation> {
       if (
         !nonempty(connectorId) ||
         !isRecord(patch) ||
@@ -357,7 +431,7 @@ export function createInventoryCommands(
         },
       });
     },
-    async deleteConnector(connectorId: string): Promise<RuntimeMcp> {
+    async deleteConnector(connectorId: string): Promise<McpConnectorMutation> {
       if (!nonempty(connectorId)) throw new Error("A connector id is required");
       return manage(MCP_CONNECTOR_METHODS.DELETE, {
         session_id: sessionId,
@@ -367,7 +441,7 @@ export function createInventoryCommands(
     async setConnectorEnabled(
       connectorId: string,
       enabled: boolean,
-    ): Promise<RuntimeMcp> {
+    ): Promise<McpConnectorMutation> {
       if (!nonempty(connectorId) || typeof enabled !== "boolean")
         throw new Error("A connector id and enabled state are required");
       return manage(MCP_CONNECTOR_METHODS.SET_ENABLED, {
@@ -376,7 +450,9 @@ export function createInventoryCommands(
         enabled,
       });
     },
-    async reconnectConnector(connectorId: string): Promise<RuntimeMcp> {
+    async reconnectConnector(
+      connectorId: string,
+    ): Promise<McpConnectorMutation> {
       if (!nonempty(connectorId)) throw new Error("A connector id is required");
       return manage(MCP_CONNECTOR_METHODS.RECONNECT, {
         session_id: sessionId,
