@@ -158,6 +158,77 @@ test("the overview shows waiting work and allows it once", async ({
   ).toBeVisible();
 });
 
+test("watching from the folder browser keeps waiting and running work in view", async ({
+  browser,
+  request,
+}) => {
+  // T-0351: the folder list lives below the status sections. Choosing a
+  // folder there left the viewport mid-form ("Waiting for you" scrolled off
+  // the top); adding must reveal the status sections again.
+  test.setTimeout(120_000);
+  const folder = "/srv/fixture/Projects/octoscode-web";
+  await scoped(request, folder);
+  const waitingDesktop = await desktopSends(
+    browser,
+    folder,
+    "Request approval fixture",
+  );
+  await expect(
+    waitingDesktop.getByRole("dialog", { name: "Run product checks?" }),
+  ).toBeVisible();
+  await request.post(`${ORIGIN}/__test__/terminal/hold-next`);
+  const runningDesktop = await desktopSends(
+    browser,
+    folder,
+    "Keep this draft while the status is unknown",
+  );
+  await expect(
+    runningDesktop.getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
+
+  const page = await phone(browser);
+  // The browse affordance is advertised only to the browse fixture token.
+  await page.goto("/?view=remote");
+  await page.getByLabel("服务器地址").fill(ORIGIN);
+  await page
+    .getByLabel("访问令牌", { exact: true })
+    .fill("workspace-browse-e2e-token");
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "手机遥控" })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已连接 Octos" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "浏览服务器文件夹", exact: true })
+    .tap();
+  await page.getByRole("button", { name: "打开文件夹 Projects" }).tap();
+  // T-0347's real walk: the folder browser stays open and the user taps the
+  // typed-path submit at the bottom of the page, so the viewport sits far
+  // below the status sections when the add happens.
+  const input = page.getByLabel("服务器上的文件夹路径");
+  await input.scrollIntoViewIfNeeded();
+  await input.fill(folder);
+  // Adding must bring the status sections back instead of leaving them above
+  // the viewport.
+  await page.getByRole("button", { name: "盯住" }).tap();
+
+  const waiting = section(page, /^等你处理/);
+  await expect(waiting).toBeInViewport();
+  await expect(
+    waiting.getByRole("button", { name: /Run product checks\?/ }),
+  ).toBeInViewport();
+  const running = section(page, /^运行中/);
+  await expect(running).toBeInViewport();
+  await expect(running.getByRole("button").first()).toBeInViewport();
+
+  // A data refresh must never steal the scroll position afterwards.
+  const foldersSection = section(page, /^盯着的文件夹/);
+  await foldersSection.scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "刷新", exact: true }).tap();
+  await page.waitForTimeout(1_200);
+  await expect(foldersSection).toBeInViewport();
+});
+
 test("a phone can deny, and never widens permissions", async ({
   browser,
   request,

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import type { RecentWorkspace } from "../workspace/workspace-recents.ts";
 import { formatRelativeTime } from "../shell/relative-time.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
@@ -38,6 +38,12 @@ export interface RemoteHomeProps {
 export function RemoteHome(props: RemoteHomeProps) {
   const t = useUiText();
   const { overview, folders, link } = props;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Adding or removing a watched folder happens at the bottom of the page,
+  // below the status sections. Bring Waiting/Running back into view so the
+  // phone answers "is there work?" immediately — never on data refresh or
+  // when the user scrolled on their own.
+  const revealStatus = () => scrollRef.current?.scrollTo({ top: 0 });
   const time = (value: number | null) => {
     const label =
       value === null ? undefined : formatRelativeTime(value, props.now);
@@ -97,7 +103,7 @@ export function RemoteHome(props: RemoteHomeProps) {
         </span>
       </p>
 
-      <div className={styles.scroll}>
+      <div className={styles.scroll} ref={scrollRef}>
         {props.openError ? (
           <p className={styles.error} role="alert">
             {props.openError}
@@ -149,6 +155,7 @@ export function RemoteHome(props: RemoteHomeProps) {
           online={link.kind === "online"}
           onAdd={props.onAddFolder}
           onRemove={props.onRemoveFolder}
+          onChanged={revealStatus}
         />
 
         <button
@@ -261,6 +268,7 @@ function FolderList(props: {
   online: boolean;
   onAdd: (path: string) => void;
   onRemove: (path: string) => void;
+  onChanged: () => void;
 }) {
   const t = useUiText();
   const inputId = useId();
@@ -272,6 +280,7 @@ function FolderList(props: {
     if (!path) return;
     props.onAdd(path);
     setDraft("");
+    props.onChanged();
   };
   return (
     <section className={styles.section} aria-labelledby={`${inputId}-title`}>
@@ -297,7 +306,10 @@ function FolderList(props: {
                   type="button"
                   className={styles.iconButton}
                   aria-label={t("Stop watching {name}", { name: folder.name })}
-                  onClick={() => props.onRemove(folder.path)}
+                  onClick={() => {
+                    props.onRemove(folder.path);
+                    props.onChanged();
+                  }}
                 >
                   <CloseIcon size={16} />
                 </button>
@@ -325,6 +337,7 @@ function FolderList(props: {
           onChoose={(path) => {
             props.onAdd(path);
             setBrowsing(false);
+            props.onChanged();
           }}
           onBack={() => setBrowsing(false)}
         />
