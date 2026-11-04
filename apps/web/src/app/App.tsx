@@ -3424,6 +3424,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     safety.permission.result?.session_id,
   ]);
   const currentPermission = safety.permission.result?.current;
+  // T-0359: a phone may follow up on a session it opened, but only honestly —
+  // the server must be able to start turns and the session must be writable.
+  // The phone may never widen access (the permission filter below), so a
+  // read-only session shows this reason instead of an inviting composer.
+  const phoneSendBlockedReason = remote
+    ? !codingCapabilities.turnStartAvailable
+      ? t("This server cannot start coding turns")
+      : currentPermission?.mode === "read_only"
+        ? t(
+            "This session is read-only. A phone cannot send work; switch it to write access from the computer.",
+          )
+        : null
+    : null;
   const projectedPermissionOptions = permissionOptions(
     safety.permission.result,
     defaultPermission,
@@ -5040,6 +5053,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             );
                           });
                         }}
+                        sendBlockedReason={phoneSendBlockedReason}
                         value={draft}
                         onChange={(value) => {
                           draftRef.current = value;
@@ -5212,7 +5226,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onInterrupt={() => void conversation.interrupt()}
                         />
                         {(conversation.canSendPendingNow || sendingNow) &&
-                        !readOnlyPeer &&
+                        !(readOnlyPeer || phoneSendBlockedReason) &&
                         // #218: interrupting the running turn is
                         // dispatch-adjacent — a locked-out tab stays fully
                         // locked (same as App.submit's held-elsewhere gate).
@@ -5232,7 +5246,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               : t("Send now (Ctrl+X)")}
                           </button>
                         ) : null}
-                        {activeTurnId && draft.trim() && !readOnlyPeer ? (
+                        {activeTurnId &&
+                        draft.trim() &&
+                        !(readOnlyPeer || phoneSendBlockedReason) ? (
                           <button
                             type="button"
                             className="button button-sm"
@@ -5251,7 +5267,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             {t("Queue")}
                           </button>
                         ) : null}
-                        {(!activeTurnId || draft.trim()) && !readOnlyPeer ? (
+                        {(!activeTurnId || draft.trim()) &&
+                        !(readOnlyPeer || phoneSendBlockedReason) ? (
                           <button
                             className="send-button"
                             type="button"

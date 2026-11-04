@@ -1058,6 +1058,8 @@ const catalog: Readonly<Record<string, string>> = {
     "已启用插话，但此服务器不支持安全插话。输入仍会排队。",
   "{count} queued": "{count} 条排队中",
   "This server cannot start coding turns": "此服务器无法启动编程轮次",
+  "This session is read-only. A phone cannot send work; switch it to write access from the computer.":
+    "此会话是只读权限。手机不能续发任务；请在电脑上把它切回可写后再发。",
   "Connect a workspace to begin": "连接工作区以开始",
   "Loading session controls": "正在加载会话控制",
   "Session controls": "会话控制",
