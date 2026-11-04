@@ -2010,8 +2010,11 @@ const catalog: Readonly<Record<string, string>> = {
   "⚠ {count} steps failed": "⚠ {count} 步失败",
   "Duration {seconds}s": "用时 {seconds} 秒",
   "{count} files changed": "改动 {count} 个文件",
-  "{count} files recorded; command-line changes not counted":
-    "记录到 {count} 个文件，命令行改动未统计",
+  "{count} files recorded; other changes not counted":
+    "记录到 {count} 个文件，其他改动未统计",
+  "Changes not counted": "改动未统计",
+  "Switched to write, but your request could not be sent again.":
+    "已切到写入，但没能重新发送你的请求。",
   "{input} tokens in · {output} tokens out":
     "输入 {input} token · 输出 {output} token",
   "Output files: {files}": "产出文件：{files}",

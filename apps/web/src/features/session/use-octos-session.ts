@@ -154,6 +154,7 @@ import {
   type UserQuestionRequested,
   type TaskArtifactRecord,
   isProtocolUuid,
+  type TurnMedia,
 } from "@octos-org/octoscode-client/protocol";
 import {
   useCodingSafety,
@@ -357,6 +358,7 @@ export interface OctosSessionRuntime {
     interruptible: boolean;
     interruptingTurnId: string | null;
     enqueuePrompt: (text: string, queueOnly?: boolean) => boolean;
+    redoRequest: (text: string, media: readonly TurnMedia[]) => boolean;
     canSendPendingNow: boolean;
     sendPendingNow: () => Promise<void>;
     cancelQueuedPrompt: (turnId: string) => boolean;
@@ -1613,10 +1615,14 @@ export function useOctosSession(): OctosSessionRuntime {
         // Gap 9: the controller reports an interrupted turn's stashed prompt
         // back when ITS terminal lands. Park it on the OWNING record (resolved
         // by session id, not by current selection) for the composer to pick up.
-        onInterruptPromptRestore: (prompt) => {
+        onInterruptPromptRestore: (prompt, _sessionId, media) => {
           const owner = recordManagerRef.current?.get(scope);
           if (owner)
-            composerDraftsRef.current?.restoreInterruptPrompt(owner, prompt);
+            composerDraftsRef.current?.restoreInterruptPrompt(
+              owner,
+              prompt,
+              media,
+            );
         },
       }),
     });
@@ -2831,6 +2837,14 @@ export function useOctosSession(): OctosSessionRuntime {
         btwControllersRef.current.get(viewRecord)?.clearSettled();
       return accepted;
     },
+    redoRequest: (text: string, media: readonly TurnMedia[]) => {
+      const accepted = viewRecord
+        ? composerDrafts.redoRequest(viewRecord, text, media)
+        : false;
+      if (accepted && viewRecord)
+        btwControllersRef.current.get(viewRecord)?.clearSettled();
+      return accepted;
+    },
     interrupt: () => viewRecord?.controller.interrupt() ?? Promise.resolve(),
   };
   const supervisionController = useSupervision({
@@ -3842,6 +3856,7 @@ export function useOctosSession(): OctosSessionRuntime {
       interruptible: turnController.interruptible,
       interruptingTurnId: turnController.interruptingTurnId,
       enqueuePrompt: turnController.enqueuePrompt,
+      redoRequest: turnController.redoRequest,
       canSendPendingNow: viewRecord?.controller.canSendPendingNow() ?? false,
       sendPendingNow: () =>
         viewRecord &&

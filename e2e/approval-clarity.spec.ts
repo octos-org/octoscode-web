@@ -105,6 +105,66 @@ test("switches a read-only denied write to workspace-write and redoes it", async
   await expect(composer).toBeFocused();
 });
 
+test("redoing a denied write sends the request's files and leaves the tray alone", async ({
+  page,
+}) => {
+  const starts: { text: string; media: { path: string }[] }[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "turn/start")
+        starts.push({
+          text: frame.params.input[0].text,
+          media: frame.params.media ?? [],
+        });
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  let uploads = 0;
+  await page.route("**/api/upload", async (route) => {
+    const profile = route.request().headers()["x-profile-id"];
+    uploads += 1;
+    const id = Buffer.from(`${profile}/file-${uploads}`).toString("base64url");
+    await route.fulfill({ json: [`up/${id}/file-${uploads}.csv`] });
+  });
+  const composer = await prepareReadOnly(page);
+  const attached = page.getByRole("list", { name: "Attached files" });
+  const choose = (name: string) =>
+    page.getByLabel("Choose files to attach").setInputFiles({
+      name,
+      mimeType: "text/csv",
+      buffer: Buffer.from(`region,sales\n${name},1\n`),
+    });
+  await choose("first.csv");
+  await expect(attached.locator('li[data-status="ready"]')).toHaveCount(1);
+  await composer.fill("Fail a write fixture");
+  await composer.press("Enter");
+  const retry = page.getByRole("button", {
+    name: "Switch to write and continue",
+  });
+  await expect(retry).toBeVisible();
+  await choose("second.csv");
+  await expect(attached.locator('li[data-status="ready"]')).toContainText(
+    "second.csv",
+  );
+
+  await retry.click();
+  await expect(
+    page.locator("details").filter({ hasText: "report.md written" }),
+  ).toHaveCount(1);
+  expect(starts).toHaveLength(2);
+  expect(starts[1]!.text).toBe("Fail a write fixture");
+  expect(starts[1]!.media.map((item) => item.path)).toEqual(
+    starts[0]!.media.map((item) => item.path),
+  );
+  expect(starts[0]!.media).toHaveLength(1);
+  await expect(attached.locator('li[data-status="ready"]')).toContainText(
+    "second.csv",
+  );
+});
+
 test("switching stops the running workaround, then redoes the request with write access", async ({
   page,
 }) => {

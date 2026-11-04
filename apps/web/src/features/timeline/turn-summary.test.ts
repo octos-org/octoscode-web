@@ -40,7 +40,7 @@ describe("turn summary", () => {
     expect(summarizeTurn(entries, "turn-1")).toEqual({
       seconds: 4,
       unlistedChanges: 0,
-      commandChangesUnknown: false,
+      changesUnknown: false,
       changedFiles: ["report.md"],
       outputFiles: ["report.md"],
       failedSteps: 1,
@@ -58,26 +58,32 @@ describe("turn summary", () => {
     const inGit = (receipt: string) =>
       `(no output)\n\nExit code: 0\n${receipt}\nscope: workdir`;
 
-    it("counts what Core measured, and trusts its zero", () => {
+    it("counts what Core measured, as a floor", () => {
+      // Real output for `echo z >> a.txt ; touch v.txt` with a.txt already
+      // dirty: two files changed, one reported.
       const summary = summarizeTurn(
-        [
-          command(inGit("files_changed: 1\n  a.txt")),
-          command(inGit("files_changed: 0"), 2000),
-        ],
+        [command(inGit("files_changed: 1\n  v.txt"))],
         "turn-1",
       );
-      expect(summary.changedFiles).toEqual(["a.txt"]);
-      expect(summary.commandChangesUnknown).toBe(false);
+      expect(summary.changedFiles).toEqual(["v.txt"]);
+      expect(summary.changesUnknown).toBe(true);
+    });
+
+    it("does not take Core's zero for no change", () => {
+      // Real output for appending to an already-dirty file, and for deleting
+      // an untracked one: Core only compares `git status` lines before and after.
+      expect(
+        summarizeTurn([command(inGit("files_changed: 0"))], "turn-1"),
+      ).toMatchObject({ changedFiles: [], changesUnknown: true });
     });
 
     it("says it does not know when a command left no measurement", () => {
       expect(
         summarizeTurn([command("(no output)\n\nExit code: 0")], "turn-1"),
-      ).toMatchObject({ changedFiles: [], commandChangesUnknown: true });
+      ).toMatchObject({ changedFiles: [], changesUnknown: true });
       // A long output's preview is cut before the receipt.
       expect(
-        summarizeTurn([command("1\n2\n3\n4...")], "turn-1")
-          .commandChangesUnknown,
+        summarizeTurn([command("1\n2\n3\n4...")], "turn-1").changesUnknown,
       ).toBe(true);
     });
 
@@ -92,7 +98,7 @@ describe("turn summary", () => {
         ),
       ).toMatchObject({
         changedFiles: ["a.txt"],
-        commandChangesUnknown: true,
+        changesUnknown: true,
       });
     });
 
@@ -118,14 +124,14 @@ describe("turn summary", () => {
             },
           ],
           "turn-1",
-        ).commandChangesUnknown,
+        ).changesUnknown,
       ).toBe(false);
     });
 
     it("leaves other tools out of it", () => {
       expect(
         summarizeTurn([tool("read_file", "a.txt", "complete", 1000)], "turn-1")
-          .commandChangesUnknown,
+          .changesUnknown,
       ).toBe(false);
     });
   });

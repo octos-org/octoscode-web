@@ -11,7 +11,8 @@ import type { SessionRecord } from "./session-record-manager.ts";
 import { sessionRuntimeScopeKey } from "./session-scope.ts";
 import type { PromptTurn } from "../composer/turn-queue.ts";
 
-export type ComposerRestore = { text: string } | PromptTurn;
+export type ComposerRestore =
+  { text: string; media?: TurnMedia[] } | PromptTurn;
 
 type Record = SessionRecord<OctosUiClient>;
 interface Draft {
@@ -123,9 +124,16 @@ export class SessionComposerDrafts {
    * when THAT turn's own terminal lands. Park it on the owning record so the
    * Session it came from — not whichever Session is now selected — gets it.
    */
-  restoreInterruptPrompt(record: Record, prompt: string): void {
-    if (!this.options.isRetained(record) || !prompt) return;
-    this.#parkRestore(record, { text: prompt });
+  restoreInterruptPrompt(
+    record: Record,
+    prompt: string,
+    media: readonly TurnMedia[] = [],
+  ): void {
+    if (!this.options.isRetained(record) || (!prompt && !media.length)) return;
+    this.#parkRestore(record, {
+      text: prompt,
+      ...(media.length ? { media: media.map((item) => ({ ...item })) } : {}),
+    });
   }
   restoreUnsentTurn(record: Record, turn: PromptTurn): void {
     if (!this.options.isRetained(record)) return;
@@ -154,12 +162,11 @@ export class SessionComposerDrafts {
     if (!restore) return null;
     const draft = this.get(record);
     if (draft.images?.getSnapshot().entries.length) return null;
-    if ("turnId" in restore) {
-      // A media-bearing composer submission already owns an image store. Its
-      // handles were consumed at local admission, not at the later wire send.
-      if (restore.media?.length) draft.images!.restoreUploaded(restore.media);
+    // A media-bearing composer submission already owns an image store. Its
+    // handles were consumed at local admission, not at the later wire send.
+    if (restore.media?.length) draft.images!.restoreUploaded(restore.media);
+    if ("turnId" in restore)
       draft.effort = reasoningEffort(restore.reasoningEffort);
-    }
     pending!.shift();
     if (!pending!.length) this.#restores.delete(record);
     this.options.changed();
@@ -192,6 +199,21 @@ export class SessionComposerDrafts {
       this.options.changed();
       return false;
     }
+  }
+  /** Runs an earlier request again with its own files; the tray stays a draft. */
+  redoRequest(
+    record: Record,
+    text: string,
+    media: readonly TurnMedia[],
+  ): boolean {
+    if (!this.options.isRetained(record)) return false;
+    const draft = this.get(record);
+    return record.controller.enqueueTurn({
+      turnId: randomUUID(),
+      text,
+      ...(draft.effort ? { reasoningEffort: draft.effort } : {}),
+      ...(media.length ? { media: media.map((item) => ({ ...item })) } : {}),
+    });
   }
   suspendTransfers(): void {
     for (const draft of this.#drafts.values()) draft.images?.cancelUploads();
