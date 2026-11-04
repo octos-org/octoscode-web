@@ -340,12 +340,20 @@ export function withHydratedTurnOutcome(
   const terminal = ["completed", "errored", "interrupted"].includes(
     latest.state,
   );
-  return entries.map(({ latestTurnOutcome: _previous, ...entry }) => ({
-    ...entry,
-    ...(terminal && entry.turnId === latest.turn_id
-      ? { latestTurnOutcome: latest.state }
-      : {}),
-  }));
+  return entries.map((entry) => {
+    // A terminal entry's latestTurnOutcome is its OWN turn's settle outcome
+    // (the summary reads it to say "stopped" vs "failed"); stripping it from
+    // every turn but the latest rewrote an earlier user-stopped turn as
+    // failed after a reload. Only non-terminal rows carry the stale marker.
+    const { latestTurnOutcome: _previous, ...stripped } = entry;
+    const base = entry.id.startsWith("terminal:") ? entry : stripped;
+    return {
+      ...base,
+      ...(terminal && entry.turnId === latest.turn_id
+        ? { latestTurnOutcome: latest.state }
+        : {}),
+    };
+  });
 }
 
 /** Hydration has no reliable per-entry wall clock; never invent a zero duration. */
