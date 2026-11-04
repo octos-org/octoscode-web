@@ -12,6 +12,7 @@ import type { ReviewStartResult } from "@octos-org/octoscode-client/history";
 import type { TurnSteerResult } from "@octos-org/octoscode-client/steer";
 import type { RpcNotification } from "@octos-org/octoscode-client/protocol";
 import { notificationMatchesSessionScope } from "../session/scope.ts";
+import { STEERING_ACCEPTED } from "../timeline/entry-model.ts";
 import {
   addOptimisticUser,
   addSystemMessage,
@@ -836,7 +837,7 @@ export function createQueueBackedTurnController(options: {
           // consumption. Preserve that state at terminal instead of rewriting
           // it as an inconclusive delivery when no drop receipt exists.
           entry.accepted = true;
-          reportSteer(turn, "Steering accepted", turn.text);
+          reportSteer(turn, STEERING_ACCEPTED, turn.text);
         }
       } catch (reason) {
         if (!isCurrent() || entry.returned) return;

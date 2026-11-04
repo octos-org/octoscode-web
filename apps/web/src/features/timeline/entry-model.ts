@@ -140,3 +140,6 @@ export function upsert(
     next = { ...next, textTerminal: previous.textTerminal };
   return entries.map((entry, current) => (current === index ? next : entry));
 }
+
+/** The system row's title when Core accepts a steer into the running turn. */
+export const STEERING_ACCEPTED = "Steering accepted";
