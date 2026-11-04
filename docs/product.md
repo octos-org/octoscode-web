@@ -47,6 +47,7 @@ server does in the chosen folder.
 | Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
 | Connectors    | Manage HTTP and allowlisted stdio MCP connectors, sign them in with OAuth; saved-but-not-loaded ones stay visible.              |
 | Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
+| Expert teams  | Sidebar page: built-in teams of three run side by side as peer sessions; per-member state, results, stop, merge into the chat.  |
 | Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                            |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.      |
@@ -79,6 +80,17 @@ first render, and reaches the waiting page over a same-origin
 `BroadcastChannel`, matched by its OAuth `state`. If Core refuses this origin as
 the return address, or the app is not served at the origin root, the person
 pastes the address instead (Core's `manual_callback_url`).
+
+An expert team is one `peer/prepare` with a named member per expert, then the
+ordinary `session/open` and `turn/start` for each member; the page invents no
+team protocol. Every member stages the same team brief, whose first line names
+the template and the team, and is started with its own angle. The team is read
+back from `peer/gather` alone (member names, results, `last_outcome`), so it
+survives a refresh; live states come from the members this tab opened. A member
+stopped before its turn ends leaves no record on the server, so after a refresh
+it shows "No result yet" rather than a guessed state. Merging reuses the gather
+turn in the current conversation, limited to members with a result and naming
+the rest. Members are asked, not forced, to only read files.
 
 `mcp/status/list` only shows what the running server loaded, and on a profile
 loaded at startup a change waits for a restart, even though Core also sends

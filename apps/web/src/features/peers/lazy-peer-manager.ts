@@ -195,7 +195,10 @@ export class LazyPeerManager {
    * as a typed `unknown` and renders it — the run-12 triage found this exact
    * settle being `void`-swallowed into invisibility.
    */
-  async kickoff(params: PeerPrepareParams, options?: { readOnly: boolean }) {
+  async kickoff(
+    params: PeerPrepareParams,
+    options?: Parameters<PeerManager["kickoff"]>[1],
+  ) {
     this.syncAuthority();
     // Preserve the form across module loading. The real manager performs the
     // complete validation/whitelist before dispatch and owns visible errors.
@@ -207,7 +210,12 @@ export class LazyPeerManager {
     const epoch = this.#epoch;
     const manager = await this.#load();
     return manager && this.#current(source, epoch)
-      ? manager.kickoff(input, options)
+      ? manager.kickoff(
+          input,
+          options?.memberBriefs
+            ? { ...options, memberBriefs: [...options.memberBriefs] }
+            : options,
+        )
       : null;
   }
   async gather(params: PeerGatherParams = {}) {

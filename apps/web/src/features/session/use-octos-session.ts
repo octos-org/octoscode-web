@@ -276,6 +276,7 @@ export interface OctosSessionRuntime {
     gather(
       slugs: readonly string[] | undefined,
       canSubmit: () => boolean,
+      instruction?: string,
     ): Promise<GatherOutcome>;
     /** Native peer controls: turn/steer, turn/interrupt, approval/respond. */
     rowAction(
@@ -3783,7 +3784,7 @@ export function useOctosSession(): OctosSessionRuntime {
         // inventory walk either.
         releaseControlSeat();
       },
-      gather: async (slugs, canSubmit) => {
+      gather: async (slugs, canSubmit, instruction) => {
         const record = viewRecord;
         const authority = record?.runtime.currentAuthority() ?? null;
         const reasoningEffort = viewDraft?.effort;
@@ -3794,6 +3795,7 @@ export function useOctosSession(): OctosSessionRuntime {
           authority,
           reasoningEffort,
           slugs: filter,
+          instruction,
           canSubmit,
           isRetained: (origin) => recordManager.get(origin.scope) === origin,
           pooledClient: () => activeRuntime.currentAuthority()?.client ?? null,

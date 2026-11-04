@@ -242,6 +242,11 @@ export interface PeerManagerSnapshot {
   readonly gatherError: string | null;
   readonly prepareUncertain: boolean;
   /**
+   * The server's own words when it answered `peer/prepare` with an error.
+   * Staging is all-or-nothing, so nothing was staged and a retry is safe.
+   */
+  readonly prepareRefusal?: string | null;
+  /**
    * The allowlisted TYPED dispatch-refusal kind from the LAST staging settle
    * (finding 2920 (a)). The Core answers a refused `peer/dispatch` with a
    * JSON-RPC error carrying `data.kind` (evidence
@@ -260,5 +265,6 @@ export const EMPTY_PEER_SNAPSHOT: PeerManagerSnapshot = Object.freeze({
   prepareError: null,
   gatherError: null,
   prepareUncertain: false,
+  prepareRefusal: null,
   dispatchRefusalKind: null,
 });

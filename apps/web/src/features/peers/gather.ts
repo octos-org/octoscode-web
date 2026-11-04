@@ -66,6 +66,8 @@ interface GatherRequest {
   canSubmit(): boolean;
   reasoningEffort?: ReasoningEffort | undefined;
   slugs?: readonly string[] | undefined;
+  /** Put ahead of the gathered results, e.g. how an expert team wants them merged. */
+  instruction?: string | undefined;
 }
 const pending = new WeakMap<
   GatherRecord,
@@ -122,7 +124,10 @@ export function gatherFromRecord(
       const result = await commands.gather(params);
       if (!current()) return "stale";
       if (!result.peers.length) return "empty";
-      const text = composeGatherPrompt(result);
+      const gathered = composeGatherPrompt(result);
+      const text = request.instruction?.trim()
+        ? `${request.instruction.trim()}\n\n${gathered}`
+        : gathered;
       if (!current()) return "stale";
       // Reading is permitted without write capability; synthesis is ordinary input.
       if (!request.canSubmit()) return "blocked";
