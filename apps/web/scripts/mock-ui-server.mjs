@@ -42,7 +42,7 @@ const defaultCronJob = () => ({
   last_error: null,
   next_run: 1_800_000_000_000,
   next_in: "30m",
-  timezone: "UTC",
+  timezone: null,
 });
 const cronJobs = [defaultCronJob()];
 let nextCronJobId = 2;
@@ -5600,7 +5600,7 @@ sockets.on("connection", (socket, request) => {
           cronFields.slice(0, 3).every((field) => /^\d+$/.test(field)));
       const job = {
         id: `cron-${nextCronJobId++}`,
-        name: params.message.trim().slice(0, 32),
+        name: params.message.trim().slice(0, 48),
         enabled: true,
         schedule,
         message: params.message.trim(),
@@ -5617,7 +5617,8 @@ sockets.on("connection", (socket, request) => {
                 ? Date.now() + 3_600_000
                 : null,
         next_in: cronSchedulable ? "scheduled" : null,
-        timezone: params.timezone ?? "UTC",
+        timezone: params.timezone ?? null,
+        origin: { session_id: sessionId, profile_id: "default" },
       };
       cronJobs.unshift(job);
       reply(socket, request.id, { job });

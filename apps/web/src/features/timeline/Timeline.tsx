@@ -534,6 +534,7 @@ function StepGroup({
       <details
         className={styles.stepGroup}
         data-step-group={id}
+        data-turn-id={entries[0]?.turnId}
         {...(expanded === undefined
           ? {}
           : {
@@ -671,6 +672,7 @@ function DefaultEntry({
   return (
     <article
       data-timeline-entry={entry.id}
+      data-turn-id={entry.turnId}
       className={`timeline-entry entry-${entry.kind}${entry.kind === "assistant" ? ` ${styles.assistantEntry}` : ""}`}
       aria-label={
         entry.kind === "assistant" ? t("Assistant response") : undefined

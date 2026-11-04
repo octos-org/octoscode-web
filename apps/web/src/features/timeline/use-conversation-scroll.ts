@@ -102,6 +102,28 @@ export function useConversationScroll(
     }
   }, [rememberPosition]);
 
+  /** Puts a turn at the top and stays there; false until the turn has rendered. */
+  const revealTurn = useCallback(
+    (turnId: string) => {
+      const element = scrollRef.current;
+      const first = element?.querySelector(
+        `[data-turn-id="${CSS.escape(turnId)}"]`,
+      );
+      if (!element || !first) return false;
+      restoreAfterLayout.current = false;
+      following.current = false;
+      first.scrollIntoView({ block: "start" });
+      previousTop.current = element.scrollTop;
+      const atBottom =
+        element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+      if (atBottom) following.current = true;
+      setShowJumpLatest(!atBottom);
+      rememberPosition(element);
+      return true;
+    },
+    [rememberPosition],
+  );
+
   const onDisclosureInteraction = useCallback(
     (event: SyntheticEvent) => {
       if (
@@ -201,5 +223,6 @@ export function useConversationScroll(
     onDisclosureInteraction,
     showJumpLatest,
     jumpToLatest,
+    revealTurn,
   };
 }

@@ -88,7 +88,7 @@ export interface ModelControlLabels {
 }
 
 export type SettingsSectionId =
-  "general" | "models" | "skills" | "memory" | "connectors" | "scheduled";
+  "general" | "models" | "skills" | "memory" | "connectors";
 
 export interface SettingsLabels {
   title: string;
@@ -98,7 +98,6 @@ export interface SettingsLabels {
   skills: string;
   memory: string;
   connectors: string;
-  scheduled: string;
   close: string;
 }
 
@@ -108,5 +107,4 @@ export interface SettingsSlots {
   skills?: ReactNode;
   memory?: ReactNode;
   connectors?: ReactNode;
-  scheduled?: ReactNode;
 }

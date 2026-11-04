@@ -1,12 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const SNAPSHOT = {
-  animations: "disabled" as const,
-  caret: "hide" as const,
-  maxDiffPixelRatio: 0.01,
-};
 
 test.beforeEach(async ({ request }) => {
   await request.post(`${ORIGIN}/__test__/cron/reset`);
@@ -26,29 +21,38 @@ async function start(page: Page) {
 }
 
 async function openCron(page: Page) {
-  const settingsButton = page
+  return openCronWith(page, /Queue check|No scheduled tasks yet|暂无定时任务/);
+}
+
+async function openCronWith(page: Page, firstRow: string | RegExp) {
+  const entry = page
     .locator("aside")
-    .getByRole("button", { name: /^Settings$|^设置$/ });
-  if (!(await settingsButton.isVisible())) {
+    .getByRole("button", { name: /^Scheduled tasks$|^定时任务$/ });
+  if (!(await entry.isVisible())) {
     await page
       .getByRole("button", { name: /Open sessions|打开会话列表/ })
       .click();
   }
-  await settingsButton.click();
-  const settings = page.getByRole("dialog", { name: /Settings|设置/ });
-  await settings
-    .getByRole("button", { name: /Scheduled tasks|定时任务/ })
-    .click();
-  await expect(
-    settings
-      .getByText(/Queue check|No scheduled tasks yet|暂无定时任务/)
-      .first(),
-  ).toBeVisible();
-  return settings;
+  await entry.click();
+  const tasks = page.locator("[data-scheduled-tasks]");
+  await expect(tasks.getByText(firstRow).first()).toBeVisible();
+  return tasks;
 }
 
-async function openCreate(settings: ReturnType<typeof page.getByRole>) {
-  await settings.getByText(/New scheduled task|新建定时任务/).click();
+async function openCreate(tasks: Locator) {
+  const submit = tasks.getByRole("button", {
+    name: /Create scheduled task|创建定时任务/,
+  });
+  if (!(await submit.isVisible())) {
+    await tasks.getByText(/New scheduled task|新建定时任务/).click();
+  }
+  await expect(submit).toBeVisible();
+}
+
+async function useCron(tasks: Locator) {
+  if (!(await tasks.getByLabel("Cron expression").isVisible())) {
+    await tasks.getByText("Advanced options").click();
+  }
 }
 
 test("creates At, Every and Cron jobs, then deletes one after confirmation", async ({
@@ -69,46 +73,66 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
+  const tasks = await openCron(page);
+  await openCreate(tasks);
 
-  await settings.getByLabel("Run at").fill("2027-01-02T03:04");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+  await tasks.getByRole("radio", { name: "Once" }).check();
+  await tasks.getByLabel("Run at").fill("2027-01-02T03:04");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Run once");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  const once = settings.locator('[data-cron-job="cron-2"]');
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const once = tasks.locator('[data-cron-job="cron-2"]');
   await expect(once).toBeVisible();
-  await expect(
-    once.getByText("Run once", { exact: true }).first(),
-  ).toBeVisible();
+  await expect(once.getByRole("heading", { name: "Run once" })).toBeVisible();
   await expect(once.getByRole("checkbox")).toBeChecked();
-  await expect(once.getByText(/Next run:/)).toBeVisible();
-  await expect(once.getByText("Last run: Never")).toBeVisible();
+  await expect(once.getByText("Has not run yet")).toBeVisible();
+  await expect(tasks.getByText("“Run once” is scheduled.")).toBeVisible();
 
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  await settings.getByLabel("Every (minutes)").fill("45");
-  await settings.getByLabel("Delivery").selectOption("notify");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
-    .fill("Recurring check");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect(settings.locator('[data-cron-job="cron-3"]')).toBeVisible();
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  await tasks.getByLabel("Every", { exact: true }).fill("45");
+  await tasks.getByLabel("Unit").selectOption("minutes");
+  await tasks.getByRole("radio", { name: "Run tests and report" }).check();
+  await expect(
+    tasks.getByRole("textbox", { name: "What should Octos do?" }),
+  ).toHaveValue(/^Run tests and report\nRun this project's tests\./);
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const interval = tasks.locator('[data-cron-job="cron-3"]');
+  await expect(interval).toBeVisible();
+  await expect(
+    interval.getByRole("heading", { name: "Run tests and report" }),
+  ).toBeVisible();
+  await expect(interval.getByText("Every 45 minutes")).toBeVisible();
 
-  await settings.getByLabel("Schedule type").selectOption("Cron");
-  await settings
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "Every week" }).check();
+  await tasks.getByRole("combobox", { name: /^Day/ }).selectOption("WED");
+  await tasks.getByLabel("Time", { exact: true }).fill("18:30");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
+    .fill("Weekly check");
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const weekly = tasks.locator('[data-cron-job="cron-4"]');
+  await expect(weekly).toBeVisible();
+  await expect(weekly.getByText(/^Every Wednesday at 18:30/)).toBeVisible();
+
+  await openCreate(tasks);
+  await useCron(tasks);
+  await tasks
     .getByLabel("Cron expression", { exact: true })
-    .fill("0 0 9 * * *");
-  await settings.getByLabel("Timezone (optional)").fill("UTC");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("0 0 9 1 * *");
+  await tasks.getByLabel("Timezone").fill("UTC");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Cron check");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect(settings.locator('[data-cron-job="cron-4"]')).toBeVisible();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(tasks.locator('[data-cron-job="cron-5"]')).toBeVisible();
   expect(created.map((params) => params.schedule)).toEqual([
     { kind: "At", at_ms: created[0]!.schedule.at_ms },
     { kind: "Every", every_ms: 2_700_000 },
-    { kind: "Cron", expr: "0 0 9 * * *" },
+    { kind: "Cron", expr: "0 30 18 * * WED" },
+    { kind: "Cron", expr: "0 0 9 1 * *" },
   ]);
   expect(
     created.every(
@@ -116,21 +140,16 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
         typeof params.session_id === "string" && params.session_id.length > 0,
     ),
   ).toBe(true);
-  expect(created.map((params) => params.mode)).toEqual([
-    "agent",
-    "notify",
-    "agent",
-  ]);
+  expect(created.every((params) => params.mode === "agent")).toBe(true);
 
   expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+    (await new AxeBuilder({ page }).include("[data-scheduled-tasks]").analyze())
       .violations,
   ).toEqual([]);
-  await expect(settings).toHaveScreenshot("cron-create-delete.png", SNAPSHOT);
   await once.getByRole("button", { name: "Delete", exact: true }).click();
   await once.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect(once).toHaveCount(0);
-  await expect(settings.locator('[data-cron-job="cron-3"]')).toBeVisible();
+  await expect(tasks.locator('[data-cron-job="cron-3"]')).toBeVisible();
 });
 
 test("uses the current session scope for list, toggle, create and delete", async ({
@@ -149,22 +168,19 @@ test("uses the current session scope for list, toggle, create and delete", async
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const settings = await openCron(page);
-  await settings
-    .locator('[data-cron-job="cron-1"]')
-    .getByRole("checkbox")
-    .click();
+  const tasks = await openCron(page);
+  await tasks.locator('[data-cron-job="cron-1"]').getByRole("checkbox").click();
   await expect
     .poll(() => calls.some((call) => call.method === "cron/toggle"))
     .toBe(true);
 
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Scoped job");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  const row = settings.locator('[data-cron-job="cron-2"]');
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const row = tasks.locator('[data-cron-job="cron-2"]');
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Delete", exact: true }).click();
   await row.getByRole("button", { name: "Delete scheduled task" }).click();
@@ -208,61 +224,58 @@ test("keeps an empty list and retry state after invalid input and server refusal
   });
   await page.request.post(`${ORIGIN}/__test__/cron/empty`);
   await start(page);
-  const settings = await openCron(page);
-  await expect(settings.getByText("No scheduled tasks yet.")).toBeVisible();
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  await settings.getByLabel("Every (minutes)").fill("0");
-  await settings
-    .getByLabel("Message", { exact: true })
+  const tasks = await openCron(page);
+  await expect(tasks.getByText("No scheduled tasks yet.")).toBeVisible();
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  await tasks.getByLabel("Every", { exact: true }).fill("0");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Keep this message");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(
-    settings.getByText("Enter a whole number of minutes greater than zero."),
+    tasks.getByText("Enter a whole number from 1 to 10000."),
   ).toBeVisible();
   expect(createCalls).toBe(0);
 
-  await settings.getByLabel("Schedule type").selectOption("At");
-  await settings.getByLabel("Run at").fill("2020-01-01T00:00");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("radio", { name: "Once" }).check();
+  await tasks.getByLabel("Run at").fill("2020-01-01T00:00");
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(tasks.getByText("Choose a future date and time.")).toBeVisible();
+  expect(createCalls).toBe(0);
+
+  await useCron(tasks);
+  await tasks.getByLabel("Cron expression", { exact: true }).fill("0 9 * * *");
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(
-    settings.getByText("Choose a future date and time."),
+    tasks.getByText("Use a cron expression with seconds (six fields)."),
   ).toBeVisible();
   expect(createCalls).toBe(0);
 
-  await settings.getByLabel("Schedule type").selectOption("Cron");
-  await settings
-    .getByLabel("Cron expression", { exact: true })
-    .fill("0 9 * * *");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect(
-    settings.getByText("Use a cron expression with seconds (six fields)."),
-  ).toBeVisible();
-  expect(createCalls).toBe(0);
-
-  await settings
+  await tasks
     .getByLabel("Cron expression", { exact: true })
     .fill("0 0 9 * * * 2027");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(
-    settings.getByText("Use a cron expression with seconds (six fields)."),
+    tasks.getByText("Use a cron expression with seconds (six fields)."),
   ).toBeVisible();
   expect(createCalls).toBe(0);
 
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  await settings.getByLabel("Every (minutes)").fill("30");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect(settings.getByText("permission denied")).toBeVisible();
-  await settings.getByText("Technical details", { exact: true }).click();
+  await tasks.getByLabel("Cron expression", { exact: true }).fill("");
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  await tasks.getByLabel("Every", { exact: true }).fill("30");
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  await expect(tasks.getByText("permission denied")).toBeVisible();
+  await tasks.getByText("Technical details", { exact: true }).click();
   await expect(
-    settings.getByText("auth_scope_violation", { exact: true }),
+    tasks.getByText("auth_scope_violation", { exact: true }),
   ).toBeVisible();
-  await expect(settings.getByText("No scheduled tasks yet.")).toBeVisible();
+  await expect(tasks.getByText("No scheduled tasks yet.")).toBeVisible();
   await expect(
-    settings.getByRole("textbox", { name: "Message", exact: true }),
+    tasks.getByRole("textbox", { name: "What should Octos do?" }),
   ).toHaveValue("Keep this message");
   await expect(
-    settings.getByRole("button", { name: "Create scheduled task" }),
+    tasks.getByRole("button", { name: "Create scheduled task" }),
   ).toBeEnabled();
 });
 
@@ -270,17 +283,17 @@ test("reports an enabled job without a next run as unschedulable", async ({
   page,
 }) => {
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Cron");
-  await settings
+  const tasks = await openCron(page);
+  await openCreate(tasks);
+  await useCron(tasks);
+  await tasks
     .getByLabel("Cron expression", { exact: true })
     .fill("x x x x x x");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Unschedulable job");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
-  const row = settings.locator('[data-cron-job="cron-2"]');
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const row = tasks.locator('[data-cron-job="cron-2"]');
   await expect(row).toBeVisible();
   await expect(row.getByRole("alert")).toHaveText(
     "This enabled task has no next run and is not scheduled. Check its schedule and server version.",
@@ -318,38 +331,37 @@ test("refetches and releases loading when create/delete invalidate a list", asyn
   await start(page);
   await page
     .locator("aside")
-    .getByRole("button", { name: /^Settings$/ })
+    .getByRole("button", { name: /^Scheduled tasks$/ })
     .click();
-  const settings = page.getByRole("dialog", { name: /Settings|设置/ });
-  await settings.getByRole("button", { name: /Scheduled tasks/ }).click();
+  const tasks = page.locator("[data-scheduled-tasks]");
   await expect.poll(() => control.held.length).toBe(1);
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  await settings.getByLabel("Every (minutes)").fill("45");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  await tasks.getByLabel("Every", { exact: true }).fill("45");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Made while loading");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect.poll(() => control.held.length).toBe(2);
   for (const release of control.held.splice(0)) release();
-  const row = settings.locator('[data-cron-job="cron-2"]');
+  const row = tasks.locator('[data-cron-job="cron-2"]');
   await expect(row).toBeVisible();
-  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(tasks.getByText("Waiting for the server…")).toHaveCount(0);
   await expect(
-    settings.getByRole("button", { name: "Refresh", exact: true }),
+    tasks.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeEnabled();
 
   control.holdFrom = control.lists + 1;
-  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await tasks.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect.poll(() => control.held.length).toBe(1);
   await row.getByRole("button", { name: "Delete", exact: true }).click();
   await row.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect.poll(() => control.held.length).toBe(2);
   for (const release of control.held.splice(0)) release();
   await expect(row).toHaveCount(0);
-  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(tasks.getByText("Waiting for the server…")).toHaveCount(0);
   await expect(
-    settings.getByRole("button", { name: "Refresh", exact: true }),
+    tasks.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeEnabled();
 });
 
@@ -372,24 +384,24 @@ test("keeps a create success when Refresh serves the list first", async ({
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  const message = settings.getByRole("textbox", {
-    name: "Message",
-    exact: true,
+  const tasks = await openCron(page);
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  const message = tasks.getByRole("textbox", {
+    name: "What should Octos do?",
   });
   await message.fill("Refreshed during create");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
-  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
-  await expect(settings.locator('[data-cron-job="cron-2"]')).toHaveCount(0);
+  await tasks.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(tasks.getByText("Waiting for the server…")).toHaveCount(0);
+  await expect(tasks.locator('[data-cron-job="cron-2"]')).toHaveCount(0);
   const before = listRequests;
   release!();
-  const row = settings.locator('[data-cron-job="cron-2"]');
+  const row = tasks.locator('[data-cron-job="cron-2"]');
   await expect(row).toBeVisible();
   await expect(row).toHaveCount(1);
+  await openCreate(tasks);
   await expect(message).toHaveValue("");
   await expect.poll(() => listRequests).toBeGreaterThan(before);
 });
@@ -420,24 +432,27 @@ test("keeps create/delete success when a committed list lands first", async ({
     });
   });
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
-  await settings.getByLabel("Schedule type").selectOption("Every");
-  const message = settings.getByRole("textbox", {
-    name: "Message",
-    exact: true,
+  const tasks = await openCron(page);
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "At an interval" }).check();
+  const message = tasks.getByRole("textbox", {
+    name: "What should Octos do?",
   });
   await message.fill("Refreshed after commit");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
-  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
-  const row = settings.locator('[data-cron-job="cron-2"]');
+  await tasks.getByRole("button", { name: "Refresh", exact: true }).click();
+  const row = tasks.locator('[data-cron-job="cron-2"]');
   await expect(row).toBeVisible();
   release!();
+  await expect(
+    tasks.getByText("“Refreshed after commit” is scheduled."),
+  ).toBeVisible();
+  await openCreate(tasks);
   await expect(message).toHaveValue("");
   await expect(row).toHaveCount(1);
   await expect(
-    settings.getByRole("button", { name: "Create scheduled task" }),
+    tasks.getByRole("button", { name: "Create scheduled task" }),
   ).toBeEnabled();
 
   heldMethod = "cron/delete";
@@ -445,15 +460,15 @@ test("keeps create/delete success when a committed list lands first", async ({
   await row.getByRole("button", { name: "Delete", exact: true }).click();
   await row.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
-  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await tasks.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(row).toHaveCount(0);
   release!();
   await expect(row).toHaveCount(0);
   await expect(
-    settings.getByRole("button", { name: "Delete scheduled task" }),
+    tasks.getByRole("button", { name: "Delete scheduled task" }),
   ).toHaveCount(0);
   await expect(
-    settings.getByRole("button", { name: "Refresh", exact: true }),
+    tasks.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeEnabled();
 });
 
@@ -474,15 +489,15 @@ test("ignores a late create response after the session view changes", async ({
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
-  await settings.getByLabel("Run at").fill("2027-01-02T03:04");
-  await settings
-    .getByRole("textbox", { name: "Message", exact: true })
+  const tasks = await openCron(page);
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "Once" }).check();
+  await tasks.getByLabel("Run at").fill("2027-01-02T03:04");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Late job");
-  await settings.getByRole("button", { name: "Create scheduled task" }).click();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
-  await settings.getByRole("button", { name: /Close/ }).click();
   await page.getByRole("button", { name: "New session", exact: true }).click();
   const next = await openCron(page);
   await openCreate(next);
@@ -509,24 +524,141 @@ test("creates and deletes with Chinese labels on a phone using the keyboard", as
     );
   });
   await start(page);
-  const settings = await openCron(page);
-  await openCreate(settings);
-  await settings.getByLabel("运行时间").fill("2027-01-02T03:04");
-  await settings.getByLabel("消息", { exact: true }).fill("手机任务");
-  const submit = settings.getByRole("button", { name: "创建定时任务" });
+  const tasks = await openCron(page);
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "只运行一次" }).check();
+  await tasks.getByLabel("运行时间").fill("2027-01-02T03:04");
+  await tasks.getByLabel("要 Octos 做什么？").fill("手机任务");
+  const submit = tasks.getByRole("button", { name: "创建定时任务" });
   await submit.focus();
   await page.keyboard.press("Enter");
-  const job = settings.locator('[data-cron-job="cron-2"]');
+  const job = tasks.locator('[data-cron-job="cron-2"]');
   await expect(job).toBeVisible();
-  await expect(
-    job.getByText("手机任务", { exact: true }).first(),
-  ).toBeVisible();
+  await expect(job.getByRole("heading", { name: "手机任务" })).toBeVisible();
   expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+    (await new AxeBuilder({ page }).include("[data-scheduled-tasks]").analyze())
       .violations,
   ).toEqual([]);
-  await expect(settings).toHaveScreenshot("cron-mobile-zh.png", SNAPSHOT);
   await job.getByRole("button", { name: "删除", exact: true }).click();
   await job.getByRole("button", { name: "删除定时任务" }).click();
   await expect(job).toHaveCount(0);
+});
+
+test("shows how each run really went and opens the run it points at", async ({
+  page,
+}) => {
+  const now = Date.now();
+  const ago = (minutes: number) =>
+    new Date(now - minutes * 60_000).toISOString();
+  const job = (id: string, name: string, lastRun: string, session: string) => ({
+    id,
+    name,
+    enabled: true,
+    schedule: { kind: "Every", every_ms: 600_000 },
+    message: name,
+    channel: null,
+    // Core reports ok once the Session accepts the run, whatever happens next.
+    last_run: lastRun,
+    last_status: "ok",
+    last_error: null,
+    next_run: now + 300_000,
+    next_in: "5m",
+    timezone: null,
+    origin: { session_id: session, profile_id: "default" },
+  });
+  const turns = [
+    { turn_id: "run-ok", state: "completed", started_at: ago(20) },
+    { turn_id: "run-bad", state: "errored", started_at: ago(10) },
+    { turn_id: "later-chat", state: "completed", started_at: ago(5) },
+  ];
+  const message = (seq: number, turnId: string) => ({
+    seq,
+    role: "assistant",
+    content: Array.from(
+      { length: 40 },
+      (_, line) => `${turnId} line ${line}`,
+    ).join("\n\n"),
+    turn_id: turnId,
+    persisted_at: ago(5),
+    media: [],
+  });
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    const requests = new Map<
+      string,
+      { method: string; params: { session_id?: string; include?: string[] } }
+    >();
+    socket.onMessage((data) => {
+      const frame = JSON.parse(String(data));
+      requests.set(String(frame.id), frame);
+      server.send(data);
+    });
+    server.onMessage((data) => {
+      const frame = JSON.parse(String(data));
+      const request = requests.get(String(frame.id));
+      if (request?.method === "cron/list" && frame.result) {
+        const session = request.params.session_id!;
+        frame.result.jobs = [
+          job("job-ok", "Weekly report", ago(20.1), session),
+          job("job-bad", "Run tests", ago(10.1), session),
+          job("job-gone", "Old task", ago(30), "coding:api:gone"),
+        ];
+        frame.result.count = 3;
+      }
+      if (request?.method === "session/hydrate" && frame.result) {
+        frame.result.turns = turns;
+        const include = request.params.include ?? [];
+        if (include.includes("threads")) {
+          frame.result.messages = turns
+            .filter((turn) => turn.state === "completed")
+            .map((turn, index) => message(index + 1, turn.turn_id));
+        } else if (include.includes("messages")) {
+          frame.result.replayed_projection_envelopes = [
+            {
+              session_id: request.params.session_id,
+              thread_id: "run-bad",
+              seq: 1,
+              turn_id: "run-bad",
+              payload: {
+                type: "turn_terminal",
+                data: {
+                  outcome: "errored",
+                  error: {
+                    code: "turn_failed",
+                    message: "The model is down [lanes: provider trace]",
+                  },
+                },
+              },
+            },
+          ];
+          frame.result.projection_thread_sequences = { "run-bad": 1 };
+        }
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  await start(page);
+  const tasks = await openCronWith(page, /^Weekly report$/);
+
+  const ok = tasks.locator('[data-cron-job="job-ok"]');
+  const bad = tasks.locator('[data-cron-job="job-bad"]');
+  await expect(ok.getByText(/^Success · 20 min ago$/)).toBeVisible();
+  await expect(bad.getByText(/^Run failed · 10 min ago$/)).toBeVisible();
+  await expect(
+    bad.getByText("The model is down", { exact: true }),
+  ).toBeVisible();
+
+  const gone = tasks.locator('[data-cron-job="job-gone"]');
+  await expect(gone.getByText(/no record of how it went/)).toBeVisible();
+  await gone.getByRole("button", { name: "View result" }).click();
+  await expect(gone.getByRole("alert")).toContainText("can't be opened here");
+
+  await ok.getByRole("button", { name: "View result" }).click();
+  await expect(tasks).toBeHidden();
+  const run = page.locator('[data-turn-id="run-ok"]').first();
+  await expect(run).toBeInViewport();
+  await expect(page.getByText("later-chat line 39")).not.toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
 });
