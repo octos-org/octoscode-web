@@ -177,6 +177,34 @@ test("continues past an unknown turn without replaying it or losing the queue an
   expect(interrupts).toEqual([]);
 });
 
+test("counts the first-token wait in the turn duration, identically after reload", async ({
+  page,
+}) => {
+  // T-0345: the fixture turn admits, holds the model's first byte for 3s,
+  // then completes. Live and reloaded summaries must both count the wait.
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page
+    .getByLabel("Server workspace path")
+    .fill("/workspace/runtime-recovery");
+  await page.getByLabel("Server workspace path").press("Enter");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
+  await composer.fill("Slow first token fixture");
+  await composer.press("Enter");
+  await expect(page.getByText("Duration 3s", { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.reload();
+  await expect(page.getByText("Duration 3s", { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
 test("keeps durable turn duration across reconnect and cold reload", async ({
   page,
   request,

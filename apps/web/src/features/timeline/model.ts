@@ -519,6 +519,24 @@ export function foldNotification(
         "errored",
         stringOf(params.message, "Unknown server error"),
       );
+    case CORE_UI_METHODS.TURN_STARTED: {
+      // The server's turn-start stamp — the same instant hydrate reports as
+      // `started_at`. Live duration must include queueing and the wait for the
+      // first token, not restart at the first timed step; settleTimelineTurn
+      // already prefers this turn-scoped stamp over per-step times, and keeps
+      // durable hydrated values ahead of it. Older cores without a timestamp
+      // keep the previous first-step fallback instead of inventing a start.
+      const turnStartedAtMs =
+        typeof params.timestamp === "string"
+          ? Date.parse(params.timestamp)
+          : NaN;
+      if (!Number.isFinite(turnStartedAtMs)) return entries.slice();
+      return entries.map((entry) =>
+        entry.turnId === turnId && entry.turnStartedAtMs === undefined
+          ? { ...entry, turnStartedAtMs }
+          : entry,
+      );
+    }
     case CORE_UI_METHODS.WARNING:
       return addSystemMessage(
         entries,
@@ -1148,6 +1166,12 @@ function upsertCanonicalUser(
     status: "complete",
     turnId,
     streamId: eventId,
+    // The turn-start stamp from turn/started must survive the optimistic row
+    // being superseded by its canonical echo, or live duration falls back to
+    // the first timed step.
+    ...((replayed ?? optimistic)?.turnStartedAtMs !== undefined
+      ? { turnStartedAtMs: (replayed ?? optimistic)!.turnStartedAtMs }
+      : {}),
     ...(optimistic?.attachmentSizes
       ? { attachmentSizes: optimistic.attachmentSizes }
       : {}),

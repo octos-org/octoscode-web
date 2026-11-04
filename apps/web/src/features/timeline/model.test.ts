@@ -1132,6 +1132,93 @@ describe("hydrated tool presentation", () => {
     expect(summarizeTurn(completed, "turn-1").seconds).toBe(71);
   });
 
+  it("counts the wait for the first token from the accepted turn start", () => {
+    // T-0339 real acceptance: the turn was admitted at 03:44:04, the model's
+    // first byte arrived 123s later, and the turn completed at 138s — the live
+    // summary must not restart the clock at that first byte.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const started = "2026-11-01T19:59:00.477226945Z";
+    const startedAtMs = Date.parse(started);
+    vi.setSystemTime(startedAtMs);
+    let entries = addOptimisticUser([], "turn-1", "Redo the summary");
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: {
+        session_id: "coding:local:main",
+        turn_id: "turn-1",
+        timestamp: started,
+      },
+    });
+    vi.setSystemTime(startedAtMs + 123_000);
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "message/delta",
+      params: {
+        session_id: "coding:local:main",
+        turn_id: "turn-1",
+        text: "Done",
+      },
+    });
+    vi.setSystemTime(startedAtMs + 138_000);
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: { session_id: "coding:local:main", turn_id: "turn-1" },
+    });
+    expect(summarizeTurn(entries, "turn-1").seconds).toBe(138);
+  });
+
+  it("keeps the first-step fallback when turn/started has no trustworthy timestamp", () => {
+    // Older cores omit the stamp: keep the previous behavior instead of
+    // inventing a start.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const startedAtMs = 1_700_000_000_000;
+    vi.setSystemTime(startedAtMs);
+    let entries = addOptimisticUser([], "turn-1", "Redo the summary");
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { session_id: "coding:local:main", turn_id: "turn-1" },
+    });
+    vi.setSystemTime(startedAtMs + 123_000);
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "message/delta",
+      params: {
+        session_id: "coding:local:main",
+        turn_id: "turn-1",
+        text: "Done",
+      },
+    });
+    vi.setSystemTime(startedAtMs + 138_000);
+    entries = foldNotification(entries, {
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: { session_id: "coding:local:main", turn_id: "turn-1" },
+    });
+    expect(summarizeTurn(entries, "turn-1").seconds).toBe(15);
+  });
+
+  it("ignores a turn/started that arrives before any local row", () => {
+    const entries = foldNotification([], {
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: {
+        session_id: "coding:local:main",
+        turn_id: "turn-1",
+        timestamp: "2026-11-01T19:59:00.477226945Z",
+      },
+    });
+    expect(entries).toEqual([]);
+  });
+
   it("restores rc.9 tools without message turn IDs in their original transcript order", () => {
     // This case builds the same hydrate twice and compares; entries carry
     // wall-clock start/end stamps, so a millisecond boundary between the two

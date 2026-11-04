@@ -4476,6 +4476,17 @@ sockets.on("connection", (socket, request) => {
                 })),
             }
           : {}),
+        // The timed-turn fixture (T-0345) needs Core's canonical replay so a
+        // reload rebuilds the terminal and shows the identical duration;
+        // other fixture sessions keep the legacy hydrate shape unchanged.
+        ...(state.completedTurns.some((turn) => turn.started_at)
+          ? {
+              replayed_projection_envelopes: replayedEvents,
+              projection_thread_sequences: Object.fromEntries(
+                replayedEvents.map((event) => [event.thread_id, event.seq]),
+              ),
+            }
+          : {}),
         // Native context state is an estimate, not billed input usage and
         // not a fabricated model-window occupancy percentage.
         context_state: {
@@ -5798,6 +5809,87 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (text === "Slow first token fixture") {
+    // T-0345: the wait for the model's first byte is part of the turn. Emit
+    // the real turn/started stamp at admission, hold the first byte for 3s,
+    // then complete; the durable turn carries matching started_at/completed_at
+    // + completed_at_durable so a reload shows the identical duration.
+    const admittedAt = new Date();
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "turn/started",
+        params: {
+          session_id: sessionId,
+          turn_id: turnId,
+          timestamp: admittedAt.toISOString(),
+        },
+      }),
+    );
+    setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
+        return;
+      notify(
+        socket,
+        sessionId,
+        threadId,
+        turnId,
+        2,
+        nextCursor(),
+        "assistant_delta",
+        {
+          text: "Slow answer",
+          assistant_segment_id: "segment-1",
+        },
+      );
+      setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
+          return;
+        notify(
+          socket,
+          sessionId,
+          threadId,
+          turnId,
+          3,
+          nextCursor(),
+          "assistant_persisted",
+          {
+            text: "Slow answer",
+            assistant_segment_id: "segment-1",
+            meta: {
+              message_id: `message-${turnId}`,
+              persisted_at: new Date().toISOString(),
+            },
+          },
+        );
+        notify(
+          socket,
+          sessionId,
+          threadId,
+          turnId,
+          4,
+          nextCursor(),
+          "turn_terminal",
+          {
+            outcome: "completed",
+            token_usage: { input_tokens: 12, output_tokens: 9 },
+          },
+        );
+        const settleState = sessionStateBySessionId.get(sessionId);
+        if (settleState?.activeTurn?.turnId === turnId)
+          settleState.activeTurn = null;
+        settleState?.completedTurns.push({
+          turn_id: turnId,
+          thread_id: threadId,
+          state: "completed",
+          started_at: admittedAt.toISOString(),
+          completed_at: new Date().toISOString(),
+          completed_at_durable: true,
+        });
+      }, 200);
+    }, 3_000);
+    return null;
+  }
   if (text === "Write an artifact fixture") {
     const content =
       "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n";

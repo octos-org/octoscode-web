@@ -4,7 +4,11 @@ import {
   type ProjectionEnvelopeV2,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
-import { foldNotification, settleTimelineTurn } from "./model.ts";
+import {
+  addOptimisticUser,
+  foldNotification,
+  settleTimelineTurn,
+} from "./model.ts";
 import { summarizeTurn } from "./turn-summary.ts";
 import { timelineFromCanonicalHydrate as timelineFromHydrate } from "./canonical-hydrate.ts";
 import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
@@ -115,6 +119,62 @@ describe("canonical hydrate recovery", () => {
     expect(
       summarizeTurn(restored, data.turns![0]!.turn_id).failedSteps,
     ).toEqual(summarizeTurn(live, data.turns![0]!.turn_id).failedSteps);
+  });
+
+  it("shows the same duration live and after reload, first-token wait included", () => {
+    // T-0345: the live clock starts at turn/started (the same instant hydrate
+    // reports as started_at), so the 123s model silence is counted on both
+    // sides and a reload shows the identical number.
+    const started = "2026-11-01T19:59:00.477226945Z";
+    const ended = "2026-11-01T20:01:18.477226945Z"; // +138s
+    const events = [
+      event(1, "user_message", { text: "Redo the summary" }),
+      event(2, "assistant_persisted", {
+        text: "Done",
+        assistant_segment_id: "seg-1",
+        meta: { message_id: "m1", persisted_at: ended },
+      }),
+      event(3, "turn_terminal", { outcome: "completed" }),
+    ];
+    const restored = timelineFromHydrate(
+      snapshot(events, {
+        turns: [
+          {
+            turn_id: "turn",
+            thread_id: "thread",
+            state: "completed",
+            started_at: started,
+            completed_at: ended,
+            completed_at_durable: true,
+          },
+        ],
+      }),
+    );
+    vi.setSystemTime(Date.parse(started));
+    let live = addOptimisticUser([], "turn", "Redo the summary");
+    live = foldNotification(live, {
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { session_id: "s", turn_id: "turn", timestamp: started },
+    });
+    for (const envelope of events.slice(0, 2)) {
+      vi.setSystemTime(Date.parse(ended));
+      live = foldNotification(live, {
+        jsonrpc: "2.0",
+        method: "projection/envelope",
+        params: envelope,
+      });
+    }
+    vi.setSystemTime(Date.parse(ended));
+    live = foldNotification(live, {
+      jsonrpc: "2.0",
+      method: "projection/envelope",
+      params: events[2]!,
+    });
+    expect(summarizeTurn(restored, "turn").seconds).toBe(138);
+    expect(summarizeTurn(live, "turn").seconds).toBe(
+      summarizeTurn(restored, "turn").seconds,
+    );
   });
 
   it("keeps the real completed turn summary before the next prompt after reconnect", () => {
