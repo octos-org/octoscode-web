@@ -148,7 +148,15 @@ function describeEvery(everyMs: number, t: UiText): string {
 }
 
 export function formatDateTime(ms: number): string {
+  if (!Number.isFinite(ms)) return "";
+  // A one-time run next year or in 2099 must not read like this year. The
+  // year joins only when it differs from the current one, so daily/weekly
+  // runs (always near-term) stay compact.
+  const date = new Date(ms);
   return new Intl.DateTimeFormat(undefined, {
+    ...(date.getFullYear() !== new Date().getFullYear()
+      ? { year: "numeric" as const }
+      : {}),
     month: "short",
     day: "numeric",
     weekday: "short",

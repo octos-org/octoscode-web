@@ -81,13 +81,29 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   await tasks
     .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Run once");
+  // A one-time run outside the current year must name the year, both in the
+  // creation summary and later in the list (T-0352).
+  await expect(tasks.getByText(/Once, on .*(2027)/)).toBeVisible();
   await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   const once = tasks.locator('[data-cron-job="cron-2"]');
   await expect(once).toBeVisible();
   await expect(once.getByRole("heading", { name: "Run once" })).toBeVisible();
   await expect(once.getByRole("checkbox")).toBeChecked();
   await expect(once.getByText("Has not run yet")).toBeVisible();
+  await expect(once.getByText(/Once, on .*(2027)/)).toBeVisible();
   await expect(tasks.getByText("“Run once” is scheduled.")).toBeVisible();
+
+  await openCreate(tasks);
+  await tasks.getByRole("radio", { name: "Once" }).check();
+  await tasks.getByLabel("Run at").fill("2099-06-30T09:00");
+  await tasks
+    .getByRole("textbox", { name: "What should Octos do?" })
+    .fill("Run in 2099");
+  await expect(tasks.getByText(/Once, on .*(2099)/)).toBeVisible();
+  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
+  const century = tasks.locator('[data-cron-job="cron-3"]');
+  await expect(century).toBeVisible();
+  await expect(century.getByText(/Once, on .*(2099)/)).toBeVisible();
 
   await openCreate(tasks);
   await tasks.getByRole("radio", { name: "At an interval" }).check();
@@ -98,7 +114,7 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     tasks.getByRole("textbox", { name: "What should Octos do?" }),
   ).toHaveValue(/^Run tests and report\nRun this project's tests\./);
   await tasks.getByRole("button", { name: "Create scheduled task" }).click();
-  const interval = tasks.locator('[data-cron-job="cron-3"]');
+  const interval = tasks.locator('[data-cron-job="cron-4"]');
   await expect(interval).toBeVisible();
   await expect(
     interval.getByRole("heading", { name: "Run tests and report" }),
@@ -113,7 +129,7 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Weekly check");
   await tasks.getByRole("button", { name: "Create scheduled task" }).click();
-  const weekly = tasks.locator('[data-cron-job="cron-4"]');
+  const weekly = tasks.locator('[data-cron-job="cron-5"]');
   await expect(weekly).toBeVisible();
   await expect(weekly.getByText(/^Every Wednesday at 18:30/)).toBeVisible();
 
@@ -127,9 +143,10 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     .getByRole("textbox", { name: "What should Octos do?" })
     .fill("Cron check");
   await tasks.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect(tasks.locator('[data-cron-job="cron-5"]')).toBeVisible();
+  await expect(tasks.locator('[data-cron-job="cron-6"]')).toBeVisible();
   expect(created.map((params) => params.schedule)).toEqual([
     { kind: "At", at_ms: created[0]!.schedule.at_ms },
+    { kind: "At", at_ms: created[1]!.schedule.at_ms },
     { kind: "Every", every_ms: 2_700_000 },
     { kind: "Cron", expr: "0 30 18 * * WED" },
     { kind: "Cron", expr: "0 0 9 1 * *" },
@@ -149,7 +166,42 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   await once.getByRole("button", { name: "Delete", exact: true }).click();
   await once.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect(once).toHaveCount(0);
-  await expect(tasks.locator('[data-cron-job="cron-3"]')).toBeVisible();
+  await century.getByRole("button", { name: "Delete", exact: true }).click();
+  await century.getByRole("button", { name: "Delete scheduled task" }).click();
+  await expect(century).toHaveCount(0);
+  await expect(tasks.locator('[data-cron-job="cron-4"]')).toBeVisible();
+});
+
+test("names the year of a far-future one-time task on a zh phone", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    locale: "zh-CN",
+  });
+  const page = await context.newPage();
+  try {
+    await start(page);
+    const tasks = await openCron(page);
+    await openCreate(tasks);
+    await tasks.getByRole("radio", { name: "只运行一次" }).check();
+    await tasks.getByLabel("运行时间").fill("2099-06-30T09:00");
+    await tasks
+      .getByRole("textbox", { name: "要 Octos 做什么？" })
+      .fill("2099 年任务");
+    await expect(tasks.getByText(/只运行一次：.*2099年/)).toBeVisible();
+    await tasks.getByRole("button", { name: "创建定时任务" }).click();
+    const row = tasks.locator('[data-cron-job="cron-2"]');
+    await expect(row).toBeVisible();
+    await expect(row.getByText(/只运行一次：.*2099年/)).toBeVisible();
+    await row.getByRole("button", { name: "删除", exact: true }).click();
+    await row.getByRole("button", { name: "删除定时任务" }).click();
+    await expect(row).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
 });
 
 test("uses the current session scope for list, toggle, create and delete", async ({

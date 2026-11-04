@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   describeSchedule,
   draftSchedule,
+  formatDateTime,
   initialDraft,
   jobDetail,
   jobTitle,
@@ -90,6 +91,32 @@ describe("describeSchedule", () => {
     expect(describeSchedule({ kind: "Cron", expr: "0 0 9 * * XYZ" }, t)).toBe(
       "Cron: 0 0 9 * * XYZ",
     );
+  });
+
+  it("names the year for one-time runs outside the current year only", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-11-04T08:00:00Z"));
+    try {
+      // Same year stays compact; next year and 2099 must be unmistakable.
+      expect(formatDateTime(Date.parse("2026-12-30T09:00:00"))).not.toMatch(
+        /2026/,
+      );
+      expect(formatDateTime(Date.parse("2027-01-02T03:04:00"))).toMatch(/2027/);
+      expect(formatDateTime(Date.parse("2099-06-30T09:00:00"))).toMatch(/2099/);
+      expect(
+        describeSchedule(
+          { kind: "At", at_ms: Date.parse("2099-06-30T09:00:00") },
+          t,
+        ),
+      ).toContain("2099");
+      // Invalid input never fabricates a date.
+      expect(formatDateTime(Number.NaN)).toBe("");
+      expect(describeSchedule({ kind: "At", at_ms: Number.NaN }, t)).toBe(
+        "Once, on ",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
