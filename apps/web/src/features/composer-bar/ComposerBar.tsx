@@ -21,6 +21,7 @@ import {
   formatUsd,
   type SessionUsage,
 } from "./session-usage.ts";
+import type { DraftEstimate } from "./draft-estimate.ts";
 import styles from "./ComposerBar.module.css";
 
 /**
@@ -547,6 +548,144 @@ export function UsageChip({
             {t(
               "Totals for this session as reported by the server. Cost is the server’s estimate from its price table, not a bill.",
             )}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Before sending: this message's size and what the context will hold, both
+ * estimates and labelled so. No money: nothing here knows a price, and the
+ * reply, tool calls and attachments are not counted.
+ */
+export function DraftEstimateChip({
+  estimate,
+  compact = false,
+}: {
+  estimate: DraftEstimate;
+  compact?: boolean;
+}) {
+  const t = useUiText();
+  const { language } = usePreferences();
+  const locale = language === "zh" ? "zh-CN" : "en-US";
+  const popover = usePopover();
+  const panelId = useId();
+  const count = formatTokenCount(estimate.draftTokens, locale);
+  const exact = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const nearlyFull = estimate.reachesThreshold;
+  const label = t("This message ≈{count} tokens", { count });
+  return (
+    <div
+      ref={popover.rootRef}
+      className={controlStyles.control}
+      onKeyDown={popover.onKeyDown}
+      data-draft-estimate
+    >
+      <button
+        ref={popover.triggerRef}
+        type="button"
+        className={`${controlStyles.trigger} ${styles.usage}`}
+        data-tone={nearlyFull ? "attention" : undefined}
+        aria-label={
+          nearlyFull
+            ? t("{label}, estimated. The server will compact first.", {
+                label,
+              })
+            : t("{label}, estimated", { label })
+        }
+        aria-expanded={popover.open}
+        aria-controls={popover.open ? panelId : undefined}
+        onClick={() => popover.setOpen((value) => !value)}
+      >
+        <span className={controlStyles.triggerLabel}>
+          {compact ? `≈${count}` : label}
+        </span>
+      </button>
+      {popover.open ? (
+        <div
+          id={panelId}
+          className={`${controlStyles.menu} ${styles.rightMenu} ${styles.usagePanel}`}
+          role="group"
+          aria-label={t("Before sending")}
+        >
+          <dl>
+            <div>
+              <dt>{t("This message")}</dt>
+              <dd>≈{exact(estimate.draftTokens)}</dd>
+            </div>
+            <div>
+              <dt>{t("Context so far")}</dt>
+              <dd>
+                {estimate.contextTokens !== null
+                  ? `≈${exact(estimate.contextTokens)}`
+                  : t("Not reported")}
+              </dd>
+            </div>
+            {estimate.afterPercent !== null && estimate.window !== null ? (
+              <div>
+                <dt>{t("After sending")}</dt>
+                <dd>
+                  {t("≈{percent}% of {window}", {
+                    percent: estimate.afterPercent,
+                    window: exact(estimate.window),
+                  })}
+                </dd>
+              </div>
+            ) : null}
+            {estimate.attachments > 0 ? (
+              <div>
+                <dt>{t("Attachments")}</dt>
+                <dd>{t("Not counted")}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {nearlyFull && estimate.threshold !== null ? (
+            <p className={styles.estimateWarning}>
+              {t(
+                "With this message the context reaches the server’s compaction threshold of about {threshold}, so it will compact older messages first.",
+                { threshold: exact(estimate.threshold) },
+              )}
+            </p>
+          ) : null}
+          <p>
+            {[
+              t(
+                "Estimated from the character count, the same way the server estimates its context. The model’s own count will differ.",
+              ),
+              estimate.contextSource === "prompt"
+                ? t(
+                    "The context is the server’s estimate of the last prompt it sent, instructions and tool definitions included.",
+                  )
+                : estimate.contextSource === "transcript"
+                  ? t(
+                      "The context is the server’s estimate of the conversation so far; instructions and tool definitions sent with every request are not in it.",
+                    )
+                  : t(
+                      "This server has not reported the context for this session.",
+                    ),
+              estimate.window === null
+                ? t(
+                    "The context window is known after the first reply in this session.",
+                  )
+                : null,
+              t(
+                "Not included: the reply, and this turn’s tool calls and their output.",
+              ),
+              estimate.attachments > 0
+                ? t(
+                    "{count} attachments are not counted; their size is only known once sent.",
+                    { count: estimate.attachments },
+                  )
+                : null,
+              t(
+                "No price before sending: nothing here knows one. Usage and the server’s cost estimate appear after the reply.",
+              ),
+            ]
+              .filter(Boolean)
+              // Chinese sentences run on without a space after 。
+              .join(language === "zh" ? "" : " ")}
           </p>
         </div>
       ) : null}

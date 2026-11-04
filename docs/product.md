@@ -49,7 +49,7 @@ server does in the chosen folder.
 | Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
 | Expert teams  | Sidebar page: built-in teams of three run side by side as peer sessions; per-member state, results, stop, merge into the chat.  |
 | Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
-| Usage         | Context-window, token, and cost projections from typed server state.                                                            |
+| Usage         | Context, token, and cost from typed server state; a labelled pre-send token estimate, never a pre-send price.                   |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.      |
 
 Remote one-click skill installation is not part of the Settings Skills section:

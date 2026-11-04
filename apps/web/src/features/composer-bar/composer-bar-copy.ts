@@ -41,4 +41,33 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
     Fast: "快",
     "Long documents": "长文档",
     Chinese: "中文",
+    // T-0364: the pre-send estimate.
+    "This message ≈{count} tokens": "本条约 {count} token",
+    "{label}, estimated": "{label}（估算）",
+    "Before sending": "发送前估算",
+    "This message": "这条消息",
+    "Context so far": "已有上下文",
+    "After sending": "发送后",
+    "≈{percent}% of {window}": "约占 {window} 的 {percent}%",
+    "Not counted": "未计入",
+    "Estimated from the character count, the same way the server estimates its context. The model’s own count will differ.":
+      "按字数估算，和服务器估算上下文的方法相同；模型实际的计数会有出入。",
+    "This server has not reported the context for this session.":
+      "服务器没有报告这个会话的上下文。",
+    "The context window is known after the first reply in this session.":
+      "上下文窗口要等这个会话第一次回复后才知道。",
+    "{count} attachments are not counted; their size is only known once sent.":
+      "{count} 个附件未计入，发送后才知道它们有多大。",
+    "No price before sending: nothing here knows one. Usage and the server’s cost estimate appear after the reply.":
+      "发送前不显示价格：这里没有可靠的单价。实际用量和服务器的费用估算会在回复后显示。",
+    "{label}, estimated. The server will compact first.":
+      "{label}（估算）。服务器会先压缩上下文。",
+    "With this message the context reaches the server’s compaction threshold of about {threshold}, so it will compact older messages first.":
+      "加上这条消息，上下文会达到服务器的压缩阈值（约 {threshold}），服务器会先压缩较早的内容。",
+    "The context is the server’s estimate of the last prompt it sent, instructions and tool definitions included.":
+      "已有上下文是服务器对它上一次发给模型的内容的估算，包含系统说明和工具说明。",
+    "The context is the server’s estimate of the conversation so far; instructions and tool definitions sent with every request are not in it.":
+      "已有上下文是服务器对目前对话内容的估算，不含每次请求都会带上的系统说明和工具说明。",
+    "Not included: the reply, and this turn’s tool calls and their output.":
+      "未计入：模型的回复，以及这一轮的工具调用和输出。",
   });

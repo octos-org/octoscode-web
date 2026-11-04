@@ -126,6 +126,48 @@ describe("context lifecycle", () => {
     expect(completed?.state.token_estimate).toBe(50);
     expect(applyContextNotification(completed, event, "s1")).toBe(completed);
   });
+  it("follows the live prompt estimate and the server's threshold, then drops them on compaction", () => {
+    const report = {
+      jsonrpc: "2.0" as const,
+      method: "context/state_reported",
+      params: {
+        session_id: "s1",
+        context_state: { ...state, token_estimate: 9_400 },
+        threshold_tokens: 140_000,
+        iteration: 0,
+      },
+    };
+    const live = applyContextNotification({ state }, report, "s1");
+    expect(live?.state.token_estimate).toBe(9_400);
+    expect(live?.reported).toEqual({ thresholdTokens: 140_000 });
+    // From nothing (a fresh tab) a report is enough on its own.
+    expect(applyContextNotification(null, report, "s1")?.reported).toEqual({
+      thresholdTokens: 140_000,
+    });
+    expect(applyContextNotification(null, report, "s2")).toBeNull();
+    expect(
+      applyContextNotification(
+        live,
+        { ...report, params: { ...report.params, threshold_tokens: -1 } },
+        "s1",
+      ),
+    ).toBe(live);
+    const compacted = applyContextNotification(
+      live,
+      {
+        ...report,
+        method: "context/compaction_completed",
+        params: {
+          session_id: "s1",
+          context_state: { ...state, generation: 4, token_estimate: 50 },
+          compaction: result,
+        },
+      },
+      "s1",
+    );
+    expect(compacted?.state.token_estimate).toBe(50);
+    expect(compacted).not.toHaveProperty("reported");
+  });
   it("permits a failed compaction to retry at the same generation", () => {
     const completed = {
       state,

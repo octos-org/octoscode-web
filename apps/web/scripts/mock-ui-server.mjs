@@ -1065,6 +1065,18 @@ function peerNameSlug(name) {
     .replace(/^-+|-+$/gu, "")
     .toLowerCase();
 }
+/** Each session gets its own transcript estimate so a cross-session leak is visible. */
+function draftEstimateContext(sessionId) {
+  let hash = 0;
+  for (const char of sessionId) hash = (hash * 31 + char.charCodeAt(0)) % 9_000;
+  return {
+    session_id: sessionId,
+    generation: 1,
+    token_estimate: 1_000 + hash,
+    item_count: 2,
+    recovery_state: "exact",
+  };
+}
 function stagePeers(
   count,
   profileId,
@@ -5305,13 +5317,19 @@ sockets.on("connection", (socket, request) => {
       const profileId = profileIdFor(socket, request.params);
       const runtimeModel =
         effectiveRuntimeModelByProfile.get(profileId) ?? defaultRuntimeModel;
+      const statusWorkspace =
+        sessionStateBySessionId.get(sessionId)?.workspaceRoot ??
+        defaultWorkspace;
       reply(socket, request.id, {
         session_id: sessionId,
         runtime_mode: "solo",
         profile_id: profileId,
-        workspace_root:
-          sessionStateBySessionId.get(sessionId)?.workspaceRoot ??
-          defaultWorkspace,
+        workspace_root: statusWorkspace,
+        // T-0364: the transcript estimate a real Core returns with the
+        // lifecycle feature; distinct per session so a leak would show.
+        ...(statusWorkspace.includes("draft-estimate")
+          ? { context_state: draftEstimateContext(sessionId) }
+          : {}),
         model: { ...runtimeModel, selected: true },
         sandbox: permission.mode,
         network: permission.network === "allow" ? "allowed" : "blocked",
@@ -6728,6 +6746,21 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       },
     }),
   );
+  // T-0364: what a Core that negotiated context.state.v1 pushes before each
+  // model call: the prompt estimate and its compaction threshold.
+  const estimateWorkspace = sessionState(sessionId).workspaceRoot ?? "";
+  if (estimateWorkspace.includes("draft-estimate")) {
+    const full = estimateWorkspace.includes("draft-estimate-full");
+    notifyRpc(socket, "context/state_reported", {
+      session_id: sessionId,
+      context_state: {
+        ...draftEstimateContext(sessionId),
+        token_estimate: full ? 699_950 : 52_000,
+      },
+      threshold_tokens: 700_000,
+      iteration: 0,
+    });
+  }
   setTimeout(() => {
     // Core rc.11 kills connection-owned turns when the owner disconnects. A
     // fixture turn must therefore NOT fabricate a recorded success after its
