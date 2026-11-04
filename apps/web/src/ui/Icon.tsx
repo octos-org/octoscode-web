@@ -60,6 +60,20 @@ export function CronIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Expert teams: several people on one task. */
+export function ExpertsIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <circle cx="8" cy="5" r="2" />
+      <path d="M4.5 13c0-2 1.57-3.5 3.5-3.5s3.5 1.5 3.5 3.5" />
+      <circle cx="3.5" cy="6.5" r="1.5" />
+      <path d="M1.25 12.5c0-1.45.85-2.55 2.15-2.85" />
+      <circle cx="12.5" cy="6.5" r="1.5" />
+      <path d="M14.75 12.5c0-1.45-.85-2.55-2.15-2.85" />
+    </svg>
+  );
+}
+
 export function ModelsIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>

@@ -2291,6 +2291,148 @@ const catalog: Readonly<Record<string, string>> = {
     "这一步要的权限超出了沙箱。请回到电脑上处理；在手机上只能拒绝。",
   "From the phone you can allow this one request. To allow it for the whole session or raise permissions, use your computer.":
     "在手机上只能批准这一次。要在整个会话里允许或者提升权限，请回到电脑上操作。",
+  // Expert teams (T-0358).
+  "Plan review": "方案评审团",
+  "Three reviewers read the same plan, design or decision, and each looks for problems from one angle.":
+    "三位评审读同一份方案、设计或决定，各自从一个角度找问题。",
+  "What should they review?": "要评审什么？",
+  "For example docs/plan.md, or paste the plan here":
+    "比如 docs/plan.md，或者直接把方案贴在这里",
+  "Feasibility reviewer": "可行性评审",
+  "Can it be built as described? Missing steps, hidden dependencies, time and cost.":
+    "照这样能不能做出来：缺的步骤、隐藏的依赖、时间和成本。",
+  "Risk reviewer": "风险评审",
+  "What could go wrong: failure cases, security and privacy, things that are hard to undo.":
+    "哪里会出问题：失败的情况、安全和隐私、难以撤回的地方。",
+  "User reviewer": "用户视角评审",
+  "Read it as the person who will use the result: is it clear, useful and worth the effort?":
+    "站在最终使用的人这边看：清不清楚、有没有用、值不值得。",
+  "Merge the reviews into one report: a verdict first, then the problems by priority, each noting which reviewer raised it. Remove duplicates and point out where the reviewers disagree.":
+    "把几位评审的意见合成一份报告：先给结论，再按优先级列问题，每条注明是哪位评审提的；去掉重复，指出评审之间的分歧。",
+  "Research group": "调研小组",
+  "Three researchers look into one question from different sides, and the results are merged into one brief.":
+    "三位调研员从不同侧面查同一个问题，最后合成一份简报。",
+  "What should they find out?": "要调研什么？",
+  "For example: which charting library fits this project":
+    "比如：这个项目适合用哪个图表库",
+  "Fact finder": "事实调研",
+  "Collect the facts and the current state, with a source for each.":
+    "收集事实和现状，每条注明来源。",
+  "Options analyst": "方案对比",
+  "List the realistic options and compare them on the points that matter here.":
+    "列出可行的选项，按这里真正在意的几点对比。",
+  "Devil's advocate": "反方意见",
+  "Look for counter-evidence, limits, and reasons the obvious answer may be wrong.":
+    "找反例和局限，以及显而易见的答案可能错在哪。",
+  "Merge the findings into one brief: the answer first, then the evidence and the options compared, and a short section on open questions and doubts.":
+    "把调研结果合成一份简报：先给答案，再列证据和选项对比，最后用一小段写还没解决的问题和疑点。",
+  "Code check-up": "代码体检",
+  "Three engineers read the code in this workspace, and each reports problems in one area. Nobody changes files.":
+    "三位工程师读这个工作区里的代码，各自报告一个方面的问题，谁都不改文件。",
+  "Which part of the code?": "看哪部分代码？",
+  "For example src/payments, or the whole project":
+    "比如 src/payments，或者整个项目",
+  Correctness: "正确性",
+  "Bugs and wrong behaviour: edge cases, error handling, data that can be lost.":
+    "缺陷和错误行为：边界情况、错误处理、可能丢数据的地方。",
+  Tests: "测试",
+  "What is not tested and should be, and tests that would pass even if the code were wrong.":
+    "该测而没测的地方，以及代码写错了也照样能过的测试。",
+  Maintainability: "可维护性",
+  "Code that is hard to read or change, duplication, and slow paths that matter.":
+    "难读难改的代码、重复，以及确实要紧的慢路径。",
+  "Merge the findings into one list ordered by severity. For each problem give the file and line, what goes wrong and a suggested fix, and note which engineer found it.":
+    "把发现合成一张按严重程度排序的清单。每个问题写明文件和行号、会出什么错、建议怎么改，并注明是哪位工程师发现的。",
+  "Writing review": "文稿打磨",
+  "Three editors read the same draft: one for structure, one for facts, one as the intended reader.":
+    "三位编辑读同一份稿子：一位看结构，一位核事实，一位当目标读者。",
+  "Which draft, and who is it for?": "哪份稿子？写给谁看？",
+  "For example README.md, for first-time users":
+    "比如 README.md，写给第一次用的人",
+  "Structure editor": "结构编辑",
+  "Order, headings, what is missing or repeated, and where readers will get lost.":
+    "顺序、标题、缺了什么或重复了什么，读者会在哪里迷路。",
+  "Fact checker": "事实核查",
+  "Claims, numbers, names and links that are wrong, outdated or unsupported.":
+    "错误、过时或没有依据的说法、数字、名称和链接。",
+  "Target reader": "目标读者",
+  "Read as the intended reader: what is unclear, what you would ask, where you would stop reading.":
+    "以目标读者的身份读：哪里看不懂、会想问什么、读到哪里会放弃。",
+  "Merge the edits into one list the author can work through: the most important changes first, each with its place in the draft and a suggested rewrite where useful.":
+    "把修改意见合成一张作者能逐条处理的清单：最重要的放前面，每条写明在稿子里的位置，必要时给出改写建议。",
+  "Workspace: {path}": "工作区：{path}",
+  "Goal:": "目标：",
+  "This is the {team} team. {count} experts work on the same goal at the same time, each from one angle, and cannot see each other's results. The conversation that started the team merges them.":
+    "这是「{team}」。{count} 位专家同时处理同一个目标，各自负责一个角度，互相看不到对方的结果；最后由发起的对话汇总。",
+  "Members:": "成员分工：",
+  "- {name}: {focus}": "- {name}：{focus}",
+  "Rules for every member:": "每位成员都要遵守：",
+  "Read only. Do not create, change or delete any files.":
+    "只读：不要创建、修改或删除任何文件。",
+  "Work only from your own angle; the other experts cover theirs.":
+    "只从自己的角度处理，其他角度由别的专家负责。",
+  "Lead with your conclusion, then the reasons, in under 600 words. Give the evidence for each point: file path and line, or source.":
+    "先写结论再写理由，不超过 800 字。每一点都给出依据：文件路径和行号，或者资料来源。",
+  "If information is missing, say what is missing instead of guessing.":
+    "信息不够时写明缺什么，不要猜。",
+  "You are “{name}”. Your angle: {focus}": "你是「{name}」。你的角度：{focus}",
+  "Expert team": "专家团",
+  "These are the results of the {team} team for this goal:":
+    "下面是「{team}」针对这个目标的结果：",
+  "Merge the results into one report, conclusion first.":
+    "把结果合成一份报告，先写结论。",
+  "Results below are listed by handle:": "下面的结果按编号列出：",
+  "- {handle}: {label}": "- {handle}：{label}",
+  "These experts have no result; say that their part is missing:":
+    "这几位专家没有结果，汇总时说明缺了他们这部分：",
+  "- {label} ({state})": "- {label}（{state}）",
+  "Did not start": "没有启动",
+  "Hit a rate limit": "被限流，没有完成",
+  Closed: "已关闭",
+  "No result yet": "还没有结果",
+  "The answer is still being saved. It shows up here shortly.":
+    "结果还在保存，稍后会显示在这里。",
+  "It is waiting for your approval or answer. Open its conversation to respond.":
+    "它在等你批准或回答，打开它的对话处理。",
+  "It may still be working, or it may have been stopped. Open its conversation to see.":
+    "它可能还在工作，也可能已经停了。打开它的对话看看。",
+  "{count} still working": "{count} 位还在工作",
+  "{count} did not finish": "{count} 位没有完成",
+  "{count} stopped": "{count} 位已停止",
+  "Gathering results…": "正在读取结果…",
+  "Merge results in this conversation": "汇总到当前对话",
+  "Stop all": "全部停止",
+  "{count} experts have no result yet. Merging now leaves their part out.":
+    "还有 {count} 位专家没有结果，现在汇总会缺他们这部分。",
+  "This conversation cannot take new messages right now, so results cannot be merged here.":
+    "当前对话现在不能接收新消息，没法在这里汇总。",
+  "Merging was sent to this conversation.": "已把汇总请求发到当前对话。",
+  "There are no results to merge yet.": "还没有可以汇总的结果。",
+  "This conversation cannot take the merge request right now. Try again when it is free.":
+    "当前对话现在接不了汇总请求，等它空下来再试。",
+  "The results could not be read. Try again.": "没能读取结果，请重试。",
+  "Expert teams": "专家团",
+  "Hand one task to several experts at once. Each works from one angle in its own conversation, and the results are merged in this conversation.":
+    "把一个任务同时交给几位专家。每位在自己的对话里从一个角度处理，结果汇总到当前对话。",
+  "Teams in this workspace": "这个工作区的专家团",
+  "Loading expert teams…": "正在加载专家团…",
+  "The state of the expert teams could not be read.": "没能读取专家团的状态。",
+  "Start a team": "发起专家团",
+  Choose: "选这个",
+  "{count} experts each run a full conversation of their own at the same time, and merging takes one more turn here. Expect roughly {times} times the usage of asking once.":
+    "{count} 位专家会同时各跑一个完整的对话，汇总时当前对话还要再跑一轮。消耗大约是直接问一次的 {times} 倍。",
+  "They work in {workspace}. They are asked to only read and not change files.":
+    "专家在「{workspace}」里工作，已要求他们只读、不改文件。",
+  "Start {count} experts": "启动 {count} 位专家",
+  "This connection cannot start expert teams.": "当前连接不能发起专家团。",
+  "Describe what the experts should work on.": "请先写下要专家处理什么。",
+  "It is not clear whether the team started. Refresh to see whether it is listed above; until then no new team can be started from this conversation.":
+    "不确定专家团有没有启动。刷新看看上面有没有这一组；在确认之前，这个对话不能再发起新的专家团。",
+  "The team was not started; nothing was created. You can try again.":
+    "专家团没有启动，也没有创建任何东西，可以再试一次。",
+  "{team} started: {count} experts are working.":
+    "「{team}」已启动，{count} 位专家开始工作。",
+  "This server cannot start expert teams.": "这个服务器不支持专家团。",
 };
 
 const zh: Readonly<Record<string, string>> = { ...catalog, ...FLEET_ZH_COPY };

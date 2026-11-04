@@ -419,8 +419,17 @@ label > span {
    own <section aria-label="Fleet"> stays the ONE Fleet region). Secondary
    styling matches the app's picker buttons. */
 .fleet-pane,
-.scheduled-pane {
+.scheduled-pane,
+.experts-pane {
   grid-template-rows: 52px minmax(0, 1fr);
+}
+
+/* A routed page whose server capability went away while it was open. */
+.product-route-note {
+  margin: 0;
+  padding: var(--dsw-space-5) var(--dsw-space-4);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
 }
 
 /* The phone overview owns its whole column (header included). */

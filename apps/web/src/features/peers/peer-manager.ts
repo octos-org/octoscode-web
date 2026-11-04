@@ -14,7 +14,10 @@ import {
   type PeerGatherParams,
   type PeerGatherResult,
 } from "@octos-org/octoscode-client/peers";
-import type { RpcNotification } from "@octos-org/octoscode-client/protocol";
+import {
+  OctosUiProtocolError,
+  type RpcNotification,
+} from "@octos-org/octoscode-client/protocol";
 export * from "./peer-roster.ts";
 import {
   EMPTY_PEER_SNAPSHOT,
@@ -174,7 +177,11 @@ export class PeerManager {
 
   kickoff(
     params: PeerPrepareParams,
-    options?: { readOnly: boolean },
+    options?: {
+      readOnly?: boolean;
+      /** One kickoff brief per member, in `names` order; the staged brief stays shared. */
+      memberBriefs?: readonly string[];
+    },
   ): Promise<PeerPrepareResult | null> {
     this.syncAuthority();
     const commands = this.#commands;
@@ -188,8 +195,17 @@ export class PeerManager {
         ),
       );
     let input: PeerPrepareParams;
+    const memberBriefs = options?.memberBriefs
+      ? [...options.memberBriefs]
+      : undefined;
     try {
       input = buildPeerPrepareParams(params);
+      if (
+        memberBriefs &&
+        (memberBriefs.length !== (input.n ?? 1) ||
+          memberBriefs.some((brief) => !brief.trim()))
+      )
+        throw new Error("member briefs must match the fleet");
     } catch {
       this.#publish({
         prepareError:
@@ -204,6 +220,7 @@ export class PeerManager {
     this.#publish({
       prepareBusy: true,
       prepareError: null,
+      prepareRefusal: null,
       dispatchRefusalKind: null,
     });
     const operation = Promise.resolve()
@@ -221,9 +238,10 @@ export class PeerManager {
             this.#stage(
               commands,
               peer,
-              fleet.length > 1
-                ? `${brief}\n\n(You are fleet member ${index + 1} of ${fleet.length} — peers were given this same brief; differentiate your angle.)`
-                : brief,
+              memberBriefs?.[index] ??
+                (fleet.length > 1
+                  ? `${brief}\n\n(You are fleet member ${index + 1} of ${fleet.length} — peers were given this same brief; differentiate your angle.)`
+                  : brief),
               "prepare",
               closeRevision,
             ),
@@ -231,8 +249,18 @@ export class PeerManager {
         );
         return this.#current(commands, epoch) ? result : null;
       })
-      .catch(() => {
-        if (this.#current(commands, epoch))
+      .catch((error: unknown) => {
+        if (!this.#current(commands, epoch)) return null;
+        // An error reply is a definite no: prepare stages all members or none.
+        if (
+          error instanceof OctosUiProtocolError &&
+          this.#prepareAwaitingReceipt
+        )
+          this.#publish({
+            prepareError: "The server did not stage the peers.",
+            prepareRefusal: error.message,
+          });
+        else
           this.#publish({
             prepareError:
               "Peer staging could not be confirmed. Inspect the blackboard; the server may have staged the peer.",

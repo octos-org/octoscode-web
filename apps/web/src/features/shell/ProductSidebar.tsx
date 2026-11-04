@@ -20,7 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { CronIcon } from "../../ui/Icon.tsx";
+import { CronIcon, ExpertsIcon } from "../../ui/Icon.tsx";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./ProductSidebar.module.css";
 import {
@@ -86,6 +86,10 @@ export interface ProductSidebarProps {
   scheduledAvailable?: boolean;
   scheduledActive?: boolean;
   onScheduled?: (() => void) | undefined;
+  /** Expert teams need peer staging, gather, session open and turn start. */
+  expertsAvailable?: boolean;
+  expertsActive?: boolean;
+  onExperts?: (() => void) | undefined;
   /** The Fleet navigation entry descriptor (mounted next to Settings). */
   fleetEntry?: {
     label: string;
@@ -180,6 +184,9 @@ export function ProductSidebar({
   scheduledAvailable = false,
   scheduledActive = false,
   onScheduled,
+  expertsAvailable = false,
+  expertsActive = false,
+  onExperts,
   fleetEntry = null,
   fleetActive = false,
   fleetAvailable = true,
@@ -1288,6 +1295,20 @@ export function ProductSidebar({
           >
             <CronIcon />
             {!collapsed ? <span>{t("Scheduled tasks")}</span> : null}
+          </button>
+        ) : null}
+        {expertsAvailable && onExperts ? (
+          <button
+            type="button"
+            className={`${styles.settings} ${expertsActive ? styles.settingsActive : ""}`}
+            aria-current={expertsActive ? "page" : undefined}
+            aria-label={t("Expert teams")}
+            title={collapsed ? t("Expert teams") : undefined}
+            data-experts-nav="entry"
+            onClick={onExperts}
+          >
+            <ExpertsIcon />
+            {!collapsed ? <span>{t("Expert teams")}</span> : null}
           </button>
         ) : null}
         {fleetEntry && onFleet ? (

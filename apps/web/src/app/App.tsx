@@ -408,6 +408,10 @@ const ScheduledTasksPage = lazyNamed(
   () => import("../features/cron/ScheduledTasksPage.tsx"),
   (module) => module.ScheduledTasksPage,
 );
+const ExpertCenter = lazyNamed(
+  () => import("../features/experts/ExpertCenter.tsx"),
+  (module) => module.ExpertCenter,
+);
 const REMOTE_REFRESH_MS = 15_000;
 const RemoteHome = lazyNamed(
   () => import("../features/remote/RemoteHome.tsx"),
@@ -631,10 +635,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   const [productRoute, setProductRoute] = useState<
-    "fleet" | "scheduled" | null
+    "fleet" | "scheduled" | "experts" | null
   >(null);
   const fleetRouteActive = productRoute === "fleet";
   const scheduledRouteActive = productRoute === "scheduled";
+  const expertsRouteActive = productRoute === "experts";
   // A scheduled run to scroll to once its Session's timeline has it.
   const [revealTurnId, setRevealTurnId] = useState<string | null>(null);
   /** Alt+D requests focus inside Fleet once the routed pane is visible. */
@@ -891,6 +896,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     session.capabilities,
     "peer/gather",
   );
+  // Expert teams stage, open and start members, then read them back.
+  const expertTeamsSupported =
+    nativeFleetSupported && nativeFleetGatherSupported;
   const externalFleetSupported =
     peerControlAdmitted(session.capabilities) &&
     peerDispatchAdmitted(session.capabilities);
@@ -4030,6 +4038,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setProductRoute("scheduled");
                 setSettingsOpen(false);
               }}
+              expertsAvailable={expertTeamsSupported}
+              expertsActive={expertsRouteActive}
+              onExperts={() => {
+                if (compact) setSidebarCollapsed(true);
+                setProductRoute("experts");
+                setSettingsOpen(false);
+              }}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
               fleetAvailable={fleetSupported}
@@ -5360,6 +5375,67 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   onOpenFull={() => setRemoteViewInUrl(null)}
                 />
               </Suspense>
+            </div>
+          ) : null}
+          {expertsRouteActive ? (
+            <div className="conversation experts-pane">
+              <header className="conversation-header">
+                <button
+                  type="button"
+                  className="scheduled-back"
+                  onClick={onBackFromProductRoute}
+                >
+                  {t("Back")}
+                </button>
+              </header>
+              {expertTeamsSupported && session.opened ? (
+                <Suspense
+                  fallback={<DeferredSurface label="Loading expert teams…" />}
+                >
+                  <ExpertCenter
+                    manager={peers.manager}
+                    roster={peers.roster}
+                    workspace={activeWorkspacePath}
+                    workspaceLabel={workspaceName(
+                      activeWorkspacePath || t("Workspace"),
+                    )}
+                    profileId={
+                      session.opened.active_profile_id?.trim() ||
+                      protocol.profileId.trim()
+                    }
+                    canLaunch={peers.manager?.canPrepare() ?? false}
+                    canStop={supportsMethod(
+                      session.capabilities,
+                      CORE_UI_METHODS.TURN_INTERRUPT,
+                    )}
+                    canSummarize={!navigationBlocked}
+                    onSummarize={(instruction, slugs) =>
+                      peers
+                        .gather(slugs, () => !navigationBlocked, instruction)
+                        .then((outcome) => {
+                          if (outcome === "queued") setProductRoute(null);
+                          return outcome;
+                        })
+                    }
+                    onOpenMember={(member) => {
+                      if (draftCapacityBlocked) return;
+                      void workspaceProduct
+                        .openSession({ ...member, resolveLaunch: false })
+                        .then((outcome) => {
+                          if (outcome !== "opened") return;
+                          setProductRoute(null);
+                          if (compact) setSidebarCollapsed(true);
+                          revealRemoteSession();
+                        });
+                    }}
+                    onStopMember={(entry) => peers.rowAction(entry, "stop")}
+                  />
+                </Suspense>
+              ) : (
+                <p className="product-route-note">
+                  {t("This server cannot start expert teams.")}
+                </p>
+              )}
             </div>
           ) : null}
           {scheduledRouteActive ? (

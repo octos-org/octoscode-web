@@ -1053,15 +1053,34 @@ const heldTerminals = new Map(); // sessionId -> { emit, turnId }
 // owner is what the fixture counts — never a synthetic counter.
 const stagedPeers = new Map(); // sessionId -> { slug, profileId, workspaceRoot, masterSessionId, brief }
 const admittedPeers = new Set(); // sessionId -> opened over a real owner WS
+const EXPERT_TEAM_HEADER = "Octoscode expert team:";
+let expertClashUsed = false;
 function isPeerSessionId(sessionId) {
   return stagedPeers.has(sessionId) || admittedPeers.has(sessionId);
 }
-function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
+// Core's handle for a named peer keeps only the ASCII of the name.
+function peerNameSlug(name) {
+  return name
+    .replace(/[^A-Za-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .toLowerCase();
+}
+function stagePeers(
+  count,
+  profileId,
+  workspaceRoot,
+  masterSessionId,
+  brief,
+  names,
+) {
   const staged = [];
   for (let index = 0; index < count; index += 1) {
-    const slug = workspaceRoot.includes("peer-presentation")
-      ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
-      : randomUUID();
+    const name = names?.[index];
+    const slug = name
+      ? peerNameSlug(name) || randomUUID()
+      : workspaceRoot.includes("peer-presentation")
+        ? `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+        : randomUUID();
     const sessionId = `${profileId}:local:tui#peer-${slug}`;
     stagedPeers.set(sessionId, {
       slug,
@@ -1069,6 +1088,7 @@ function stagePeers(count, profileId, workspaceRoot, masterSessionId, brief) {
       workspaceRoot,
       masterSessionId,
       brief,
+      ...(name ? { name } : {}),
     });
     staged.push({
       sessionId,
@@ -2721,6 +2741,7 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === "POST" && request.url === "/__test__/peers/reset") {
     stagedPeers.clear();
+    expertClashUsed = false;
     admittedPeers.clear();
     for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
       sessionsByWorkspace.set(
@@ -4946,12 +4967,59 @@ sockets.on("connection", (socket, request) => {
         replyError(socket, request.id, -32602, "Invalid peer fleet request");
         return;
       }
+      const names = Array.isArray(request.params.names)
+        ? request.params.names
+        : undefined;
+      if (names && names.length !== count) {
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          `names must have exactly ${count} entries (one per peer)`,
+        );
+        return;
+      }
+      // Like Core: a name whose handle is already taken refuses the whole
+      // fleet and stages nothing. "[clash-once]" in a brief makes its first
+      // attempt clash, so the browser's retry with a fresh tag is exercised.
+      const taken = new Set([...stagedPeers.values()].map((peer) => peer.slug));
+      const forcedClash =
+        names &&
+        request.params.brief.includes("[clash-once]") &&
+        !expertClashUsed;
+      const clash = names?.find(
+        (name, index) =>
+          taken.has(peerNameSlug(name)) ||
+          names.findIndex(
+            (other) => peerNameSlug(other) === peerNameSlug(name),
+          ) !== index,
+      );
+      if (request.params.brief.includes("[refuse-prepare]")) {
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          "no workspace root — pass cwd, or session_id of an open session",
+        );
+        return;
+      }
+      if (forcedClash || clash) {
+        if (forcedClash) expertClashUsed = true;
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          `a peer named '${clash ?? names[0]}' already exists`,
+        );
+        return;
+      }
       const staged = stagePeers(
         count,
         master.profileId,
         request.params.cwd ?? master.workspaceRoot,
         sessionId,
         request.params.brief,
+        names,
       );
       const peers = staged.map(
         ({ slug, topic, profile_id, cwd, brief_path }) => ({
@@ -4963,6 +5031,9 @@ sockets.on("connection", (socket, request) => {
         }),
       );
       reply(socket, request.id, { ...peers[0], peers });
+      // Core announces peer/staged for model hand-offs, not for a client's
+      // own prepare; expert teams follow Core so the browser opens them itself.
+      if (request.params.brief.startsWith(EXPERT_TEAM_HEADER)) return;
       for (const peer of peers) {
         const event = {
           ...peer,
@@ -4998,11 +5069,17 @@ sockets.on("connection", (socket, request) => {
         .map(([id, peer]) => ({
           slug: peer.slug,
           topic: `peer-${peer.slug}`,
+          ...(peer.name ? { name: peer.name } : {}),
+          ...(peer.lastOutcome ? { last_outcome: peer.lastOutcome } : {}),
           brief: peer.brief,
           brief_truncated: false,
-          result: sessionStateBySessionId.get(id)?.completedTurns.length
-            ? "Fixture peer completed"
-            : null,
+          // Core writes a result only when a turn ends; a stopped or cut-off
+          // expert member has none.
+          result: peer.brief.startsWith(EXPERT_TEAM_HEADER)
+            ? (peer.result ?? null)
+            : sessionStateBySessionId.get(id)?.completedTurns.length
+              ? "Fixture peer completed"
+              : null,
           result_truncated: false,
           result_updated_unix: null,
           has_worktree: false,
@@ -5090,6 +5167,13 @@ sockets.on("connection", (socket, request) => {
       ) {
         if (!active.emitSeq) active.emitSeq = { value: 1 };
         cancelledTurns.add(active.turnId);
+        if (stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER))
+          notifyRpc(socket, "turn/error", {
+            session_id: sessionId,
+            turn_id: active.turnId,
+            code: "interrupted",
+            message: "The turn was interrupted by the user.",
+          });
         const params = {
           session_id: sessionId,
           thread_id: active.threadId,
@@ -6173,6 +6257,122 @@ sockets.on("connection", (socket, request) => {
   });
 });
 
+/**
+ * One expert-team member's turn. Seats answer in order; "[fail-seat-N]" in the
+ * team brief makes seat N fail the way a provider outage does, and
+ * "[slow-seat-N]" keeps seat N working until someone stops it. The result
+ * is kept with Core's front matter, as `peer/gather` returns it.
+ */
+function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
+  const seat = Number(/-(\d+)$/u.exec(member.name ?? "")?.[1] ?? 0);
+  const state = sessionState(sessionId);
+  const record = (outcome, body) => {
+    member.lastOutcome = outcome;
+    member.result = `---\nslug: ${member.slug}\noutcome: ${outcome}\nupdated_unix: ${Math.floor(Date.now() / 1000)}\nturn: 1\nturn_id: ${turnId}\n---\n\n${body}\n`;
+  };
+  // The browser follows a member through the same turn notifications Core
+  // sends for any session it has open.
+  notifyRpc(socket, "turn/started", {
+    session_id: sessionId,
+    turn_id: turnId,
+    timestamp: new Date().toISOString(),
+  });
+  notify(
+    socket,
+    sessionId,
+    turnId,
+    turnId,
+    2,
+    nextCursor(),
+    "assistant_delta",
+    {
+      text: "Reading the material…",
+      assistant_segment_id: "segment-1",
+    },
+  );
+  if (member.brief.includes(`[slow-seat-${seat}]`)) return;
+  setTimeout(
+    () => {
+      if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
+        return;
+      if (state.activeTurn?.turnId !== turnId) return;
+      if (member.brief.includes(`[fail-seat-${seat}]`)) {
+        const message =
+          'custom/stub temporarily unavailable (HTTP 500 - {"error":{"message":"stub model is down"}})';
+        notify(
+          socket,
+          sessionId,
+          turnId,
+          turnId,
+          3,
+          nextCursor(),
+          "turn_terminal",
+          {
+            outcome: "errored",
+            error: { code: "provider_error", message },
+          },
+        );
+        state.completedTurns.push({
+          turn_id: turnId,
+          thread_id: turnId,
+          state: "failed",
+          error: message,
+        });
+        notifyRpc(socket, "turn/error", {
+          session_id: sessionId,
+          turn_id: turnId,
+          code: "provider_error",
+          message,
+        });
+        record("errored", message);
+      } else {
+        const answer = `${member.name}: the most important problem is example problem ${seat}; see section ${seat} of the material.`;
+        notify(
+          socket,
+          sessionId,
+          turnId,
+          turnId,
+          3,
+          nextCursor(),
+          "assistant_persisted",
+          {
+            text: answer,
+            assistant_segment_id: "segment-1",
+            meta: {
+              message_id: `message-${turnId}`,
+              persisted_at: new Date().toISOString(),
+            },
+          },
+        );
+        notify(
+          socket,
+          sessionId,
+          turnId,
+          turnId,
+          4,
+          nextCursor(),
+          "turn_terminal",
+          {
+            outcome: "completed",
+            token_usage: { input_tokens: 40, output_tokens: 20 },
+          },
+        );
+        state.completedTurns.push({
+          turn_id: turnId,
+          thread_id: turnId,
+          state: "completed",
+        });
+        notifyRpc(socket, "turn/completed", {
+          session_id: sessionId,
+          turn_id: turnId,
+        });
+        record("completed", answer);
+      }
+      state.activeTurn = null;
+    },
+    400 + seat * 300,
+  );
+}
 function streamTurn(socket, sessionId, params, nextCursor) {
   const turnId = params.turn_id;
   rememberTurnState(sessionId, turnId, "active");
@@ -6196,6 +6396,11 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  const expertMember = stagedPeers.get(sessionId);
+  if (expertMember?.brief.startsWith(EXPERT_TEAM_HEADER)) {
+    streamExpertMember(socket, sessionId, turnId, expertMember, nextCursor);
+    return null;
+  }
   if (text === "Slow first token fixture") {
     // T-0345: the wait for the model's first byte is part of the turn. Emit
     // the real turn/started stamp at admission, hold the first byte for 3s,

@@ -161,6 +161,23 @@ describe("peer wire authority", () => {
       slugs: ["different"],
     });
   });
+  it("keeps the recorded outcome of a peer's last turn and drops words it does not know", () => {
+    const parse = (last_outcome: unknown) =>
+      parsePeerGatherResult(
+        {
+          profile_id: "dev",
+          peers: [{ ...row, name: "评审甲 · k7q2-1", last_outcome }],
+        },
+        "dev",
+      )?.peers[0];
+    expect(parse("errored")).toMatchObject({
+      name: "评审甲 · k7q2-1",
+      last_outcome: "errored",
+    });
+    expect(parse("completed")?.last_outcome).toBe("completed");
+    expect(parse(null)).not.toHaveProperty("last_outcome");
+    expect(parse("exploded")).not.toHaveProperty("last_outcome");
+  });
   it("requires originating session AND profile on durable notifications", () => {
     const notification = {
       method: PEER_METHODS.STAGED,

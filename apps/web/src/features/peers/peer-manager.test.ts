@@ -5,6 +5,7 @@ import {
   type PeerCommands,
 } from "@octos-org/octoscode-client/peers";
 import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
+import { OctosUiProtocolError } from "@octos-org/octoscode-client/protocol";
 import {
   PeerManager,
   fleetLanded,
@@ -377,6 +378,55 @@ describe("peer lifecycle manager", () => {
     await expect(h.manager.kickoff({ brief: "x" })).rejects.toThrow(
       "outcome is unknown",
     );
+    expect(h.request).toHaveBeenCalledOnce();
+  });
+  it("lets a refused prepare be retried, since the server staged nothing", async () => {
+    const h = setup();
+    h.request.mockRejectedValueOnce(
+      new OctosUiProtocolError(
+        -32602,
+        "a peer named 'x · k7q2-1' already exists",
+      ),
+    );
+    await expect(h.manager.kickoff({ brief: "x" })).resolves.toBeNull();
+    expect(h.manager.getSnapshot()).toMatchObject({
+      prepareUncertain: false,
+      prepareError: "The server did not stage the peers.",
+      prepareRefusal: "a peer named 'x · k7q2-1' already exists",
+    });
+    expect(h.onOpenPeer).not.toHaveBeenCalled();
+    h.request.mockResolvedValueOnce({ ...peer, peers: [peer] });
+    await expect(h.manager.kickoff({ brief: "x" })).resolves.not.toBeNull();
+    expect(h.manager.getSnapshot().prepareRefusal).toBeNull();
+    expect(h.request).toHaveBeenCalledTimes(2);
+  });
+  it("kicks each member off with its own brief while staging one shared brief", async () => {
+    const h = setup();
+    const second = {
+      ...peer,
+      slug: "two",
+      topic: "peer-two",
+      brief_path: "/p/two/brief.md",
+    };
+    h.request.mockResolvedValueOnce({ ...peer, peers: [peer, second] });
+    await h.manager.kickoff(
+      { brief: "shared", n: 2, names: ["a · k-1", "b · k-2"] },
+      { memberBriefs: ["shared\n\nYou are a", "shared\n\nYou are b"] },
+    );
+    await flush();
+    expect(h.request.mock.calls[0]?.[1]).toMatchObject({
+      brief: "shared",
+      n: 2,
+    });
+    const prompts = h.onOpenPeer.mock.calls.map(([request]) => request.prompt);
+    expect(prompts[0]).toContain("You are a");
+    expect(prompts[1]).toContain("You are b");
+    await expect(
+      h.manager.kickoff(
+        { brief: "shared", n: 2 },
+        { memberBriefs: ["only one"] },
+      ),
+    ).resolves.toBeNull();
     expect(h.request).toHaveBeenCalledOnce();
   });
   it("does not open a prepare receipt if close landed while prepare was pending", async () => {

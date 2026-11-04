@@ -73,7 +73,12 @@ export interface PeerGatherEntry {
   result_updated_unix: number | null;
   has_worktree: boolean;
   closed: boolean;
+  /** How the peer's latest finished turn ended, from the server's turn record. */
+  last_outcome?: PeerTurnOutcomeRecord;
 }
+/** Peer turns that are stopped before they end leave no record, so there is no "interrupted" here in practice. */
+export type PeerTurnOutcomeRecord =
+  "completed" | "errored" | "interrupted" | "rate_limited";
 /** Gather is PROFILE-wide. Rows do not assert an originating session or workspace. */
 export interface PeerGatherResult {
   profile_id: string;

@@ -4,6 +4,7 @@ import type {
   PeerGatherResult,
   PeerFleetEntry,
   PeerGatherEntry,
+  PeerTurnOutcomeRecord,
 } from "./peer-protocol.ts";
 // Keep receipt-only validation out of the background lifecycle subscription path.
 const text = (v: unknown): v is string =>
@@ -14,6 +15,13 @@ const slug = (v: unknown): v is string =>
 const uint = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const optionalText = (v: unknown): boolean => v == null || text(v);
+// Newer outcome words are dropped rather than guessed at.
+const PEER_TURN_OUTCOMES: ReadonlySet<PeerTurnOutcomeRecord> = new Set([
+  "completed",
+  "errored",
+  "interrupted",
+  "rate_limited",
+]);
 function parsePeerFleetEntry(value: unknown): PeerFleetEntry | null {
   if (
     !isRecord(value) ||
@@ -110,6 +118,9 @@ export function parsePeerGatherResult(
       result_updated_unix: row.result_updated_unix,
       has_worktree: row.has_worktree,
       closed: row.closed,
+      ...(PEER_TURN_OUTCOMES.has(row.last_outcome as PeerTurnOutcomeRecord)
+        ? { last_outcome: row.last_outcome as PeerTurnOutcomeRecord }
+        : {}),
     });
   }
   return { profile_id: profileId, peers };
