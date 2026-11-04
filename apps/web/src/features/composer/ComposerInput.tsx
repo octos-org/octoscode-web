@@ -35,6 +35,13 @@ interface ComposerInputProps {
   peerRoster?: readonly PeerReadonlyRow[] | undefined;
   peerSessionId?: string | null | undefined;
   onReturnToMaster?: (() => void) | undefined;
+  /**
+   * Honest refusal to send (T-0359): on the phone remote, a session the
+   * server cannot run or that is read-only replaces the textarea with this
+   * reason instead of inviting a prompt that would fail or silently no-op.
+   * Already translated by the caller; peer read-only takes precedence.
+   */
+  sendBlockedReason?: string | null | undefined;
   paletteId: string;
   commandCount: number;
   selectedCommandId: string | undefined;
@@ -150,6 +157,15 @@ export function ComposerInput(props: ComposerInputProps) {
               {t("Return to master")}
             </button>
           ) : null}
+        </div>
+      </>
+    );
+  }
+  if (props.sendBlockedReason) {
+    return (
+      <>
+        <div role="status" tabIndex={-1} className={styles.peerReadonly}>
+          <span>{props.sendBlockedReason}</span>
         </div>
       </>
     );

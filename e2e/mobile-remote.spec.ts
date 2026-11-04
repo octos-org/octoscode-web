@@ -336,6 +336,145 @@ test("a follow-up from the phone runs and can be stopped", async ({
   ).toHaveCount(1);
 });
 
+test("a phone follow-up completes on the same session and survives a reload", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-follow-up";
+  await scoped(request, folder);
+  const desktop = await desktopSends(
+    browser,
+    folder,
+    "First pass from the desk",
+  );
+  await expect(desktop.getByText("Turn complete").first()).toBeVisible();
+
+  const page = await phone(browser);
+  await connectPhone(page);
+  await watch(page, folder);
+  await section(page, /^最近/).getByRole("button").first().tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toBeEnabled();
+  await composer.fill("Phone follow-up for the summary");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+
+  // The same session on the desktop runs it, once, to completion.
+  await expect(
+    desktop
+      .getByRole("region", { name: "Conversation" })
+      .getByText("Phone follow-up for the summary", { exact: true }),
+  ).toBeVisible();
+  await expect(desktop.getByText("Turn complete")).toHaveCount(2);
+  await expect(page.getByText("本轮完成").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page
+      .getByRole("region", { name: "对话" })
+      .getByText("Phone follow-up for the summary", { exact: true }),
+  ).toHaveCount(1);
+
+  // A reload returns to the overview; reopening the session shows the same
+  // follow-up and its result — nothing was sent twice.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "手机遥控" })).toBeVisible();
+  await section(page, /^最近/).getByRole("button").first().tap();
+  await expect(
+    page
+      .getByRole("region", { name: "对话" })
+      .getByText("Phone follow-up for the summary", { exact: true }),
+  ).toHaveCount(1);
+  await expect(page.getByText("本轮完成").first()).toBeVisible();
+});
+
+test("a read-only session shows the reason instead of a composer on the phone", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-readonly";
+  await scoped(request, folder);
+  const desktop = await desktopSends(
+    browser,
+    folder,
+    "First pass from the desk",
+  );
+  await expect(desktop.getByText("Turn complete").first()).toBeVisible();
+
+  const page = await phone(browser);
+  const sentMethods: string[] = [];
+  page.on("websocket", (ws) =>
+    ws.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method) sentMethods.push(frame.method);
+    }),
+  );
+  await connectPhone(page);
+  await watch(page, folder);
+  await section(page, /^最近/).getByRole("button").first().tap();
+  await expect(
+    page.getByRole("textbox", { name: "给 Octos 发消息" }),
+  ).toBeEnabled();
+
+  // The phone may narrow access, never widen it; once the session is
+  // read-only the composer must tell the truth instead of inviting work.
+  await page
+    .getByRole("button", { name: /^权限[:：]/ })
+    .first()
+    .tap();
+  await page.getByRole("menuitemradio", { name: /读取/ }).tap();
+  await expect(
+    page.getByText(
+      "此会话是只读权限。手机不能续发任务；请在电脑上把它切回可写后再发。",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "给 Octos 发消息" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "发送提示" })).toHaveCount(0);
+  await page.waitForTimeout(1_000);
+  expect(sentMethods.filter((method) => method === "turn/start")).toEqual([]);
+});
+
+test("a rejected phone follow-up keeps the draft and tells the truth", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-reject";
+  await scoped(request, folder);
+  const desktop = await desktopSends(
+    browser,
+    folder,
+    "First pass from the desk",
+  );
+  await expect(desktop.getByText("Turn complete").first()).toBeVisible();
+
+  const page = await phone(browser);
+  await connectPhone(page);
+  await watch(page, folder);
+  await section(page, /^最近/).getByRole("button").first().tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toBeEnabled();
+
+  await request.post(`${ORIGIN}/__test__/turn-start/hold-next`);
+  await composer.fill("Phone follow-up that gets rejected");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect
+    .poll(async () => {
+      const state = (await (
+        await request.get(`${ORIGIN}/__test__/turn-start/state`)
+      ).json()) as { held?: { turn_id?: string } | null };
+      return state.held?.turn_id ?? null;
+    })
+    .not.toBeNull();
+  await request.post(`${ORIGIN}/__test__/turn-start/reject`);
+
+  await expect(page.getByText("本轮未被接受")).toBeVisible();
+  await expect(composer).toHaveValue("Phone follow-up that gets rejected");
+  await expect(
+    page.getByRole("button", { name: "停止", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("an unreachable server reads as offline, and the overview recovers", async ({
   browser,
   request,

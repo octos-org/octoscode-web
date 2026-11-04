@@ -2817,6 +2817,22 @@ const MAX_SESSION_LOG_EVENTS = 500;
 function isBrowserSessionId(sessionId) {
   return /(^|:)web-[0-9a-f-]{36}$/i.test(sessionId.trim());
 }
+// Real Core stamps durable timing on every settled turn (T-0196): a reload
+// must restore the same turn summary the live stream showed, whatever the
+// outcome. Without it a hydrate had no canonical marker and quietly dropped
+// completed terminals (T-0359 debug: summaries vanished after reload).
+function settledTurnRecord(state, turnId, threadId, outcome, extra = {}) {
+  const admittedAt = state.activeTurn?.admittedAt ?? new Date();
+  return {
+    turn_id: turnId,
+    thread_id: threadId,
+    state: outcome,
+    started_at: admittedAt.toISOString(),
+    completed_at: new Date().toISOString(),
+    completed_at_durable: true,
+    ...extra,
+  };
+}
 function recordProjection(sessionId, params) {
   // Peers persist messages and canonical replay just like browser Sessions.
   // Demo sessions keep their static transcript.
@@ -3603,12 +3619,15 @@ sockets.on("connection", (socket, request) => {
           };
           cancelledTurns.add(active.turnId);
           const recorded = recordProjection(sessionId, params) ?? params;
-          state.completedTurns.push({
-            turn_id: active.turnId,
-            thread_id: active.threadId,
-            state: "interrupted",
-            error: "connection_closed",
-          });
+          state.completedTurns.push(
+            settledTurnRecord(
+              state,
+              active.turnId,
+              active.threadId,
+              "interrupted",
+              { error: "connection_closed" },
+            ),
+          );
           state.activeTurn = null;
           state.interaction = null;
           for (const openSocket of state.sockets) {
@@ -4863,6 +4882,7 @@ sockets.on("connection", (socket, request) => {
           ownerKind: peerOwned ? "peer" : "socket",
           emitSeq,
           holdTerminal: holdNextTerminal > 0,
+          admittedAt: new Date(),
         };
         if (state.activeTurn.holdTerminal) holdNextTerminal -= 1;
         const interaction = streamTurn(
@@ -5090,12 +5110,15 @@ sockets.on("connection", (socket, request) => {
           },
         };
         const recorded = recordProjection(sessionId, params) ?? params;
-        state.completedTurns.push({
-          turn_id: active.turnId,
-          thread_id: active.threadId,
-          state: "interrupted",
-          error: "interrupted_by_user",
-        });
+        state.completedTurns.push(
+          settledTurnRecord(
+            state,
+            active.turnId,
+            active.threadId,
+            "interrupted",
+            { error: "interrupted_by_user" },
+          ),
+        );
         state.activeTurn = null;
         state.interaction = null;
         for (const openSocket of state.sockets) {
@@ -6283,11 +6306,9 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       { outcome: "completed" },
     );
     const state = sessionState(sessionId);
-    state.completedTurns.push({
-      turn_id: turnId,
-      thread_id: turnId,
-      state: "completed",
-    });
+    state.completedTurns.push(
+      settledTurnRecord(state, turnId, turnId, "completed"),
+    );
     state.activeTurn = null;
     return null;
   }
@@ -6355,11 +6376,9 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       },
     );
     const state = sessionState(sessionId);
-    state.completedTurns.push({
-      turn_id: turnId,
-      thread_id: turnId,
-      state: "completed",
-    });
+    state.completedTurns.push(
+      settledTurnRecord(state, turnId, turnId, "completed"),
+    );
     state.activeTurn = null;
     return null;
   }
@@ -6574,11 +6593,9 @@ function streamTurn(socket, sessionId, params, nextCursor) {
         settleState.activeTurn &&
         settleState.activeTurn.turnId === turnId
       ) {
-        settleState.completedTurns.push({
-          turn_id: turnId,
-          thread_id: threadId,
-          state: "completed",
-        });
+        settleState.completedTurns.push(
+          settledTurnRecord(settleState, turnId, threadId, "completed"),
+        );
         settleState.activeTurn = null;
       }
     };
@@ -6661,11 +6678,9 @@ function streamCapturedPersistedOrder(socket, sessionId, turnId, first) {
       emit("turn_terminal");
     }
     const state = sessionState(sessionId);
-    state.completedTurns.push({
-      turn_id: turnId,
-      thread_id: turnId,
-      state: "completed",
-    });
+    state.completedTurns.push(
+      settledTurnRecord(state, turnId, turnId, "completed"),
+    );
     state.activeTurn = null;
   };
   setTimeout(() => {
@@ -6769,11 +6784,14 @@ function finishInteraction(socket, interaction) {
     }
   }
   if (state) {
-    state.completedTurns.push({
-      turn_id: interaction.turnId,
-      thread_id: interaction.threadId,
-      state: "completed",
-    });
+    state.completedTurns.push(
+      settledTurnRecord(
+        state,
+        interaction.turnId,
+        interaction.threadId,
+        "completed",
+      ),
+    );
     state.activeTurn = null;
     state.interaction = null;
   }

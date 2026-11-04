@@ -382,6 +382,29 @@ describe("read-only peer composer surface (audit row 7)", () => {
   });
 });
 
+describe("blocked send surface (T-0359)", () => {
+  it("replaces the textarea with the reason instead of inviting a send", () => {
+    const { input, hint } = surface({
+      sendBlockedReason: "此会话是只读权限。手机不能续发任务。",
+    });
+    expect(input).toBeNull();
+    expect(hint?.props.role).toBe("status");
+    const copy = hint!.props.children as ReactElement<{ children: string }>;
+    expect(copy.props.children).toContain("只读权限");
+  });
+
+  it("keeps the peer read-only hint ahead of a blocked reason", () => {
+    const { input, hint } = surface({
+      peerRoster: PEER_ROSTER,
+      peerSessionId: "dev:local:tui#peer-review",
+      sendBlockedReason: "unreachable",
+    });
+    expect(input).toBeNull();
+    const [copy] = hint!.props.children as [ReactElement<{ children: string }>];
+    expect(copy.props.children).toContain("review");
+  });
+});
+
 // a11y review 0800 §1 DEFECT (:92/:212): disabling a FOCUSED textarea drops
 // focus to <body>. The status row (refs[1] — refs order: textarea, statusRow,
 // hadFocus, peerReadOnly, mode, selection) is the controlled landing.
