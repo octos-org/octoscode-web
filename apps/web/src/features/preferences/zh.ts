@@ -2286,6 +2286,7 @@ const catalog: Readonly<Record<string, string>> = {
   Watch: "盯住",
   "Back to remote control": "返回手机遥控",
   "This session could not be opened. Try again.": "这个会话打不开，请重试。",
+  "Could not create the session. Try again.": "新建会话失败，请重试。",
   "Loading remote control…": "正在加载手机遥控…",
   "This asks for more access than the sandbox allows. Decide it on your computer; from the phone you can only deny it.":
     "这一步要的权限超出了沙箱。请回到电脑上处理；在手机上只能拒绝。",

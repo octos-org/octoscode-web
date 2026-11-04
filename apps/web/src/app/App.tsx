@@ -848,6 +848,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   );
   const remoteHandoffImported = useRef(false);
   const [remoteOpening, setRemoteOpening] = useState<string | null>(null);
+  // T-0361: at most one phone-initiated session create in flight; a second
+  // tap while the open is pending must not mint a parallel empty session.
+  const [remoteCreating, setRemoteCreating] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [remoteRefresh, setRemoteRefresh] = useState(0);
   const [remoteNow, setRemoteNow] = useState(() => Date.now());
@@ -3308,24 +3311,43 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       </section>
     )
   ) : null;
-  const createSessionInWorkspace = async (workspacePath: string) => {
+  const createSessionInWorkspace = async (
+    workspacePath: string,
+  ): Promise<WorkspaceOpenOutcome | null> => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
       navigationBlocked ||
       !workspacePath.trim()
     )
-      return;
+      return null;
     const sessionId = freshWebSessionId();
     const outcome = await openSessionWithDefaults(sessionId, workspacePath);
     if (outcome === "awaiting_choice") {
       setWorkspacePicker((current) => ({ ...current, open: false }));
       revealRemoteSession();
-      return;
+      return outcome;
     }
-    if (outcome !== "opened") return;
+    if (outcome !== "opened") return outcome;
     if (compact) setSidebarCollapsed(true);
     setWorkspacePicker((current) => ({ ...current, open: false }));
     revealRemoteSession();
+    return outcome;
+  };
+  // T-0361: a phone starts a fresh session inside a folder it already
+  // watches. One create at a time, and a refused open says so instead of
+  // pretending a session exists.
+  const newRemoteSession = async (workspacePath: string) => {
+    if (remoteCreating) return;
+    setRemoteError(null);
+    setRemoteCreating(workspacePath);
+    try {
+      const outcome = await createSessionInWorkspace(workspacePath);
+      if (outcome !== "opened" && outcome !== "awaiting_choice") {
+        setRemoteError(t("Could not create the session. Try again."));
+      }
+    } finally {
+      setRemoteCreating(null);
+    }
   };
   /**
    * §4.4 creation-only defaults (case 22): the sandbox draft rides the open
@@ -5347,8 +5369,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   listedAt={remoteListedAt}
                   openingKey={remoteOpening}
                   openError={remoteError}
+                  canCreateSession={codingCapabilities.sessionCreationAvailable}
+                  createKey={remoteCreating}
                   now={remoteNow}
                   onOpen={(row) => void openRemoteRow(row)}
+                  onNewSession={(path) => void newRemoteSession(path)}
                   onAddFolder={(path) =>
                     setRemoteFolders(
                       rememberRemoteFolder(

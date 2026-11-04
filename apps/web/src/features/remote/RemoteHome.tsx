@@ -21,10 +21,18 @@ export interface RemoteHomeProps {
   listedAt: number | null;
   openingKey: string | null;
   openError: string | null;
+  /**
+   * T-0361: the server can create sessions and the phone is online, so each
+   * watched folder may offer "new session here". Null hides the action.
+   */
+  canCreateSession: boolean;
+  /** Path whose create is in flight; the row shows progress and stays single. */
+  createKey: string | null;
   now: number;
   onOpen: (row: RemoteRow) => void;
   onAddFolder: (path: string) => void;
   onRemoveFolder: (path: string) => void;
+  onNewSession: (path: string) => void;
   onRefresh: () => void;
   onOpenSessions: () => void;
   onOpenFull: () => void;
@@ -153,8 +161,11 @@ export function RemoteHome(props: RemoteHomeProps) {
           states={props.folderStates}
           browse={props.browse}
           online={link.kind === "online"}
+          canCreateSession={props.canCreateSession}
+          createKey={props.createKey}
           onAdd={props.onAddFolder}
           onRemove={props.onRemoveFolder}
+          onNewSession={props.onNewSession}
           onChanged={revealStatus}
         />
 
@@ -266,8 +277,11 @@ function FolderList(props: {
   states: RemoteCatalogSnapshot;
   browse: WorkspaceBrowseAdapter | null;
   online: boolean;
+  canCreateSession: boolean;
+  createKey: string | null;
   onAdd: (path: string) => void;
   onRemove: (path: string) => void;
+  onNewSession: (path: string) => void;
   onChanged: () => void;
 }) {
   const t = useUiText();
@@ -302,6 +316,22 @@ function FolderList(props: {
                       : folder.path}
                   </small>
                 </span>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t("New session in {value0}", {
+                    value0: folder.name,
+                  })}
+                  disabled={
+                    !props.online ||
+                    !props.canCreateSession ||
+                    props.createKey !== null
+                  }
+                  aria-busy={props.createKey === folder.path || undefined}
+                  onClick={() => props.onNewSession(folder.path)}
+                >
+                  <PlusIcon size={16} />
+                </button>
                 <button
                   type="button"
                   className={styles.iconButton}
