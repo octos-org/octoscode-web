@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   parseRuntimeTools,
+  parseMcpConnectorMutation,
   parseRuntimeMcp,
   createInventoryCommands,
   supportsMcpConnectorManagement,
@@ -314,34 +315,21 @@ describe("runtime inventory contracts", () => {
     await expect(commands.mcp()).rejects.toThrow("not advertised");
     expect(request).toHaveBeenCalledTimes(1);
   });
-  it("sends exact connector management payloads and refreshes status", async () => {
-    const request = vi.fn(async (method: string) => {
-      if (method === APPUI_INVENTORY_METHODS.MCP) return mcpStatus;
-      return {
-        status:
-          method === MCP_CONNECTOR_METHODS.DELETE ? null : { id: "mcp-1" },
-      };
-    });
+  it("sends exact connector management payloads without reading status", async () => {
+    const request = vi.fn(async (method: string) => ({
+      status: method === MCP_CONNECTOR_METHODS.DELETE ? null : { id: "mcp-1" },
+    }));
     const commands = createInventoryCommands(
       { request },
       "s1",
       "p1",
       managementCapabilities,
     );
-    const results = [
-      await commands.createHttpConnector("Docs", "https://docs.example/mcp"),
-      await commands.updateConnector("mcp-1", { name: "Renamed" }),
-      await commands.deleteConnector("mcp-1"),
-      await commands.setConnectorEnabled("mcp-1", false),
-      await commands.reconnectConnector("mcp-1"),
-    ];
-    const expected = {
-      sessionId: "s1",
-      profileId: "p1",
-      servers: [],
-      summary,
-    };
-    expect(results).toEqual([expected, expected, expected, expected, expected]);
+    await commands.createHttpConnector("Docs", "https://docs.example/mcp");
+    await commands.updateConnector("mcp-1", { name: "Renamed" });
+    await commands.deleteConnector("mcp-1");
+    await commands.setConnectorEnabled("mcp-1", false);
+    await commands.reconnectConnector("mcp-1");
     expect(request).toHaveBeenNthCalledWith(1, MCP_CONNECTOR_METHODS.CREATE, {
       session_id: "s1",
       connector: {
@@ -350,33 +338,104 @@ describe("runtime inventory contracts", () => {
         url: "https://docs.example/mcp",
       },
     });
-    expect(request).toHaveBeenNthCalledWith(3, MCP_CONNECTOR_METHODS.UPDATE, {
+    expect(request).toHaveBeenNthCalledWith(2, MCP_CONNECTOR_METHODS.UPDATE, {
       session_id: "s1",
       connector_id: "mcp-1",
       patch: { name: "Renamed" },
     });
-    expect(request).toHaveBeenNthCalledWith(5, MCP_CONNECTOR_METHODS.DELETE, {
+    expect(request).toHaveBeenNthCalledWith(3, MCP_CONNECTOR_METHODS.DELETE, {
       session_id: "s1",
       connector_id: "mcp-1",
     });
     expect(request).toHaveBeenNthCalledWith(
-      7,
+      4,
       MCP_CONNECTOR_METHODS.SET_ENABLED,
       { session_id: "s1", connector_id: "mcp-1", enabled: false },
     );
     expect(request).toHaveBeenNthCalledWith(
-      9,
+      5,
       MCP_CONNECTOR_METHODS.RECONNECT,
       { session_id: "s1", connector_id: "mcp-1" },
     );
-    for (const call of [2, 4, 6, 8, 10]) {
-      expect(request).toHaveBeenNthCalledWith(
-        call,
-        APPUI_INVENTORY_METHODS.MCP,
-        { session_id: "s1", profile_id: "p1", include_disabled: true },
-      );
-    }
-    expect(request).toHaveBeenCalledTimes(10);
+    expect(request).toHaveBeenCalledTimes(5);
+  });
+  it("reads what the server saved from Core's real create result", async () => {
+    // Captured from a startup-pinned profile on Core 4748d11b.
+    const request = vi.fn(async () => ({
+      status: null,
+      runtime: {
+        runtime_disposition: "restart_required",
+        restart_required: true,
+        config_revision: "2026-11-04T10:05:54.140841525+00:00",
+        effective_from: "next_turn",
+      },
+      connector: {
+        id: "mcp-c1023b4b",
+        name: "Fixture",
+        transport: "http",
+        enabled: true,
+        url: "https://fixture.invalid/mcp",
+        allowlist_entry_id: null,
+        oauth: false,
+        scopes: [],
+        concurrency_class: null,
+      },
+      created: true,
+    }));
+    const commands = createInventoryCommands(
+      { request },
+      "s1",
+      "p1",
+      managementCapabilities,
+    );
+    await expect(
+      commands.createHttpConnector("Fixture", "https://fixture.invalid/mcp"),
+    ).resolves.toEqual({
+      connector: {
+        id: "mcp-c1023b4b",
+        name: "Fixture",
+        transport: "http",
+        enabled: true,
+        url: "https://fixture.invalid/mcp",
+      },
+      runtime: { restartRequired: true, effectiveFrom: "next_turn" },
+      created: true,
+      deleted: false,
+      listed: false,
+    });
+  });
+  it("a mutation result it can't read yields no connector, not an error", () => {
+    const unread = { created: false, deleted: false, listed: false };
+    expect(parseMcpConnectorMutation(null)).toEqual(unread);
+    expect(parseMcpConnectorMutation({ connector: { id: 1 } })).toEqual(unread);
+    expect(
+      parseMcpConnectorMutation({ connector: { id: "a", name: "b" } }),
+    ).toEqual(unread);
+    expect(
+      parseMcpConnectorMutation({ runtime: { restart_required: "yes" } }),
+    ).toEqual(unread);
+  });
+  it("marks a connector the server already lists, and carries a rebuild failure", () => {
+    expect(
+      parseMcpConnectorMutation({
+        status: { id: "a" },
+        runtime: {
+          restart_required: false,
+          effective_from: "next_turn",
+          runtime_error: "rebuild failed",
+        },
+        deleted: true,
+      }),
+    ).toEqual({
+      runtime: {
+        restartRequired: false,
+        effectiveFrom: "next_turn",
+        error: "rebuild failed",
+      },
+      created: false,
+      deleted: true,
+      listed: true,
+    });
   });
   it("creates a stdio connector from an allowlist entry, never a command", async () => {
     const request = vi.fn(async (method: string) =>
@@ -420,8 +479,8 @@ describe("runtime inventory contracts", () => {
     );
     await expect(
       noFeature.createHttpConnector("Docs", "https://docs.example/mcp"),
-    ).resolves.toMatchObject({ sessionId: "s1", profileId: "p1" });
-    expect(request).toHaveBeenCalledTimes(2);
+    ).resolves.toMatchObject({ listed: true });
+    expect(request).toHaveBeenCalledTimes(1);
     request.mockClear();
 
     const withoutDelete = {
@@ -473,21 +532,15 @@ describe("runtime inventory contracts", () => {
       include_disabled: true,
     });
   });
-  it("rejects wrong-scope refreshed connector status", async () => {
-    const request = vi.fn(async (method: string) =>
-      method === APPUI_INVENTORY_METHODS.MCP
-        ? { ...mcpStatus, profile_id: "other" }
-        : { status: { id: "mcp-1" } },
-    );
+  it("rejects wrong-scope connector status", async () => {
+    const request = vi.fn(async () => ({ ...mcpStatus, profile_id: "other" }));
     const commands = createInventoryCommands(
       { request },
       "s1",
       "p1",
       managementCapabilities,
     );
-    await expect(commands.reconnectConnector("mcp-1")).rejects.toThrow(
-      "wrong-scope",
-    );
-    expect(request).toHaveBeenCalledTimes(2);
+    await expect(commands.mcp()).rejects.toThrow("wrong-scope");
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });

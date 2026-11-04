@@ -45,7 +45,7 @@ server does in the chosen folder.
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.     |
 | Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.                |
 | Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
-| Connectors    | Read-only MCP server status; no add/remove/edit or OAuth controls.                                                              |
+| Connectors    | Manage HTTP and allowlisted stdio MCP connectors; saved-but-not-loaded ones stay visible. No OAuth controls.                    |
 | Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
 | Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                            |
@@ -70,9 +70,14 @@ XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
 File bytes come from the authenticated Session blob API, and copy-path/download
 controls never put the server token in a URL.
 
-The connector surface is intentionally incomplete by protocol: there is no
-connector configuration/OAuth flow. The UI does not describe it as full
+There is no connector OAuth flow yet, and the UI does not describe it as full
 management.
+
+`mcp/status/list` only shows what the running server loaded, and on a profile
+loaded at startup a change waits for a restart, even though Core also sends
+`effective_from: "next_turn"`. So the connector page keeps a saved connector in
+memory, says what it is waiting for, and hands over once the server lists it. A
+page refresh loses the row until then, because nothing lists saved config.
 
 A scheduled task's `last_status` only says its Session accepted the run, so the
 list reads the outcome from the turn that run started. Turns do not record which

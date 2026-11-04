@@ -55,7 +55,35 @@ const MCP_CONNECTOR_METHODS = [
   "mcp/connector/reconnect",
 ];
 const connectorRowsByWorkspace = new Map();
+// A profile loaded at startup: Core saves a change but keeps serving its boot
+// snapshot, so mcp/status/list stays as it was until the server restarts.
+const connectorSavedByWorkspace = new Map();
+function connectorSaved(workspaceRoot) {
+  if (!connectorSavedByWorkspace.has(workspaceRoot)) {
+    connectorSavedByWorkspace.set(workspaceRoot, []);
+  }
+  return connectorSavedByWorkspace.get(workspaceRoot);
+}
+function savedConnectorSummary(row) {
+  return {
+    id: row.id,
+    name: row.display_name,
+    transport: row.transport,
+    enabled: row.enabled,
+    url: row.url ?? null,
+    allowlist_entry_id: null,
+    oauth: false,
+    scopes: [],
+    concurrency_class: null,
+  };
+}
 function connectorRows(workspaceRoot) {
+  if (workspaceRoot.includes("connector-management-pinned")) {
+    if (!connectorRowsByWorkspace.has(workspaceRoot)) {
+      connectorRowsByWorkspace.set(workspaceRoot, []);
+    }
+    return connectorRowsByWorkspace.get(workspaceRoot);
+  }
   if (!connectorRowsByWorkspace.has(workspaceRoot)) {
     connectorRowsByWorkspace.set(workspaceRoot, [
       {
@@ -2530,6 +2558,26 @@ const http = createServer(async (request, response) => {
     request.url === "/__test__/connectors/reset"
   ) {
     connectorRowsByWorkspace.clear();
+    connectorSavedByWorkspace.clear();
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/__test__/connectors/restart"
+  ) {
+    for (const [workspaceRoot, saved] of connectorSavedByWorkspace) {
+      connectorRows(workspaceRoot).push(
+        ...saved.map((row) => ({
+          ...row,
+          status: row.enabled ? "failed" : "disabled",
+          tool_count: 0,
+          tools: [],
+          ...(row.enabled ? { error: "MCP initialize failed" } : {}),
+        })),
+      );
+      saved.length = 0;
+    }
     response.writeHead(204).end();
     return;
   }
@@ -5465,6 +5513,76 @@ sockets.on("connection", (socket, request) => {
       }
       const rows = connectorRows(workspaceRoot);
       const connectorId = request.params.connector_id;
+      if (workspaceRoot.includes("connector-management-pinned")) {
+        const runtime = workspaceRoot.includes("deferred")
+          ? { runtime_disposition: "deferred", restart_required: false }
+          : { runtime_disposition: "restart_required", restart_required: true };
+        const saved = connectorSaved(workspaceRoot);
+        const known =
+          saved.find((item) => item.id === connectorId) ??
+          rows.find((item) => item.id === connectorId);
+        const result = {
+          status: null,
+          runtime: {
+            ...runtime,
+            config_revision: new Date().toISOString(),
+            effective_from: "next_turn",
+          },
+        };
+        if (request.method === "mcp/connector/create") {
+          const input = request.params.connector;
+          if (input.url?.includes("refused")) {
+            replyError(socket, request.id, -32602, "url was refused", {
+              kind: "invalid_params",
+            });
+            return;
+          }
+          const created = {
+            id: `mcp-${saved.length + rows.length + 1}`,
+            display_name: input.name,
+            transport: input.transport,
+            enabled: true,
+            url: input.url,
+          };
+          saved.push(created);
+          reply(socket, request.id, {
+            ...result,
+            connector: savedConnectorSummary(created),
+            created: true,
+          });
+          return;
+        }
+        if (request.method === "mcp/connector/delete") {
+          const index = saved.findIndex((item) => item.id === connectorId);
+          if (index >= 0) saved.splice(index, 1);
+          reply(socket, request.id, { ...result, deleted: true });
+          return;
+        }
+        if (!known) {
+          replyError(
+            socket,
+            request.id,
+            -32004,
+            `mcp_connector not found: ${connectorId}`,
+            { kind: "not_found" },
+          );
+          return;
+        }
+        // A listed row keeps what it shows; only what is saved changes.
+        const target = saved.includes(known) ? known : { ...known };
+        if (request.method === "mcp/connector/set_enabled") {
+          target.enabled = request.params.enabled === true;
+        } else if (request.method === "mcp/connector/update") {
+          if (request.params.patch.name)
+            target.display_name = request.params.patch.name;
+          if (request.params.patch.url) target.url = request.params.patch.url;
+        }
+        reply(socket, request.id, {
+          ...result,
+          connector: savedConnectorSummary(target),
+        });
+        return;
+      }
       let row = rows.find((item) => item.id === connectorId);
       if (request.method === "mcp/connector/create") {
         const input = request.params.connector;
@@ -5537,15 +5655,14 @@ sockets.on("connection", (socket, request) => {
         workspaceRoot,
       );
       reply(socket, request.id, {
-        connector: row
-          ? {
-              id: row.id,
-              display_name: row.display_name,
-              transport: row.transport,
-              enabled: row.enabled,
-            }
-          : { id: connectorId },
+        connector: row ? savedConnectorSummary(row) : { id: connectorId },
         status: status.servers.find((server) => server.id === row?.id) ?? null,
+        runtime: {
+          runtime_disposition: "reloaded",
+          restart_required: false,
+          effective_from: "next_turn",
+        },
+        ...(request.method === "mcp/connector/create" ? { created: true } : {}),
       });
       return;
     }
