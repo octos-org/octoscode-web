@@ -15,6 +15,7 @@ import steeredRepairFixture from "./fixtures/t-0084-steered-repair.json";
 import attachmentRetryFixture from "./fixtures/t-0084-attachment-retry.json";
 import sendFileRecoveryFixture from "./fixtures/t-0301-send-file-recovery.json";
 import reconnectSummaryFixture from "./fixtures/t-0194-reconnect-summary.json";
+import consecutiveInterruptedFixture from "./fixtures/t-0350-consecutive-interrupted.json";
 
 function event(
   seq: number,
@@ -119,6 +120,57 @@ describe("canonical hydrate recovery", () => {
     expect(
       summarizeTurn(restored, data.turns![0]!.turn_id).failedSteps,
     ).toEqual(summarizeTurn(live, data.turns![0]!.turn_id).failedSteps);
+  });
+
+  it("keeps consecutive user-stopped turns stopped after a reload (T-0347 real hydrate)", () => {
+    // Two consecutive turns both ended by the user's Stop: after a reload the
+    // first one regressed to "failed" because the latest-turn marker strip
+    // removed its terminal outcome.
+    const data = parseSessionHydrateResult(consecutiveInterruptedFixture)!;
+    const [firstTurn, secondTurn] = data.turns!;
+    const terminalFields = (
+      entries: ReturnType<typeof timelineFromHydrate>,
+    ): unknown[][] =>
+      entries
+        .filter((entry) => entry.id.startsWith("terminal:"))
+        .map((entry) => [
+          entry.id,
+          entry.title,
+          entry.body,
+          entry.status,
+          entry.latestTurnOutcome,
+        ]);
+    const restored = timelineFromHydrate(data);
+    // Live, the same replayed envelopes settle both turns as stopped.
+    const live = data.replayed_projection_envelopes!.reduce(
+      (entries, envelope) =>
+        foldNotification(entries, {
+          jsonrpc: "2.0",
+          method: "projection/envelope",
+          params: envelope,
+        }),
+      [] as ReturnType<typeof timelineFromHydrate>,
+    );
+    expect(terminalFields(restored)).toEqual(terminalFields(live));
+    expect(terminalFields(restored)).toEqual([
+      [
+        `terminal:${firstTurn!.turn_id}`,
+        "Turn stopped",
+        "turn interrupted by client",
+        "info",
+        "interrupted",
+      ],
+      [
+        `terminal:${secondTurn!.turn_id}`,
+        "Turn stopped",
+        "turn interrupted by client",
+        "info",
+        "interrupted",
+      ],
+    ]);
+    // T-0230 durable timing on the same frame must not regress.
+    expect(summarizeTurn(restored, firstTurn!.turn_id).seconds).toBe(300);
+    expect(summarizeTurn(restored, secondTurn!.turn_id).seconds).toBe(159);
   });
 
   it("shows the same duration live and after reload, first-token wait included", () => {

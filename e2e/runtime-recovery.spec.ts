@@ -205,6 +205,39 @@ test("counts the first-token wait in the turn duration, identically after reload
   });
 });
 
+test("keeps two consecutive stopped turns stopped after a reload", async ({
+  page,
+}) => {
+  // T-0350: live both stops read "stopped"; before the fix a reload rewrote
+  // the first one as "failed" because the latest-turn marker strip removed
+  // the older terminal's own outcome.
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page
+    .getByLabel("Server workspace path")
+    .fill("/workspace/runtime-recovery");
+  await page.getByLabel("Server workspace path").press("Enter");
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
+  const stopped = page.getByText("This turn was stopped before it completed.");
+  const failed = page.getByText("This turn failed before it completed.");
+  for (const count of [1, 2]) {
+    await composer.fill("Slow first token fixture");
+    await composer.press("Enter");
+    await page.getByRole("button", { name: "Stop", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(stopped).toHaveCount(count);
+  }
+  await expect(failed).toHaveCount(0);
+  await page.reload();
+  await expect(stopped).toHaveCount(2, { timeout: 15_000 });
+  await expect(failed).toHaveCount(0);
+});
+
 test("keeps durable turn duration across reconnect and cold reload", async ({
   page,
   request,
