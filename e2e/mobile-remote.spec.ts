@@ -435,6 +435,165 @@ test("a read-only session shows the reason instead of a composer on the phone", 
   expect(sentMethods.filter((method) => method === "turn/start")).toEqual([]);
 });
 
+test("a phone starts a new session in a watched folder and every screen sees it", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-create";
+  await scoped(request, folder);
+  const desktop = await desktopSends(
+    browser,
+    folder,
+    "First pass from the desk",
+  );
+  await expect(desktop.getByText("Turn complete").first()).toBeVisible();
+
+  const page = await phone(browser);
+  const sentMethods: string[] = [];
+  let createdSessionId = "";
+  page.on("websocket", (ws) =>
+    ws.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method) sentMethods.push(frame.method);
+      if (frame.method === "session/open")
+        createdSessionId = frame.params?.session_id ?? createdSessionId;
+    }),
+  );
+  await connectPhone(page);
+  await watch(page, folder);
+  const create = page.getByRole("button", {
+    name: "在 remote-create 中新建会话",
+  });
+  await expect(create).toBeEnabled();
+  // A double tap must mint exactly one session, never a parallel empty one.
+  await create.evaluate((node: HTMLButtonElement) => {
+    node.click();
+    node.click();
+  });
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toBeEnabled();
+  expect(
+    sentMethods.filter((method) => method === "session/open"),
+  ).toHaveLength(1);
+
+  await composer.fill("Phone first task");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect(page.getByText("本轮完成").first()).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // The desktop sees the very same session under the workspace — one new
+  // row, not two — and opening it shows the phone's task and its result.
+  // (The sidebar refetches the session list after a reload.)
+  await desktop.reload();
+  const desktopRows = desktop.locator('[role="treeitem"][data-session-id]');
+  await expect(desktopRows).toHaveCount(2);
+  expect(createdSessionId).not.toBe("");
+  // The row key embeds the session id; the double tap minted no third row.
+  const created = desktop.locator(
+    `[role="treeitem"][data-session-id*=${JSON.stringify(createdSessionId)}]`,
+  );
+  await expect(created).toHaveCount(1);
+  await created.click();
+  await expect(
+    desktop
+      .getByRole("region", { name: "Conversation" })
+      .getByText("Phone first task", { exact: true }),
+  ).toBeVisible();
+  await expect(desktop.getByText("Turn complete").first()).toBeVisible();
+
+  // After a reload the phone's overview lists both folder sessions under
+  // 最近 (newest first — the phone-created one just finished) and reopening
+  // shows the same task — nothing was created or sent twice.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "手机遥控" })).toBeVisible();
+  const recent = section(page, /^最近/).getByRole("button");
+  await expect(recent).toHaveCount(2);
+  await recent.first().tap();
+  await expect(
+    page
+      .getByRole("region", { name: "对话" })
+      .getByText("Phone first task", { exact: true }),
+  ).toHaveCount(1);
+  await expect(page.getByText("本轮完成").first()).toBeVisible();
+});
+
+test("a refused phone create says so, keeps nothing fake, and retries clean", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-create-refused";
+  await scoped(request, folder);
+  const page = await phone(browser);
+  const sentMethods: string[] = [];
+  page.on("websocket", (ws) =>
+    ws.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method) sentMethods.push(frame.method);
+    }),
+  );
+  await connectPhone(page);
+  await watch(page, folder);
+  const create = page.getByRole("button", {
+    name: "在 remote-create-refused 中新建会话",
+  });
+  await expect(create).toBeEnabled();
+
+  await request.post(`${ORIGIN}/__test__/session-open/reject-next`);
+  await create.tap();
+  await expect(page.getByText("新建会话失败，请重试。")).toBeVisible();
+  // No fabricated session: the overview stays empty and the button is back.
+  await expect(page.getByText("这些文件夹里还没有会话。")).toBeVisible();
+  await expect(create).toBeEnabled();
+  expect(
+    sentMethods.filter((method) => method === "session/open"),
+  ).toHaveLength(1);
+
+  await request.post(`${ORIGIN}/__test__/session-open/reset`);
+  await create.tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toBeEnabled();
+  expect(
+    sentMethods.filter((method) => method === "session/open"),
+  ).toHaveLength(2);
+  await expect(page.getByText("新建会话失败，请重试。")).toHaveCount(0);
+});
+
+test("a rejected first task on a phone-created session keeps the draft", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/remote-create-reject";
+  await scoped(request, folder);
+  const page = await phone(browser);
+  await connectPhone(page);
+  await watch(page, folder);
+  await page
+    .getByRole("button", { name: "在 remote-create-reject 中新建会话" })
+    .tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toBeEnabled();
+
+  await request.post(`${ORIGIN}/__test__/turn-start/hold-next`);
+  await composer.fill("Phone first task that gets rejected");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect
+    .poll(async () => {
+      const state = (await (
+        await request.get(`${ORIGIN}/__test__/turn-start/state`)
+      ).json()) as { held?: { turn_id?: string } | null };
+      return state.held?.turn_id ?? null;
+    })
+    .not.toBeNull();
+  await request.post(`${ORIGIN}/__test__/turn-start/reject`);
+
+  await expect(page.getByText("本轮未被接受")).toBeVisible();
+  await expect(composer).toHaveValue("Phone first task that gets rejected");
+  await expect(
+    page.getByRole("button", { name: "停止", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("a rejected phone follow-up keeps the draft and tells the truth", async ({
   browser,
   request,
