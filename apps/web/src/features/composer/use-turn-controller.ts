@@ -5,6 +5,7 @@ import {
   OctosUiProtocolError,
   type OctosUiClient,
   type SessionHydrateResult,
+  type TurnMedia,
 } from "@octos-org/octoscode-client/protocol";
 import type { TurnLifecycleState } from "@octos-org/octoscode-client";
 import type { ReviewStartResult } from "@octos-org/octoscode-client/history";
@@ -55,7 +56,11 @@ export interface TurnControllerDependencies {
    * composer or saved draft — mirroring the TUI's per-session
    * `pending_interrupt_restores`. Never fires for a forgotten or superseded turn.
    */
-  onInterruptPromptRestore?: (prompt: string, sessionId: string) => void;
+  onInterruptPromptRestore?: (
+    prompt: string,
+    sessionId: string,
+    media: readonly TurnMedia[],
+  ) => void;
   /**
    * The Session's current reasoning selection. Read at ENQUEUE time and stored
    * on the PromptTurn, because rc11 clears the persisted value on any turn
@@ -600,6 +605,7 @@ export function createQueueBackedTurnController(options: {
         dependenciesRef.current.onInterruptPromptRestore?.(
           restore.prompt,
           restore.sessionId,
+          restore.media ?? [],
         );
       sync();
       return;
@@ -619,6 +625,7 @@ export function createQueueBackedTurnController(options: {
       dependenciesRef.current.onInterruptPromptRestore?.(
         restore.prompt,
         restore.sessionId,
+        restore.media ?? [],
       );
     sync();
     if (transition.next) void startTurn(transition.next);
@@ -1033,8 +1040,13 @@ export function createQueueBackedTurnController(options: {
     // returns only when THIS turn's own terminal lands. Keyed by the turn's
     // OWNING session inside the queue, so switching Sessions neither loses nor
     // misapplies a pending restore (one re-armable entry per session).
-    if (restorePrompt && activeTurn.text.trim())
-      queueOf().stashInterruptPrompt(sessionId, activeTurnId, activeTurn.text);
+    if (restorePrompt && (activeTurn.text.trim() || activeTurn.media?.length))
+      queueOf().stashInterruptPrompt(
+        sessionId,
+        activeTurnId,
+        activeTurn.text,
+        activeTurn.media,
+      );
     else if (!restorePrompt) queueOf().takeInterruptPrompt(activeTurnId);
 
     interruptingTurnId = activeTurnId;

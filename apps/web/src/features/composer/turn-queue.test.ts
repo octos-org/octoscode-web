@@ -118,6 +118,18 @@ describe("PromptTurnQueue", () => {
     expect(queue.takeInterruptPrompt("turn-a")).toBeNull();
   });
 
+  it("holds a stopped turn's attachments with its prompt, even with no text", () => {
+    const queue = new PromptTurnQueue();
+    const media = [{ path: "up/x/a.csv", mime: "text/csv", size_bytes: 3 }];
+    queue.stashInterruptPrompt("session-a", "turn-a", "draft a", media);
+    expect(queue.takeInterruptPrompt("turn-a")).toMatchObject({
+      prompt: "draft a",
+      media,
+    });
+    queue.stashInterruptPrompt("session-a", "turn-b", "", media);
+    expect(queue.takeInterruptPrompt("turn-b")).toMatchObject({ media });
+  });
+
   it("keeps one re-armable entry per session without disturbing other sessions", () => {
     const queue = new PromptTurnQueue();
     queue.stashInterruptPrompt("session-a", "turn-a1", "first");

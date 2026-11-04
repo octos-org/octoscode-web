@@ -32,7 +32,7 @@ describe("latestReadOnlyDenial", () => {
   ])("recognizes Core's wording: %s", (body) => {
     expect(
       latestReadOnlyDenial([user("t1", "fix it"), tool("t1", "error", body)]),
-    ).toEqual({ turnId: "t1", prompt: "fix it" });
+    ).toEqual({ turnId: "t1", prompt: "fix it", media: [] });
   });
 
   it.each([
@@ -62,7 +62,67 @@ describe("latestReadOnlyDenial", () => {
         tool("t1", "error", "cat: /tmp/copy/a.js: No such file or directory"),
         tool("t1", "complete", "listed files"),
       ]),
-    ).toEqual({ turnId: "t1", prompt: "fix it" });
+    ).toEqual({ turnId: "t1", prompt: "fix it", media: [] });
+  });
+
+  it("redoes the whole request when a steer was added to it", () => {
+    expect(
+      latestReadOnlyDenial([
+        { ...user("t1", "fix the bug"), id: "user:t1" },
+        { ...user("t1", "only touch price.js"), id: "user-event:steer" },
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+      ]),
+    ).toEqual({
+      turnId: "t1",
+      prompt: "fix the bug\n\nonly touch price.js",
+      media: [],
+    });
+  });
+
+  it("keeps a denial when the steer arrived after it", () => {
+    expect(
+      latestReadOnlyDenial([
+        { ...user("t1", "fix the bug"), id: "user:t1" },
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+        { ...user("t1", "use a new file"), id: "user-event:steer" },
+      ]),
+    ).toMatchObject({ prompt: "fix the bug\n\nuse a new file" });
+  });
+
+  it("brings the request's files along, with the sizes the row knows", () => {
+    expect(
+      latestReadOnlyDenial([
+        {
+          ...user("t1", "summarize this"),
+          media: ["uploads/sales.csv", "uploads/notes.md"],
+          attachmentSizes: { "uploads/sales.csv": 23 },
+        },
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+      ]),
+    ).toMatchObject({
+      media: [
+        {
+          path: "uploads/sales.csv",
+          mime: "application/octet-stream",
+          size_bytes: 23,
+        },
+        {
+          path: "uploads/notes.md",
+          mime: "application/octet-stream",
+          size_bytes: 0,
+        },
+      ],
+    });
+  });
+
+  it("does not credit a later request with an earlier turn's late denial", () => {
+    expect(
+      latestReadOnlyDenial([
+        user("t1", "fix it"),
+        user("t2", "just explain it"),
+        tool("t1", "error", "read-only filesystem access"),
+      ]),
+    ).toBeNull();
   });
 
   it("clears once a newer request starts", () => {

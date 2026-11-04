@@ -18,6 +18,10 @@ function fixture() {
         if (admitted) submissions.push(turn);
         return admitted;
       },
+      enqueueTurn: (turn: PromptTurn) => {
+        if (admitted) submissions.push(turn);
+        return admitted;
+      },
     },
   } as unknown as SessionRecord<OctosUiClient>;
   const b = {
@@ -98,6 +102,28 @@ describe("record-owned composer inputs", () => {
     drafts.restoreInterruptPrompt(a, "interrupted prompt");
     expect(drafts.consumeRestore(a)).toBe("interrupted prompt");
     expect(drafts.consumeRestore(a)).toBeNull();
+    // A stopped turn's attachments return to the tray with its text, and the
+    // same upload goes out again without another transfer.
+    drafts.setEffort(a, "medium");
+    drafts.restoreInterruptPrompt(a, "stopped prompt", [media]);
+    expect(drafts.consumeRestore(a)).toBe("stopped prompt");
+    expect(drafts.get(a).effort).toBe("medium");
+    expect(images.getSnapshot().entries[0]).toMatchObject({
+      name: "original.png",
+      status: "ready",
+    });
+    expect(upload).toHaveBeenCalledTimes(1);
+    images.remove(images.getSnapshot().entries[0]!.id);
+    // Redoing an earlier request sends its files and leaves the tray alone.
+    images.selectFiles([new File(["n"], "tray.png", { type: "image/png" })]);
+    const before = submissions.length;
+    expect(drafts.redoRequest(a, "denied request", [media])).toBe(true);
+    expect(submissions[before]).toMatchObject({
+      text: "denied request",
+      media: [media],
+      reasoningEffort: "medium",
+    });
+    expect(images.getSnapshot().entries[0]?.name).toBe("tray.png");
     drafts.restoreUnsentTurn(a, submissions[0]!);
     drafts.retire(a);
     retire();

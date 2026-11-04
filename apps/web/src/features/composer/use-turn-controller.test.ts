@@ -953,6 +953,26 @@ describe("queue-backed turn controller async authority", () => {
     expect(restored).toEqual(["draft a"]);
   });
 
+  it("gives a stopped turn's attachments back with its prompt", async () => {
+    const restored: unknown[][] = [];
+    const client = fakeClient();
+    const harness = renderController(client, {
+      onInterruptPromptRestore: (...args) => restored.push(args),
+    });
+    const media = [{ path: "up/x/a.csv", mime: "text/csv", size_bytes: 3 }];
+    harness.controller.enqueueTurn({
+      turnId: crypto.randomUUID(),
+      text: "summarize this",
+      media,
+    });
+    await vi.waitFor(() => {
+      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+    });
+    await harness.controller.interrupt();
+    harness.controller.settleTurn(harness.activeTurnId());
+    expect(restored).toEqual([["summarize this", "session-a", media]]);
+  });
+
   it("re-arms one pending restore per session and drops it on reset", async () => {
     const restored: string[] = [];
     const client = fakeClient();

@@ -19,6 +19,7 @@ export function TurnSummary({
   const terminal = entries.find((entry) => entry.id === `terminal:${turnId}`);
   if (!terminal) return null;
   const summary = summarizeTurn(entries, turnId);
+  const recorded = summary.changedFiles.length + summary.unlistedChanges;
   const failed = terminal.status === "error";
   const outcome =
     terminal.latestTurnOutcome === "completed"
@@ -76,12 +77,13 @@ export function TurnSummary({
           summary.seconds
             ? t("Duration {seconds}s", { seconds: summary.seconds })
             : null,
-          t(
-            summary.commandChangesUnknown
-              ? "{count} files recorded; command-line changes not counted"
-              : "{count} files changed",
-            { count: summary.changedFiles.length + summary.unlistedChanges },
-          ),
+          !summary.changesUnknown
+            ? t("{count} files changed", { count: recorded })
+            : recorded
+              ? t("{count} files recorded; other changes not counted", {
+                  count: recorded,
+                })
+              : t("Changes not counted"),
           summary.usage
             ? t("{input} tokens in · {output} tokens out", {
                 input: summary.usage.input,

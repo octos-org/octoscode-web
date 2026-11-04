@@ -337,6 +337,43 @@ describe("Timeline", () => {
     expect(html).toContain("0 files changed");
   });
 
+  it("never reports 0 files for a turn that ran a command", () => {
+    const entries = (body: string) => [
+      {
+        id: "tool:1",
+        kind: "tool" as const,
+        title: "exec_command",
+        body,
+        status: "complete" as const,
+        turnId: "turn-1",
+      },
+      {
+        id: "terminal:turn-1",
+        kind: "system" as const,
+        title: "Turn complete",
+        body: "",
+        status: "complete" as const,
+        turnId: "turn-1",
+        latestTurnOutcome: "completed" as const,
+      },
+    ];
+    const zero = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={entries("ok\nfiles_changed: 0\nscope: workdir")}
+      />,
+    );
+    expect(zero).toContain("Changes not counted");
+    expect(zero).not.toContain("0 files");
+    const one = renderToStaticMarkup(
+      <Timeline
+        connected
+        entries={entries("ok\nfiles_changed: 1\n  a.txt\nscope: workdir")}
+      />,
+    );
+    expect(one).toContain("1 files recorded; other changes not counted");
+  });
+
   it("folds a finished turn's steps into one disclosure and lifts its files out", () => {
     const entries = [
       {

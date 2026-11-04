@@ -2356,9 +2356,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (!ownerIsCurrent()) return;
       // Queued, not steered: a steer would feed the running response, which
       // keeps its read-only access. Stopping it starts the queued request.
-      if (conversation.enqueuePrompt(denial.prompt, true)) {
-        await conversation.sendPendingNow();
+      if (!conversation.redoRequest(denial.prompt, denial.media)) {
+        throw new Error(
+          t("Switched to write, but your request could not be sent again."),
+        );
       }
+      await conversation.sendPendingNow();
       if (ownerIsCurrent()) composerRef.current?.focus();
     } catch (reason) {
       setReadOnlyNoticeError({

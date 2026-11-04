@@ -6,8 +6,8 @@ export interface TurnSummaryData {
   changedFiles: string[];
   /** Files Core counted as changed by a command without naming them. */
   unlistedChanges: number;
-  /** A command ran and nothing says what it did to the files. */
-  commandChangesUnknown: boolean;
+  /** A tool that can change files ran, so the count is only a floor. */
+  changesUnknown: boolean;
   outputFiles: string[];
   /** Failed steps the turn never recovered from. */
   failedSteps: number;
@@ -17,11 +17,52 @@ export interface TurnSummaryData {
 }
 
 const COMMAND_TOOLS = new Set(["exec_command", "write_stdin", "shell", "bash"]);
+const FILE_TOOLS = new Set([
+  "write_file",
+  "edit_file",
+  "diff_edit",
+  "apply_patch",
+]);
+/** Tools that cannot change the workspace; any other tool might have. */
+const READ_ONLY_TOOLS = new Set([
+  "ask_user_question",
+  "check_background_tasks",
+  "check_workspace_contract",
+  "code_structure",
+  "discover_tools",
+  "glob",
+  "grep",
+  "list_dir",
+  "memory_load",
+  "memory_search",
+  "message",
+  "monitor_list",
+  "peer_list",
+  "read_file",
+  "read_task_output",
+  "recall",
+  "recall_memory",
+  "search",
+  "send_app_card",
+  "send_file",
+  "tool_search",
+  "tool_suggest",
+  "view_image",
+  "view_video",
+  "wait_agent",
+  "web_fetch",
+  "web_search",
+  "workspace_diff",
+  "workspace_log",
+  "workspace_show",
+]);
 
 /**
  * Core appends what a command changed to its output: `files_changed: 1`, then
- * the paths, indented. It can only measure inside a git project, and a long
- * output's preview is cut before it reaches that tail, so often there is none.
+ * the paths, indented. It compares `git status` lines before and after, so it
+ * misses a file that was already dirty and any file that became clean or was
+ * deleted while untracked. The count is a floor, and its zero proves nothing.
+ * Outside a git project, or past a long output's cut, there is no receipt.
  */
 export function commandReceipt(
   output: string,
@@ -50,7 +91,7 @@ export function summarizeTurn(
   let failedSteps = 0;
   let retriedSteps = 0;
   let unlistedChanges = 0;
-  let commandChangesUnknown = false;
+  let changesUnknown = false;
   for (const entry of turn) {
     // What the user attached is an input, however the turn used it.
     if (entry.kind !== "user")
@@ -62,29 +103,31 @@ export function summarizeTurn(
     }
     const name = entry.title.toLowerCase();
     const target = toolTargetFull(entry.toolArguments ?? entry.body);
-    if (
-      entry.status === "complete" &&
-      (name === "write_file" || name === "edit_file" || name === "apply_patch")
+    if (FILE_TOOLS.has(name)) {
+      if (entry.status === "complete") {
+        if (target) changed.add(target);
+        else changesUnknown = true;
+      }
+    } else if (
+      !READ_ONLY_TOOLS.has(name) &&
+      entry.status !== "info" &&
+      // Refused before it ran, so it changed nothing.
+      !entry.body.startsWith("Command denied by ")
     ) {
-      if (target) changed.add(target);
+      changesUnknown = true;
+      const receipt = COMMAND_TOOLS.has(name)
+        ? commandReceipt(entry.body)
+        : null;
+      if (receipt) {
+        for (const path of receipt.paths) changed.add(path);
+        unlistedChanges += Math.max(0, receipt.count - receipt.paths.length);
+      }
     }
     if (
       entry.status === "complete" &&
       (name === "write_file" || name === "send_file")
     ) {
       if (target) output.add(target);
-    }
-    if (
-      COMMAND_TOOLS.has(name) &&
-      entry.status !== "info" &&
-      // Refused before it ran, so it changed nothing.
-      !entry.body.startsWith("Command denied by ")
-    ) {
-      const receipt = commandReceipt(entry.body);
-      if (receipt) {
-        for (const path of receipt.paths) changed.add(path);
-        unlistedChanges += Math.max(0, receipt.count - receipt.paths.length);
-      } else commandChangesUnknown = true;
     }
   }
   const starts = turn.flatMap((entry) =>
@@ -115,7 +158,7 @@ export function summarizeTurn(
         : Math.max(0, Math.round((end - start) / 1000)),
     changedFiles: [...changed],
     unlistedChanges,
-    commandChangesUnknown,
+    changesUnknown,
     outputFiles: [...output],
     failedSteps,
     retriedSteps,

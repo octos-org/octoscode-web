@@ -43,6 +43,7 @@ export interface PendingInterruptRestore {
   sessionId: string;
   turnId: string;
   prompt: string;
+  media?: TurnMedia[];
 }
 
 /**
@@ -113,19 +114,25 @@ export class PromptTurnQueue {
   /**
    * Stash the interrupted turn's prompt for the session that owns it. One
    * entry per session: a re-Esc on the same session replaces its own entry
-   * while other sessions' entries stay untouched. Empty prompts are ignored —
-   * there is nothing to give back.
+   * while other sessions' entries stay untouched. A turn with neither text nor
+   * files is ignored — there is nothing to give back.
    */
   stashInterruptPrompt(
     sessionId: string,
     turnId: string,
     prompt: string,
+    media: readonly TurnMedia[] = [],
   ): void {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() && !media.length) return;
     const existing = this.#interruptRestores.findIndex(
       (pending) => pending.sessionId === sessionId,
     );
-    const entry: PendingInterruptRestore = { sessionId, turnId, prompt };
+    const entry: PendingInterruptRestore = {
+      sessionId,
+      turnId,
+      prompt,
+      ...(media.length ? { media: media.map((item) => ({ ...item })) } : {}),
+    };
     if (existing >= 0) this.#interruptRestores[existing] = entry;
     else this.#interruptRestores.push(entry);
   }
