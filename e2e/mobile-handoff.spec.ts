@@ -93,7 +93,13 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
     hasTouch: true,
   });
   await phone.goto(link);
-  await expect(phone.getByLabel("Server origin")).toHaveValue(ORIGIN);
+  // This fixture hosts web and Core on different ports. Cross-origin links
+  // cannot choose the credential destination; the user enters it manually.
+  await expect(phone.getByLabel("Server origin")).toHaveValue(
+    new URL(link).origin,
+  );
+  await expect(phone.getByRole("alert")).toContainText("not filled in");
+  await phone.getByLabel("Server origin").fill(ORIGIN);
   await expect(phone.getByLabel("Auth token", { exact: true })).toHaveValue("");
   await phone.getByLabel("Auth token", { exact: true }).fill(TOKEN);
   await phone.getByRole("button", { name: "Connect", exact: true }).tap();
@@ -132,9 +138,8 @@ test("a handoff never auto-connects with this tab's saved credential", async ({
   page.on("websocket", (ws) => sockets.push(new URL(ws.url()).origin));
   await page.goto("about:blank");
   await page.goto(url.href);
-  await expect(page.getByLabel("Server origin")).toHaveValue(
-    "http://127.0.0.1:59999",
-  );
+  await expect(page.getByLabel("Server origin")).toHaveValue(url.origin);
+  await expect(page.getByRole("alert")).toContainText("not filled in");
   await expect(page.getByLabel("Auth token", { exact: true })).toHaveValue("");
   expect(sockets).toEqual([]);
   // An operator selecting a different server must not import its paths there.
