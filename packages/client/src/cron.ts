@@ -38,6 +38,8 @@ export interface CronJob {
   nextRun?: number | null | undefined;
   nextIn?: string | null | undefined;
   timezone?: string | null | undefined;
+  /** The Session a run delivers to; absent on jobs not created from one. */
+  originSessionId?: string | undefined;
 }
 export interface CronListResult {
   jobs: CronJob[];
@@ -85,6 +87,9 @@ export function parseCronJob(value: unknown): CronJob | null {
     nextRun: value.next_run as number | null | undefined,
     nextIn: value.next_in as string | null | undefined,
     timezone: value.timezone as string | null | undefined,
+    ...(isRecord(value.origin) && text(value.origin.session_id)
+      ? { originSessionId: value.origin.session_id }
+      : {}),
   };
 }
 

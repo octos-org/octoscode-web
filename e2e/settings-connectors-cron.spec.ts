@@ -23,6 +23,14 @@ async function start(page: Page) {
   ).toBeEnabled();
 }
 
+async function openScheduled(page: Page) {
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Scheduled tasks", exact: true })
+    .click();
+  return page.locator("[data-scheduled-tasks]");
+}
+
 async function openSection(page: Page, name: string) {
   await page
     .getByRole("complementary", { name: "Product navigation" })
@@ -79,28 +87,28 @@ test("keeps legacy cron list and toggles without create/delete methods", async (
     });
   });
   await start(page);
-  const settings = await openSection(page, "Scheduled tasks");
-  await expect(settings.getByText("Queue check")).toBeVisible();
-  await expect(settings.getByText("New scheduled task")).toHaveCount(0);
-  await expect(settings.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  const tasks = await openScheduled(page);
+  await expect(tasks.getByText("Queue check")).toBeVisible();
+  await expect(tasks.getByText("New scheduled task")).toHaveCount(0);
+  await expect(tasks.getByRole("button", { name: "Delete" })).toHaveCount(0);
   await expect(
-    settings.getByText(
+    tasks.getByText(
       "Creating scheduled tasks is not supported by this server.",
     ),
   ).toBeVisible();
   await expect(
-    settings.getByText(
+    tasks.getByText(
       "Deleting scheduled tasks is not supported by this server.",
     ),
   ).toBeVisible();
-  const toggle = settings.getByRole("checkbox");
+  const toggle = tasks.getByRole("checkbox");
   await expect(toggle).not.toBeChecked();
   await toggle.click();
   await expect(toggle).toBeChecked();
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   const results = await new AxeBuilder({ page })
-    .include('[role="dialog"]')
+    .include("[data-scheduled-tasks]")
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
     .analyze();
   expect(results.violations).toEqual([]);
@@ -135,17 +143,17 @@ test("does not let a delayed list response overwrite a confirmed cron toggle", a
     });
   });
   await start(page);
-  const settings = await openSection(page, "Scheduled tasks");
-  const toggle = settings.getByRole("checkbox");
+  const tasks = await openScheduled(page);
+  const toggle = tasks.getByRole("checkbox");
   await expect(toggle).not.toBeChecked();
-  await settings.getByRole("button", { name: "Refresh" }).click();
+  await tasks.getByRole("button", { name: "Refresh" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
   await toggle.click();
   await expect(toggle).toBeChecked();
   release?.();
   await expect(toggle).toBeChecked();
   await expect(toggle).toBeEnabled();
-  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  await expect(tasks.getByRole("button", { name: "Refresh" })).toBeEnabled();
   expect(listCalls).toBe(2);
 });
 
@@ -180,11 +188,11 @@ test("a refresh during a pending cron toggle leaves both controls usable", async
     });
   });
   await start(page);
-  const settings = await openSection(page, "Scheduled tasks");
-  const toggle = settings.getByRole("checkbox");
+  const tasks = await openScheduled(page);
+  const toggle = tasks.getByRole("checkbox");
   await toggle.click();
   await expect.poll(() => releases.length).toBeGreaterThan(0);
-  const refresh = settings.getByRole("button", { name: "Refresh" });
+  const refresh = tasks.getByRole("button", { name: "Refresh" });
   await refresh.click();
   await expect.poll(() => releases.length).toBe(2);
   for (const release of releases) release();

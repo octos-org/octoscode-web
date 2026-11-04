@@ -7,7 +7,6 @@ import { useId, useRef, type ReactNode } from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import {
   ConnectorsIcon,
-  CronIcon,
   GearIcon,
   MemoryIcon,
   ModelsIcon,
@@ -84,7 +83,6 @@ export function SettingsDialog({
   const skillsId = `${navId}-skills`;
   const memoryId = `${navId}-memory`;
   const connectorsId = `${navId}-connectors`;
-  const scheduledId = `${navId}-scheduled`;
   const closeRef = useRef<HTMLButtonElement>(null);
   if (!open) return null;
 
@@ -92,13 +90,11 @@ export function SettingsDialog({
   const hasSkills = slots.skills !== undefined;
   const hasMemory = slots.memory !== undefined;
   const hasConnectors = slots.connectors !== undefined;
-  const hasScheduled = slots.scheduled !== undefined;
   const effectiveSection =
     (activeSection === "models" && !hasModels) ||
     (activeSection === "skills" && !hasSkills) ||
     (activeSection === "memory" && !hasMemory) ||
-    (activeSection === "connectors" && !hasConnectors) ||
-    (activeSection === "scheduled" && !hasScheduled)
+    (activeSection === "connectors" && !hasConnectors)
       ? "general"
       : activeSection;
 
@@ -115,9 +111,7 @@ export function SettingsDialog({
           ? skillsId
           : effectiveSection === "memory"
             ? memoryId
-            : effectiveSection === "connectors"
-              ? connectorsId
-              : scheduledId;
+            : connectorsId;
   const content =
     effectiveSection === "general"
       ? slots.general
@@ -127,9 +121,7 @@ export function SettingsDialog({
           ? slots.skills
           : effectiveSection === "memory"
             ? slots.memory
-            : effectiveSection === "connectors"
-              ? slots.connectors
-              : slots.scheduled;
+            : slots.connectors;
 
   return (
     <ModalSurface
@@ -223,24 +215,6 @@ export function SettingsDialog({
             >
               <ConnectorsIcon />
               <span className={styles.navLabel}>{labels.connectors}</span>
-            </button>
-          ) : null}
-          {hasScheduled ? (
-            <button
-              id={scheduledId}
-              type="button"
-              className={
-                effectiveSection === "scheduled"
-                  ? `${styles.navCell} ${styles.active}`
-                  : styles.navCell
-              }
-              aria-current={
-                effectiveSection === "scheduled" ? "page" : undefined
-              }
-              onClick={() => choose("scheduled")}
-            >
-              <CronIcon />
-              <span className={styles.navLabel}>{labels.scheduled}</span>
             </button>
           ) : null}
         </div>

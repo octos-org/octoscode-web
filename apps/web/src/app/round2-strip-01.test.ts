@@ -18,7 +18,7 @@ describe("#1 Fleet view keeps state across navigation", () => {
     // disclosure preserved). The chat pane hides via CSS, not unmounting, so
     // the composer draft and scroll also survive.
     // (The phone overview also hides it the same way: `|| remoteView …`.)
-    expect(app).toMatch(/hidden=\{fleetRouteActive( \|\| [^}]+)?\}/);
+    expect(app).toMatch(/hidden=\{productRoute !== null( \|\| [^}]+)?\}/);
     const gateStart = app.indexOf("{!fleetRouteActive ? (");
     expect(gateStart).toBe(-1); // the unmount gate is gone
   });

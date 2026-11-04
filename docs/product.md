@@ -46,7 +46,7 @@ server does in the chosen folder.
 | Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.                |
 | Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
 | Connectors    | Read-only MCP server status; no add/remove/edit or OAuth controls.                                                              |
-| Scheduled     | Existing cron job list and capability-gated enable/disable; no cron creation.                                                   |
+| Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
 | Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                            |
 | Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.      |
@@ -70,9 +70,15 @@ XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
 File bytes come from the authenticated Session blob API, and copy-path/download
 controls never put the server token in a URL.
 
-Connector and scheduled-task surfaces are intentionally incomplete by protocol:
-there is no connector configuration/OAuth flow and no `cron/create`. The UI does
-not describe either surface as full management.
+The connector surface is intentionally incomplete by protocol: there is no
+connector configuration/OAuth flow. The UI does not describe it as full
+management.
+
+A scheduled task's `last_status` only says its Session accepted the run, so the
+list reads the outcome from the turn that run started. Turns do not record which
+job started them; the list pairs them by time, so a person's turn started in the
+same moment could be read as the run. A task that only delivers text (`notify`)
+shows nothing in a web Session, so the page does not offer it.
 
 The expanded candidate also exposes capability-gated native peers and gather,
 agents/goals/loops/monitors, context/cache/compaction, snapshot undo,

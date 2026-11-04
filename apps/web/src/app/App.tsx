@@ -404,9 +404,9 @@ const ConnectorsSettingsContent = lazyNamed(
   () => import("../features/connectors/ConnectorsSettingsContent.tsx"),
   (module) => module.ConnectorsSettingsContent,
 );
-const CronSettingsContent = lazyNamed(
-  () => import("../features/cron/CronSettingsContent.tsx"),
-  (module) => module.CronSettingsContent,
+const ScheduledTasksPage = lazyNamed(
+  () => import("../features/cron/ScheduledTasksPage.tsx"),
+  (module) => module.ScheduledTasksPage,
 );
 const REMOTE_REFRESH_MS = 15_000;
 const RemoteHome = lazyNamed(
@@ -630,7 +630,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
-  const [fleetRouteActive, setFleetRouteActive] = useState(false);
+  const [productRoute, setProductRoute] = useState<
+    "fleet" | "scheduled" | null
+  >(null);
+  const fleetRouteActive = productRoute === "fleet";
+  const scheduledRouteActive = productRoute === "scheduled";
+  // A scheduled run to scroll to once its Session's timeline has it.
+  const [revealTurnId, setRevealTurnId] = useState<string | null>(null);
   /** Alt+D requests focus inside Fleet once the routed pane is visible. */
   const [fleetBriefFocusRequest, setFleetBriefFocusRequest] = useState(0);
   // §4.2: Advanced collapsed by default, remembered per browser.
@@ -792,8 +798,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // Design §3: Fleet is a destination that REPLACES the chat pane; Back
   // returns to the previously selected session (the route is view state, the
   // session selection is untouched by entering/leaving Fleet).
-  const onBackFromFleet = () => {
-    setFleetRouteActive(false);
+  const onBackFromProductRoute = () => {
+    setProductRoute(null);
   };
   const [sessionDefaults, setSessionDefaults] =
     useState<SessionDefaults | null>(() => {
@@ -910,7 +916,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const connectorsSettingsAvailable =
     Boolean(protocol.client && session.opened) &&
     supportsMethod(session.capabilities, APPUI_INVENTORY_METHODS.MCP);
-  const scheduledSettingsAvailable =
+  const scheduledTasksAvailable =
     Boolean(protocol.client && session.opened) &&
     supportsFeature(
       session.capabilities,
@@ -1813,7 +1819,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       if (shortcutTargetSuppressed(event.target)) return;
       if (!fleetSupported) return;
       event.preventDefault();
-      setFleetRouteActive(true);
+      setProductRoute("fleet");
       // The Fleet pane is `hidden` until the route is active and a HIDDEN
       // element cannot take focus, so the focus cannot land inside this
       // handler: it is requested here and applied once the route has flipped
@@ -2553,10 +2559,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     [conversation.timeline],
   );
   const panelColumn =
-    !compact &&
-    panelLayout.open &&
-    Boolean(session.opened) &&
-    !fleetRouteActive;
+    !compact && panelLayout.open && Boolean(session.opened) && !productRoute;
   // The column's width lives in CSS (AppProduct.module.css); only the
   // remembered value is handed over, as a custom property on the grid.
   const workspaceMainRef = useRef<HTMLElement>(null);
@@ -2708,6 +2711,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     onDisclosureInteraction,
     showJumpLatest,
     jumpToLatest,
+    revealTurn,
   } = useConversationScroll(
     connectionIdentity,
     activeSessionKey,
@@ -2715,6 +2719,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     // The empty Session's template home reads from the top.
     conversation.timeline.length === 0,
   );
+  // The run's Session may still be loading; if the turn never renders (too old
+  // for the loaded window) the reader stays at the latest output.
+  useEffect(() => {
+    if (!revealTurnId) return;
+    if (revealTurn(revealTurnId)) {
+      setRevealTurnId(null);
+      return;
+    }
+    const giveUp = window.setTimeout(() => setRevealTurnId(null), 8_000);
+    return () => window.clearTimeout(giveUp);
+  }, [conversation.timeline, revealTurn, revealTurnId]);
   const conversationSearch = useConversationSearch(conversationScrollRef);
 
   useEffect(() => {
@@ -3108,7 +3123,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const moveToProductSession = async (
     productSessionId: string,
   ): Promise<boolean> => {
-    setFleetRouteActive(false);
+    setProductRoute(null);
+    return openProductSession(productSessionId);
+  };
+  const openProductSession = async (
+    productSessionId: string,
+  ): Promise<boolean> => {
     const target = navigableSessions.find(
       (item) =>
         workspaceSessionKey(
@@ -3136,6 +3156,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     });
     if (outcome !== "opened") return false;
     if (compact) setSidebarCollapsed(true);
+    return true;
+  };
+  const openScheduledRun = async (
+    sessionId: string,
+    turnId: string | null,
+  ): Promise<boolean> => {
+    const target = navigableSessions.find(
+      (item) => item.sessionId === sessionId,
+    );
+    if (
+      !target ||
+      !(await openProductSession(
+        workspaceSessionKey(
+          target.workspaceRoot,
+          target.profileId,
+          target.sessionId,
+        ),
+      ))
+    ) {
+      return false;
+    }
+    setConversationTab("chat");
+    setRevealTurnId(turnId);
+    setProductRoute(null);
     return true;
   };
   const dismissSavedLink = () => {
@@ -3586,7 +3630,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // returns to that destination; moveToProductSession also covers selecting
   // the already-active session, whose key does not change.
   useEffect(() => {
-    setFleetRouteActive(false);
+    setProductRoute(null);
   }, [activeSessionKey, fleetSupported]);
   useEffect(() => {
     if (
@@ -3599,7 +3643,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       inventoryMode ||
       savedLink
     ) {
-      setFleetRouteActive(false);
+      setProductRoute(null);
     }
   }, [
     settingsOpen,
@@ -3966,6 +4010,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               loading={workspaceProduct.state.loading}
               error={sidebarError}
               settingsActive={settingsOpen}
+              scheduledAvailable={scheduledTasksAvailable}
+              scheduledActive={scheduledRouteActive}
+              onScheduled={() => {
+                if (compact) setSidebarCollapsed(true);
+                setProductRoute("scheduled");
+                setSettingsOpen(false);
+              }}
               fleetEntry={fleetNavigationEntry}
               fleetActive={fleetRouteActive}
               fleetAvailable={fleetSupported}
@@ -4100,7 +4151,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               onFleet={() => {
                 if (!fleetSupported) return;
                 if (compact) setSidebarCollapsed(true);
-                setFleetRouteActive(true);
+                setProductRoute("fleet");
                 setSettingsOpen(false);
               }}
               {...(!session.recoveryPending
@@ -4122,7 +4173,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         >
           <section
             className="conversation"
-            hidden={fleetRouteActive || remoteView === "home"}
+            hidden={productRoute !== null || remoteView === "home"}
             {...(attachmentsAvailable
               ? {
                   onDragOver: (event: ReactDragEvent) => {
@@ -5250,7 +5301,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
-          {remoteView === "home" && !fleetRouteActive ? (
+          {remoteView === "home" && !productRoute ? (
             <div className="conversation remote-pane">
               <Suspense
                 fallback={<DeferredSurface label="Loading remote control…" />}
@@ -5294,13 +5345,49 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               </Suspense>
             </div>
           ) : null}
+          {scheduledRouteActive ? (
+            <div className="conversation scheduled-pane">
+              <header className="conversation-header">
+                <button
+                  type="button"
+                  className="scheduled-back"
+                  onClick={onBackFromProductRoute}
+                >
+                  {t("Back")}
+                </button>
+              </header>
+              {scheduledTasksAvailable && protocol.client ? (
+                <Suspense
+                  fallback={
+                    <DeferredSurface label="Loading scheduled tasks…" />
+                  }
+                >
+                  <ScheduledTasksPage
+                    client={protocol.client}
+                    capabilities={session.capabilities!}
+                    sessionId={session.opened!.session_id}
+                    sessionTitle={(sessionId) => {
+                      for (const workspace of visibleCatalog.values()) {
+                        const known = workspace.sessions.find(
+                          (item) => item.sessionId === sessionId,
+                        );
+                        if (known?.title) return known.title;
+                      }
+                      return null;
+                    }}
+                    onOpenRun={openScheduledRun}
+                  />
+                </Suspense>
+              ) : null}
+            </div>
+          ) : null}
           <div className="conversation fleet-pane" hidden={!fleetRouteActive}>
             <header className="conversation-header">
               <button
                 type="button"
                 className="fleet-back"
                 data-fleet-back="true"
-                onClick={onBackFromFleet}
+                onClick={onBackFromProductRoute}
               >
                 {t("Back")}
               </button>
@@ -5993,23 +6080,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     ),
                   }
                 : {}),
-              ...(scheduledSettingsAvailable && protocol.client
-                ? {
-                    scheduled: (
-                      <Suspense
-                        fallback={
-                          <DeferredSurface label="Loading scheduled tasks…" />
-                        }
-                      >
-                        <CronSettingsContent
-                          client={protocol.client}
-                          capabilities={session.capabilities!}
-                          sessionId={session.opened!.session_id}
-                        />
-                      </Suspense>
-                    ),
-                  }
-                : {}),
             }}
             onSectionChange={setSettingsSection}
             onClose={() => setSettingsOpen(false)}
@@ -6379,7 +6449,6 @@ const SETTINGS_LABELS = {
   skills: "Skills",
   memory: "Memory",
   connectors: "Connectors",
-  scheduled: "Scheduled tasks",
   close: "Close settings",
 } as const;
 

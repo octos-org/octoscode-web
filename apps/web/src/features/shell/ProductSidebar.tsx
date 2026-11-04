@@ -20,6 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { CronIcon } from "../../ui/Icon.tsx";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./ProductSidebar.module.css";
 import {
@@ -81,6 +82,10 @@ export interface ProductSidebarProps {
   brandName?: string;
   sessionLimit?: number;
   settingsActive?: boolean;
+  /** The server can list scheduled tasks. */
+  scheduledAvailable?: boolean;
+  scheduledActive?: boolean;
+  onScheduled?: (() => void) | undefined;
   /** The Fleet navigation entry descriptor (mounted next to Settings). */
   fleetEntry?: {
     label: string;
@@ -172,6 +177,9 @@ export function ProductSidebar({
   brandName = "Octoscode",
   sessionLimit = DEFAULT_SESSION_LIMIT,
   settingsActive = false,
+  scheduledAvailable = false,
+  scheduledActive = false,
+  onScheduled,
   fleetEntry = null,
   fleetActive = false,
   fleetAvailable = true,
@@ -1269,6 +1277,19 @@ export function ProductSidebar({
       />
 
       <div className={styles.footer}>
+        {scheduledAvailable && onScheduled ? (
+          <button
+            type="button"
+            className={`${styles.settings} ${scheduledActive ? styles.settingsActive : ""}`}
+            aria-current={scheduledActive ? "page" : undefined}
+            aria-label={t("Scheduled tasks")}
+            title={collapsed ? t("Scheduled tasks") : undefined}
+            onClick={onScheduled}
+          >
+            <CronIcon />
+            {!collapsed ? <span>{t("Scheduled tasks")}</span> : null}
+          </button>
+        ) : null}
         {fleetEntry && onFleet ? (
           <>
             <button

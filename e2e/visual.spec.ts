@@ -187,19 +187,37 @@ test("connectors settings matches baseline", async ({ page }) => {
   await expect(settings).toHaveScreenshot("settings-connectors.png", SNAPSHOT);
 });
 
-test("scheduled tasks settings matches baseline", async ({ page }) => {
+test("scheduled tasks page matches baseline", async ({ page }) => {
   await connect(page);
   await startDefaultWorkspace(page);
   await page
     .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings
     .getByRole("button", { name: "Scheduled tasks", exact: true })
     .click();
-  await expect(settings.getByText("Queue check")).toBeVisible();
-  await expect(settings).toHaveScreenshot("settings-scheduled.png", SNAPSHOT);
+  const tasks = page.locator("[data-scheduled-tasks]");
+  await expect(tasks.getByText("Queue check")).toBeVisible();
+  await expect(tasks).toHaveScreenshot("scheduled-tasks.png", SNAPSHOT);
+});
+
+test("scheduled task form matches baseline on desktop and phone", async ({
+  page,
+}) => {
+  await connect(page);
+  await startDefaultWorkspace(page);
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Scheduled tasks", exact: true })
+    .click();
+  const tasks = page.locator("[data-scheduled-tasks]");
+  await tasks.getByText("New scheduled task").click();
+  await tasks.getByRole("radio", { name: "Every week" }).check();
+  await tasks.getByRole("radio", { name: "Write a weekly report" }).check();
+  await expect(tasks).toHaveScreenshot("scheduled-task-form.png", SNAPSHOT);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(tasks).toHaveScreenshot(
+    "scheduled-task-form-phone.png",
+    SNAPSHOT,
+  );
 });
 
 test("memory settings matches baseline", async ({ page }) => {

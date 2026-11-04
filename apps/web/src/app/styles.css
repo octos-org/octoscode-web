@@ -418,7 +418,8 @@ label > span {
 /* Round 4 A: the routed Fleet pane wrapper (a non-landmark div; FleetView's
    own <section aria-label="Fleet"> stays the ONE Fleet region). Secondary
    styling matches the app's picker buttons. */
-.fleet-pane {
+.fleet-pane,
+.scheduled-pane {
   grid-template-rows: 52px minmax(0, 1fr);
 }
 
@@ -427,7 +428,8 @@ label > span {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.fleet-back {
+.fleet-back,
+.scheduled-back {
   justify-self: start;
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-button-elevated-fill);
@@ -439,12 +441,14 @@ label > span {
 }
 
 @media (pointer: coarse) {
-  .fleet-back {
+  .fleet-back,
+  .scheduled-back {
     min-height: var(--dsw-control-h-lg);
   }
 }
 
-.fleet-back:hover:not(:disabled) {
+.fleet-back:hover:not(:disabled),
+.scheduled-back:hover:not(:disabled) {
   background: var(--dsw-alias-button-floating-hover);
 }
 
