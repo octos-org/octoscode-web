@@ -2123,6 +2123,8 @@ const catalog: Readonly<Record<string, string>> = {
     "无法生成手机接续链接，请检查服务器地址和文件夹数量。",
   "This phone link is invalid. Copy a new link from your computer.":
     "手机接续链接无效，请从电脑重新复制。",
+  "This phone link points to another server, so its address was not filled in. Use this page's server or enter an address you trust.":
+    "此手机接续链接指向另一台服务器，未自动填写其中的地址。请使用当前网页的服务器，或自行输入可信地址。",
   "The phone link is for a different server. Browse this server's folders instead.":
     "此链接的文件夹属于另一台服务器，请浏览选择当前服务器的文件夹。",
   "Remote control": "手机遥控",

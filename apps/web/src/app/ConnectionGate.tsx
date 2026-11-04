@@ -134,7 +134,16 @@ export function ConnectionGate() {
   const { theme, setTheme } = useTheme();
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [handoff] = useState(() => readRemoteHandoff(window.location.href));
-  const [handoffError, setHandoffError] = useState(handoff.kind === "invalid");
+  const crossOriginHandoff =
+    handoff.kind === "valid" &&
+    new URL(handoff.endpoint).origin !== window.location.origin;
+  const [handoffError, setHandoffError] = useState<string | null>(
+    handoff.kind === "invalid"
+      ? "This phone link is invalid. Copy a new link from your computer."
+      : crossOriginHandoff
+        ? "This phone link points to another server, so its address was not filled in. Use this page's server or enter an address you trust."
+        : null,
+  );
   const restoreConnectionRef = useRef<boolean | null>(null);
   if (restoreConnectionRef.current === null) {
     restoreConnectionRef.current =
@@ -149,14 +158,15 @@ export function ConnectionGate() {
     return handoff.kind === "none" ? pairing : null;
   });
   const [connection, setConnection] = useState(() => {
-    if (handoff.kind !== "none")
+    // An unsigned link must not choose another origin to receive a token.
+    if (handoff.kind === "valid")
       return {
         ...initialConnection,
-        endpoint:
-          handoff.kind === "valid"
-            ? handoff.endpoint
-            : initialConnection.endpoint,
+        endpoint: crossOriginHandoff
+          ? window.location.origin
+          : handoff.endpoint,
       };
+    if (handoff.kind === "invalid") return { ...initialConnection };
     const loaded = loadConnectionPreferences(
       initialConnection,
       browserStorage("localStorage"),
@@ -197,7 +207,7 @@ export function ConnectionGate() {
    * the chunk is still in flight is neither lost nor sent twice.
    */
   const requestConnect = (next: ConnectionDraft) => {
-    setHandoffError(false);
+    setHandoffError(null);
     setShellArmed(true);
     const bridge = bridgeRef.current;
     if (bridge) bridge.connect(next);
@@ -433,15 +443,7 @@ export function ConnectionGate() {
       ) : (
         <>
           <SurfaceBoundary name="Connection" fallback={null}>
-            <ConnectionPanel
-              {...panel}
-              status="idle"
-              error={
-                handoffError
-                  ? "This phone link is invalid. Copy a new link from your computer."
-                  : null
-              }
-            />
+            <ConnectionPanel {...panel} status="idle" error={handoffError} />
           </SurfaceBoundary>
         </>
       )}
