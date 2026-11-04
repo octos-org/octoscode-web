@@ -45,7 +45,7 @@ server does in the chosen folder.
 | Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.     |
 | Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.                |
 | Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
-| Connectors    | Manage HTTP and allowlisted stdio MCP connectors; saved-but-not-loaded ones stay visible. No OAuth controls.                    |
+| Connectors    | Manage HTTP and allowlisted stdio MCP connectors, sign them in with OAuth; saved-but-not-loaded ones stay visible.              |
 | Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
 | Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
 | Usage         | Context-window, token, and cost projections from typed server state.                                                            |
@@ -70,8 +70,15 @@ XLSX, PPTX, and other unsupported or oversized files fail honestly to Download.
 File bytes come from the authenticated Session blob API, and copy-path/download
 controls never put the server token in a URL.
 
-There is no connector OAuth flow yet, and the UI does not describe it as full
-management.
+A connector signs in through Core's `mcp/oauth/*` methods. Core runs the OAuth
+exchange and keeps the tokens; the page opens the provider's sign-in page in a
+window cut off from it (`opener` cleared before the provider loads) and hands
+Core the address the provider returns to. That address arrives at
+`/oauth/mcp/callback` on this origin, is taken off the address bar before the
+first render, and reaches the waiting page over a same-origin
+`BroadcastChannel`, matched by its OAuth `state`. If Core refuses this origin as
+the return address, or the app is not served at the origin root, the person
+pastes the address instead (Core's `manual_callback_url`).
 
 `mcp/status/list` only shows what the running server loaded, and on a profile
 loaded at startup a change waits for a restart, even though Core also sends

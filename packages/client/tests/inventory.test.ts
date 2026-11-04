@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   parseRuntimeTools,
   parseMcpConnectorMutation,
+  parseMcpOAuthStart,
   parseRuntimeMcp,
+  supportsMcpOAuth,
   createInventoryCommands,
   supportsMcpConnectorManagement,
 } from "../src/inventory.ts";
 import {
+  MCP_OAUTH_METHODS,
   APPUI_INVENTORY_METHODS,
   MCP_CONNECTOR_MANAGE_V1,
   MCP_CONNECTOR_METHODS,
@@ -397,6 +400,7 @@ describe("runtime inventory contracts", () => {
         transport: "http",
         enabled: true,
         url: "https://fixture.invalid/mcp",
+        oauth: false,
       },
       runtime: { restartRequired: true, effectiveFrom: "next_turn" },
       created: true,
@@ -542,5 +546,159 @@ describe("runtime inventory contracts", () => {
     );
     await expect(commands.mcp()).rejects.toThrow("wrong-scope");
     expect(request).toHaveBeenCalledTimes(1);
+  });
+  describe("connector sign-in", () => {
+    const oauthCapabilities: UiProtocolCapabilities = {
+      ...managementCapabilities,
+      supported_methods: [
+        ...(managementCapabilities.supported_methods ?? []),
+        ...Object.values(MCP_OAUTH_METHODS),
+      ],
+    };
+    // Captured from Core 4748d11b with a local OAuth server.
+    const started = {
+      flow_id: "c2a39f29-c3e7-4457-81ad-87778309ac24",
+      authorization_url:
+        "https://mcp.example.test/authorize?response_type=code&client_id=c&state=s&code_challenge=x&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A4449%2Foauth%2Fmcp%2Fcallback",
+      redirect_uri: "http://127.0.0.1:4449/oauth/mcp/callback",
+      completion: "web_origin",
+      expires_at: "2026-11-04T13:09:19.275947497+00:00",
+      token_storage: "keyring",
+    };
+
+    it("needs all four methods", () => {
+      expect(supportsMcpOAuth(oauthCapabilities)).toBe(true);
+      expect(supportsMcpOAuth(managementCapabilities)).toBe(false);
+      expect(
+        supportsMcpOAuth({
+          ...oauthCapabilities,
+          supported_methods: (oauthCapabilities.supported_methods ?? []).filter(
+            (method) => method !== MCP_OAUTH_METHODS.CANCEL,
+          ),
+        }),
+      ).toBe(false);
+    });
+
+    it("reads a started sign-in and keeps the token storage out", () => {
+      expect(parseMcpOAuthStart(started)).toEqual({
+        flowId: started.flow_id,
+        authorizationUrl: started.authorization_url,
+        redirectUri: started.redirect_uri,
+        completion: "web_origin",
+        expiresAt: started.expires_at,
+      });
+    });
+
+    it("opens only a web page", () => {
+      for (const authorization_url of [
+        "javascript:alert(1)",
+        "data:text/html,hi",
+        "http://provider.example/authorize",
+        "https://user:pass@provider.example/authorize",
+        "not a url",
+      ])
+        expect(parseMcpOAuthStart({ ...started, authorization_url })).toBe(
+          null,
+        );
+      expect(
+        parseMcpOAuthStart({
+          ...started,
+          authorization_url: "http://127.0.0.1:50080/__oauth__/authorize",
+        })?.authorizationUrl,
+      ).toBe("http://127.0.0.1:50080/__oauth__/authorize");
+    });
+
+    it("sends the exact sign-in payloads", async () => {
+      const request = vi.fn(async (method: string) =>
+        method === MCP_OAUTH_METHODS.START
+          ? started
+          : method === MCP_OAUTH_METHODS.CANCEL
+            ? { cancelled: true }
+            : {
+                status: { id: "mcp-1" },
+                runtime: {
+                  runtime_disposition: "reloaded",
+                  restart_required: false,
+                  effective_from: "next_turn",
+                },
+                connector: {
+                  id: "mcp-1",
+                  name: "Docs",
+                  transport: "http",
+                  enabled: true,
+                  oauth: true,
+                },
+                completed: method === MCP_OAUTH_METHODS.COMPLETE,
+                revoked: method === MCP_OAUTH_METHODS.REVOKE,
+                token_storage: "keyring",
+              },
+      );
+      const commands = createInventoryCommands(
+        { request },
+        "s1",
+        "p1",
+        oauthCapabilities,
+      );
+      await commands.startOAuth("mcp-1", started.redirect_uri);
+      await commands.startOAuth("mcp-1");
+      const completed = await commands.completeOAuth(
+        "flow-1",
+        `${started.redirect_uri}?code=c&state=s`,
+      );
+      await commands.cancelOAuth("flow-2");
+      const revoked = await commands.revokeOAuth("mcp-1");
+      expect(request.mock.calls).toEqual([
+        [
+          MCP_OAUTH_METHODS.START,
+          {
+            session_id: "s1",
+            connector_id: "mcp-1",
+            redirect_uri: started.redirect_uri,
+          },
+        ],
+        [MCP_OAUTH_METHODS.START, { session_id: "s1", connector_id: "mcp-1" }],
+        [
+          MCP_OAUTH_METHODS.COMPLETE,
+          {
+            session_id: "s1",
+            flow_id: "flow-1",
+            callback_url: `${started.redirect_uri}?code=c&state=s`,
+          },
+        ],
+        [MCP_OAUTH_METHODS.CANCEL, { session_id: "s1", flow_id: "flow-2" }],
+        [MCP_OAUTH_METHODS.REVOKE, { session_id: "s1", connector_id: "mcp-1" }],
+      ]);
+      expect(completed).toMatchObject({
+        completed: true,
+        listed: true,
+        connector: { id: "mcp-1", oauth: true },
+      });
+      expect(revoked).toMatchObject({ revoked: true });
+    });
+
+    it("refuses a start result it can't open, and methods it wasn't offered", async () => {
+      const bad = createInventoryCommands(
+        {
+          request: async () => ({
+            ...started,
+            authorization_url: "javascript:alert(1)",
+          }),
+        },
+        "s1",
+        "p1",
+        oauthCapabilities,
+      );
+      await expect(bad.startOAuth("mcp-1")).rejects.toThrow(
+        "Invalid OAuth start result",
+      );
+      const none = createInventoryCommands(
+        { request: async () => started },
+        "s1",
+        "p1",
+        managementCapabilities,
+      );
+      await expect(none.startOAuth("mcp-1")).rejects.toThrow("not advertised");
+      await expect(none.revokeOAuth("mcp-1")).rejects.toThrow("not advertised");
+    });
   });
 });

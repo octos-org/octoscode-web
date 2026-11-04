@@ -4,6 +4,7 @@ import type { UiProtocolCapabilities } from "./types.ts";
 import {
   APPUI_INVENTORY_METHODS,
   MCP_CONNECTOR_METHODS,
+  MCP_OAUTH_METHODS,
 } from "./inventory-methods.ts";
 
 export interface RuntimeTool {
@@ -79,6 +80,8 @@ export interface McpConnectorSaved {
   transport?: string;
   enabled: boolean;
   url?: string;
+  /** Whether the connector signs in with OAuth; says nothing about stored tokens. */
+  oauth?: boolean;
 }
 export interface McpConnectorRuntime {
   /**
@@ -97,6 +100,24 @@ export interface McpConnectorMutation {
   deleted: boolean;
   /** The server already lists this connector, so nothing is waiting to load. */
   listed: boolean;
+  /** `mcp/oauth/complete` saved the sign-in. */
+  completed?: boolean;
+  /** `mcp/oauth/revoke` removed the stored sign-in. */
+  revoked?: boolean;
+}
+/** An OAuth sign-in the server has started and is waiting to complete. */
+export interface McpOAuthStart {
+  flowId: string;
+  /** Where the person signs in. Checked to be a web page before it is used. */
+  authorizationUrl: string;
+  redirectUri: string;
+  /**
+   * `web_origin`: the provider sends the person back to this web app.
+   * `manual_callback_url`: back to an address nothing answers on, which the
+   * person copies into the page.
+   */
+  completion: string;
+  expiresAt?: string;
 }
 
 const text = (value: unknown): value is string =>
@@ -289,7 +310,56 @@ export function parseMcpConnectorMutation(
     created: value.created === true,
     deleted: value.deleted === true,
     listed: isRecord(value.status),
+    ...(value.completed === true ? { completed: true } : {}),
+    ...(value.revoked === true ? { revoked: true } : {}),
   };
+}
+
+/**
+ * The sign-in page is opened in a window, so only a web page is accepted:
+ * https, or http on this computer for a local test server.
+ */
+export function parseMcpOAuthStart(value: unknown): McpOAuthStart | null {
+  if (
+    !isRecord(value) ||
+    !nonempty(value.flow_id) ||
+    !nonempty(value.authorization_url) ||
+    !nonempty(value.redirect_uri) ||
+    !nonempty(value.completion) ||
+    !webPage(value.authorization_url)
+  )
+    return null;
+  return {
+    flowId: value.flow_id,
+    authorizationUrl: value.authorization_url,
+    redirectUri: value.redirect_uri,
+    completion: value.completion,
+    ...(nonempty(value.expires_at) ? { expiresAt: value.expires_at } : {}),
+  };
+}
+
+function webPage(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password) return false;
+  if (url.protocol === "https:") return true;
+  return (
+    url.protocol === "http:" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
+  );
+}
+
+/** All four, or none: a sign-in that can start must be able to finish and stop. */
+export function supportsMcpOAuth(
+  capabilities: UiProtocolCapabilities | undefined,
+): boolean {
+  return Object.values(MCP_OAUTH_METHODS).every((method) =>
+    supportsMethod(capabilities, method),
+  );
 }
 
 function parseSavedConnector(value: unknown): McpConnectorSaved | null {
@@ -302,6 +372,7 @@ function parseSavedConnector(value: unknown): McpConnectorSaved | null {
     enabled: value.enabled,
     ...(nonempty(value.transport) ? { transport: value.transport } : {}),
     ...(nonempty(value.url) ? { url: value.url } : {}),
+    ...(typeof value.oauth === "boolean" ? { oauth: value.oauth } : {}),
   };
 }
 
@@ -455,6 +526,54 @@ export function createInventoryCommands(
     ): Promise<McpConnectorMutation> {
       if (!nonempty(connectorId)) throw new Error("A connector id is required");
       return manage(MCP_CONNECTOR_METHODS.RECONNECT, {
+        session_id: sessionId,
+        connector_id: connectorId,
+      });
+    },
+    /** Without a return address the server falls back to a pasted callback. */
+    async startOAuth(
+      connectorId: string,
+      redirectUri?: string,
+    ): Promise<McpOAuthStart> {
+      if (
+        !nonempty(connectorId) ||
+        (redirectUri !== undefined && !nonempty(redirectUri))
+      )
+        throw new Error("A connector id is required");
+      managementAvailable(MCP_OAUTH_METHODS.START);
+      const result = parseMcpOAuthStart(
+        await client.request(MCP_OAUTH_METHODS.START, {
+          session_id: sessionId,
+          connector_id: connectorId,
+          ...(redirectUri === undefined ? {} : { redirect_uri: redirectUri }),
+        }),
+      );
+      if (!result) throw new Error("Invalid OAuth start result");
+      return result;
+    },
+    async completeOAuth(
+      flowId: string,
+      callbackUrl: string,
+    ): Promise<McpConnectorMutation> {
+      if (!nonempty(flowId) || !nonempty(callbackUrl))
+        throw new Error("A sign-in and its return address are required");
+      return manage(MCP_OAUTH_METHODS.COMPLETE, {
+        session_id: sessionId,
+        flow_id: flowId,
+        callback_url: callbackUrl,
+      });
+    },
+    async cancelOAuth(flowId: string): Promise<void> {
+      if (!nonempty(flowId)) throw new Error("A sign-in is required");
+      managementAvailable(MCP_OAUTH_METHODS.CANCEL);
+      await client.request(MCP_OAUTH_METHODS.CANCEL, {
+        session_id: sessionId,
+        flow_id: flowId,
+      });
+    },
+    async revokeOAuth(connectorId: string): Promise<McpConnectorMutation> {
+      if (!nonempty(connectorId)) throw new Error("A connector id is required");
+      return manage(MCP_OAUTH_METHODS.REVOKE, {
         session_id: sessionId,
         connector_id: connectorId,
       });
