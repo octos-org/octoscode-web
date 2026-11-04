@@ -1,5 +1,8 @@
 import type { TurnMedia } from "@octos-org/octoscode-client/protocol";
-import type { TimelineEntry } from "../timeline/entry-model.ts";
+import {
+  STEERING_ACCEPTED,
+  type TimelineEntry,
+} from "../timeline/entry-model.ts";
 
 /**
  * How Core words a write blocked by read-only access: its own tools say
@@ -20,7 +23,9 @@ export interface ReadOnlyDenial {
  * The write the latest request lost to read-only access. A newer request
  * clears it, because that request may never need to write. A steer is not a
  * newer request: it joins the running turn, so redoing the turn takes every
- * input it received, in order, with their files.
+ * input it received, in order, with their files. Core gives the model a steer
+ * before it echoes the steer as a user row, so until then the accepted notice
+ * is the only record of it.
  */
 export function latestReadOnlyDenial(
   entries: readonly TimelineEntry[],
@@ -29,9 +34,16 @@ export function latestReadOnlyDenial(
   if (latest < 0) return null;
   const turnId = entries[latest]!.turnId;
   // An old transcript row can lack a turn; then it speaks only for itself.
-  const request = turnId
-    ? entries.filter((entry) => entry.turnId === turnId)
-    : entries.slice(latest);
+  const first = turnId
+    ? entries.findIndex(
+        (entry) => entry.kind === "user" && entry.turnId === turnId,
+      )
+    : latest;
+  const request = entries
+    .slice(first)
+    .filter(
+      (entry) => !turnId || entry.turnId === turnId || isAcceptedSteer(entry),
+    );
   const denied = request.find(
     (entry) =>
       entry.kind === "tool" &&
@@ -39,15 +51,15 @@ export function latestReadOnlyDenial(
       entry.status === "error" &&
       READ_ONLY_DENIAL.test(entry.body),
   );
-  const inputs = request.filter((entry) => entry.kind === "user");
-  const prompt = inputs
-    .map((entry) => entry.body.trim())
-    .filter(Boolean)
-    .join("\n\n");
-  if (!denied?.turnId || !prompt) return null;
+  const inputs = request.filter(
+    (entry) => entry.kind === "user" || isAcceptedSteer(entry),
+  );
+  const texts = inputs.map((entry) => entry.body.trim()).filter(Boolean);
+  if (!denied?.turnId || !texts.length) return null;
   return {
     turnId: denied.turnId,
-    prompt,
+    // A steer's notice and its later echo say the same thing.
+    prompt: [...new Set(texts)].join("\n\n"),
     media: inputs.flatMap((entry) =>
       (entry.media ?? []).map((path) => ({
         path,
@@ -57,4 +69,8 @@ export function latestReadOnlyDenial(
       })),
     ),
   };
+}
+
+function isAcceptedSteer(entry: TimelineEntry): boolean {
+  return entry.kind === "system" && entry.title === STEERING_ACCEPTED;
 }

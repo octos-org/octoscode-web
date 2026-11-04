@@ -115,6 +115,50 @@ describe("latestReadOnlyDenial", () => {
     });
   });
 
+  it("includes a steer Core accepted but has not echoed as a user row", () => {
+    // Core gives the model a steer before it sends the steer's user_message,
+    // so while the turn runs this notice is the only record of it.
+    const steer = (body: string): TimelineEntry => ({
+      id: `steer:${body}`,
+      kind: "system",
+      title: "Steering accepted",
+      status: "info",
+      body,
+    });
+    expect(
+      latestReadOnlyDenial([
+        steer("from an earlier request"),
+        { ...user("t1", "fix the bug"), id: "user:t1" },
+        steer("only touch price.js"),
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+      ]),
+    ).toMatchObject({ prompt: "fix the bug\n\nonly touch price.js" });
+    expect(
+      latestReadOnlyDenial([
+        { ...user("t1", "fix the bug"), id: "user:t1" },
+        steer("only touch price.js"),
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+        { ...user("t1", "only touch price.js"), id: "user-event:steer" },
+      ]),
+    ).toMatchObject({ prompt: "fix the bug\n\nonly touch price.js" });
+  });
+
+  it("does not take another notice for a steer", () => {
+    expect(
+      latestReadOnlyDenial([
+        { ...user("t1", "fix the bug"), id: "user:t1" },
+        {
+          id: "steer:x",
+          kind: "system",
+          title: "Steering queued",
+          status: "info",
+          body: "The text remains ahead of later pending prompts.",
+        },
+        tool("t1", "error", "write_file is not permitted by read-only access"),
+      ]),
+    ).toMatchObject({ prompt: "fix the bug" });
+  });
+
   it("does not credit a later request with an earlier turn's late denial", () => {
     expect(
       latestReadOnlyDenial([
