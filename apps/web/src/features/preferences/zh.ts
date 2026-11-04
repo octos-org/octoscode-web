@@ -1846,6 +1846,64 @@ const catalog: Readonly<Record<string, string>> = {
     "它还没有运行。这一行只记在当前页面：刷新页面后，要等连接器加载出来才会再显示，但保存的配置还在。",
   "Delete {name}? Its saved setup will be removed.":
     "删除 {name}？保存的配置会被移除。",
+  "Sign in": "授权",
+  "Sign in again": "重新授权",
+  "Revoke sign-in": "撤销授权",
+  "Cancel sign-in": "取消授权",
+  "Confirm revoke": "确认撤销",
+  "Open the sign-in page": "打开授权页",
+  "Open the sign-in page again": "重新打开授权页",
+  "Opening the sign-in page…": "正在打开授权页…",
+  "Getting the sign-in page…": "正在准备授权页…",
+  "Finishing sign-in…": "正在完成授权…",
+  "Revoking sign-in…": "正在撤销授权…",
+  "This connector needs you to sign in.": "这个连接器需要登录授权。",
+  "Finish signing in in the window that opened. This page updates by itself when you're done.":
+    "在新打开的窗口里完成授权，完成后这里会自动更新。",
+  "The browser blocked the sign-in window. Open it with the link below.":
+    "浏览器拦住了授权窗口，请用下面的链接打开。",
+  "This server takes the sign-in back by hand: after you allow access, the window stops on a page that doesn't load. Copy that page's full address here.":
+    "这台服务要你手动交回授权结果：在授权页同意后，窗口会停在一个打不开的页面，把那个页面的完整地址复制到这里。",
+  "Address after signing in": "授权后的地址",
+  "Finish signing in": "完成授权",
+  "That isn't a web address. Copy the full address from the sign-in window.":
+    "这不是一个网址。请从授权窗口复制完整地址。",
+  "Signed in.": "已授权。",
+  "Signed in. Takes effect after the server restarts.":
+    "已授权，重启服务后生效。",
+  "Signed in. Not in effect yet.": "已授权，还没有生效。",
+  "Sign-in revoked. Sign in again to use this connector.":
+    "已撤销授权，要重新授权才能用这个连接器。",
+  "Sign-in revoked. The server keeps using it until it restarts.":
+    "已撤销授权。这台服务要重启后才会停用它。",
+  "Sign-in cancelled. Nothing was saved. You can close the sign-in window.":
+    "已取消授权，没有保存任何授权信息。可以关掉授权窗口了。",
+  "Only connectors with an https address can sign in.":
+    "只有 https 地址的连接器能授权。",
+  "This connector's service doesn't offer sign-in (OAuth).":
+    "这个连接器的服务没有提供登录授权（OAuth）。",
+  "Sign-in didn't finish: the service answered “{reason}”.":
+    "授权没有完成：对方返回“{reason}”。",
+  "Sign-in didn't finish: the service refused it when Octos exchanged it.":
+    "授权没有完成：Octos 向对方换取授权时被拒绝了。",
+  "This sign-in is no longer waiting on the server (cancelled, or the server restarted). Sign in again.":
+    "服务器上已经没有这次授权了（取消过，或服务重启过）。请重新授权。",
+  "This sign-in expired after 10 minutes. Sign in again.":
+    "这次授权超过 10 分钟已失效。请重新授权。",
+  "Sign-in didn't finish.": "授权没有完成。",
+  "Revoke the sign-in for {name}? It stops working until you sign in again.":
+    "撤销 {name} 的授权？撤销后要重新授权才能用。",
+  "Sign-in handed back": "授权已交回",
+  "Octoscode is finishing it. You can close this window.":
+    "Octoscode 正在完成授权，可以关闭这个窗口了。",
+  "No Octoscode page is waiting for this sign-in":
+    "没有 Octoscode 页面在等这次授权",
+  "The page may have been refreshed, or the sign-in was cancelled. Go back to Octoscode and choose Sign in on the connector again.":
+    "可能页面刷新过，或者授权已经取消。回到 Octoscode，在连接器上重新点“授权”。",
+  "This browser can't hand the sign-in back": "这个浏览器没法把授权交回去",
+  "Go back to Octoscode and sign in again from a current version of Chrome, Edge, Firefox or Safari.":
+    "回到 Octoscode，用新版的 Chrome、Edge、Firefox 或 Safari 重新授权。",
+  "Handing the sign-in back to Octoscode…": "正在把授权交回 Octoscode…",
   "This connector is no longer in the saved setup.":
     "这个连接器已经不在保存的配置里了。",
   "This server only reconnects connectors when it restarts.":

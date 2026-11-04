@@ -12,5 +12,12 @@ export const MCP_CONNECTOR_METHODS = {
   RECONNECT: "mcp/connector/reconnect",
 } as const;
 
+export const MCP_OAUTH_METHODS = {
+  START: "mcp/oauth/start",
+  COMPLETE: "mcp/oauth/complete",
+  CANCEL: "mcp/oauth/cancel",
+  REVOKE: "mcp/oauth/revoke",
+} as const;
+
 /** Request during negotiation; Core #2912 omits this from SessionOpened's response. */
 export const MCP_CONNECTOR_MANAGE_V1 = "mcp.connector.manage.v1";

@@ -54,6 +54,16 @@ const MCP_CONNECTOR_METHODS = [
   "mcp/connector/set_enabled",
   "mcp/connector/reconnect",
 ];
+const MCP_OAUTH_METHODS = [
+  "mcp/oauth/start",
+  "mcp/oauth/complete",
+  "mcp/oauth/cancel",
+  "mcp/oauth/revoke",
+];
+// Connector sign-ins, as Core runs them: Core holds the flow and the tokens, the
+// browser only ever sees the provider's page and the address it returns to.
+const oauthFlows = new Map();
+const socketOrigins = new WeakMap();
 const connectorRowsByWorkspace = new Map();
 // A profile loaded at startup: Core saves a change but keeps serving its boot
 // snapshot, so mcp/status/list stays as it was until the server restarts.
@@ -106,6 +116,22 @@ function connectorRows(workspaceRoot) {
         error: "connection refused",
         url: "https://legacy.example.test/mcp",
       },
+      ...(workspaceRoot.includes("oauth")
+        ? [
+            {
+              id: "issues",
+              display_name: "Issue tracker",
+              transport: "http",
+              enabled: true,
+              status: "failed",
+              tool_count: 0,
+              tools: [],
+              url: "https://issues.example.test/mcp",
+              error:
+                "MCP initialize failed: Send message error Transport [rmcp::transport::worker::WorkerTransport<…>] error: Auth required, when send initialize request",
+            },
+          ]
+        : []),
     ]);
   }
   return connectorRowsByWorkspace.get(workspaceRoot);
@@ -2559,7 +2585,32 @@ const http = createServer(async (request, response) => {
   ) {
     connectorRowsByWorkspace.clear();
     connectorSavedByWorkspace.clear();
+    oauthFlows.clear();
     response.writeHead(204).end();
+    return;
+  }
+  // The provider's sign-in page for a mock connector sign-in.
+  if (
+    request.method === "GET" &&
+    new URL(request.url, "http://fixture").pathname === "/__oauth__/authorize"
+  ) {
+    const flow = oauthFlows.get(
+      new URL(request.url, "http://fixture").searchParams.get("flow"),
+    );
+    if (!flow) {
+      response.writeHead(404).end();
+      return;
+    }
+    const back = (params) =>
+      `${flow.redirect}?${new URLSearchParams({ ...params, state: flow.state })}`;
+    const escape = (value) => value.replaceAll("&", "&amp;");
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(
+      `<!doctype html><html lang="en"><title>Mock provider</title><main><h1>Mock provider sign-in</h1>` +
+        `<a href="${escape(back({ code: `ok-${flow.id}` }))}">Allow</a> ` +
+        `<a href="${escape(back({ error: "access_denied", error_description: "The person said no" }))}">Deny</a> ` +
+        `<a href="${escape(back({ code: `bad-${flow.id}` }))}">Allow with a code the exchange refuses</a></main></html>`,
+    );
     return;
   }
   if (
@@ -2985,6 +3036,7 @@ function capabilitiesFor(socket, state) {
       supported_methods: [
         ...memoryCapabilities.supported_methods,
         ...MCP_CONNECTOR_METHODS,
+        ...(workspaceRoot.includes("oauth") ? MCP_OAUTH_METHODS : []),
       ],
       supported_features: [
         ...memoryCapabilities.supported_features,
@@ -3448,6 +3500,7 @@ function handleNativeRequest(socket, request, state) {
 }
 
 sockets.on("connection", (socket, request) => {
+  socketOrigins.set(socket, request.headers.origin ?? null);
   const connectionAuthToken = authTokenFromUpgradeRequest(request);
   if (connectionAuthToken === workspaceBrowseAuthToken) {
     workspaceBrowseSockets.add(socket);
@@ -5495,6 +5548,200 @@ sockets.on("connection", (socket, request) => {
         content_base64: bytes.toString("base64"),
       });
       return;
+    }
+    if (request.method.startsWith("mcp/oauth/")) {
+      const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";
+      const rows = [
+        ...connectorRows(workspaceRoot),
+        ...connectorSaved(workspaceRoot),
+      ];
+      const runtime = workspaceRoot.includes("pinned")
+        ? {
+            runtime_disposition: "restart_required",
+            restart_required: true,
+            effective_from: "next_turn",
+          }
+        : {
+            runtime_disposition: "reloaded",
+            restart_required: false,
+            effective_from: "next_turn",
+          };
+      const summary = (row) => ({ ...savedConnectorSummary(row), oauth: true });
+      const status = (row) =>
+        connectorPayload(
+          sessionId,
+          defaultProfileId,
+          workspaceRoot,
+        ).servers.find((server) => server.id === row.id) ?? null;
+      if (request.method === "mcp/oauth/start") {
+        const row = rows.find(
+          (item) => item.id === request.params.connector_id,
+        );
+        if (!row) {
+          replyError(
+            socket,
+            request.id,
+            -32170,
+            `mcp_connector not found: ${request.params.connector_id}`,
+            { kind: "not_found" },
+          );
+          return;
+        }
+        if (!row.url?.startsWith("https://")) {
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            "OAuth MCP endpoints must use https",
+          );
+          return;
+        }
+        let redirect = "http://127.0.0.1/oauth/mcp/callback";
+        let completion = "manual_callback_url";
+        if (request.params.redirect_uri) {
+          const asked = new URL(request.params.redirect_uri);
+          if (
+            asked.pathname !== "/oauth/mcp/callback" ||
+            asked.search ||
+            asked.hash
+          ) {
+            replyError(
+              socket,
+              request.id,
+              -32602,
+              "redirect_uri must be the allowed web origin plus /oauth/mcp/callback",
+            );
+            return;
+          }
+          if (
+            asked.origin !== socketOrigins.get(socket) ||
+            workspaceRoot.includes("oauth-manual")
+          ) {
+            replyError(
+              socket,
+              request.id,
+              -32120,
+              "redirect_uri origin is not allowed for this connection",
+            );
+            return;
+          }
+          redirect = request.params.redirect_uri;
+          completion = "web_origin";
+        }
+        const flow = {
+          id: randomUUID(),
+          state: randomUUID(),
+          redirect,
+          connectorId: row.id,
+          sessionId,
+        };
+        oauthFlows.set(flow.id, flow);
+        reply(socket, request.id, {
+          flow_id: flow.id,
+          authorization_url: `http://127.0.0.1:${port}/__oauth__/authorize?${new URLSearchParams({ flow: flow.id, state: flow.state, client_id: "mock-client" })}`,
+          redirect_uri: redirect,
+          completion,
+          expires_at: new Date(Date.now() + 600_000).toISOString(),
+          token_storage: "keyring",
+        });
+        return;
+      }
+      if (request.method === "mcp/oauth/cancel") {
+        oauthFlows.delete(request.params.flow_id);
+        reply(socket, request.id, { cancelled: true });
+        return;
+      }
+      if (request.method === "mcp/oauth/complete") {
+        const flow = oauthFlows.get(request.params.flow_id);
+        oauthFlows.delete(request.params.flow_id);
+        if (!flow || flow.sessionId !== sessionId) {
+          replyError(
+            socket,
+            request.id,
+            -32170,
+            `oauth_flow not found: ${request.params.flow_id}`,
+            { kind: "not_found" },
+          );
+          return;
+        }
+        const callback = new URL(request.params.callback_url);
+        const expected = new URL(flow.redirect);
+        if (
+          callback.origin !== expected.origin ||
+          callback.pathname !== expected.pathname
+        ) {
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            "callback_url does not match the flow redirect_uri",
+          );
+          return;
+        }
+        const code = callback.searchParams.get("code");
+        if (!code || callback.searchParams.get("state") !== flow.state) {
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            `OAuth callback exchange failed: OAuth authorization failed: ${code ? "state mismatch" : "Authorization callback missing code"}`,
+          );
+          return;
+        }
+        if (code.startsWith("bad-")) {
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            "OAuth callback exchange failed: OAuth token exchange failed: Server returned error response: invalid_grant",
+          );
+          return;
+        }
+        const row = rows.find((item) => item.id === flow.connectorId);
+        if (!workspaceRoot.includes("pinned")) {
+          row.status = "connected";
+          row.tool_count = 1;
+          row.tools = ["lookup"];
+          delete row.error;
+        }
+        reply(socket, request.id, {
+          status: workspaceRoot.includes("pinned") ? null : status(row),
+          runtime,
+          connector: summary(row),
+          completed: true,
+          token_storage: "keyring",
+        });
+        return;
+      }
+      if (request.method === "mcp/oauth/revoke") {
+        const row = rows.find(
+          (item) => item.id === request.params.connector_id,
+        );
+        if (!row) {
+          replyError(
+            socket,
+            request.id,
+            -32170,
+            `mcp_connector not found: ${request.params.connector_id}`,
+            { kind: "not_found" },
+          );
+          return;
+        }
+        if (!workspaceRoot.includes("pinned")) {
+          row.status = "failed";
+          row.tool_count = 0;
+          row.tools = [];
+          row.error = `no stored OAuth tokens for MCP server '${row.url}'; run \`octos mcp login ${row.url}\` first`;
+        }
+        reply(socket, request.id, {
+          status: workspaceRoot.includes("pinned") ? null : status(row),
+          runtime,
+          connector: summary(row),
+          revoked: true,
+          token_storage: "keyring",
+        });
+        return;
+      }
     }
     if (request.method.startsWith("mcp/connector/")) {
       const workspaceRoot = openedWorkspaceBySocket.get(socket) ?? "";

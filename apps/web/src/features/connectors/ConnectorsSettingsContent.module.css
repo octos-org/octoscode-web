@@ -53,6 +53,54 @@
   line-height: 20px;
 }
 
+.signIn {
+  display: grid;
+  gap: var(--dsw-space-2);
+  padding-top: var(--dsw-space-2);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.signIn details code {
+  display: block;
+  margin-top: var(--dsw-space-1);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.signInPaste {
+  display: grid;
+  gap: var(--dsw-space-2);
+}
+
+.signInPaste input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--dsw-control-h-md);
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-control);
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.actions .linkButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--dsw-control-h-md);
+  padding: 0 var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-control);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-size-button);
+  text-decoration: none;
+}
+
+.actions .linkButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .editor {
   display: grid;
   gap: var(--dsw-space-3);

@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type {
   OctosUiClient,
   UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import {
   supportsMcpConnectorManagement,
+  supportsMcpOAuth,
   type McpConnectorMutation,
   type McpStdioAllowlistEntry,
   type RuntimeMcp,
@@ -14,6 +22,16 @@ import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "../settings-lists/SettingsLists.module.css";
 import local from "./ConnectorsSettingsContent.module.css";
+import { ConnectorSignIn } from "./ConnectorSignIn.tsx";
+import {
+  connectorOAuthState,
+  knownToUseOAuth,
+  needsSignIn,
+  oauthSettled,
+  oauthVersion,
+  rememberConnectorOAuth,
+  subscribeConnectorOAuth,
+} from "./connector-oauth.ts";
 import {
   afterMutation,
   readSavedConnectors,
@@ -148,6 +166,17 @@ export function ConnectorsSettingsContent({
   const managementDisabled =
     !managementAvailable || manageDenied || serverDenied || factsInvalid;
   const allowlist = factsInvalid ? undefined : state?.stdioAllowlist;
+  const signInAvailable = managementAvailable && supportsMcpOAuth(capabilities);
+  // Sign-ins outlive this page: one can finish while settings are closed.
+  useSyncExternalStore(
+    useCallback(
+      (listener: () => void) =>
+        subscribeConnectorOAuth(client, profileId, listener),
+      [client, profileId],
+    ),
+    () => oauthVersion(client, profileId),
+  );
+  const settled = oauthSettled(client, profileId);
   const allowlistEntry = (entryId: string) =>
     allowlist?.find((entry) => entry.entryId === entryId);
 
@@ -208,6 +237,14 @@ export function ConnectorsSettingsContent({
     };
   }, [client, profileId, refresh]);
 
+  // A finished sign-in or revocation changed what the server runs.
+  const seenSettled = useRef(settled);
+  useEffect(() => {
+    if (settled === seenSettled.current) return;
+    seenSettled.current = settled;
+    void refresh();
+  }, [refresh, settled]);
+
   async function runMutation(
     key: string,
     operation: (
@@ -230,6 +267,7 @@ export function ConnectorsSettingsContent({
         capabilities,
       );
       const mutation = await operation(commands);
+      rememberConnectorOAuth(client, profileId, mutation);
       const open = ticket === generation.current;
       updateSaved((rows) => afterMutation(rows, mutation, connectorId), open);
       if (!open) return;
@@ -617,8 +655,17 @@ export function ConnectorsSettingsContent({
             {(state?.servers ?? []).map((server) => {
               const name = connectorName(server);
               const rowBusy = busy?.endsWith(`:${server.id}`) === true;
+              const signIn = connectorOAuthState(client, profileId, server.id);
+              const usesOAuth = knownToUseOAuth(client, profileId, server.id);
+              const signInNeeded = needsSignIn(server.error);
               const needsAuthorization =
-                server.authorization && server.authorization !== "authorized";
+                (server.authorization &&
+                  server.authorization !== "authorized") ||
+                (signInNeeded && signIn?.kind !== "authorized");
+              const showSignIn =
+                signInAvailable &&
+                server.transport === "http" &&
+                (signInNeeded || usesOAuth || Boolean(signIn));
               return (
                 <article
                   key={server.id}
@@ -645,8 +692,23 @@ export function ConnectorsSettingsContent({
                     {" · "}
                     {t("{count} tools", { count: server.toolCount })}
                   </p>
-                  {server.error ? (
+                  {server.error && !(showSignIn && signInNeeded) ? (
                     <p className={styles.error}>{server.error.slice(0, 512)}</p>
+                  ) : null}
+                  {showSignIn ? (
+                    <ConnectorSignIn
+                      client={client}
+                      profileId={profileId}
+                      sessionId={sessionId}
+                      capabilities={capabilities}
+                      connectorId={server.id}
+                      connectorName={name}
+                      state={signIn}
+                      needsSignIn={signInNeeded}
+                      serverError={signInNeeded ? server.error : undefined}
+                      usesOAuth={usesOAuth}
+                      locked={managementLocked}
+                    />
                   ) : null}
                   {server.tools.length ? (
                     <details>
@@ -800,6 +862,22 @@ export function ConnectorsSettingsContent({
                 </p>
                 {row.error ? (
                   <p className={styles.error}>{row.error.slice(0, 512)}</p>
+                ) : null}
+                {signInAvailable &&
+                row.transport === "http" &&
+                row.url?.startsWith("https://") ? (
+                  <ConnectorSignIn
+                    client={client}
+                    profileId={profileId}
+                    sessionId={sessionId}
+                    capabilities={capabilities}
+                    connectorId={row.id}
+                    connectorName={row.name}
+                    state={connectorOAuthState(client, profileId, row.id)}
+                    needsSignIn={false}
+                    usesOAuth={knownToUseOAuth(client, profileId, row.id)}
+                    locked={managementLocked}
+                  />
                 ) : null}
                 <p className={styles.meta}>
                   {t(
