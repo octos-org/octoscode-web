@@ -3753,16 +3753,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       t("saved model")
     : undefined;
   // The context as the server last described it: the open-time read, then
-  // whatever `context/*` notifications have said since.
-  const liveContext = useLiveContext(
+  // whatever `context/*` notifications have said since, kept per session so
+  // coming back to a session keeps its latest report and window.
+  const live = useLiveContext(
     protocol.client,
     session.opened?.session_id,
     work.supervision.runtimeStatus?.contextSnapshot,
   );
-  const contextPercent = contextUsage(
-    liveContext,
-    workspaceProduct.state.tokenCost,
-  ).percent;
+  const liveContext = live.snapshot;
+  const contextWindowUsage =
+    session.opened?.session_id && live.window !== null
+      ? { sessionId: session.opened.session_id, contextWindow: live.window }
+      : workspaceProduct.state.tokenCost;
+  const contextPercent = contextUsage(liveContext, contextWindowUsage).percent;
   // T-0364: the pre-send estimate follows the draft after a short pause, and
   // only for the session the draft was typed in; it is never stored.
   const estimateSessionId = session.opened?.session_id ?? null;
@@ -3789,7 +3792,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           sessionId: estimateInput.sessionId,
           text: estimateInput.text,
           snapshot: liveContext,
-          usage: workspaceProduct.state.tokenCost,
+          usage: contextWindowUsage,
           attachments:
             conversation.attachments?.getSnapshot().entries.length ?? 0,
         })

@@ -667,7 +667,7 @@ export function DraftEstimateChip({
                     ),
               estimate.window === null
                 ? t(
-                    "The context window is known after the first reply in this session.",
+                    "The context window is known once this session replies while this page is open.",
                   )
                 : null,
               t(
