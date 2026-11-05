@@ -1950,6 +1950,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         }
         return;
       }
+      // Another submit may have consumed the draft while both awaited SET.
+      if (draftRef.current.trim() !== text) return;
     }
     if (
       intent.kind === "prompt" &&
@@ -2767,7 +2769,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         previousDraft: string;
       }
     | null
-  >(null);
+  >(() => {
+    const id = new URL(window.location.href).searchParams.get("template");
+    return id && findTaskTemplate(id)
+      ? { kind: "pending", templateId: id }
+      : null;
+  });
+  useEffect(() => {
+    // Only the public catalog selection survives a pre-session reload.
+    const url = new URL(window.location.href);
+    if (templateNotice?.kind === "pending") {
+      url.searchParams.set("template", templateNotice.templateId);
+    } else {
+      url.searchParams.delete("template");
+    }
+    window.history.replaceState(null, "", url);
+  }, [templateNotice]);
   const [templatePermission, setTemplatePermission] = useState<{
     sessionKey: string;
     action: "read" | "restore";
@@ -3316,27 +3333,46 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       </section>
     )
   ) : null;
+  const sessionCreationRef = useRef<{
+    connection: typeof connectionIdentity;
+    path: string;
+    id: string;
+    pending: boolean;
+  } | null>(null);
   const createSessionInWorkspace = async (
     workspacePath: string,
   ): Promise<WorkspaceOpenOutcome | null> => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
       navigationBlocked ||
+      sessionCreationRef.current?.pending ||
       !workspacePath.trim()
     )
       return null;
-    const sessionId = freshWebSessionId();
-    const outcome = await openSessionWithDefaults(sessionId, workspacePath);
-    if (outcome === "awaiting_choice") {
+    const path = workspacePath.trim();
+    let attempt = sessionCreationRef.current;
+    if (attempt?.connection !== connectionIdentity || attempt.path !== path) {
+      attempt = {
+        connection: connectionIdentity,
+        path,
+        id: freshWebSessionId(),
+        pending: false,
+      };
+      sessionCreationRef.current = attempt;
+    }
+    attempt.pending = true;
+    try {
+      const outcome = await openSessionWithDefaults(attempt.id, path);
+      if (outcome !== "opened" && outcome !== "awaiting_choice") return outcome;
+      sessionCreationRef.current = null;
+      if (outcome === "opened" && compact) setSidebarCollapsed(true);
       setWorkspacePicker((current) => ({ ...current, open: false }));
       revealRemoteSession();
       return outcome;
+    } finally {
+      // A failed open can already exist on the server; retry that same ID.
+      attempt.pending = false;
     }
-    if (outcome !== "opened") return outcome;
-    if (compact) setSidebarCollapsed(true);
-    setWorkspacePicker((current) => ({ ...current, open: false }));
-    revealRemoteSession();
-    return outcome;
   };
   // T-0361: a phone starts a fresh session inside a folder it already
   // watches. One create at a time, and a refused open says so instead of

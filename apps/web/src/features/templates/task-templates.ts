@@ -101,6 +101,29 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
     },
   },
   {
+    id: "repository-health",
+    category: "code",
+    access: "read",
+    copy: {
+      en: {
+        title: "Check repository health",
+        summary: "Find concrete risks and missing tests without changing code.",
+        prompt:
+          "Check the health of [the module or workflow to examine] in the selected workspace.\nRead its implementation, configuration and tests. Prioritize concrete bugs, error handling gaps and untested boundaries. For each finding give a file and line, a reproducible example or supporting evidence, its impact and a suggested fix. Do not edit files or install dependencies. Ask before running commands that write data or access the network. State what you could not verify; do not invent findings.",
+        example:
+          "High · import.ts:42 malformed rows abort the entire import\nEvidence: the parser throws before the per-row error handler\nSuggested test: valid row followed by a malformed row",
+      },
+      zh: {
+        title: "代码体检",
+        summary: "找出有证据的风险和测试缺口，只审不改。",
+        prompt:
+          "为当前工作区的【要检查的模块或流程】做一次代码体检。\n阅读相关实现、配置和测试，优先检查真实 bug、错误处理和未覆盖的边界。每条问题写清文件与行号、复现示例或证据、影响和修改建议。不要改文件或安装依赖；需要写入数据或联网的命令先问我。说明哪些结论尚未验证，不要编造问题。",
+        example:
+          "高 · import.ts:42 一行格式错误会中断整批导入\n证据：解析器在逐行错误处理之前抛错\n建议用例：正常行后接一行错误数据",
+      },
+    },
+  },
+  {
     id: "weekly-report",
     category: "general",
     access: "write",
@@ -143,6 +166,53 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
           "整理【表格文件，可以拖进来，也可以写文件名，例如 客户名单.csv】：去掉重复行，统一日期和金额格式，修正明显的错别字，按【排序依据】排序。原文件不动，结果另存为一个新文件，并告诉我改了什么、哪些行拿不准。只使用用户或参考资料中提供的事实；推测和建议必须明确标注，不能把未知信息写成已确定或已确认。",
         example:
           "去重 23 行 · 统一日期 410 处\n有 3 行拿不准，请确认\n已另存为 客户名单_整理.csv",
+      },
+    },
+  },
+  {
+    id: "research-topic",
+    category: "general",
+    access: "read",
+    copy: {
+      en: {
+        title: "Research a topic",
+        summary: "Compare sources and separate evidence from open questions.",
+        prompt:
+          "Research [topic and the decision this should inform] using [provided materials or public links].\nSummarize the key findings, compare the options in a table and cite a source for each factual claim. Distinguish facts, inferences and recommendations, including dates where relevant. Use only the materials I identify and available public sources; do not search private folders. If web access or a source is unavailable, say so and ask for the missing material. Reply here without changing files.",
+        example:
+          "Option A: lower setup cost (source, date)\nOption B: supports offline work (source, date)\nStill unknown: support response time",
+      },
+      zh: {
+        title: "调研一个主题",
+        summary: "对照资料列出结论、出处和待确认的问题。",
+        prompt:
+          "围绕【调研主题和要支持的决策】，使用【提供的资料或公开链接】做一份调研。\n先总结关键发现，再用表格比较方案，每条事实标明出处，必要时注明日期。区分事实、推测和建议。只使用我指定的材料和可访问的公开来源，不搜索私有目录；无法联网或读取来源时明确说明，并向我索取缺少的材料。在回复里给出结果，不修改文件。",
+        example:
+          "方案 A：初始成本较低（来源、日期）\n方案 B：支持离线使用（来源、日期）\n待确认：支持服务的响应时间",
+      },
+    },
+  },
+  {
+    id: "polish-writing",
+    category: "general",
+    access: "write",
+    copy: {
+      en: {
+        title: "Polish a draft",
+        summary:
+          "Improve structure and clarity while keeping your facts intact.",
+        prompt:
+          "Polish [the text pasted here, attached file or named file in this workspace] for [audience and tone].\nImprove its structure, clarity and wording while preserving the author's meaning, numbers and quotations. Flag unsupported claims or missing information instead of inventing details. Save a separate polished copy in this workspace without overwriting the original, and summarize the main edits. Read only the materials I specify.",
+        example:
+          "Structure: lead with the request, then give context\nWording: shorten repeated explanations\nNeeds confirmation: the delivery date",
+      },
+      zh: {
+        title: "文稿打磨",
+        summary: "理顺结构、改进表达，保留事实和原稿。",
+        prompt:
+          "打磨【粘贴的正文、附件或当前工作区里的文件名】，面向【读者和希望的语气】。\n调整结构、精简表达，保留作者原意、数字和引文。缺少依据或信息时标注待确认，不编造细节。在当前工作区另存一份润色稿，不覆盖原稿，并简述主要修改。只读取我指定的材料。",
+        example:
+          "结构：先说明诉求，再补充背景\n表达：删去重复解释，缩短长句\n待确认：交付日期",
       },
     },
   },

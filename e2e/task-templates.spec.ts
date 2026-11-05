@@ -165,6 +165,7 @@ test("a read-only template waits for the permission receipt before sending", asy
     .click();
   await composer.press("Enter");
   await expect.poll(() => Boolean(release)).toBe(true);
+  await composer.press("Enter");
   expect(starts).toBe(0);
   await expect(composer).toHaveValue(/^Review the recent changes/);
   release?.();
@@ -174,6 +175,11 @@ test("a read-only template waits for the permission receipt before sending", asy
   await expect(
     page.getByRole("button", { name: /Read only/ }).first(),
   ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Turn summary", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".entry-user")).toHaveCount(1);
+  expect(starts).toBe(1);
 });
 
 test("a write template sends without changing the selected permission", async ({
