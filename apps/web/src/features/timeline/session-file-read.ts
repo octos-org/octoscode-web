@@ -4,7 +4,8 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 
 const CHUNK_SIZE = 512 * 1024;
-const MAX_FILE_BYTES = 32 * 1024 * 1024;
+/** Core's session/files.read limit (SESSION_FILE_READ_MAX_BYTES). */
+export const MAX_FILE_BYTES = 32 * 1024 * 1024;
 
 export function isWorkspaceRelativePath(value: string): boolean {
   return (

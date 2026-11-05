@@ -3,8 +3,8 @@ import { ArrowLeftIcon, FileIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import type { SupervisedTask } from "../supervision/model.ts";
 import type { AttachmentAccess } from "../timeline/attachment-access.ts";
-import { attachmentName } from "../timeline/attachments.ts";
-import { FilePreview } from "./FilePreview.tsx";
+import { attachmentName, isWorkspaceUpload } from "../timeline/attachments.ts";
+import { SentFilePreview } from "./SentFilePreview.tsx";
 import type { SessionFileChange } from "./session-changes.ts";
 import type { resolvePanelFile } from "./panel-selection.ts";
 import styles from "./SessionPanelTabs.module.css";
@@ -48,13 +48,14 @@ export function OutputsTab(props: OutputsTabProps) {
       access.workspacePathAvailable?.(change.path)
         ? access.downloadWorkspaceFile
         : null;
-    const open = workspaceRead ? change!.path : reference;
-    const loadBlob = deleted
+    // The same preview as the transcript: a written file through the
+    // workspace reader, a sent one through the delivered-file route.
+    const preview = deleted
       ? null
-      : workspaceRead && open
-        ? (signal?: AbortSignal) => workspaceRead(open, signal)
+      : workspaceRead
+        ? { reference: change!.path, workspaceFile: true }
         : reference && access && access.deliveredPreviewAvailable !== false
-          ? (signal?: AbortSignal) => access.download(reference, signal)
+          ? { reference, workspaceFile: isWorkspaceUpload(reference) }
           : null;
     return (
       <div className={styles.stack}>
@@ -67,7 +68,7 @@ export function OutputsTab(props: OutputsTabProps) {
             <ArrowLeftIcon />
             {t("All outputs")}
           </button>
-          {loadBlob ? (
+          {preview ? (
             <button
               type="button"
               className={styles.action}
@@ -80,12 +81,12 @@ export function OutputsTab(props: OutputsTabProps) {
         {workspaceRead && !deleted ? (
           <p className={styles.note}>{t("Current workspace file")}</p>
         ) : null}
-        {loadBlob && open ? (
-          <FilePreview
-            key={`${open}:${change?.previewId ?? ""}:${revision}`}
-            name={attachmentName(open)}
-            path={open}
-            loadBlob={loadBlob}
+        {preview && access ? (
+          <SentFilePreview
+            key={`${preview.reference}:${change?.previewId ?? ""}:${revision}`}
+            reference={preview.reference}
+            workspaceFile={preview.workspaceFile}
+            access={access}
           />
         ) : found ? (
           <p className={styles.empty}>

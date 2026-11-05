@@ -368,43 +368,6 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.previewTitle {
-  overflow: hidden;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.preview {
-  display: grid;
-  min-width: 0;
-  gap: var(--dsw-space-3);
-}
-
-.previewImage {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
-}
-
-.previewText {
-  max-height: 60vh;
-  overflow: auto;
-  margin: 0;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: 400 12px/1.6 var(--dsw-font-family-code);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .action,
 .empty button {
   justify-self: start;

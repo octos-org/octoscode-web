@@ -315,6 +315,7 @@ import {
 import {
   deliveredArtifactWorkspacePath,
   isWorkspaceReadLimitError,
+  MAX_FILE_BYTES as SESSION_FILE_READ_LIMIT_BYTES,
   readSessionFileBlob,
   readSessionFileSize,
   workspaceRelativeArtifactPath,
@@ -1047,6 +1048,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 }
               }
               if (!canUseBlob) return null;
+              // Core's reader refusing a file as too large is the only size
+              // fact left when nothing lists it exactly.
+              let overReaderLimit = false;
+              const noted = (reason: unknown) => {
+                if (isWorkspaceReadLimitError(reason)) overReaderLimit = true;
+              };
+              const unknownSize = () =>
+                overReaderLimit
+                  ? { largerThanBytes: SESSION_FILE_READ_LIMIT_BYTES }
+                  : null;
               const workspacePath = workspaceRelativeArtifactPath(
                 reference,
                 attachmentWorkspaceRoot,
@@ -1063,9 +1074,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       deliveredPath,
                     ),
                   };
-                } catch {
+                } catch (reason) {
                   // The durable copy is the correct source for an external
                   // delivery, but older deliveries may not have one.
+                  noted(reason);
                 }
               }
               if (workspacePath && canReadWorkspace) {
@@ -1077,9 +1089,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       workspacePath,
                     ),
                   };
-                } catch {
+                } catch (reason) {
                   // Fall back to delivery-time metadata when the current
                   // source cannot be read through the workspace route.
+                  noted(reason);
                 }
               }
               const sizeBytes =
@@ -1096,9 +1109,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       deliveredPath,
                     ),
                   };
-                } catch {
+                } catch (reason) {
                   // Older deliveries may predate the durable copy. Fall back
                   // to the current workspace source only as a last resort.
+                  noted(reason);
                 }
               }
               try {
@@ -1119,9 +1133,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 );
                 return exact.length === 1
                   ? { sizeBytes: exact[0]!.size_bytes }
-                  : null;
+                  : unknownSize();
               } catch {
-                return null;
+                return unknownSize();
               }
             },
           }

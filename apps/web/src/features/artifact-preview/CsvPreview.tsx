@@ -146,18 +146,23 @@ export function CsvPreview({ blob }: { blob: Blob }) {
         ) : null}
         <span aria-live="polite">
           {total
-            ? t("Rows {first}–{last} of {total}", {
-                first: start + 1,
-                last: Math.min(total, start + rows.length),
-                total,
-              })
+            ? t(
+                truncated
+                  ? "Rows {first}–{last} of the first {total}"
+                  : "Rows {first}–{last} of {total}",
+                {
+                  first: start + 1,
+                  last: Math.min(total, start + rows.length),
+                  total,
+                },
+              )
             : t("0 rows")}
         </span>
       </div>
       {truncated ? (
         <p className={styles.notice} role="status">
           {t(
-            "This preview is limited to 1,000,000 cells and 200 columns. Download the file for the complete workbook.",
+            "This preview stops at 100,000 rows, 1,000,000 cells or 200 columns, so the file has more than is shown. Download it for all of it.",
           )}
         </p>
       ) : null}

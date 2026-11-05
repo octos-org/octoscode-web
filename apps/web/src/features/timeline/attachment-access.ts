@@ -34,6 +34,8 @@ export interface AttachmentAccess {
   ) => Promise<{
     sizeBytes?: number;
     saveAvailable?: boolean;
+    /** No exact size, but Core's reader refused the file as larger than this. */
+    largerThanBytes?: number;
   } | null>;
 }
 

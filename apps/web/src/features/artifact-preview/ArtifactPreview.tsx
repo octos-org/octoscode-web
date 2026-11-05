@@ -8,6 +8,7 @@ import {
 } from "react";
 import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { formatAttachmentSize } from "../timeline/attachments.ts";
 import {
   artifactExtension,
   artifactKind,
@@ -42,6 +43,9 @@ const SandboxPreview = lazy(() =>
 );
 
 const TEXT_PAGE_CHARACTERS = 48_000;
+/** Shared with the transcript thumbnail, which drops itself on the same failure. */
+export const BROKEN_IMAGE =
+  "This image can't be shown. The file may be damaged; download it to check.";
 const MAX_AUTOMATIC_PREVIEW_BYTES = 50 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 10 * 1024 * 1024;
 
@@ -63,6 +67,8 @@ export interface ArtifactPreviewProps {
   sizePending?: boolean;
   /** Delivered REST blobs must have an authoritative size before preview. */
   sizeRequired?: boolean;
+  /** No exact size, but the server's reader refused it as larger than this. */
+  largerThanBytes?: number | undefined;
   hasMore?: boolean;
   onLoadMore?: () => void;
   loadBlob?: (signal?: AbortSignal) => Promise<Blob>;
@@ -95,8 +101,8 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     kind !== "unsupported" && (!textKind || props.text === undefined);
   const oversizedByMetadata =
     needsBlob &&
-    props.sizeBytes !== undefined &&
-    props.sizeBytes > previewSizeLimit;
+    ((props.sizeBytes !== undefined && props.sizeBytes > previewSizeLimit) ||
+      (props.sizeBytes === undefined && props.largerThanBytes !== undefined));
   const waitingForSize = needsBlob && props.sizePending === true;
   const sizeUnknown =
     needsBlob &&
@@ -204,6 +210,19 @@ export function ArtifactPreview(props: ArtifactPreviewProps) {
     content = (
       <div className={styles.message} role="status">
         {t("Loading preview…")}
+      </div>
+    );
+  } else if (
+    oversizedByMetadata &&
+    props.sizeBytes === undefined &&
+    props.largerThanBytes !== undefined
+  ) {
+    content = (
+      <div className={styles.message}>
+        {t(
+          "This file is larger than {size}, too large to preview here. Download it to open it in another app.",
+          { size: formatAttachmentSize(props.largerThanBytes) },
+        )}
       </div>
     );
   } else if (oversizedByMetadata || oversized) {
@@ -444,12 +463,21 @@ function PaginatedText({
 function ImagePreview({ blob, name }: { blob: Blob; name: string }) {
   const t = useUiText();
   const [url, setUrl] = useState<string>();
+  const [broken, setBroken] = useState(false);
   const [size, setSize] = useState({ width: 1200, height: 900 });
   useEffect(() => {
     const next = URL.createObjectURL(blob.slice(0, blob.size, imageMime(name)));
     setUrl(next);
+    setBroken(false);
     return () => URL.revokeObjectURL(next);
   }, [blob, name]);
+  if (broken) {
+    return (
+      <div className={styles.message} role="status">
+        {t(BROKEN_IMAGE)}
+      </div>
+    );
+  }
   if (!url) {
     return (
       <div className={styles.message} role="status">
@@ -468,6 +496,7 @@ function ImagePreview({ blob, name }: { blob: Blob; name: string }) {
           const image = event.currentTarget;
           setSize({ width: image.naturalWidth, height: image.naturalHeight });
         }}
+        onError={() => setBroken(true)}
       />
     </div>
   );
