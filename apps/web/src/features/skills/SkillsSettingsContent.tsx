@@ -15,16 +15,16 @@ import {
   type SkillAction,
   type SkillActionInvocation,
   type SkillActionJob,
-  type SkillActionJobStatus,
 } from "@octos-org/octoscode-client/skill-actions";
 import { errorMessage } from "../../shared/errors.ts";
-import { useUiText, type UiText } from "../preferences/ui-text.tsx";
+import { useUiText } from "../preferences/ui-text.tsx";
 import {
   actionArguments,
   actionArgumentsComplete,
   actionArgumentFields,
   mergeSkillJobs,
   skillJobsActive,
+  skillJobStatus,
 } from "./action-fields.ts";
 import styles from "./SkillsSettings.module.css";
 
@@ -284,7 +284,7 @@ export function SkillsSettingsContent({
                 <div className={styles.skillHeading}>
                   <strong>{job.actionId}</strong>
                   <span data-job-status={job.status}>
-                    {jobStatus(job.status, t)}
+                    {skillJobStatus(job.status, t)}
                   </span>
                 </div>
                 <small>{job.id}</small>
@@ -402,21 +402,4 @@ function ActionCard({
       </button>
     </article>
   );
-}
-
-function jobStatus(status: SkillActionJobStatus, t: UiText): string {
-  switch (status) {
-    case "queued":
-      return t("Queued");
-    case "running":
-      return t("Running");
-    case "succeeded":
-      return t("Succeeded");
-    case "failed":
-      return t("Failed");
-    case "cancelled":
-      return t("Cancelled");
-    case "abandoned":
-      return t("Abandoned");
-  }
 }

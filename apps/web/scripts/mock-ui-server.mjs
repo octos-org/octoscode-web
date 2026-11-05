@@ -1470,9 +1470,10 @@ const skillActionFixture = {
   available: true,
 };
 function newSkillJob(sessionId) {
+  const sequence = (skillJobsBySessionId.get(sessionId) ?? []).length + 1;
   return {
-    job_id: `skill-job-${sessionId}`,
-    batch_id: `skill-batch-${sessionId}`,
+    job_id: `skill-job-${sessionId}-${sequence}`,
+    batch_id: `skill-batch-${sessionId}-${sequence}`,
     profile_id: "coding",
     session_id: sessionId,
     action_id: "document.probe",
@@ -2242,14 +2243,23 @@ const http = createServer(async (request, response) => {
   ) {
     const url = new URL(request.url, "http://fixture");
     const sessionId = url.searchParams.get("session_id") ?? "";
-    const job = (skillJobsBySessionId.get(sessionId) ?? [])[0];
+    const jobs = skillJobsBySessionId.get(sessionId) ?? [];
+    const job = jobs.at(-1);
     if (!job) {
       response.writeHead(409).end("No skill action job to advance");
       return;
     }
+    const wanted = url.searchParams.get("status");
     job.status =
-      url.searchParams.get("status") === "running" ? "running" : "succeeded";
+      wanted === "failed"
+        ? "failed"
+        : wanted === "running"
+          ? "running"
+          : "succeeded";
     job.updated_at = "2026-10-28T00:01:00Z";
+    if (job.status === "failed") {
+      job.error = "probe backend refused the document";
+    }
     if (job.status === "succeeded") {
       job.output = "protocol action fixture";
       job.result = { summary: "protocol action fixture" };
@@ -3181,6 +3191,21 @@ function capabilitiesFor(socket, state) {
       supported_features: adverts.feature
         ? [...memoryCapabilities.supported_features, DRIVER_FEATURE]
         : memoryCapabilities.supported_features,
+    };
+  }
+  if (workspaceRoot?.includes("no-skill-actions")) {
+    return {
+      ...memoryCapabilities,
+      supported_methods: memoryCapabilities.supported_methods.filter(
+        (method) => !method.startsWith("skill/action/"),
+      ),
+      supported_features: memoryCapabilities.supported_features.filter(
+        (feature) => !feature.startsWith("skill.action"),
+      ),
+      supported_notifications:
+        memoryCapabilities.supported_notifications.filter(
+          (notification) => notification !== "skill/action/job/updated",
+        ),
     };
   }
   const native = workspaceRoot?.startsWith(nativeWorkspacePrefix) === true;
@@ -5646,7 +5671,11 @@ sockets.on("connection", (socket, request) => {
         ...newSkillJob(sessionId),
         profile_id: request.params.profile_id,
       };
-      skillJobsBySessionId.set(sessionId, [job]);
+      // A retry creates a SECOND job, as the server does.
+      skillJobsBySessionId.set(sessionId, [
+        ...(skillJobsBySessionId.get(sessionId) ?? []),
+        job,
+      ]);
       reply(socket, request.id, {
         action_id: "document.probe",
         ok: true,

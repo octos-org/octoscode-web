@@ -70,4 +70,14 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
       "已有上下文是服务器对目前对话内容的估算，不含每次请求都会带上的系统说明和工具说明。",
     "Not included: the reply, and this turn’s tool calls and their output.":
       "未计入：模型的回复，以及这一轮的工具调用和输出。",
+    // T-0394: the composer's skill actions chip.
+    "Actions · {count} running": "动作 · {count} 个运行中",
+    "Skill actions": "技能动作",
+    "Runs the action on the server, not as a prompt. Its job and result are listed below.":
+      "在服务器上直接运行这个动作，不是发给模型的话。它的任务和结果列在下面。",
+    "Loading actions…": "正在加载动作…",
+    "Couldn't load this Profile's skill actions.":
+      "没能加载这个配置档案的技能动作。",
+    "Running…": "正在运行…",
+    Run: "运行",
   });
