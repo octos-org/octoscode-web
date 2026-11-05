@@ -441,14 +441,16 @@ export class PeerManager {
       return true;
     }
     if (event.kind === "usage") {
-      // Token spend accumulates independently of the activity axis: re-stamp
-      // with the row's current activity/finishedAt and only raise the total.
+      // Core's token_cost_update carries the Session's running total, not
+      // the turn's own count (6fc12da3: a second turn of 1000/100 reports
+      // 2000/200), so the row takes the latest total; adding them up would
+      // count every earlier turn again. Independent of the activity axis.
       const tokens = event.outputTokens;
       if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0)
         return true;
       this.#stamp(
         event.sessionId,
-        { ...entry, outputTokens: (entry.outputTokens ?? 0) + tokens },
+        { ...entry, outputTokens: tokens },
         entry.activity,
         entry.finishedAt,
       );

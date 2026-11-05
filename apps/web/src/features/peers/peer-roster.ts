@@ -136,7 +136,8 @@ export interface PeerSessionEvent {
    */
   readonly question?: Readonly<PeerQuestionDetail>;
   /**
-   * Output tokens for ONE turn, only meaningful when `kind === "usage"`.
+   * The peer Session's output tokens so far — Core's running total, not one
+   * turn's count — only meaningful when `kind === "usage"`.
    * Sourced from the client's existing token-cost surface —
    * `parseTokenCostUpdate()` → `TokenCostUpdate.outputTokens`
    * (`progress.updated` with `metadata.kind === "token_cost_update"`).
@@ -169,8 +170,8 @@ export interface PeerRosterEntry {
   /** Wall-clock ms of the latest turn terminal, frozen for `done`; null until then. */
   readonly finishedAt: number | null;
   /**
-   * Output tokens accumulated across the peer Session's turns (audit row 4),
-   * from `usage` Session events; every row this manager produces carries a
+   * Output tokens across the peer Session's turns (audit row 4): the running
+   * total from the latest `usage` Session event; every row this manager produces carries a
    * number (0 until the first one lands). Optional in the type only so
    * full-row fixtures outside this grant keep type-checking.
    */

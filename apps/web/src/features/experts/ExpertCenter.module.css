@@ -259,6 +259,44 @@
   font-weight: 500;
 }
 
+/* The team's usage: three short rows, label then figure, that wrap on a phone. */
+.usage {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.usage > div {
+  display: grid;
+  grid-template-columns: minmax(4.5em, max-content) minmax(0, 1fr);
+  gap: var(--dsw-space-3);
+}
+
+.usage dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.usage dd {
+  min-width: 0;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage small {
+  margin-inline-start: 0.5em;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: inherit;
+}
+
+.usageLine {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Its own line, so no space is typed between two sentences in either language. */
 .costNote {
   display: block;

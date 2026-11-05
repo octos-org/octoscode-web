@@ -4794,7 +4794,10 @@ sockets.on("connection", (socket, request) => {
         // The timed-turn fixture (T-0345) needs Core's canonical replay so a
         // reload rebuilds the terminal and shows the identical duration;
         // other fixture sessions keep the legacy hydrate shape unchanged.
-        ...(state.completedTurns.some((turn) => turn.started_at)
+        // The expert team page reads it the way Core sends it with messages
+        // alone, an empty list before the first turn (T-0427).
+        ...(state.completedTurns.some((turn) => turn.started_at) ||
+        JSON.stringify(request.params?.include) === '["messages"]'
           ? {
               replayed_projection_envelopes: replayedEvents,
               projection_thread_sequences: Object.fromEntries(
@@ -6550,6 +6553,9 @@ sockets.on("connection", (socket, request) => {
  * "[writes-seat-N=path]" has seat N's file tool write `path` (with `{tag}`
  * replaced by the team's tag), recorded the way Core 6fc12da3 does: every
  * write is a `modify`, kept for `session/hydrate` with messages.
+ * Every settled member turn is one run in the usage ledger, as Core records
+ * it (T-0427): seat N uses 1000N in / 100N out, seat 2 also reads 400 from
+ * cache; a failed turn, or "[nousage-seat-N]", is a run with no tokens.
  */
 function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   const seat = Number(/-(\d+)$/u.exec(member.name ?? "")?.[1] ?? 0);
@@ -6569,6 +6575,21 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   }
   const live = () => socket.readyState === WebSocket.OPEN;
   const record = (outcome, body) => {
+    const reported =
+      outcome === "completed" &&
+      !member.brief.includes(`[nousage-seat-${seat}]`);
+    usageLedger.events.push({
+      timestamp: new Date().toISOString(),
+      profile_id: member.profileId,
+      session_id: sessionId,
+      provider: "custom",
+      model: "fixture-model",
+      input_tokens: reported ? 1000 * seat - (seat === 2 ? 400 : 0) : 0,
+      output_tokens: reported ? 100 * seat : 0,
+      cache_read_tokens: reported && seat === 2 ? 400 : 0,
+      cache_write_tokens: 0,
+      channel: "appui",
+    });
     member.lastOutcome = hideOutcome ? undefined : outcome;
     member.result = `---\nslug: ${member.slug}\noutcome: ${outcome}\nupdated_unix: ${Math.floor(Date.now() / 1000)}\nturn: 1\nturn_id: ${turnId}\n---\n\n${body}\n`;
   };

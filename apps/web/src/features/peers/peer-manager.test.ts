@@ -922,8 +922,8 @@ describe("peer roster counts (audit rows 2-4)", () => {
   });
 });
 
-describe("peer output token accumulation (audit row 4)", () => {
-  it("accumulates the peer Session's usage output tokens without touching the activity axis", async () => {
+describe("peer output tokens (audit row 4)", () => {
+  it("keeps the Session's running total from usage events without touching the activity axis", async () => {
     const h = setup();
     await stagePeer(h);
     h.manager.observeSessionEvent(
@@ -937,9 +937,11 @@ describe("peer output token accumulation (audit row 4)", () => {
       ),
     ).toBe(true);
     h.manager.observeSessionEvent(
-      { sessionId: identity, kind: "usage", outputTokens: 80 },
+      { sessionId: identity, kind: "usage", outputTokens: 200 },
       h.commands,
     );
+    // Core reports the Session's running total (T-0427, 6fc12da3): a second
+    // turn of 80 arrives as 200, which is the total, not 120 + 200.
     // A later terminal still stamps `done`; the token total is untouched by it.
     h.manager.observeSessionEvent(
       { sessionId: identity, kind: "turn-terminal" },
