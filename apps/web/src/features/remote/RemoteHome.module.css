@@ -283,7 +283,7 @@
 
 .folder {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) var(--dsw-control-h-lg);
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
   gap: var(--dsw-space-3);
   padding: 6px 4px 6px 14px;
@@ -350,4 +350,18 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+
+.folderActions {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--dsw-space-2);
+}
+
+.templatePicker {
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-control);
 }

@@ -16,6 +16,8 @@ interface HomeCopy {
   sessionLead: string;
   chooserHeading: string;
   chooserLead: string;
+  workspaceLead: string;
+  workspacePending: string;
   categories: Record<TaskTemplateCategory, string>;
   access: Record<TaskTemplateAccess, string>;
   example: string;
@@ -54,6 +56,10 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     chooserHeading: "Or start from a template",
     chooserLead:
       "Pick one, then choose a folder above. The request goes into the message box for you to edit.",
+    workspaceLead:
+      "Start a conversation in {workspace}. Choose a template, edit the request, then send.",
+    workspacePending:
+      "“{title}” is selected. Use it again to retry opening the same conversation.",
     categories: { code: "Code", office: "Office", general: "General" },
     access: { read: "Reads only", write: "Edits files" },
     example: "Example result",
@@ -92,6 +98,8 @@ const COPY: Record<UiLanguage, HomeCopy> = {
       "在 {workspace} 里工作。挑一个模板改改，或者直接在下面写需求。",
     chooserHeading: "也可以先挑一个模板",
     chooserLead: "选好后在上面选文件夹，需求会填进输入框，改好再发送。",
+    workspaceLead: "在 {workspace} 中新建会话。挑一个模板，编辑需求后再发送。",
+    workspacePending: "已选「{title}」，再次使用会重试打开同一会话。",
     categories: { code: "编程", office: "办公", general: "通用" },
     access: { read: "只读", write: "会改文件" },
     example: "示例结果",
@@ -207,7 +215,7 @@ export function ResumeSessionLink({
 }
 
 export interface TaskTemplateHomeProps {
-  variant: "session" | "chooser";
+  variant: "session" | "chooser" | "workspace";
   language: UiLanguage;
   workspaceName?: string | undefined;
   resume?: ResumeTarget | null | undefined;
@@ -394,7 +402,9 @@ export function TaskTemplateHome({
         <p>
           {session
             ? fill(copy.sessionLead, { workspace: workspaceName ?? "" })
-            : copy.chooserLead}
+            : variant === "workspace"
+              ? fill(copy.workspaceLead, { workspace: workspaceName ?? "" })
+              : copy.chooserLead}
         </p>
       </header>
       {session && resume ? (
@@ -406,7 +416,9 @@ export function TaskTemplateHome({
             <span>
               {fill(
                 notice.kind === "pending"
-                  ? copy.pending
+                  ? variant === "workspace"
+                    ? copy.workspacePending
+                    : copy.pending
                   : noticeTemplate.access === "read" && !readAccess?.error
                     ? copy.appliedReadOnly
                     : copy.applied,

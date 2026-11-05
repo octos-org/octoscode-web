@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { RecentWorkspace } from "../workspace/workspace-recents.ts";
 import { formatRelativeTime } from "../shell/relative-time.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
@@ -9,6 +9,10 @@ import type { RemoteLink } from "./remote-link.ts";
 import type { RemoteOverview, RemoteRow } from "./remote-model.ts";
 import { WorkspaceFolderBrowser } from "../workspace-create/WorkspaceFolderBrowser.tsx";
 import type { WorkspaceBrowseAdapter } from "../workspace-create/workspace-browse.ts";
+import { TaskTemplateHome } from "../templates/TaskTemplateHome.tsx";
+import type { TaskTemplate } from "../templates/task-templates.ts";
+import type { UiLanguage } from "../preferences/model.ts";
+import type { TemplateLaunchDraft } from "../connection/preferences.ts";
 import styles from "./RemoteHome.module.css";
 
 export interface RemoteHomeProps {
@@ -28,11 +32,13 @@ export interface RemoteHomeProps {
   canCreateSession: boolean;
   /** Path whose create is in flight; the row shows progress and stays single. */
   createKey: string | null;
+  language: UiLanguage;
+  templateDraft: TemplateLaunchDraft | null;
   now: number;
   onOpen: (row: RemoteRow) => void;
   onAddFolder: (path: string) => void;
   onRemoveFolder: (path: string) => void;
-  onNewSession: (path: string) => void;
+  onNewSession: (path: string, template?: TaskTemplate) => void;
   onRefresh: () => void;
   onOpenSessions: () => void;
   onOpenFull: () => void;
@@ -47,6 +53,16 @@ export function RemoteHome(props: RemoteHomeProps) {
   const t = useUiText();
   const { overview, folders, link } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [templateFolder, setTemplateFolder] = useState<string | null>(
+    props.templateDraft?.workspacePath ?? null,
+  );
+  const pickerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (templateFolder) pickerRef.current?.scrollIntoView({ block: "start" });
+  }, [templateFolder]);
+  const selectedFolder = folders.find(
+    (folder) => folder.path === templateFolder,
+  );
   // Adding or removing a watched folder happens at the bottom of the page,
   // below the status sections. Bring Waiting/Running back into view so the
   // phone answers "is there work?" immediately — never on data refresh or
@@ -166,9 +182,46 @@ export function RemoteHome(props: RemoteHomeProps) {
           onAdd={props.onAddFolder}
           onRemove={props.onRemoveFolder}
           onNewSession={props.onNewSession}
+          onTemplates={setTemplateFolder}
           onChanged={revealStatus}
         />
 
+        {selectedFolder ? (
+          <section
+            className={styles.templatePicker}
+            ref={pickerRef}
+            aria-label={t("Choose a new session template")}
+          >
+            <button
+              type="button"
+              className={styles.addButton}
+              onClick={() => setTemplateFolder(null)}
+            >
+              {t("Close templates")}
+            </button>
+            <TaskTemplateHome
+              variant="workspace"
+              language={props.language}
+              workspaceName={selectedFolder.name}
+              notice={
+                props.templateDraft?.workspacePath === selectedFolder.path
+                  ? {
+                      kind: "pending",
+                      templateId: props.templateDraft.templateId,
+                    }
+                  : null
+              }
+              templatesDisabled={
+                !props.canCreateSession ||
+                link.kind !== "online" ||
+                props.createKey !== null
+              }
+              onUse={(template) =>
+                props.onNewSession(selectedFolder.path, template)
+              }
+            />
+          </section>
+        ) : null}
         <button
           type="button"
           className={styles.fullLink}
@@ -282,6 +335,7 @@ function FolderList(props: {
   onAdd: (path: string) => void;
   onRemove: (path: string) => void;
   onNewSession: (path: string) => void;
+  onTemplates: (path: string) => void;
   onChanged: () => void;
 }) {
   const t = useUiText();
@@ -316,33 +370,52 @@ function FolderList(props: {
                       : folder.path}
                   </small>
                 </span>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={t("New session in {value0}", {
-                    value0: folder.name,
-                  })}
-                  disabled={
-                    !props.online ||
-                    !props.canCreateSession ||
-                    props.createKey !== null
-                  }
-                  aria-busy={props.createKey === folder.path || undefined}
-                  onClick={() => props.onNewSession(folder.path)}
-                >
-                  <PlusIcon size={16} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={t("Stop watching {name}", { name: folder.name })}
-                  onClick={() => {
-                    props.onRemove(folder.path);
-                    props.onChanged();
-                  }}
-                >
-                  <CloseIcon size={16} />
-                </button>
+                <div className={styles.folderActions}>
+                  <button
+                    type="button"
+                    className={styles.addButton}
+                    aria-label={t("New from template in {name}", {
+                      name: folder.name,
+                    })}
+                    disabled={
+                      !props.online ||
+                      !props.canCreateSession ||
+                      props.createKey !== null
+                    }
+                    onClick={() => props.onTemplates(folder.path)}
+                  >
+                    {t("From template")}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t("New session in {value0}", {
+                      value0: folder.name,
+                    })}
+                    disabled={
+                      !props.online ||
+                      !props.canCreateSession ||
+                      props.createKey !== null
+                    }
+                    aria-busy={props.createKey === folder.path || undefined}
+                    onClick={() => props.onNewSession(folder.path)}
+                  >
+                    <PlusIcon size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t("Stop watching {name}", {
+                      name: folder.name,
+                    })}
+                    onClick={() => {
+                      props.onRemove(folder.path);
+                      props.onChanged();
+                    }}
+                  >
+                    <CloseIcon size={16} />
+                  </button>
+                </div>
               </li>
             );
           })}

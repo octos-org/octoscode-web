@@ -71,6 +71,7 @@ interface TabConnectionPreferences {
   composerDrafts: SessionDraftRecord[];
   sentTurns: TabTurnReceipt[];
   draftPrincipal?: string | undefined;
+  templateLaunch?: TemplateLaunchDraft | undefined;
 }
 
 type ConnectionIdentity = Pick<ConnectionDraft, "endpoint" | "token">;
@@ -138,6 +139,7 @@ export function saveConnectionPreferences(
     composerDrafts: sameIdentity ? previous.composerDrafts : [],
     sentTurns: sameIdentity ? previous.sentTurns : [],
     draftPrincipal: sameIdentity ? previous.draftPrincipal : undefined,
+    templateLaunch: sameIdentity ? previous.templateLaunch : undefined,
   };
   safely(() => durableStorage.setItem(DURABLE_KEY, JSON.stringify(durable)));
   safely(() => durableStorage.removeItem(LEGACY_DURABLE_KEY));
@@ -328,6 +330,49 @@ export function loadComposerDrafts(
     : [];
 }
 
+/** A retryable browser launch intent, never proof that a session exists. */
+export interface TemplateLaunchDraft {
+  sessionId: string;
+  workspacePath: string;
+  templateId: string;
+}
+
+function parseTemplateLaunch(value: unknown): TemplateLaunchDraft | undefined {
+  if (!isRecord(value)) return undefined;
+  const sessionId = bounded(value.sessionId, LIMITS.sessionId);
+  const workspacePath = bounded(value.workspacePath, LIMITS.cwd);
+  const templateId = bounded(value.templateId, 128);
+  return sessionId && workspacePath && templateId
+    ? { sessionId, workspacePath, templateId }
+    : undefined;
+}
+
+export function loadTemplateLaunch(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+): TemplateLaunchDraft | null {
+  const current = readTabConnection(tabStorage);
+  return current && matchesIdentity(current, identity)
+    ? (current.templateLaunch ?? null)
+    : null;
+}
+
+export function saveTemplateLaunch(
+  tabStorage: StorageLike,
+  identity: ConnectionIdentity,
+  draft: TemplateLaunchDraft | null,
+): boolean {
+  const current = readTabConnection(tabStorage);
+  if (!current || !matchesIdentity(current, identity)) return false;
+  const parsed = draft === null ? undefined : parseTemplateLaunch(draft);
+  if (draft !== null && !parsed) return false;
+  const value = { ...current, templateLaunch: parsed };
+  writeTabConnection(tabStorage, value);
+  return (
+    safely(() => tabStorage.getItem(TAB_STATE_KEY)) === JSON.stringify(value)
+  );
+}
+
 /** Remember only for offline Forget; restoring drafts still requires REST auth. */
 export function loadDraftPrincipal(
   tabStorage: StorageLike,
@@ -438,6 +483,7 @@ function readTabConnection(
       composerDrafts: parseSessionDrafts(value.composerDrafts),
       sentTurns: parseTabTurns(value.sentTurns),
       draftPrincipal: bounded(value.draftPrincipal, 1_024) || undefined,
+      templateLaunch: parseTemplateLaunch(value.templateLaunch),
     };
   } catch {
     return null;
