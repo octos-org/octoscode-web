@@ -34,6 +34,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.usage[data-tone="attention"] {
+  color: var(--dsw-alias-state-warn-text);
+}
+
+.usagePanel p.estimateWarning {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .usagePanel {
   width: min(300px, calc(100vw - 32px));
   padding: 12px;

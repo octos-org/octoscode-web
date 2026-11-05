@@ -137,6 +137,9 @@ export const DEFAULT_UI_FEATURES = [
   CORE_UI_FEATURES.HARNESS_TASK_CONTROL_V1,
   CORE_UI_FEATURES.HARNESS_TASK_ARTIFACTS_V1,
   CORE_UI_FEATURES.CONTEXT_LIFECYCLE_V1,
+  // Live `context/state_reported`: the prompt size the model is about to get
+  // and the server's own compaction threshold, instead of the open-time value.
+  CORE_UI_FEATURES.CONTEXT_STATE_V1,
   CORE_UI_FEATURES.REVIEW_START_V1,
   CORE_UI_FEATURES.CODING_AUTONOMY_V1,
   CORE_UI_FEATURES.CODING_AGENT_CONTROL_V1,

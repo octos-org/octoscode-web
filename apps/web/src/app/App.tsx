@@ -20,12 +20,15 @@ import {
   ModelChip,
   SkillsChip,
   UsageChip,
+  DraftEstimateChip,
 } from "../features/composer-bar/ComposerBar.tsx";
 import {
   modelStrengthLabel,
   modelStrengths,
 } from "../features/composer-bar/model-strengths.ts";
 import { sessionUsage } from "../features/composer-bar/session-usage.ts";
+import { draftEstimate } from "../features/composer-bar/draft-estimate.ts";
+import { useLiveContext } from "../features/context/live-context.ts";
 import type { AttentionSettings } from "../features/attention/desktop-notifications.ts";
 import { SurfaceBoundary } from "../features/error/SurfaceBoundary.tsx";
 import {
@@ -413,6 +416,8 @@ const ExpertCenter = lazyNamed(
   (module) => module.ExpertCenter,
 );
 const REMOTE_REFRESH_MS = 15_000;
+/** Typing pauses this long before the composer re-estimates the draft. */
+const DRAFT_ESTIMATE_DELAY_MS = 300;
 const RemoteHome = lazyNamed(
   () => import("../features/remote/RemoteHome.tsx"),
   (module) => module.RemoteHome,
@@ -3747,10 +3752,48 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       selectedProfileModel?.model ||
       t("saved model")
     : undefined;
-  const contextPercent = contextUsage(
+  // The context as the server last described it: the open-time read, then
+  // whatever `context/*` notifications have said since.
+  const liveContext = useLiveContext(
+    protocol.client,
+    session.opened?.session_id,
     work.supervision.runtimeStatus?.contextSnapshot,
+  );
+  const contextPercent = contextUsage(
+    liveContext,
     workspaceProduct.state.tokenCost,
   ).percent;
+  // T-0364: the pre-send estimate follows the draft after a short pause, and
+  // only for the session the draft was typed in; it is never stored.
+  const estimateSessionId = session.opened?.session_id ?? null;
+  const [estimateInput, setEstimateInput] = useState<{
+    sessionId: string;
+    text: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!estimateSessionId || !draft.trim()) {
+      setEstimateInput(null);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setEstimateInput({ sessionId: estimateSessionId, text: draft }),
+      DRAFT_ESTIMATE_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [draft, estimateSessionId]);
+  const draftHint =
+    estimateInput &&
+    estimateInput.sessionId === estimateSessionId &&
+    draft.trim()
+      ? draftEstimate({
+          sessionId: estimateInput.sessionId,
+          text: estimateInput.text,
+          snapshot: liveContext,
+          usage: workspaceProduct.state.tokenCost,
+          attachments:
+            conversation.attachments?.getSnapshot().entries.length ?? 0,
+        })
+      : null;
   const composerUsage = sessionUsage(
     session.opened?.session_id,
     work.supervision.runtimeStatus,
@@ -5249,6 +5292,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             onOpenPane={() => setSessionConfigOpen(true)}
                           />
                         ) : null}
+                        {draftHint ? (
+                          <DraftEstimateChip
+                            estimate={draftHint}
+                            compact={compact}
+                          />
+                        ) : null}
                         {composerUsage ? (
                           <UsageChip
                             usage={composerUsage}
@@ -6283,9 +6332,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             client={protocol.client}
             sessionId={protocol.sessionId}
             capabilities={session.opened.capabilities}
-            initialSnapshot={
-              work.supervision.runtimeStatus?.contextSnapshot ?? null
-            }
+            initialSnapshot={liveContext}
             usage={workspaceProduct.state.tokenCost}
             turnBusy={runtimeMutationBlocked}
             onClose={() => setContextOpen(false)}

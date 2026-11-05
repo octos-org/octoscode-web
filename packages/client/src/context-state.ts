@@ -42,6 +42,13 @@ export interface ContextNormalization {
 
 export interface ContextSnapshot {
   state: ContextState;
+  /**
+   * Set when `state` came from `context/state_reported`: its estimate is the
+   * prompt the model was about to receive (runtime instructions and tool
+   * declarations included), and this is the server's compaction threshold.
+   * Any other event replaces `state` with the transcript estimate and drops it.
+   */
+  reported?: { thresholdTokens: number };
   lastCompaction?: ContextCompaction;
   lastNormalization?: ContextNormalization;
   compacting?: { generation: number; thresholdTokens: number; trigger: string };
