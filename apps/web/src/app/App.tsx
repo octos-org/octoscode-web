@@ -22,6 +22,7 @@ import {
   UsageChip,
   DraftEstimateChip,
 } from "../features/composer-bar/ComposerBar.tsx";
+import { SkillActionsChip } from "../features/composer-bar/SkillActionsChip.tsx";
 import {
   modelStrengthLabel,
   modelStrengths,
@@ -5315,6 +5316,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 onManage={() =>
                                   setProfileExtensionsMode("skills")
                                 }
+                              />
+                            ) : null}
+                            {!compact &&
+                            skillsCapabilities &&
+                            session.opened &&
+                            !readOnlyPeer ? (
+                              <SkillActionsChip
+                                client={skillsCapabilities.client}
+                                profileId={protocol.profileId}
+                                sessionId={session.opened.session_id}
+                                capabilities={skillsCapabilities.capabilities}
                               />
                             ) : null}
                             {!compact && attachmentsAvailable ? (

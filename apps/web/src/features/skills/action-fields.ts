@@ -1,5 +1,30 @@
 import { isRecord } from "@octos-org/octoscode-client/protocol";
-import type { SkillActionJob } from "@octos-org/octoscode-client/skill-actions";
+import type {
+  SkillActionJob,
+  SkillActionJobStatus,
+} from "@octos-org/octoscode-client/skill-actions";
+import type { UiText } from "../preferences/ui-text.tsx";
+
+/** One status wording for every surface that lists action jobs. */
+export function skillJobStatus(
+  status: SkillActionJobStatus,
+  t: UiText,
+): string {
+  switch (status) {
+    case "queued":
+      return t("Queued");
+    case "running":
+      return t("Running");
+    case "succeeded":
+      return t("Succeeded");
+    case "failed":
+      return t("Failed");
+    case "cancelled":
+      return t("Cancelled");
+    case "abandoned":
+      return t("Abandoned");
+  }
+}
 
 export interface ActionArgumentField {
   name: string;

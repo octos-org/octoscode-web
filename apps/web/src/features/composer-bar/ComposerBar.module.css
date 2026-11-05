@@ -119,6 +119,42 @@
   line-height: 18px;
 }
 
+/* T-0394: the skill action run form and job rows inside the actions menu. */
+.actionRun {
+  display: grid;
+  gap: 8px;
+  padding: 6px 10px 10px;
+}
+
+.actionRun .field {
+  display: grid;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.actionRun .field input {
+  min-height: var(--dsw-control-h-sm);
+}
+
+.actionOutput {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.actionJobs {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.actionJobs details {
+  padding: 0 10px;
+}
+
 @media (pointer: coarse) {
   .iconTrigger {
     width: var(--dsw-control-h-lg);
