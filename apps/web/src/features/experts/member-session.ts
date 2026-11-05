@@ -1,14 +1,16 @@
 import {
   OctosUiProtocolError,
+  type HydratedFileMutation,
   type HydratedTurn,
   type SessionHydrateParams,
 } from "@octos-org/octoscode-client/protocol";
 
 /** The two calls a refreshed page needs on a member's own session. */
 export interface MemberSessionClient {
-  hydrateSession(
-    params: SessionHydrateParams,
-  ): Promise<{ turns?: readonly HydratedTurn[] }>;
+  hydrateSession(params: SessionHydrateParams): Promise<{
+    turns?: readonly HydratedTurn[];
+    file_mutations?: readonly HydratedFileMutation[];
+  }>;
   interruptTurn(sessionId: string, turnId: string): Promise<unknown>;
 }
 
@@ -20,6 +22,19 @@ export function readMemberTurns(
   return client
     .hydrateSession({ session_id: sessionId, include: ["turns"] })
     .then((result) => result.turns ?? null);
+}
+
+/**
+ * The files the member's tools changed. Core only sends them with the
+ * messages section; a member's session is a few turns, so that stays small.
+ */
+export function readMemberFiles(
+  client: MemberSessionClient,
+  sessionId: string,
+): Promise<readonly HydratedFileMutation[] | null> {
+  return client
+    .hydrateSession({ session_id: sessionId, include: ["messages"] })
+    .then((result) => result.file_mutations ?? null);
 }
 
 /**

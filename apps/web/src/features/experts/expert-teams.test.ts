@@ -10,10 +10,13 @@ import {
   expertSummaryInstruction,
   expertTeams,
   lastMemberTurn,
+  memberFileChanges,
   membersToRead,
   newTeamTag,
   parseTeamBrief,
   resultBody,
+  teamCopyName,
+  teamWrites,
   type MemberTurnRead,
 } from "./expert-teams.ts";
 
@@ -428,8 +431,171 @@ describe("expert team copy", () => {
       team.goalLabel,
       team.goalPlaceholder,
       team.summary,
-      ...team.members.flatMap((member) => [member.label, member.focus]),
+      ...(team.costNote ? [team.costNote] : []),
+      ...team.members.flatMap((member) => [
+        member.label,
+        member.focus,
+        ...(member.input ? [member.input] : []),
+        ...(member.output ? [member.output] : []),
+      ]),
     ]).filter((source) => !Object.prototype.hasOwnProperty.call(zh, source));
     expect(missing).toEqual([]);
+  });
+});
+
+describe("teams that deliver a file", () => {
+  const cleanup = EXPERT_TEAMS.find((team) => team.id === "data-cleanup")!;
+  const delivery = EXPERT_TEAMS.find(
+    (team) => team.id === "document-delivery",
+  )!;
+  const start = (t = en, template = cleanup) =>
+    composeExpertTeam(t, template, {
+      goal: "data/orders.csv: dates as YYYY-MM-DD",
+      workspace: "/srv/work",
+      tag: "7f3a",
+      startedAt,
+    });
+
+  it("name the copy after the original with the team's tag", () => {
+    expect(teamCopyName("orders.csv", "cleaned", "7f3a")).toBe(
+      "orders.cleaned-7f3a.csv",
+    );
+    expect(teamCopyName("docs/v1.2/proposal.md", "revised", "7f3a")).toBe(
+      "docs/v1.2/proposal.revised-7f3a.md",
+    );
+    expect(teamCopyName("NOTES", "revised", "7f3a")).toBe("NOTES.revised-7f3a");
+  });
+
+  it("let one member write a new file and everyone else only read", () => {
+    expect(teamWrites(cleanup)).toBe(true);
+    expect(teamWrites(delivery)).toBe(true);
+    expect(teamWrites(review)).toBe(false);
+    const team = start();
+    expect(team.brief).toContain(
+      "Do not change, move or delete any existing file. The original stays as it is.",
+    );
+    expect(team.brief).toContain(
+      "Only Data cleaner · 7f3a-2 creates a file, as its angle says; everyone else only reads.",
+    );
+    expect(team.brief).not.toContain("Read only.");
+    expect(team.brief).toContain(
+      "Hands back: A cleaned copy as a new file, and the rules applied with row counts.",
+    );
+    expect(team.memberBriefs[1]).toContain(
+      "orders.csv becomes orders.cleaned-7f3a.csv",
+    );
+    expect(team.memberBriefs[0]).not.toContain("new file next to the original");
+    expect(team.memberBriefs[2]).not.toContain("new file next to the original");
+    // The review teams keep their read-only rule.
+    expect(launch().brief).toContain(
+      "Read only. Do not create, change or delete any files.",
+    );
+  });
+
+  it("read back like any other team, in either language", () => {
+    for (const t of [en, zhText]) {
+      const team = start(t, delivery);
+      expect(parseTeamBrief(team.brief)).toMatchObject({
+        templateId: "document-delivery",
+        tag: "7f3a",
+        goal: "data/orders.csv: dates as YYYY-MM-DD",
+      });
+    }
+    expect(start(zhText).memberBriefs[1]).toContain(
+      "orders.csv 写成 orders.cleaned-7f3a.csv",
+    );
+  });
+
+  it("tell the team's new copy from changes to other files", () => {
+    const changes = memberFileChanges(
+      [
+        { path: "/srv/work/data/orders.cleaned-7f3a.csv", operation: "modify" },
+        { path: "/srv/work/data/orders.csv", operation: "modify" },
+        { path: "/srv/work/old.cleaned-0000.csv", operation: "modify" },
+        { path: "/srv/work/notes.cleaned-7f3a.csv", operation: "delete" },
+      ],
+      cleanup,
+      "7f3a",
+      "/srv/work",
+    );
+    expect(changes).toEqual([
+      { path: "notes.cleaned-7f3a.csv", teamCopy: false, deleted: true },
+      { path: "old.cleaned-0000.csv", teamCopy: false, deleted: false },
+      { path: "data/orders.csv", teamCopy: false, deleted: false },
+      { path: "data/orders.cleaned-7f3a.csv", teamCopy: true, deleted: false },
+    ]);
+    // Core records every write as "modify", so a deletion always shows.
+    expect(
+      memberFileChanges(
+        [
+          { path: "/srv/work/a.csv", operation: "modify" },
+          { path: "/srv/work/a.csv", operation: "delete" },
+        ],
+        cleanup,
+        "7f3a",
+        "/srv/work",
+      ),
+    ).toEqual([{ path: "a.csv", teamCopy: false, deleted: true }]);
+  });
+
+  it("hand the merge the files the server recorded, not the ones claimed", () => {
+    const brief = start().brief;
+    const rows = [
+      gatherRow("Data inspector · 7f3a-1", "7f3a-1", brief, {
+        result: done("problems"),
+        last_outcome: "completed",
+      }),
+      gatherRow("Data cleaner · 7f3a-2", "7f3a-2", brief, {
+        result: done("wrote orders.cleaned-7f3a.csv"),
+        last_outcome: "completed",
+      }),
+      gatherRow("Data checker · 7f3a-3", "7f3a-3", brief, {
+        result: done("model is down", "errored"),
+        last_outcome: "errored",
+      }),
+    ];
+    const files = new Map([
+      [
+        "7f3a-2",
+        [
+          {
+            path: "/srv/work/data/orders.cleaned-7f3a.csv",
+            operation: "modify" as const,
+          },
+        ],
+      ],
+      [
+        "7f3a-3",
+        [{ path: "/srv/work/data/orders.csv", operation: "modify" as const }],
+      ],
+      ["7f3a-1", []],
+    ]);
+    const [view] = expertTeams(rows, [], "/srv/work", new Map(), files);
+    expect(view?.members.map((member) => member.files?.length)).toEqual([
+      0, 1, 1,
+    ]);
+    expect(view?.members[1]?.writes).toEqual({
+      suffix: "cleaned",
+      example: "orders.csv",
+    });
+    const { slugs, instruction } = expertSummaryInstruction(
+      en,
+      view!,
+      (state) => state,
+    );
+    expect(slugs).toEqual(["7f3a-1", "7f3a-2"]);
+    expect(instruction).toContain(
+      "New files from experts that finished, as the server recorded them:\n- Data cleaner: data/orders.cleaned-7f3a.csv",
+    );
+    expect(instruction).toContain(
+      "- Data checker (changed a file that is not the team's new copy): data/orders.csv",
+    );
+    expect(instruction).toContain("- Data checker (failed)");
+    // Unread files add nothing.
+    const [unread] = expertTeams(rows, [], "/srv/work");
+    expect(unread?.members.every((member) => member.files === null)).toBe(true);
+    expect(
+      expertSummaryInstruction(en, unread!, (state) => state).instruction,
+    ).not.toContain("recorded");
   });
 });

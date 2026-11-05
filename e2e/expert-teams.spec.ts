@@ -97,7 +97,7 @@ test("starts a team, shows each member's progress and result, and merges them he
   const sent = observe(page);
   await connect(page);
   const center = await openExperts(page);
-  await expect(center.locator("[data-expert-template]")).toHaveCount(4);
+  await expect(center.locator("[data-expert-template]")).toHaveCount(6);
 
   const row = center.locator('[data-expert-template="plan-review"]');
   await row.getByRole("button", { name: "Choose" }).click();
@@ -516,4 +516,221 @@ test("a name clash is retried with a new tag, and a refusal leaves the form usab
     center.getByText("Code check-up started: 3 experts are working."),
   ).toBeVisible();
   await expect(center.locator("[data-expert-team]")).toHaveCount(2);
+});
+
+// T-0426: the two teams that deliver a file. Core 6fc12da3 records every file
+// tool write as `modify` and only returns them with hydrate's messages, so the
+// page reads each member's own record once its turn is over.
+const fileReads = (sent: SentFrame[]) =>
+  sent.filter(
+    (frame) =>
+      frame.method === "session/hydrate" &&
+      JSON.stringify(frame.params?.include) === '["messages"]',
+  );
+
+test("a data cleanup team states each role's input and output, and delivers the new copy the server recorded", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  const row = center.locator('[data-expert-template="data-cleanup"]');
+  await expect(
+    row.getByText("Data inspector, Data cleaner, Data checker"),
+  ).toBeVisible();
+  await row.getByRole("button", { name: "Choose" }).click();
+  const cleaner = row.locator("dl > div").filter({ hasText: "Data cleaner" });
+  await expect(
+    cleaner.getByText("Works from: The CSV file named in the goal."),
+  ).toBeVisible();
+  await expect(
+    cleaner.getByText(
+      "Hands back: A cleaned copy as a new file, and the rules applied with row counts.",
+    ),
+  ).toBeVisible();
+  await expect(
+    row.getByText(/roughly 4 times the usage of asking once\./),
+  ).toBeVisible();
+  await expect(
+    row.getByText(
+      "The cleaner writes the whole file again, so this team uses more than a review.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    row.getByText(
+      /Data cleaner writes its result to a new file next to the original/,
+    ),
+  ).toBeVisible();
+  await row
+    .getByRole("textbox")
+    .fill(
+      "data/orders.csv: dates as YYYY-MM-DD [writes-seat-2=data/orders.cleaned-{tag}.csv]",
+    );
+  await row.getByRole("button", { name: "Start 3 experts" }).click();
+  await expect(
+    center.getByText("Data cleanup started: 3 experts are working."),
+  ).toBeVisible();
+
+  const prepare = prepares(sent)[0]!.params!;
+  const names = prepare.names as string[];
+  const tag = /· ([0-9a-f]{4})-1$/.exec(names[0]!)![1]!;
+  expect(String(prepare.brief)).toContain(
+    `Only Data cleaner · ${tag}-2 creates a file, as its angle says; everyone else only reads.`,
+  );
+  expect(String(prepare.brief)).not.toContain("Read only.");
+  await expect.poll(() => memberStarts(sent).length).toBe(3);
+  const kickoff = (seat: number) =>
+    memberStarts(sent).find((frame) =>
+      turnText(frame).includes(`${tag}-${seat}”`),
+    )!;
+  expect(turnText(kickoff(2))).toContain(
+    `orders.csv becomes orders.cleaned-${tag}.csv`,
+  );
+  expect(turnText(kickoff(1))).not.toContain("new file next to the original");
+
+  const team = center.locator("[data-expert-team]");
+  const member = (seat: number) =>
+    team.locator(`[data-expert-member$="-${seat}"]`);
+  await expect(team.locator('[data-expert-state="finished"]')).toHaveCount(3, {
+    timeout: 20_000,
+  });
+  await expect(
+    member(2)
+      .locator("p", { hasText: "New file:" })
+      .getByText(`data/orders.cleaned-${tag}.csv`, { exact: true }),
+  ).toBeVisible();
+  await expect(member(1).locator("p", { hasText: "New file:" })).toHaveCount(0);
+  await expect(team.getByText(/which is not the team's new copy/)).toHaveCount(
+    0,
+  );
+  // Each member's record is read once its turn is over, not polled.
+  await expect.poll(() => fileReads(sent).length).toBe(3);
+  await page.waitForTimeout(500);
+  expect(fileReads(sent)).toHaveLength(3);
+
+  const before = masterStarts(sent).length;
+  await team
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
+  const merge = turnText(masterStarts(sent).at(-1)!);
+  expect(merge).toContain("These are the results of the Data cleanup team");
+  expect(merge).toContain(
+    "Read the cleaned copy and check it against the checker's list",
+  );
+  expect(merge).toContain(
+    `New files from experts that finished, as the server recorded them:\\n- Data cleaner: data/orders.cleaned-${tag}.csv`,
+  );
+  expect(merge).not.toContain("The server also recorded these file changes");
+  expect(merge).not.toContain("These experts have no result");
+
+  // Coming back to the page shows what was read, without reading it again.
+  const back = await openExperts(page);
+  await expect(
+    back
+      .locator('[data-expert-team] [data-expert-member$="-2"]')
+      .locator("p", { hasText: "New file:" })
+      .getByText(`data/orders.cleaned-${tag}.csv`, { exact: true }),
+  ).toBeVisible();
+  expect(fileReads(sent)).toHaveLength(3);
+
+  // A refresh reads the record again from each member's session.
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const again = await openExperts(page);
+  await expect(
+    again
+      .locator('[data-expert-team] [data-expert-member$="-2"]')
+      .locator("p", { hasText: "New file:" })
+      .getByText(`data/orders.cleaned-${tag}.csv`, { exact: true }),
+  ).toBeVisible();
+  expect(fileReads(sent)).toHaveLength(6);
+});
+
+test("a document delivery team names a member that changed the original and one that failed, and delivers neither", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(
+    page,
+    "docs/proposal.md for the client's lead [writes-seat-1=docs/proposal.revised-{tag}.md] [writes-seat-2=docs/proposal.md] [fail-seat-3]",
+    "document-delivery",
+  );
+  const team = center.locator("[data-expert-team]");
+  const member = (seat: number) =>
+    team.locator(`[data-expert-member$="-${seat}"]`);
+  await expect(member(3).locator('[data-expert-state="failed"]')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    member(2).locator('[data-expert-state="finished"]'),
+  ).toBeVisible();
+  const tag = /([0-9a-f]{4})-1$/.exec(
+    String(await member(1).getAttribute("data-expert-member")),
+  )![1]!;
+  await expect(
+    member(1)
+      .locator("p", { hasText: "New file:" })
+      .getByText(`docs/proposal.revised-${tag}.md`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    member(2).getByText(
+      "It changed docs/proposal.md, which is not the team's new copy. The team was told to leave existing files alone; check that file.",
+    ),
+  ).toBeVisible();
+  await expect(team.getByText("2 of 3 done · 1 did not finish")).toBeVisible();
+
+  const before = masterStarts(sent).length;
+  await team
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
+  const merge = turnText(masterStarts(sent).at(-1)!);
+  expect(merge).toContain(`- Reviser: docs/proposal.revised-${tag}.md`);
+  expect(merge).toContain(
+    "- Proofreader (changed a file that is not the team's new copy): docs/proposal.md",
+  );
+  expect(merge).toContain(
+    "These experts have no result; say that their part is missing:",
+  );
+  expect(merge).toContain("- Summary writer (Failed)");
+  // The failed member's answer is not among the gathered results.
+  expect(merge).toMatch(new RegExp(`## peer Reviser · ${tag}-1 \\(done\\)`));
+  expect(merge).not.toMatch(new RegExp(`## peer Summary writer · ${tag}-3`));
+});
+
+test("a writer whose answer claims a file the server never recorded is called out", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(page, "data/orders.csv, dedupe rows", "data-cleanup");
+  const team = center.locator("[data-expert-team]");
+  await expect(team.locator('[data-expert-state="finished"]')).toHaveCount(3, {
+    timeout: 20_000,
+  });
+  await expect(
+    team
+      .locator('[data-expert-member$="-2"]')
+      .getByText(
+        "The server recorded no new file from this expert, whatever its answer says.",
+      ),
+  ).toBeVisible();
+  await expect(team.locator("p", { hasText: "New file:" })).toHaveCount(0);
+  await team
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBeGreaterThan(0);
+  expect(turnText(masterStarts(sent).at(-1)!)).not.toContain(
+    "New files from experts",
+  );
 });

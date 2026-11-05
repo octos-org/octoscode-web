@@ -4764,6 +4764,13 @@ sockets.on("connection", (socket, request) => {
                 },
               ]
             : [],
+        // Core sends the retained file changes only with messages, an empty
+        // list when there are none (6fc12da3); kept to expert members here.
+        ...(request.params?.include?.includes("messages") &&
+        (state.fileMutations ||
+          stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER))
+          ? { file_mutations: state.fileMutations ?? [] }
+          : {}),
         // Core hydrates persisted messages/turns separately from tool replay;
         // ordinary message deltas and terminals are not a second transcript.
         ...(replayedEvents.length
@@ -6540,6 +6547,9 @@ sockets.on("connection", (socket, request) => {
  * team brief makes seat N fail the way a provider outage does, and
  * "[slow-seat-N]" keeps seat N working until someone stops it. The result
  * is kept with Core's front matter, as `peer/gather` returns it.
+ * "[writes-seat-N=path]" has seat N's file tool write `path` (with `{tag}`
+ * replaced by the team's tag), recorded the way Core 6fc12da3 does: every
+ * write is a `modify`, kept for `session/hydrate` with messages.
  */
 function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   const seat = Number(/-(\d+)$/u.exec(member.name ?? "")?.[1] ?? 0);
@@ -6587,6 +6597,18 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
     () => {
       if (cancelledTurns.has(turnId)) return;
       if (state.activeTurn?.turnId !== turnId) return;
+      const tag = /([a-z0-9]{4})-\d+$/u.exec(member.slug)?.[1] ?? "";
+      for (const [, path] of member.brief.matchAll(
+        new RegExp(`\\[writes-seat-${seat}=([^\\]]+)\\]`, "gu"),
+      ))
+        state.fileMutations = [
+          ...(state.fileMutations ?? []),
+          {
+            path: `${member.workspaceRoot}/${path.replaceAll("{tag}", tag)}`,
+            operation: "modify",
+            preview_id: `preview-${turnId}-${path.length}`,
+          },
+        ];
       if (
         member.brief.includes(`[fail-seat-${seat}]`) ||
         member.brief.includes(`[fail-nooutcome-seat-${seat}]`)

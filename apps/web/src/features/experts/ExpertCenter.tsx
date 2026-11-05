@@ -14,6 +14,7 @@ import {
   type PeerPrepareParams,
   type PeerPrepareResult,
 } from "@octos-org/octoscode-client/peers";
+import type { HydratedFileMutation } from "@octos-org/octoscode-client/protocol";
 import { randomUUID } from "../../shared/uuid.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
 import { MarkdownBody } from "../markdown/MarkdownBody.tsx";
@@ -33,6 +34,7 @@ import {
   lastMemberTurn,
   membersToRead,
   newTeamTag,
+  teamWrites,
   type ExpertMemberState,
   type MemberTurnRead,
   type ExpertMemberView,
@@ -40,6 +42,7 @@ import {
   type ExpertTeamView,
 } from "./expert-teams.ts";
 import {
+  readMemberFiles,
   readMemberTurns,
   stopMemberTurn,
   type MemberSessionClient,
@@ -115,6 +118,25 @@ const STOPPABLE: ReadonlySet<ExpertMemberState> = new Set([
   "working",
   "waiting",
 ]);
+/** A member's files are read once its turn has ended, and again on Refresh. */
+const FILES_SETTLED: ReadonlySet<ExpertMemberState> = new Set([
+  "finished",
+  "failed",
+  "stopped",
+  "rate-limited",
+]);
+/**
+ * What a settled member's session recorded, by session, for this tab's
+ * lifetime: reopening the page does not read every member again. Memory
+ * only; Refresh and a page reload read afresh.
+ */
+const settledFiles = new Map<
+  string,
+  {
+    state: ExpertMemberState;
+    mutations: readonly HydratedFileMutation[];
+  }
+>();
 /** Members keep running server-side; this only decides how often to look. */
 const REFRESH_MS = 15_000;
 const subscribeNothing = () => () => undefined;
@@ -157,9 +179,14 @@ export function ExpertCenter({
   const [stopFailed, setStopFailed] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  // Memory only: the file changes each writing team's members recorded.
+  const [files, setFiles] = useState<
+    ReadonlyMap<string, readonly HydratedFileMutation[]>
+  >(() => new Map());
+  const filesRead = useRef(new Map<string, ExpertMemberState>());
   const teams = useMemo(
-    () => expertTeams(snapshot.blackboard, roster, workspace, turns),
-    [snapshot.blackboard, roster, workspace, turns],
+    () => expertTeams(snapshot.blackboard, roster, workspace, turns, files),
+    [snapshot.blackboard, roster, workspace, turns, files],
   );
   // Callers pass fresh callbacks each render; reads go through the latest
   // ones without re-running the arrival effect.
@@ -215,6 +242,10 @@ export function ExpertCenter({
   const refresh = useCallback(
     (force = false) => {
       if (!manager) return;
+      if (force) {
+        filesRead.current.clear();
+        settledFiles.clear();
+      }
       void manager
         .gather()
         .catch(() => null)
@@ -254,6 +285,40 @@ export function ExpertCenter({
         ACTIVE_MEMBER_STATES.has(member.state) || member.state === "no-result",
     ),
   );
+  // Read what each member of a writing team changed once its turn is over;
+  // what it says it wrote is not taken on trust.
+  useEffect(() => {
+    if (!memberClient) return;
+    const due = teams
+      .filter((team) => teamWrites(team.template))
+      .flatMap((team) => team.members)
+      .filter(
+        (member) =>
+          FILES_SETTLED.has(member.state) &&
+          filesRead.current.get(member.slug) !== member.state,
+      );
+    for (const member of due) {
+      filesRead.current.set(member.slug, member.state);
+      const sessionId = memberSession(member.topic);
+      if (!sessionId) continue;
+      const known = settledFiles.get(sessionId);
+      if (known?.state === member.state) {
+        setFiles((current) =>
+          new Map(current).set(member.slug, known.mutations),
+        );
+        continue;
+      }
+      void readMemberFiles(memberClient, sessionId)
+        .catch(() => null)
+        .then((mutations) => {
+          // An unreadable member keeps what was known; Refresh reads it again.
+          if (!mutations) return;
+          settledFiles.set(sessionId, { state: member.state, mutations });
+          setFiles((current) => new Map(current).set(member.slug, mutations));
+        });
+    }
+  });
+
   useEffect(() => {
     if (!watching) return;
     const timer = window.setInterval(() => {
@@ -436,6 +501,36 @@ export function ExpertCenter({
         ) : member.state === "finished" ? (
           <p className={styles.hint}>
             {t("The answer is still being saved. It shows up here shortly.")}
+          </p>
+        ) : null}
+        {member.files?.map((file) =>
+          file.teamCopy ? (
+            <p key={file.path} className={styles.file}>
+              {t("New file:")}
+              <code>{file.path}</code>
+            </p>
+          ) : (
+            <p key={file.path} className={styles.error}>
+              {file.deleted
+                ? t(
+                    "It deleted {path}. The team was told to leave existing files alone.",
+                    { path: file.path },
+                  )
+                : t(
+                    "It changed {path}, which is not the team's new copy. The team was told to leave existing files alone; check that file.",
+                    { path: file.path },
+                  )}
+            </p>
+          ),
+        )}
+        {member.writes &&
+        member.files &&
+        member.state === "finished" &&
+        !member.files.some((file) => file.teamCopy) ? (
+          <p className={styles.hint}>
+            {t(
+              "The server recorded no new file from this expert, whatever its answer says.",
+            )}
           </p>
         ) : null}
         {member.state === "waiting" ? (
@@ -625,6 +720,8 @@ export function ExpertCenter({
             {EXPERT_TEAMS.map((template) => {
               const open = selected === template.id;
               const formId = `${id}-${template.id}`;
+              const writer =
+                template.members.find((member) => member.writes) ?? null;
               return (
                 <li
                   key={template.id}
@@ -659,7 +756,23 @@ export function ExpertCenter({
                         {template.members.map((member) => (
                           <div key={member.label}>
                             <dt>{t(member.label)}</dt>
-                            <dd>{t(member.focus)}</dd>
+                            <dd>
+                              <p>{t(member.focus)}</p>
+                              {member.input ? (
+                                <p className={styles.io}>
+                                  {t("Works from: {input}", {
+                                    input: t(member.input),
+                                  })}
+                                </p>
+                              ) : null}
+                              {member.output ? (
+                                <p className={styles.io}>
+                                  {t("Hands back: {output}", {
+                                    output: t(member.output),
+                                  })}
+                                </p>
+                              ) : null}
+                            </dd>
                           </div>
                         ))}
                       </dl>
@@ -684,14 +797,27 @@ export function ExpertCenter({
                             times: template.members.length + 1,
                           },
                         )}
+                        {template.costNote ? (
+                          <span className={styles.costNote}>
+                            {t(template.costNote)}
+                          </span>
+                        ) : null}
                       </p>
                       <p className={styles.hint}>
-                        {t(
-                          "They work in {workspace}. They are asked to only read and not change files.",
-                          {
-                            workspace: workspaceLabel,
-                          },
-                        )}
+                        {writer
+                          ? t(
+                              "They work in {workspace}. {writer} writes its result to a new file next to the original; the others only read, and nobody is to change the original. The page cannot enforce this. It shows the file changes the server recorded from each expert's file tools; changes made with shell commands are not recorded.",
+                              {
+                                workspace: workspaceLabel,
+                                writer: t(writer.label),
+                              },
+                            )
+                          : t(
+                              "They work in {workspace}. They are asked to only read and not change files.",
+                              {
+                                workspace: workspaceLabel,
+                              },
+                            )}
                       </p>
                       <div className={styles.submit}>
                         <button
