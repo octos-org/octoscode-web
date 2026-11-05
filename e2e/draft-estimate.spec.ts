@@ -120,7 +120,7 @@ test("before sending, the composer shows this message's estimate and the server'
     `After sending≈${percentOf(first.tokens)}`,
   );
   await expect(estimate).toContainText(
-    "the last prompt it sent, instructions and tool definitions included",
+    "most recently reported estimate, instructions and tool definitions included",
   );
   await expect(estimate).not.toContainText("known once this session replies");
   await expect(estimate).not.toContainText(/[$¥€]|USD|CNY/);

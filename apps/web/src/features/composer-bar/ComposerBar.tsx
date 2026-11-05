@@ -656,7 +656,7 @@ export function DraftEstimateChip({
               ),
               estimate.contextSource === "prompt"
                 ? t(
-                    "The context is the server’s estimate of the last prompt it sent, instructions and tool definitions included.",
+                    "The context is the server’s most recently reported estimate, instructions and tool definitions included; it updates when the change passes a threshold, so it can lag.",
                   )
                 : estimate.contextSource === "transcript"
                   ? t(
