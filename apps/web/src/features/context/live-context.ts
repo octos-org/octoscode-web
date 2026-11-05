@@ -9,8 +9,15 @@ import {
 /**
  * The session's context as the server last described it. `session/status/read`
  * gives the value when the session opened; `context/*` notifications keep it
- * moving during and after turns. The newer generation wins; at the same
- * generation the notification wins, since it came later.
+ * moving during and after turns.
+ *
+ * A prompt report (`context/state_reported`) is the last prompt sent, with
+ * instructions and tools. Core moves the generation on with every message, so
+ * a read after the reply is always newer, yet it is only the transcript and far
+ * smaller. The report stands until the read shows the context was rewritten
+ * (fewer items: a compaction) or the transcript alone has outgrown it.
+ * Otherwise the newer generation wins, and at the same generation the
+ * notification, since it came later.
  */
 export function pickContext(
   opened: ContextSnapshot | null | undefined,
@@ -22,6 +29,11 @@ export function pickContext(
   const latest = live?.state.session_id === sessionId ? live : null;
   if (!latest) return seed;
   if (!seed) return latest;
+  if (latest.reported && seed.state.generation >= latest.state.generation)
+    return seed.state.item_count < latest.state.item_count ||
+      seed.state.token_estimate > latest.state.token_estimate
+      ? seed
+      : latest;
   return latest.state.generation >= seed.state.generation ? latest : seed;
 }
 

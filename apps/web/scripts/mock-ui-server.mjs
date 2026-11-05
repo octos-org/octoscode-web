@@ -1065,15 +1065,20 @@ function peerNameSlug(name) {
     .replace(/^-+|-+$/gu, "")
     .toLowerCase();
 }
-/** Each session gets its own transcript estimate so a cross-session leak is visible. */
+/**
+ * Each session gets its own transcript estimate so a cross-session leak is
+ * visible. Like Core, every message moves the generation on, so a read after
+ * a reply is newer than the report sent before the model call.
+ */
 function draftEstimateContext(sessionId) {
   let hash = 0;
   for (const char of sessionId) hash = (hash * 31 + char.charCodeAt(0)) % 9_000;
+  const items = sessionStateBySessionId.get(sessionId)?.messages.length ?? 0;
   return {
     session_id: sessionId,
-    generation: 1,
+    generation: 1 + items,
     token_estimate: 1_000 + hash,
-    item_count: 2,
+    item_count: items,
     recovery_state: "exact",
   };
 }

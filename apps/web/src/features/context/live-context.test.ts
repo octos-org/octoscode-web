@@ -7,13 +7,18 @@ import {
   type SessionContextFacts,
 } from "./live-context.ts";
 
-const at = (sessionId: string, generation: number, tokens: number) =>
+const at = (
+  sessionId: string,
+  generation: number,
+  tokens: number,
+  items = generation,
+) =>
   ({
     state: {
       session_id: sessionId,
       generation,
       token_estimate: tokens,
-      item_count: 1,
+      item_count: items,
       recovery_state: "exact",
     },
   }) as ContextSnapshot;
@@ -28,9 +33,20 @@ describe("pickContext", () => {
     expect(pickContext(opened, null, "s1")).toBe(opened);
     expect(pickContext(opened, reported, "s1")).toBe(reported);
     expect(pickContext(null, reported, "s1")).toBe(reported);
-    // A newer read after a compaction outranks an older report.
-    const compactedRead = at("s1", 4, 400);
+    // Core moves the generation on with the reply, so the next read is newer
+    // but only the transcript: the report (instructions and tools) stands.
+    expect(pickContext(at("s1", 4, 1_200), reported, "s1")).toBe(reported);
+    // A compaction leaves fewer items: the read wins.
+    const compactedRead = at("s1", 5, 400, 2);
     expect(pickContext(compactedRead, reported, "s1")).toBe(compactedRead);
+    // So does a transcript that has outgrown the report.
+    const grown = at("s1", 9, 12_000);
+    expect(pickContext(grown, reported, "s1")).toBe(grown);
+    // Without a report the newer generation wins as before.
+    const lifecycle = at("s1", 3, 900);
+    expect(
+      pickContext(at("s1", 4, 1_200), lifecycle, "s1")?.state.generation,
+    ).toBe(4);
   });
 
   it("never shows another session's context", () => {
@@ -79,15 +95,15 @@ describe("rememberContext", () => {
     known = rememberContext(known, cost("b", 64_000));
     expect(known.get("a")?.window).toBe(128_000);
     expect(known.get("b")?.window).toBe(64_000);
-    // Back in A, the reopen reads the transcript at the same generation: the
-    // later report still wins, and B's numbers never show.
-    const reopened = at("a", 1, 1);
+    // Back in A, the reopen reads the transcript one message later (the
+    // reply): the report still wins, and B's numbers never show.
+    const reopened = at("a", 2, 15);
     const a = pickContext(reopened, known.get("a")!.context, "a");
     expect(a?.state.token_estimate).toBe(8_663);
     expect(a?.reported).toEqual({ thresholdTokens: 89_600 });
-    // A compaction elsewhere moves the generation on; the newer read wins.
+    // A compaction elsewhere leaves fewer items; that read wins.
     expect(
-      pickContext(at("a", 2, 400), known.get("a")!.context, "a")?.state
+      pickContext(at("a", 3, 400, 0), known.get("a")!.context, "a")?.state
         .token_estimate,
     ).toBe(400);
   });
