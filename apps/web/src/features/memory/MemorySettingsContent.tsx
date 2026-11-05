@@ -28,6 +28,12 @@ import {
   type MemoryExportFormat,
   type MemoryExportScope,
 } from "./memory-export.ts";
+import {
+  fingerprinted,
+  importBatches,
+  type ImportRecord,
+} from "./memory-import.ts";
+import { MemoryImport, type ImportOutcome } from "./MemoryImport.tsx";
 
 /** How many results a search asks for; a full page may not be all of them. */
 const SEARCH_LIMIT = 20;
@@ -318,6 +324,61 @@ export function MemorySettingsContent({
     [entity, record, sessionProfileId],
   );
 
+  /** Each batch in order; a failure stops the rest and is reported as such. */
+  const importRecords = async (
+    records: ImportRecord[],
+  ): Promise<ImportOutcome | null> => {
+    if (busy || inflight.current) return null;
+    inflight.current = true;
+    setBusyAction("import");
+    setError(null);
+    setNotice(null);
+    const outcome: ImportOutcome = {
+      total: records.length,
+      sent: 0,
+      inserted: 0,
+      updated: 0,
+      unchanged: 0,
+    };
+    try {
+      const batches = importBatches(await fingerprinted(records));
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
+      for (const [index, batch] of batches.entries()) {
+        try {
+          const result = await commands.ingest(
+            batch.map((record) => ({ ...record })),
+          );
+          outcome.sent += batch.length;
+          outcome.inserted += result.inserted;
+          outcome.updated += result.updated;
+          outcome.unchanged += result.unchanged;
+        } catch (reason) {
+          outcome.failedBatch = index + 1;
+          outcome.reason = errorMessage(reason);
+          break;
+        }
+      }
+    } catch (reason) {
+      outcome.failedBatch = 1;
+      outcome.reason = errorMessage(reason);
+    } finally {
+      inflight.current = false;
+      setBusyAction(null);
+    }
+    return outcome;
+  };
+  const knownIds = useMemo(
+    () =>
+      new Set([
+        ...(hits ?? []).map((hit) => hit.id),
+        ...(record ? [record.record.id] : []),
+      ]),
+    [hits, record],
+  );
+
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
     if (busy || refreshing || inflight.current) return;
@@ -600,6 +661,14 @@ export function MemorySettingsContent({
               </div>
             </section>
           ) : null}
+          <MemoryImport
+            canIngest={canIngest}
+            busy={busy}
+            importing={busyAction === "import"}
+            profileId={sessionProfileId}
+            knownIds={knownIds}
+            onImport={importRecords}
+          />
         </div>
         <aside className={styles.detail} aria-label={t("Memory detail")}>
           <h3>{t("Detail")}</h3>

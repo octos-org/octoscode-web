@@ -1577,6 +1577,73 @@ const catalog: Readonly<Record<string, string>> = {
   "Promoted to knowledge": "已提升为知识",
   JSON: "JSON",
   Markdown: "Markdown",
+  "Import memories": "导入记忆",
+  "A memory record exported from this page, as JSON or Markdown, or a JSON list of records. Nothing is written until you confirm.":
+    "可以导入本页导出的记忆记录（JSON 或 Markdown），或者一个 JSON 记录列表。确认之前不会写入任何内容。",
+  "This server doesn't take memory writes, so files can't be imported.":
+    "这台服务器不接受写入记忆，所以不能导入文件。",
+  "Choose a JSON or Markdown file": "选择 JSON 或 Markdown 文件",
+  "{name} can't be imported:": "{name} 不能导入：",
+  "…and {count} more problems.": "……还有 {count} 个问题。",
+  "Nothing was written.": "没有写入任何内容。",
+  "Import preview": "导入预览",
+  "JSON export": "JSON 导出",
+  "JSON record list": "JSON 记录列表",
+  "Markdown export": "Markdown 导出",
+  "{count} records will be written to Profile {profileId}.":
+    "将写入配置档案 {profileId}：{count} 条。",
+  "Sources: {sources}.": "来源：{sources}。",
+  "{count} later records repeat an id already in this file and are skipped: {ids}.":
+    "文件里有 {count} 条与前面的 id 重复，会跳过：{ids}。",
+  "{count} of these ids were loaded on this page, so they are on the server and will be replaced: {ids}.":
+    "其中 {count} 个 id 本页已从服务器读到过，说明服务器上已有，会被替换：{ids}。",
+  "A record already on the server with one of these ids is replaced by the version here. Afterwards the server reports how many were new, updated or unchanged.":
+    "服务器上已有同 id 的记录会被这里的版本替换。导入后服务器会报告新增、更新和未变化各多少条。",
+  "Not sent: {fields}. The server keeps its own trust, visits and dates for every record.":
+    "不会发送：{fields}。每条记录的可信度、访问次数和时间由服务器自己维护。",
+  "The server will shorten {count} records whose title, summary or content is longer than it keeps: {ids}.":
+    "有 {count} 条的标题、摘要或正文超过服务器的上限，服务器会截短：{ids}。",
+  "{size} B of content": "正文 {size} B",
+  "Importing…": "正在导入…",
+  "Import {count} records": "导入 {count} 条",
+  "Cancel import": "取消导入",
+  "{inserted} new · {updated} updated · {unchanged} unchanged":
+    "新增 {inserted} · 更新 {updated} · 未变化 {unchanged}",
+  "Stopped after {sent} of {total} records. Written so far: {counts}.":
+    "共 {total} 条，发送到第 {sent} 条时停下。已写入：{counts}。",
+  "Nothing was imported.": "没有导入任何内容。",
+  "Batch {batch} didn't finish: {reason}. The server reported nothing written for it; the {left} records after it were not sent.":
+    "第 {batch} 批没有完成：{reason}。服务器没有报告这一批写入了什么；后面的 {left} 条没有发送。",
+  "Imported {sent} records: {counts}.": "已导入 {sent} 条：{counts}。",
+  "The server accounted for {reported} of the {sent} records sent.":
+    "发送了 {sent} 条，服务器只报告了其中 {reported} 条。",
+  "The file is {size} KiB; at most {max} KiB can be imported.":
+    "文件有 {size} KiB，最多只能导入 {max} KiB。",
+  "Only .json and .md files exported from memory can be imported.":
+    "只能导入从记忆导出的 .json 和 .md 文件。",
+  "The file isn't valid UTF-8 text.": "文件不是有效的 UTF-8 文本。",
+  "The file isn't valid JSON.": "文件不是有效的 JSON。",
+  "This isn't a memory export this page made, or a list of memory records.":
+    "这不是本页导出的记忆，也不是记忆记录列表。",
+  "This is a search export: it holds titles and summaries only. Importing it would replace stored records' content with nothing. Export each detail instead.":
+    "这是搜索结果导出，只有标题和摘要。导入它会把服务器上同 id 记录的正文清空。请逐条导出详情后再导入。",
+  "This is a memory entity, which can't be written through import.":
+    "这是记忆实体，不能通过导入写入。",
+  "The file has no records.": "文件里没有记录。",
+  "The file has {count} records; at most {max} can be imported at once.":
+    "文件里有 {count} 条记录，一次最多导入 {max} 条。",
+  "Record {n} isn't an object.": "第 {n} 条不是对象。",
+  "Record {n} has no {field}.": "第 {n} 条缺少 {field}。",
+  "Record {n}: {field} isn't text.": "第 {n} 条：{field} 不是文本。",
+  "Record {n}: kind “{kind}” can't be imported (document or episode only).":
+    "第 {n} 条：类型“{kind}”不能导入（只能是 document 或 episode）。",
+  "Record {n}: id “{id}” must start with {expected}.":
+    "第 {n} 条：id“{id}”必须以 {expected} 开头。",
+  "Record {n}: timestamp “{value}” isn't an RFC 3339 time.":
+    "第 {n} 条：时间“{value}”不是 RFC 3339 格式。",
+  "{name} · {size} KiB · {format}": "{name} · {size} KiB · {format}",
+  "Each record goes with a fingerprint of its content, so the server can tell an unchanged record from an updated one.":
+    "每条记录会带上内容指纹，服务器据此区分未变化和已更新。",
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
   Overview: "概览",
