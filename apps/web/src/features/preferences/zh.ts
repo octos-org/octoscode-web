@@ -2442,6 +2442,51 @@ const catalog: Readonly<Record<string, string>> = {
   "{team} started: {count} experts are working.":
     "「{team}」已启动，{count} 位专家开始工作。",
   "This server cannot start expert teams.": "这个服务器不支持专家团。",
+  // T-0392: the usage ledger page.
+  Usage: "用量",
+  "What the server recorded for each finished run. Every figure here comes from its usage ledger; this page keeps no copy.":
+    "服务器为每次完成的运行记下的消耗。这里的数字都来自服务器的用量账本，页面不保存副本。",
+  Period: "时间段",
+  "Last 7 days": "近 7 天",
+  "Last 30 days": "近 30 天",
+  "All time": "全部",
+  "Profile {profile}": "档案 {profile}",
+  "Your account": "你的账号",
+  "Reading usage…": "正在读取用量…",
+  "Loading usage…": "正在加载用量…",
+  "Connect to a server to see its usage.": "连接服务器后才能查看用量。",
+  "All sessions": "全部会话",
+  "One session": "单个会话",
+  "Show all sessions": "看全部会话",
+  "By session": "按会话",
+  "Session pages": "会话分页",
+  "Page {page} of {pages}": "第 {page}/{pages} 页",
+  "Sessions from the sidebar, one page at a time. The totals above are the server's own and also count sessions not listed here.":
+    "列出侧栏里的会话，每次一页。上面的总计是服务器自己的数字，也包括这里没列出的会话。",
+  "The sidebar has no sessions to list.": "侧栏里没有可列出的会话。",
+  "Couldn't read this session.": "读取这个会话失败。",
+  "This session has no runs in this period.": "这个会话在这段时间里没有运行。",
+  "No runs recorded yet. Each finished reply adds to this ledger.":
+    "还没有记录到运行。每完成一次回复，账本里就会多一条。",
+  "No runs in this period.": "这段时间里没有运行。",
+  Runs: "运行次数",
+  "Input tokens": "输入 token",
+  "{count} from cache": "其中缓存 {count}",
+  "Not recorded": "未记录",
+  "The server has no price for these runs.": "服务器没有这些运行的价格。",
+  "The server's estimate, from priced runs only.":
+    "服务器的估算，只含有价格的运行。",
+  "By model": "按模型",
+  "By date (UTC)": "按日期（UTC）",
+  "Date (UTC)": "日期（UTC）",
+  "This server does not keep a usage ledger.": "这个服务器没有用量账本。",
+  "The server no longer accepts this sign-in. Reconnect, then try again.":
+    "服务器不再接受这次登录。重新连接后再试。",
+  "This account cannot see usage here.": "这个账号无权查看这里的用量。",
+  "The server answered in a form this page cannot read.":
+    "服务器返回的内容这个页面读不懂。",
+  "Couldn't read usage. Check the connection and try again.":
+    "读取用量失败。检查连接后再试。",
 };
 
 const zh: Readonly<Record<string, string>> = { ...catalog, ...FLEET_ZH_COPY };

@@ -60,6 +60,16 @@ export function CronIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Usage: what the server's ledger recorded. */
+export function UsageIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="M2.5 13.5h11" />
+      <path d="M4.5 11V8.5M8 11V4.5M11.5 11V7" />
+    </svg>
+  );
+}
+
 /** Expert teams: several people on one task. */
 export function ExpertsIcon({ size = 16, className }: IconProps) {
   return (

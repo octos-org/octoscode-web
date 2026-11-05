@@ -407,6 +407,10 @@ const ConnectorsSettingsContent = lazyNamed(
   () => import("../features/connectors/ConnectorsSettingsContent.tsx"),
   (module) => module.ConnectorsSettingsContent,
 );
+const UsageLedgerPage = lazyNamed(
+  () => import("../features/usage/UsageLedgerPage.tsx"),
+  (module) => module.UsageLedgerPage,
+);
 const ScheduledTasksPage = lazyNamed(
   () => import("../features/cron/ScheduledTasksPage.tsx"),
   (module) => module.ScheduledTasksPage,
@@ -640,11 +644,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   const [productRoute, setProductRoute] = useState<
-    "fleet" | "scheduled" | "experts" | null
+    "fleet" | "scheduled" | "experts" | "usage" | null
   >(null);
   const fleetRouteActive = productRoute === "fleet";
   const scheduledRouteActive = productRoute === "scheduled";
   const expertsRouteActive = productRoute === "experts";
+  const usageRouteActive = productRoute === "usage";
   // A scheduled run to scroll to once its Session's timeline has it.
   const [revealTurnId, setRevealTurnId] = useState<string | null>(null);
   /** Alt+D requests focus inside Fleet once the routed pane is visible. */
@@ -1260,6 +1265,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           ),
     [deletedSessionIds, sessionCatalog],
   );
+  // The usage page lists this profile's catalog rows, one per Session.
+  const usageSessions = useMemo(() => {
+    const rows = new Map<
+      string,
+      { sessionId: string; title: string | null; updatedAt: number | null }
+    >();
+    for (const workspace of visibleCatalog.values()) {
+      for (const row of workspace.sessions) {
+        if (row.profileId !== catalogProfileId || rows.has(row.sessionId))
+          continue;
+        rows.set(row.sessionId, {
+          sessionId: row.sessionId,
+          title: row.title,
+          updatedAt: row.updatedAt,
+        });
+      }
+    }
+    return [...rows.values()];
+  }, [visibleCatalog, catalogProfileId]);
   const navigableSessions = useMemo(() => {
     const catalogRefs = [...visibleCatalog.values()].flatMap(
       (workspace) => workspace.sessions,
@@ -4142,6 +4166,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 setProductRoute("scheduled");
                 setSettingsOpen(false);
               }}
+              usageAvailable={Boolean(protocol.client && session.opened)}
+              usageActive={usageRouteActive}
+              onUsage={() => {
+                if (compact) setSidebarCollapsed(true);
+                setProductRoute("usage");
+                setSettingsOpen(false);
+              }}
               expertsAvailable={expertTeamsSupported}
               expertsActive={expertsRouteActive}
               onExperts={() => {
@@ -5556,6 +5587,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               ) : (
                 <p className="product-route-note">
                   {t("This server cannot start expert teams.")}
+                </p>
+              )}
+            </div>
+          ) : null}
+          {usageRouteActive ? (
+            <div className="conversation usage-pane">
+              <header className="conversation-header">
+                <button
+                  type="button"
+                  className="scheduled-back"
+                  onClick={onBackFromProductRoute}
+                >
+                  {t("Back")}
+                </button>
+              </header>
+              {protocol.client && session.opened ? (
+                <Suspense fallback={<DeferredSurface label="Loading usage…" />}>
+                  <UsageLedgerPage
+                    client={protocol.client}
+                    profileId={catalogProfileId}
+                    sessions={usageSessions}
+                  />
+                </Suspense>
+              ) : (
+                <p className="product-route-note">
+                  {t("Connect to a server to see its usage.")}
                 </p>
               )}
             </div>

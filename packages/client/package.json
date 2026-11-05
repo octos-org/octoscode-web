@@ -17,6 +17,7 @@
     "./research": "./src/research.ts",
     "./cron": "./src/cron.ts",
     "./media": "./src/media.ts",
+    "./usage": "./src/usage.ts",
     "./memory": "./src/memory.ts",
     "./peers": "./src/peers.ts",
     "./peer-protocol": "./src/peer-protocol.ts",
