@@ -18,6 +18,7 @@ import styles from "./SessionPanelTabs.module.css";
 export interface FilesTabProps {
   /** The Session's workspace folder, absolute. */
   root: string;
+  selectedPath: string | null;
   /** Server folder listing (directories only); null when not offered. */
   browse: WorkspaceBrowseAdapter | null;
   changes: readonly SessionFileChange[];
@@ -36,11 +37,12 @@ interface FolderState {
 
 /**
  * The workspace folder as a tree. Folders come from the server's listing;
- * files are the ones this Session changed — Core lists directories only, and
- * offers no read of other workspace files.
+ * files are the ones this Session changed. Directory browsing does not give
+ * us a complete workspace file tree.
  */
 export function FilesTab({
   root,
+  selectedPath,
   browse,
   changes,
   onOpenChange,
@@ -50,6 +52,14 @@ export function FilesTab({
     () => new Map<string, FolderState>([["", { absolute: root }]]),
   );
   const [expanded, setExpanded] = useState(() => new Set<string>([""]));
+  useEffect(() => {
+    if (!selectedPath || isOutsideWorkspace(selectedPath)) return;
+    const parents = selectedPath
+      .split("/")
+      .slice(0, -1)
+      .map((_, index, parts) => parts.slice(0, index + 1).join("/"));
+    setExpanded((current) => new Set([...current, ...parents]));
+  }, [selectedPath]);
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
   const generation = useRef(0);
@@ -59,7 +69,6 @@ export function FilesTab({
     generation.current += 1;
     foldersRef.current = fresh;
     setFolders(fresh);
-    setExpanded(new Set([""]));
     void load("");
     return () => {
       generation.current += 1;
@@ -124,6 +133,7 @@ export function FilesTab({
         {nodes.map((node) => (
           <li key={node.path}>
             <TreeRow
+              selected={node.path === selectedPath}
               node={node}
               expanded={expanded.has(node.path)}
               onToggle={() => toggle(node.path)}
@@ -183,6 +193,7 @@ export function FilesTab({
             {outside.map((change) => (
               <li key={change.path}>
                 <TreeRow
+                  selected={change.path === selectedPath}
                   node={{
                     kind: "file",
                     name: change.path,
@@ -201,8 +212,8 @@ export function FilesTab({
       <p className={styles.note}>
         {t(
           browse
-            ? "Shows folders, and the files Octos changed in this session. The server can't list or open other files yet."
-            : "Shows the files Octos changed in this session. This server can't list folders or open other files yet.",
+            ? "Shows folders and this session's changed files, not a complete workspace file tree."
+            : "Shows this session's changed files. This server cannot list workspace folders.",
         )}
       </p>
     </div>
@@ -211,11 +222,13 @@ export function FilesTab({
 
 function TreeRow({
   node,
+  selected,
   expanded,
   onToggle,
   onOpen,
 }: {
   node: FileTreeNode;
+  selected: boolean;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -255,6 +268,7 @@ function TreeRow({
       type="button"
       className={styles.treeRow}
 
+      aria-current={selected ? "true" : undefined}
       disabled={!node.change.previewId}
       title={
         node.change.previewId

@@ -32,10 +32,10 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     "Outside this folder": "工作区之外",
     "{count} changed": "{count} 个有改动",
     "Show the change to {name}": "查看 {name} 的改动",
-    "Shows folders, and the files Octos changed in this session. The server can't list or open other files yet.":
-      "这里显示文件夹，以及本会话里 Octos 改过的文件。服务器暂时还不能列出或打开其他文件。",
-    "Shows the files Octos changed in this session. This server can't list folders or open other files yet.":
-      "这里显示本会话里 Octos 改过的文件。这个服务器暂时还不能列出文件夹或打开其他文件。",
+    "Shows folders and this session's changed files, not a complete workspace file tree.":
+      "这里显示文件夹和本会话里改过的文件，并非工作区的完整文件树。",
+    "Shows this session's changed files. This server cannot list workspace folders.":
+      "这里显示本会话里改过的文件。服务器不支持列出工作区文件夹。",
     // Changes
     "Uncommitted (Git)": "未提交（Git）",
     "Changed in this session": "本会话改过的文件",
@@ -46,6 +46,17 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     Edited: "修改",
     Deleted: "删除",
     Renamed: "重命名",
+    "Current workspace file": "当前工作区文件",
+    "Selected file": "选中的文件",
+    "View changes": "查看改动",
+    "Preview file": "预览文件",
+    "Clear selection": "清除选择",
+    "This file is no longer in the session's retained files. Select another file.":
+      "会话保留的文件记录里已没有这个文件，请选择其他文件。",
+    "This file was deleted. You can still review its retained diff.":
+      "这个文件已删除，仍可查看保留的改动。",
+    "This server cannot preview this file. You can review its retained diff if available.":
+      "服务器无法预览这个文件；如有保留的改动，仍可查看。",
     // Outputs
     "Nothing yet. Files Octos writes or sends in this session show here.":
       "还没有产物。本会话里 Octos 写出或发给你的文件会显示在这里。",

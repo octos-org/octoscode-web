@@ -6,6 +6,7 @@ import type { AttachmentAccess } from "../timeline/attachment-access.ts";
 import { attachmentName } from "../timeline/attachments.ts";
 import { FilePreview } from "./FilePreview.tsx";
 import type { SessionFileChange } from "./session-changes.ts";
+import type { resolvePanelFile } from "./panel-selection.ts";
 import styles from "./SessionPanelTabs.module.css";
 
 export interface OutputsTabProps {
@@ -16,7 +17,10 @@ export interface OutputsTabProps {
   /** Null when this server cannot serve Session files. */
   access: AttachmentAccess | null;
   tasks: readonly SupervisedTask[];
-  onOpenChange: (change: SessionFileChange) => void;
+  selectedPath: string | null;
+  selected: ReturnType<typeof resolvePanelFile>;
+  onSelectPath: (path: string | null) => void;
+  onOpenDelivered: (reference: string) => void;
   onOpenTask?: ((taskId: string) => void) | undefined;
 }
 
@@ -27,33 +31,71 @@ export interface OutputsTabProps {
  */
 export function OutputsTab(props: OutputsTabProps) {
   const t = useUiText();
-  const [open, setOpen] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+
   const written = props.changes.filter(
-    (change) => change.operation === "create" || change.operation === "write",
+    (change) => change.operation !== "delete",
   );
   const taskOutputs = props.tasks.filter((task) => task.outputFiles.length);
 
-  if (open && props.access) {
+  if (props.selectedPath) {
+    const { change, reference, found } = props.selected;
     const access = props.access;
+    const deleted = change?.operation === "delete";
+    const workspaceRead =
+      change &&
+      access?.downloadWorkspaceFile &&
+      access.workspacePathAvailable?.(change.path)
+        ? access.downloadWorkspaceFile
+        : null;
+    const open = workspaceRead ? change!.path : reference;
+    const loadBlob = deleted
+      ? null
+      : workspaceRead && open
+        ? (signal?: AbortSignal) => workspaceRead(open, signal)
+        : reference && access && access.deliveredPreviewAvailable !== false
+          ? (signal?: AbortSignal) => access.download(reference, signal)
+          : null;
     return (
       <div className={styles.stack}>
-        <button
-          type="button"
-          className={styles.back}
-          onClick={() => setOpen(null)}
-        >
-          <ArrowLeftIcon />
-          {t("All outputs")}
-        </button>
-        <h3 className={styles.previewTitle} title={open}>
-          {attachmentName(open)}
-        </h3>
-        <FilePreview
-          key={open}
-          name={attachmentName(open)}
-          path={open}
-          loadBlob={(signal) => access.download(open, signal)}
-        />
+        <div className={styles.selectionActions}>
+          <button
+            type="button"
+            className={styles.back}
+            onClick={() => props.onSelectPath(null)}
+          >
+            <ArrowLeftIcon />
+            {t("All outputs")}
+          </button>
+          {loadBlob ? (
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => setRevision((value) => value + 1)}
+            >
+              {t("Refresh")}
+            </button>
+          ) : null}
+        </div>
+        {workspaceRead && !deleted ? (
+          <p className={styles.note}>{t("Current workspace file")}</p>
+        ) : null}
+        {loadBlob && open ? (
+          <FilePreview
+            key={`${open}:${change?.previewId ?? ""}:${revision}`}
+            name={attachmentName(open)}
+            path={open}
+            loadBlob={loadBlob}
+          />
+        ) : found ? (
+          <p className={styles.empty}>
+            {t(
+              deleted
+                ? "This file was deleted. You can still review its retained diff."
+                : "This server cannot preview this file. You can review its retained diff if available.",
+            )}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -81,13 +123,8 @@ export function OutputsTab(props: OutputsTabProps) {
                 <button
                   type="button"
                   className={styles.row}
-                  disabled={!change.previewId}
-                  title={
-                    change.previewId
-                      ? change.path
-                      : t("Core kept no diff for this change.")
-                  }
-                  onClick={() => props.onOpenChange(change)}
+                  title={change.path}
+                  onClick={() => props.onSelectPath(change.path)}
                 >
                   <FileIcon />
                   <span className={styles.rowText}>
@@ -125,7 +162,7 @@ export function OutputsTab(props: OutputsTabProps) {
                   className={styles.row}
                   disabled={!props.access}
                   title={reference}
-                  onClick={() => setOpen(reference)}
+                  onClick={() => props.onOpenDelivered(reference)}
                 >
                   <FileIcon />
                   <span className={styles.rowText}>

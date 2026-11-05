@@ -30,7 +30,8 @@ function render(
     <ChangesView
       state={state}
       changes={changes}
-      onOpenPreview={vi.fn()}
+      selectedPath={null}
+      onOpenChange={vi.fn()}
       onRefresh={vi.fn()}
       onScopeChange={vi.fn()}
     />,

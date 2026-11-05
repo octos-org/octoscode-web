@@ -188,7 +188,7 @@ test("Files shows the folder and this session's changes; a file opens its diff",
   await expect(
     files.getByRole("button", { name: "octoscode-web", exact: true }),
   ).toHaveAttribute("aria-expanded", "false");
-  await expect(files).toContainText("can't list or open other files yet");
+  await expect(files).toContainText("not a complete workspace file tree");
 
   await send(page, "Edit the panel fixture");
   await expect(page.getByText("Completed with")).toBeVisible();
@@ -210,9 +210,25 @@ test("Files shows the folder and this session's changes; a file opens its diff",
   await panel(page)
     .getByRole("tab", { name: /^Outputs/ })
     .click();
+  await expect(panel(page).getByLabel("Selected file")).toContainText(
+    "App.tsx",
+  );
+  await panel(page)
+    .getByRole("button", { name: "All outputs", exact: true })
+    .click();
   await expect(panel(page).getByRole("tabpanel")).toContainText(
     "Written in this folder",
   );
+  await panel(page)
+    .getByRole("button", { name: /App\.tsx/ })
+    .click();
+  // The fixture omits retained mutations on hydrate. A browser hint must not
+  // recreate a server record, nor keep rendering an old preview.
+  await page.reload();
+  await expect(panel(page)).toContainText(
+    "This file is no longer in the session's retained files",
+  );
+  await expect(panel(page).locator("pre")).toHaveCount(0);
 });
 
 test("Outputs previews a file Octos sent", async ({ page, request }) => {
@@ -239,6 +255,11 @@ test("Outputs previews a file Octos sent", async ({ page, request }) => {
   await outputs.getByRole("button", { name: /summary\.md/ }).click();
   await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
   await expect(outputs.getByRole("button", { name: "Download" })).toBeVisible();
+  await panel(page).getByRole("tab", { name: "Overview" }).click();
+  await panel(page).getByRole("tab", { name: "Outputs" }).click();
+  await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
+  await page.reload();
+  await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
   await outputs.getByRole("button", { name: "All outputs" }).click();
   await expect(outputs).toContainText("Sent to you");
 });
@@ -442,4 +463,139 @@ test("Automation shows and controls goals, loops, monitors and agents with zero 
 
   await automation.getByRole("button", { name: "Clear session goal" }).click();
   await expect(automation).toContainText("No active goal for this session.");
+});
+
+test("one file stays selected across diff, output, reload and read failure", async ({
+  page,
+  request,
+}) => {
+  const mutations = new Map<string, unknown[]>();
+  let readFails = false;
+  let deleted = false;
+  const previewReads: string[] = [];
+  await page.route("**/api/files?**", (route) =>
+    readFails
+      ? route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "workspace file was not found" }),
+        })
+      : route.continue(),
+  );
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    const methods = new Map<string | number, string>();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      methods.set(frame.id, frame.method);
+      if (frame.method === "diff/preview/get")
+        previewReads.push(frame.params.preview_id);
+      if (readFails && frame.method === "session/files/read") {
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: frame.id,
+            error: { code: -32004, message: "workspace file was not found" },
+          }),
+        );
+      } else server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      const mutation = frame.params?.metadata?.file_mutation;
+      if (frame.method === "progress/updated" && mutation) {
+        mutation.path = "_build/summary.md";
+        mutations.set(frame.params.session_id, [mutation]);
+      }
+      if (methods.get(frame.id) === "session/hydrate" && frame.result) {
+        frame.result.file_mutations =
+          mutations.get(frame.result.session_id) ?? [];
+        if (deleted && frame.result.file_mutations.length)
+          frame.result.file_mutations = [
+            ...frame.result.file_mutations,
+            { path: "_build/summary.md", operation: "delete" },
+          ];
+      }
+      if (methods.get(frame.id) === "diff/preview/get" && frame.result)
+        frame.result.preview.files[0].path = "_build/summary.md";
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  await start(page, `/workspace/panel-linked-${Date.now()}`);
+  await send(page, "Write the linked report");
+  await expect(toggle(page)).toHaveAccessibleName("Session panel, 1 changed");
+  const id = JSON.parse(
+    new URL(page.url()).searchParams.get("s")!,
+  )[2] as string;
+  expect(
+    (
+      await request.post(
+        `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(id)}&name=summary.md`,
+      )
+    ).ok(),
+  ).toBe(true);
+  await toggle(page).click();
+  await panel(page)
+    .getByRole("tab", { name: /^Changes/ })
+    .click();
+  await panel(page)
+    .getByRole("button", { name: /summary.md/ })
+    .click();
+  await panel(page)
+    .getByRole("tab", { name: /^Outputs/ })
+    .click();
+  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await panel(page).getByRole("tab", { name: "Overview" }).click();
+  await expect(panel(page).getByLabel("Selected file")).toContainText(
+    "_build/summary.md",
+  );
+  await panel(page)
+    .getByRole("button", { name: "View changes", exact: true })
+    .click();
+  await expect(
+    panel(page).getByRole("button", { name: /summary.md/ }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect(panel(page).locator(".diff-file").first()).toContainText(
+    "_build/summary.md",
+  );
+  const before = previewReads.length;
+  await page.reload();
+  await expect(
+    panel(page).getByRole("button", { name: /summary.md/ }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect(panel(page).locator(".diff-file").first()).toContainText(
+    "_build/summary.md",
+  );
+  expect(previewReads.length).toBeGreaterThan(before);
+  await panel(page)
+    .getByRole("button", { name: "Preview file", exact: true })
+    .click();
+  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .include('[aria-label="Selected file"]')
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+  readFails = true;
+  await panel(page)
+    .getByRole("button", { name: "Refresh", exact: true })
+    .click();
+  await expect(panel(page).getByRole("alert")).toContainText(
+    "workspace file was not found",
+  );
+  await expect(panel(page).locator("pre")).toHaveCount(0);
+  readFails = false;
+  await panel(page)
+    .getByRole("button", { name: "Try again", exact: true })
+    .click();
+  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  deleted = true;
+  await page.reload();
+  await expect(panel(page)).toContainText("This file was deleted");
+  await expect(panel(page).locator("pre")).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeInViewport();
 });

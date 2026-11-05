@@ -423,3 +423,28 @@
 .empty button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
+
+.selection {
+  display: grid;
+  gap: var(--dsw-space-2);
+  margin-bottom: var(--dsw-space-4);
+  padding-bottom: var(--dsw-space-3);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  font-size: 13px;
+}
+.selection > strong {
+  overflow-wrap: anywhere;
+}
+.selectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dsw-space-2);
+}
+.selectionActions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.treeRow[aria-current="true"] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
