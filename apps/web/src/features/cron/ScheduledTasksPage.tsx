@@ -32,6 +32,11 @@ import {
   type TaskTemplateId,
   type Weekday,
 } from "./schedule-form.ts";
+import {
+  displayNow,
+  serverTimeRange,
+  type ServerTimeRange,
+} from "./server-clock.ts";
 import { useRunOutcomes } from "./use-run-outcomes.ts";
 import styles from "./ScheduledTasksPage.module.css";
 
@@ -71,6 +76,9 @@ export function ScheduledTasksPage({
   const [loading, setLoading] = useState(true);
   const [refreshToken, setRefreshToken] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  // The server's clock as the last list gave it away; run times are the
+  // server's, so they are never compared with this browser's clock.
+  const [serverRange, setServerRange] = useState<ServerTimeRange | null>(null);
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
@@ -93,8 +101,10 @@ export function ScheduledTasksPage({
   const { outcomes, reasons } = useRunOutcomes(
     client,
     state?.jobs ?? null,
+    serverRange,
     now,
   );
+  const shownNow = displayNow(serverRange, now, performance.now());
 
   useEffect(() => {
     mutationGeneration.current += 1;
@@ -123,6 +133,7 @@ export function ScheduledTasksPage({
         (result) => {
           if (current && generation === listGeneration.current) {
             setState(result);
+            setServerRange(serverTimeRange(result.jobs, performance.now()));
             setLoading(false);
           }
         },
@@ -162,6 +173,7 @@ export function ScheduledTasksPage({
         .then((result) => {
           if (generation !== listGeneration.current) return;
           setState(result);
+          setServerRange(serverTimeRange(result.jobs, performance.now()));
           if (listFailed.current) {
             listFailed.current = false;
             setError(null);
@@ -511,7 +523,7 @@ export function ScheduledTasksPage({
                   job={job}
                   outcome={outcomes.get(job.id) ?? { kind: "never" }}
                   reasons={reasons}
-                  now={now}
+                  now={shownNow}
                   sessionTitle={
                     job.originSessionId
                       ? sessionTitle(job.originSessionId)
@@ -653,7 +665,8 @@ function JobRow({
   job: CronJob;
   outcome: RunOutcome;
   reasons: ReadonlyMap<string, string | null>;
-  now: number;
+  /** The server's now as far as it is known; null shows dates instead. */
+  now: number | null;
   sessionTitle: string | null;
   saving: boolean;
   deleting: boolean;
@@ -746,7 +759,11 @@ function JobRow({
             className={styles.primaryAction}
             onClick={() => onOpenRun(turnId)}
           >
-            {outcome.kind === "running" ? t("View progress") : t("View result")}
+            {outcome.kind === "running"
+              ? t("View progress")
+              : turnId
+                ? t("View result")
+                : t("Open conversation")}
           </button>
         ) : null}
         {canDelete && !confirmingDelete ? (
@@ -807,7 +824,11 @@ function toneOf(outcome: RunOutcome): string {
   }
 }
 
-function outcomeText(outcome: RunOutcome, now: number, t: UiText): string {
+function outcomeText(
+  outcome: RunOutcome,
+  now: number | null,
+  t: UiText,
+): string {
   const when = "at" in outcome && outcome.at ? agoText(outcome.at, now, t) : "";
   const withTime = (label: string) => (when ? `${label} · ${when}` : label);
   switch (outcome.kind) {
@@ -824,6 +845,14 @@ function outcomeText(outcome: RunOutcome, now: number, t: UiText): string {
       return withTime(t("Stopped before finishing"));
     case "unconfirmed":
       return withTime(t("Started; no record of how it went"));
+    case "unlinked":
+      return withTime(
+        outcome.why === "no-turn"
+          ? t("Ran; it started no reply here")
+          : outcome.why === "late"
+            ? t("Ran; a reply came too late to tell if it was this run")
+            : t("Ran; can't tell which reply is this run's"),
+      );
     case "undelivered":
       return withTime(
         outcome.stopped
@@ -833,12 +862,13 @@ function outcomeText(outcome: RunOutcome, now: number, t: UiText): string {
   }
 }
 
-function nextRunText(job: CronJob, now: number, t: UiText): string {
+function nextRunText(job: CronJob, now: number | null, t: UiText): string {
   if (!job.enabled) return t("Turned off");
   const next = job.nextRun;
   if (next === undefined || next === null) {
     return job.nextIn ?? t("Not scheduled");
   }
+  if (now === null) return formatDateTime(next);
   const wait = next - now;
   if (wait <= 60_000) return t("Within a minute");
   if (wait < 3_600_000) {
@@ -847,7 +877,8 @@ function nextRunText(job: CronJob, now: number, t: UiText): string {
   return formatDateTime(next);
 }
 
-function agoText(at: number, now: number, t: UiText): string {
+function agoText(at: number, now: number | null, t: UiText): string {
+  if (now === null) return formatDateTime(at);
   const elapsed = Math.max(0, now - at);
   if (elapsed < 60_000) return t("just now");
   if (elapsed < 3_600_000) {
