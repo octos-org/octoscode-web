@@ -233,3 +233,49 @@
 .export .meta {
   margin: var(--dsw-space-1) 0 0;
 }
+
+.importPreview {
+  margin-top: var(--dsw-space-3);
+  padding: var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+}
+
+.importPreview h4 {
+  margin-top: 0;
+}
+
+.importPreview p {
+  overflow-wrap: anywhere;
+}
+
+.importList {
+  display: grid;
+  gap: var(--dsw-space-2);
+  max-height: 280px;
+  margin: var(--dsw-space-3) 0;
+  padding-inline-start: var(--dsw-space-5);
+  overflow: auto;
+}
+
+.importList li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.importList strong {
+  display: block;
+  font-weight: 500;
+}
+
+.importList span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.form input[type="file"] {
+  min-height: auto;
+  padding: var(--dsw-space-2) 0;
+  border: 0;
+  background: transparent;
+}
