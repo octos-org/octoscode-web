@@ -1420,6 +1420,8 @@ function configuredModelProjection(model, selected) {
     has_api_key: model.has_api_key,
     selected,
     available: model.available,
+    ...(model.context_window ? { context_window: model.context_window } : {}),
+    ...(model.model_hints ? { model_hints: model.model_hints } : {}),
   };
 }
 
@@ -2274,6 +2276,43 @@ const http = createServer(async (request, response) => {
         }),
       );
     }
+    response.writeHead(204).end();
+    return;
+  }
+  // T-0419: a profile's configured overrides, as Core echoes them.
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname ===
+      "/__test__/model-overrides"
+  ) {
+    const url = new URL(request.url, "http://fixture");
+    const profileId = url.searchParams.get("profile") ?? defaultProfileId;
+    if (url.searchParams.get("reset") === "1") {
+      configuredModelsByProfile.delete(profileId);
+      response.writeHead(204).end();
+      return;
+    }
+    const target = configuredModelsForProfile(profileId).find(
+      (model) => model.model_id === url.searchParams.get("model"),
+    );
+    if (!target) {
+      response.writeHead(404).end();
+      return;
+    }
+    const contextWindow = Number(url.searchParams.get("context_window"));
+    if (contextWindow) target.context_window = contextWindow;
+    else delete target.context_window;
+    if (url.searchParams.get("lacks_vision") === "1")
+      target.model_hints = {
+        uses_completion_tokens: false,
+        fixed_temperature: false,
+        lacks_vision: true,
+        lacks_video: false,
+        retain_tool_images: false,
+        merge_system_messages: true,
+        reasoning_style: "none",
+      };
+    else delete target.model_hints;
     response.writeHead(204).end();
     return;
   }
@@ -4195,6 +4234,9 @@ sockets.on("connection", (socket, request) => {
             models: [
               {
                 id: "glm-5.3-flash",
+                // T-0419: Core's catalog fields; deepseek-v4-pro has no row.
+                context_window: 200000,
+                max_output: 8192,
                 endpoints: [
                   {
                     id: "official",

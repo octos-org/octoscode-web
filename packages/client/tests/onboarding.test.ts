@@ -12,6 +12,85 @@ import {
   parseProfileLlmSelectResult,
 } from "@octos-org/octoscode-client/onboarding";
 
+describe("configured model hints", () => {
+  const configuration = (modelHints: unknown) =>
+    parseProfileLlmConfigResult({
+      profile_id: "coding",
+      primary: {
+        family_id: "zai",
+        model_id: "model",
+        route: { route_id: "official", api_type: "openai" },
+        has_api_key: false,
+        selected: true,
+        available: true,
+        model_hints: modelHints,
+      },
+      fallbacks: [],
+    });
+
+  it("reads every hint Core sends and leaves the entry editable", () => {
+    const hints = {
+      uses_completion_tokens: false,
+      fixed_temperature: false,
+      lacks_vision: true,
+      lacks_video: false,
+      retain_tool_images: false,
+      merge_system_messages: true,
+      reasoning_style: "none",
+    };
+    const primary = configuration(hints)?.primary;
+    expect(primary?.model_hints).toEqual(hints);
+    expect(primary?.edit_blocked).toBeUndefined();
+  });
+
+  it("stays readable but not editable when Core sends a hint this client does not know", () => {
+    const primary = configuration({
+      lacks_vision: true,
+      future: true,
+    })?.primary;
+    expect(primary?.model_hints).toEqual({ lacks_vision: true });
+    expect(primary?.edit_blocked).toBe(true);
+  });
+
+  it("still refuses a hint it knows with the wrong type", () => {
+    expect(configuration({ lacks_vision: "yes" })).toBeNull();
+  });
+});
+
+describe("catalog token limits", () => {
+  it("keeps Core's real limits and leaves out what it records as none", () => {
+    const parsed = parseLlmCatalogResult({
+      families: {
+        deepseek: {
+          env: "DEEPSEEK_API_KEY",
+          models: [
+            // The row shape Core b5d32903 returns from model_catalog.json.
+            {
+              id: "deepseek-v4-pro",
+              input: 0.28,
+              output: 0.42,
+              max_output: 8192,
+              context_window: 1048576,
+            },
+            { id: "unmeasured", max_output: 0, context_window: 0 },
+            { id: "malformed", max_output: "8192", context_window: -1 },
+          ],
+        },
+      },
+    });
+    expect(parsed?.families[0]?.models).toEqual([
+      {
+        id: "deepseek-v4-pro",
+        endpoints: [],
+        context_window: 1048576,
+        max_output: 8192,
+      },
+      { id: "unmeasured", endpoints: [] },
+      { id: "malformed", endpoints: [] },
+    ]);
+  });
+});
+
 describe("solo onboarding transport contract", () => {
   it("preserves omission, null, zero, and closed rc11 inference hints", () => {
     expect(parseLlmInferenceOverrides({})).toEqual({});

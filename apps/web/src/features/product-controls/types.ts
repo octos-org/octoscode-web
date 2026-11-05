@@ -62,6 +62,8 @@ export interface ModelOption {
   id: string;
   name: string;
   description?: string;
+  /** Short facts the server can prove about this model, as display text. */
+  facts?: readonly string[];
   /** False keeps a catalog entry visible but impossible to submit. */
   available: boolean;
   unavailableReason?: string;

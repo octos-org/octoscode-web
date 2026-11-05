@@ -122,12 +122,15 @@ export function ModelChip({
   runtimeLabel,
   pendingLabel,
   control,
+  facts,
 }: {
   /** What this Session's runtime serves; the chip's value. */
   runtimeLabel: string | null;
   /** A saved Profile default the server has not started using yet. */
   pendingLabel?: string | null | undefined;
   control: ModelControlProps;
+  /** What the server can prove about the model the chip names. */
+  facts?: readonly string[] | undefined;
 }) {
   const t = useUiText();
   const popover = usePopover();
@@ -159,6 +162,7 @@ export function ModelChip({
               })
             : t("Model: {model}", { model: label })
         }
+        title={facts?.length ? facts.join(" · ") : undefined}
         aria-haspopup="menu"
         aria-expanded={popover.open}
         aria-controls={popover.open ? menuId : undefined}

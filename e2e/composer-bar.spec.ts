@@ -124,7 +124,7 @@ test("the composer shows where, who, and what it may do, at a glance", async ({
   await expect(menu).toContainText("every session");
   await expect(
     menu.getByRole("menuitemradio", { name: /GLM 5\.3 Flash/ }),
-  ).toContainText("Fast · Chinese");
+  ).toContainText("200K token context");
   expect(
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
       .violations,

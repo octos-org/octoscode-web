@@ -24,9 +24,10 @@ import {
 } from "../features/composer-bar/ComposerBar.tsx";
 import { SkillActionsChip } from "../features/composer-bar/SkillActionsChip.tsx";
 import {
-  modelStrengthLabel,
-  modelStrengths,
-} from "../features/composer-bar/model-strengths.ts";
+  modelFactLabels,
+  modelFacts,
+} from "../features/composer-bar/model-facts.ts";
+import { useModelFactSources } from "../features/composer-bar/use-model-fact-sources.ts";
 import { sessionUsage } from "../features/composer-bar/session-usage.ts";
 import { draftEstimate } from "../features/composer-bar/draft-estimate.ts";
 import { useLiveContext } from "../features/context/live-context.ts";
@@ -76,6 +77,7 @@ import {
   SESSION_EXECUTION_ENVIRONMENT_READ,
   type PermissionProfileSelection,
   type PlanUpdated,
+  type ProfileLlmModel,
 } from "@octos-org/octoscode-client/protocol";
 import {
   buildRowControlCommand,
@@ -163,6 +165,7 @@ import {
 import { freshWebSessionId } from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
+import { modelOptionId } from "../features/shell/model-projection.ts";
 import {
   findModel,
   modelControlState,
@@ -3578,6 +3581,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       networkLabel: t(option.networkLabel),
     }));
   const projectedModelGroups = modelGroups(models.state.models);
+  const modelFactSources = useModelFactSources({
+    client: protocol.client,
+    capabilities: session.capabilities,
+    profileId: catalogProfileId,
+    models: models.state.models,
+  });
   const currentProfileModel = selectedModel(models.state.models);
   const runtimeModel = work.supervision.runtimeStatus?.model;
   const runtimeModelLabel = runtimeModel?.title ?? runtimeModel?.model ?? null;
@@ -3614,28 +3623,38 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
-  // "Good at" tags come from a local table (model-strengths.ts); the server
-  // reports no model capabilities yet.
-  const modelGroupsWithStrengths = projectedModelGroups.map((group) => ({
+  // Only what the server proves about each model; see model-facts.ts.
+  const factLabelsFor = (model: ProfileLlmModel) =>
+    modelFactSources
+      ? modelFactLabels(
+          modelFacts(model, modelFactSources.catalog, modelFactSources.config),
+          t,
+          preferences.language === "zh" ? "zh-CN" : "en-US",
+        )
+      : [];
+  const modelGroupsWithFacts = projectedModelGroups.map((group) => ({
     ...group,
     models: group.models.map((option) => {
-      const tags = modelStrengths(option.description ?? option.name, group.id);
-      return tags.length
-        ? {
-            ...option,
-            description: [
-              option.description,
-              ...tags.map((tag) => t(modelStrengthLabel(tag))),
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }
-        : option;
+      const model = models.state.models.find(
+        (entry) =>
+          entry.provider === group.id && modelOptionId(entry) === option.id,
+      );
+      const facts = model ? factLabelsFor(model) : [];
+      return facts.length ? { ...option, facts } : option;
     }),
   }));
+  // The chip names what the runtime serves, which a pending default may not be.
+  const chipModel = runtimeModel
+    ? models.state.models.find(
+        (entry) =>
+          entry.model === runtimeModel.model &&
+          entry.provider === runtimeModel.provider,
+      )
+    : models.state.models.find((entry) => entry.selected);
+  const chipModelFacts = chipModel ? factLabelsFor(chipModel) : [];
   const modelControl: ModelControlProps = {
     state: modelControlState(models.state),
-    groups: modelGroupsWithStrengths,
+    groups: modelGroupsWithFacts,
     selected: currentProfileModel,
     locked: runtimeMutationBlocked || models.state.busy,
     labels: translateLabels(MODEL_LABELS, t),
@@ -5331,6 +5350,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               runtimeLabel={runtimeModelLabel}
                               pendingLabel={pendingProfileDefault}
                               control={modelControl}
+                              facts={chipModelFacts}
                             />
                             {permissionControl ? (
                               <PermissionControl {...permissionControl} />

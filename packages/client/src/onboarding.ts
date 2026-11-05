@@ -27,6 +27,10 @@ export interface LlmCatalogEndpoint {
 export interface LlmCatalogModel {
   id: string;
   endpoints: LlmCatalogEndpoint[];
+  /** Tokens, from Core's model catalog; absent when it records none. */
+  context_window?: number;
+  /** Tokens, from Core's model catalog; absent when it records none. */
+  max_output?: number;
 }
 
 export interface LlmCatalogFamily {
@@ -57,6 +61,8 @@ export interface LlmInferenceOverrides {
     uses_completion_tokens?: boolean;
     fixed_temperature?: boolean;
     lacks_vision?: boolean;
+    lacks_video?: boolean;
+    retain_tool_images?: boolean;
     merge_system_messages?: boolean;
     reasoning_style?:
       | "none"
@@ -220,6 +226,13 @@ export function parseLocalProfileCreateResult(
   };
 }
 
+/** Core defaults a missing limit to 0; a catalog is still usable without one. */
+function catalogTokenLimit(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
 export function parseLlmCatalogResult(value: unknown): LlmCatalogResult | null {
   if (!isRecord(value) || !isRecord(value.families)) return null;
   const familyEntries = Object.entries(value.families);
@@ -266,7 +279,16 @@ export function parseLlmCatalogResult(value: unknown): LlmCatalogResult | null {
           ...(apiType ? { api_type: apiType } : {}),
         });
       }
-      models.push({ id, endpoints });
+      const contextWindow = catalogTokenLimit(modelSource.context_window);
+      const maxOutput = catalogTokenLimit(modelSource.max_output);
+      models.push({
+        id,
+        endpoints,
+        ...(contextWindow === undefined
+          ? {}
+          : { context_window: contextWindow }),
+        ...(maxOutput === undefined ? {} : { max_output: maxOutput }),
+      });
     }
     if (models.length) families.push({ id: familyId, env, models });
   }
@@ -454,21 +476,34 @@ function parseProfileLlmConfiguredModel(
   const apiType = optionalText(value.route.api_type);
   if ([routeId, label, baseUrl, apiKeyEnv, apiType].includes(null)) return null;
 
+  // A hint newer than this client must not cost the whole configuration. The
+  // entry stays readable but edit-ineligible, so a save can't drop what Core holds.
+  const foreignHints =
+    isRecord(value.model_hints) &&
+    Object.keys(value.model_hints).some((key) => !HINT_KEYS.includes(key));
   const inference = parseLlmInferenceOverrides(
     Object.fromEntries(
       INFERENCE_KEYS.filter((key) => Object.hasOwn(value, key)).map((key) => [
         key,
-        value[key],
+        key === "model_hints" && foreignHints
+          ? Object.fromEntries(
+              Object.entries(
+                value.model_hints as Record<string, unknown>,
+              ).filter(([hint]) => HINT_KEYS.includes(hint)),
+            )
+          : value[key],
       ]),
     ),
   );
   if (!inference) return null;
   const editBlocked =
+    foreignHints ||
     Object.keys(value).some(
       (key) =>
         !CONFIGURED_KEYS.includes(key) &&
         !((key === "cost_per_m" || key === "strong") && value[key] === null),
-    ) || Object.keys(value.route).some((key) => !ROUTE_KEYS.includes(key));
+    ) ||
+    Object.keys(value.route).some((key) => !ROUTE_KEYS.includes(key));
 
   return {
     ...inference,
@@ -522,8 +557,11 @@ const HINT_BOOLEAN_KEYS = [
   "uses_completion_tokens",
   "fixed_temperature",
   "lacks_vision",
+  "lacks_video",
+  "retain_tool_images",
   "merge_system_messages",
 ] as const;
+const HINT_KEYS: readonly string[] = [...HINT_BOOLEAN_KEYS, "reasoning_style"];
 const REASONING_STYLES = [
   "none",
   "effort",
@@ -580,11 +618,7 @@ export function parseLlmInferenceOverrides(
     else {
       if (
         !isRecord(hints) ||
-        Object.keys(hints).some(
-          (key) =>
-            key !== "reasoning_style" &&
-            !(HINT_BOOLEAN_KEYS as readonly string[]).includes(key),
-        )
+        Object.keys(hints).some((key) => !HINT_KEYS.includes(key))
       )
         return null;
       const parsed: NonNullable<LlmInferenceOverrides["model_hints"]> = {};
