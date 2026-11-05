@@ -158,6 +158,35 @@ test("signs a connector in through the provider and back", async ({ page }) => {
   ).toBeEnabled();
 });
 
+test("a provider-side revocation flips the row on the next status read", async ({
+  page,
+  request,
+}) => {
+  // T-0371: the provider revokes out of band; a remembered "Signed in" must
+  // not survive the next status read.
+  await connect(page, `/srv/work/connector-management-oauth-${Date.now()}`);
+  const settings = await openConnectors(page);
+  const issues = settings.locator('[data-connector-id="issues"]');
+
+  const popupOpened = page.waitForEvent("popup");
+  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
+  const popup = await popupOpened;
+  const closed = popup.waitForEvent("close");
+  await popup.getByRole("link", { name: "Allow", exact: true }).click();
+  await closed;
+  await expect(issues).toContainText("Signed in.");
+  await expect(issues).toContainText("connected");
+
+  await request.post(`${origin}/__test__/oauth/provider-revoke`);
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(issues).toContainText("Authorization required");
+  await expect(issues).toContainText("This connector needs you to sign in.");
+  await expect(issues).not.toContainText("Signed in.");
+  await expect(
+    issues.getByRole("button", { name: "Sign in again" }),
+  ).toBeEnabled();
+});
+
 test("a cancelled sign-in saves nothing, even if its window is used afterwards", async ({
   page,
 }) => {

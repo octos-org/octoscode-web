@@ -14,8 +14,10 @@ import {
   deliverOAuthCallback,
   knownToUseOAuth,
   needsSignIn,
+  noteConnectorUnauthorized,
   oauthFailure,
   oauthSettled,
+  oauthVersion,
   revokeConnectorOAuth,
   setOAuthChannelForTests,
   startConnectorOAuth,
@@ -180,6 +182,67 @@ describe("connector sign-in", () => {
     });
     expect(knownToUseOAuth(connection, "coding", "mcp-1")).toBe(true);
     expect(oauthSettled(connection, "coding")).toBe(1);
+  });
+
+  it("measures the flow expiry on the server's clock, not the browser's", async () => {
+    // T-0371: a browser one hour AHEAD used to fail the sign-in instantly;
+    // one hour BEHIND kept waiting an hour past the server's expiry.
+    vi.useFakeTimers();
+    const expiry = "2026-11-04T13:10:00Z";
+    const start = (connection: object, browserNow: string) =>
+      startConnectorOAuth({
+        connection,
+        profileId: "coding",
+        connectorId: "mcp-1",
+        commands: async () =>
+          fakeCommands({
+            startOAuth: vi.fn(async () => started("s1", "web_origin", expiry)),
+          }),
+        origin: ORIGIN,
+        callbackServed: true,
+        window: fakeWindow(),
+        now: () => Date.parse(browserNow),
+        serverNow: async () => Date.parse("2026-11-04T13:00:00Z"),
+      });
+
+    const ahead = {};
+    await start(ahead, "2026-11-04T14:00:00Z");
+    expect(connectorOAuthState(ahead, "coding", "mcp-1")?.kind).toBe("waiting");
+    vi.advanceTimersByTime(9 * 60_000);
+    expect(connectorOAuthState(ahead, "coding", "mcp-1")?.kind).toBe("waiting");
+    vi.advanceTimersByTime(60_000);
+    expect(connectorOAuthState(ahead, "coding", "mcp-1")).toEqual({
+      kind: "failed",
+      reason: "expired",
+    });
+
+    const behind = {};
+    await start(behind, "2026-11-04T12:00:00Z");
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(connectorOAuthState(behind, "coding", "mcp-1")).toEqual({
+      kind: "failed",
+      reason: "expired",
+    });
+  });
+
+  it("drops a remembered sign-in when a status read reports revocation", async () => {
+    // T-0371: the provider revoked out of band; the next server report must
+    // erase the remembered "Signed in" instead of displaying it as current.
+    const connection = {};
+    const commands = fakeCommands();
+    await begin(connection, commands);
+    returnFromProvider("code=c&state=s1");
+    await flush();
+    expect(connectorOAuthState(connection, "coding", "mcp-1")?.kind).toBe(
+      "authorized",
+    );
+    const before = oauthVersion(connection, "coding");
+    noteConnectorUnauthorized(connection, "coding", "mcp-1");
+    expect(connectorOAuthState(connection, "coding", "mcp-1")).toBeUndefined();
+    expect(oauthVersion(connection, "coding")).toBe(before + 1);
+    // Only a remembered success is cleared; anything else is left alone.
+    noteConnectorUnauthorized(connection, "coding", "mcp-1");
+    expect(oauthVersion(connection, "coding")).toBe(before + 1);
   });
 
   it("ignores another sign-in's return, and one from another origin", async () => {

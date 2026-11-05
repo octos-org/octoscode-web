@@ -150,6 +150,20 @@ export function ConnectorSignIn({
       origin: window.location.origin,
       callbackServed: CALLBACK_SERVED,
       window: openSignInWindow(t("Opening the sign-in page…")),
+      serverNow: async () => {
+        // The web origin IS the server here; its Date header is the only
+        // wall clock we should compare the server's expiry with (T-0371).
+        try {
+          const response = await fetch(window.location.origin, {
+            method: "HEAD",
+            cache: "no-store",
+          });
+          const parsed = Date.parse(response.headers.get("date") ?? "");
+          return Number.isFinite(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      },
     });
   }
 

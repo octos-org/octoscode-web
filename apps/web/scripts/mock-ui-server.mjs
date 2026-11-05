@@ -2501,6 +2501,25 @@ const http = createServer(async (request, response) => {
   }
   if (
     request.method === "POST" &&
+    request.url === "/__test__/oauth/provider-revoke"
+  ) {
+    // The provider revoked its token out of band (T-0371): the next status
+    // read reports the connector needs signing in again.
+    for (const rows of connectorRowsByWorkspace.values()) {
+      for (const row of rows) {
+        if (row.id === "issues") {
+          row.status = "failed";
+          row.tool_count = 0;
+          row.tools = [];
+          row.error = `no stored OAuth tokens for MCP server '${row.url}'; run \`octos mcp login ${row.url}\` first`;
+        }
+      }
+    }
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
     request.url === "/__test__/turn-start/reset"
   ) {
     holdNextTurnStartAcknowledgement = false;
