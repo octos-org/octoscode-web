@@ -79,7 +79,7 @@ test("before sending, the composer shows this message's estimate and the server'
     "instructions and tool definitions sent with every request are not in it",
   );
   await expect(estimate).toContainText(
-    "The context window is known after the first reply in this session.",
+    "The context window is known once this session replies while this page is open.",
   );
   await expect(estimate).toContainText(
     "Not included: the reply, and this turn’s tool calls and their output.",
@@ -105,18 +105,27 @@ test("before sending, the composer shows this message's estimate and the server'
   await expect(chip(page)).toHaveCount(0);
 
   // After a reply the server has reported its prompt estimate and the window.
+  // The fixture reports 50,000 plus the session's transcript estimate.
+  const promptOf = (tokens: number) => 50_000 + tokens;
+  const percentOf = (tokens: number) =>
+    `${Math.round(((promptOf(tokens) + 7) / 1_000_000) * 100)}% of 1,000,000`;
   await sendAndSettle(page, "Summarise the repository");
   await expect(chip(page)).toHaveCount(0);
   await composer(page).fill("Review the plan");
   estimate = await openEstimate(page);
-  await expect(estimate).toContainText("Context so far≈52,000");
-  await expect(estimate).toContainText("After sending≈5% of 1,000,000");
+  await expect(estimate).toContainText(
+    `Context so far≈${exact(promptOf(first.tokens))}`,
+  );
+  await expect(estimate).toContainText(
+    `After sending≈${percentOf(first.tokens)}`,
+  );
   await expect(estimate).toContainText(
     "the last prompt it sent, instructions and tool definitions included",
   );
-  await expect(estimate).not.toContainText("known after the first reply");
+  await expect(estimate).not.toContainText("known once this session replies");
   await expect(estimate).not.toContainText(/[$¥€]|USD|CNY/);
   await page.keyboard.press("Escape");
+  await composer(page).fill("");
 
   // A new session in the same folder: its own context, none of the last one's.
   const navigation = page.locator("aside");
@@ -136,9 +145,48 @@ test("before sending, the composer shows this message's estimate and the server'
   await expect(estimate).toContainText(
     `Context so far≈${exact(second.tokens)}`,
   );
-  await expect(estimate).not.toContainText("52,000");
+  await expect(estimate).not.toContainText(exact(promptOf(first.tokens)));
   await expect(estimate).not.toContainText("After sending");
-  await expect(estimate).toContainText("known after the first reply");
+  await expect(estimate).toContainText("known once this session replies");
+  await page.keyboard.press("Escape");
+
+  // B replies too, with its own report.
+  await sendAndSettle(page, "Check the test suite");
+  await composer(page).fill("Review the plan");
+  estimate = await openEstimate(page);
+  await expect(estimate).toContainText(
+    `Context so far≈${exact(promptOf(second.tokens))}`,
+  );
+  await page.keyboard.press("Escape");
+  await composer(page).fill("");
+
+  // Back to A: its latest report and window, not the value its reopen read
+  // and nothing of B's.
+  const reopenReads = contexts.length;
+  await navigation
+    .getByRole("treeitem", { name: /Summarise the repository/ })
+    .click();
+  await expect
+    .poll(() =>
+      contexts
+        .slice(reopenReads)
+        .some((entry) => entry.session === first.session),
+    )
+    .toBe(true);
+  await expect(page.getByText("Completed with").first()).toBeVisible();
+  await composer(page).fill("Review the plan");
+  estimate = await openEstimate(page);
+  await expect(estimate).toContainText(
+    `Context so far≈${exact(promptOf(first.tokens))}`,
+  );
+  await expect(estimate).toContainText(
+    `After sending≈${percentOf(first.tokens)}`,
+  );
+  await expect(estimate).toContainText("tool definitions included");
+  await expect(estimate).not.toContainText(exact(promptOf(second.tokens)));
+  await expect(estimate).not.toContainText(
+    `Context so far≈${exact(first.tokens)}`,
+  );
 });
 
 test("the threshold warning comes from the server's own number", async ({

@@ -6755,7 +6755,10 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       session_id: sessionId,
       context_state: {
         ...draftEstimateContext(sessionId),
-        token_estimate: full ? 699_950 : 52_000,
+        // Distinct per session too, so a switch back can't show another's.
+        token_estimate: full
+          ? 699_950
+          : 50_000 + draftEstimateContext(sessionId).token_estimate,
       },
       threshold_tokens: 700_000,
       iteration: 0,

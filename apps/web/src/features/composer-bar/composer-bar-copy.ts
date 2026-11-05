@@ -54,8 +54,8 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
       "按字数估算，和服务器估算上下文的方法相同；模型实际的计数会有出入。",
     "This server has not reported the context for this session.":
       "服务器没有报告这个会话的上下文。",
-    "The context window is known after the first reply in this session.":
-      "上下文窗口要等这个会话第一次回复后才知道。",
+    "The context window is known once this session replies while this page is open.":
+      "上下文窗口要等这个会话在本页收到回复后才知道。",
     "{count} attachments are not counted; their size is only known once sent.":
       "{count} 个附件未计入，发送后才知道它们有多大。",
     "No price before sending: nothing here knows one. Usage and the server’s cost estimate appear after the reply.":
