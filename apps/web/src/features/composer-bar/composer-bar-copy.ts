@@ -64,8 +64,8 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
       "{label}（估算）。服务器会先压缩上下文。",
     "With this message the context reaches the server’s compaction threshold of about {threshold}, so it will compact older messages first.":
       "加上这条消息，上下文会达到服务器的压缩阈值（约 {threshold}），服务器会先压缩较早的内容。",
-    "The context is the server’s estimate of the last prompt it sent, instructions and tool definitions included.":
-      "已有上下文是服务器对它上一次发给模型的内容的估算，包含系统说明和工具说明。",
+    "The context is the server’s most recently reported estimate, instructions and tool definitions included; it updates when the change passes a threshold, so it can lag.":
+      "已有上下文是服务器最近一次报告的估算，包含系统说明和工具说明；变化超过阈值才更新，可能有滞后。",
     "The context is the server’s estimate of the conversation so far; instructions and tool definitions sent with every request are not in it.":
       "已有上下文是服务器对目前对话内容的估算，不含每次请求都会带上的系统说明和工具说明。",
     "Not included: the reply, and this turn’s tool calls and their output.":
