@@ -116,7 +116,33 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps firefox webkit
+      # Cache the browser binaries; the key carries the resolved Playwright
+      # version so a bump invalidates the entry. On a hit, only the system
+      # deps are re-installed (~10 s instead of a full download).
+      - name: Resolve Playwright version
+        id: playwright
+        run:
+          echo "version=$(pnpm exec playwright --version | awk '{print $3}')" >>
+          "$GITHUB_OUTPUT"
+      - uses: actions/cache@d4323d4fb8da0fdc80a8653e1c05f0b4102a36d1 # v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key:
+            playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          restore-keys: playwright-${{ runner.os }}-
+      - name: Install system dependencies for the browsers
+        run: pnpm exec playwright install-deps firefox webkit
+      - name: Install Firefox and WebKit (retry on a single stuck download)
+        timeout-minutes: 3
+        run: pnpm exec playwright install firefox webkit
+      # Second and final attempt: on a cache hit the first step is ~free, so a
+      # genuine outage still fails the job in a few minutes instead of the
+      # whole 10-minute window — and the log names the failing step.
+      - name: Retry browser install
+        if: failure()
+        timeout-minutes: 3
+        run: pnpm exec playwright install firefox webkit
       - run: pnpm test:e2e:cross-browser
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
