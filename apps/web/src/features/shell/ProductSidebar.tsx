@@ -20,7 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { CronIcon, ExpertsIcon } from "../../ui/Icon.tsx";
+import { CronIcon, ExpertsIcon, UsageIcon } from "../../ui/Icon.tsx";
 import { OctopusLogo } from "../../ui/OctopusLogo.tsx";
 import styles from "./ProductSidebar.module.css";
 import {
@@ -86,6 +86,10 @@ export interface ProductSidebarProps {
   scheduledAvailable?: boolean;
   scheduledActive?: boolean;
   onScheduled?: (() => void) | undefined;
+  /** The usage ledger page needs a connected, signed-in server. */
+  usageAvailable?: boolean;
+  usageActive?: boolean;
+  onUsage?: (() => void) | undefined;
   /** Expert teams need peer staging, gather, session open and turn start. */
   expertsAvailable?: boolean;
   expertsActive?: boolean;
@@ -184,6 +188,9 @@ export function ProductSidebar({
   scheduledAvailable = false,
   scheduledActive = false,
   onScheduled,
+  usageAvailable = false,
+  usageActive = false,
+  onUsage,
   expertsAvailable = false,
   expertsActive = false,
   onExperts,
@@ -1295,6 +1302,20 @@ export function ProductSidebar({
           >
             <CronIcon />
             {!collapsed ? <span>{t("Scheduled tasks")}</span> : null}
+          </button>
+        ) : null}
+        {usageAvailable && onUsage ? (
+          <button
+            type="button"
+            className={`${styles.settings} ${usageActive ? styles.settingsActive : ""}`}
+            aria-current={usageActive ? "page" : undefined}
+            aria-label={t("Usage")}
+            title={collapsed ? t("Usage") : undefined}
+            data-usage-nav="entry"
+            onClick={onUsage}
+          >
+            <UsageIcon />
+            {!collapsed ? <span>{t("Usage")}</span> : null}
           </button>
         ) : null}
         {expertsAvailable && onExperts ? (

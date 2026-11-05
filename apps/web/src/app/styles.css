@@ -420,6 +420,7 @@ label > span {
    styling matches the app's picker buttons. */
 .fleet-pane,
 .scheduled-pane,
+.usage-pane,
 .experts-pane {
   grid-template-rows: 52px minmax(0, 1fr);
 }

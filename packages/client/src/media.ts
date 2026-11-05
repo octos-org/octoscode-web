@@ -12,11 +12,16 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /** Blob REST is retained by the AppUI contract; never send auth in a blob URL. */
 export function blobApiUrl(endpoint: string, route: "upload" | "files"): URL {
+  return serverApiUrl(endpoint, route);
+}
+
+/** A REST route beside the WebSocket endpoint (`/api/<route>`), without query or credentials. */
+export function serverApiUrl(endpoint: string, route: string): URL {
   const url = new URL(endpoint);
   if (url.protocol === "ws:") url.protocol = "http:";
   if (url.protocol === "wss:") url.protocol = "https:";
   if (url.protocol !== "http:" && url.protocol !== "https:")
-    throw new Error("Blob endpoints require HTTP or HTTPS");
+    throw new Error("Server routes require HTTP or HTTPS");
   if (url.username || url.password)
     throw new Error(
       "Use the authentication field, not credentials in the server URL",
@@ -27,7 +32,7 @@ export function blobApiUrl(endpoint: string, route: "upload" | "files"): URL {
       url.pathname.slice(0, -"/api/ui-protocol/ws".length) + "/api/" + route;
   else
     throw new Error(
-      "Cannot resolve blob routes from this custom WebSocket path",
+      "Cannot resolve server routes from this custom WebSocket path",
     );
   url.search = "";
   url.hash = "";
