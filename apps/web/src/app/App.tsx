@@ -264,6 +264,7 @@ import {
   writePanelLayout,
   type SessionPanelTab,
 } from "../features/side-panel/panel-layout.ts";
+import { usePanelSelection } from "../features/side-panel/panel-selection.ts";
 import { SessionPanelHost } from "../features/side-panel/SessionPanelHost.tsx";
 import { ConversationActionsMenu } from "../features/shell/ConversationActionsMenu.tsx";
 import { contextUsage } from "../features/context/model.ts";
@@ -2540,6 +2541,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     readPanelLayout(browserLocalStorage()),
   );
   const [panelDrawerOpen, setPanelDrawerOpen] = useState(false);
+  const panelSelection = usePanelSelection(
+    browserStorage("sessionStorage"),
+    JSON.stringify([connection.endpoint, activeSessionKey]),
+  );
   useEffect(() => {
     writePanelLayout(browserLocalStorage(), panelLayout);
   }, [panelLayout]);
@@ -2562,7 +2567,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const closePanelDrawer = () => setPanelDrawerOpen(false);
   const openChangePreview = (previewId?: string | null, overlay = compact) => {
     showPanel("changes", overlay);
-    if (previewId) void safety.openDiffReview(previewId);
+    if (previewId) {
+      panelSelection.select(
+        safety.changes.find((change) => change.previewId === previewId)?.path ??
+          null,
+      );
+      void safety.openDiffReview(previewId);
+    }
   };
   // A plan is dropped when its turn ends; the Overview keeps showing the last
   // one this view saw, marked as ended, until a new plan replaces it. The
@@ -2628,13 +2639,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
       onClose={presentation === "drawer" ? closePanelDrawer : closePanelColumn}
       workspaceRoot={activeWorkspacePath}
+      selectedPath={panelSelection.path}
+      onSelectPath={panelSelection.select}
       browse={workspaceBrowse}
       changes={safety.changes}
       diffReview={safety.diffReview}
       onOpenPreview={(previewId) => void safety.openDiffReview(previewId)}
       onRefreshChanges={() => void safety.openDiffReview()}
       onChangesScope={(scope) => void safety.openDiffReview(undefined, scope)}
-      onOpenChange={(change) => openChangePreview(change.previewId)}
       planAvailable={planAvailable}
       plan={livePlan}
       finishedPlan={finishedPlan}

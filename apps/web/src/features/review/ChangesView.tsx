@@ -20,7 +20,8 @@ interface ChangesViewProps {
   state: DiffReviewRuntimeState;
   /** Files this Session's tools touched, newest first. */
   changes: readonly SessionFileChange[];
-  onOpenPreview: (previewId: string) => void;
+  selectedPath: string | null;
+  onOpenChange: (change: SessionFileChange) => void;
   onRefresh: () => void;
   onScopeChange: (scope: "turn" | "workspace") => void;
 }
@@ -32,7 +33,8 @@ interface ChangesViewProps {
 export function ChangesView({
   state,
   changes,
-  onOpenPreview,
+  selectedPath,
+  onOpenChange,
   onRefresh,
   onScopeChange,
 }: ChangesViewProps) {
@@ -124,9 +126,13 @@ export function ChangesView({
                 <button
                   type="button"
                   aria-current={
-                    change.previewId && change.previewId === shownPreview
-                      ? "true"
-                      : undefined
+                    selectedPath
+                      ? change.path === selectedPath &&
+                        change.previewId === shownPreview &&
+                        !state.loading
+                      : change.previewId && change.previewId === shownPreview
+                        ? "true"
+                        : undefined
                   }
                   disabled={!change.previewId || !state.available}
                   title={
@@ -134,9 +140,7 @@ export function ChangesView({
                       ? change.path
                       : t("Core kept no diff for this change.")
                   }
-                  onClick={() =>
-                    change.previewId && onOpenPreview(change.previewId)
-                  }
+                  onClick={() => onOpenChange(change)}
                 >
                   <span
                     className={`file-status status-${operationStatus(change.operation)}`}
