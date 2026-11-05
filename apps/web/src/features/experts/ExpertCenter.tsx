@@ -16,6 +16,7 @@ import {
 } from "@octos-org/octoscode-client/peers";
 import { randomUUID } from "../../shared/uuid.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
+import { MarkdownBody } from "../markdown/MarkdownBody.tsx";
 import {
   EMPTY_PEER_SNAPSHOT,
   type PeerManagerSnapshot,
@@ -315,7 +316,9 @@ export function ExpertCenter({
           <p className={styles.focus}>{t(member.focus)}</p>
         ) : null}
         {member.result ? (
-          <p className={styles.excerpt}>{member.result}</p>
+          <div className={styles.excerpt}>
+            <MarkdownBody text={member.result} />
+          </div>
         ) : member.state === "finished" ? (
           <p className={styles.hint}>
             {t("The answer is still being saved. It shows up here shortly.")}

@@ -173,13 +173,14 @@
   line-height: 1.6;
 }
 
+/* Rendered Markdown owns its block layout and whitespace; the excerpt only
+   tones it down and keeps the same four-line clamp as before. */
 .excerpt {
   display: -webkit-box;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
   line-height: 1.6;
-  white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }

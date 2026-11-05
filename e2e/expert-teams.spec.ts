@@ -223,6 +223,74 @@ test("a failed member and a stopped member are named, and the merge leaves them 
   expect(merge).toContain("User reviewer (Failed)");
 });
 
+test("renders member Markdown, the merge names the experts, and a refresh keeps both", async ({
+  page,
+}) => {
+  // T-0366: the real-model run showed raw ** / ## in member excerpts and a
+  // merge report quoting bare handles. A Markdown-answering member plus a
+  // failed member walks start → merge → refresh.
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(page, "Review the plan. [md-seat-1] [fail-seat-3]");
+
+  const team = center.locator("[data-expert-team]");
+  const member = (seat: number) =>
+    team.locator(`[data-expert-member$="-${seat}"]`);
+  await expect(member(1).locator('[data-expert-state="finished"]')).toBeVisible(
+    { timeout: 20_000 },
+  );
+  // The Markdown result renders: heading, bold and list are real elements,
+  // never raw ** / ## characters.
+  await expect(
+    member(1).getByRole("heading", { name: "Conclusion" }),
+  ).toBeVisible();
+  await expect(member(1).locator("strong")).toHaveText(
+    "The most important problem is example problem 1.",
+  );
+  await expect(member(1).getByText(/\*\*/)).toHaveCount(0);
+  await expect(member(1).getByText(/##/)).toHaveCount(0);
+  await expect(
+    member(2).locator('[data-expert-state="finished"]'),
+  ).toBeVisible();
+  await expect(member(3).locator('[data-expert-state="failed"]')).toBeVisible();
+
+  const before = masterStarts(sent).length;
+  await team
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
+  const merge = turnText(masterStarts(sent).at(-1)!);
+  // Headings lead with the role name (which already carries the handle), and
+  // the instruction asks the merge to cite people, not numbers.
+  expect(merge).toMatch(
+    /## peer Feasibility reviewer · [0-9a-f]{4}-1 \(done\)/,
+  );
+  expect(merge).toMatch(/## peer Risk reviewer · [0-9a-f]{4}-2 \(done\)/);
+  expect(merge).toContain(
+    "In the report, refer to each expert by their role name",
+  );
+  expect(merge).toContain("User reviewer (Failed)");
+
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const again = await openExperts(page);
+  const rebuilt = again.locator("[data-expert-team]");
+  await expect(rebuilt).toHaveCount(1);
+  await expect(rebuilt.locator('[data-expert-state="finished"]')).toHaveCount(
+    2,
+  );
+  await expect(rebuilt.locator('[data-expert-state="failed"]')).toHaveCount(1);
+  await expect(
+    rebuilt
+      .locator('[data-expert-member$="-1"]')
+      .getByRole("heading", { name: "Conclusion" }),
+  ).toBeVisible();
+});
+
 test("after a refresh the team is read back from the server", async ({
   page,
 }) => {
