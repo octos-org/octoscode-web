@@ -42,6 +42,7 @@
   line-height: 1.6;
 }
 
+.manage,
 .heading button,
 .action button {
   min-height: 32px;

@@ -65,3 +65,61 @@
 .dialog section {
   margin-top: 20px;
 }
+.confirmation h3 {
+  margin-top: 0;
+}
+.confirmation h3:focus,
+.changed:focus,
+.outcome:focus {
+  outline: none;
+}
+.confirmation code {
+  overflow-wrap: anywhere;
+}
+.risk {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.changed {
+  margin-block: 12px;
+  color: var(--dsw-alias-state-error-text);
+}
+.changed p {
+  margin-block: 4px;
+}
+.changed ul {
+  margin-block: 4px;
+  padding-inline-start: 20px;
+}
+.changedText {
+  color: var(--dsw-alias-state-error-text);
+}
+.facts {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+}
+.facts div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+}
+.facts dt {
+  color: var(--dsw-alias-label-secondary);
+}
+.facts dd {
+  margin: 0;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media (max-width: 480px) {
+  .facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
