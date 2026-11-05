@@ -291,6 +291,60 @@ test("renders member Markdown, the merge names the experts, and a refresh keeps 
   ).toBeVisible();
 });
 
+test("a server without last_outcome trusts only the front matter, and the merge skips the error", async ({
+  page,
+}) => {
+  // T-0370: an older Core omits last_outcome. The errored member's result
+  // file carries outcome:errored with the error text as body — it must read
+  // as a failure, never as a finished conclusion in the merge.
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(
+    page,
+    "Review the plan. [nooutcome-seat-1] [fail-nooutcome-seat-3]",
+  );
+  const team = center.locator("[data-expert-team]");
+  await expect(team.locator('[data-expert-state="finished"]')).toHaveCount(2, {
+    timeout: 20_000,
+  });
+  await expect(team.locator('[data-expert-state="failed"]')).toHaveCount(1);
+
+  // After a refresh the roster is gone: only the gather rows decide.
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const again = await openExperts(page);
+  const rebuilt = again.locator("[data-expert-team]");
+  const member = (seat: number) =>
+    rebuilt.locator(`[data-expert-member$="-${seat}"]`);
+  // Seat 1 completed; the front matter it wrote still says so.
+  await expect(
+    member(1).locator('[data-expert-state="finished"]'),
+  ).toBeVisible();
+  await expect(
+    member(1).getByText(/the most important problem is example problem 1/),
+  ).toBeVisible();
+  // Seat 3 errored: the error text is its failure detail, not its conclusion.
+  await expect(member(3).locator('[data-expert-state="failed"]')).toBeVisible();
+  await expect(member(3).getByText(/example problem/)).toHaveCount(0);
+  await member(3).getByText("Technical details").click();
+  await expect(member(3).getByText(/stub model is down/)).toBeVisible();
+
+  const before = masterStarts(sent).length;
+  await rebuilt
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
+  const gathers = sent.filter((frame) => frame.method === "peer/gather");
+  expect(gathers.at(-1)!.params!.slugs).toHaveLength(2);
+  const merge = turnText(masterStarts(sent).at(-1)!);
+  expect(merge).toContain("User reviewer (Failed)");
+  expect(merge).not.toContain("stub model is down");
+});
+
 test("after a refresh the team is read back from the server", async ({
   page,
 }) => {

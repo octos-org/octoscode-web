@@ -6289,8 +6289,14 @@ sockets.on("connection", (socket, request) => {
 function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   const seat = Number(/-(\d+)$/u.exec(member.name ?? "")?.[1] ?? 0);
   const state = sessionState(sessionId);
+  // "[nooutcome-seat-N]"/"[fail-nooutcome-seat-N]" settle without the
+  // last_outcome field, like an older Core: the browser may only trust the
+  // front matter the result file itself carries.
+  const hideOutcome =
+    member.brief.includes(`[nooutcome-seat-${seat}]`) ||
+    member.brief.includes(`[fail-nooutcome-seat-${seat}]`);
   const record = (outcome, body) => {
-    member.lastOutcome = outcome;
+    member.lastOutcome = hideOutcome ? undefined : outcome;
     member.result = `---\nslug: ${member.slug}\noutcome: ${outcome}\nupdated_unix: ${Math.floor(Date.now() / 1000)}\nturn: 1\nturn_id: ${turnId}\n---\n\n${body}\n`;
   };
   // The browser follows a member through the same turn notifications Core
@@ -6319,7 +6325,10 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
       if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
         return;
       if (state.activeTurn?.turnId !== turnId) return;
-      if (member.brief.includes(`[fail-seat-${seat}]`)) {
+      if (
+        member.brief.includes(`[fail-seat-${seat}]`) ||
+        member.brief.includes(`[fail-nooutcome-seat-${seat}]`)
+      ) {
         const message =
           'custom/stub temporarily unavailable (HTTP 500 - {"error":{"message":"stub model is down"}})';
         notify(
