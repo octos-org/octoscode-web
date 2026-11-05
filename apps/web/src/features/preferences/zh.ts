@@ -2397,6 +2397,7 @@ const catalog: Readonly<Record<string, string>> = {
     "结果还在保存，稍后会显示在这里。",
   "It is waiting for your approval or answer. Open its conversation to respond.":
     "它在等你批准或回答，打开它的对话处理。",
+  "It could not be stopped. Try again.": "没能停止，请再试一次。",
   "It may still be working, or it may have been stopped. Open its conversation to see.":
     "它可能还在工作，也可能已经停了。打开它的对话看看。",
   "{count} still working": "{count} 位还在工作",

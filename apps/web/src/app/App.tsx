@@ -5506,6 +5506,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         });
                     }}
                     onStopMember={(entry) => peers.rowAction(entry, "stop")}
+                    memberClient={
+                      protocol.client &&
+                      supportsMethod(
+                        session.capabilities,
+                        CORE_UI_METHODS.SESSION_HYDRATE,
+                      )
+                        ? protocol.client
+                        : null
+                    }
                   />
                 </Suspense>
               ) : (

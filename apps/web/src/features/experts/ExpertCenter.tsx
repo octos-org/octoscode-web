@@ -30,12 +30,20 @@ import {
   composeExpertTeam,
   expertSummaryInstruction,
   expertTeams,
+  lastMemberTurn,
+  membersToRead,
   newTeamTag,
   type ExpertMemberState,
+  type MemberTurnRead,
   type ExpertMemberView,
   type ExpertTeamTemplate,
   type ExpertTeamView,
 } from "./expert-teams.ts";
+import {
+  readMemberTurns,
+  stopMemberTurn,
+  type MemberSessionClient,
+} from "./member-session.ts";
 import styles from "./ExpertCenter.module.css";
 
 export interface ExpertTeamManager {
@@ -67,6 +75,13 @@ export interface ExpertCenterProps {
     profileId: string;
   }): void;
   onStopMember(entry: PeerRosterEntry): void;
+  /**
+   * Reads and stops members this tab does not hold (after a refresh, or
+   * started from another tab) through their own sessions. Null when the
+   * server cannot hydrate a session; those members then show what the
+   * blackboard says.
+   */
+  memberClient?: MemberSessionClient | null;
 }
 
 const STATE_WORD: Readonly<Record<ExpertMemberState, string>> = {
@@ -123,6 +138,7 @@ export function ExpertCenter({
   onSummarize,
   onOpenMember,
   onStopMember,
+  memberClient = null,
 }: ExpertCenterProps) {
   const t = useUiText();
   const id = useId();
@@ -131,10 +147,24 @@ export function ExpertCenter({
     manager?.getSnapshot ?? emptySnapshot,
     manager?.getSnapshot ?? emptySnapshot,
   );
-  const teams = useMemo(
-    () => expertTeams(snapshot.blackboard, roster, workspace),
-    [snapshot.blackboard, roster, workspace],
+  // Memory only: what each member's own session last said about its turns.
+  const [turns, setTurns] = useState<ReadonlyMap<string, MemberTurnRead>>(
+    () => new Map(),
   );
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [stopFailed, setStopFailed] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const teams = useMemo(
+    () => expertTeams(snapshot.blackboard, roster, workspace, turns),
+    [snapshot.blackboard, roster, workspace, turns],
+  );
+  // Callers pass fresh callbacks each render; reads go through the latest
+  // ones without re-running the arrival effect.
+  const latest = useRef({ roster, turns, memberClient, profileId });
+  latest.current = { roster, turns, memberClient, profileId };
   const [selected, setSelected] = useState<string | null>(null);
   const [goal, setGoal] = useState("");
   const [launching, setLaunching] = useState(false);
@@ -146,13 +176,66 @@ export function ExpertCenter({
   const [readOnce, setReadOnce] = useState(false);
   const goalRef = useRef<HTMLTextAreaElement>(null);
 
-  const refresh = useCallback(() => {
-    if (!manager) return;
-    void manager
-      .gather()
-      .catch(() => null)
-      .finally(() => setReadOnce(true));
-  }, [manager]);
+  const memberSession = (topic: string) => {
+    try {
+      return peerIdentityForTopic(latest.current.profileId, topic);
+    } catch {
+      // A profile id the protocol cannot address has no member session.
+      return null;
+    }
+  };
+  const readMembers = useCallback(
+    async (members: readonly { slug: string; topic: string }[]) => {
+      const client = latest.current.memberClient;
+      if (!client || !members.length) return;
+      const reads = await Promise.all(
+        members.map(async ({ slug, topic }) => {
+          let sessionId: string;
+          try {
+            sessionId = peerIdentityForTopic(latest.current.profileId, topic);
+          } catch {
+            return null;
+          }
+          const last = lastMemberTurn(
+            await readMemberTurns(client, sessionId).catch(() => null),
+          );
+          return last ? ([slug, last] as const) : null;
+        }),
+      );
+      // An unreadable member keeps what was known; nothing is guessed.
+      setTurns((current) => {
+        const next = new Map(current);
+        for (const read of reads) if (read) next.set(read[0], read[1]);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const refresh = useCallback(
+    (force = false) => {
+      if (!manager) return;
+      void manager
+        .gather()
+        .catch(() => null)
+        .then(() =>
+          readMembers(
+            membersToRead(
+              expertTeams(
+                manager.getSnapshot().blackboard,
+                latest.current.roster,
+                workspace,
+                latest.current.turns,
+              ),
+              latest.current.turns,
+              force,
+            ),
+          ),
+        )
+        .finally(() => setReadOnce(true));
+    },
+    [manager, readMembers, workspace],
+  );
 
   // Read on arrival, and again whenever a member this tab watches changes state.
   const rosterKey = roster
@@ -291,11 +374,42 @@ export function ExpertCenter({
     }
   };
 
+  const canStopMember = (member: ExpertMemberView) =>
+    canStop &&
+    STOPPABLE.has(member.state) &&
+    (member.entry?.status === "started" ||
+      (!!member.runningTurn && !!memberClient));
+
+  /**
+   * A member this tab holds stops through its own session controller. One it
+   * does not hold stops by the running turn its session reported, so a newer
+   * turn or another member is never touched; nothing is sent again on its own.
+   */
+  const stopMember = async (member: ExpertMemberView) => {
+    if (member.entry?.status === "started") {
+      onStopMember(member.entry);
+      return;
+    }
+    const sessionId = memberSession(member.topic);
+    const turnId = member.runningTurn;
+    if (!sessionId || !turnId || !memberClient || stopping.has(member.slug))
+      return;
+    const without = (set: ReadonlySet<string>) =>
+      new Set([...set].filter((slug) => slug !== member.slug));
+    setStopping((current) => new Set(current).add(member.slug));
+    setStopFailed(without);
+    const outcome = await stopMemberTurn(memberClient, sessionId, turnId);
+    if (outcome === "failed")
+      setStopFailed((current) => new Set(current).add(member.slug));
+    // Whatever the answer, show what the member's session says now.
+    await readMembers([member]);
+    setStopping(without);
+    refresh();
+  };
+
   const memberRow = (team: ExpertTeamView, member: ExpertMemberView) => {
-    const stoppable =
-      canStop &&
-      STOPPABLE.has(member.state) &&
-      member.entry?.status === "started";
+    const stoppable = canStopMember(member);
+    const pendingStop = stopping.has(member.slug);
     return (
       <li
         key={member.slug}
@@ -337,6 +451,11 @@ export function ExpertCenter({
             )}
           </p>
         ) : null}
+        {stopFailed.has(member.slug) ? (
+          <p className={styles.hint} role="alert">
+            {t("It could not be stopped. Try again.")}
+          </p>
+        ) : null}
         {member.reason ? (
           <details className={styles.details}>
             <summary>{t("Technical details")}</summary>
@@ -351,9 +470,10 @@ export function ExpertCenter({
             <button
               type="button"
               className={styles.danger}
-              onClick={() => onStopMember(member.entry!)}
+              disabled={pendingStop}
+              onClick={() => void stopMember(member)}
             >
-              {t("Stop")}
+              {pendingStop ? t("Stopping…") : t("Stop")}
             </button>
           ) : null}
         </div>
@@ -374,12 +494,9 @@ export function ExpertCenter({
       ...(failed ? [t("{count} did not finish", { count: failed })] : []),
       ...(stopped ? [t("{count} stopped", { count: stopped })] : []),
     ].join(" · ");
-    const stoppable = canStop
-      ? team.members.filter(
-          (member) =>
-            STOPPABLE.has(member.state) && member.entry?.status === "started",
-        )
-      : [];
+    const stoppable = team.members.filter(
+      (member) => canStopMember(member) && !stopping.has(member.slug),
+    );
     const summary = summaries[team.key];
     const pending = team.members.length - done;
     return (
@@ -411,7 +528,7 @@ export function ExpertCenter({
               type="button"
               className={styles.danger}
               onClick={() => {
-                for (const member of stoppable) onStopMember(member.entry!);
+                for (const member of stoppable) void stopMember(member);
               }}
             >
               {t("Stop all")}
@@ -477,7 +594,7 @@ export function ExpertCenter({
               <button
                 type="button"
                 disabled={snapshot.gatherBusy}
-                onClick={refresh}
+                onClick={() => refresh(true)}
               >
                 {snapshot.gatherBusy ? t("Refreshing…") : t("Refresh")}
               </button>
@@ -493,7 +610,7 @@ export function ExpertCenter({
             <button
               type="button"
               className={styles.inlineButton}
-              onClick={refresh}
+              onClick={() => refresh(true)}
             >
               {t("Try again")}
             </button>
