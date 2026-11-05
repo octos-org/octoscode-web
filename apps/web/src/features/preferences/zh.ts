@@ -154,7 +154,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Confirm lane save": "确认保存通道",
   "Confirm removal": "确认删除",
   "Confirm research lane change": "确认研究通道更改",
-  "Confirm server installation": "确认在服务器安装",
   "Confirm skill change": "确认技能更改",
   Connect: "连接",
   "Connect an Octos server": "连接 Octos 服务器",
@@ -331,7 +330,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Install from source": "从来源安装",
   "Installed skills": "已安装技能",
   "Installed:": "已安装：",
-  "Instruction skills": "指令技能",
   "Interrupt agent": "中断智能体",
   "Interrupt agent {value0}": "中断智能体 {value0}",
   Interval: "间隔",
@@ -577,7 +575,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Provider identity is fixed. Add another provider to change it.":
     "提供商身份不可更改。请添加另一提供商。",
   "Provider settings": "提供商设置",
-  "Provides executable tools": "提供可执行工具",
   "Read artifact": "读取产物",
   "Read artifact by path": "按路径读取产物",
   "Read artifact {value0}": "读取产物 {value0}",
@@ -946,7 +943,6 @@ const catalog: Readonly<Record<string, string>> = {
   "{value0} is not advertised by this server": "此服务器未声明支持 {value0}",
   "{value0} pending.": "{value0} 待处理。",
   "{value0} tokens": "{value0} token",
-  "{value0} · branch {value1}": "{value0} · 分支 {value1}",
   "· Root sequence:": "· 根序号：",
   "— awaiting result": "— 等待结果",
   "— closed": "— 已关闭",
@@ -1478,6 +1474,60 @@ const catalog: Readonly<Record<string, string>> = {
   Skills: "技能",
   "Installed in server Profile {profileId}":
     "服务器配置文件 {profileId} 中安装的技能",
+  "Review before installing": "安装前审查",
+  "Review and install skills": "审查并安装技能",
+  "Installing can run this source's code directly on the server: npm install, cargo build, downloaded binaries and the setup steps in its manifest. This list is only what the server reports. Nobody has inspected the source for you here.":
+    "安装时，服务器可能直接运行这个来源里的代码：npm install、cargo build、下载的预编译程序，以及 manifest 里的初始化步骤。这里只列服务器报告的内容，没有人替你检查过来源本身。",
+  "The server's registry has no single entry for this source, so most of what follows is unknown. Check it yourself before installing.":
+    "服务器的注册表里没有这个来源的唯一条目，下面大多是未知。安装前请自己核实。",
+  "This server doesn't offer a skill registry, so most of what follows is unknown. Check it yourself before installing.":
+    "这台服务器不提供技能注册表，下面大多是未知。安装前请自己核实。",
+  "This is a path on the server. No registry entry describes it, so most of what follows is unknown. Check it yourself before installing.":
+    "这是服务器上的路径，注册表里没有它的条目，下面大多是未知。安装前请自己核实。",
+  "What the server reports changed after your review, so nothing was installed. See what changed, then decide again.":
+    "你审查之后，服务器报告的内容变了，所以没有安装。看一下哪里变了，再决定。",
+  "Couldn't read the server's skill registry, so nothing was installed.":
+    "读不到服务器的技能注册表，所以没有安装。",
+  "The server installs whatever this branch holds at that moment. It can't pin the version above, so what you get may differ.":
+    "服务器安装的是这个分支当时的内容，不能锁定上面的版本，装上的可能不一样。",
+  "Confirm install": "确认安装",
+  "Confirm remove": "确认移除",
+  Source: "来源",
+  Branch: "分支",
+  "main (server default)": "main（服务器默认）",
+  Package: "包",
+  Version: "版本",
+  Author: "作者",
+  License: "许可证",
+  Tags: "标签",
+  Listed: "已收录",
+  "Not listed": "未收录",
+  "Registry entry": "注册表条目",
+  "Skills included": "包含的技能",
+  "Required tools": "需要的工具",
+  "Executable tools": "可执行工具",
+  "The registry says it provides them": "注册表声明提供",
+  "The registry says it provides executable tools": "注册表声明提供可执行工具",
+  "Unknown. The registry doesn't say it provides them, which doesn't mean it has none":
+    "未知。注册表没有声明提供，不代表没有",
+  "Signature or checksum": "签名或校验值",
+  "Not reported by the server": "服务器未报告",
+  "Already installed": "已安装",
+  "The installation didn't finish: {detail}": "安装没有完成：{detail}",
+  "Part of it may still be on the server. Check the installed skills below.":
+    "服务器上可能留下了一部分内容，请看下面已安装的技能。",
+  "Installed on the server: {skills}": "已安装到服务器：{skills}",
+  "Already there, not overwritten: {skills}": "已经存在，没有覆盖：{skills}",
+  "Dependencies also installed: {skills}": "同时安装的依赖：{skills}",
+  "The server installed nothing.": "服务器没有安装任何内容。",
+  "The registry stated version {version} when you reviewed it, and the server reports something else now. If you don't want this, remove it.":
+    "你审查时注册表写的版本是 {version}，服务器现在报告的不一样。如果不想要，可以移除。",
+  "Installed, but the list of skills couldn't be refreshed.":
+    "已安装，但技能列表没能刷新。",
+  "Removed {name} from server Profile {profileId}.":
+    "已从服务器配置档案 {profileId} 移除 {name}。",
+  "Could not confirm the server change. It may have been applied; refresh the Profile before reviewing another attempt.":
+    "没能确认服务器上的更改，它可能已经生效。请刷新配置档案后再试。",
   "Remote one-click install is unavailable while supply-chain safeguards are being reviewed.":
     "供应链安全审查完成前，暂不支持远程一键安装。",
   "Description not reported by the server.": "服务器未提供说明。",

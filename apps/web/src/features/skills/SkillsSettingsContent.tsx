@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   APPUI_SKILL_ACTION_METHODS,
+  APPUI_SKILL_METHODS,
   SKILL_ACTIONS_UI_FEATURE,
   SKILL_ACTION_JOBS_UI_FEATURE,
   supportsFeature,
@@ -33,6 +34,8 @@ interface SkillsSettingsContentProps {
   profileId: string;
   sessionId: string;
   capabilities: UiProtocolCapabilities;
+  /** Opens the surface that reviews a source before installing it. */
+  onManage: () => void;
 }
 
 export function SkillsSettingsContent({
@@ -40,6 +43,7 @@ export function SkillsSettingsContent({
   profileId,
   sessionId,
   capabilities,
+  onManage,
 }: SkillsSettingsContentProps) {
   const t = useUiText();
   const actionsAvailable =
@@ -205,6 +209,11 @@ export function SkillsSettingsContent({
           #2321
         </a>
       </p>
+      {supportsMethod(capabilities, APPUI_SKILL_METHODS.INSTALL) ? (
+        <button type="button" className={styles.manage} onClick={onManage}>
+          {t("Review and install skills")}
+        </button>
+      ) : null}
       {error ? (
         <p className={styles.error} role="alert">
           {error}

@@ -12,9 +12,29 @@ import type {
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./SkillsDialog.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
+import {
+  readInstallReview,
+  reviewChanges,
+  skillErrorText,
+  type InstallReview,
+  type InstallSource,
+  type ReviewChange,
+} from "./install-review.ts";
+import {
+  InstallOutcomeNotice,
+  InstallReviewFailure,
+  InstallReviewPanel,
+  type InstallOutcome,
+} from "./InstallReviewPanel.tsx";
 
+type Commands = Awaited<ReturnType<OctosUiClient["skillCommands"]>>;
 type Mutation =
-  | { kind: "install"; repo: string; branch: string }
+  | {
+      kind: "install";
+      review: InstallReview;
+      /** Set when the reviewed facts no longer held at confirmation. */
+      changes: readonly ReviewChange[];
+    }
   | { kind: "remove"; name: string };
 
 /** Profile mutations are explicit, scoped and never presented as browser installs. */
@@ -40,6 +60,11 @@ export function SkillsDialog({
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
   const [confirmation, setConfirmation] = useState<Mutation | null>(null);
+  const [reviewFailure, setReviewFailure] = useState<{
+    source: InstallSource;
+    detail: string;
+  } | null>(null);
+  const [outcome, setOutcome] = useState<InstallOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,10 +76,7 @@ export function SkillsDialog({
   const available = (method: string) => supportsMethod(capabilities, method);
 
   async function run(
-    work: (
-      commands: Awaited<ReturnType<OctosUiClient["skillCommands"]>>,
-      current: () => boolean,
-    ) => Promise<void>,
+    work: (commands: Commands, current: () => boolean) => Promise<void>,
     mutation = false,
   ) {
     if (requestPending.current || (mutation && mutationBlocked.current)) return;
@@ -76,7 +98,9 @@ export function SkillsDialog({
       if (current())
         setError(
           (mutation
-            ? "Could not confirm the server change. It may have been applied; refresh the Profile before reviewing another attempt."
+            ? t(
+                "Could not confirm the server change. It may have been applied; refresh the Profile before reviewing another attempt.",
+              )
             : cause instanceof Error
               ? cause.message
               : "Skill request failed"
@@ -107,31 +131,106 @@ export function SkillsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, profileId]);
 
+  const readReview = (commands: Commands, source: InstallSource) =>
+    readInstallReview(
+      source,
+      available(APPUI_SKILL_METHODS.SEARCH) ? () => commands.search("") : null,
+    );
+
+  function openReview(source: InstallSource) {
+    void run(async (commands, current) => {
+      setConfirmation(null);
+      setReviewFailure(null);
+      setOutcome(null);
+      setNotice(null);
+      try {
+        const review = await readReview(commands, source);
+        if (current())
+          setConfirmation({ kind: "install", review, changes: [] });
+      } catch (cause) {
+        if (current())
+          setReviewFailure({ source, detail: skillErrorText(cause) });
+      }
+    });
+  }
+
+  /** The confirmation only covers what was reviewed, so that is read again first. */
+  async function installReviewed(
+    commands: Commands,
+    current: () => boolean,
+    reviewed: InstallReview,
+  ) {
+    const { source } = reviewed;
+    let latest: InstallReview;
+    try {
+      latest = await readReview(commands, source);
+    } catch (cause) {
+      if (!current()) return;
+      setConfirmation(null);
+      setReviewFailure({ source, detail: skillErrorText(cause) });
+      return;
+    }
+    if (!current()) return;
+    const changes = reviewChanges(reviewed, latest);
+    if (changes.length) {
+      setConfirmation({ kind: "install", review: latest, changes });
+      return;
+    }
+    setConfirmation(null);
+    const readBack = () => commands.list().catch(() => null);
+    try {
+      const result = await commands.install(
+        source.repo,
+        source.branch || undefined,
+      );
+      const skills = await readBack();
+      if (!current()) return;
+      setOutcome({
+        kind: "done",
+        result,
+        reviewedVersion: latest.package?.version ?? null,
+        skills,
+      });
+      if (skills) setInstalled(skills);
+      setPackages(null);
+    } catch (cause) {
+      const skills = await readBack();
+      if (!current()) return;
+      setOutcome({ kind: "failed", detail: skillErrorText(cause) });
+      if (skills) setInstalled(skills);
+    }
+  }
+
   function confirmMutation() {
     const choice = confirmation;
     if (!choice) return;
     void run(async (commands, current) => {
-      setConfirmation(null);
       if (choice.kind === "install") {
-        const result = await commands.install(
-          choice.repo,
-          choice.branch || undefined,
-        );
-        if (!current()) return;
-        setNotice(
-          `Server installed: ${result.installed.join(", ") || "none"}. Skipped: ${result.skipped.join(", ") || "none"}. Dependencies: ${result.dependenciesInstalled.join(", ") || "none"}.`,
-        );
-      } else {
-        await commands.remove(choice.name);
-        if (!current()) return;
-        setNotice(`Removed ${choice.name} from server Profile ${profileId}.`);
+        await installReviewed(commands, current, choice.review);
+        return;
       }
       setConfirmation(null);
+      setOutcome(null);
+      await commands.remove(choice.name);
+      if (!current()) return;
+      setNotice(
+        t("Removed {name} from server Profile {profileId}.", {
+          name: choice.name,
+          profileId,
+        }),
+      );
       setPackages(null);
       const result = await commands.list();
       if (current()) setInstalled(result);
     }, true);
   }
+
+  const closeReview = () => {
+    setConfirmation((current) =>
+      current?.kind === "install" ? null : current,
+    );
+    setReviewFailure(null);
+  };
 
   return (
     <ModalSurface
@@ -170,6 +269,7 @@ export function SkillsDialog({
       {busy ? <p role="status">{t("Waiting for the server…")}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <p role="status">{notice}</p> : null}
+      {outcome ? <InstallOutcomeNotice outcome={outcome} /> : null}
       <section>
         <h3>{t("Installed skills")}</h3>
         {installed?.length === 0 ? (
@@ -188,9 +288,10 @@ export function SkillsDialog({
                 <button
                   type="button"
                   disabled={busy || profileBusy}
-                  onClick={() =>
-                    setConfirmation({ kind: "remove", name: skill.name })
-                  }
+                  onClick={() => {
+                    setReviewFailure(null);
+                    setConfirmation({ kind: "remove", name: skill.name });
+                  }}
                 >
                   {t("Remove") + " "}
                   {skill.name}
@@ -233,11 +334,12 @@ export function SkillsDialog({
                 <p>{item.description}</p>
                 <p>{item.repo}</p>
                 <p>
-                  {item.providesTools
-                    ? t("Provides executable tools")
-                    : t("Instruction skills")}{" "}
-                  · {item.license ?? t("License not reported")}
+                  {item.version ?? t("Version not reported")} ·{" "}
+                  {item.license ?? t("License not reported")}
                 </p>
+                {item.providesTools ? (
+                  <p>{t("The registry says it provides executable tools")}</p>
+                ) : null}
                 {item.requires.length ? (
                   <p>
                     {t("Requires:") + " "}
@@ -257,10 +359,10 @@ export function SkillsDialog({
                     onClick={() => {
                       setRepo(item.repo);
                       setBranch("");
-                      setConfirmation({
-                        kind: "install",
+                      openReview({
                         repo: item.repo,
                         branch: "",
+                        packageName: item.name,
                       });
                     }}
                   >
@@ -280,67 +382,75 @@ export function SkillsDialog({
             {t("Repository or server-side path")}
             <input
               value={repo}
-              onChange={(event) => setRepo(event.target.value)}
+              disabled={mutating}
+              onChange={(event) => {
+                setRepo(event.target.value);
+                closeReview();
+              }}
             />
           </label>
           <label>
             {t("Branch (server default: main)")}
             <input
               value={branch}
-              onChange={(event) => setBranch(event.target.value)}
+              disabled={mutating}
+              onChange={(event) => {
+                setBranch(event.target.value);
+                closeReview();
+              }}
             />
           </label>
           <button
             type="button"
             disabled={busy || profileBusy || !repo.trim()}
             onClick={() =>
-              setConfirmation({
-                kind: "install",
-                repo: repo.trim(),
-                branch: branch.trim(),
-              })
+              openReview({ repo: repo.trim(), branch: branch.trim() })
             }
           >
             {t("Review installation")}
           </button>
         </section>
       ) : null}
-      {confirmation ? (
+      {confirmation?.kind === "install" ? (
+        <InstallReviewPanel
+          review={confirmation.review}
+          changes={confirmation.changes}
+          profileId={profileId}
+          busy={busy}
+          blocked={profileBusy}
+          onConfirm={confirmMutation}
+          onCancel={closeReview}
+        />
+      ) : null}
+      {reviewFailure ? (
+        <InstallReviewFailure
+          detail={reviewFailure.detail}
+          busy={busy}
+          onRetry={() => openReview(reviewFailure.source)}
+          onCancel={closeReview}
+        />
+      ) : null}
+      {confirmation?.kind === "remove" ? (
         <section
           className={styles.confirmation}
           aria-label={t("Confirm skill change")}
         >
-          <h3>
-            {confirmation.kind === "install"
-              ? t("Confirm server installation")
-              : t("Confirm removal")}
-          </h3>
-          <p>
-            {confirmation.kind === "install"
-              ? t("{value0} · branch {value1}", {
-                  value0: String(confirmation.repo),
-                  value1: String(confirmation.branch || "main"),
-                })
-              : confirmation.name}
-          </p>
+          <h3>{t("Confirm removal")}</h3>
+          <p>{confirmation.name}</p>
           <p>
             {t("Applies to Profile") + " "}
             {profileId}
-            {" " + t("and rebuilds its server skill runtime.")}
-            {confirmation.kind === "install"
-              ? " " + t("Existing skills are not forcibly overwritten.")
-              : " " +
-                t(
-                  "Reinstall from the original source to recover the removed skill.",
-                )}
+            {" " + t("and rebuilds its server skill runtime.")}{" "}
+            {t(
+              "Reinstall from the original source to recover the removed skill.",
+            )}
           </p>
           <button
             type="button"
             disabled={busy || profileBusy}
             onClick={confirmMutation}
           >
-            {t("Confirm") + " "}
-            {confirmation.kind}
+            {t("Confirm remove")}
           </button>
           <button
             type="button"

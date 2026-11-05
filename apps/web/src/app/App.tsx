@@ -6367,6 +6367,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           profileId={skillsProfileId}
                           sessionId={session.opened.session_id}
                           capabilities={session.opened.capabilities!}
+                          onManage={() => {
+                            setSettingsOpen(false);
+                            setProfileExtensionsMode("skills");
+                          }}
                         />
                       </Suspense>
                     ),
