@@ -27,6 +27,7 @@ import {
   connectorOAuthState,
   knownToUseOAuth,
   needsSignIn,
+  noteConnectorUnauthorized,
   oauthSettled,
   oauthVersion,
   rememberConnectorOAuth,
@@ -209,6 +210,16 @@ export function ConnectorsSettingsContent({
       if (ticket === generation.current) {
         setState(result);
         updateSaved((rows) => withoutListed(rows, result.servers), true);
+        // The provider revoked a token out of band: a remembered "Signed in"
+        // must not outlive the server's report (T-0371).
+        for (const server of result.servers) {
+          if (
+            needsSignIn(server.error) ||
+            (server.authorization && server.authorization !== "authorized")
+          ) {
+            noteConnectorUnauthorized(client, profileId, server.id);
+          }
+        }
       }
     } catch (reason) {
       if (ticket === generation.current)

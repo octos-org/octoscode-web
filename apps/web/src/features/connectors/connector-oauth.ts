@@ -218,6 +218,24 @@ export function connectorOAuthState(
   return scopes.get(connection)?.get(profileId)?.states.get(connectorId);
 }
 
+/**
+ * The provider revoked its side: a status read said this connector needs
+ * signing in (T-0371). A remembered "authorized" must not outlive that
+ * truth — drop it so the row answers from the server's report instead of
+ * claiming a sign-in the provider no longer honours.
+ */
+export function noteConnectorUnauthorized(
+  connection: object,
+  profileId: string,
+  connectorId: string,
+): void {
+  const target = scopes.get(connection)?.get(profileId);
+  if (target?.states.get(connectorId)?.kind !== "authorized") return;
+  target.states.delete(connectorId);
+  target.version += 1;
+  for (const listener of target.listeners) listener();
+}
+
 export function knownToUseOAuth(
   connection: object,
   profileId: string,
@@ -361,6 +379,13 @@ export interface StartConnectorOAuth {
   /** Opened in the click, before any await, so a popup blocker allows it. */
   window: SignInWindow | null;
   now?: () => number;
+  /**
+   * Server wall time in ms when it can be read (T-0371): the browser clock
+   * may be hours off, so the flow expiry — issued in the server's time — is
+   * anchored on this answer and only elapsed time is measured locally. When
+   * unavailable the browser clock is the fallback.
+   */
+  serverNow?: () => Promise<number | null>;
 }
 
 export async function startConnectorOAuth(
@@ -414,6 +439,17 @@ export async function startConnectorOAuth(
   };
   const expiresAt = Date.parse(started.expiresAt ?? "");
   if (Number.isFinite(expiresAt)) {
+    // expires_at is server wall time (audit 2026-11-05 #336): the browser
+    // clock can be ±1h off, so anchor on the server's answer when it gives
+    // one and measure only the elapsed remainder locally.
+    const browserNow = (options.now ?? Date.now)();
+    const serverNow = options.serverNow
+      ? await options.serverNow().catch(() => null)
+      : null;
+    const skew =
+      typeof serverNow === "number" && Number.isFinite(serverNow)
+        ? serverNow - browserNow
+        : 0;
     flow.timer = setTimeout(
       () => {
         if (!pending.has(flow)) return;
@@ -423,7 +459,7 @@ export async function startConnectorOAuth(
           reason: "expired",
         });
       },
-      Math.max(0, expiresAt - (options.now ?? Date.now)()),
+      Math.max(0, expiresAt - browserNow - skew),
     );
   }
   pending.add(flow);
