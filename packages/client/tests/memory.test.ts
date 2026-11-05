@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryCommands, parseMemoryEntity } from "../src/memory.ts";
+import {
+  createMemoryCommands,
+  parseMemoryEntity,
+  parseMemoryLoad,
+} from "../src/memory.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -122,6 +126,39 @@ describe("memory protocol", () => {
     );
     await expect(commands.overview()).rejects.toThrow(/not advertised/);
     expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe("memory record bookkeeping", () => {
+  it("keeps what Core's load sends about a record, without requiring it", () => {
+    const loaded = parseMemoryLoad(
+      {
+        record: {
+          ...record,
+          schema_version: 1,
+          last_visit: "2026-11-05T20:10:00Z",
+          promoted: false,
+          updated_at: "2026-11-05T20:00:01Z",
+        },
+        page_truncated: false,
+      },
+      record.id,
+    );
+    expect(loaded?.record).toMatchObject({
+      lastVisit: "2026-11-05T20:10:00Z",
+      promoted: false,
+      updatedAt: "2026-11-05T20:00:01Z",
+    });
+    expect(loaded?.record).not.toHaveProperty("schemaVersion");
+    const odd = parseMemoryLoad(
+      {
+        record: { ...record, promoted: "yes", updated_at: 5 },
+        page_truncated: false,
+      },
+      record.id,
+    );
+    expect(odd?.record.promoted).toBeUndefined();
+    expect(odd?.record.updatedAt).toBeUndefined();
   });
 });
 

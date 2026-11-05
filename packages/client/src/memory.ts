@@ -53,6 +53,9 @@ export interface MemoryRecord {
   trust?: string | undefined;
   score?: number | undefined;
   visits?: number | undefined;
+  lastVisit?: string | undefined;
+  promoted?: boolean | undefined;
+  updatedAt?: string | undefined;
 }
 export interface MemoryLoadResult {
   record: MemoryRecord;
@@ -205,6 +208,11 @@ function parseMemoryRecord(value: unknown): MemoryRecord | null {
     trust: value.trust as string | undefined,
     score: value.score as number | undefined,
     visits: value.visits as number | undefined,
+    // Load carries these and search doesn't. Read when well-formed, never
+    // required: a record isn't refused over its bookkeeping.
+    lastVisit: text(value.last_visit) ? value.last_visit : undefined,
+    promoted: typeof value.promoted === "boolean" ? value.promoted : undefined,
+    updatedAt: text(value.updated_at) ? value.updated_at : undefined,
   };
 }
 

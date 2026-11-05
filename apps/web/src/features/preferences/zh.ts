@@ -1539,6 +1539,44 @@ const catalog: Readonly<Record<string, string>> = {
   "This server cannot load entity details.": "此服务器无法加载实体详情。",
   "This server cannot load full record details.":
     "此服务器无法加载完整记录详情。",
+  "Export these {count} results": "导出这 {count} 条结果",
+  "Export this detail": "导出这条详情",
+  "The page asks for at most {limit} results, so there may be more. Search results carry titles and summaries only. Not a backup of all memories.":
+    "页面最多取 {limit} 条，可能还有更多。搜索结果只有标题和摘要。这不是全部记忆的备份。",
+  "Search results carry titles and summaries only. Not a backup of all memories.":
+    "搜索结果只有标题和摘要。这不是全部记忆的备份。",
+  "Only this detail, as the server sent it. Not a backup of all memories.":
+    "只有这条详情，内容以服务器发来的为准。这不是全部记忆的备份。",
+  "Couldn't make the download: {reason}. Try again.":
+    "没能生成下载：{reason}。请重试。",
+  Kind: "类型",
+  Trust: "可信度",
+  Score: "得分",
+  Visits: "访问次数",
+  Content: "正文",
+  Scope: "范围",
+  "Exported at": "导出时间",
+  "Memory export: search “{query}”": "记忆导出：查询“{query}”",
+  "Memory export: {title}": "记忆导出：{title}",
+  "the {count} results this search returned. The page asks for at most {limit}, so there may be more.":
+    "这次查询返回的 {count} 条。页面最多取 {limit} 条，可能还有更多。",
+  "the {count} results this search returned.": "这次查询返回的 {count} 条。",
+  "Search results carry titles and summaries only. This is not a backup of all memories.":
+    "搜索结果只有标题和摘要。这不是全部记忆的备份。",
+  "one memory record, as the server loaded it.":
+    "一条记忆记录，内容以服务器读出的为准。",
+  "one memory entity, as the server loaded it.":
+    "一个记忆实体，内容以服务器读出的为准。",
+  "This is not a backup of all memories.": "这不是全部记忆的备份。",
+  "The server truncated this content. Only what it sent is here.":
+    "服务器截断了这段内容，这里只有它发来的部分。",
+  "The server truncated this content ({size} B in full). Only what it sent is here.":
+    "服务器截断了这段内容（完整 {size} B），这里只有它发来的部分。",
+  "Last visit": "上次访问",
+  "Updated at": "更新时间",
+  "Promoted to knowledge": "已提升为知识",
+  JSON: "JSON",
+  Markdown: "Markdown",
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
   Overview: "概览",

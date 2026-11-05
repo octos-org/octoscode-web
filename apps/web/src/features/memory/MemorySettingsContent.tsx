@@ -1,5 +1,5 @@
 import { randomUUID } from "../../shared/uuid.ts";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_SESSION_SCOPE_FEATURE,
@@ -19,6 +19,18 @@ import type {
 import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./MemorySettings.module.css";
+import {
+  mayHaveMore,
+  memoryExportFileName,
+  memoryExportJson,
+  memoryExportMarkdown,
+  saveMemoryExport,
+  type MemoryExportFormat,
+  type MemoryExportScope,
+} from "./memory-export.ts";
+
+/** How many results a search asks for; a full page may not be all of them. */
+const SEARCH_LIMIT = 20;
 
 const MarkdownBody = lazy(() =>
   import("../markdown/MarkdownBody.tsx").then((module) => ({
@@ -131,7 +143,7 @@ export function MemorySettingsContent({
         capabilities,
         memorySessionId,
       );
-      const result = await commands.search(query.trim(), 20);
+      const result = await commands.search(query.trim(), SEARCH_LIMIT);
       setHits(result);
       setSearchedFor(query.trim());
       setRecord(null);
@@ -281,6 +293,30 @@ export function MemorySettingsContent({
       setBusyAction(null);
     }
   };
+
+  // What an export covers is what the page shows, labelled as it is shown.
+  const searchExport = useMemo<MemoryExportScope | null>(
+    () =>
+      hits?.length && searchedFor !== null
+        ? {
+            kind: "search",
+            profileId: sessionProfileId,
+            query: searchedFor,
+            records: hits,
+            limit: SEARCH_LIMIT,
+          }
+        : null,
+    [hits, searchedFor, sessionProfileId],
+  );
+  const detailExport = useMemo<MemoryExportScope | null>(
+    () =>
+      entity
+        ? { kind: "entity", profileId: sessionProfileId, entity }
+        : record
+          ? { kind: "record", profileId: sessionProfileId, loaded: record }
+          : null,
+    [entity, record, sessionProfileId],
+  );
 
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
@@ -461,6 +497,24 @@ export function MemorySettingsContent({
                 </p>
               ) : null}
               {hits?.length === 0 ? <p>{t("No matching memories.")}</p> : null}
+              {searchExport ? (
+                <MemoryExportActions
+                  scope={searchExport}
+                  label={t("Export these {count} results", {
+                    count: hits?.length ?? 0,
+                  })}
+                  note={
+                    mayHaveMore(searchExport)
+                      ? t(
+                          "The page asks for at most {limit} results, so there may be more. Search results carry titles and summaries only. Not a backup of all memories.",
+                          { limit: SEARCH_LIMIT },
+                        )
+                      : t(
+                          "Search results carry titles and summaries only. Not a backup of all memories.",
+                        )
+                  }
+                />
+              ) : null}
               <div className={styles.list}>
                 {hits?.map((hit) => (
                   <button
@@ -585,8 +639,71 @@ export function MemorySettingsContent({
               {t("Choose an entity or search result to view its contents.")}
             </p>
           )}
+          {detailExport ? (
+            <MemoryExportActions
+              scope={detailExport}
+              label={t("Export this detail")}
+              note={t(
+                "Only this detail, as the server sent it. Not a backup of all memories.",
+              )}
+            />
+          ) : null}
         </aside>
       </div>
+    </div>
+  );
+}
+
+function MemoryExportActions({
+  scope,
+  label,
+  note,
+}: {
+  scope: MemoryExportScope;
+  label: string;
+  note: string;
+}) {
+  const t = useUiText();
+  const [failure, setFailure] = useState<string | null>(null);
+  useEffect(() => setFailure(null), [scope]);
+  const save = (format: MemoryExportFormat) => {
+    setFailure(null);
+    try {
+      const exportedAt = new Date();
+      saveMemoryExport(
+        format === "json"
+          ? memoryExportJson(scope, exportedAt)
+          : memoryExportMarkdown(scope, exportedAt, t),
+        memoryExportFileName(scope, format, exportedAt),
+        format === "json"
+          ? "application/json;charset=utf-8"
+          : "text/markdown;charset=utf-8",
+      );
+    } catch (reason) {
+      setFailure(
+        t("Couldn't make the download: {reason}. Try again.", {
+          reason: errorMessage(reason),
+        }),
+      );
+    }
+  };
+  return (
+    <div className={styles.export}>
+      <div className={styles.actions} role="group" aria-label={label}>
+        <span>{label}</span>
+        <button type="button" onClick={() => save("json")}>
+          {t("JSON")}
+        </button>
+        <button type="button" onClick={() => save("markdown")}>
+          {t("Markdown")}
+        </button>
+      </div>
+      <p className={styles.meta}>{note}</p>
+      {failure ? (
+        <p className={styles.error} role="alert">
+          {failure}
+        </p>
+      ) : null}
     </div>
   );
 }
