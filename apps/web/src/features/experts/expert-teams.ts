@@ -19,15 +19,29 @@ import type {
   PeerGatherEntry,
   PeerTurnOutcomeRecord,
 } from "@octos-org/octoscode-client/peers";
-import type { HydratedTurn } from "@octos-org/octoscode-client/protocol";
+import type {
+  HydratedFileMutation,
+  HydratedTurn,
+} from "@octos-org/octoscode-client/protocol";
 import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 import type { UiText } from "../preferences/ui-text.tsx";
+import { restoreSessionChanges } from "../side-panel/session-changes.ts";
 
 export interface ExpertMember {
   /** What the member is called in the team, e.g. "Risk reviewer". */
   readonly label: string;
   /** The member's angle, told to the member and shown to the person. */
   readonly focus: string;
+  /** What it works from and what it hands back, shown before the team starts. */
+  readonly input?: string;
+  readonly output?: string;
+  /**
+   * The one new file this member writes: the original's name with
+   * `.<suffix>-<tag>` before its extension, so it never replaces a file and
+   * the page can tell the team's copy from any other change. Every member
+   * without this only reads.
+   */
+  readonly writes?: { readonly suffix: string; readonly example: string };
 }
 
 export interface ExpertTeamTemplate {
@@ -39,6 +53,8 @@ export interface ExpertTeamTemplate {
   readonly members: readonly ExpertMember[];
   /** How the starting conversation should merge the results. */
   readonly summary: string;
+  /** Why this team costs more than a review, shown with the usage estimate. */
+  readonly costNote?: string;
 }
 
 export const EXPERT_TEAMS: readonly ExpertTeamTemplate[] = Object.freeze([
@@ -150,6 +166,81 @@ export const EXPERT_TEAMS: readonly ExpertTeamTemplate[] = Object.freeze([
     summary:
       "Merge the edits into one list the author can work through: the most important changes first, each with its place in the draft and a suggested rewrite where useful.",
   },
+  {
+    id: "data-cleanup",
+    name: "Data cleanup",
+    purpose:
+      "Three experts work on one CSV file: one lists what is wrong, one writes a cleaned copy, one sets the checks the copy must pass. The original file stays as it is.",
+    goalLabel: "Which CSV file, and what should clean data look like?",
+    goalPlaceholder:
+      "For example data/orders.csv: one row per order, dates as YYYY-MM-DD",
+    members: [
+      {
+        label: "Data inspector",
+        focus:
+          "List what is wrong in the CSV: missing or malformed values, duplicate rows, mixed formats and units, values out of range. Give the row, column and count for each.",
+        input: "The CSV file named in the goal.",
+        output: "A list of problems, with rows and counts.",
+      },
+      {
+        label: "Data cleaner",
+        focus:
+          "Write a cleaned copy of the CSV. Keep the header and every column, fix what the goal asks for and what is clearly wrong, and never invent missing values. List each rule you applied and how many rows it changed or removed.",
+        input: "The CSV file named in the goal.",
+        output:
+          "A cleaned copy as a new file, and the rules applied with row counts.",
+        writes: { suffix: "cleaned", example: "orders.csv" },
+      },
+      {
+        label: "Data checker",
+        focus:
+          "Set the checks that show whether the cleaned data is right: row count, unique keys, totals that must not change, allowed values. Work each one out on the original so the copy can be compared with it.",
+        input: "The CSV file named in the goal.",
+        output: "A list of checks, each with its value on the original.",
+      },
+    ],
+    summary:
+      "Put the delivery together. Read the cleaned copy and check it against the checker's list and the inspector's problems: which checks pass, which fail, and what is still wrong. Then give the cleaned file's path, the rules applied with row counts, and what a person still has to decide. Do not change any file.",
+    costNote:
+      "The cleaner writes the whole file again, so this team uses more than a review.",
+  },
+  {
+    id: "document-delivery",
+    name: "Document delivery",
+    purpose:
+      "Three experts work on one document: one writes a revised copy, one proofreads, one writes a summary for the reader. The original file stays as it is.",
+    goalLabel: "Which document, who receives it, and what should change?",
+    goalPlaceholder:
+      "For example docs/proposal.md, for the client's project lead: shorter and more formal",
+    members: [
+      {
+        label: "Reviser",
+        focus:
+          "Write a revised copy of the document for the goal: wording, order and tone. Keep its facts, and mark anything you were unsure about. List the main changes.",
+        input: "The document named in the goal.",
+        output: "A revised copy as a new file, and the main changes.",
+        writes: { suffix: "revised", example: "proposal.md" },
+      },
+      {
+        label: "Proofreader",
+        focus:
+          "Check the original for typos, grammar, wrong numbers, and names or terms used inconsistently. Give the place and the correction for each.",
+        input: "The document named in the goal.",
+        output: "A list of corrections with their places.",
+      },
+      {
+        label: "Summary writer",
+        focus:
+          "Write a short summary for the person receiving the document: what it is for, the key points, and what they need to decide.",
+        input: "The document named in the goal.",
+        output: "A summary of up to 200 words.",
+      },
+    ],
+    summary:
+      "Put the delivery together. Read the revised copy and check the proofreader's corrections against it, listing the ones it still needs. Then give the revised file's path, the main changes, and the summary for the reader. Do not change any file.",
+    costNote:
+      "The reviser writes the whole document again, so this team uses more than a review.",
+  },
 ]);
 
 export const EXPERT_GOAL_MAX_CHARS = 8000;
@@ -169,6 +260,19 @@ export function newTeamTag(uuid: () => string): string {
  */
 export function expertMemberName(label: string, tag: string, index: number) {
   return `${label} · ${tag}-${index + 1}`;
+}
+
+/** `orders.csv` → `orders.cleaned-7f3a.csv`; a name without an extension gets it at the end. */
+export function teamCopyName(original: string, suffix: string, tag: string) {
+  const marker = `.${suffix}-${tag}`;
+  const dot = original.lastIndexOf(".");
+  return dot > 0
+    ? `${original.slice(0, dot)}${marker}${original.slice(dot)}`
+    : `${original}${marker}`;
+}
+
+function teamWriter(template: ExpertTeamTemplate | null) {
+  return template?.members.find((member) => member.writes) ?? null;
 }
 
 export interface ExpertTeamLaunch {
@@ -191,6 +295,7 @@ export function composeExpertTeam(
   const names = template.members.map((member, index) =>
     expertMemberName(t(member.label), input.tag, index),
   );
+  const writer = teamWriter(template);
   const brief = [
     `${HEADER} ${template.id} ${input.tag} ${input.startedAt.toISOString()}`,
     t("Workspace: {path}", { path: input.workspace }),
@@ -204,11 +309,25 @@ export function composeExpertTeam(
     "",
     t("Members:"),
     ...template.members.map((member, index) =>
-      t("- {name}: {focus}", { name: names[index]!, focus: t(member.focus) }),
+      member.output
+        ? t("- {name}: {focus} Hands back: {output}", {
+            name: names[index]!,
+            focus: t(member.focus),
+            output: t(member.output),
+          })
+        : t("- {name}: {focus}", {
+            name: names[index]!,
+            focus: t(member.focus),
+          }),
     ),
     "",
     t("Rules for every member:"),
-    `- ${t("Read only. Do not create, change or delete any files.")}`,
+    ...(writer
+      ? [
+          `- ${t("Do not change, move or delete any existing file. The original stays as it is.")}`,
+          `- ${t("Only {name} creates a file, as its angle says; everyone else only reads.", { name: names[template.members.indexOf(writer)]! })}`,
+        ]
+      : [`- ${t("Read only. Do not create, change or delete any files.")}`]),
     `- ${t("Work only from your own angle; the other experts cover theirs.")}`,
     `- ${t("Lead with your conclusion, then the reasons, in under 600 words. Give the evidence for each point: file path and line, or source.")}`,
     `- ${t("If information is missing, say what is missing instead of guessing.")}`,
@@ -217,13 +336,22 @@ export function composeExpertTeam(
     brief,
     title: t(template.name),
     names,
-    memberBriefs: template.members.map(
-      (member, index) =>
-        `${brief}\n\n${t("You are “{name}”. Your angle: {focus}", {
-          name: names[index]!,
-          focus: t(member.focus),
-        })}`,
-    ),
+    memberBriefs: template.members.map((member, index) => {
+      const own = `${brief}\n\n${t("You are “{name}”. Your angle: {focus}", {
+        name: names[index]!,
+        focus: t(member.focus),
+      })}`;
+      if (!member.writes) return own;
+      const { suffix, example } = member.writes;
+      return `${own}\n${t(
+        "Write your result to one new file next to the original, named like it with “{marker}” before the extension: {example} becomes {copy}. Never overwrite an existing file. Start your answer with the new file's path.",
+        {
+          marker: `.${suffix}-${input.tag}`,
+          example,
+          copy: teamCopyName(example, suffix, input.tag),
+        },
+      )}`;
+    }),
   };
 }
 
@@ -319,6 +447,56 @@ export interface ExpertMemberView {
    * does not hold the member. Stopping names this turn and nothing else.
    */
   readonly runningTurn: string | null;
+  /** The new file this member was asked to write, when it is the team's writer. */
+  readonly writes: ExpertMember["writes"] | null;
+  /**
+   * Files the member's file tools changed, as its own session recorded them;
+   * null until read. Only teams with a writer are read.
+   */
+  readonly files: readonly MemberFileChange[] | null;
+}
+
+export interface MemberFileChange {
+  /** Relative to the team's workspace when it lies inside it. */
+  readonly path: string;
+  /** Its name carries this team's marker, so it is the team's new copy. */
+  readonly teamCopy: boolean;
+  readonly deleted: boolean;
+}
+
+/** Whether members of this team write a file, so their changes are read. */
+export function teamWrites(template: ExpertTeamTemplate | null) {
+  return teamWriter(template) !== null;
+}
+
+/**
+ * Core records every write as `modify`, a new file or not, so the name is
+ * what tells the team's copy apart: the marker holds this team's tag, which
+ * no file had before the team started. Anything else is a change to a file
+ * the team was told to leave alone.
+ */
+export function memberFileChanges(
+  mutations: readonly HydratedFileMutation[],
+  template: ExpertTeamTemplate | null,
+  tag: string,
+  workspace: string,
+): MemberFileChange[] {
+  const markers = (template?.members ?? []).flatMap((member) =>
+    member.writes ? [`.${member.writes.suffix}-${tag}`] : [],
+  );
+  return restoreSessionChanges(mutations, workspace).map((change) => {
+    const name = change.path.split("/").at(-1) ?? change.path;
+    const deleted = change.operation === "delete";
+    return {
+      path: change.path,
+      deleted,
+      teamCopy:
+        !deleted &&
+        markers.some(
+          (marker) => name.includes(`${marker}.`) || name.endsWith(marker),
+        ),
+    };
+  });
 }
 
 /**
@@ -438,6 +616,7 @@ export function expertTeams(
   roster: readonly PeerRosterEntry[],
   workspace: string,
   turns: ReadonlyMap<string, MemberTurnRead> = new Map(),
+  files: ReadonlyMap<string, readonly HydratedFileMutation[]> = new Map(),
 ): ExpertTeamView[] {
   const teams = new Map<
     string,
@@ -475,6 +654,7 @@ export function expertTeams(
             const held = !!entry && entry.status !== "unknown";
             const turn = held ? null : (turns.get(row.slug) ?? null);
             const { state, reason } = expertMemberState(row, entry, turn);
+            const recorded = files.get(row.slug);
             return {
               slug: row.slug,
               name,
@@ -489,6 +669,15 @@ export function expertTeams(
                 turn && turn !== "none" && turn.state === "active"
                   ? turn.turnId
                   : null,
+              writes: member?.writes ?? null,
+              files: recorded
+                ? memberFileChanges(
+                    recorded,
+                    template,
+                    brief.tag,
+                    brief.workspace,
+                  )
+                : null,
             } satisfies ExpertMemberView;
           })
           .sort((a, b) => number(a.name) - number(b.name)),
@@ -569,6 +758,43 @@ export function expertSummaryInstruction(
         t("- {label} ({state})", {
           label: t(member.label),
           state: stateWord(member.state),
+        }),
+      ),
+    );
+  // What the server recorded, so the merge reads the real file rather than
+  // the one a member says it wrote, and leads with anything that broke the rules.
+  const recorded = team.members.flatMap((member) =>
+    (member.files ?? []).map((file) => ({ member, file })),
+  );
+  const delivered = recorded.filter(
+    ({ member, file }) => file.teamCopy && usable(member),
+  );
+  const flagged = recorded.filter(
+    ({ member, file }) => !file.teamCopy || !usable(member),
+  );
+  if (delivered.length)
+    lines.push(
+      "",
+      t("New files from experts that finished, as the server recorded them:"),
+      ...delivered.map(({ member, file }) =>
+        t("- {label}: {path}", { label: t(member.label), path: file.path }),
+      ),
+    );
+  if (flagged.length)
+    lines.push(
+      "",
+      t(
+        "The server also recorded these file changes. Name them at the top of the report and do not deliver them:",
+      ),
+      ...flagged.map(({ member, file }) =>
+        t("- {label} ({state}): {path}", {
+          label: t(member.label),
+          state: file.deleted
+            ? t("deleted")
+            : file.teamCopy
+              ? stateWord(member.state)
+              : t("changed a file that is not the team's new copy"),
+          path: file.path,
         }),
       ),
     );

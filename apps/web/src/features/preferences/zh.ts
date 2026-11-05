@@ -2584,6 +2584,85 @@ const catalog: Readonly<Record<string, string>> = {
   "{team} started: {count} experts are working.":
     "「{team}」已启动，{count} 位专家开始工作。",
   "This server cannot start expert teams.": "这个服务器不支持专家团。",
+  // T-0426: data cleanup and document delivery teams.
+  "Data cleanup": "数据清洗",
+  "Three experts work on one CSV file: one lists what is wrong, one writes a cleaned copy, one sets the checks the copy must pass. The original file stays as it is.":
+    "三位专家处理同一个 CSV 文件：一位列出问题，一位写出清洗后的副本，一位定下副本必须通过的检查。原文件保持不变。",
+  "Which CSV file, and what should clean data look like?":
+    "哪个 CSV 文件？清洗后应该是什么样？",
+  "For example data/orders.csv: one row per order, dates as YYYY-MM-DD":
+    "比如 data/orders.csv：每个订单一行，日期统一为 YYYY-MM-DD",
+  "Data inspector": "数据检查",
+  "List what is wrong in the CSV: missing or malformed values, duplicate rows, mixed formats and units, values out of range. Give the row, column and count for each.":
+    "列出 CSV 里的问题：缺失或格式错误的值、重复行、格式和单位不统一、超出范围的值。每条写明行、列和数量。",
+  "The CSV file named in the goal.": "目标里写的 CSV 文件。",
+  "A list of problems, with rows and counts.": "问题清单，带行号和数量。",
+  "Data cleaner": "清洗执行",
+  "Write a cleaned copy of the CSV. Keep the header and every column, fix what the goal asks for and what is clearly wrong, and never invent missing values. List each rule you applied and how many rows it changed or removed.":
+    "写出 CSV 清洗后的副本。保留表头和每一列，只修目标要求的和明显错误的地方，缺失的值不要编造。列出用到的每条规则，以及各改动或删除了多少行。",
+  "A cleaned copy as a new file, and the rules applied with row counts.":
+    "清洗后的副本（新文件），以及用到的规则和行数。",
+  "Data checker": "结果复核",
+  "Set the checks that show whether the cleaned data is right: row count, unique keys, totals that must not change, allowed values. Work each one out on the original so the copy can be compared with it.":
+    "定下判断清洗结果对不对的检查：行数、唯一键、不能变的合计、允许的取值。每一项都先在原文件上算出来，好和副本对比。",
+  "A list of checks, each with its value on the original.":
+    "检查清单，每项附上原文件上的值。",
+  "Put the delivery together. Read the cleaned copy and check it against the checker's list and the inspector's problems: which checks pass, which fail, and what is still wrong. Then give the cleaned file's path, the rules applied with row counts, and what a person still has to decide. Do not change any file.":
+    "整理交付结果。读清洗后的副本，对照结果复核的检查清单和数据检查列出的问题：哪些检查通过、哪些没通过、还有哪些问题。然后给出清洗后文件的路径、用到的规则和行数，以及还需要人来决定的地方。不要修改任何文件。",
+  "The cleaner writes the whole file again, so this team uses more than a review.":
+    "清洗时要把整个文件重写一遍，所以这个专家团比评审类的消耗更大。",
+  "Document delivery": "文档交付",
+  "Three experts work on one document: one writes a revised copy, one proofreads, one writes a summary for the reader. The original file stays as it is.":
+    "三位专家处理同一份文档：一位写出修订稿，一位校对，一位给读者写摘要。原文件保持不变。",
+  "Which document, who receives it, and what should change?":
+    "哪份文档？交给谁？要改成什么样？",
+  "For example docs/proposal.md, for the client's project lead: shorter and more formal":
+    "比如 docs/proposal.md，交给客户的项目负责人：更短、更正式",
+  Reviser: "修订",
+  "Write a revised copy of the document for the goal: wording, order and tone. Keep its facts, and mark anything you were unsure about. List the main changes.":
+    "按目标写出文档的修订稿：措辞、顺序和语气。事实保持不变，拿不准的地方标出来。列出主要改动。",
+  "The document named in the goal.": "目标里写的文档。",
+  "A revised copy as a new file, and the main changes.":
+    "修订稿（新文件），以及主要改动。",
+  Proofreader: "校对",
+  "Check the original for typos, grammar, wrong numbers, and names or terms used inconsistently. Give the place and the correction for each.":
+    "检查原稿里的错别字、语病、错误的数字，以及前后不一致的名称和术语。每条写明位置和改法。",
+  "A list of corrections with their places.": "更正清单，带位置。",
+  "Summary writer": "摘要撰写",
+  "Write a short summary for the person receiving the document: what it is for, the key points, and what they need to decide.":
+    "给收到文档的人写一段简短摘要：文档是做什么的、要点是什么、需要他们决定什么。",
+  "A summary of up to 200 words.": "不超过 300 字的摘要。",
+  "Put the delivery together. Read the revised copy and check the proofreader's corrections against it, listing the ones it still needs. Then give the revised file's path, the main changes, and the summary for the reader. Do not change any file.":
+    "整理交付结果。读修订稿，对照校对给出的更正逐条检查，列出修订稿里还需要改的。然后给出修订稿的路径、主要改动和给读者的摘要。不要修改任何文件。",
+  "The reviser writes the whole document again, so this team uses more than a review.":
+    "修订时要把整份文档重写一遍，所以这个专家团比评审类的消耗更大。",
+  "- {name}: {focus} Hands back: {output}": "- {name}：{focus}交付：{output}",
+  "Do not change, move or delete any existing file. The original stays as it is.":
+    "不要修改、移动或删除任何已有文件，原文件保持原样。",
+  "Only {name} creates a file, as its angle says; everyone else only reads.":
+    "只有「{name}」按自己的分工新建一个文件，其他人只读。",
+  "Write your result to one new file next to the original, named like it with “{marker}” before the extension: {example} becomes {copy}. Never overwrite an existing file. Start your answer with the new file's path.":
+    "把结果写进原文件旁边的一个新文件，文件名在扩展名前加上“{marker}”：{example} 写成 {copy}。不要覆盖任何已有文件。回答时先写新文件的路径。",
+  "New files from experts that finished, as the server recorded them:":
+    "服务器记录到的、已完成的专家新建的文件：",
+  "- {label}: {path}": "- {label}：{path}",
+  "The server also recorded these file changes. Name them at the top of the report and do not deliver them:":
+    "服务器还记录到下面这些文件改动。在报告开头写明，不要把它们当成交付结果：",
+  "- {label} ({state}): {path}": "- {label}（{state}）：{path}",
+  deleted: "删除了文件",
+  "changed a file that is not the team's new copy":
+    "改动了不是本团新副本的文件",
+  "New file:": "新文件：",
+  "It deleted {path}. The team was told to leave existing files alone.":
+    "它删除了 {path}。专家团被要求不动已有文件。",
+  "It changed {path}, which is not the team's new copy. The team was told to leave existing files alone; check that file.":
+    "它改动了 {path}，这不是本团的新副本。专家团被要求不动已有文件，请检查这个文件。",
+  "The server recorded no new file from this expert, whatever its answer says.":
+    "服务器没有记录到这位专家新建过文件，回答里说写了也不算。",
+  "Works from: {input}": "依据：{input}",
+  "Hands back: {output}": "交付：{output}",
+  "They work in {workspace}. {writer} writes its result to a new file next to the original; the others only read, and nobody is to change the original. The page cannot enforce this. It shows the file changes the server recorded from each expert's file tools; changes made with shell commands are not recorded.":
+    "专家在「{workspace}」里工作。「{writer}」把结果写进原文件旁边的新文件，其他人只读，谁都不改原文件。页面没法强制这一点，只能把服务器从每位专家的文件工具记下的改动显示出来；用命令行做的改动不会被记录。",
   // T-0393: artifact preview limits and failures.
   "This image can't be shown. The file may be damaged; download it to check.":
     "这张图片无法显示，文件可能已损坏。下载后检查一下。",

@@ -259,10 +259,41 @@
   font-weight: 500;
 }
 
+/* Its own line, so no space is typed between two sentences in either language. */
+.costNote {
+  display: block;
+  margin-top: var(--dsw-space-1);
+}
+
 .roster dd {
+  display: grid;
+  gap: 2px;
   min-width: 0;
   margin: 0;
   color: var(--dsw-alias-label-secondary);
+}
+
+.roster .io {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* A recorded file path: long names wrap instead of widening the row. */
+.file {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* The gap is drawn, not typed, so neither ": " nor "：" gets a stray space. */
+.file code {
+  margin-inline-start: 0.35em;
+}
+
+.member > .error {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .field {
