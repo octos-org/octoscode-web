@@ -65,7 +65,4 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     "From background tasks": "后台任务产出",
     "All outputs": "全部产物",
     "Loading preview…": "正在加载预览…",
-    "Couldn't load this file: {reason}": "没能加载这个文件：{reason}",
-    "No preview for this kind of file yet. Download it to open it.":
-      "这类文件暂时不能预览，下载后打开。",
   });

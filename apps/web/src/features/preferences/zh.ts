@@ -1820,8 +1820,10 @@ const catalog: Readonly<Record<string, string>> = {
   Worksheet: "工作表",
   "Rows {first}–{last} of {total}": "第 {first}–{last} 行，共 {total} 行",
   "0 rows": "0 行",
-  "This preview is limited to 1,000,000 cells and 200 columns. Download the file for the complete workbook.":
-    "预览最多显示 1,000,000 个单元格和 200 列，请下载文件查看完整工作簿。",
+  "This preview stops at 100,000 rows, 1,000,000 cells or 200 columns, so the file has more than is shown. Download it for all of it.":
+    "预览最多显示 100,000 行、1,000,000 个单元格或 200 列，文件里还有没显示的内容。完整内容请下载。",
+  "Rows {first}–{last} of the first {total}":
+    "第 {first}–{last} 行（只预览了前 {total} 行）",
   "Spreadsheet rows": "电子表格行",
   "Row number": "行号",
   "Previous rows": "上一批行",
@@ -2445,6 +2447,14 @@ const catalog: Readonly<Record<string, string>> = {
   "{team} started: {count} experts are working.":
     "「{team}」已启动，{count} 位专家开始工作。",
   "This server cannot start expert teams.": "这个服务器不支持专家团。",
+  // T-0393: artifact preview limits and failures.
+  "This image can't be shown. The file may be damaged; download it to check.":
+    "这张图片无法显示，文件可能已损坏。下载后检查一下。",
+  "This file is larger than {size}, too large to preview here. Download it to open it in another app.":
+    "这个文件超过 {size}，太大了，不能在这里预览。下载后用其他应用打开。",
+  "Over {size}": "超过 {size}",
+  "This page has no text layer. It may be a scanned image, which can't be selected or searched here.":
+    "这一页没有文字层，可能是扫描图片，这里无法选中或搜索其中的文字。",
   // T-0392: the usage ledger page.
   Usage: "用量",
   "What the server recorded for each finished run. Every figure here comes from its usage ledger; this page keeps no copy.":

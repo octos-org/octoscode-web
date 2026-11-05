@@ -12,7 +12,10 @@ import {
 } from "./attachment-access.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 import { errorMessage } from "../../shared/errors.ts";
-import { ArtifactPreview } from "../artifact-preview/ArtifactPreview.tsx";
+import {
+  ArtifactPreview,
+  BROKEN_IMAGE,
+} from "../artifact-preview/ArtifactPreview.tsx";
 import {
   attachmentName,
   attachmentNameParts,
@@ -66,6 +69,8 @@ function AttachmentItem({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [size, setSize] = useState<string | null>(null);
   const [sizeBytes, setSizeBytes] = useState<number | null>(null);
+  const [largerThanBytes, setLargerThanBytes] = useState<number | null>(null);
+  const [thumbnailBroken, setThumbnailBroken] = useState(false);
   const [sizeState, setSizeState] = useState<
     "pending" | "ready" | "unavailable"
   >(access?.describe ? "pending" : "unavailable");
@@ -121,6 +126,7 @@ function AttachmentItem({
       workspaceFile || previewOpen || (image && nearViewport);
     setSize(null);
     setSizeBytes(null);
+    setLargerThanBytes(null);
     setSaveAvailable(true);
     setSizeState(
       access?.describe && shouldDescribe ? "pending" : "unavailable",
@@ -140,6 +146,8 @@ function AttachmentItem({
         if (info?.sizeBytes !== undefined) {
           setSize(formatAttachmentSize(info.sizeBytes));
           setSizeBytes(info.sizeBytes);
+        } else if (info?.largerThanBytes !== undefined) {
+          setLargerThanBytes(info.largerThanBytes);
         }
       },
       () => {
@@ -188,6 +196,7 @@ function AttachmentItem({
         if (!abort.signal.aborted) setError(errorMessage(reason));
       },
     );
+    setThumbnailBroken(false);
     return () => {
       abort.abort();
       if (url) URL.revokeObjectURL(url);
@@ -236,26 +245,33 @@ function AttachmentItem({
       ref={itemRef}
       className={`${styles.attachment} ${previewOpen ? styles.expanded : ""}`}
       data-attachment={name}
-      title={reference}
     >
-      {preview && !previewOpen ? (
+      {preview && !previewOpen && !thumbnailBroken ? (
         <img
           className={styles.preview}
           src={preview}
           alt={name}
           width={1200}
           height={900}
+          // A damaged image would otherwise hold a blank 4:3 box over the row.
+          onError={() => setThumbnailBroken(true)}
         />
       ) : null}
       <div className={styles.row}>
         <FileIcon className={styles.fileIcon} />
-        <span className={styles.name} translate="no">
+        <span className={styles.name} translate="no" title={reference}>
           <span className={styles.nameStem}>{nameParts.stem}</span>
           {nameParts.extension ? (
             <span className={styles.nameExtension}>{nameParts.extension}</span>
           ) : null}
         </span>
-        {size ? <span className={styles.fileSize}>{size}</span> : null}
+        {size ? (
+          <span className={styles.fileSize}>{size}</span>
+        ) : largerThanBytes !== null ? (
+          <span className={styles.fileSize}>
+            {t("Over {size}", { size: formatAttachmentSize(largerThanBytes) })}
+          </span>
+        ) : null}
         <button
           type="button"
           className={styles.download}
@@ -304,6 +320,7 @@ function AttachmentItem({
             sizePending={sizeState === "pending"}
             downloadAvailable={saveAvailable}
             {...(sizeBytes === null ? {} : { sizeBytes })}
+            {...(largerThanBytes === null ? {} : { largerThanBytes })}
             loadBlob={(signal) =>
               (workspaceFile
                 ? (access.downloadWorkspaceFile ?? access.download)
@@ -335,6 +352,11 @@ function AttachmentItem({
       {error ? (
         <p className={styles.error} role="status" title={error}>
           {t("This file could not be loaded.")}
+        </p>
+      ) : null}
+      {thumbnailBroken && !previewOpen ? (
+        <p className={styles.error} role="status">
+          {t(BROKEN_IMAGE)}
         </p>
       ) : null}
       {!saveAvailable ? (

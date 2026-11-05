@@ -2295,13 +2295,25 @@ const http = createServer(async (request, response) => {
     // The original workspace path, as Core records it.
     const path = `${state.workspaceRoot ?? "/workspace"}/_build/${name}`;
     const validPreview = url.searchParams.get("valid") === "1";
+    // T-0393: a damaged file, or one Core's reader refuses as over its
+    // 32 MiB limit without listing its size anywhere (as Core 6fc12da3 does
+    // for a large file sent from the workspace).
+    const corrupt = url.searchParams.get("corrupt") === "1";
+    const overReaderLimit = url.searchParams.get("oversized") === "1";
     const deliveredFile = {
       type: artifactMime(name),
-      bytes: validPreview
-        ? await previewFixture(name)
-        : name.endsWith(".png")
-          ? FIXTURE_PNG
-          : Buffer.from(`fixture ${name}`),
+      bytes: corrupt
+        ? Buffer.from(
+            name.endsWith(".pdf")
+              ? "%PDF-1.7\nnot a pdf body\n%%EOF\n"
+              : "damaged bytes, not an image\n",
+          )
+        : validPreview
+          ? await previewFixture(name)
+          : name.endsWith(".png")
+            ? FIXTURE_PNG
+            : Buffer.from(`fixture ${name}`),
+      overReaderLimit,
     };
     deliveredFiles.set(deliveredFileKey(sessionId, path), deliveredFile);
     const turnId = randomUUID();
@@ -2334,7 +2346,7 @@ const http = createServer(async (request, response) => {
       {
         path,
         mime: deliveredFile.type,
-        size_bytes: deliveredFile.bytes.length,
+        size_bytes: overReaderLimit ? 0 : deliveredFile.bytes.length,
         attachment_owner: {
           assistant_segment_id: `${turnId}:assistant:delivery`,
         },
@@ -5845,6 +5857,16 @@ sockets.on("connection", (socket, request) => {
         return;
       }
       const file = entry[1];
+      if (file.overReaderLimit) {
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          "workspace file exceeds the 33554432-byte limit",
+          { kind: "workspace_file_too_large" },
+        );
+        return;
+      }
       const offset = request.params.offset ?? 0;
       const length = Math.min(request.params.length ?? 512 * 1024, 512 * 1024);
       const bytes = file.bytes.subarray(offset, offset + length);
@@ -6350,7 +6372,10 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "session/files.list") {
       const delivered = [...deliveredFiles.entries()]
-        .filter(([key]) => key.startsWith(`${sessionId}\n`))
+        .filter(
+          ([key, file]) =>
+            key.startsWith(`${sessionId}\n`) && !file.overReaderLimit,
+        )
         .map(([key, file]) => {
           const path = key.slice(sessionId.length + 1);
           return {

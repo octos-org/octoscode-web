@@ -228,7 +228,7 @@ test("Files shows the folder and this session's changes; a file opens its diff",
   await expect(panel(page)).toContainText(
     "This file is no longer in the session's retained files",
   );
-  await expect(panel(page).locator("pre")).toHaveCount(0);
+  await expect(panel(page).locator("[data-artifact-kind]")).toHaveCount(0);
 });
 
 test("Outputs previews a file Octos sent", async ({ page, request }) => {
@@ -253,13 +253,20 @@ test("Outputs previews a file Octos sent", async ({ page, request }) => {
   const outputs = panel(page).getByRole("tabpanel");
   await expect(outputs).toContainText("Sent to you");
   await outputs.getByRole("button", { name: /summary\.md/ }).click();
-  await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
+  // The same preview as the transcript's: Markdown is rendered, not dumped.
+  await expect(
+    outputs.locator('[data-artifact-kind="markdown"]'),
+  ).toContainText("fixture summary.md");
   await expect(outputs.getByRole("button", { name: "Download" })).toBeVisible();
   await panel(page).getByRole("tab", { name: "Overview" }).click();
   await panel(page).getByRole("tab", { name: "Outputs" }).click();
-  await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
+  await expect(outputs.locator("[data-artifact-kind]")).toContainText(
+    "fixture summary.md",
+  );
   await page.reload();
-  await expect(outputs.locator("pre")).toHaveText("fixture summary.md");
+  await expect(outputs.locator("[data-artifact-kind]")).toContainText(
+    "fixture summary.md",
+  );
   await outputs.getByRole("button", { name: "All outputs" }).click();
   await expect(outputs).toContainText("Sent to you");
 });
@@ -389,7 +396,9 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
   await panel(page)
     .getByRole("button", { name: /summary\.md/ })
     .click();
-  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await expect(
+    panel(page).locator('[data-artifact-kind="markdown"]'),
+  ).toContainText("fixture summary.md");
   await navigation
     .locator(
       `[role="treeitem"][data-session-id=${JSON.stringify(secondTitle)}]`,
@@ -404,7 +413,7 @@ test("Outputs clears the selected file and preview when switching Sessions", asy
   await expect(
     panel(page).getByRole("button", { name: /summary\.md/ }),
   ).toHaveCount(0);
-  await expect(panel(page).locator("pre")).toHaveCount(0);
+  await expect(panel(page).locator("[data-artifact-kind]")).toHaveCount(0);
 });
 
 test("Automation shows and controls goals, loops, monitors and agents with zero axe violations", async ({
@@ -544,7 +553,9 @@ test("one file stays selected across diff, output, reload and read failure", asy
   await panel(page)
     .getByRole("tab", { name: /^Outputs/ })
     .click();
-  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await expect(panel(page).locator("[data-artifact-kind]")).toContainText(
+    "fixture summary.md",
+  );
   await panel(page).getByRole("tab", { name: "Overview" }).click();
   await expect(panel(page).getByLabel("Selected file")).toContainText(
     "_build/summary.md",
@@ -570,7 +581,9 @@ test("one file stays selected across diff, output, reload and read failure", asy
   await panel(page)
     .getByRole("button", { name: "Preview file", exact: true })
     .click();
-  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await expect(panel(page).locator("[data-artifact-kind]")).toContainText(
+    "fixture summary.md",
+  );
   expect(
     (
       await new AxeBuilder({ page })
@@ -582,19 +595,22 @@ test("one file stays selected across diff, output, reload and read failure", asy
   await panel(page)
     .getByRole("button", { name: "Refresh", exact: true })
     .click();
+  // The transcript's preview names the failure without the server's words.
   await expect(panel(page).getByRole("alert")).toContainText(
-    "workspace file was not found",
+    "This preview could not be loaded.",
   );
-  await expect(panel(page).locator("pre")).toHaveCount(0);
+  await expect(panel(page).getByText("fixture summary.md")).toHaveCount(0);
   readFails = false;
   await panel(page)
     .getByRole("button", { name: "Try again", exact: true })
     .click();
-  await expect(panel(page).locator("pre")).toHaveText("fixture summary.md");
+  await expect(panel(page).locator("[data-artifact-kind]")).toContainText(
+    "fixture summary.md",
+  );
   deleted = true;
   await page.reload();
   await expect(panel(page)).toContainText("This file was deleted");
-  await expect(panel(page).locator("pre")).toHaveCount(0);
+  await expect(panel(page).locator("[data-artifact-kind]")).toHaveCount(0);
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeInViewport();

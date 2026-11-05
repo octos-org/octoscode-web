@@ -218,14 +218,17 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
           )}
         </div>
       ) : null}
-      <div className={styles.canvasPage}>
-        <canvas
-          ref={canvasRef}
-          className={styles.canvas}
-          role="img"
-          aria-label={t("Page {page} of {name}", { page: pageNumber, name })}
-        />
-      </div>
+      {/* A file that never opened has no page to show, only the message. */}
+      {error && !pageCount ? null : (
+        <div className={styles.canvasPage}>
+          <canvas
+            ref={canvasRef}
+            className={styles.canvas}
+            role="img"
+            aria-label={t("Page {page} of {name}", { page: pageNumber, name })}
+          />
+        </div>
+      )}
       {pageCount > 0 ? (
         <details
           className={styles.textAlternative}
@@ -236,7 +239,10 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
           <pre>
             {textLoading
               ? t("Loading preview…")
-              : pageText || t("No text content.")}
+              : pageText ||
+                t(
+                  "This page has no text layer. It may be a scanned image, which can't be selected or searched here.",
+                )}
           </pre>
         </details>
       ) : null}
