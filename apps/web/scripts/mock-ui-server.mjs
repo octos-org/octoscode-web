@@ -14,6 +14,7 @@ let sockets;
 // may multiplex many Sessions and every transport hydrates the same truth.
 const sessionStateBySessionId = new Map();
 const skillJobsBySessionId = new Map();
+const memoryFailNext = new Set();
 const memoryRecords = new Map([
   [
     "doc:t0008:1",
@@ -2525,6 +2526,18 @@ const http = createServer(async (request, response) => {
       ...(request.url === "/__test__/cron/reset" ? [defaultCronJob()] : []),
     );
     nextCronJobId = 2;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname ===
+      "/__test__/memory/fail-next"
+  ) {
+    const method = new URL(request.url, "http://fixture").searchParams.get(
+      "method",
+    );
+    if (method) memoryFailNext.add(method);
     response.writeHead(204).end();
     return;
   }
@@ -5748,6 +5761,10 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "memory/search") {
+      if (memoryFailNext.delete("memory/search")) {
+        replyError(socket, request.id, -32_000, "memory backend unavailable");
+        return;
+      }
       const query = String(request.params.query ?? "").toLowerCase();
       const hits = [...memoryRecords.values()].filter((record) =>
         `${record.title} ${record.abstract} ${record.body}`
@@ -5768,6 +5785,10 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "memory/ingest") {
+      if (memoryFailNext.delete("memory/ingest")) {
+        replyError(socket, request.id, -32_000, "memory backend unavailable");
+        return;
+      }
       let inserted = 0;
       let updated = 0;
       let unchanged = 0;

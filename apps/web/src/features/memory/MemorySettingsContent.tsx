@@ -1,5 +1,5 @@
 import { randomUUID } from "../../shared/uuid.ts";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_SESSION_SCOPE_FEATURE,
@@ -63,7 +63,11 @@ export function MemorySettingsContent({
   const [entity, setEntity] = useState<MemoryEntityDetail | null>(null);
   const [record, setRecord] = useState<MemoryLoadResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  /** Which action owns the single in-flight slot; feedback names it. */
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busy = busyAction !== null;
+  /** State settles after the event loop; a ref stops a same-tick second click. */
+  const inflight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -79,6 +83,7 @@ export function MemorySettingsContent({
     setHits(null);
     setEntity(null);
     setRecord(null);
+    setSearchedFor(null);
     if (!scopeVerified) {
       setLoading(false);
       return;
@@ -113,9 +118,12 @@ export function MemorySettingsContent({
     };
   }, [client, capabilities, scopeVerified, memorySessionId]);
 
+  const [searchedFor, setSearchedFor] = useState<string | null>(null);
   const search = async () => {
     if (busy || !query.trim()) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("search");
     setError(null);
     setNotice(null);
     try {
@@ -125,18 +133,23 @@ export function MemorySettingsContent({
       );
       const result = await commands.search(query.trim(), 20);
       setHits(result);
+      setSearchedFor(query.trim());
       setRecord(null);
       setEntity(null);
     } catch (reason) {
+      // The old hits stay, labeled with the query they answered (T-0395).
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
     }
   };
 
   const openEntity = async (name: string) => {
     if (busy) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("entity");
     setError(null);
     try {
       const commands = await client.memoryCommands(
@@ -148,13 +161,16 @@ export function MemorySettingsContent({
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
     }
   };
 
   const openRecord = async (id: string) => {
     if (busy) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("record");
     setError(null);
     try {
       const commands = await client.memoryCommands(
@@ -166,13 +182,16 @@ export function MemorySettingsContent({
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
     }
   };
 
   const ingest = async () => {
     if (busy || !title.trim() || !abstract.trim() || !body.trim()) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("ingest");
     setError(null);
     setNotice(null);
     setIngestResult(null);
@@ -209,13 +228,16 @@ export function MemorySettingsContent({
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
     }
   };
 
   const requestMemory = async () => {
     if (busy || !body.trim()) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("request");
     setError(null);
     try {
       const commands = await client.memoryCommands(
@@ -229,13 +251,16 @@ export function MemorySettingsContent({
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
     }
   };
 
   const promote = async () => {
     if (busy) return;
-    setBusy(true);
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusyAction("promote");
     setError(null);
     try {
       const commands = await client.memoryCommands(
@@ -252,7 +277,28 @@ export function MemorySettingsContent({
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
-      setBusy(false);
+      inflight.current = false;
+      setBusyAction(null);
+    }
+  };
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    if (busy || refreshing || inflight.current) return;
+    inflight.current = true;
+    setRefreshing(true);
+    setError(null);
+    try {
+      const commands = await client.memoryCommands(
+        capabilities,
+        memorySessionId,
+      );
+      setOverview(await commands.overview());
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      inflight.current = false;
+      setRefreshing(false);
     }
   };
 
@@ -288,6 +334,13 @@ export function MemorySettingsContent({
             })}
           </p>
         </div>
+        <button
+          type="button"
+          disabled={loading || refreshing || busy}
+          onClick={() => void refresh()}
+        >
+          {refreshing ? t("Refreshing…") : t("Refresh")}
+        </button>
       </header>
       <p className={styles.notice}>
         {t(
@@ -399,9 +452,14 @@ export function MemorySettingsContent({
                   onChange={(event) => setQuery(event.target.value)}
                 />
                 <button type="submit" disabled={busy || !query.trim()}>
-                  {t("Search")}
+                  {busyAction === "search" ? t("Searching…") : t("Search")}
                 </button>
               </form>
+              {hits !== null ? (
+                <p className={styles.meta}>
+                  {t("Results for “{query}”", { query: searchedFor ?? "" })}
+                </p>
+              ) : null}
               {hits?.length === 0 ? <p>{t("No matching memories.")}</p> : null}
               <div className={styles.list}>
                 {hits?.map((hit) => (
@@ -462,7 +520,9 @@ export function MemorySettingsContent({
                     }
                     onClick={() => void ingest()}
                   >
-                    {t("Remember this")}
+                    {busyAction === "ingest"
+                      ? t("Remembering…")
+                      : t("Remember this")}
                   </button>
                   {canRequest ? (
                     <button

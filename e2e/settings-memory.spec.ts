@@ -74,6 +74,97 @@ test("shows overview, entity and record details, searches, and ingests with zero
   expect(results.violations).toEqual([]);
 });
 
+test("ingest → search → detail survives a page refresh, and failures stay honest", async ({
+  page,
+}) => {
+  const ingestCalls: string[] = [];
+  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { method?: string };
+      if (frame.method === "memory/ingest") ingestCalls.push(frame.method);
+      server.send(message);
+    });
+    server.onMessage((message) => socket.send(message));
+  });
+  await start(page);
+  const settings = await openMemory(page);
+
+  // Results are labeled with the query that answered them.
+  await settings.getByLabel("Search memories").fill("protocol");
+  await settings.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(settings.getByText("Results for “protocol”")).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: /T0008 protocol probe/ }),
+  ).toBeVisible();
+
+  // A failed search keeps those labeled facts and says so.
+  await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/memory/fail-next?method=memory/search`,
+  );
+  await settings.getByLabel("Search memories").fill("other");
+  await settings.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    settings.getByRole("alert").getByText("memory backend unavailable"),
+  ).toBeVisible();
+  await expect(settings.getByText("Results for “protocol”")).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: /T0008 protocol probe/ }),
+  ).toBeVisible();
+
+  // Remember: one click chain submits exactly once, even double-clicked.
+  await settings.getByLabel("Title").fill("Refresh proof");
+  await settings.getByLabel("Summary").fill("survives a reload");
+  await settings.getByLabel("Memory content").fill("refresh-kept body");
+  await settings
+    .getByRole("button", { name: "Remember this", exact: true })
+    .evaluate((node: HTMLElement) => {
+      node.click();
+      node.click();
+    });
+  await expect(
+    settings.getByText("1 inserted · 0 updated · 0 unchanged"),
+  ).toBeVisible();
+  await expect(settings.getByText("refresh-kept body")).toBeVisible();
+  expect(ingestCalls).toHaveLength(1);
+
+  // A failed ingest says so and keeps the form.
+  await settings.getByLabel("Title").fill("Will fail");
+  await settings.getByLabel("Summary").fill("kept on failure");
+  await settings.getByLabel("Memory content").fill("failure body kept");
+  await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/memory/fail-next?method=memory/ingest`,
+  );
+  await settings
+    .getByRole("button", { name: "Remember this", exact: true })
+    .click();
+  await expect(
+    settings.getByRole("alert").getByText("memory backend unavailable"),
+  ).toBeVisible();
+  await expect(settings.getByLabel("Title")).toHaveValue("Will fail");
+
+  // Refresh the overview in place, then reload the page: the ingested record
+  // is still searchable and opens.
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(
+    settings.locator("summary").getByText("Long-term memory"),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("complementary", { name: "Product navigation" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const again = page.getByRole("dialog", { name: "Settings" });
+  await again.getByRole("button", { name: "Memory", exact: true }).click();
+  await expect(
+    again.locator("summary").getByText("Long-term memory"),
+  ).toBeVisible();
+  await again.getByLabel("Search memories").fill("Refresh proof");
+  await again.getByRole("button", { name: "Search", exact: true }).click();
+  await again.getByRole("button", { name: /Refresh proof/ }).click();
+  await expect(again.getByText("refresh-kept body")).toBeVisible();
+});
+
 test("shows request and promote only when the server advertises them", async ({
   page,
 }) => {
