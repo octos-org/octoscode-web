@@ -136,6 +136,22 @@ describe("TUI peer gather composition", () => {
     expect(text).toContain("## peer busy (no result yet)");
     expect(text).toContain("(still running — no result file yet)");
   });
+  it("leads a named expert's heading with its role name so the merge cites people", () => {
+    // T-0366: the real-model merge quoted bare handles ("9cf8-2") because the
+    // headings only carried them. The server already sends the role name.
+    const text = composeGatherPrompt({
+      profile_id: "dev",
+      peers: [
+        {
+          ...row("9cf8-1", "Finished"),
+          name: "Feasibility reviewer · 9cf8-1",
+        },
+        row("busy", null),
+      ],
+    });
+    expect(text).toContain("## peer Feasibility reviewer · 9cf8-1 (done)");
+    expect(text).toContain("## peer busy (no result yet)");
+  });
   it("bounds UTF-8 synthesis at64KiB with fair marked truncation and no broken codepoints", () => {
     const text = composeGatherPrompt({
       profile_id: "dev",

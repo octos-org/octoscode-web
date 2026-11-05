@@ -260,6 +260,10 @@ describe("expert teams from the blackboard", () => {
     expect(instruction).toContain("- 7f3a-2：风险评审");
     expect(instruction).toContain("可行性评审（no-result）");
     expect(instruction).toContain("用户视角评审（failed）");
+    // T-0366: the merge must cite experts by role name, not bare handles.
+    expect(instruction).toContain(
+      "在报告里引用专家时用他们的角色名，而不是编号。",
+    );
   });
 });
 

@@ -6349,7 +6349,11 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
         });
         record("errored", message);
       } else {
-        const answer = `${member.name}: the most important problem is example problem ${seat}; see section ${seat} of the material.`;
+        // "[md-seat-N]" answers with real Markdown the way a model does, so
+        // the team view proves it renders rather than leaking raw ** and ##.
+        const answer = member.brief.includes(`[md-seat-${seat}]`)
+          ? `## Conclusion\n\n**The most important problem is example problem ${seat}.**\n\n- Based on section ${seat} of the material\n- Risk is contained`
+          : `${member.name}: the most important problem is example problem ${seat}; see section ${seat} of the material.`;
         notify(
           socket,
           sessionId,

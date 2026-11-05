@@ -433,6 +433,9 @@ export function expertSummaryInstruction(
     ...finished.map((member) =>
       t("- {handle}: {label}", { handle: member.slug, label: t(member.label) }),
     ),
+    t(
+      "In the report, refer to each expert by their role name, not the handle.",
+    ),
   ];
   if (missing.length)
     lines.push(

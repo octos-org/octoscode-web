@@ -2383,6 +2383,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Merge the results into one report, conclusion first.":
     "把结果合成一份报告，先写结论。",
   "Results below are listed by handle:": "下面的结果按编号列出：",
+  "In the report, refer to each expert by their role name, not the handle.":
+    "在报告里引用专家时用他们的角色名，而不是编号。",
   "- {handle}: {label}": "- {handle}：{label}",
   "These experts have no result; say that their part is missing:":
     "这几位专家没有结果，汇总时说明缺了他们这部分：",

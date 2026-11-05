@@ -15,7 +15,11 @@ export function composeGatherPrompt(result: PeerGatherResult): string {
   const build = (budget?: number) => {
     let output = "Peer results gathered from the blackboard:\n";
     for (const peer of result.peers) {
-      output += `\n## peer ${peer.slug} (${peer.result !== null ? "done" : "no result yet"})\nBrief: ${[...peer.brief].slice(0, 200).join("")}\n\n`;
+      // T-0366: a named expert's heading leads with the role name (which
+      // already carries its stable handle), so the merge cites people, not
+      // bare numbers. Unnamed peers keep the bare-slug heading.
+      const title = peer.name?.trim() ? peer.name : peer.slug;
+      output += `\n## peer ${title} (${peer.result !== null ? "done" : "no result yet"})\nBrief: ${[...peer.brief].slice(0, 200).join("")}\n\n`;
       if (peer.result === null) {
         output += "(still running — no result file yet)\n";
         continue;
