@@ -1510,6 +1510,9 @@ const catalog: Readonly<Record<string, string>> = {
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
   Overview: "概览",
+  "Searching…": "正在搜索…",
+  "Remembering…": "正在记住…",
+  "Results for “{query}”": "“{query}”的结果",
   "Long-term memory": "长期记忆",
   Today: "今日",
   "{count} staging notes · Refresh {refresh}":
