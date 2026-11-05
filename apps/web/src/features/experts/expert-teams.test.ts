@@ -9,9 +9,12 @@ import {
   expertMemberState,
   expertSummaryInstruction,
   expertTeams,
+  lastMemberTurn,
+  membersToRead,
   newTeamTag,
   parseTeamBrief,
   resultBody,
+  type MemberTurnRead,
 } from "./expert-teams.ts";
 
 const en = createUiText("en");
@@ -307,6 +310,113 @@ describe("expert teams from the blackboard", () => {
     expect(instruction).toContain(
       "在报告里引用专家时用他们的角色名，而不是编号。",
     );
+  });
+});
+
+describe("members this tab does not hold, after a refresh", () => {
+  const team = launch(en);
+  const row = (extra: Partial<PeerGatherEntry> = {}) =>
+    gatherRow(team.names[1]!, "7f3a-2", team.brief, extra);
+  const running: MemberTurnRead = { turnId: "turn-2", state: "active" };
+  const rows = [
+    gatherRow(team.names[0]!, "7f3a-1", team.brief, {
+      result: done("A"),
+      last_outcome: "completed",
+    }),
+    gatherRow(team.names[1]!, "7f3a-2", team.brief),
+    gatherRow(team.names[2]!, "7f3a-3", team.brief),
+  ];
+
+  it("reads the last turn from the member's own session", () => {
+    expect(lastMemberTurn(null)).toBeNull();
+    expect(lastMemberTurn([])).toBe("none");
+    expect(
+      lastMemberTurn([
+        { turn_id: "t1", state: "completed" },
+        { turn_id: "t2", state: "active" },
+      ]),
+    ).toEqual({ turnId: "t2", state: "active" });
+  });
+
+  it("places running, stopped, failed and never-started members by that turn", () => {
+    const state = (turn: MemberTurnRead | null, extra = {}) =>
+      expertMemberState(row(extra), null, turn).state;
+    expect(state(running)).toBe("working");
+    expect(state({ turnId: "t", state: "interrupting" })).toBe("working");
+    // The blackboard keeps no record of a stop; the session does.
+    expect(state({ turnId: "t", state: "interrupted" })).toBe("stopped");
+    expect(state({ turnId: "t", state: "errored" })).toBe("failed");
+    expect(state({ turnId: "t", state: "completed" })).toBe("finished");
+    expect(state("none")).toBe("not-started");
+    // Unread stays honest: no guess between running and stopped.
+    expect(state(null)).toBe("no-result");
+    // A newer turn outranks an older recorded result.
+    expect(
+      state(running, { result: done("A"), last_outcome: "completed" }),
+    ).toBe("working");
+  });
+
+  it("offers a stop only for an active turn of a member it does not hold", () => {
+    const turns = new Map<string, MemberTurnRead>([
+      ["7f3a-2", running],
+      ["7f3a-3", { turnId: "turn-3", state: "interrupting" }],
+    ]);
+    const [view] = expertTeams(rows, [], "/srv/work", turns);
+    expect(
+      view?.members.map((m) => [m.slug, m.state, m.runningTurn, m.topic]),
+    ).toEqual([
+      ["7f3a-1", "finished", null, "peer-7f3a-1"],
+      ["7f3a-2", "working", "turn-2", "peer-7f3a-2"],
+      ["7f3a-3", "working", null, "peer-7f3a-3"],
+    ]);
+    // This tab's live row wins over the session read.
+    const [held] = expertTeams(
+      rows,
+      [rosterEntry("7f3a-2", { activity: "done", outcome: "stopped" })],
+      "/srv/work",
+      turns,
+    );
+    expect(held?.members[1]).toMatchObject({
+      state: "stopped",
+      runningTurn: null,
+    });
+  });
+
+  it("reads only members the blackboard cannot place, and running ones again", () => {
+    const slugs = (
+      turns: ReadonlyMap<string, MemberTurnRead>,
+      roster: PeerRosterEntry[] = [],
+      force = false,
+    ) =>
+      membersToRead(
+        expertTeams(rows, roster, "/srv/work", turns),
+        turns,
+        force,
+      ).map((member) => member.slug);
+    expect(slugs(new Map())).toEqual(["7f3a-2", "7f3a-3"]);
+    const read = new Map<string, MemberTurnRead>([
+      ["7f3a-2", running],
+      ["7f3a-3", { turnId: "turn-3", state: "interrupted" }],
+    ]);
+    expect(slugs(read)).toEqual(["7f3a-2"]);
+    expect(slugs(read, [rosterEntry("7f3a-2")])).toEqual([]);
+    // Refresh asks every member this tab does not hold.
+    expect(slugs(read, [], true)).toEqual(["7f3a-1", "7f3a-2", "7f3a-3"]);
+  });
+
+  it("merges only results that are actually there", () => {
+    const turns = new Map<string, MemberTurnRead>([
+      ["7f3a-2", { turnId: "turn-2", state: "completed" }],
+    ]);
+    const [view] = expertTeams(rows, [], "/srv/work", turns);
+    expect(view?.members[1]?.state).toBe("finished");
+    const { slugs, instruction } = expertSummaryInstruction(
+      en,
+      view!,
+      (state) => state,
+    );
+    expect(slugs).toEqual(["7f3a-1"]);
+    expect(instruction).toContain("Risk reviewer (finished)");
   });
 });
 

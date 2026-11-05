@@ -1054,6 +1054,8 @@ const heldTerminals = new Map(); // sessionId -> { emit, turnId }
 const stagedPeers = new Map(); // sessionId -> { slug, profileId, workspaceRoot, masterSessionId, brief }
 const admittedPeers = new Set(); // sessionId -> opened over a real owner WS
 const EXPERT_TEAM_HEADER = "Octoscode expert team:";
+/** Every expert member stop the fixture accepted, for tests to count. */
+const expertInterrupts = [];
 let expertClashUsed = false;
 function isPeerSessionId(sessionId) {
   return stagedPeers.has(sessionId) || admittedPeers.has(sessionId);
@@ -2756,8 +2758,17 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (
+    request.method === "GET" &&
+    request.url === "/__test__/experts/interrupts"
+  ) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(expertInterrupts));
+    return;
+  }
   if (request.method === "POST" && request.url === "/__test__/peers/reset") {
     stagedPeers.clear();
+    expertInterrupts.length = 0;
     expertClashUsed = false;
     admittedPeers.clear();
     for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
@@ -3726,7 +3737,13 @@ sockets.on("connection", (socket, request) => {
           "peer/prepare",
           "peer/gather",
         ]).has(request.method) &&
-        !openedSessionsBySocket.get(socket)?.has(sessionId)
+        !openedSessionsBySocket.get(socket)?.has(sessionId) &&
+        // Core reads and stops an expert member's turn for a page that did
+        // not open its session, e.g. after a refresh (T-0368 probe).
+        !(
+          ["session/hydrate", "turn/interrupt"].includes(request.method) &&
+          stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER)
+        )
       ) {
         replyError(
           socket,
@@ -4489,7 +4506,10 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "session/hydrate") {
       const openedSessionIds = openedSessionsBySocket.get(socket);
-      if (!openedSessionIds || !openedSessionIds.has(sessionId)) {
+      if (
+        !stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER) &&
+        (!openedSessionIds || !openedSessionIds.has(sessionId))
+      ) {
         replyError(
           socket,
           request.id,
@@ -5177,6 +5197,79 @@ sockets.on("connection", (socket, request) => {
       // persisted + broadcast, exactly like an owner disconnect.
       const state = sessionStateBySessionId.get(sessionId);
       const active = state?.activeTurn ?? null;
+      // T-0368: a server-owned expert member turn, as Core b95e756f answers
+      // it from any web connection: the turn id must match, a stopped turn is
+      // unknown afterwards, and the stop is recorded for hydrate.
+      if (
+        stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER) &&
+        (active?.ownerKind === "server" ||
+          !active ||
+          request.params?.turn_id !== active.turnId)
+      ) {
+        if (!active) {
+          replyError(
+            socket,
+            request.id,
+            -32_101,
+            `unknown turn: ${request.params?.turn_id}`,
+          );
+          return;
+        }
+        if (request.params?.turn_id !== active.turnId) {
+          reply(socket, request.id, {
+            interrupted: false,
+            reason: "turn_id_mismatch",
+          });
+          return;
+        }
+        cancelledTurns.add(active.turnId);
+        if (!active.emitSeq) active.emitSeq = { value: 1 };
+        const terminal = recordProjection(sessionId, {
+          session_id: sessionId,
+          thread_id: active.threadId,
+          seq: (active.emitSeq.value += 1),
+          cursor: { stream: sessionId, seq: 0 },
+          turn_id: active.turnId,
+          payload: {
+            type: "turn_terminal",
+            data: {
+              outcome: "interrupted",
+              error: {
+                code: "interrupted_by_user",
+                message: "The turn was interrupted by the user.",
+              },
+            },
+          },
+        });
+        state.completedTurns.push({
+          turn_id: active.turnId,
+          thread_id: active.threadId,
+          state: "interrupted",
+          completed_at: new Date().toISOString(),
+        });
+        state.activeTurn = null;
+        state.interaction = null;
+        for (const openSocket of new Set([socket, ...state.sockets]))
+          if (openSocket.readyState === WebSocket.OPEN) {
+            notifyRpc(openSocket, "turn/error", {
+              session_id: sessionId,
+              turn_id: active.turnId,
+              code: "interrupted",
+              message: "The turn was interrupted by the user.",
+            });
+            if (terminal)
+              openSocket.send(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "projection/envelope",
+                  params: terminal,
+                }),
+              );
+          }
+        expertInterrupts.push({ sessionId, turnId: active.turnId });
+        reply(socket, request.id, { interrupted: true });
+        return;
+      }
       if (
         active &&
         active.ownerSocket === socket &&
@@ -6295,6 +6388,14 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   const hideOutcome =
     member.brief.includes(`[nooutcome-seat-${seat}]`) ||
     member.brief.includes(`[fail-nooutcome-seat-${seat}]`);
+  // Core owns turns started from an ordinary web connection: a refresh only
+  // detaches delivery, the member keeps working and can be stopped from the
+  // reloaded page (T-0368).
+  if (state.activeTurn?.turnId === turnId) {
+    state.activeTurn.ownerSocket = null;
+    state.activeTurn.ownerKind = "server";
+  }
+  const live = () => socket.readyState === WebSocket.OPEN;
   const record = (outcome, body) => {
     member.lastOutcome = hideOutcome ? undefined : outcome;
     member.result = `---\nslug: ${member.slug}\noutcome: ${outcome}\nupdated_unix: ${Math.floor(Date.now() / 1000)}\nturn: 1\nturn_id: ${turnId}\n---\n\n${body}\n`;
@@ -6322,8 +6423,7 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
   if (member.brief.includes(`[slow-seat-${seat}]`)) return;
   setTimeout(
     () => {
-      if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
-        return;
+      if (cancelledTurns.has(turnId)) return;
       if (state.activeTurn?.turnId !== turnId) return;
       if (
         member.brief.includes(`[fail-seat-${seat}]`) ||
@@ -6331,31 +6431,34 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
       ) {
         const message =
           'custom/stub temporarily unavailable (HTTP 500 - {"error":{"message":"stub model is down"}})';
-        notify(
-          socket,
-          sessionId,
-          turnId,
-          turnId,
-          3,
-          nextCursor(),
-          "turn_terminal",
-          {
-            outcome: "errored",
-            error: { code: "provider_error", message },
-          },
-        );
+        if (live())
+          notify(
+            socket,
+            sessionId,
+            turnId,
+            turnId,
+            3,
+            nextCursor(),
+            "turn_terminal",
+            {
+              outcome: "errored",
+              error: { code: "provider_error", message },
+            },
+          );
+        // Core's hydrate calls a failed turn `errored`.
         state.completedTurns.push({
           turn_id: turnId,
           thread_id: turnId,
-          state: "failed",
+          state: "errored",
           error: message,
         });
-        notifyRpc(socket, "turn/error", {
-          session_id: sessionId,
-          turn_id: turnId,
-          code: "provider_error",
-          message,
-        });
+        if (live())
+          notifyRpc(socket, "turn/error", {
+            session_id: sessionId,
+            turn_id: turnId,
+            code: "provider_error",
+            message,
+          });
         record("errored", message);
       } else {
         // "[md-seat-N]" answers with real Markdown the way a model does, so
@@ -6363,45 +6466,48 @@ function streamExpertMember(socket, sessionId, turnId, member, nextCursor) {
         const answer = member.brief.includes(`[md-seat-${seat}]`)
           ? `## Conclusion\n\n**The most important problem is example problem ${seat}.**\n\n- Based on section ${seat} of the material\n- Risk is contained`
           : `${member.name}: the most important problem is example problem ${seat}; see section ${seat} of the material.`;
-        notify(
-          socket,
-          sessionId,
-          turnId,
-          turnId,
-          3,
-          nextCursor(),
-          "assistant_persisted",
-          {
-            text: answer,
-            assistant_segment_id: "segment-1",
-            meta: {
-              message_id: `message-${turnId}`,
-              persisted_at: new Date().toISOString(),
+        if (live())
+          notify(
+            socket,
+            sessionId,
+            turnId,
+            turnId,
+            3,
+            nextCursor(),
+            "assistant_persisted",
+            {
+              text: answer,
+              assistant_segment_id: "segment-1",
+              meta: {
+                message_id: `message-${turnId}`,
+                persisted_at: new Date().toISOString(),
+              },
             },
-          },
-        );
-        notify(
-          socket,
-          sessionId,
-          turnId,
-          turnId,
-          4,
-          nextCursor(),
-          "turn_terminal",
-          {
-            outcome: "completed",
-            token_usage: { input_tokens: 40, output_tokens: 20 },
-          },
-        );
+          );
+        if (live())
+          notify(
+            socket,
+            sessionId,
+            turnId,
+            turnId,
+            4,
+            nextCursor(),
+            "turn_terminal",
+            {
+              outcome: "completed",
+              token_usage: { input_tokens: 40, output_tokens: 20 },
+            },
+          );
         state.completedTurns.push({
           turn_id: turnId,
           thread_id: turnId,
           state: "completed",
         });
-        notifyRpc(socket, "turn/completed", {
-          session_id: sessionId,
-          turn_id: turnId,
-        });
+        if (live())
+          notifyRpc(socket, "turn/completed", {
+            session_id: sessionId,
+            turn_id: turnId,
+          });
         record("completed", answer);
       }
       state.activeTurn = null;

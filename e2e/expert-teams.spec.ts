@@ -345,10 +345,15 @@ test("a server without last_outcome trusts only the front matter, and the merge 
   expect(merge).not.toContain("stub model is down");
 });
 
-test("after a refresh the team is read back from the server", async ({
+const interrupts = (sent: SentFrame[]) =>
+  sent.filter((frame) => frame.method === "turn/interrupt");
+
+test("after a refresh a working member shows as working and can be stopped once", async ({
   page,
+  request,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
+  const sent = observe(page);
   await connect(page);
   const center = await openExperts(page);
   await startTeam(page, "Check the release notes. [slow-seat-2] [fail-seat-3]");
@@ -357,6 +362,10 @@ test("after a refresh the team is read back from the server", async ({
     timeout: 20_000,
   });
   await expect(team.locator('[data-expert-state="failed"]')).toHaveCount(1);
+  await expect(team.locator('[data-expert-state="working"]')).toHaveCount(1);
+  const slowStart = memberStarts(sent).find((frame) =>
+    String(frame.params?.session_id).endsWith("-2"),
+  )!;
 
   await page.reload();
   await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
@@ -366,21 +375,103 @@ test("after a refresh the team is read back from the server", async ({
   const rebuilt = again.locator("[data-expert-team]");
   await expect(rebuilt).toHaveCount(1);
   await expect(rebuilt.getByText("Check the release notes.")).toBeVisible();
+  // Finished and failed come from the blackboard; the slow member's own
+  // session says it is still running, so it is working, with a Stop.
   await expect(rebuilt.locator('[data-expert-state="finished"]')).toHaveCount(
     1,
   );
   await expect(rebuilt.locator('[data-expert-state="failed"]')).toHaveCount(1);
-  // This tab no longer holds the slow member's session: the page says what it
-  // does not know instead of claiming it is still working, and offers no Stop.
   const slow = rebuilt.locator('[data-expert-member$="-2"]');
-  await expect(slow.locator('[data-expert-state="no-result"]')).toBeVisible();
-  await expect(
-    slow.getByText(/It may still be working, or it may have been stopped/),
-  ).toBeVisible();
+  await expect(slow.locator('[data-expert-state="working"]')).toBeVisible();
+  await expect(slow.getByText(/It may still be working/)).toHaveCount(0);
+  expect(interrupts(sent)).toHaveLength(0);
+
+  await slow.getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => interrupts(sent).length).toBe(1);
+  // Exactly the turn the member was running, in its own session.
+  expect(interrupts(sent)[0]!.params).toEqual({
+    session_id: slowStart.params!.session_id,
+    turn_id: slowStart.params!.turn_id,
+  });
+  await expect(slow.locator('[data-expert-state="stopped"]')).toBeVisible();
   await expect(slow.getByRole("button", { name: "Stop" })).toHaveCount(0);
   await expect(
-    rebuilt.getByRole("button", { name: "Merge results in this conversation" }),
-  ).toBeEnabled();
+    rebuilt.getByText("1 of 3 done · 1 did not finish · 1 stopped"),
+  ).toBeVisible();
+
+  // Another refresh: still stopped, from the member's session, and nothing
+  // is stopped again.
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const third = (await openExperts(page)).locator("[data-expert-team]");
+  const slowAgain = third.locator('[data-expert-member$="-2"]');
+  await expect(
+    slowAgain.locator('[data-expert-state="stopped"]'),
+  ).toBeVisible();
+  await expect(slowAgain.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(third.locator('[data-expert-state="failed"]')).toHaveCount(1);
+  expect(interrupts(sent)).toHaveLength(1);
+  const accepted = await (
+    await request.get(FIXTURE_ORIGIN + "/__test__/experts/interrupts")
+  ).json();
+  expect(accepted).toHaveLength(1);
+
+  // The merge reads only the member with a result.
+  const before = masterStarts(sent).length;
+  await third
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
+  const gathers = sent.filter((frame) => frame.method === "peer/gather");
+  expect(gathers.at(-1)!.params!.slugs).toEqual([expect.stringMatching(/-1$/)]);
+  const merge = turnText(masterStarts(sent).at(-1)!);
+  expect(merge).toContain("Risk reviewer (Stopped)");
+  expect(merge).toContain("User reviewer (Failed)");
+});
+
+test("a reconnect keeps a working member working, and sends no stop by itself", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(page, "Read the changelog. [slow-seat-2]");
+  const team = center.locator("[data-expert-team]");
+  await expect(team.locator('[data-expert-state="finished"]')).toHaveCount(2, {
+    timeout: 20_000,
+  });
+  const slow = team.locator('[data-expert-member$="-2"]');
+  await expect(slow.locator('[data-expert-state="working"]')).toBeVisible();
+
+  const sockets = sent.filter(
+    (frame) => frame.method === "session/open",
+  ).length;
+  expect(
+    (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
+  ).toBe(204);
+  // The page reconnects and reopens its sessions on its own.
+  await expect
+    .poll(() => sent.filter((frame) => frame.method === "session/open").length)
+    .toBeGreaterThan(sockets);
+  // The reconnect returns the page to the conversation; come back.
+  const back = await openExperts(page);
+  const slowBack = back.locator('[data-expert-member$="-2"]');
+  await expect(slowBack.locator('[data-expert-state="working"]')).toBeVisible();
+  expect(interrupts(sent)).toHaveLength(0);
+
+  await slowBack.getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => interrupts(sent).length).toBe(1);
+  await expect(slowBack.locator('[data-expert-state="stopped"]')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    back.locator('[data-expert-team] [data-expert-state="finished"]'),
+  ).toHaveCount(2);
+  expect(interrupts(sent)).toHaveLength(1);
 });
 
 test("a name clash is retried with a new tag, and a refusal leaves the form usable", async ({

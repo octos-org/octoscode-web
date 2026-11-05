@@ -10,12 +10,16 @@
  * Nothing about a team is stored in the browser. The brief's first line
  * names the template and the team, so `peer/gather` alone is enough to show
  * the team again after a refresh; live states come from this tab's peer
- * roster while the members it opened are retained.
+ * roster while the members it opened are retained. For members this tab does
+ * not hold, the member's own session says whether its last turn is still
+ * running, was stopped, failed or finished: `peer/gather` keeps no record of
+ * a stopped turn, and Core keeps a member working when the page goes away.
  */
 import type {
   PeerGatherEntry,
   PeerTurnOutcomeRecord,
 } from "@octos-org/octoscode-client/peers";
+import type { HydratedTurn } from "@octos-org/octoscode-client/protocol";
 import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 import type { UiText } from "../preferences/ui-text.tsx";
 
@@ -308,6 +312,37 @@ export interface ExpertMemberView {
   readonly reason: string | null;
   /** Present while this tab holds the member's session; needed to stop it. */
   readonly entry: PeerRosterEntry | null;
+  /** The member's peer topic; its session id follows from it. */
+  readonly topic: string;
+  /**
+   * The running turn as the member's own session reported it, when this tab
+   * does not hold the member. Stopping names this turn and nothing else.
+   */
+  readonly runningTurn: string | null;
+}
+
+/**
+ * What the member's own session (`session/hydrate`) says about its turns:
+ * the last one, `none` when it has never started one, or null when unread.
+ */
+export type MemberTurnRead =
+  { readonly turnId: string; readonly state: HydratedTurn["state"] } | "none";
+
+export function lastMemberTurn(
+  turns: readonly HydratedTurn[] | null | undefined,
+): MemberTurnRead | null {
+  if (!turns) return null;
+  const last = turns.at(-1);
+  return last ? { turnId: last.turn_id, state: last.state } : "none";
+}
+
+/** Still running by the member's own account; `interrupting` is already being stopped. */
+export function memberTurnRunning(read: MemberTurnRead | null | undefined) {
+  return (
+    !!read &&
+    read !== "none" &&
+    (read.state === "active" || read.state === "interrupting")
+  );
 }
 
 export interface ExpertTeamView {
@@ -332,6 +367,7 @@ const DURABLE_STATE: Readonly<
 export function expertMemberState(
   row: PeerGatherEntry | null,
   entry: PeerRosterEntry | null,
+  turn: MemberTurnRead | null = null,
 ): { state: ExpertMemberState; reason: string | null } {
   const parts = resultParts(row?.result ?? null);
   const body = parts.body;
@@ -355,6 +391,21 @@ export function expertMemberState(
     }
     // Opened and kicked off, but the first turn has not reported yet.
     if (!row?.last_outcome) return { state: "starting", reason: null };
+  }
+  // The member's own session is newer than the blackboard: a later turn, or
+  // a stop, which the blackboard never records.
+  if (turn === "none" && !row?.last_outcome && !body)
+    return { state: "not-started", reason: null };
+  if (turn && turn !== "none") {
+    if (memberTurnRunning(turn)) return { state: "working", reason: null };
+    if (turn.state === "interrupted") return { state: "stopped", reason: null };
+    if (turn.state === "errored")
+      return {
+        state: "failed",
+        reason:
+          (row?.last_outcome ?? parts.outcome) === "errored" ? body : null,
+      };
+    if (turn.state === "completed") return { state: "finished", reason: null };
   }
   if (row?.last_outcome) {
     const state = DURABLE_STATE[row.last_outcome];
@@ -386,6 +437,7 @@ export function expertTeams(
   rows: readonly PeerGatherEntry[],
   roster: readonly PeerRosterEntry[],
   workspace: string,
+  turns: ReadonlyMap<string, MemberTurnRead> = new Map(),
 ): ExpertTeamView[] {
   const teams = new Map<
     string,
@@ -419,7 +471,10 @@ export function expertTeams(
             const name = row.name ?? row.slug;
             const member = template?.members[number(name) - 1] ?? null;
             const entry = bySlug.get(row.slug) ?? null;
-            const { state, reason } = expertMemberState(row, entry);
+            // This tab's live row wins; the member's session fills in otherwise.
+            const held = !!entry && entry.status !== "unknown";
+            const turn = held ? null : (turns.get(row.slug) ?? null);
+            const { state, reason } = expertMemberState(row, entry, turn);
             return {
               slug: row.slug,
               name,
@@ -429,6 +484,11 @@ export function expertTeams(
               result: state === "finished" ? resultBody(row.result) : null,
               reason,
               entry,
+              topic: row.topic,
+              runningTurn:
+                turn && turn !== "none" && turn.state === "active"
+                  ? turn.turnId
+                  : null,
             } satisfies ExpertMemberView;
           })
           .sort((a, b) => number(a.name) - number(b.name)),
@@ -444,6 +504,29 @@ export const ACTIVE_MEMBER_STATES: ReadonlySet<ExpertMemberState> = new Set([
 ]);
 
 /**
+ * Members whose own session should be read: ones this tab does not hold and
+ * the blackboard cannot place (no durable outcome), and ones last seen
+ * running. `force` (the Refresh button) reads every member not held here.
+ */
+export function membersToRead(
+  teams: readonly ExpertTeamView[],
+  turns: ReadonlyMap<string, MemberTurnRead>,
+  force = false,
+): ExpertMemberView[] {
+  return teams
+    .flatMap((team) => team.members)
+    .filter((member) => {
+      if (member.state === "closed") return false;
+      if (member.entry && member.entry.status !== "unknown") return false;
+      if (force) return true;
+      const read = turns.get(member.slug);
+      return read === undefined
+        ? member.state === "no-result"
+        : memberTurnRunning(read);
+    });
+}
+
+/**
  * What the starting conversation is asked to do with the results. Only
  * finished members are gathered; the rest are named so the merge says what
  * is missing instead of passing an error off as a finding.
@@ -453,8 +536,12 @@ export function expertSummaryInstruction(
   team: ExpertTeamView,
   stateWord: (state: ExpertMemberState) => string,
 ): { instruction: string; slugs: string[] } {
-  const finished = team.members.filter((member) => member.state === "finished");
-  const missing = team.members.filter((member) => member.state !== "finished");
+  // Only results that are actually there: a member whose session finished but
+  // whose answer is not on the blackboard yet counts as missing.
+  const usable = (member: ExpertMemberView) =>
+    member.state === "finished" && member.result !== null;
+  const finished = team.members.filter(usable);
+  const missing = team.members.filter((member) => !usable(member));
   const name = team.template ? t(team.template.name) : t("Expert team");
   const lines = [
     t("These are the results of the {team} team for this goal:", {
