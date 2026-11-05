@@ -1,30 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionStatusReadResult } from "@octos-org/octoscode-client/protocol";
-import { modelStrengths } from "./model-strengths.ts";
 import { formatUsd, sessionUsage } from "./session-usage.ts";
-
-describe("model strengths", () => {
-  it("tags tiers by their public naming, never fast and heavy at once", () => {
-    expect(modelStrengths("deepseek-v4-pro", "deepseek")).toEqual([
-      "deep",
-      "zh",
-    ]);
-    expect(modelStrengths("deepseek-v4-flash", "deepseek")).toEqual([
-      "fast",
-      "zh",
-    ]);
-    expect(modelStrengths("gpt-5.1-codex", "openai")).toEqual(["code", "deep"]);
-    expect(modelStrengths("gpt-5-mini", "openai")).toEqual(["fast"]);
-    expect(modelStrengths("o4-mini", "openai")).toEqual(["fast"]);
-    expect(modelStrengths("kimi-k3", "moonshot")).toEqual([
-      "deep",
-      "long",
-      "zh",
-    ]);
-    expect(modelStrengths("Qwen/Qwen3-32B", "vllm")).toEqual(["local", "zh"]);
-    expect(modelStrengths("some-house-model", "openai")).toEqual([]);
-  });
-});
 
 describe("session usage", () => {
   const status: SessionStatusReadResult = {

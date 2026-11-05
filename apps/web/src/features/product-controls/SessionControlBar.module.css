@@ -283,6 +283,16 @@
   white-space: nowrap;
 }
 
+.optionFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--dsw-space-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
 .optionCheck {
   color: var(--dsw-alias-label-primary);
 }

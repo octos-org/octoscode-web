@@ -35,12 +35,9 @@ export const COMPOSER_BAR_ZH_COPY: Readonly<Record<string, string>> =
     "Estimated cost": "估算费用",
     "Totals for this session as reported by the server. Cost is the server’s estimate from its price table, not a bill.":
       "这是服务端报告的本会话累计用量。费用是服务端按价目表估算的，不是账单。",
-    "Runs locally": "本地运行",
-    Coding: "编程",
-    "Hard problems": "复杂任务",
-    Fast: "快",
-    "Long documents": "长文档",
-    Chinese: "中文",
+    "{count} token context": "上下文 {count} token",
+    "{count} token max output": "最长输出 {count} token",
+    "Images not sent": "不发送图片",
     // T-0364: the pre-send estimate.
     "This message ≈{count} tokens": "本条约 {count} token",
     "{label}, estimated": "{label}（估算）",

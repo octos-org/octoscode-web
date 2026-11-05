@@ -659,6 +659,13 @@ export function ModelMenu({
                           {unavailableCopy ?? model.description}
                         </span>
                       ) : null}
+                      {model.facts?.length ? (
+                        <span className={styles.optionFacts} data-model-facts>
+                          {model.facts.map((fact) => (
+                            <span key={fact}>{fact}</span>
+                          ))}
+                        </span>
+                      ) : null}
                     </span>
                     <span className={styles.optionCheck}>
                       {selectedModel ? <CheckIcon /> : null}
