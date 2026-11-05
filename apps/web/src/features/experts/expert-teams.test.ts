@@ -122,6 +122,14 @@ describe("expert team templates", () => {
     ).toBeNull();
   });
 
+  it("keeps a standalone --- line inside the goal", () => {
+    // T-0370: the first --- ended the goal early; the delimiter is the last
+    // one (the brief's own footer never has a standalone ---).
+    const goal = "Part one\n\n---\n\nPart two after the rule";
+    const brief = launch(en, goal).brief;
+    expect(parseTeamBrief(brief)?.goal).toBe(goal);
+  });
+
   it("strips the server's front matter from a result", () => {
     expect(resultBody(done("Problem A, see section 1."))).toBe(
       "Problem A, see section 1.",
@@ -129,6 +137,23 @@ describe("expert team templates", () => {
     expect(resultBody("plain answer")).toBe("plain answer");
     expect(resultBody(null)).toBeNull();
     expect(resultBody("---\nslug: x\n---\n\n")).toBeNull();
+  });
+
+  it("only parses a real front-matter block and keeps every other --- line", () => {
+    // T-0370: CRLF parses; a body opening with a --- line, a block without a
+    // closing marker, and later --- lines are never eaten.
+    expect(
+      resultBody("---\r\nslug: x\r\noutcome: completed\r\n---\r\n\r\nbody"),
+    ).toBe("body");
+    expect(resultBody("---\nnot front matter\n\nkept in full")).toBe(
+      "---\nnot front matter\n\nkept in full",
+    );
+    expect(resultBody("---\nslug: x\n(no closing marker)")).toBe(
+      "---\nslug: x\n(no closing marker)",
+    );
+    expect(resultBody(done("first\n\n---\n\nsecond"))).toBe(
+      "first\n\n---\n\nsecond",
+    );
   });
 });
 
@@ -187,9 +212,27 @@ describe("expert member state", () => {
       ),
     ).toEqual({ state: "failed", reason: "HTTP 500 stub model is down" });
     expect(expertMemberState(row({ closed: true }), null).state).toBe("closed");
-    // A server without last_outcome: a result file is all there is.
-    expect(expertMemberState(row({ result: "answer" }), null).state).toBe(
+  });
+
+  it("trusts only the front-matter outcome when last_outcome is missing", () => {
+    // T-0370: an older Core omits last_outcome. The outcome inside the result
+    // file is still the server's record; a bare body proves nothing — an
+    // errored result's body is the error text, never a conclusion.
+    expect(expertMemberState(row({ result: done("ok") }), null).state).toBe(
       "finished",
+    );
+    expect(
+      expertMemberState(
+        row({ result: done("HTTP 500 stub model is down", "errored") }),
+        null,
+      ),
+    ).toEqual({ state: "failed", reason: "HTTP 500 stub model is down" });
+    expect(
+      expertMemberState(row({ result: done("cut off", "interrupted") }), null)
+        .state,
+    ).toBe("stopped");
+    expect(expertMemberState(row({ result: "answer" }), null).state).toBe(
+      "no-result",
     );
   });
 

@@ -237,9 +237,11 @@ export function parseTeamBrief(brief: string): ParsedTeamBrief | null {
   const header = HEADER_LINE.exec(lines[0] ?? "");
   if (!header || lines.length < 4) return null;
   const workspace = (lines[1] ?? "").replace(/^[^:：]*[:：]\s*/u, "");
-  const end = lines.indexOf(GOAL_END, 3);
+  // The goal itself may contain a standalone --- line; the delimiter is the
+  // LAST one — the footer (team intro, members, rules) never has one.
+  const end = lines.lastIndexOf(GOAL_END);
   const goal = lines
-    .slice(3, end === -1 ? undefined : end)
+    .slice(3, end === -1 || end < 3 ? undefined : end)
     .join("\n")
     .trim();
   const startedAt = Date.parse(header[3]!);
@@ -252,11 +254,33 @@ export function parseTeamBrief(brief: string): ParsedTeamBrief | null {
   };
 }
 
-/** The result file starts with the server's own front matter; people read the body. */
+/**
+ * The result file starts with the server's own front matter; people read the
+ * body. Only a REAL block at position 0 — `---`, one or more `key:` lines, a
+ * closing `---` — parses (CRLF tolerated). A body that itself opens with a
+ * `---` line, or a block missing its closing marker, is never eaten.
+ */
+const FRONT_MATTER =
+  /^---\r?\n((?:[A-Za-z][\w-]*:[^\n]*\r?\n)+)---(?:\r?\n|$)/u;
+
+export interface ResultParts {
+  /** The outcome the server recorded in the front matter, if it wrote one. */
+  readonly outcome: string | null;
+  readonly body: string | null;
+}
+
+export function resultParts(result: string | null): ResultParts {
+  if (result === null) return { outcome: null, body: null };
+  const match = FRONT_MATTER.exec(result);
+  const outcome = match
+    ? (/^outcome:\s*(\S+)\s*$/mu.exec(match[1]!)?.[1] ?? null)
+    : null;
+  const text = (match ? result.slice(match[0].length) : result).trim();
+  return { outcome, body: text || null };
+}
+
 export function resultBody(result: string | null): string | null {
-  if (result === null) return null;
-  const body = result.replace(/^---\n[\s\S]*?\n---\n*/u, "").trim();
-  return body || null;
+  return resultParts(result).body;
 }
 
 export type ExpertMemberState =
@@ -309,7 +333,8 @@ export function expertMemberState(
   row: PeerGatherEntry | null,
   entry: PeerRosterEntry | null,
 ): { state: ExpertMemberState; reason: string | null } {
-  const body = resultBody(row?.result ?? null);
+  const parts = resultParts(row?.result ?? null);
+  const body = parts.body;
   if (row?.closed || entry?.status === "closed")
     return { state: "closed", reason: null };
   if (entry && entry.status !== "unknown") {
@@ -338,7 +363,19 @@ export function expertMemberState(
       reason: state === "failed" || state === "rate-limited" ? body : null,
     };
   }
-  return { state: body ? "finished" : "no-result", reason: null };
+  // T-0370: no last_outcome field — the ONLY remaining server fact is the
+  // outcome it wrote into the result file's front matter. A bare body never
+  // proves completion (an errored result's body is the error text), so
+  // without either record the member stays unknown and out of the merge.
+  // When the outcome field arrives later, this same recomputation adopts it.
+  if (parts.outcome && parts.outcome in DURABLE_STATE) {
+    const state = DURABLE_STATE[parts.outcome as PeerTurnOutcomeRecord];
+    return {
+      state,
+      reason: state === "failed" || state === "rate-limited" ? body : null,
+    };
+  }
+  return { state: "no-result", reason: null };
 }
 
 /**
