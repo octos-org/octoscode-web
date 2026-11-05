@@ -230,7 +230,9 @@ test("a cold hydrate failure stays honest and Start retries without a phantom re
     page.getByText("response_bytes_limit", { exact: true }),
   ).toHaveCount(0);
   expect(probe.opens).toHaveLength(2);
-  expect(probe.opens[0]).not.toBe(probe.opens[1]);
+  // Open already succeeded before hydrate failed. Retry that server Session
+  // instead of creating an abandoned Session for every recovery attempt.
+  expect(probe.opens[0]).toBe(probe.opens[1]);
   await expect(page.locator('[role="treeitem"][data-session-id]')).toHaveCount(
     1,
   );
