@@ -27,10 +27,10 @@ describe("profile skills surface", () => {
     );
     expect(html).toContain("Server Profile: ");
     expect(html).not.toContain("No skills installed");
-    expect(html).not.toContain("Review installation");
+    expect(html).not.toContain("Review source");
     expect(html).not.toContain("Search registry");
   });
-  it("locks profile mutations while known work runs and warns about executable dependencies", () => {
+  it("reviews sources read-only and warns about executable dependencies", () => {
     const html = renderToStaticMarkup(
       <SkillsDialog
         client={client}
@@ -48,7 +48,8 @@ describe("profile skills surface", () => {
       />,
     );
     expect(html).toContain("download executable tools and dependencies");
-    expect(html).toContain('disabled="">Review installation');
-    expect(html).not.toContain("Confirm install");
+    // Disabled only until a source is typed: reviewing writes nothing.
+    expect(html).toContain('disabled="">Review source</button>');
+    expect(html).not.toMatch(/Confirm install|Install from source/);
   });
 });

@@ -286,7 +286,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Esc closes": "Esc 关闭",
   "Esc stops the active turn": "Esc 停止当前轮次",
   "Event stream": "事件流",
-  "Existing skills are not forcibly overwritten.": "不会强制覆盖现有技能。",
   "Expand sidebar": "展开侧栏",
   "Expand to load sessions.": "展开以加载会话。",
   "Fetch available models": "获取可用模型",
@@ -327,7 +326,6 @@ const catalog: Readonly<Record<string, string>> = {
   Inspect: "查看",
   "Inspect or control an agent by ID": "按 ID 查看或控制智能体",
   "Inspect {value0}": "查看 {value0}",
-  "Install from source": "从来源安装",
   "Installed skills": "已安装技能",
   "Installed:": "已安装：",
   "Interrupt agent": "中断智能体",
@@ -664,8 +662,6 @@ const catalog: Readonly<Record<string, string>> = {
     "暂无会话改动预览。可选择上方的改动文件，或查看工作区中的文件。",
   "Review changes": "审查更改",
   "Review diff": "审查差异",
-  "Review installation": "检查安装",
-  "Review installation of": "检查安装以下项目",
   "Review instructions (optional)": "审查要求（可选）",
   "Review lane save": "检查通道保存",
   "Rewind to checkpoint #{value0}?": "回退到检查点 #{value0}？",
@@ -1474,23 +1470,8 @@ const catalog: Readonly<Record<string, string>> = {
   Skills: "技能",
   "Installed in server Profile {profileId}":
     "服务器配置文件 {profileId} 中安装的技能",
-  "Review before installing": "安装前审查",
-  "Review and install skills": "审查并安装技能",
   "Installing can run this source's code directly on the server: npm install, cargo build, downloaded binaries and the setup steps in its manifest. This list is only what the server reports. Nobody has inspected the source for you here.":
     "安装时，服务器可能直接运行这个来源里的代码：npm install、cargo build、下载的预编译程序，以及 manifest 里的初始化步骤。这里只列服务器报告的内容，没有人替你检查过来源本身。",
-  "The server's registry has no single entry for this source, so most of what follows is unknown. Check it yourself before installing.":
-    "服务器的注册表里没有这个来源的唯一条目，下面大多是未知。安装前请自己核实。",
-  "This server doesn't offer a skill registry, so most of what follows is unknown. Check it yourself before installing.":
-    "这台服务器不提供技能注册表，下面大多是未知。安装前请自己核实。",
-  "This is a path on the server. No registry entry describes it, so most of what follows is unknown. Check it yourself before installing.":
-    "这是服务器上的路径，注册表里没有它的条目，下面大多是未知。安装前请自己核实。",
-  "What the server reports changed after your review, so nothing was installed. See what changed, then decide again.":
-    "你审查之后，服务器报告的内容变了，所以没有安装。看一下哪里变了，再决定。",
-  "Couldn't read the server's skill registry, so nothing was installed.":
-    "读不到服务器的技能注册表，所以没有安装。",
-  "The server installs whatever this branch holds at that moment. It can't pin the version above, so what you get may differ.":
-    "服务器安装的是这个分支当时的内容，不能锁定上面的版本，装上的可能不一样。",
-  "Confirm install": "确认安装",
   "Confirm remove": "确认移除",
   Source: "来源",
   Branch: "分支",
@@ -1499,10 +1480,6 @@ const catalog: Readonly<Record<string, string>> = {
   Version: "版本",
   Author: "作者",
   License: "许可证",
-  Tags: "标签",
-  Listed: "已收录",
-  "Not listed": "未收录",
-  "Registry entry": "注册表条目",
   "Skills included": "包含的技能",
   "Required tools": "需要的工具",
   "Executable tools": "可执行工具",
@@ -1513,21 +1490,26 @@ const catalog: Readonly<Record<string, string>> = {
   "Signature or checksum": "签名或校验值",
   "Not reported by the server": "服务器未报告",
   "Already installed": "已安装",
-  "The installation didn't finish: {detail}": "安装没有完成：{detail}",
-  "Part of it may still be on the server. Check the installed skills below.":
-    "服务器上可能留下了一部分内容，请看下面已安装的技能。",
-  "Installed on the server: {skills}": "已安装到服务器：{skills}",
-  "Already there, not overwritten: {skills}": "已经存在，没有覆盖：{skills}",
-  "Dependencies also installed: {skills}": "同时安装的依赖：{skills}",
-  "The server installed nothing.": "服务器没有安装任何内容。",
-  "The registry stated version {version} when you reviewed it, and the server reports something else now. If you don't want this, remove it.":
-    "你审查时注册表写的版本是 {version}，服务器现在报告的不一样。如果不想要，可以移除。",
-  "Installed, but the list of skills couldn't be refreshed.":
-    "已安装，但技能列表没能刷新。",
   "Removed {name} from server Profile {profileId}.":
     "已从服务器配置档案 {profileId} 移除 {name}。",
   "Could not confirm the server change. It may have been applied; refresh the Profile before reviewing another attempt.":
     "没能确认服务器上的更改，它可能已经生效。请刷新配置档案后再试。",
+  "Source review": "来源审查",
+  "Review skill sources": "审查技能来源",
+  "Look up a source": "查一个来源",
+  "Review source": "审查来源",
+  "Review the source of {name}": "审查 {name} 的来源",
+  "Couldn't read the server's skill registry.": "读不到服务器的技能注册表。",
+  "Installing isn't offered here. The server can't yet tie an install to the exact version or commit reviewed below: the branch can change between this review and the server's clone, so a confirmation here couldn't promise what would be installed.":
+    "这里不提供安装。服务器还不能把安装锁定到下面审查的确切版本或 commit：从审查到服务器拉取代码之间，分支可能已经变了，在这里确认也保证不了装上的是什么。",
+  "Installing here needs the server to accept an immutable commit or version, refuse anything else, and report what it installed.":
+    "要在这里安装，需要服务器接受不可变的 commit 或版本、拒绝其他内容，并返回实际装了什么。",
+  "The server's registry has no single entry for this source, so most of what follows is unknown.":
+    "服务器的注册表里没有这个来源的唯一条目，下面大多是未知。",
+  "This server doesn't offer a skill registry, so most of what follows is unknown.":
+    "这台服务器不提供技能注册表，下面大多是未知。",
+  "This is a path on the server. No registry entry describes it, so most of what follows is unknown.":
+    "这是服务器上的路径，注册表里没有它的条目，下面大多是未知。",
   "Remote one-click install is unavailable while supply-chain safeguards are being reviewed.":
     "供应链安全审查完成前，暂不支持远程一键安装。",
   "Description not reported by the server.": "服务器未提供说明。",

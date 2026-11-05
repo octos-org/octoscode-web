@@ -68,18 +68,20 @@
 .confirmation h3 {
   margin-top: 0;
 }
-.confirmation h3:focus,
-.changed:focus,
-.outcome:focus {
+.confirmation h3:focus {
   outline: none;
 }
 .confirmation code {
   overflow-wrap: anywhere;
 }
 .risk {
-  padding: 12px;
+  padding: 4px 12px;
   border-radius: 8px;
   background: var(--dsw-alias-interactive-bg-hover);
+}
+.risk a {
+  color: inherit;
+  text-underline-offset: 3px;
 }
 .changed {
   margin-block: 12px;
@@ -91,9 +93,6 @@
 .changed ul {
   margin-block: 4px;
   padding-inline-start: 20px;
-}
-.changedText {
-  color: var(--dsw-alias-state-error-text);
 }
 .facts {
   display: grid;

@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { SkillPackage } from "@octos-org/octoscode-client/skills";
 import {
   findPackage,
-  installedVersionsDiffer,
   isServerPath,
   readInstallReview,
-  reviewChanges,
   skillErrorText,
   withoutCredentials,
 } from "./install-review.ts";
@@ -116,75 +114,6 @@ describe("readInstallReview", () => {
       readInstallReview({ repo: "/srv/a", branch: "" }, read),
     ).resolves.toMatchObject({ standing: "server-path", package: null });
     expect(read).not.toHaveBeenCalled();
-  });
-});
-
-describe("reviewChanges", () => {
-  const source = { repo: "example/sample", branch: "" };
-  const listed = (item: SkillPackage) => ({
-    source,
-    standing: "listed" as const,
-    package: item,
-  });
-  it("finds nothing when only the installed state moved", () => {
-    expect(
-      reviewChanges(
-        listed(pack()),
-        listed(pack({ installed: true, installedSkills: ["sample"] })),
-      ),
-    ).toEqual([]);
-  });
-  it("names each reviewed fact that changed", () => {
-    expect(
-      reviewChanges(
-        listed(pack()),
-        listed(pack({ version: "1.1.0", requires: ["git", "npm"] })),
-      ),
-    ).toEqual([
-      { field: "version", before: "1.0.0", after: "1.1.0" },
-      { field: "requires", before: "git", after: "git, npm" },
-    ]);
-    expect(
-      reviewChanges(
-        listed(pack({ version: null })),
-        listed(pack({ version: "1.0.0", providesTools: false })),
-      ),
-    ).toEqual([
-      { field: "version", before: "", after: "1.0.0" },
-      { field: "providesTools", before: "true", after: "false" },
-    ]);
-  });
-  it("notices a package that left the registry", () => {
-    expect(
-      reviewChanges(listed(pack()), {
-        source,
-        standing: "unlisted",
-        package: null,
-      }),
-    ).toEqual([{ field: "standing", before: "listed", after: "unlisted" }]);
-  });
-});
-
-describe("installedVersionsDiffer", () => {
-  const result = {
-    profileId: "p",
-    installed: ["sample"],
-    skipped: [],
-    dependenciesInstalled: [],
-  };
-  const skill = (version: string | null) => [
-    { name: "sample", version, toolCount: 0, sourceRepo: null },
-  ];
-  it("flags a version the server reports other than the one reviewed", () => {
-    expect(installedVersionsDiffer("1.0.0", result, skill("2.0.0"))).toBe(true);
-    expect(installedVersionsDiffer("1.0.0", result, skill("1.0.0"))).toBe(
-      false,
-    );
-  });
-  it("claims nothing when either side is unknown", () => {
-    expect(installedVersionsDiffer(null, result, skill("2.0.0"))).toBe(false);
-    expect(installedVersionsDiffer("1.0.0", result, skill(null))).toBe(false);
-    expect(installedVersionsDiffer("1.0.0", result, null)).toBe(false);
   });
 });
 
