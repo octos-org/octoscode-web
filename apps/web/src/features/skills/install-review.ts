@@ -1,11 +1,7 @@
-import type {
-  InstalledSkill,
-  SkillInstallResult,
-  SkillPackage,
-} from "@octos-org/octoscode-client/skills";
+import type { SkillPackage } from "@octos-org/octoscode-client/skills";
 import { errorMessage } from "../../shared/errors.ts";
 
-/** Exactly what `profile/skills/install` will be asked for. */
+/** A source as `profile/skills/install` would take it. */
 export interface InstallSource {
   repo: string;
   /** Empty means the server's default branch. */
@@ -23,26 +19,6 @@ export interface InstallReview {
   standing: RegistryStanding;
   package: SkillPackage | null;
 }
-
-/** A reviewed fact that no longer holds. */
-export interface ReviewChange {
-  field: ReviewField;
-  before: string;
-  after: string;
-}
-
-const PACKAGE_FIELDS = [
-  "name",
-  "description",
-  "version",
-  "author",
-  "license",
-  "skills",
-  "requires",
-  "providesTools",
-  "tags",
-] as const;
-export type ReviewField = (typeof PACKAGE_FIELDS)[number] | "standing";
 
 /** Core resolves these on its own disk, so no registry entry describes them. */
 export function isServerPath(repo: string): boolean {
@@ -75,48 +51,6 @@ export async function readInstallReview(
   if (!readRegistry) return { source, standing: "not-offered", package: null };
   const item = findPackage(await readRegistry(), source);
   return { source, standing: item ? "listed" : "unlisted", package: item };
-}
-
-function factText(value: string | readonly string[] | boolean | null): string {
-  if (Array.isArray(value)) return value.join(", ");
-  return value === null ? "" : String(value);
-}
-
-/** Empty when a confirmation still applies to what the server says now. */
-export function reviewChanges(
-  reviewed: InstallReview,
-  latest: InstallReview,
-): ReviewChange[] {
-  const changes: ReviewChange[] = [];
-  if (reviewed.standing !== latest.standing)
-    changes.push({
-      field: "standing",
-      before: reviewed.standing,
-      after: latest.standing,
-    });
-  if (!reviewed.package || !latest.package) return changes;
-  for (const field of PACKAGE_FIELDS) {
-    const before = factText(reviewed.package[field]);
-    const after = factText(latest.package[field]);
-    if (before !== after) changes.push({ field, before, after });
-  }
-  return changes;
-}
-
-/**
- * Core has no way to pin what it installs, so this is only known afterwards:
- * the server reports a version other than the one the registry stated.
- */
-export function installedVersionsDiffer(
-  reviewedVersion: string | null,
-  result: SkillInstallResult,
-  skills: readonly InstalledSkill[] | null,
-): boolean {
-  if (!reviewedVersion || !skills) return false;
-  return result.installed.some((name) => {
-    const version = skills.find((skill) => skill.name === name)?.version;
-    return Boolean(version) && version !== reviewedVersion;
-  });
 }
 
 /** A source URL can carry credentials, and Core's errors repeat the source. */

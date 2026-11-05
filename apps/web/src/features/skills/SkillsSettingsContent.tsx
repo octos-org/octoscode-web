@@ -34,7 +34,7 @@ interface SkillsSettingsContentProps {
   profileId: string;
   sessionId: string;
   capabilities: UiProtocolCapabilities;
-  /** Opens the surface that reviews a source before installing it. */
+  /** Opens the surface where a skill source can be reviewed. */
   onManage: () => void;
 }
 
@@ -211,7 +211,7 @@ export function SkillsSettingsContent({
       </p>
       {supportsMethod(capabilities, APPUI_SKILL_METHODS.INSTALL) ? (
         <button type="button" className={styles.manage} onClick={onManage}>
-          {t("Review and install skills")}
+          {t("Review skill sources")}
         </button>
       ) : null}
       {error ? (
