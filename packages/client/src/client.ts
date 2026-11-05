@@ -607,6 +607,18 @@ export class OctosUiClient {
     });
   }
 
+  /** Core #1376 usage ledger: authenticated REST beside the RPC wire. */
+  async usageCommands(profileId: string) {
+    const { createUsageCommands } = await import("./usage.ts");
+    return createUsageCommands({
+      endpoint: this.options.endpoint,
+      ...(this.options.token === undefined
+        ? {}
+        : { token: this.options.token }),
+      profileId,
+    });
+  }
+
   interruptTurn(sessionId: string, turnId: string): Promise<unknown> {
     return this.request(CORE_UI_METHODS.TURN_INTERRUPT, {
       session_id: sessionId,

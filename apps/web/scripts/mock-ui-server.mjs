@@ -1574,6 +1574,17 @@ function artifactMime(name) {
 }
 
 const http = createServer(async (request, response) => {
+  // T-0392: Core #1376 usage ledger over its REST routes, aggregated the way
+  // Core's UsageAnalytics::from_events does, with controls for the tests.
+  const usagePath = new URL(request.url, "http://fixture").pathname;
+  if (usagePath.startsWith("/__test__/usage/")) {
+    await handleUsageControl(request, response, usagePath);
+    return;
+  }
+  if (usagePath === "/api/my/usage" || usagePath.startsWith("/api/my/usage/")) {
+    await handleUsageRead(request, response, usagePath);
+    return;
+  }
   if (new URL(request.url, "http://fixture").pathname === "/api/files") {
     response.setHeader(
       "Access-Control-Allow-Origin",
@@ -7283,6 +7294,226 @@ function authTokenFromRequestUrl(requestUrl) {
     }
   }
   return "";
+}
+
+// ---- T-0392 usage ledger -------------------------------------------------
+const usageLedger = {
+  events: [],
+  mode: "ok",
+  failSession: null,
+  delayAllMs: 0,
+  reads: [],
+  seeded: [],
+};
+
+function usageTotals() {
+  return {
+    run_count: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    estimated_cost_usd: 0,
+  };
+}
+
+function addUsage(totals, event) {
+  totals.run_count += 1;
+  totals.input_tokens += event.input_tokens;
+  totals.output_tokens += event.output_tokens;
+  totals.cache_read_tokens += event.cache_read_tokens;
+  totals.cache_write_tokens += event.cache_write_tokens;
+  if (typeof event.estimated_cost_usd === "number")
+    totals.estimated_cost_usd += event.estimated_cost_usd;
+}
+
+function usageAnalytics(events) {
+  const totals = usageTotals();
+  const groups = {
+    by_day: new Map(),
+    by_month: new Map(),
+    by_profile: new Map(),
+    by_provider: new Map(),
+    by_model: new Map(),
+    by_channel: new Map(),
+  };
+  const keys = (event) => ({
+    by_day: event.timestamp.slice(0, 10),
+    by_month: event.timestamp.slice(0, 7),
+    by_profile: event.profile_id,
+    by_provider: event.provider ?? "unknown",
+    by_model: event.model ?? "unknown",
+    by_channel: event.channel,
+  });
+  for (const event of events) {
+    addUsage(totals, event);
+    for (const [name, key] of Object.entries(keys(event))) {
+      const group = groups[name];
+      if (!group.has(key)) group.set(key, usageTotals());
+      addUsage(group.get(key), event);
+    }
+  }
+  const rollups = (group) =>
+    [...group.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, value]) => ({ key, totals: value }));
+  return {
+    totals,
+    ...Object.fromEntries(
+      Object.entries(groups).map(([name, group]) => [name, rollups(group)]),
+    ),
+  };
+}
+
+async function handleUsageRead(request, response, path) {
+  response.setHeader(
+    "Access-Control-Allow-Origin",
+    request.headers.origin ?? "*",
+  );
+  response.setHeader("Access-Control-Allow-Headers", "Authorization, Accept");
+  response.setHeader("Access-Control-Allow-Methods", "GET");
+  if (request.method === "OPTIONS") {
+    response.writeHead(204).end();
+    return;
+  }
+  const token = authTokenFromUpgradeRequest(request);
+  if (mockAuthMode === "required" && !mockAuthTokens.has(token)) {
+    response.writeHead(401).end();
+    return;
+  }
+  const url = new URL(request.url, "http://fixture");
+  const sessionId = path.startsWith("/api/my/usage/sessions/")
+    ? decodeURIComponent(path.slice("/api/my/usage/sessions/".length))
+    : url.searchParams.get("session_id");
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  usageLedger.reads.push({
+    path,
+    sessionId,
+    from,
+    bearer: typeof request.headers.authorization === "string",
+    tokenInUrl: url.searchParams.has("token"),
+  });
+  if (
+    usageLedger.mode === "unsupported" ||
+    (path !== "/api/my/usage" && !path.startsWith("/api/my/usage/sessions/"))
+  ) {
+    response.writeHead(404).end();
+    return;
+  }
+  if (
+    usageLedger.mode === "fail" ||
+    (sessionId && sessionId === usageLedger.failSession)
+  ) {
+    response.writeHead(500).end("failed to read usage analytics");
+    return;
+  }
+  const rfc3339 =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+  if ((from && !rfc3339.test(from)) || (to && !rfc3339.test(to))) {
+    response
+      .writeHead(400)
+      .end("Failed to deserialize query string: from: premature end of input");
+    return;
+  }
+  if (!from && usageLedger.delayAllMs)
+    await new Promise((resolve) => setTimeout(resolve, usageLedger.delayAllMs));
+  const events = usageLedger.events.filter(
+    (event) =>
+      (!sessionId || event.session_id === sessionId) &&
+      (!from || Date.parse(event.timestamp) >= Date.parse(from)) &&
+      (!to || Date.parse(event.timestamp) <= Date.parse(to)),
+  );
+  response
+    .writeHead(200, { "content-type": "application/json" })
+    .end(JSON.stringify(usageAnalytics(events)));
+}
+
+async function handleUsageControl(request, response, path) {
+  const url = new URL(request.url, "http://fixture");
+  if (request.method === "GET" && path === "/__test__/usage/reads") {
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify(usageLedger.reads));
+    return;
+  }
+  if (request.method !== "POST") {
+    response.writeHead(405).end();
+    return;
+  }
+  if (path === "/__test__/usage/reset") {
+    for (const [workspace, ids] of usageLedger.seeded)
+      sessionsByWorkspace.set(
+        workspace,
+        (sessionsByWorkspace.get(workspace) ?? []).filter(
+          (session) => !ids.includes(session.id),
+        ),
+      );
+    Object.assign(usageLedger, {
+      events: [],
+      mode: "ok",
+      failSession: null,
+      delayAllMs: 0,
+      reads: [],
+      seeded: [],
+    });
+    response.writeHead(204).end();
+    return;
+  }
+  if (path === "/__test__/usage/mode") {
+    usageLedger.mode = url.searchParams.get("mode") ?? "ok";
+    usageLedger.failSession = url.searchParams.get("fail_session");
+    usageLedger.delayAllMs = Number(url.searchParams.get("delay_all_ms") ?? 0);
+    response.writeHead(204).end();
+    return;
+  }
+  let body = "";
+  for await (const chunk of request) body += chunk;
+  const seed = JSON.parse(body || "{}");
+  if (path === "/__test__/usage/seed") {
+    // Listed Sessions (newest first), then runs against them by index; a
+    // negative index is a Session the sidebar does not list.
+    const profile = seed.profile ?? defaultProfileId;
+    const ids = (seed.sessions ?? []).map(
+      (_, index) => `${profile}:api:web-usage-${index}-${randomUUID()}`,
+    );
+    if (seed.workspace && ids.length) {
+      const now = Date.now();
+      sessionsByWorkspace.set(seed.workspace, [
+        ...(sessionsByWorkspace.get(seed.workspace) ?? []),
+        ...seed.sessions.map((title, index) => ({
+          id: ids[index],
+          title,
+          message_count: 2,
+          updated_at: new Date(now - (index + 1) * 60_000).toISOString(),
+        })),
+      ]);
+      usageLedger.seeded.push([seed.workspace, ids]);
+    }
+    for (const run of seed.runs ?? []) {
+      usageLedger.events.push({
+        timestamp: new Date(Date.now() - run.ago_ms).toISOString(),
+        profile_id: profile,
+        session_id:
+          run.session >= 0 ? ids[run.session] : `${profile}:api:unlisted`,
+        provider: run.provider ?? "custom",
+        model: run.model,
+        input_tokens: run.input ?? 0,
+        output_tokens: run.output ?? 0,
+        cache_read_tokens: run.cache_read ?? 0,
+        cache_write_tokens: run.cache_write ?? 0,
+        ...(typeof run.cost === "number"
+          ? { estimated_cost_usd: run.cost }
+          : {}),
+        channel: "appui",
+      });
+    }
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify({ sessionIds: ids }));
+    return;
+  }
+  response.writeHead(404).end();
 }
 
 function authTokenFromUpgradeRequest(request) {
