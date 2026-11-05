@@ -215,3 +215,21 @@
     border-left: 0;
   }
 }
+
+.export {
+  margin-top: var(--dsw-space-3);
+}
+
+.export .actions {
+  align-items: center;
+}
+
+.export .actions span {
+  flex-basis: 100%;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.export .meta {
+  margin: var(--dsw-space-1) 0 0;
+}
