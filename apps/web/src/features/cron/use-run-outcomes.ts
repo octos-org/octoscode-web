@@ -1,49 +1,85 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CronJob } from "@octos-org/octoscode-client/cron";
-import type {
-  HydratedTurn,
-  OctosUiClient,
-} from "@octos-org/octoscode-client/protocol";
+import type { OctosUiClient } from "@octos-org/octoscode-client/protocol";
 import {
   failureReason,
+  linksOf,
   needsTurnsRead,
+  runKey,
   runOutcomes,
+  turnStarters,
+  type LinkedOutcome,
   type RunOutcome,
+  type SessionTurns,
   type SessionTurnsRead,
 } from "./run-outcome.ts";
+import { serverNow, type ServerTimeRange } from "./server-clock.ts";
 
-interface SessionTurns extends SessionTurnsRead {
-  turns: readonly HydratedTurn[];
+interface SessionRead extends SessionTurns, SessionTurnsRead {
+  /** Which read this was; an older answer arriving late is dropped. */
+  sequence: number;
 }
 
-/** Reads each job's Session only while its last run is unsettled. */
+const steadyNow = () => performance.now();
+
+/**
+ * Reads each job's Session only while its last run is unsettled. `tick`
+ * re-evaluates on the page's beat; times are the server's (from the list)
+ * and this page's steady clock, never this browser's wall clock.
+ */
 export function useRunOutcomes(
   client: OctosUiClient,
   jobs: readonly CronJob[] | null,
-  now: number,
+  serverRange: ServerTimeRange | null,
+  tick: number,
 ) {
-  const [sessions, setSessions] = useState<ReadonlyMap<string, SessionTurns>>(
+  const [sessions, setSessions] = useState<ReadonlyMap<string, SessionRead>>(
     new Map(),
   );
   const [reasons, setReasons] = useState<ReadonlyMap<string, string | null>>(
     new Map(),
   );
   const reading = useRef(new Set<string>());
+  const sequence = useRef(0);
+  const firstSeen = useRef(new Map<string, number>());
+  const confirmed = useRef(new Map<string, LinkedOutcome>());
   const clientRef = useRef(client);
   clientRef.current = client;
 
   useEffect(() => {
     reading.current = new Set();
+    firstSeen.current = new Map();
+    confirmed.current = new Map();
     setSessions(new Map());
     setReasons(new Map());
   }, [client]);
 
   const outcomes = useMemo(() => {
-    const turns = new Map(
-      [...sessions].map(([id, session]) => [id, session.turns]),
+    const now = steadyNow();
+    for (const job of jobs ?? []) {
+      const at = Date.parse(job.lastRun ?? "");
+      if (!Number.isFinite(at)) continue;
+      const key = runKey(job.id, at);
+      if (!firstSeen.current.has(key)) firstSeen.current.set(key, now);
+    }
+    return runOutcomes(
+      jobs ?? [],
+      sessions,
+      {
+        serverEarliest: serverNow(serverRange, now)?.earliest ?? null,
+        knownFor: (key) => now - (firstSeen.current.get(key) ?? now),
+      },
+      confirmed.current,
     );
-    return runOutcomes(jobs ?? [], turns, now);
-  }, [jobs, now, sessions]);
+    // `tick` moves the windows on without a new list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, sessions, serverRange, tick]);
+
+  // A link, once made, stands: later reads may lack what made it.
+  useEffect(() => {
+    for (const [key, link] of linksOf(jobs ?? [], outcomes))
+      confirmed.current.set(key, link);
+  }, [jobs, outcomes]);
 
   useEffect(() => {
     const newestRun = new Map<string, number>();
@@ -56,7 +92,7 @@ export function useRunOutcomes(
         );
       }
     }
-    const readNow = Date.now();
+    const readNow = steadyNow();
     for (const job of jobs ?? []) {
       const sessionId = job.originSessionId;
       const outcome = outcomes.get(job.id);
@@ -70,21 +106,30 @@ export function useRunOutcomes(
       reading.current.add(sessionId);
       const reader = reading.current;
       const forRun = newestRun.get(sessionId) ?? 0;
+      const order = ++sequence.current;
       void client
-        .hydrateSession({ session_id: sessionId, include: ["turns"] })
+        .hydrateSession({
+          session_id: sessionId,
+          // Threads and messages say who opened each turn.
+          include: ["turns", "threads", "messages"],
+        })
         .then(
           (result) => {
             if (clientRef.current !== client) return;
-            setSessions((current) =>
-              new Map(current).set(sessionId, {
+            setSessions((current) => {
+              const previous = current.get(sessionId);
+              if (previous && previous.sequence > order) return current;
+              return new Map(current).set(sessionId, {
                 turns: result.turns ?? [],
+                starters: turnStarters(result),
                 readAt: readNow,
                 forRun,
-              }),
-            );
+                sequence: order,
+              });
+            });
           },
           () => {
-            // The row stays unconfirmed; the next list refresh reads again.
+            // The row keeps what it knew; the next beat reads again.
           },
         )
         .finally(() => reader.delete(sessionId));

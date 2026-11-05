@@ -1971,6 +1971,11 @@ const catalog: Readonly<Record<string, string>> = {
   "Run failed": "失败",
   "Stopped before finishing": "没跑完就停了",
   "Started; no record of how it went": "已启动，没有运行记录",
+  "Ran; it started no reply here": "已运行，没有在这里开始回复",
+  "Ran; a reply came too late to tell if it was this run":
+    "已运行，之后的回复来得太晚，不能确定是这次运行的",
+  "Ran; can't tell which reply is this run's":
+    "已运行，分不清哪条回复是这次运行的",
   "Could not start, so it was turned off": "启动失败，已自动停用",
   "Could not start; it will try again": "启动失败，稍后重试",
   "Turned off": "已停用，不会运行",

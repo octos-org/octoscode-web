@@ -45,6 +45,14 @@ const defaultCronJob = () => ({
   timezone: null,
 });
 const cronJobs = [defaultCronJob()];
+/** Core's own rounding of the time left before a job's next run. */
+function coreNextIn(leftMs) {
+  const secs = Math.trunc(leftMs / 1000);
+  if (secs < 0) return "overdue";
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+}
 let nextCronJobId = 2;
 const MCP_CONNECTOR_FEATURE = "mcp.connector.manage.v1";
 const MCP_CONNECTOR_METHODS = [
@@ -6254,8 +6262,15 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "cron/list") {
+      // Like Core's job_json: next_in is next_run rounded down against the
+      // server's own now at list time, so the two always agree.
+      const listedAt = Date.now();
       reply(socket, request.id, {
-        jobs: cronJobs,
+        jobs: cronJobs.map((job) =>
+          typeof job.next_run === "number"
+            ? { ...job, next_in: coreNextIn(job.next_run - listedAt) }
+            : job,
+        ),
         count: cronJobs.length,
         gateway_running: false,
         truncated: false,

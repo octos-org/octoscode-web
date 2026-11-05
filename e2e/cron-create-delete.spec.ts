@@ -658,12 +658,25 @@ test("shows how each run really went and opens the run it points at", async ({
         frame.result.count = 3;
       }
       if (request?.method === "session/hydrate" && frame.result) {
-        frame.result.turns = turns;
+        frame.result.turns = turns.map((turn) => ({
+          ...turn,
+          thread_id: turn.turn_id,
+        }));
         const include = request.params.include ?? [];
         if (include.includes("threads")) {
-          frame.result.messages = turns
-            .filter((turn) => turn.state === "completed")
-            .map((turn, index) => message(index + 1, turn.turn_id));
+          // As Core keeps them: a person's turn opens with their message, a
+          // scheduled run's with the reply (its prompt is not kept).
+          frame.result.messages = [
+            message(1, "run-ok"),
+            message(2, "run-bad"),
+            { ...message(3, "later-chat"), role: "user", content: "hi" },
+            message(4, "later-chat"),
+          ];
+          frame.result.threads = [
+            { thread_id: "run-ok", root_seq: 1, message_seqs: [1] },
+            { thread_id: "run-bad", root_seq: 2, message_seqs: [2] },
+            { thread_id: "later-chat", root_seq: 3, message_seqs: [3, 4] },
+          ];
         } else if (include.includes("messages")) {
           frame.result.replayed_projection_envelopes = [
             {
@@ -702,7 +715,7 @@ test("shows how each run really went and opens the run it points at", async ({
 
   const gone = tasks.locator('[data-cron-job="job-gone"]');
   await expect(gone.getByText(/no record of how it went/)).toBeVisible();
-  await gone.getByRole("button", { name: "View result" }).click();
+  await gone.getByRole("button", { name: "Open conversation" }).click();
   await expect(gone.getByRole("alert")).toContainText("can't be opened here");
 
   await ok.getByRole("button", { name: "View result" }).click();
