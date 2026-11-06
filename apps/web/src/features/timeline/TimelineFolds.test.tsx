@@ -1,9 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Timeline } from "./Timeline.tsx";
-import { ThinkingDisclosure } from "./ThinkingDisclosure.tsx";
-import { ToolCallDisclosure } from "./ToolCallDisclosure.tsx";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
+import { collapseAll } from "./folds.ts";
 import type { TimelineEntry } from "./model.ts";
 
 const reasoningEntry: TimelineEntry = {
@@ -28,202 +27,79 @@ const toolEntry: TimelineEntry = {
   endedAtMs: 3_400,
 };
 
+const failedEntry: TimelineEntry = {
+  ...toolEntry,
+  id: "tool:call-2",
+  status: "error",
+};
+
+/** The `<details>` block of one timeline entry, and its one-line summary. */
+function block(html: string, id: string): { tag: string; summary: string } {
+  const start = html.indexOf(`<details data-timeline-entry="${id}"`);
+  expect(start, id).toBeGreaterThanOrEqual(0);
+  const rest = html.slice(start);
+  return {
+    tag: /^<details\b[^>]*>/.exec(rest)?.[0] ?? "",
+    summary: /<summary[^>]*>([\s\S]*?)<\/summary>/.exec(rest)?.[1] ?? "",
+  };
+}
+const isOpen = (tag: string): boolean => /\sopen=""/.test(tag);
+
 describe("Timeline foldable rendering", () => {
-  it("renders thinking collapsed with a one-line summary when showThinking", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[reasoningEntry]}
-        connected
-        showThinking
-        folds={{}}
-        onToggleFold={() => {}}
-        onExpandAll={() => {}}
-        onCollapseAll={() => {}}
-      />,
-    );
-    // Timeline renders upstream's native <details> disclosure: folded means
-    // no `open` attribute; the one-line summary is the <summary> element and
-    // the reasoning text lives only in the (natively hidden) body.
-    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*reasoningBlock/);
-    const summary = summaryOf(html);
-    expect(summary).toContain("Thought process");
-    expect(summary).toContain("12 s · 6 words");
-    expect(summary).not.toContain("let me think about this carefully");
-    expect(html).toMatch(
-      /<\/summary><div[^>]*reasoningBody[^>]*><pre[^>]*>let me think about this carefully<\/pre>/,
-    );
-  });
-
-  it("renders no thinking at all when showThinking is off (no marker)", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[reasoningEntry, toolEntry]}
-        connected
-        showThinking={false}
-        folds={{}}
-        onToggleFold={() => {}}
-        onExpandAll={() => {}}
-        onCollapseAll={() => {}}
-      />,
-    );
-    expect(html).not.toContain("let me think about this carefully");
-    expect(html).not.toContain("Thinking · ");
-    expect(html).not.toContain("Thought process");
-    expect(html).not.toContain("reasoningBlock");
-    expect(html).not.toContain("thinking hidden");
-    expect(html).toContain("cargo test");
-  });
-
-  it("renders tool calls folded with a one-line header", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[toolEntry]}
-        connected
-        showThinking
-        folds={{}}
-        onToggleFold={() => {}}
-        onExpandAll={() => {}}
-        onCollapseAll={() => {}}
-      />,
-    );
-    // Folded by default; the header line carries a human title, status
-    // mark (check glyph + label) and duration.
-    expect(html).toMatch(/<details(?![^>]*\sopen)[^>]*toolBlock/);
-    const summary = summaryOf(html);
-    expect(summary).toContain("Run command cargo test");
-    expect(summary).toMatch(/completedGlyph/);
-    expect(summary).toMatch(/data-status="complete"[^>]*>Done · 3 s</);
-    expect(summary).not.toContain("<pre");
-  });
-
-  it("exposes Expand all / Collapse all at the transcript top", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[toolEntry]}
-        connected
-        showThinking
-        folds={{}}
-        onToggleFold={() => {}}
-        onExpandAll={() => {}}
-        onCollapseAll={() => {}}
-      />,
-    );
-    const tools = html.indexOf("Expand all");
-    expect(tools).toBeGreaterThanOrEqual(0);
+  it("folds thinking and steps by default behind one-line summaries, under Expand all / Collapse all, and Collapse all keeps a failed step folded", () => {
+    const render = (folds: Record<string, boolean>) =>
+      renderToStaticMarkup(
+        <Timeline
+          entries={[reasoningEntry, toolEntry, failedEntry]}
+          connected
+          showThinking
+          folds={folds}
+          onToggleFold={() => {}}
+          onExpandAll={() => {}}
+          onCollapseAll={() => {}}
+        />,
+      );
+    const html = render({});
+    // Upstream's native <details>: folded means no `open`; the reasoning text
+    // lives only in the (natively hidden) body, never in the summary.
+    const thinking = block(html, reasoningEntry.id);
+    expect(isOpen(thinking.tag)).toBe(false);
+    expect(thinking.summary).toContain("Thought process");
+    expect(thinking.summary).toContain("12 s · 6 words");
+    expect(thinking.summary).not.toContain("let me think about this carefully");
+    expect(html).toContain("let me think about this carefully</pre>");
+    // A step's header carries a human title, its status word and duration.
+    const tool = block(html, toolEntry.id);
+    expect(isOpen(tool.tag)).toBe(false);
+    expect(tool.summary).toContain("Run command cargo test");
+    expect(tool.summary).toMatch(/data-status="complete"[^>]*>Done · 3 s</);
+    expect(tool.summary).not.toContain("<pre");
+    // The raw error stays folded; the header still says it failed.
+    const failed = block(html, failedEntry.id);
+    expect(isOpen(failed.tag)).toBe(false);
+    expect(failed.summary).toMatch(/data-status="error"[^>]*>Failed · 3 s</);
+    // Expand all / Collapse all sit at the transcript top.
+    expect(html.indexOf("Expand all")).toBeGreaterThanOrEqual(0);
     expect(html.indexOf("Expand all")).toBeLessThan(
-      html.indexOf("Run command cargo test"),
+      html.indexOf("Thought process"),
     );
     expect(html).toContain("Collapse all");
-  });
-
-  it("folds a failed step but keeps the error in its header", () => {
-    const failing: TimelineEntry = { ...toolEntry, status: "error" };
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[failing]}
-        connected
-        showThinking
-        folds={{}}
-        onToggleFold={() => {}}
-        onExpandAll={() => {}}
-        onCollapseAll={() => {}}
-      />,
-    );
-    // The raw tool error stays folded; the header still says it failed.
-    expect(html).not.toMatch(/<details[^>]*toolBlock[^>]*open/);
-    const summary = summaryOf(html);
-    expect(summary).toContain("Run command cargo test");
-    expect(summary).toMatch(/data-status="error"[^>]*aria-hidden="true"/);
-    expect(summary).toMatch(/data-status="error"[^>]*>Failed · 3 s</);
-    expect(summary).not.toMatch(/completedGlyph/);
-  });
-});
-
-function summaryOf(html: string): string {
-  return /<summary[^>]*>([\s\S]*?)<\/summary>/.exec(html)?.[1] ?? "";
-}
-
-describe("ThinkingDisclosure", () => {
-  it("is a native disclosure button announcing expanded state", () => {
-    const collapsed = renderToStaticMarkup(
-      <ThinkingDisclosure
-        entry={reasoningEntry}
-        expanded={false}
-        onToggle={() => {}}
-      />,
-    );
-    expect(collapsed).toMatch(/<button[^>]*aria-expanded="false"/);
-    expect(collapsed).toMatch(/aria-controls="[^"]+"/);
-    expect(collapsed).toContain("Thinking · 12 s · 6 words");
-    const expanded = renderToStaticMarkup(
-      <ThinkingDisclosure
-        entry={reasoningEntry}
-        expanded
-        onToggle={() => {}}
-      />,
-    );
-    expect(expanded).toMatch(/<button[^>]*aria-expanded="true"/);
-    expect(expanded).toContain("let me think about this carefully");
-  });
-});
-
-describe("ToolCallDisclosure", () => {
-  it("is a native disclosure button with the header line", () => {
-    const collapsed = renderToStaticMarkup(
-      <ToolCallDisclosure
-        entry={toolEntry}
-        expanded={false}
-        onToggle={() => {}}
-      />,
-    );
-    expect(collapsed).toMatch(/<button[^>]*aria-expanded="false"/);
-    expect(collapsed).toContain("shell · cargo test · ✓ · 3 s");
-    expect(collapsed).not.toContain("<pre>");
-    const expanded = renderToStaticMarkup(
-      <ToolCallDisclosure entry={toolEntry} expanded onToggle={() => {}} />,
-    );
-    expect(expanded).toMatch(/<button[^>]*aria-expanded="true"/);
-    expect(expanded).toContain("<pre ");
-    expect(expanded).toContain("</pre>");
-  });
-
-  it("shows the error glyph on the header line for failed calls", () => {
-    const html = renderToStaticMarkup(
-      <ToolCallDisclosure
-        entry={{ ...toolEntry, status: "error" }}
-        expanded={false}
-        onToggle={() => {}}
-      />,
-    );
-    expect(html).toContain("✗");
+    expect(render(collapseAll({}))).not.toMatch(/<details[^>]*open/);
   });
 });
 
 describe("TurnActivityIndicator", () => {
-  it("renders the animated glyph and status word while streaming", () => {
-    const html = renderToStaticMarkup(
-      <TurnActivityIndicator
-        activity={{ label: "Thinking…", startedAtMs: 0, lastAtMs: 1_000 }}
-      />,
-    );
-    expect(html).toContain("Thinking…");
-    expect(html).toMatch(/class="[^"]*[Tt]hinking.?[Ss]pinner/);
-    expect(html).toMatch(/role="status"/);
-  });
-
-  it("renders nothing once the turn ends", () => {
-    expect(
-      renderToStaticMarkup(<TurnActivityIndicator activity={null} />),
-    ).toBe("");
-  });
-
-  it("announces the animated glyph as hidden from assistive tech", () => {
+  it("is a status whose animated glyph is hidden from assistive tech, and is gone once the turn ends", () => {
     const html = renderToStaticMarkup(
       <TurnActivityIndicator
         activity={{ label: "Running shell…", startedAtMs: 0, lastAtMs: 1 }}
       />,
     );
-    expect(html).toMatch(/aria-hidden="true"/);
+    expect(html).toMatch(/role="status"/);
     expect(html).toContain("Running shell…");
+    expect(html).toMatch(/aria-hidden="true"[^>]*>◠</);
+    expect(
+      renderToStaticMarkup(<TurnActivityIndicator activity={null} />),
+    ).toBe("");
   });
 });

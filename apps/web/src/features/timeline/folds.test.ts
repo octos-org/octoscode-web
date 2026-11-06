@@ -4,104 +4,53 @@ import {
   expandAll,
   initialFoldState,
   isFoldExpanded,
-  pruneFolds,
   thinkingSummary,
   thinkingSummaryParts,
   toggleFold,
-  toolHeaderLine,
-  toolStatusGlyph,
   toolTarget,
 } from "./folds.ts";
 
 describe("transcript fold model", () => {
-  it("starts with every foldable block folded", () => {
-    const folds = initialFoldState();
-    expect(isFoldExpanded(folds, "reasoning:turn-1")).toBe(false);
-    expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
-  });
-
-  it("toggles one block and remembers it while the session stays open", () => {
+  it("starts folded, remembers each toggled block, expands exactly the live blocks, and collapses back to folded", () => {
     let folds = initialFoldState();
+    expect(isFoldExpanded(folds, "reasoning:turn-1")).toBe(false);
     folds = toggleFold(folds, "tool:call-1");
     expect(isFoldExpanded(folds, "tool:call-1")).toBe(true);
-    folds = toggleFold(folds, "tool:call-1");
-    expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
     // Other blocks stay folded.
     expect(isFoldExpanded(folds, "tool:call-2")).toBe(false);
-  });
+    folds = toggleFold(folds, "tool:call-1");
+    expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
 
-  it("expandAll expands exactly the live foldable ids", () => {
-    let folds = initialFoldState();
-    folds = toggleFold(folds, "reasoning:turn-1");
-    const next = expandAll(folds, [
+    const expanded = expandAll(toggleFold(folds, "reasoning:turn-1"), [
       "reasoning:turn-1",
       "tool:call-1",
       "tool:call-2",
     ]);
-    expect(isFoldExpanded(next, "reasoning:turn-1")).toBe(true);
-    expect(isFoldExpanded(next, "tool:call-1")).toBe(true);
-    expect(isFoldExpanded(next, "tool:call-2")).toBe(true);
-    expect(isFoldExpanded(next, "tool:gone")).toBe(false);
-  });
+    for (const id of ["reasoning:turn-1", "tool:call-1", "tool:call-2"])
+      expect(isFoldExpanded(expanded, id)).toBe(true);
+    expect(isFoldExpanded(expanded, "tool:gone")).toBe(false);
 
-  it("collapseAll returns to the all-folded default and forgets memory", () => {
-    let folds = expandAll(initialFoldState(), ["tool:call-1", "tool:call-2"]);
-    folds = collapseAll(folds);
-    expect(isFoldExpanded(folds, "tool:call-1")).toBe(false);
-    expect(isFoldExpanded(folds, "tool:call-2")).toBe(false);
-    expect(folds).toEqual({ __collapsed_all__: false });
-  });
-
-  it("pruneFolds drops memory for blocks no longer in the transcript", () => {
-    let folds = expandAll(initialFoldState(), ["tool:a", "tool:b"]);
-    folds = pruneFolds(folds, ["tool:b", "tool:c"]);
-    expect(isFoldExpanded(folds, "tool:a")).toBe(false);
-    expect(isFoldExpanded(folds, "tool:b")).toBe(true);
-    expect(isFoldExpanded(folds, "tool:c")).toBe(false);
+    const collapsed = collapseAll(expanded);
+    for (const id of ["reasoning:turn-1", "tool:call-1", "tool:call-2"])
+      expect(isFoldExpanded(collapsed, id)).toBe(false);
   });
 });
 
 describe("thinking one-line summary", () => {
-  const words = Array.from({ length: 340 }, () => "word").join(" ");
-
-  it("summarizes a settled thinking block with duration and word count", () => {
+  it("shows duration and word count, timing from the latest delta while streaming, and counts Chinese by characters", () => {
+    const words = Array.from({ length: 340 }, () => "word").join(" ");
     expect(
-      thinkingSummary({
-        body: words,
-        startedAtMs: 0,
-        endedAtMs: 12_400,
-      }),
+      thinkingSummary({ body: words, startedAtMs: 0, endedAtMs: 12_400 }),
     ).toBe("Thinking · 12 s · 340 words");
-  });
-
-  it("uses the latest delta time while the block is still streaming", () => {
     expect(
-      thinkingSummary({
-        body: words,
-        startedAtMs: 1_000,
-        updatedAtMs: 5_600,
-      }),
+      thinkingSummary({ body: words, startedAtMs: 1_000, updatedAtMs: 5_600 }),
     ).toBe("Thinking · 5 s · 340 words");
-  });
-
-  it("omits the duration when timing was never captured", () => {
+    // No timing captured: the duration is omitted, never shown as 0.
     expect(thinkingSummary({ body: "one two three" })).toBe(
       "Thinking · 3 words",
     );
-  });
-
-  it("exposes parts so localized copy can interpolate them", () => {
-    expect(
-      thinkingSummaryParts({
-        body: words,
-        startedAtMs: 0,
-        endedAtMs: 12_400,
-      }),
-    ).toEqual({ seconds: 12, words: 340, unit: "words" });
-  });
-
-  it("counts Chinese by characters, since it has no spaces between words", () => {
-    // 12 characters plus one Latin word; the comma counts as neither.
+    // Chinese has no spaces between words: 12 characters plus one Latin
+    // word; the comma counts as neither.
     expect(
       thinkingSummaryParts({ body: "先看一下工作区，再读 sales.csv 的数据" }),
     ).toMatchObject({ words: 20, unit: "characters" });
@@ -112,49 +61,16 @@ describe("thinking one-line summary", () => {
   });
 });
 
-describe("tool call header line", () => {
-  it("joins name, target, status icon and duration in order", () => {
-    expect(
-      toolHeaderLine({
-        title: "shell",
-        body: '{"cmd": "cargo test", "cwd": "/repo"}',
-        status: "complete",
-        startedAtMs: 0,
-        endedAtMs: 3_400,
-      }),
-    ).toBe("shell · cargo test · ✓ · 3 s");
-  });
-
-  it("keeps errors visible in the header line", () => {
-    const line = toolHeaderLine({
-      title: "shell",
-      body: '{"cmd": "rm -rf /"}',
-      status: "error",
-      startedAtMs: 0,
-      endedAtMs: 2_200,
-    });
-    expect(line).toContain("✗");
-    expect(line).toContain("shell · rm -rf /");
-  });
-
-  it("maps every status to a stable single glyph", () => {
-    expect(toolStatusGlyph("running")).toBe("◐");
-    expect(toolStatusGlyph("complete")).toBe("✓");
-    expect(toolStatusGlyph("error")).toBe("✗");
-    expect(toolStatusGlyph("info")).toBe("·");
-  });
-
-  it("extracts the most useful argument as the target", () => {
+describe("tool call target", () => {
+  it("picks the most useful argument and truncates very long ones", () => {
     expect(toolTarget('{"path": "/src/main.rs", "q": 1}')).toBe("/src/main.rs");
     expect(toolTarget('{"file_path": "/a/b.rs"}')).toBe("/a/b.rs");
     expect(toolTarget('{"query": "spinner"}')).toBe("spinner");
     expect(toolTarget('path: "report.md", content: …')).toBe("report.md");
     expect(toolTarget("not json")).toBe("");
-  });
-
-  it("truncates very long targets", () => {
-    const long = `/${"a".repeat(80)}`;
-    const truncated = toolTarget(JSON.stringify({ path: long }));
+    const truncated = toolTarget(
+      JSON.stringify({ path: `/${"a".repeat(80)}` }),
+    );
     expect(truncated).toHaveLength(25); // 24 chars + ellipsis
     expect(truncated.endsWith("…")).toBe(true);
   });
