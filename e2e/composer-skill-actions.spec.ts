@@ -134,3 +134,99 @@ test("a server without the skill action surface shows no chip", async ({
   await start(page, `/workspace/no-skill-actions-${Date.now()}`);
   await expect(page.locator("[data-skill-actions]")).toHaveCount(0);
 });
+
+test("on a phone, actions run from the + menu and the same job survives a refresh", async ({
+  page,
+}) => {
+  // T-0422: the phone folds the desktop chip into the "+" menu; the invoke,
+  // the single job, and the reload behaviour are identical.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const frames = invocations(page);
+  const sessionId = await start(
+    page,
+    `/workspace/phone-skill-actions-${Date.now()}`,
+  );
+
+  await page.getByRole("button", { name: "Add skills or files" }).click();
+  const menu = page.getByRole("menu", { name: "Add" });
+  await expect(
+    menu.getByRole("group").filter({ hasText: "Skill actions" }),
+  ).toBeVisible();
+  await menu.getByText("Run document probe").click();
+  await menu.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='queued']"),
+  ).toBeVisible();
+  expect(
+    frames.filter((frame) => frame.method === "skill/action/invoke"),
+  ).toHaveLength(1);
+  expect(frames.filter((frame) => frame.method === "turn/start")).toHaveLength(
+    0,
+  );
+
+  await progress(page, sessionId, "running");
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='running']"),
+  ).toBeVisible();
+  await progress(page, sessionId);
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='succeeded']"),
+  ).toBeVisible();
+  await menu.getByText("Result details").click();
+  await expect(menu.getByText("protocol action fixture")).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Add skills or files" }).click();
+  const again = page.getByRole("menu", { name: "Add" });
+  await expect(again.locator("[data-skill-job]")).toHaveCount(1);
+  await expect(
+    again.locator("[data-skill-job] [data-job-status='succeeded']"),
+  ).toBeVisible();
+  expect(
+    frames.filter((frame) => frame.method === "skill/action/invoke"),
+  ).toHaveLength(1);
+});
+
+test("on a phone, a failed action job retries into a new job", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sessionId = await start(
+    page,
+    `/workspace/phone-skill-actions-retry-${Date.now()}`,
+  );
+  await page.getByRole("button", { name: "Add skills or files" }).click();
+  const menu = page.getByRole("menu", { name: "Add" });
+  await menu.getByText("Run document probe").click();
+  await menu.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='queued']"),
+  ).toBeVisible();
+  await progress(page, sessionId, "failed");
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='failed']"),
+  ).toBeVisible();
+  await expect(menu.getByText(/refused the document/)).toBeVisible();
+
+  await menu.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(menu.locator("[data-skill-job]")).toHaveCount(2);
+  await progress(page, sessionId);
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='succeeded']"),
+  ).toBeVisible();
+});
+
+test("on a phone, a server without the skill action surface hides the section", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, `/workspace/no-skill-actions-phone-${Date.now()}`);
+  await page.getByRole("button", { name: "Add skills or files" }).click();
+  const menu = page.getByRole("menu", { name: "Add" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByText("Skill actions")).toHaveCount(0);
+  await expect(page.locator("[data-skill-actions]")).toHaveCount(0);
+});

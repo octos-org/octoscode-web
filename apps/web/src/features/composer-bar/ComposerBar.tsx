@@ -1,4 +1,9 @@
 import {
+  SkillActionsContent,
+  useSkillActionsState,
+  type SkillActionsStateProps,
+} from "./SkillActionsChip.tsx";
+import {
   useEffect,
   useId,
   useRef,
@@ -371,12 +376,37 @@ export function AttachChip({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/** The "+" menu's skill-actions section; hooks stay unconditional here. */
+function AddMenuSkillActions({
+  props,
+  listening,
+  headingId,
+}: {
+  props: SkillActionsStateProps;
+  listening: boolean;
+  headingId: string;
+}) {
+  const t = useUiText();
+  const state = useSkillActionsState({ ...props, listening });
+  // A server without the surface gets no section at all (T-0422).
+  if (!state.actionsAvailable) return null;
+  return (
+    <div role="group" aria-labelledby={headingId} className={styles.addSection}>
+      <p id={headingId} className={styles.addHeading}>
+        {t("Skill actions")}
+      </p>
+      <SkillActionsContent state={state} />
+    </div>
+  );
+}
+
 /**
  * Phones (美-9): Skills and Images fold into one "+" so the settings row fits
  * a line. One level deep: files first, then the skills list in place.
  */
 export function ComposerAddMenu({
   skills,
+  skillActions,
   onAttachFiles,
 }: {
   skills: {
@@ -384,12 +414,15 @@ export function ComposerAddMenu({
     onUse: (name: string) => void;
     onManage: () => void;
   } | null;
+  /** Phone entry to skill actions (T-0422): same content as the desktop chip. */
+  skillActions: SkillActionsStateProps | null;
   onAttachFiles: (() => void) | null;
 }) {
   const t = useUiText();
   const popover = usePopover();
   const menuId = useId();
   const skillsHeadingId = useId();
+  const actionsHeadingId = useId();
   const list = useSkillsList(popover.open && skills !== null, () =>
     skills ? skills.load() : Promise.resolve([]),
   );
@@ -467,6 +500,13 @@ export function ComposerAddMenu({
                 }}
               />
             </div>
+          ) : null}
+          {skillActions ? (
+            <AddMenuSkillActions
+              props={skillActions}
+              listening={popover.open}
+              headingId={actionsHeadingId}
+            />
           ) : null}
         </div>
       ) : null}
