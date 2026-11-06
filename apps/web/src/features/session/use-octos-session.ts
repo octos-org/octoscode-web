@@ -33,7 +33,10 @@ import type {
   SessionRecord,
 } from "./session-record-manager.ts";
 import { LazySessionRecordManager } from "./lazy-session-record-manager.ts";
-import { SessionPeerCoordinator } from "./session-peer-coordinator.ts";
+import {
+  SessionPeerCoordinator,
+  type PeerDirectoryEntry,
+} from "./session-peer-coordinator.ts";
 import {
   backgroundSessionState,
   type BackgroundSessionState,
@@ -252,6 +255,20 @@ export interface OctosSessionRuntime {
   peers: {
     manager: LazyPeerManager | null;
     roster: readonly PeerRosterEntry[];
+    /** Rows that make the viewed Session a read-only peer (roster + server directory). */
+    readonlyRows: readonly {
+      readonly identity: string;
+      readonly slug: string;
+    }[];
+    /** Server-attested native peer Sessions from `peer/gather`, by identity. */
+    directory: ReadonlyMap<string, PeerDirectoryEntry>;
+    /** The viewed Session is a peer whose master this page knows. */
+    hasMaster: boolean;
+    /**
+     * Report the Session ids the sidebar lists, so peers staged before a
+     * reload are recognized and put back under their master (T-0082).
+     */
+    noteSessions(sessionIds: Iterable<string>): void;
     returnToMaster(): Promise<WorkspaceOpenOutcome>;
     error: string | null;
     /**
@@ -2399,7 +2416,7 @@ export function useOctosSession(): OctosSessionRuntime {
     if (
       record &&
       peerReadonlySlug(
-        peerCoordinator.get(record)?.snapshot().peers ?? [],
+        peerCoordinator.readonlyRows(record),
         record.scope.sessionId,
       ) !== null
     ) {
@@ -2826,7 +2843,7 @@ export function useOctosSession(): OctosSessionRuntime {
     enqueuePrompt: (text: string, queueOnly = false) => {
       const readOnlyPeer = viewRecord
         ? peerReadonlySlug(
-            peerCoordinator.get(viewRecord)?.snapshot().peers ?? [],
+            peerCoordinator.readonlyRows(viewRecord),
             viewRecord.scope.sessionId,
           ) !== null
         : false;
@@ -3735,6 +3752,14 @@ export function useOctosSession(): OctosSessionRuntime {
     peers: {
       manager: viewRecord ? peerCoordinator.get(viewRecord) : null,
       roster: peerCoordinator.roster(),
+      readonlyRows: viewRecord ? peerCoordinator.readonlyRows(viewRecord) : [],
+      directory: peerCoordinator.directory(),
+      // Stable identity, so a host effect does not re-run on every render.
+      noteSessions: peerCoordinator.noteSessions,
+      hasMaster: Boolean(
+        viewRecord &&
+        (peerCoordinator.getMaster(viewRecord) ?? viewRecord) !== viewRecord,
+      ),
       returnToMaster: () => {
         const master = viewRecord
           ? peerCoordinator.getMaster(viewRecord)

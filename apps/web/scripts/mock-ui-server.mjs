@@ -5399,6 +5399,10 @@ sockets.on("connection", (socket, request) => {
           result_updated_unix: null,
           has_worktree: false,
           closed: peer.closed ?? false,
+          // The master Session that staged the peer, as Core records it in
+          // `peers/<slug>/originator`. T-0454 asks Core to send it here; the
+          // web restores a reloaded peer under its master from it (T-0082).
+          ...(peer.masterSessionId ? { originator: peer.masterSessionId } : {}),
         }));
       const release = () =>
         reply(socket, request.id, { profile_id: profileId, peers });

@@ -75,11 +75,23 @@ export interface PeerGatherEntry {
   closed: boolean;
   /** How the peer's latest finished turn ended, from the server's turn record. */
   last_outcome?: PeerTurnOutcomeRecord;
+  /** The server's view of the peer's lifetime right now; absent on older servers. */
+  execution?: PeerExecution;
+  /** The master Session that staged this peer (its `originator` record), when the server reports it. */
+  originator?: string;
+  /** The master Session of a supervised peer's trusted lifetime, when there is one. */
+  master_session_id?: string;
 }
+/** `execution` words a server reports for a peer row; newer words are dropped. */
+export type PeerExecution =
+  "queued" | "running" | "idle" | "failed" | "closed" | "unknown";
 /** Peer turns that are stopped before they end leave no record, so there is no "interrupted" here in practice. */
 export type PeerTurnOutcomeRecord =
   "completed" | "errored" | "interrupted" | "rate_limited";
-/** Gather is PROFILE-wide. Rows do not assert an originating session or workspace. */
+/**
+ * Gather is PROFILE-wide. Rows name no workspace; a row names its master Session
+ * only through `originator` or `master_session_id`, when the server sends one.
+ */
 export interface PeerGatherResult {
   profile_id: string;
   peers: PeerGatherEntry[];

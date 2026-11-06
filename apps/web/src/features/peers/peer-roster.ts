@@ -160,7 +160,8 @@ export interface PeerRosterEntry {
   readonly slug: string;
   readonly cwd: string;
   readonly briefPath: string;
-  readonly origin: "prepare" | "staged";
+  /** `restored`: rebuilt from `peer/gather` after a reload; never opened by this page. */
+  readonly origin: "prepare" | "staged" | "restored";
   readonly turnId: string;
   readonly status: "opening" | "started" | "failed" | "unknown" | "closed";
   /** Live-run axis (audit 0550 row 5); `status` remains the lifecycle axis. */
@@ -269,3 +270,26 @@ export const EMPTY_PEER_SNAPSHOT: PeerManagerSnapshot = Object.freeze({
   prepareRefusal: null,
   dispatchRefusalKind: null,
 });
+
+/**
+ * Whether a roster row counts as a RUNNING peer: still opening, or started and
+ * not yet finished. A peer whose turn ended stays `started` (its Session is
+ * still open) but its activity is `done`, and it is no longer running.
+ */
+export function isPeerRunning(entry: PeerRosterEntry): boolean {
+  return (
+    entry.status === "opening" ||
+    (entry.status === "started" && entry.activity !== "done")
+  );
+}
+
+/**
+ * The activity a peer row restored from `peer/gather` starts with: `live`
+ * while the server says its lifetime is queued or running, `done` once it has
+ * a result or a recorded outcome, otherwise `idle` (staged, nothing landed yet).
+ */
+export function restoredPeerActivity(row: PeerGatherEntry): PeerActivity {
+  if (row.execution === "running" || row.execution === "queued") return "live";
+  if (row.result !== null || row.last_outcome !== undefined) return "done";
+  return "idle";
+}

@@ -21,6 +21,7 @@ import {
 export * from "./peer-roster.ts";
 import {
   EMPTY_PEER_SNAPSHOT,
+  restoredPeerActivity,
   type PeerActivity,
   type PeerManagerSnapshot,
   type PeerOpenOutcome,
@@ -744,6 +745,59 @@ export class PeerManager {
     if (this.#peers.get(identity)?.status !== "closed") return;
     this.#peers.delete(identity);
     this.#publish();
+  }
+
+  /**
+   * T-0082 cold restore. A page reload empties the roster, but the server still
+   * has this master's peers. Insert a row for each gather row the server
+   * attaches to THIS master (its `originator`, or a supervised peer's
+   * `master_session_id`). A row already on the roster (staged since the
+   * reload) or closed by this page is left alone; nothing is opened and no
+   * frame is sent. A worktree peer is skipped: gather does not name its folder,
+   * so the row could not reopen the right Session. Returns the identities added.
+   */
+  restore(result: PeerGatherResult, cwd: string): readonly string[] {
+    this.syncAuthority();
+    const commands = this.#commands;
+    if (!commands || result.profile_id !== commands.scope.profileId) return [];
+    const added: string[] = [];
+    for (const row of result.peers) {
+      const master = row.originator ?? row.master_session_id;
+      if (master !== commands.scope.sessionId || row.has_worktree) continue;
+      const identity = peerIdentityForTopic(result.profile_id, row.topic);
+      if (this.#peers.has(identity) || this.#closed.has(identity)) continue;
+      const activity = restoredPeerActivity(row);
+      this.#peers.set(
+        identity,
+        Object.freeze({
+          rowKey: identity,
+          identity,
+          profileId: result.profile_id,
+          topic: row.topic,
+          slug: row.slug,
+          cwd,
+          briefPath: "",
+          origin: "restored",
+          turnId: "",
+          status: row.closed ? "closed" : "started",
+          activity,
+          openedAt: null,
+          finishedAt:
+            activity === "done" && row.result_updated_unix !== null
+              ? row.result_updated_unix * 1000
+              : null,
+          outputTokens: 0,
+          requestId: null,
+          requestKind: null,
+          operationId: null,
+          error: null,
+          canRetry: false,
+        }),
+      );
+      added.push(identity);
+    }
+    if (added.length) this.#publish();
+    return added;
   }
 
   /**

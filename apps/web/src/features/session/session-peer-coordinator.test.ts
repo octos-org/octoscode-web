@@ -13,7 +13,8 @@ import {
 import { createQueueBackedTurnController } from "../composer/use-turn-controller.ts";
 import { PromptTurnQueue } from "../composer/turn-queue.ts";
 import { foldNotification, type TimelineEntry } from "../timeline/model.ts";
-import type { PeerOpenRequest } from "../peers/peer-manager.ts";
+import { isPeerRunning, type PeerOpenRequest } from "../peers/peer-manager.ts";
+import { peerReadonlySlug } from "../composer/peer-readonly.ts";
 import { ExternalDriverRefusalError } from "@octos-org/octoscode-client/external-driver";
 import {
   SessionPeerCoordinator,
@@ -54,6 +55,8 @@ function deferred<T>() {
 class Client extends OctosUiClient {
   connected = true;
   starts: TurnStartParams[] = [];
+  /** Answers `peer/gather`; any other peer RPC is unexpected. */
+  gather: ((params: unknown) => unknown) | null = null;
   gate = deferred<unknown>();
   factory: ((commands: PeerCommands) => Promise<PeerCommands>) | null = null;
   constructor() {
@@ -70,7 +73,9 @@ class Client extends OctosUiClient {
   ) {
     const commands = createPeerCommands(
       {
-        request: async () => {
+        request: async (method, params) => {
+          if (method === PEER_METHODS.GATHER && this.gather)
+            return this.gather(params);
           throw new Error("Unexpected fixture RPC");
         },
       },
@@ -744,6 +749,113 @@ it("never prunes a live row and leaves a foreign record's roster alone", async (
   expect(h.manager.snapshot().peers).toHaveLength(1);
   // The other master owns no bound rows: fail-closed 0, never a throw.
   expect(h.coordinator.clearFinished(other)).toBe(0);
+});
+
+describe("cold restore after a page reload (T-0082)", () => {
+  const gatherRow = (slug: string, extra: { [key: string]: unknown } = {}) => ({
+    slug,
+    topic: `peer-${slug}`,
+    brief: "Reply OK",
+    brief_truncated: false,
+    result: null,
+    result_truncated: false,
+    result_updated_unix: null,
+    has_worktree: false,
+    closed: false,
+    ...extra,
+  });
+
+  it("asks the server about listed peer-shaped Sessions and puts each peer back where it belongs", async () => {
+    // F-15: after a reload a peer was only a row in `session/list`, so it fell
+    // into the ordinary list, editable, with no way back to its master.
+    const h = setup();
+    const asked: unknown[] = [];
+    h.client.gather = (params) => {
+      asked.push(params);
+      return {
+        profile_id: "dev",
+        peers: [
+          gatherRow("review", {
+            originator: "dev:local:tui",
+            result: "OK",
+            result_updated_unix: 1_700_000_000,
+          }),
+          gatherRow("orphan"),
+        ],
+      };
+    };
+    // A peer staged live on this page is already known and never asked about.
+    h.send(stage("dev:local:tui", "live"));
+    await until(() => expect(h.manager.snapshot().peers).toHaveLength(1));
+    expect(isPeerRunning(h.manager.snapshot().peers[0]!)).toBe(true);
+
+    h.coordinator.noteSessions([
+      "dev:local:tui",
+      "dev:local:tui#peer-live",
+      "dev:local:tui#peer-review",
+      "dev:local:tui#peer-orphan",
+      // An ordinary Session whose topic merely looks like a peer's.
+      "dev:local:tui#peer-notes",
+    ]);
+    await until(() => expect(h.manager.snapshot().peers).toHaveLength(2));
+    expect(asked).toEqual([
+      {
+        session_id: "dev:local:tui",
+        profile_id: "dev",
+        slugs: ["review", "orphan", "notes"],
+      },
+    ]);
+
+    // The peer whose originator is this master is back on its roster, done,
+    // and no longer counted as running.
+    const restored = h.manager
+      .snapshot()
+      .peers.find((peer) => peer.slug === "review")!;
+    expect(restored).toMatchObject({
+      identity: "dev:local:tui#peer-review",
+      origin: "restored",
+      status: "started",
+      activity: "done",
+      cwd: "/repo",
+      finishedAt: 1_700_000_000_000,
+    });
+    expect(isPeerRunning(restored)).toBe(false);
+    expect(h.requests).toHaveLength(1);
+    const peer = record(h.client, "dev:local:tui#peer-review", h.emit);
+    expect(h.coordinator.getMaster(peer)).toBe(h.master);
+    expect(
+      peerReadonlySlug(h.coordinator.readonlyRows(peer), peer.scope.sessionId),
+    ).toBe("review");
+
+    // A peer the server names no master for stays read-only, with no master.
+    const orphan = record(h.client, "dev:local:tui#peer-orphan", h.emit);
+    expect(h.coordinator.getMaster(orphan)).toBeNull();
+    expect(
+      peerReadonlySlug(
+        h.coordinator.readonlyRows(orphan),
+        orphan.scope.sessionId,
+      ),
+    ).toBe("orphan");
+    expect(h.coordinator.directory().get(orphan.scope.sessionId)?.name).toBe(
+      "orphan",
+    );
+
+    // A Session the server does not list as a peer stays an ordinary one.
+    const notes = record(h.client, "dev:local:tui#peer-notes", h.emit);
+    expect(
+      peerReadonlySlug(
+        h.coordinator.readonlyRows(notes),
+        notes.scope.sessionId,
+      ),
+    ).toBeNull();
+
+    // Listing them again asks nothing more.
+    h.coordinator.noteSessions([
+      "dev:local:tui#peer-review",
+      "dev:local:tui#peer-notes",
+    ]);
+    expect(asked).toHaveLength(1);
+  });
 });
 
 describe("peer dispatch adoption (build 1230)", () => {
