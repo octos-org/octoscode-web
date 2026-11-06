@@ -706,9 +706,12 @@ function DefaultEntry({
         {entry.kind !== "assistant" ? (
           <div className="entry-heading">
             {/* System rows are the client's own notices; translate them.
-                t() returns anything it does not know unchanged. */}
+                t() returns anything it does not know unchanged. A durable
+                message's own role is server data and stays verbatim. */}
             <strong>
-              {entry.kind === "system" ? t(entry.title) : entry.title}
+              {entry.kind === "system" && !entry.serverTitle
+                ? t(entry.title)
+                : entry.title}
             </strong>
             {entry.status === "running" ? (
               <span className="running-label">{t("running")}</span>
