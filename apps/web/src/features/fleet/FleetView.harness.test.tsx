@@ -292,7 +292,7 @@ describe("§4.3 Start — the ONLY implicit acquisition (Round 4 J2)", () => {
     expect(calls[1]!.operationId).not.toBe(calls[0]!.operationId);
   });
 
-  it("a refused Start keeps the draft beside its bounded label; an uncertain one retries with the SAME id", () => {
+  it("a refused Start keeps the draft beside its bounded label and starts again as a NEW request; an uncertain one retries with the SAME id", () => {
     const refusedCalls: StartSubmit[] = [];
     const refused = mount({ onStart: (submit) => refusedCalls.push(submit) });
     change(one(refused.render(), "data-fleet-field", "model"), "glm-5.3");
@@ -302,7 +302,7 @@ describe("§4.3 Start — the ONLY implicit acquisition (Round 4 J2)", () => {
     );
     press(one(refused.render(), "data-fleet-action", "start"));
     expect(refusedCalls).toHaveLength(1);
-    const html = refused.render({
+    const refusal = {
       startState: {
         kind: "failed",
         laneKey: "",
@@ -310,7 +310,8 @@ describe("§4.3 Start — the ONLY implicit acquisition (Round 4 J2)", () => {
         operationId: "",
         refusalKind: "driver_model_unavailable",
       },
-    });
+    };
+    const html = refused.render(refusal);
     const label = one(html, "data-fleet-start-failed", "true");
     // §6: the BOUNDED recovery label, never the typed kind token; the kind
     // stays available as a diagnostic data hook.
@@ -322,6 +323,26 @@ describe("§4.3 Start — the ONLY implicit acquisition (Round 4 J2)", () => {
     expect(one(html, "data-fleet-field", "brief").props!.value).toBe(
       "Review the diff",
     );
+
+    // T-0459: the refusal started nothing, so Start is open again and mints a
+    // NEW request — a fresh id, never a replay of the refused one.
+    const again = one(html, "data-fleet-action", "start");
+    expect(isDisabled(again)).toBe(false);
+    press(again);
+    expect(refusedCalls).toHaveLength(2);
+    expect(refusedCalls[1]!.operationId).not.toBe(refusedCalls[0]!.operationId);
+    // The sink still reports the OLD refusal until the new request is under
+    // way; meanwhile the form reads as this request's "Starting…".
+    const superseded = refused.render(refusal);
+    expect(textOf(one(superseded, "data-fleet-action", "start")).join("")).toBe(
+      "Starting…",
+    );
+    expect(collect(superseded, "data-fleet-start-failed")).toHaveLength(0);
+    // Once the sink moves on, a refusal of the NEW request shows again.
+    refused.render();
+    expect(
+      collect(refused.render(refusal), "data-fleet-start-failed"),
+    ).toHaveLength(1);
 
     // No ack within 15 s: Retry resends the SAME operation id (the server
     // replays the duplicate or reports the conflict); Dismiss sends nothing.
