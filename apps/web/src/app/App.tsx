@@ -156,13 +156,18 @@ import {
   browserStorage,
   forgetKnownSession,
   loadComposerDrafts,
+  loadTemplateLaunch,
+  saveTemplateLaunch,
   loadKnownSessions,
   rememberKnownSession,
   rememberDraftPrincipal,
   saveComposerDrafts,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
-import { freshWebSessionId } from "../features/session/session-identity.ts";
+import {
+  bindWebSessionIdToProfile,
+  freshWebSessionId,
+} from "../features/session/session-identity.ts";
 import type { KnownSessionRef } from "../features/session/known-session-registry.ts";
 import type { ProductSidebarOrderMode } from "../features/shell/ProductSidebar.tsx";
 import { modelOptionId } from "../features/shell/model-projection.ts";
@@ -868,6 +873,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // T-0361: at most one phone-initiated session create in flight; a second
   // tap while the open is pending must not mint a parallel empty session.
   const [remoteCreating, setRemoteCreating] = useState<string | null>(null);
+  const [remoteTemplateDraft, setRemoteTemplateDraft] = useState(() =>
+    loadTemplateLaunch(browserStorage("sessionStorage"), connection),
+  );
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [remoteRefresh, setRemoteRefresh] = useState(0);
   const [remoteNow, setRemoteNow] = useState(() => Date.now());
@@ -887,6 +895,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       pendingDraftEditsRef.current.clear();
       setRecentWorkspaces([]);
       setKnownSessions([]);
+      setRemoteTemplateDraft(null);
+      setTemplateNotice(null);
       sessionDrafts.clear();
       setDraftRetained(true);
       setDraftSaved(true);
@@ -2815,7 +2825,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // and sends it. Chosen before any Session is open, it waits and fills the
   // next opened Session, unless that Session already has text or history.
   const [templateNotice, setTemplateNotice] = useState<
-    | { kind: "pending"; templateId: string }
+    | { kind: "pending"; templateId: string; launchId?: string }
     | {
         kind: "applied";
         templateId: string;
@@ -2825,6 +2835,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       }
     | null
   >(() => {
+    const saved = loadTemplateLaunch(
+      browserStorage("sessionStorage"),
+      connection,
+    );
+    if (saved && findTaskTemplate(saved.templateId))
+      return {
+        kind: "pending",
+        templateId: saved.templateId,
+        launchId: saved.sessionId,
+      };
     const id = new URL(window.location.href).searchParams.get("template");
     return id && findTaskTemplate(id)
       ? { kind: "pending", templateId: id }
@@ -2833,7 +2853,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   useEffect(() => {
     // Only the public catalog selection survives a pre-session reload.
     const url = new URL(window.location.href);
-    if (templateNotice?.kind === "pending") {
+    if (templateNotice?.kind === "pending" && !templateNotice.launchId) {
       url.searchParams.set("template", templateNotice.templateId);
     } else {
       url.searchParams.delete("template");
@@ -3078,6 +3098,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       !activeSessionKey
     )
       return;
+    if (templateNotice.launchId) {
+      if (
+        session.opened.session_id !==
+        bindWebSessionIdToProfile(
+          templateNotice.launchId,
+          session.opened.active_profile_id ?? "",
+        )
+      )
+        return;
+      if (
+        !saveTemplateLaunch(browserStorage("sessionStorage"), connection, null)
+      )
+        setCommandError(
+          t(
+            "Could not save the template launch. Check this tab's storage and retry.",
+          ),
+        );
+      setRemoteTemplateDraft(null);
+    }
     const template = findTaskTemplate(templateNotice.templateId);
     if (!template || draftRef.current || conversation.timeline.length > 0) {
       setTemplateNotice(null);
@@ -3414,6 +3453,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   } | null>(null);
   const createSessionInWorkspace = async (
     workspacePath: string,
+    template?: TaskTemplate,
   ): Promise<WorkspaceOpenOutcome | null> => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
@@ -3425,18 +3465,71 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const path = workspacePath.trim();
     let attempt = sessionCreationRef.current;
     if (attempt?.connection !== connectionIdentity || attempt.path !== path) {
+      const saved = loadTemplateLaunch(
+        browserStorage("sessionStorage"),
+        connection,
+      );
       attempt = {
         connection: connectionIdentity,
         path,
-        id: freshWebSessionId(),
+        id:
+          saved?.workspacePath === path ? saved.sessionId : freshWebSessionId(),
         pending: false,
       };
       sessionCreationRef.current = attempt;
     }
     attempt.pending = true;
     try {
+      if (template) {
+        const launch = {
+          sessionId: attempt.id,
+          workspacePath: path,
+          templateId: template.id,
+        };
+        if (
+          !saveTemplateLaunch(
+            browserStorage("sessionStorage"),
+            connection,
+            launch,
+          )
+        ) {
+          setRemoteError(
+            t(
+              "Could not save the template launch. Check this tab's storage and retry.",
+            ),
+          );
+          return null;
+        }
+        setRemoteTemplateDraft(launch);
+      } else if (
+        loadTemplateLaunch(browserStorage("sessionStorage"), connection)
+          ?.sessionId === attempt.id
+      ) {
+        if (
+          !saveTemplateLaunch(
+            browserStorage("sessionStorage"),
+            connection,
+            null,
+          )
+        ) {
+          setRemoteError(
+            t(
+              "Could not save the template launch. Check this tab's storage and retry.",
+            ),
+          );
+          return null;
+        }
+        setRemoteTemplateDraft(null);
+        setTemplateNotice(null);
+      }
       const outcome = await openSessionWithDefaults(attempt.id, path);
       if (outcome !== "opened" && outcome !== "awaiting_choice") return outcome;
+      if (template)
+        setTemplateNotice({
+          kind: "pending",
+          templateId: template.id,
+          launchId: attempt.id,
+        });
       sessionCreationRef.current = null;
       if (outcome === "opened" && compact) setSidebarCollapsed(true);
       setWorkspacePicker((current) => ({ ...current, open: false }));
@@ -3450,14 +3543,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // T-0361: a phone starts a fresh session inside a folder it already
   // watches. One create at a time, and a refused open says so instead of
   // pretending a session exists.
-  const newRemoteSession = async (workspacePath: string) => {
-    if (remoteCreating) return;
+  const newRemoteSession = async (
+    workspacePath: string,
+    template?: TaskTemplate,
+  ) => {
+    if (remoteCreating || sessionCreationRef.current?.pending) return;
     setRemoteError(null);
     setRemoteCreating(workspacePath);
     try {
-      const outcome = await createSessionInWorkspace(workspacePath);
+      const outcome = await createSessionInWorkspace(workspacePath, template);
       if (outcome !== "opened" && outcome !== "awaiting_choice") {
-        setRemoteError(t("Could not create the session. Try again."));
+        setRemoteError(
+          (current) => current ?? t("Could not create the session. Try again."),
+        );
       }
     } finally {
       setRemoteCreating(null);
@@ -5571,7 +5669,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   createKey={remoteCreating}
                   now={remoteNow}
                   onOpen={(row) => void openRemoteRow(row)}
-                  onNewSession={(path) => void newRemoteSession(path)}
+                  language={preferences.language}
+                  templateDraft={remoteTemplateDraft}
+                  onNewSession={(path, template) =>
+                    void newRemoteSession(path, template)
+                  }
                   onAddFolder={(path) =>
                     setRemoteFolders(
                       rememberRemoteFolder(

@@ -654,3 +654,7 @@
     line-clamp: 2;
   }
 }
+
+.home[data-variant="workspace"] {
+  padding-top: var(--dsw-space-3);
+}

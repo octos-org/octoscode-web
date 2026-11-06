@@ -1064,3 +1064,173 @@ test("a peer's sandbox escalation can only be denied from the phone", async ({
     decision: "deny",
   });
 });
+
+test("a phone template retries the same launch after failure and reload without sending a draft", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/phone-template-retry";
+  await scoped(request, folder);
+  const page = await phone(browser);
+  const opens: string[] = [];
+  const turns: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method === "session/open") opens.push(frame.params.session_id);
+      if (frame.method === "turn/start") turns.push(frame.params.turn_id);
+    }),
+  );
+  await connectPhone(page);
+  await watch(page, folder);
+  await page
+    .getByRole("button", { name: "在 phone-template-retry 中从模板新建" })
+    .tap();
+  const picker = page.getByRole("region", { name: "选择新会话模板" });
+  await expect(picker).toBeVisible();
+  expect(opens).toHaveLength(0);
+  await request.post(`${ORIGIN}/__test__/session-open/reject-next`);
+  await picker
+    .getByRole("button", { name: "做同款：写周报" })
+    .evaluate((node: HTMLButtonElement) => {
+      node.click();
+      node.click();
+    });
+  await expect(page.getByText("新建会话失败，请重试。")).toBeVisible();
+  expect(opens).toHaveLength(1);
+  expect(turns).toHaveLength(0);
+  await expect(page.getByText("这些文件夹里还没有会话。")).toBeVisible();
+  await page.reload();
+  await expect(picker).toBeVisible();
+  expect(opens).toHaveLength(1);
+  await request.post(`${ORIGIN}/__test__/session-open/reset`);
+  await picker
+    .getByRole("button", { name: "做同款：写周报" })
+    .evaluate((node: HTMLButtonElement) => {
+      node.click();
+      node.click();
+    });
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toHaveValue(/本周周报/);
+  expect(new Set(opens).size).toBe(1);
+  expect(turns).toHaveLength(0);
+  const prompt =
+    "T0421 weekly: completed three deliveries; review feedback next week.";
+  await composer.fill(prompt);
+  await page.reload();
+  await section(page, /^最近/).getByRole("button").first().tap();
+  await expect(composer).toHaveValue(prompt);
+  await request.post(`${ORIGIN}/__test__/turn-start/hold-next`);
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await request.get(`${ORIGIN}/__test__/turn-start/state`)
+          ).json()
+        ).held?.turn_id,
+    )
+    .toBeTruthy();
+  await request.post(`${ORIGIN}/__test__/turn-start/reject`);
+  await expect(page.getByText("本轮未被接受")).toBeVisible();
+  await expect(composer).toHaveValue(prompt);
+  await page
+    .getByRole("button", { name: "发送提示" })
+    .evaluate((node: HTMLButtonElement) => {
+      node.click();
+      node.click();
+    });
+  await expect(page.getByText("本轮完成").first()).toBeVisible();
+  expect(turns).toHaveLength(2); // One rejected attempt, one accepted turn.
+  await page.reload();
+  const recent = section(page, /^最近/).getByRole("button");
+  await expect(recent).toHaveCount(1);
+  await recent.first().tap();
+  await expect(page.locator(".entry-user")).toHaveCount(1);
+  expect(new Set(opens).size).toBe(1);
+  expect(turns).toHaveLength(2);
+});
+
+test("a phone code template targets its new session and leaves the previous draft untouched", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/phone-code-template";
+  await scoped(request, folder);
+  const page = await phone(browser);
+  await connectPhone(page);
+  await watch(page, folder);
+  await page
+    .getByRole("button", { name: "在 phone-code-template 中新建会话" })
+    .tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await composer.fill("Keep the previous session draft");
+  await page.getByRole("button", { name: "返回手机遥控" }).tap();
+  const starts: string[] = [];
+  const updates: unknown[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.method === "turn/start") starts.push(frame.params.turn_id);
+      if (frame.method === "permission/profile/set")
+        updates.push(frame.params.update);
+    }),
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "在 phone-code-template 中从模板新建" })
+    .tap();
+  await page
+    .getByRole("region", { name: "选择新会话模板" })
+    .getByRole("button", { name: "做同款：修一个 bug" })
+    .tap();
+  await expect(composer).toHaveValue(/^帮我修一个 bug/);
+  expect(starts).toHaveLength(0);
+  await composer.fill(
+    "Fix calc.ts division by zero without changing other files.",
+  );
+  await page
+    .getByRole("button", { name: "发送提示" })
+    .evaluate((node: HTMLButtonElement) => {
+      node.click();
+      node.click();
+    });
+  await expect(page.getByText("本轮完成").first()).toBeVisible();
+  expect(starts).toHaveLength(1);
+  expect(updates).toEqual([]);
+  await page.getByRole("button", { name: "返回手机遥控" }).tap();
+  const recent = section(page, /^最近/).getByRole("button");
+  await expect(recent).toHaveCount(2);
+  await recent.last().tap();
+  await expect(composer).toHaveValue("Keep the previous session draft");
+});
+
+test("choosing a blank phone session after a refused template does not restore that template on reload", async ({
+  browser,
+  request,
+}) => {
+  const folder = "/workspace/phone-template-to-blank";
+  await scoped(request, folder);
+  const page = await phone(browser);
+  await connectPhone(page);
+  await watch(page, folder);
+  await page
+    .getByRole("button", { name: "在 phone-template-to-blank 中从模板新建" })
+    .tap();
+  await request.post(`${ORIGIN}/__test__/session-open/reject-next`);
+  await page
+    .getByRole("region", { name: "选择新会话模板" })
+    .getByRole("button", { name: "做同款：写周报" })
+    .tap();
+  await expect(page.getByText("新建会话失败，请重试。")).toBeVisible();
+  await request.post(`${ORIGIN}/__test__/session-open/reset`);
+  await page
+    .getByRole("button", { name: "在 phone-template-to-blank 中新建会话" })
+    .tap();
+  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(composer).toHaveValue("");
+  await page.reload();
+  await section(page, /^最近/).getByRole("button").first().tap();
+  await expect(composer).toHaveValue("");
+});

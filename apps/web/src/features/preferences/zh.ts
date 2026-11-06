@@ -411,6 +411,12 @@ const catalog: Readonly<Record<string, string>> = {
   "New monitor name": "新监视器名称",
   "New monitor probe command": "新监视器探测命令",
   "New session": "新会话",
+  "New from template in {name}": "在 {name} 中从模板新建",
+  "From template": "从模板新建",
+  "Choose a new session template": "选择新会话模板",
+  "Close templates": "收起模板",
+  "Could not save the template launch. Check this tab's storage and retry.":
+    "无法保存模板草稿，请检查此标签页的存储后重试。",
   "New session in {value0}": "在 {value0} 中新建会话",
   "Next run": "下次运行",
   No: "否",

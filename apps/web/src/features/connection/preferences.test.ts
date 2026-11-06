@@ -9,6 +9,8 @@ import {
   loadAutoConnect,
   loadConnectionPreferences,
   loadComposerDrafts,
+  loadTemplateLaunch,
+  saveTemplateLaunch,
   loadDraftPrincipal,
   loadKnownSessions,
   rememberKnownSession,
@@ -179,6 +181,60 @@ describe("connection preferences", () => {
     ).toEqual([]);
     clearConnectionPreferences(durable, tab);
     expect(loadComposerDrafts(tab, identity)).toEqual([]);
+  });
+
+  it("keeps template retry identity only in the matching tab and clears it on credential change or Forget", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    const identity = { ...defaults, token: "first-secret" };
+    const launch = {
+      sessionId: "web-retry",
+      workspacePath: "/chosen",
+      templateId: "weekly-report",
+    };
+    saveConnectionPreferences(identity, durable, tab);
+    expect(saveTemplateLaunch(tab, identity, launch)).toBe(true);
+    saveConnectionPreferences({ ...identity, cwd: "/chosen" }, durable, tab);
+    expect(loadTemplateLaunch(tab, identity)).toEqual(launch);
+    expect([...durable.values.values()].join("")).not.toContain("web-retry");
+    expect(loadTemplateLaunch(tab, { ...identity, token: "other" })).toBeNull();
+    expect(
+      loadTemplateLaunch(tab, {
+        ...identity,
+        endpoint: "https://other.example",
+      }),
+    ).toBeNull();
+    expect(
+      saveTemplateLaunch(tab, { ...identity, token: "other" }, launch),
+    ).toBe(false);
+    saveConnectionPreferences({ ...identity, token: "other" }, durable, tab);
+    expect(loadTemplateLaunch(tab, { ...identity, token: "other" })).toBeNull();
+    expect(
+      saveTemplateLaunch(tab, { ...identity, token: "other" }, launch),
+    ).toBe(true);
+    clearConnectionPreferences(durable, tab);
+    expect(loadTemplateLaunch(tab, { ...identity, token: "other" })).toBeNull();
+  });
+
+  it("reports an unwritten template retry identity instead of claiming refresh recovery", () => {
+    const durable = new MemoryStorage();
+    const tab = new MemoryStorage();
+    saveConnectionPreferences(defaults, durable, tab);
+    const blocked = {
+      getItem: (key: string) => tab.getItem(key),
+      setItem: () => {
+        throw Error("quota");
+      },
+      removeItem: () => {},
+    };
+    expect(
+      saveTemplateLaunch(blocked, defaults, {
+        sessionId: "web-retry",
+        workspacePath: "/chosen",
+        templateId: "weekly-report",
+      }),
+    ).toBe(false);
+    expect(loadTemplateLaunch(tab, defaults)).toBeNull();
   });
 
   it("reports failed draft writes and leaves oversized input untruncated", () => {
