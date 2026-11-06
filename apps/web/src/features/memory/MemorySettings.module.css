@@ -279,3 +279,12 @@
   border: 0;
   background: transparent;
 }
+
+.importOutcome {
+  display: grid;
+  gap: 4px;
+}
+
+.importOutcome > .meta {
+  margin: 0;
+}

@@ -56,6 +56,8 @@ export interface MemoryRecord {
   lastVisit?: string | undefined;
   promoted?: boolean | undefined;
   updatedAt?: string | undefined;
+  /** The content fingerprint the record was last written with, if any. */
+  fingerprint?: string | undefined;
 }
 export interface MemoryLoadResult {
   record: MemoryRecord;
@@ -213,6 +215,7 @@ function parseMemoryRecord(value: unknown): MemoryRecord | null {
     lastVisit: text(value.last_visit) ? value.last_visit : undefined,
     promoted: typeof value.promoted === "boolean" ? value.promoted : undefined,
     updatedAt: text(value.updated_at) ? value.updated_at : undefined,
+    fingerprint: nonEmpty(value.fingerprint) ? value.fingerprint : undefined,
   };
 }
 

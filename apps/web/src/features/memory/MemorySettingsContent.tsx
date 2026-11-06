@@ -31,9 +31,20 @@ import {
 import {
   fingerprinted,
   importBatches,
+  ingestFailure,
+  readBack,
+  readBackVerdict,
   type ImportRecord,
 } from "./memory-import.ts";
 import { MemoryImport, type ImportOutcome } from "./MemoryImport.tsx";
+import {
+  dropImportRun,
+  importRun,
+  publishImportRun,
+  startImportRun,
+  useImportRun,
+  type ImportRun,
+} from "./import-runs.ts";
 
 /** How many results a search asks for; a full page may not be all of them. */
 const SEARCH_LIMIT = 20;
@@ -151,6 +162,7 @@ export function MemorySettingsContent({
       );
       const result = await commands.search(query.trim(), SEARCH_LIMIT);
       setHits(result);
+      setHitsBeforeImport(false);
       setSearchedFor(query.trim());
       setRecord(null);
       setEntity(null);
@@ -324,51 +336,191 @@ export function MemorySettingsContent({
     [entity, record, sessionProfileId],
   );
 
-  /** Each batch in order; a failure stops the rest and is reported as such. */
-  const importRecords = async (
-    records: ImportRecord[],
-  ): Promise<ImportOutcome | null> => {
-    if (busy || inflight.current) return null;
+  // One import run per memory scope: its batches keep the fingerprints they
+  // were first sent with, so a retry sends exactly the same records. It
+  // lives outside this component (import-runs.ts), so a reconnect that
+  // remounts the page keeps it, and another Session's page never shows it.
+  const scopeKey = `${sessionProfileId}\u0000${memorySessionId ?? ""}`;
+  const live = useRef({ client, capabilities, scopeKey, searchedFor, record });
+  live.current = { client, capabilities, scopeKey, searchedFor, record };
+  const lastImport = useImportRun(scopeKey);
+  const [hitsBeforeImport, setHitsBeforeImport] = useState(false);
+
+  const liveCommands = () =>
+    live.current.client.memoryCommands(
+      live.current.capabilities,
+      memorySessionId,
+    );
+
+  /** Reads the stopped batch back once and settles what can be settled. */
+  const settleUncertain = async (run: ImportRun) => {
+    const stop = run.outcome.stop;
+    if (!stop || stop.kind !== "uncertain") return;
+    if (!canLoad) {
+      stop.readBack = "unavailable";
+      stop.verdict = "unknown";
+      return;
+    }
+    const batch = run.batches[stop.batch - 1]!;
+    let found;
+    try {
+      const commands = await liveCommands();
+      found = await readBack(batch, (id) => commands.load(id));
+    } catch {
+      found = { asSent: 0, missing: 0, different: 0, unreadable: batch.length };
+    }
+    stop.readBack = found;
+    stop.verdict = readBackVerdict(found, batch.length);
+    if (stop.verdict === "written") {
+      run.outcome.confirmed += batch.length;
+      if (stop.batch === run.batches.length) delete run.outcome.stop;
+    }
+  };
+
+  /** Sends batches in order from `from`; a failure stops the rest. */
+  const sendFrom = async (run: ImportRun, from: number) => {
+    delete run.outcome.stop;
+    let commands;
+    try {
+      commands = await liveCommands();
+    } catch (reason) {
+      // Nothing was sent: the memory commands never became available.
+      run.outcome.stop = {
+        batch: from + 1,
+        size: run.batches[from]!.length,
+        kind: "unsent",
+        reason: errorMessage(reason),
+      };
+      return;
+    }
+    for (let index = from; index < run.batches.length; index += 1) {
+      const batch = run.batches[index]!;
+      try {
+        const result = await commands.ingest(
+          batch.map((entry) => ({ ...entry })),
+        );
+        run.outcome.sent += batch.length;
+        run.outcome.inserted += result.inserted;
+        run.outcome.updated += result.updated;
+        run.outcome.unchanged += result.unchanged;
+      } catch (reason) {
+        run.outcome.stop = {
+          batch: index + 1,
+          size: batch.length,
+          kind: ingestFailure(reason),
+          reason: errorMessage(reason),
+        };
+        await settleUncertain(run);
+        return;
+      }
+      publishImportRun(run);
+    }
+  };
+
+  /** The search on screen and the open record, read again after writing. */
+  const refreshAfterImport = async (run: ImportRun) => {
+    const query = live.current.searchedFor;
+    const open = live.current.record;
+    const imported = new Set(run.batches.flat().map((entry) => entry.id));
+    const current = () => live.current.scopeKey === run.scope;
+    try {
+      const commands = await liveCommands();
+      if (query !== null && canSearch) {
+        const result = await commands.search(query, SEARCH_LIMIT);
+        if (current() && live.current.searchedFor === query) {
+          setHits(result);
+          setHitsBeforeImport(false);
+        }
+      }
+      if (open && imported.has(open.record.id) && canLoad) {
+        const reloaded = await commands.load(open.record.id);
+        if (current() && live.current.record?.record.id === open.record.id)
+          setRecord(reloaded);
+      }
+    } catch {
+      if (current() && query !== null) setHitsBeforeImport(true);
+    }
+  };
+
+  /** One import step at a time, taken before any await. */
+  const lockImport = () => {
+    if (busy || inflight.current || importRun(scopeKey)?.pending) return false;
     inflight.current = true;
     setBusyAction("import");
     setError(null);
     setNotice(null);
+    return true;
+  };
+  const unlockImport = () => {
+    inflight.current = false;
+    setBusyAction(null);
+  };
+
+  const importStep = async (
+    run: ImportRun,
+    step: (run: ImportRun) => Promise<void>,
+  ) => {
+    run.pending = true;
+    publishImportRun(run);
+    try {
+      await step(run);
+      run.pending = false;
+      publishImportRun(run);
+      await refreshAfterImport(run);
+    } finally {
+      run.pending = false;
+      publishImportRun(run);
+      unlockImport();
+    }
+  };
+
+  const importRecords = async (
+    name: string,
+    records: ImportRecord[],
+  ): Promise<boolean> => {
+    if (!lockImport()) return false;
     const outcome: ImportOutcome = {
       total: records.length,
       sent: 0,
       inserted: 0,
       updated: 0,
       unchanged: 0,
+      confirmed: 0,
     };
+    let batches: ImportRecord[][];
     try {
-      const batches = importBatches(await fingerprinted(records));
-      const commands = await client.memoryCommands(
-        capabilities,
-        memorySessionId,
-      );
-      for (const [index, batch] of batches.entries()) {
-        try {
-          const result = await commands.ingest(
-            batch.map((record) => ({ ...record })),
-          );
-          outcome.sent += batch.length;
-          outcome.inserted += result.inserted;
-          outcome.updated += result.updated;
-          outcome.unchanged += result.unchanged;
-        } catch (reason) {
-          outcome.failedBatch = index + 1;
-          outcome.reason = errorMessage(reason);
-          break;
-        }
-      }
-    } catch (reason) {
-      outcome.failedBatch = 1;
-      outcome.reason = errorMessage(reason);
-    } finally {
-      inflight.current = false;
-      setBusyAction(null);
+      batches = importBatches(await fingerprinted(records));
+    } catch {
+      // As on an origin without Web Crypto: sent without fingerprints, so
+      // the server reports repeats as updates.
+      batches = importBatches(records.map((entry) => ({ ...entry })));
     }
-    return outcome;
+    const run: ImportRun = {
+      scope: scopeKey,
+      name,
+      batches,
+      outcome,
+      pending: false,
+    };
+    startImportRun(run);
+    await importStep(run, (current) => sendFrom(current, 0));
+    return true;
+  };
+
+  /** By hand only: nothing is ever sent again on its own. */
+  const resumeImport = () => {
+    const run = importRun(scopeKey);
+    const stop = run?.outcome.stop;
+    if (!run || !stop || stop.kind === "refused" || !run.batches.length) return;
+    if (!lockImport()) return;
+    const next = stop.verdict === "written" ? stop.batch : stop.batch - 1;
+    void importStep(run, (current) => sendFrom(current, next));
+  };
+
+  const readImportBack = () => {
+    const run = importRun(scopeKey);
+    if (run?.outcome.stop?.kind !== "uncertain" || !lockImport()) return;
+    void importStep(run, settleUncertain);
   };
   const knownIds = useMemo(
     () =>
@@ -557,6 +709,13 @@ export function MemorySettingsContent({
                   {t("Results for “{query}”", { query: searchedFor ?? "" })}
                 </p>
               ) : null}
+              {hits !== null && hitsBeforeImport ? (
+                <p className={styles.meta}>
+                  {t(
+                    "These results are from before the import; the search couldn't be read again. Search again to update them.",
+                  )}
+                </p>
+              ) : null}
               {hits?.length === 0 ? <p>{t("No matching memories.")}</p> : null}
               {searchExport ? (
                 <MemoryExportActions
@@ -662,12 +821,17 @@ export function MemorySettingsContent({
             </section>
           ) : null}
           <MemoryImport
+            key={scopeKey}
             canIngest={canIngest}
-            busy={busy}
-            importing={busyAction === "import"}
+            busy={busy || Boolean(lastImport?.pending)}
+            importing={busyAction === "import" || Boolean(lastImport?.pending)}
             profileId={sessionProfileId}
             knownIds={knownIds}
+            lastImport={lastImport}
             onImport={importRecords}
+            onClear={() => dropImportRun(scopeKey)}
+            onResume={resumeImport}
+            onReadBack={readImportBack}
           />
         </div>
         <aside className={styles.detail} aria-label={t("Memory detail")}>

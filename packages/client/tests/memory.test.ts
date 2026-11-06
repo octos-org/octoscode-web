@@ -139,6 +139,7 @@ describe("memory record bookkeeping", () => {
           last_visit: "2026-11-05T20:10:00Z",
           promoted: false,
           updated_at: "2026-11-05T20:00:01Z",
+          fingerprint: "sha256:abc",
         },
         page_truncated: false,
       },
@@ -148,17 +149,19 @@ describe("memory record bookkeeping", () => {
       lastVisit: "2026-11-05T20:10:00Z",
       promoted: false,
       updatedAt: "2026-11-05T20:00:01Z",
+      fingerprint: "sha256:abc",
     });
     expect(loaded?.record).not.toHaveProperty("schemaVersion");
     const odd = parseMemoryLoad(
       {
-        record: { ...record, promoted: "yes", updated_at: 5 },
+        record: { ...record, promoted: "yes", updated_at: 5, fingerprint: "" },
         page_truncated: false,
       },
       record.id,
     );
     expect(odd?.record.promoted).toBeUndefined();
     expect(odd?.record.updatedAt).toBeUndefined();
+    expect(odd?.record.fingerprint).toBeUndefined();
   });
 });
 

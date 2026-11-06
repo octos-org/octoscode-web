@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MemoryRecord } from "@octos-org/octoscode-client/memory";
+import { OctosUiProtocolError } from "@octos-org/octoscode-client/protocol";
 import { createUiText } from "../preferences/ui-text.tsx";
 import zh from "../preferences/zh.ts";
 import { memoryExportJson, memoryExportMarkdown } from "./memory-export.ts";
@@ -10,7 +11,12 @@ import {
   fingerprinted,
   importBatches,
   importFileProblem,
+  ingestFailure,
   parseMemoryImport,
+  readBack,
+  readBackVerdict,
+  storedAsSent,
+  type ImportRecord,
 } from "./memory-import.ts";
 
 const at = new Date("2026-11-05T21:00:00.000Z");
@@ -270,5 +276,116 @@ describe("fingerprints", () => {
     expect(b!.fingerprint).toBe(a!.fingerprint);
     expect(c!.fingerprint).not.toBe(a!.fingerprint);
     expect(a).toMatchObject(base);
+  });
+});
+
+describe("a batch that fails", () => {
+  it.each([
+    [-32602, "refused"],
+    [-32600, "refused"],
+    [-32601, "refused"],
+    [-32700, "refused"],
+    [-32004, "refused"],
+    [-32120, "refused"],
+    [-32140, "refused"],
+    // Core's index persists after the commit, so an internal error can
+    // follow a write.
+    [-32603, "uncertain"],
+    [-32000, "uncertain"],
+  ] as const)("server code %i is %s", (code, kind) => {
+    expect(ingestFailure(new OctosUiProtocolError(code, "x"))).toBe(kind);
+  });
+  it("treats a lost reply or an unreadable one as uncertain", () => {
+    const timeout = new Error("memory/ingest timed out");
+    timeout.name = "OctosUiRequestTimeoutError";
+    expect(ingestFailure(timeout)).toBe("uncertain");
+    expect(
+      ingestFailure(new Error("Octos UI Protocol client disconnected")),
+    ).toBe("uncertain");
+    expect(ingestFailure(new Error("Invalid memory ingest result"))).toBe(
+      "uncertain",
+    );
+    expect(ingestFailure("odd")).toBe("uncertain");
+  });
+});
+
+describe("reading a batch back", () => {
+  const sent: ImportRecord = {
+    id: "doc:octoscode-web:r1",
+    kind: "document",
+    source: "octoscode-web",
+    timestamp: "2026-11-05T21:00:00Z",
+    title: "  Title  ",
+    abstract: "Summary",
+    body: "Body",
+    fingerprint: "sha256:aa",
+  };
+  const kept: MemoryRecord = {
+    id: sent.id,
+    kind: "document",
+    source: "octoscode-web",
+    title: "Title",
+    abstract: "Summary",
+    body: "Body",
+  };
+  it("goes by the fingerprint when both sides have one", () => {
+    expect(storedAsSent(sent, { ...kept, fingerprint: "sha256:aa" })).toBe(
+      true,
+    );
+    expect(storedAsSent(sent, { ...kept, fingerprint: "sha256:bb" })).toBe(
+      false,
+    );
+  });
+  it("otherwise compares the text as Core keeps it: trimmed and cut at whole characters", () => {
+    const { fingerprint: _, ...unsigned } = sent;
+    expect(storedAsSent(unsigned, kept)).toBe(true);
+    expect(storedAsSent(unsigned, { ...kept, body: "Other" })).toBe(false);
+    const long = { ...unsigned, title: "题".repeat(50) };
+    // 120 bytes hold 40 three-byte characters.
+    expect(storedAsSent(long, { ...kept, title: "题".repeat(40) })).toBe(true);
+    expect(
+      storedAsSent({ ...unsigned, body: "  " }, { ...kept, body: undefined }),
+    ).toBe(true);
+  });
+  it("counts each record once, telling missing from unreadable", async () => {
+    const batch = ["a", "b", "c", "d"].map((n) => ({
+      ...sent,
+      id: `doc:octoscode-web:${n}`,
+    }));
+    const load = vi.fn(async (id: string) => {
+      if (id.endsWith(":a"))
+        return {
+          record: { ...kept, id, fingerprint: "sha256:aa" },
+          pageTruncated: false,
+        };
+      if (id.endsWith(":b"))
+        return {
+          record: { ...kept, id, fingerprint: "sha256:old" },
+          pageTruncated: false,
+        };
+      if (id.endsWith(":c"))
+        throw new OctosUiProtocolError(-32170, "memory_record not found");
+      throw new Error("Octos UI Protocol connection is not ready");
+    });
+    expect(await readBack(batch, load)).toEqual({
+      asSent: 1,
+      different: 1,
+      missing: 1,
+      unreadable: 1,
+    });
+    expect(load).toHaveBeenCalledTimes(4);
+  });
+  it("settles only what the reads prove", () => {
+    const none = { asSent: 0, missing: 0, different: 0, unreadable: 0 };
+    expect(readBackVerdict({ ...none, asSent: 3 }, 3)).toBe("written");
+    expect(readBackVerdict({ ...none, missing: 2, different: 1 }, 3)).toBe(
+      "not-written",
+    );
+    expect(readBackVerdict({ ...none, asSent: 2, missing: 1 }, 3)).toBe(
+      "unknown",
+    );
+    expect(readBackVerdict({ ...none, missing: 2, unreadable: 1 }, 3)).toBe(
+      "unknown",
+    );
   });
 });

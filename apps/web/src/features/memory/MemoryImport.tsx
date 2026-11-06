@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useUiText, type UiText } from "../preferences/ui-text.tsx";
 import {
+  IMPORT_BATCH,
   IMPORT_MAX_BYTES,
   IMPORT_MAX_RECORDS,
   decodeImport,
@@ -9,18 +10,37 @@ import {
   type ImportPlan,
   type ImportProblem,
   type ImportRecord,
+  type ReadBack,
 } from "./memory-import.ts";
+import type { ImportRunView } from "./import-runs.ts";
 import styles from "./MemorySettings.module.css";
 
 /** What the server said, batch by batch, and where it stopped if it did. */
 export interface ImportOutcome {
   total: number;
+  /** Records in batches the server answered with counts. */
   sent: number;
   inserted: number;
   updated: number;
   unchanged: number;
-  failedBatch?: number;
-  reason?: string;
+  /** Records read back as sent after their reply was lost; no counts. */
+  confirmed: number;
+  stop?: ImportStop | undefined;
+}
+
+export interface ImportStop {
+  /** 1-based, as the page counts batches. */
+  batch: number;
+  size: number;
+  /**
+   * `refused`: the server answered before writing anything. `unsent`: the
+   * page never sent it. `uncertain`: it may have been written.
+   */
+  kind: "refused" | "unsent" | "uncertain";
+  reason: string;
+  /** Uncertain only: the one read-back, or why none could be made. */
+  readBack?: ReadBack | "unavailable";
+  verdict?: "written" | "not-written" | "unknown";
 }
 
 const LISTED = 5;
@@ -119,7 +139,11 @@ export function MemoryImport({
   importing,
   profileId,
   knownIds,
+  lastImport,
   onImport,
+  onClear,
+  onResume,
+  onReadBack,
 }: {
   canIngest: boolean;
   busy: boolean;
@@ -127,7 +151,15 @@ export function MemoryImport({
   profileId: string;
   /** Ids this page has loaded from the server, so known to exist there. */
   knownIds: ReadonlySet<string>;
-  onImport: (records: ImportRecord[]) => Promise<ImportOutcome | null>;
+  /** This scope's last import, which outlives a remount of this page. */
+  lastImport: ImportRunView | null;
+  /** True once the import has started; its outcome arrives in `lastImport`. */
+  onImport: (name: string, records: ImportRecord[]) => Promise<boolean>;
+  onClear: () => void;
+  /** Sends the stopped import on from where it stopped, by hand only. */
+  onResume: () => void;
+  /** Reads an uncertain batch back again. */
+  onReadBack: () => void;
 }) {
   const t = useUiText();
   const [preview, setPreview] = useState<{
@@ -139,12 +171,11 @@ export function MemoryImport({
     name: string;
     problems: ImportProblem[];
   } | null>(null);
-  const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
 
   const choose = async (file: File) => {
     setPreview(null);
     setProblems(null);
-    setOutcome(null);
+    onClear();
     const refused = importFileProblem(file);
     if (refused) {
       setProblems({ name: file.name, problems: [refused] });
@@ -163,10 +194,8 @@ export function MemoryImport({
 
   const confirm = async () => {
     if (!preview) return;
-    const result = await onImport(preview.plan.records);
-    if (!result) return;
-    setOutcome(result);
-    setPreview(null);
+    const { name, plan } = preview;
+    if (await onImport(name, plan.records)) setPreview(null);
   };
 
   const plan = preview?.plan;
@@ -333,12 +362,35 @@ export function MemoryImport({
           </div>
         </div>
       ) : null}
-      {outcome ? <ImportOutcomeNotice outcome={outcome} /> : null}
+      {lastImport?.pending && !preview ? (
+        <p role="status">{t("Importing {name}…", { name: lastImport.name })}</p>
+      ) : null}
+      {lastImport && !lastImport.pending ? (
+        <ImportOutcomeNotice
+          name={lastImport.name}
+          outcome={lastImport.outcome}
+          busy={busy}
+          onResume={onResume}
+          onReadBack={onReadBack}
+        />
+      ) : null}
     </section>
   );
 }
 
-function ImportOutcomeNotice({ outcome }: { outcome: ImportOutcome }) {
+function ImportOutcomeNotice({
+  name,
+  outcome,
+  busy,
+  onResume,
+  onReadBack,
+}: {
+  name: string;
+  outcome: ImportOutcome;
+  busy: boolean;
+  onResume: () => void;
+  onReadBack: () => void;
+}) {
   const t = useUiText();
   const reported = outcome.inserted + outcome.updated + outcome.unchanged;
   const counts = t(
@@ -349,55 +401,180 @@ function ImportOutcomeNotice({ outcome }: { outcome: ImportOutcome }) {
       unchanged: outcome.unchanged,
     },
   );
-  if (outcome.failedBatch !== undefined) {
+  const confirmed = outcome.confirmed ? (
+    <p>
+      {t(
+        "{count} records are on the server as sent: their reply was lost, and reading them back found them. The server's counts for them are unknown.",
+        { count: outcome.confirmed },
+      )}
+    </p>
+  ) : null;
+  const stop = outcome.stop;
+  if (stop) {
+    const first = (stop.batch - 1) * IMPORT_BATCH + 1;
+    const range = {
+      batch: stop.batch,
+      first,
+      last: first + stop.size - 1,
+    };
+    const after = outcome.total - (first + stop.size - 1);
+    const sendLeft =
+      stop.verdict === "written" ? after : outcome.total - first + 1;
     return (
-      <div className={styles.error} role="alert">
-        {outcome.sent ? (
-          <p>
-            {t(
-              "Stopped after {sent} of {total} records. Written so far: {counts}.",
-              {
-                sent: outcome.sent,
-                total: outcome.total,
-                counts,
-              },
-            )}
-          </p>
-        ) : (
-          <p>{t("Nothing was imported.")}</p>
-        )}
-        <p>
-          {t(
-            "Batch {batch} didn't finish: {reason}. The server reported nothing written for it; the {left} records after it were not sent.",
-            {
-              batch: outcome.failedBatch,
-              reason: outcome.reason ?? "",
-              left: outcome.total - outcome.sent,
-            },
+      <div className={styles.importOutcome}>
+        <p className={styles.meta}>{name}</p>
+        <div
+          className={stop.verdict === "written" ? undefined : styles.error}
+          role={stop.verdict === "written" ? "status" : "alert"}
+        >
+          {outcome.sent ? (
+            <p>
+              {t(
+                "Stopped after {sent} of {total} records. Written so far: {counts}.",
+                { sent: outcome.sent, total: outcome.total, counts },
+              )}
+            </p>
+          ) : !outcome.confirmed ? (
+            <p>{t("Nothing was imported.")}</p>
+          ) : null}
+          {stop.verdict === "written" && outcome.confirmed === stop.size
+            ? null
+            : confirmed}
+          {stop.kind === "refused" ? (
+            <p>
+              {t(
+                "The server refused batch {batch} (records {first}–{last}): {reason}. It wrote nothing for that batch.",
+                { ...range, reason: stop.reason },
+              )}
+            </p>
+          ) : stop.kind === "unsent" ? (
+            <p>
+              {t(
+                "Batch {batch} (records {first}–{last}) wasn't sent: {reason}.",
+                { ...range, reason: stop.reason },
+              )}
+            </p>
+          ) : stop.verdict === "written" ? (
+            <p>
+              {t(
+                "Batch {batch} (records {first}–{last}) lost its reply: {reason}. Reading it back found all its records on the server as sent.",
+                { ...range, reason: stop.reason },
+              )}
+            </p>
+          ) : (
+            <>
+              <p>
+                <strong>
+                  {stop.verdict === "not-written"
+                    ? t(
+                        "Batch {batch} (records {first}–{last}) was not written: {reason}.",
+                        { ...range, reason: stop.reason },
+                      )
+                    : t(
+                        "Not sure whether batch {batch} (records {first}–{last}) was written: {reason}.",
+                        { ...range, reason: stop.reason },
+                      )}
+                </strong>{" "}
+                {stop.verdict === "not-written"
+                  ? null
+                  : t(
+                      "The server may have written it before the reply was lost, so the page doesn't send it again on its own.",
+                    )}
+              </p>
+              <ReadBackText stop={stop} />
+            </>
           )}
-        </p>
+          {after > 0 && stop.verdict !== "written" ? (
+            <p>
+              {t("The {left} records after it were not sent.", { left: after })}
+            </p>
+          ) : null}
+          {stop.kind === "uncertain" && stop.verdict !== "written" ? (
+            <p className={styles.meta}>
+              {t(
+                "Sending again replaces records by id, so nothing is added twice: records already on the server as sent come back as unchanged.",
+              )}
+            </p>
+          ) : null}
+          {sendLeft > 0 && stop.kind !== "refused" ? (
+            <div className={styles.actions}>
+              {stop.kind === "uncertain" &&
+              stop.verdict === "unknown" &&
+              stop.readBack !== "unavailable" ? (
+                <button type="button" disabled={busy} onClick={onReadBack}>
+                  {t("Read batch {batch} back again", { batch: stop.batch })}
+                </button>
+              ) : null}
+              <button type="button" disabled={busy} onClick={onResume}>
+                {stop.verdict === "written"
+                  ? t("Send the remaining {count} records", { count: sendLeft })
+                  : t("Send from batch {batch} again ({count} records)", {
+                      batch: stop.batch,
+                      count: sendLeft,
+                    })}
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }
   return (
-    <div role="status">
-      <p>
-        {t("Imported {sent} records: {counts}.", {
-          sent: outcome.sent,
-          counts,
-        })}
-      </p>
-      {reported !== outcome.sent ? (
-        <p className={styles.error}>
-          {t(
-            "The server accounted for {reported} of the {sent} records sent.",
-            {
-              reported,
+    <div className={styles.importOutcome}>
+      <p className={styles.meta}>{name}</p>
+      <div role="status">
+        {outcome.sent ? (
+          <p>
+            {t("Imported {sent} records: {counts}.", {
               sent: outcome.sent,
-            },
-          )}
-        </p>
-      ) : null}
+              counts,
+            })}
+          </p>
+        ) : null}
+        {confirmed}
+        {reported !== outcome.sent ? (
+          <p className={styles.error}>
+            {t(
+              "The server accounted for {reported} of the {sent} records sent.",
+              {
+                reported,
+                sent: outcome.sent,
+              },
+            )}
+          </p>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function ReadBackText({ stop }: { stop: ImportStop }) {
+  const t = useUiText();
+  const found = stop.readBack;
+  if (found === undefined) return null;
+  if (found === "unavailable")
+    return (
+      <p>
+        {t(
+          "This server can't read records back, so the page can't check. Search for a record from this batch to see whether it's there.",
+        )}
+      </p>
+    );
+  if (stop.verdict === "not-written")
+    return (
+      <p>
+        {t(
+          "Read back: none of its {size} records are on the server as sent, so it was not written.",
+          { size: stop.size },
+        )}
+      </p>
+    );
+  return (
+    <p>
+      {t(
+        "Read back: {asSent} as sent · {missing} not on the server · {different} with other content · {unreadable} couldn't be read. Still not sure.",
+        { ...found },
+      )}
+    </p>
   );
 }
