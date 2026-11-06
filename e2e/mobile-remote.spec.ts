@@ -928,7 +928,12 @@ async function phoneWithBlockedPeer(
   request: APIRequestContext,
   kind: "approval" | "approval-escalation",
 ) {
-  const folder = `/srv/work/peer-control-${kind}`;
+  // One folder per run: a retry or repeat must not find the Sessions an
+  // earlier attempt left in the fixture, and "approval" must not match the
+  // "approval-escalation" folder's rows.
+  const { retry, repeatEachIndex } = test.info();
+  const name = `peer-control-${kind}-run${repeatEachIndex}-${retry}`;
+  const folder = `/srv/work/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Hello from the desk");
   await expect(desktop.getByText("Hello from the desk").first()).toBeVisible();
@@ -940,7 +945,7 @@ async function phoneWithBlockedPeer(
   await watch(page, folder);
   await page
     .getByRole("button", {
-      name: new RegExp(`New coding session.*peer-control-${kind}`),
+      name: new RegExp(`^New coding session ${name} · `),
     })
     .tap();
   await page.getByRole("button", { name: "返回手机遥控" }).tap();
