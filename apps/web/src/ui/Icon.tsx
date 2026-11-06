@@ -148,6 +148,15 @@ export function PencilIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Outline star; the caller fills it (`fill: currentColor`) when starred. */
+export function StarIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...svgProps(size, "0 0 16 16", className)}>
+      <path d="m8 1.9 1.85 3.76 4.15.6-3 2.93.71 4.13L8 11.37l-3.71 1.95.71-4.13-3-2.93 4.15-.6L8 1.9Z" />
+    </svg>
+  );
+}
+
 export function FileIcon({ size = 16, className }: IconProps) {
   return (
     <svg {...svgProps(size, "0 0 16 16", className)}>

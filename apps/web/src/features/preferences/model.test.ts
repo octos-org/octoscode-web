@@ -7,7 +7,10 @@ import {
   isDisplayTheme,
   isUiLanguage,
   parseDisplayPreferences,
+  parseTemplateShortcuts,
+  RECENT_TEMPLATE_LIMIT,
   SAVE_ERROR,
+  TEMPLATES_SAVE_ERROR,
   type DisplayTheme,
   type UiLanguage,
 } from "./model.ts";
@@ -23,6 +26,7 @@ function storage(initial: string | null = null) {
   };
 }
 const saved = { version: 1, theme: "claude", language: "zh", vimMode: true };
+const noShortcuts = { favorites: [], recent: [] };
 
 describe("strict browser-only display preferences", () => {
   it.each(DISPLAY_THEMES)("accepts the native %s palette", (theme) => {
@@ -49,6 +53,7 @@ describe("strict browser-only display preferences", () => {
     JSON.stringify({ ...saved, token: "must-never-persist" }),
     JSON.stringify({ ...saved, sessionId: "not-a-display-setting" }),
     '{"version":1,"theme":"codex","language":"en","vimMode":false,"__proto__":{}}',
+    JSON.stringify({ ...saved, templates: noShortcuts, token: "secret" }),
   ])("rejects malformed, extended or unsupported saved input %#", (raw) => {
     expect(parseDisplayPreferences(raw)).toBeNull();
   });
@@ -70,6 +75,8 @@ describe("strict browser-only display preferences", () => {
         vimMode: false,
         dirty: false,
         error: null,
+        templates: noShortcuts,
+        templatesError: null,
       });
     },
   );
@@ -82,6 +89,8 @@ describe("strict browser-only display preferences", () => {
       vimMode: true,
       dirty: false,
       error: null,
+      templates: noShortcuts,
+      templatesError: null,
     });
     expect(local.getItem.mock.calls).toEqual([[DISPLAY_PREFERENCES_KEY]]);
     expect(local.setItem).not.toHaveBeenCalled();
@@ -182,6 +191,8 @@ describe("strict browser-only display preferences", () => {
       vimMode: false,
       dirty: true,
       error: SAVE_ERROR,
+      templates: noShortcuts,
+      templatesError: null,
     });
     expect(JSON.stringify(store.getSnapshot())).not.toContain("token");
     local.setItem.mockImplementation(() => undefined);
@@ -192,6 +203,142 @@ describe("strict browser-only display preferences", () => {
     const store = new DisplayPreferencesStore();
     expect(store.save()).toBe(false);
     expect(store.getSnapshot().error).toBe(SAVE_ERROR);
+  });
+});
+
+describe("template shortcuts in the display preferences", () => {
+  const withTemplates = (templates: unknown) =>
+    JSON.stringify({ ...saved, templates });
+
+  it("loads only catalog IDs, once each, and keeps the display choices", () => {
+    const raw = withTemplates({
+      favorites: ["fix-bug", "retired-template", "fix-bug", 7, "weekly-report"],
+      recent: ["t0428-0123456789abcdef", "research-topic", null],
+    });
+    expect(parseDisplayPreferences(raw)).toEqual({
+      theme: "claude",
+      language: "zh",
+      vimMode: true,
+    });
+    expect(parseTemplateShortcuts(raw)).toEqual({
+      favorites: ["fix-bug", "weekly-report"],
+      recent: ["research-topic"],
+    });
+  });
+  it.each([
+    withTemplates(null),
+    withTemplates("fix-bug"),
+    withTemplates(["fix-bug"]),
+    withTemplates({ favorites: ["fix-bug"] }),
+    withTemplates({ favorites: "fix-bug", recent: [] }),
+    withTemplates({ favorites: [], recent: [], prompt: "secret" }),
+    JSON.stringify({ ...saved, theme: "neon", templates: noShortcuts }),
+  ])("falls back to no shortcuts for a malformed record %#", (raw) => {
+    expect(parseTemplateShortcuts(raw)).toEqual(noShortcuts);
+  });
+  it("records a chosen template first, a repeat changes nothing, and older uses keep their order", () => {
+    const local = storage(JSON.stringify(saved));
+    const store = new DisplayPreferencesStore(local);
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.recordTemplateUse("fix-bug");
+    store.recordTemplateUse("weekly-report");
+    const afterTwo = store.getSnapshot();
+    store.recordTemplateUse("weekly-report");
+    expect(store.getSnapshot()).toBe(afterTwo);
+    expect(local.setItem).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(2);
+    store.recordTemplateUse("fix-bug");
+    expect(store.getSnapshot().templates.recent).toEqual([
+      "fix-bug",
+      "weekly-report",
+    ]);
+    expect(JSON.parse(local.values.get(DISPLAY_PREFERENCES_KEY)!)).toEqual({
+      ...saved,
+      templates: { favorites: [], recent: ["fix-bug", "weekly-report"] },
+    });
+  });
+  it("keeps at most the recent limit and ignores IDs outside the catalog", () => {
+    const store = new DisplayPreferencesStore(storage());
+    const ids = [
+      "explain-repository",
+      "fix-bug",
+      "review-changes",
+      "repository-health",
+      "weekly-report",
+      "tidy-spreadsheet",
+      "research-topic",
+    ];
+    for (const id of ids) store.recordTemplateUse(id);
+    store.recordTemplateUse("not-in-the-catalog");
+    store.toggleFavoriteTemplate("/home/someone/project");
+    store.recordTemplateUse(42 as unknown as string);
+    expect(store.getSnapshot().templates).toEqual({
+      favorites: [],
+      recent: ids.slice(-RECENT_TEMPLATE_LIMIT).reverse(),
+    });
+  });
+  it("stars in order, unstars, and saves only template IDs beside the last saved display choices", () => {
+    const local = storage(JSON.stringify(saved));
+    const store = new DisplayPreferencesStore(local);
+    store.setTheme("slate");
+    store.toggleFavoriteTemplate("weekly-report");
+    store.toggleFavoriteTemplate("fix-bug");
+    store.toggleFavoriteTemplate("weekly-report");
+    store.toggleFavoriteTemplate("research-topic");
+    expect(store.getSnapshot()).toMatchObject({
+      theme: "slate",
+      dirty: true,
+      templates: { favorites: ["fix-bug", "research-topic"], recent: [] },
+    });
+    // The unsaved palette is not written along with the shortcuts.
+    expect(local.values.get(DISPLAY_PREFERENCES_KEY)).toBe(
+      JSON.stringify({
+        ...saved,
+        templates: { favorites: ["fix-bug", "research-topic"], recent: [] },
+      }),
+    );
+    expect(store.save()).toBe(true);
+    const reloaded = new DisplayPreferencesStore(local).getSnapshot();
+    expect(reloaded).toMatchObject({
+      theme: "slate",
+      templates: { favorites: ["fix-bug", "research-topic"], recent: [] },
+    });
+    store.toggleFavoriteTemplate("fix-bug");
+    store.toggleFavoriteTemplate("research-topic");
+    // With nothing left, the record is the plain display whitelist again.
+    expect(local.values.get(DISPLAY_PREFERENCES_KEY)).toBe(
+      JSON.stringify({ ...saved, theme: "slate" }),
+    );
+  });
+  it("drops a removed template on the next write", () => {
+    const local = storage(
+      withTemplates({ favorites: ["retired-template"], recent: ["fix-bug"] }),
+    );
+    const store = new DisplayPreferencesStore(local);
+    expect(store.getSnapshot().templates).toEqual({
+      favorites: [],
+      recent: ["fix-bug"],
+    });
+    expect(local.setItem).not.toHaveBeenCalled();
+    store.recordTemplateUse("weekly-report");
+    expect(local.values.get(DISPLAY_PREFERENCES_KEY)).not.toContain("retired");
+  });
+  it("keeps shortcuts in memory and says so when the browser refuses to save", () => {
+    const local = storage();
+    local.setItem.mockImplementation(() => {
+      throw new Error("quota");
+    });
+    const store = new DisplayPreferencesStore(local);
+    store.toggleFavoriteTemplate("fix-bug");
+    expect(store.getSnapshot()).toMatchObject({
+      templates: { favorites: ["fix-bug"], recent: [] },
+      templatesError: TEMPLATES_SAVE_ERROR,
+      error: null,
+    });
+    local.setItem.mockImplementation(() => undefined);
+    store.recordTemplateUse("fix-bug");
+    expect(store.getSnapshot().templatesError).toBeNull();
   });
 });
 
