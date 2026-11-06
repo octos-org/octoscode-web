@@ -854,3 +854,152 @@ test("a failed member's run without tokens is unknown, and another team's merge 
     ),
   ).toContainText("(merges: 1)");
 });
+
+test("an angle reworded for one team reaches only that member, and a refresh shows the server's copy", async ({
+  page,
+}) => {
+  // T-0440: one member's angle, for this task only.
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  const row = center.locator('[data-expert-template="plan-review"]');
+  const riskDefault =
+    "What could go wrong: failure cases, security and privacy, things that are hard to undo.";
+  const adjust = row.getByRole("button", {
+    name: "Adjust Risk reviewer's angle for this task",
+  });
+  const angle = row.getByRole("textbox", {
+    name: "Risk reviewer: angle for this task",
+  });
+  const goal = row.getByRole("textbox", { name: "What should they review?" });
+  const start = row.getByRole("button", { name: "Start 3 experts" });
+  await row.getByRole("button", { name: "Choose" }).click();
+
+  // The editor starts from the template's words.
+  await adjust.click();
+  await expect(angle).toHaveValue(riskDefault);
+  await expect(angle).toBeFocused();
+  await expect(
+    row.getByText(
+      "Same as the default. One paragraph; line breaks become spaces.",
+    ),
+  ).toBeVisible();
+
+  // Blank is refused before anything is sent.
+  await angle.fill("   ");
+  await goal.fill("Review docs/plan.md for the launch.");
+  await start.click();
+  await expect(
+    row.getByText(
+      "Give Risk reviewer an angle for this task, or use the default.",
+    ),
+  ).toBeVisible();
+  await expect(angle).toHaveAttribute("aria-invalid", "true");
+  await expect(angle).toBeFocused();
+  expect(prepares(sent)).toHaveLength(0);
+
+  // Long Chinese text counts characters; "Use the default" goes back.
+  const own =
+    "只看回滚：每一步能不能撤回，撤回要多久、谁来做。" +
+    "特别留意数据迁移。".repeat(40);
+  await angle.fill(own);
+  await expect(
+    row.getByText(`${[...own].length} of 1000 characters.`, { exact: false }),
+  ).toBeVisible();
+  await row
+    .getByRole("button", { name: "Use the default angle for Risk reviewer" })
+    .click();
+  await expect(angle).toHaveCount(0);
+  await expect(row.getByText(riskDefault, { exact: true })).toBeVisible();
+
+  // Closing the form drops the edit and sends nothing.
+  await adjust.click();
+  await angle.fill("Edited, then thrown away.");
+  await row.getByRole("button", { name: "Close" }).click();
+  await row.getByRole("button", { name: "Choose" }).click();
+  await expect(angle).toHaveCount(0);
+  await expect(row.getByText(riskDefault, { exact: true })).toBeVisible();
+  expect(prepares(sent)).toHaveLength(0);
+  expect(sent.filter((frame) => frame.method === "session/open")).toHaveLength(
+    1,
+  );
+
+  // The edit goes out once, on a double click, to that member only.
+  await adjust.click();
+  await angle.fill("只看回滚：每一步能不能撤回，\n撤回要多久、谁来做。");
+  await goal.fill("Review docs/plan.md for the launch.");
+  await start.dblclick();
+  await expect(
+    center.getByText("Plan review started: 3 experts are working."),
+  ).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(prepares(sent)).toHaveLength(1);
+  const prepare = prepares(sent)[0]!.params!;
+  const names = prepare.names as string[];
+  const sentAngle = "只看回滚：每一步能不能撤回， 撤回要多久、谁来做。";
+  const brief = String(prepare.brief);
+  expect(brief).toContain(`- ${names[1]}: ${sentAngle}`);
+  expect(brief).toContain(
+    `- ${names[0]}: Can it be built as described? Missing steps, hidden dependencies, time and cost.`,
+  );
+  expect(brief).toContain(
+    `- ${names[2]}: Read it as the person who will use the result: is it clear, useful and worth the effort?`,
+  );
+  expect(brief).not.toContain(riskDefault);
+  await expect.poll(() => memberStarts(sent).length).toBe(3);
+  const angleOf = (name: string) =>
+    turnText(
+      memberStarts(sent).find((frame) =>
+        turnText(frame).includes(`You are “${name}”`),
+      )!,
+    );
+  expect(angleOf(names[1]!)).toContain(`Your angle: ${sentAngle}`);
+  expect(angleOf(names[0]!)).toContain(
+    "Your angle: Can it be built as described?",
+  );
+  expect(angleOf(names[2]!)).toContain(
+    "Your angle: Read it as the person who will use the result",
+  );
+
+  const team = center.locator("[data-expert-team]");
+  const member = (seat: number) =>
+    team.locator(`[data-expert-member$="-${seat}"]`);
+  await expect(member(2).getByText(sentAngle)).toBeVisible();
+  await expect(member(2).getByText("Adjusted for this task")).toBeVisible();
+  await expect(member(1).getByText("Adjusted for this task")).toHaveCount(0);
+
+  // After a refresh the angle is the server's copy; the template is unchanged.
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const again = await openExperts(page);
+  const rebuilt = again.locator("[data-expert-team]");
+  await expect(
+    rebuilt.locator('[data-expert-member$="-2"]').getByText(sentAngle),
+  ).toBeVisible();
+  await expect(rebuilt.getByText("Adjusted for this task")).toHaveCount(1);
+  const card = again.locator('[data-expert-template="plan-review"]');
+  await card.getByRole("button", { name: "Choose" }).click();
+  await expect(card.getByText(riskDefault, { exact: true })).toBeVisible();
+  await expect(
+    card.getByRole("textbox", { name: "Risk reviewer: angle for this task" }),
+  ).toHaveCount(0);
+
+  // A phone keeps the editor inside the screen.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await card
+    .getByRole("button", { name: "Adjust Risk reviewer's angle for this task" })
+    .click();
+  const editor = card.getByRole("textbox", {
+    name: "Risk reviewer: angle for this task",
+  });
+  await editor.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(390);
+  const box = await editor.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  expect(prepares(sent)).toHaveLength(1);
+});

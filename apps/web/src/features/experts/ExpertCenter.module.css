@@ -342,7 +342,8 @@
   font-size: 13px;
 }
 
-.field textarea {
+.field textarea,
+.angleInput {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
@@ -357,12 +358,64 @@
   resize: vertical;
 }
 
-.field textarea[aria-invalid="true"] {
+.field textarea[aria-invalid="true"],
+.angleInput[aria-invalid="true"] {
   border-color: var(--dsw-alias-state-error-text);
 }
 
-.field textarea:disabled {
+.field textarea:disabled,
+.angleInput:disabled {
   opacity: 0.55;
+}
+
+/* A member's angle in the start form: the template's words with a quiet way
+   to reword them for this task, or the editor for that. */
+.angle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--dsw-space-2);
+}
+
+.angle p {
+  margin: 0;
+}
+
+.angle .inlineButton,
+.angleNote .inlineButton {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.angleEdit {
+  display: grid;
+  gap: var(--dsw-space-1);
+  min-width: 0;
+}
+
+.angleEdit .field {
+  font-size: 12px;
+}
+
+textarea.angleInput {
+  min-height: 64px;
+}
+
+.angleNote {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px var(--dsw-space-3);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.adjusted {
+  margin-left: var(--dsw-space-2);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .submit {
@@ -450,7 +503,9 @@
   .sectionHeading button,
   .rowHeading button,
   .actions button,
-  .submit button {
+  .submit button,
+  .angle .inlineButton,
+  .angleNote .inlineButton {
     min-height: var(--dsw-control-h-lg);
   }
 }

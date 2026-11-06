@@ -244,6 +244,8 @@ export const EXPERT_TEAMS: readonly ExpertTeamTemplate[] = Object.freeze([
 ]);
 
 export const EXPERT_GOAL_MAX_CHARS = 8000;
+/** A member's angle, when the person words it for this task. */
+export const EXPERT_FOCUS_MAX_CHARS = 1000;
 const HEADER = "Octoscode expert team:";
 const HEADER_LINE =
   /^Octoscode expert team: ([a-z0-9-]+) ([a-z0-9]{4}) (\S+)$/u;
@@ -282,6 +284,25 @@ export interface ExpertTeamLaunch {
   readonly memberBriefs: string[];
 }
 
+/** One paragraph: the angle sits on its member's line of the brief. */
+export function oneParagraph(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * The angle a member is given this time: the person's own words for this
+ * task, or the template's. Only the angle can change; the member's name,
+ * hand-off, file rules and the team's rules stay the template's.
+ */
+export function memberFocus(
+  t: UiText,
+  member: ExpertMember,
+  override: string | undefined,
+): string {
+  const own = override === undefined ? "" : oneParagraph(override);
+  return own || t(member.focus);
+}
+
 export function composeExpertTeam(
   t: UiText,
   template: ExpertTeamTemplate,
@@ -290,10 +311,15 @@ export function composeExpertTeam(
     workspace: string;
     tag: string;
     startedAt: Date;
+    /** Per member, by position: this task's own angle, if the person wrote one. */
+    focus?: readonly (string | undefined)[];
   },
 ): ExpertTeamLaunch {
   const names = template.members.map((member, index) =>
     expertMemberName(t(member.label), input.tag, index),
+  );
+  const focus = template.members.map((member, index) =>
+    memberFocus(t, member, input.focus?.[index]),
   );
   const writer = teamWriter(template);
   const brief = [
@@ -309,16 +335,7 @@ export function composeExpertTeam(
     "",
     t("Members:"),
     ...template.members.map((member, index) =>
-      member.output
-        ? t("- {name}: {focus} Hands back: {output}", {
-            name: names[index]!,
-            focus: t(member.focus),
-            output: t(member.output),
-          })
-        : t("- {name}: {focus}", {
-            name: names[index]!,
-            focus: t(member.focus),
-          }),
+      memberLine(t, member, names[index]!, focus[index]!),
     ),
     "",
     t("Rules for every member:"),
@@ -339,7 +356,7 @@ export function composeExpertTeam(
     memberBriefs: template.members.map((member, index) => {
       const own = `${brief}\n\n${t("You are “{name}”. Your angle: {focus}", {
         name: names[index]!,
-        focus: t(member.focus),
+        focus: focus[index]!,
       })}`;
       if (!member.writes) return own;
       const { suffix, example } = member.writes;
@@ -353,6 +370,70 @@ export function composeExpertTeam(
       )}`;
     }),
   };
+}
+
+/** A member's line under "Members:" in the team brief. */
+function memberLine(
+  t: UiText,
+  member: ExpertMember,
+  name: string,
+  focus: string,
+): string {
+  return member.output
+    ? t("- {name}: {focus} Hands back: {output}", {
+        name,
+        focus,
+        output: t(member.output),
+      })
+    : t("- {name}: {focus}", { name, focus });
+}
+
+export interface RecordedFocus {
+  /** The angle as the server's copy of the brief has it. */
+  readonly text: string;
+  /** It differs from the template's, as this page words the template. */
+  readonly adjusted: boolean;
+}
+
+/**
+ * What the server's copy of the brief says this member's angle was: the
+ * member's own line under "Members:". Null when the line is not there; a
+ * truncated brief may have lost it, which `expertTeams` says rather than
+ * showing the template's angle in its place.
+ */
+export function recordedFocus(
+  t: UiText,
+  brief: string,
+  name: string,
+  member: ExpertMember | null,
+): RecordedFocus | null {
+  const lines = brief.split("\n");
+  // The goal ends at the last standalone --- line; the roster comes after it.
+  const end = lines.lastIndexOf(GOAL_END);
+  const roster = end === -1 ? lines : lines.slice(end + 1);
+  const line = roster.find(
+    (candidate) =>
+      candidate.startsWith(`- ${name}:`) || candidate.startsWith(`- ${name}：`),
+  );
+  if (line === undefined) return null;
+  if (member) {
+    // Worded by this page in its current language: take the angle out of
+    // the line exactly, and compare it with the template's.
+    const MARK = "\u0000";
+    const [before = "", after = ""] = memberLine(t, member, name, MARK).split(
+      MARK,
+    );
+    if (
+      line.startsWith(before) &&
+      line.endsWith(after) &&
+      line.length >= before.length + after.length
+    ) {
+      const text = line.slice(before.length, line.length - after.length);
+      return { text, adjusted: text !== t(member.focus) };
+    }
+  }
+  // Another language or wording: the line as the server has it.
+  return { text: line.replace(/^- [^:：]*[:：]\s*/u, ""), adjusted: false };
 }
 
 export interface ParsedTeamBrief {
@@ -432,7 +513,12 @@ export interface ExpertMemberView {
   readonly name: string;
   /** The role from the template, or the member's own name when unknown. */
   readonly label: string;
+  /** The template's angle (source text, translated when shown). */
   readonly focus: string | null;
+  /** The angle the server's copy of the brief records for this team. */
+  readonly recordedFocus: RecordedFocus | null;
+  /** The server returned a cut brief that no longer holds this member's line. */
+  readonly focusUnread: boolean;
   readonly state: ExpertMemberState;
   /** The member's answer, without the server's front matter. */
   readonly result: string | null;
@@ -617,6 +703,8 @@ export function expertTeams(
   workspace: string,
   turns: ReadonlyMap<string, MemberTurnRead> = new Map(),
   files: ReadonlyMap<string, readonly HydratedFileMutation[]> = new Map(),
+  /** Reads each member's angle from the brief when given. */
+  t?: UiText,
 ): ExpertTeamView[] {
   const teams = new Map<
     string,
@@ -655,11 +743,14 @@ export function expertTeams(
             const turn = held ? null : (turns.get(row.slug) ?? null);
             const { state, reason } = expertMemberState(row, entry, turn);
             const recorded = files.get(row.slug);
+            const angle = t ? recordedFocus(t, row.brief, name, member) : null;
             return {
               slug: row.slug,
               name,
               label: member?.label ?? name,
               focus: member?.focus ?? null,
+              recordedFocus: angle,
+              focusUnread: !!t && !angle && row.brief_truncated,
               state,
               result: state === "finished" ? resultBody(row.result) : null,
               reason,

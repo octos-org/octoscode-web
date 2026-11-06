@@ -32,9 +32,12 @@ import { usePreferences } from "../preferences/preferences.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
   ACTIVE_MEMBER_STATES,
+  EXPERT_FOCUS_MAX_CHARS,
   EXPERT_GOAL_MAX_CHARS,
   EXPERT_TEAMS,
   composeExpertTeam,
+  memberFocus,
+  oneParagraph,
   expertSummaryInstruction,
   expertTeams,
   lastMemberTurn,
@@ -168,6 +171,7 @@ const emptySnapshot = () => EMPTY_PEER_SNAPSHOT;
 
 type LaunchError =
   | { kind: "goal" }
+  | { kind: "focus"; index: number }
   | { kind: "refused"; detail: string | null }
   | { kind: "uncertain" };
 type SummaryState = GatherOutcome | "busy";
@@ -227,8 +231,8 @@ export function ExpertCenter({
     readonly ProjectionEnvelopeV2[] | "failed" | null
   >(null);
   const teams = useMemo(
-    () => expertTeams(snapshot.blackboard, roster, workspace, turns, files),
-    [snapshot.blackboard, roster, workspace, turns, files],
+    () => expertTeams(snapshot.blackboard, roster, workspace, turns, files, t),
+    [snapshot.blackboard, roster, workspace, turns, files, t],
   );
   // Callers pass fresh callbacks each render; reads go through the latest
   // ones without re-running the arrival effect.
@@ -238,6 +242,12 @@ export function ExpertCenter({
   const [goal, setGoal] = useState("");
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<LaunchError | null>(null);
+  // This task's own angles, by member position. Kept in the form only: they
+  // change nothing until Start, and never the built-in team.
+  const [focusEdits, setFocusEdits] = useState<
+    Readonly<Record<number, string>>
+  >({});
+  const launchingRef = useRef(false);
   const [started, setStarted] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<
     Readonly<Record<string, SummaryState>>
@@ -483,8 +493,10 @@ export function ExpertCenter({
     ].join(t(", "));
 
   const choose = (template: ExpertTeamTemplate) => {
+    if (launchingRef.current) return;
     setLaunchError(null);
     setStarted(null);
+    setFocusEdits({});
     setSelected((current) => (current === template.id ? null : template.id));
   };
   useEffect(() => {
@@ -493,13 +505,24 @@ export function ExpertCenter({
 
   const launch = async (event: FormEvent, template: ExpertTeamTemplate) => {
     event.preventDefault();
-    if (!manager || !canLaunch || launching) return;
+    // A second click lands before the first one's render: one team only.
+    if (!manager || !canLaunch || launchingRef.current) return;
     const text = goal.trim();
     if (!text) {
       setLaunchError({ kind: "goal" });
       goalRef.current?.focus();
       return;
     }
+    const blank = template.members.findIndex(
+      (_, index) =>
+        focusEdits[index] !== undefined && !oneParagraph(focusEdits[index]!),
+    );
+    if (blank !== -1) {
+      setLaunchError({ kind: "focus", index: blank });
+      document.getElementById(focusFieldId(template, blank))?.focus();
+      return;
+    }
+    launchingRef.current = true;
     setLaunching(true);
     setLaunchError(null);
     setStarted(null);
@@ -511,6 +534,7 @@ export function ExpertCenter({
         workspace,
         tag: newTeamTag(randomUUID),
         startedAt: new Date(),
+        focus: template.members.map((_, index) => focusEdits[index]),
       });
       const result = await manager
         .kickoff(
@@ -525,6 +549,7 @@ export function ExpertCenter({
         .catch(() => null);
       if (result) {
         setGoal("");
+        setFocusEdits({});
         setSelected(null);
         setStarted(
           t("{team} started: {count} experts are working.", {
@@ -532,6 +557,7 @@ export function ExpertCenter({
             count: team.names.length,
           }),
         );
+        launchingRef.current = false;
         setLaunching(false);
         refresh();
         return;
@@ -549,9 +575,12 @@ export function ExpertCenter({
       });
       break;
     }
+    launchingRef.current = false;
     setLaunching(false);
     refresh();
   };
+  const focusFieldId = (template: ExpertTeamTemplate, index: number) =>
+    `${id}-${template.id}-focus-${index}`;
 
   const summarize = async (team: ExpertTeamView) => {
     const { instruction, slugs } = expertSummaryInstruction(t, team, (state) =>
@@ -646,7 +675,22 @@ export function ExpertCenter({
             {t(STATE_WORD[member.state])}
           </span>
         </div>
-        {member.focus ? (
+        {member.recordedFocus ? (
+          <p className={styles.focus}>
+            {member.recordedFocus.text}
+            {member.recordedFocus.adjusted ? (
+              <span className={styles.adjusted}>
+                {t("Adjusted for this task")}
+              </span>
+            ) : null}
+          </p>
+        ) : member.focusUnread ? (
+          <p className={styles.hint}>
+            {t(
+              "The server returned only part of the brief, so this member's angle for this task cannot be shown.",
+            )}
+          </p>
+        ) : member.focus ? (
           <p className={styles.focus}>{t(member.focus)}</p>
         ) : null}
         {member.result ? (
@@ -1008,11 +1052,112 @@ export function ExpertCenter({
                       onSubmit={(event) => void launch(event, template)}
                     >
                       <dl className={styles.roster}>
-                        {template.members.map((member) => (
+                        {template.members.map((member, index) => (
                           <div key={member.label}>
                             <dt>{t(member.label)}</dt>
                             <dd>
-                              <p>{t(member.focus)}</p>
+                              {focusEdits[index] === undefined ? (
+                                <div className={styles.angle}>
+                                  <p>{t(member.focus)}</p>
+                                  <button
+                                    type="button"
+                                    className={styles.inlineButton}
+                                    disabled={launching}
+                                    aria-label={t(
+                                      "Adjust {member}'s angle for this task",
+                                      { member: t(member.label) },
+                                    )}
+                                    onClick={() => {
+                                      setFocusEdits((current) => ({
+                                        ...current,
+                                        [index]: t(member.focus),
+                                      }));
+                                      requestAnimationFrame(() =>
+                                        document
+                                          .getElementById(
+                                            focusFieldId(template, index),
+                                          )
+                                          ?.focus(),
+                                      );
+                                    }}
+                                  >
+                                    {t("Adjust for this task")}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className={styles.angleEdit}>
+                                  <label
+                                    className={styles.field}
+                                    htmlFor={focusFieldId(template, index)}
+                                  >
+                                    <span>
+                                      {t("{member}: angle for this task", {
+                                        member: t(member.label),
+                                      })}
+                                    </span>
+                                  </label>
+                                  <textarea
+                                    id={focusFieldId(template, index)}
+                                    className={styles.angleInput}
+                                    rows={3}
+                                    maxLength={EXPERT_FOCUS_MAX_CHARS}
+                                    value={focusEdits[index]}
+                                    disabled={launching}
+                                    aria-invalid={
+                                      launchError?.kind === "focus" &&
+                                      launchError.index === index
+                                    }
+                                    aria-describedby={`${focusFieldId(template, index)}-note`}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setFocusEdits((current) => ({
+                                        ...current,
+                                        [index]: value,
+                                      }));
+                                    }}
+                                  />
+                                  <div className={styles.angleNote}>
+                                    <span
+                                      id={`${focusFieldId(template, index)}-note`}
+                                    >
+                                      {memberFocus(
+                                        t,
+                                        member,
+                                        focusEdits[index],
+                                      ) === t(member.focus)
+                                        ? t(
+                                            "Same as the default. One paragraph; line breaks become spaces.",
+                                          )
+                                        : t(
+                                            "For this team only; the built-in team keeps its own. One paragraph; line breaks become spaces. {count} of {max} characters.",
+                                            {
+                                              count: [...focusEdits[index]!]
+                                                .length,
+                                              max: EXPERT_FOCUS_MAX_CHARS,
+                                            },
+                                          )}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className={styles.inlineButton}
+                                      disabled={launching}
+                                      aria-label={t(
+                                        "Use the default angle for {member}",
+                                        { member: t(member.label) },
+                                      )}
+                                      onClick={() =>
+                                        setFocusEdits((current) => {
+                                          const next = { ...current };
+                                          delete next[index];
+                                          return next;
+                                        })
+                                      }
+                                    >
+                                      {t("Use the default")}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                               {member.input ? (
                                 <p className={styles.io}>
                                   {t("Works from: {input}", {
@@ -1096,6 +1241,18 @@ export function ExpertCenter({
                           {launchError.kind === "goal" ? (
                             <p>
                               {t("Describe what the experts should work on.")}
+                            </p>
+                          ) : launchError.kind === "focus" ? (
+                            <p>
+                              {t(
+                                "Give {member} an angle for this task, or use the default.",
+                                {
+                                  member: t(
+                                    template.members[launchError.index]
+                                      ?.label ?? "",
+                                  ),
+                                },
+                              )}
                             </p>
                           ) : launchError.kind === "uncertain" ? (
                             <p>
