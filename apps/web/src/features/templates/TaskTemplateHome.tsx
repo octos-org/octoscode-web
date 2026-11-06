@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type MouseEvent } from "react";
 import type { TemplateShortcuts, UiLanguage } from "../preferences/model.ts";
-import { EyeIcon, PencilIcon, StarIcon } from "../../ui/Icon.tsx";
+import { EyeIcon, PencilIcon, SearchIcon, StarIcon } from "../../ui/Icon.tsx";
 import {
   TASK_TEMPLATES,
   TASK_TEMPLATE_CATEGORIES,
@@ -36,6 +36,14 @@ interface HomeCopy {
   addFavorite: string;
   removeFavorite: string;
   shortcutsUnsaved: string;
+  search: string;
+  searchPlaceholder: string;
+  scene: string;
+  all: string;
+  showing: string;
+  noMatch: string;
+  noMatchIn: string;
+  clearFilters: string;
 }
 
 const COPY: Record<UiLanguage, HomeCopy> = {
@@ -46,7 +54,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     chooserHeading: "Or start from a template",
     chooserLead:
       "Pick one, then choose a folder above. The request goes into the message box for you to edit.",
-    categories: { code: "Code", general: "General" },
+    categories: { code: "Code", office: "Office", general: "General" },
     access: { read: "Reads only", write: "Edits files" },
     example: "Example result",
     use: "Use this",
@@ -69,6 +77,14 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     removeFavorite: "Remove from favorites",
     shortcutsUnsaved:
       "Favorites and recent templates could not be saved in this browser. They will reset when the page reloads.",
+    search: "Search templates",
+    searchPlaceholder: "Search by name or description",
+    scene: "Scene",
+    all: "All",
+    showing: "Showing {shown} of {total} templates.",
+    noMatch: "No template matches “{query}”.",
+    noMatchIn: "No {scene} template matches “{query}”.",
+    clearFilters: "Show all templates",
   },
   zh: {
     heading: "想让 Octos 帮你做什么？",
@@ -76,7 +92,7 @@ const COPY: Record<UiLanguage, HomeCopy> = {
       "在 {workspace} 里工作。挑一个模板改改，或者直接在下面写需求。",
     chooserHeading: "也可以先挑一个模板",
     chooserLead: "选好后在上面选文件夹，需求会填进输入框，改好再发送。",
-    categories: { code: "编程", general: "通用" },
+    categories: { code: "编程", office: "办公", general: "通用" },
     access: { read: "只读", write: "会改文件" },
     example: "示例结果",
     use: "做同款",
@@ -97,6 +113,14 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     addFavorite: "加入收藏",
     removeFavorite: "取消收藏",
     shortcutsUnsaved: "收藏和最近使用没能存进这个浏览器，刷新页面后会清空。",
+    search: "搜索模板",
+    searchPlaceholder: "按名称或说明搜索",
+    scene: "场景",
+    all: "全部",
+    showing: "显示 {shown} 个，共 {total} 个模板。",
+    noMatch: "没有模板匹配「{query}」。",
+    noMatchIn: "{scene}里没有模板匹配「{query}」。",
+    clearFilters: "显示全部模板",
   },
 };
 
@@ -205,6 +229,48 @@ export interface TaskTemplateHomeProps {
   onToggleFavorite?: ((templateId: string) => void) | undefined;
   /** `pointer` when clicked or tapped: the page must not move under it. */
   onUse: (template: TaskTemplate, by: TemplateUseSource) => void;
+  /** The catalog to show; the shipped one unless a test passes another. */
+  catalog?: readonly TaskTemplate[] | undefined;
+}
+
+export type SceneFilter = TaskTemplateCategory | "all";
+
+const searchable = (text: string) => text.normalize("NFKC").toLocaleLowerCase();
+
+/**
+ * Every word of the query appears in the template's name, description or
+ * scene, in either language: the same query finds the same templates
+ * whatever language the page is in. Prompts and examples are not searched.
+ */
+export function templateMatches(
+  template: TaskTemplate,
+  query: string,
+): boolean {
+  const words = searchable(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = searchable(
+    (["en", "zh"] as const)
+      .flatMap((language) => [
+        template.copy[language].title,
+        template.copy[language].summary,
+        COPY[language].categories[template.category],
+      ])
+      .join("\n"),
+  );
+  return words.every((word) => text.includes(word));
+}
+
+/** A browsing view only: nothing about the templates themselves changes. */
+export function browseTemplates(
+  catalog: readonly TaskTemplate[],
+  scene: SceneFilter,
+  query: string,
+): TaskTemplate[] {
+  return catalog.filter(
+    (template) =>
+      (scene === "all" || template.category === scene) &&
+      templateMatches(template, query),
+  );
 }
 
 export type TemplateUseSource = "pointer" | "keyboard";
@@ -212,8 +278,13 @@ export type TemplateUseSource = "pointer" | "keyboard";
 /** Recent rows leave out favorites, which already sit right above them. */
 export const RECENT_TEMPLATES_SHOWN = 3;
 
-function catalogTemplates(ids: readonly string[]): TaskTemplate[] {
-  return ids.flatMap((id) => findTaskTemplate(id) ?? []);
+function catalogTemplates(
+  catalog: readonly TaskTemplate[],
+  ids: readonly string[],
+): TaskTemplate[] {
+  return ids.flatMap(
+    (id) => catalog.find((template) => template.id === id) ?? [],
+  );
 }
 
 function scrollParent(node: HTMLElement): Element | null {
@@ -261,17 +332,31 @@ export function TaskTemplateHome({
   shortcutsUnsaved = false,
   onToggleFavorite,
   onUse,
+  catalog = TASK_TEMPLATES,
 }: TaskTemplateHomeProps) {
   const copy = COPY[language];
   const headingId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [scene, setScene] = useState<SceneFilter>("all");
+  const [query, setQuery] = useState("");
+  const scenes = TASK_TEMPLATE_CATEGORIES.filter((category) =>
+    catalog.some((template) => template.category === category),
+  );
+  const shown = browseTemplates(catalog, scene, query);
+  const filtering = scene !== "all" || query.trim() !== "";
+  const clearFilters = () => {
+    setScene("all");
+    setQuery("");
+    searchRef.current?.focus();
+  };
   const homeRef = useRef<HTMLElement>(null);
   // Recent rows keep the order this home opened with: reordering them under
   // a double click would hand its second click to another template. The
   // next home (a new Session or a reload) shows the updated order.
   const [recentAtOpen] = useState(() => shortcuts?.recent ?? []);
-  const favorites = catalogTemplates(shortcuts?.favorites ?? []);
+  const favorites = catalogTemplates(catalog, shortcuts?.favorites ?? []);
   const favoriteIds = new Set(favorites.map((template) => template.id));
-  const recent = catalogTemplates(recentAtOpen)
+  const recent = catalogTemplates(catalog, recentAtOpen)
     .filter((template) => !favoriteIds.has(template.id))
     .slice(0, RECENT_TEMPLATES_SHOWN);
   const favorite = onToggleFavorite
@@ -383,10 +468,70 @@ export function TaskTemplateHome({
           />
         ) : null,
       )}
-      {TASK_TEMPLATE_CATEGORIES.map((category) => (
+      {catalog.length > 0 ? (
+        <div className={styles.browse}>
+          <div className={styles.searchField}>
+            <SearchIcon size={14} />
+            <input
+              ref={searchRef}
+              type="search"
+              className={styles.search}
+              aria-label={copy.search}
+              placeholder={copy.searchPlaceholder}
+              autoComplete="off"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div
+            className={styles.scenes}
+            role="radiogroup"
+            aria-label={copy.scene}
+          >
+            {(["all", ...scenes] as const).map((value) => (
+              <label key={value} className={styles.scene}>
+                <input
+                  type="radio"
+                  name={`${headingId}-scene`}
+                  value={value}
+                  checked={scene === value}
+                  onChange={() => setScene(value)}
+                />
+                <span>
+                  {value === "all" ? copy.all : copy.categories[value]}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {/* Announced as it changes; the home's one status region keeps its notices. */}
+      <p className={styles.count} aria-live="polite" aria-atomic="true">
+        {filtering
+          ? fill(copy.showing, {
+              shown: String(shown.length),
+              total: String(catalog.length),
+            })
+          : ""}
+      </p>
+      {filtering && shown.length === 0 ? (
+        <div className={styles.empty}>
+          <p>
+            {fill(scene === "all" ? copy.noMatch : copy.noMatchIn, {
+              query: query.trim(),
+              scene: scene === "all" ? "" : copy.categories[scene],
+            })}
+          </p>
+          <button type="button" onClick={clearFilters}>
+            {copy.clearFilters}
+          </button>
+        </div>
+      ) : null}
+      {scenes.map((category) => (
         <TemplateGroup
           key={category}
           category={category}
+          templates={shown.filter((template) => template.category === category)}
           language={language}
           selectedId={notice?.templateId}
           disabled={templatesDisabled}
@@ -533,6 +678,7 @@ function ShortcutGroup({
 
 function TemplateGroup({
   category,
+  templates,
   language,
   selectedId,
   disabled,
@@ -540,6 +686,7 @@ function TemplateGroup({
   onUse,
 }: {
   category: TaskTemplateCategory;
+  templates: readonly TaskTemplate[];
   language: UiLanguage;
   selectedId: string | undefined;
   disabled: boolean;
@@ -548,9 +695,6 @@ function TemplateGroup({
 }) {
   const copy = COPY[language];
   const headingId = useId();
-  const templates = TASK_TEMPLATES.filter(
-    (template) => template.category === category,
-  );
   if (templates.length === 0) return null;
   return (
     <section className={styles.group} aria-labelledby={headingId}>
