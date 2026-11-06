@@ -331,12 +331,31 @@ describe("Timeline", () => {
     expect(unticked).not.toContain("0 of 2 done");
   });
 
-  it("translates the client's own notices", async () => {
+  it("translates the client's own notices but keeps a durable message's role verbatim", async () => {
+    // A hydrated message whose role is not user/assistant/tool is a system
+    // row titled with that role: server data, so "system" must not become
+    // the catalog's theme label 「跟随系统」 (T-0460). Only zh can show it.
+    const hydrated = timelineFromHydrate({
+      session_id: "coding:local:main",
+      cursor: { stream: "coding:local:main", seq: 1 },
+      messages: [
+        {
+          seq: 1,
+          role: "system",
+          content: "Hydrated notice",
+          turn_id: "turn-1",
+          message_id: "message-system",
+          persisted_at: "",
+          media: [],
+        },
+      ],
+    });
     const html = renderToStaticMarkup(
       <UiTextProvider language="zh" catalog={await loadChineseCatalog()}>
         <Timeline
           connected
           entries={[
+            ...hydrated,
             {
               id: "steer:turn-1",
               kind: "system",
@@ -356,5 +375,8 @@ describe("Timeline", () => {
     );
     expect(html).toContain("本轮完成");
     expect(html).not.toContain("Turn complete");
+    expect(html).toContain("Hydrated notice");
+    expect(html).toContain("<strong>system</strong>");
+    expect(html).not.toContain("跟随系统");
   });
 });
