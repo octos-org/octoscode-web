@@ -14,8 +14,13 @@ import {
   type PeerPrepareParams,
   type PeerPrepareResult,
 } from "@octos-org/octoscode-client/peers";
-import type { HydratedFileMutation } from "@octos-org/octoscode-client/protocol";
+import type {
+  HydratedFileMutation,
+  ProjectionEnvelopeV2,
+} from "@octos-org/octoscode-client/protocol";
+import type { UsageScope } from "@octos-org/octoscode-client/usage";
 import { randomUUID } from "../../shared/uuid.ts";
+import { formatUsd } from "../composer-bar/session-usage.ts";
 import type { GatherOutcome } from "../peers/gather.ts";
 import { MarkdownBody } from "../markdown/MarkdownBody.tsx";
 import {
@@ -23,6 +28,7 @@ import {
   type PeerManagerSnapshot,
   type PeerRosterEntry,
 } from "../peers/peer-roster.ts";
+import { usePreferences } from "../preferences/preferences.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
   ACTIVE_MEMBER_STATES,
@@ -42,6 +48,17 @@ import {
   type ExpertTeamView,
 } from "./expert-teams.ts";
 import {
+  memberUsage,
+  parentTurns,
+  serverTurns,
+  teamMerges,
+  teamUsage,
+  type MemberUsage,
+  type TokenCount,
+  type UsagePart,
+} from "./expert-usage.ts";
+import {
+  readConversationReplay,
   readMemberFiles,
   readMemberTurns,
   stopMemberTurn,
@@ -65,6 +82,8 @@ export interface ExpertCenterProps {
   roster: readonly PeerRosterEntry[];
   /** The server path of the current workspace; teams are kept per workspace. */
   workspace: string;
+  /** The conversation that started the teams; its merges are its turns. */
+  sessionId: string;
   workspaceLabel: string;
   /** The profile this conversation runs in; members are staged there. */
   profileId: string;
@@ -118,8 +137,8 @@ const STOPPABLE: ReadonlySet<ExpertMemberState> = new Set([
   "working",
   "waiting",
 ]);
-/** A member's files are read once its turn has ended, and again on Refresh. */
-const FILES_SETTLED: ReadonlySet<ExpertMemberState> = new Set([
+/** A member's files and usage are read once its turn has ended, and again on Refresh. */
+const SETTLED: ReadonlySet<ExpertMemberState> = new Set([
   "finished",
   "failed",
   "stopped",
@@ -137,6 +156,11 @@ const settledFiles = new Map<
     mutations: readonly HydratedFileMutation[];
   }
 >();
+/** Each settled member's ledger figure, by session, for this tab's lifetime. */
+const settledUsage = new Map<
+  string,
+  { state: ExpertMemberState; usage: MemberUsage }
+>();
 /** Members keep running server-side; this only decides how often to look. */
 const REFRESH_MS = 15_000;
 const subscribeNothing = () => () => undefined;
@@ -152,6 +176,7 @@ export function ExpertCenter({
   manager,
   roster,
   workspace,
+  sessionId,
   workspaceLabel,
   profileId,
   canLaunch,
@@ -163,6 +188,8 @@ export function ExpertCenter({
   memberClient = null,
 }: ExpertCenterProps) {
   const t = useUiText();
+  const { language } = usePreferences();
+  const number = new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US");
   const id = useId();
   const snapshot = useSyncExternalStore(
     manager?.subscribe ?? subscribeNothing,
@@ -184,6 +211,21 @@ export function ExpertCenter({
     ReadonlyMap<string, readonly HydratedFileMutation[]>
   >(() => new Map());
   const filesRead = useRef(new Map<string, ExpertMemberState>());
+  // Memory only: each member's ledger figure, and the starting conversation's
+  // replayed turns (null until read, "failed" when it could not be).
+  const [usage, setUsage] = useState<ReadonlyMap<string, MemberUsage>>(
+    () => new Map(),
+  );
+  const usageRead = useRef(new Map<string, ExpertMemberState>());
+  const usageScope = useRef<Promise<{
+    commands: Awaited<
+      ReturnType<NonNullable<MemberSessionClient["usageCommands"]>>
+    >;
+    scope: UsageScope;
+  } | null> | null>(null);
+  const [replay, setReplay] = useState<
+    readonly ProjectionEnvelopeV2[] | "failed" | null
+  >(null);
   const teams = useMemo(
     () => expertTeams(snapshot.blackboard, roster, workspace, turns, files),
     [snapshot.blackboard, roster, workspace, turns, files],
@@ -239,12 +281,28 @@ export function ExpertCenter({
     [],
   );
 
+  // The starting conversation's own record: its merge turns and their usage.
+  const readReplay = useCallback(() => {
+    const client = latest.current.memberClient;
+    if (!client) return;
+    void readConversationReplay(client, sessionId)
+      .catch(() => null)
+      .then((envelopes) => setReplay(envelopes ?? "failed"));
+  }, [sessionId]);
+  useEffect(() => {
+    setReplay(null);
+    readReplay();
+  }, [readReplay]);
+
   const refresh = useCallback(
     (force = false) => {
       if (!manager) return;
       if (force) {
         filesRead.current.clear();
         settledFiles.clear();
+        usageRead.current.clear();
+        settledUsage.clear();
+        readReplay();
       }
       void manager
         .gather()
@@ -265,7 +323,7 @@ export function ExpertCenter({
         )
         .finally(() => setReadOnce(true));
     },
-    [manager, readMembers, workspace],
+    [manager, readMembers, readReplay, workspace],
   );
 
   // Read on arrival, and again whenever a member this tab watches changes state.
@@ -294,7 +352,7 @@ export function ExpertCenter({
       .flatMap((team) => team.members)
       .filter(
         (member) =>
-          FILES_SETTLED.has(member.state) &&
+          SETTLED.has(member.state) &&
           filesRead.current.get(member.slug) !== member.state,
       );
     for (const member of due) {
@@ -319,6 +377,55 @@ export function ExpertCenter({
     }
   });
 
+  // Each member's part of the usage ledger, once its turn is over.
+  useEffect(() => {
+    const client = memberClient;
+    if (!client?.usageCommands) return;
+    const due = teams
+      .flatMap((team) => team.members)
+      .filter(
+        (member) =>
+          SETTLED.has(member.state) &&
+          usageRead.current.get(member.slug) !== member.state,
+      );
+    if (!due.length) return;
+    usageScope.current ??= client
+      .usageCommands(profileId)
+      .then(async (commands) => ({ commands, scope: await commands.scope() }))
+      .catch(() => null);
+    const scoped = usageScope.current;
+    for (const member of due) {
+      usageRead.current.set(member.slug, member.state);
+      const memberSessionId = memberSession(member.topic);
+      if (!memberSessionId) continue;
+      const known = settledUsage.get(memberSessionId);
+      if (known?.state === member.state) {
+        setUsage((current) => new Map(current).set(member.slug, known.usage));
+        continue;
+      }
+      void scoped
+        .then((ledger) =>
+          ledger
+            ? ledger.commands
+                .read(ledger.scope, { sessionId: memberSessionId })
+                .then(memberUsage)
+            : null,
+        )
+        .catch(() => null)
+        .then((read) => {
+          const result: MemberUsage = read ?? { kind: "unreadable" };
+          // Nothing recorded yet may only mean the ledger is behind; keep it
+          // out of the cache so the next read can see the run.
+          if (result.kind !== "none" && result.kind !== "unreadable")
+            settledUsage.set(memberSessionId, {
+              state: member.state,
+              usage: result,
+            });
+          setUsage((current) => new Map(current).set(member.slug, result));
+        });
+    }
+  });
+
   useEffect(() => {
     if (!watching) return;
     const timer = window.setInterval(() => {
@@ -326,6 +433,54 @@ export function ExpertCenter({
     }, REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [watching, refresh]);
+
+  const conversationTurns = useMemo(
+    () => (Array.isArray(replay) ? parentTurns(replay) : null),
+    [replay],
+  );
+  const tokens = (count: TokenCount) =>
+    t("{prompt} in · {output} out tokens", {
+      prompt: number.format(count.prompt),
+      output: number.format(count.output),
+    });
+  const memberUsageLine = (member: ExpertMemberView) => {
+    const read = usage.get(member.slug);
+    if (!read)
+      return ACTIVE_MEMBER_STATES.has(member.state)
+        ? t("Its usage is recorded when this turn ends.")
+        : null;
+    if (read.kind === "recorded")
+      return [
+        t("Usage: {tokens} · runs: {runs}", {
+          tokens: tokens(read.tokens),
+          runs: number.format(read.runs),
+        }),
+        ...(read.costUsd === null
+          ? []
+          : [t("about {cost}", { cost: formatUsd(read.costUsd) })]),
+      ].join(" · ");
+    if (read.kind === "unreported")
+      return t(
+        "Usage unknown: the server recorded runs ({runs}) without token counts.",
+        { runs: number.format(read.runs) },
+      );
+    if (read.kind === "none") return t("No usage recorded for it yet.");
+    return t("Its usage could not be read.");
+  };
+  /** "3 recorded, 1 unknown" — only the counts that are not zero. */
+  const partNote = (part: UsagePart, noun: "experts" | "merges") =>
+    [
+      ...(part.unknownCount
+        ? [t("{count} unknown", { count: part.unknownCount })]
+        : []),
+      ...(part.pendingCount
+        ? [
+            noun === "experts"
+              ? t("{count} not recorded yet", { count: part.pendingCount })
+              : t("{count} still running", { count: part.pendingCount }),
+          ]
+        : []),
+    ].join(t(", "));
 
   const choose = (template: ExpertTeamTemplate) => {
     setLaunchError(null);
@@ -557,6 +712,11 @@ export function ExpertCenter({
             <code>{member.reason}</code>
           </details>
         ) : null}
+        {memberUsageLine(member) ? (
+          <p className={styles.usageLine} data-expert-usage={member.slug}>
+            {memberUsageLine(member)}
+          </p>
+        ) : null}
         <div className={styles.actions}>
           <button type="button" onClick={() => openMember(team, member)}>
             {t("Open conversation")}
@@ -573,6 +733,99 @@ export function ExpertCenter({
           ) : null}
         </div>
       </li>
+    );
+  };
+
+  const teamUsageBlock = (team: ExpertTeamView) => {
+    if (!memberClient?.usageCommands) return null;
+    const merges = conversationTurns ? teamMerges(conversationTurns, team) : [];
+    const figures = teamUsage(team, usage, merges);
+    const membersNote = partNote(figures.members, "experts");
+    const mergesNote = partNote(figures.merges, "merges");
+    const mergeCount = merges.length;
+    const left =
+      figures.members.unknownCount +
+      figures.members.pendingCount +
+      figures.merges.unknownCount +
+      figures.merges.pendingCount;
+    return (
+      <dl className={styles.usage} data-expert-team-usage={team.key}>
+        <div>
+          <dt>{t("Experts")}</dt>
+          <dd>
+            {figures.members.knownCount ? tokens(figures.members.known) : "—"}
+            {membersNote ? <small>{membersNote}</small> : null}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Merges")}</dt>
+          <dd>
+            {replay === "failed"
+              ? t("This conversation's turns could not be read.")
+              : replay === null
+                ? t("Reading…")
+                : mergeCount === 0
+                  ? t("Not merged in this conversation yet.")
+                  : figures.merges.knownCount
+                    ? t("{tokens} (merges: {count})", {
+                        tokens: tokens(figures.merges.known),
+                        count: mergeCount,
+                      })
+                    : "—"}
+            {mergesNote ? <small>{mergesNote}</small> : null}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Total")}</dt>
+          <dd>
+            {figures.members.knownCount || figures.merges.knownCount
+              ? tokens(figures.total)
+              : "—"}
+            <small>
+              {mergeCount
+                ? t("Experts plus merges ({count}).", { count: mergeCount })
+                : t("Experts only; no merge yet.")}
+            </small>
+            {left ? (
+              <small>
+                {t("Left out, no figure: {count}.", {
+                  count: left,
+                })}
+              </small>
+            ) : null}
+          </dd>
+        </div>
+      </dl>
+    );
+  };
+
+  /** Turns in this conversation that no one here started; in no team's total. */
+  const serverTurnsNote = () => {
+    const started = conversationTurns ? serverTurns(conversationTurns) : [];
+    if (!started.length) return null;
+    const known = started.flatMap((turn) =>
+      turn.usage && turn.usage !== "unreported" ? [turn.usage] : [],
+    );
+    const sum = known.reduce<TokenCount>(
+      (total, count) => ({
+        prompt: total.prompt + count.prompt,
+        output: total.output + count.output,
+      }),
+      { prompt: 0, output: 0 },
+    );
+    return (
+      <p className={styles.hint} data-expert-server-turns>
+        {t(
+          "This conversation also has turns the server started on its own ({count}), such as a summary after experts deliver: {tokens}. They have no message from you and are not counted in any team.",
+          {
+            count: started.length,
+            tokens: known.length ? tokens(sum) : t("usage unknown"),
+          },
+        )}
+        {known.length && known.length < started.length
+          ? ` ${t("Without a figure: {count}.", { count: started.length - known.length })}`
+          : ""}
+      </p>
     );
   };
 
@@ -604,6 +857,7 @@ export function ExpertCenter({
         </div>
         {team.goal ? <p className={styles.goal}>{team.goal}</p> : null}
         <p className={styles.progress}>{progress}</p>
+        {teamUsageBlock(team)}
         <ul className={styles.members}>
           {team.members.map((member) => memberRow(team, member))}
         </ul>
@@ -694,6 +948,7 @@ export function ExpertCenter({
                 {snapshot.gatherBusy ? t("Refreshing…") : t("Refresh")}
               </button>
             </div>
+            {serverTurnsNote()}
             <ul className={styles.rows}>{teams.map(teamRow)}</ul>
           </section>
         ) : !readOnce ? (

@@ -2584,6 +2584,31 @@ const catalog: Readonly<Record<string, string>> = {
   "{team} started: {count} experts are working.":
     "「{team}」已启动，{count} 位专家开始工作。",
   "This server cannot start expert teams.": "这个服务器不支持专家团。",
+  // T-0427: what an expert team cost, from the server's records.
+  "{prompt} in · {output} out tokens": "输入 {prompt} · 输出 {output} token",
+  "Its usage is recorded when this turn ends.": "这一轮结束后记入用量。",
+  "Usage: {tokens} · runs: {runs}": "用量：{tokens} · {runs} 次运行",
+  "about {cost}": "约 {cost}",
+  "Usage unknown: the server recorded runs ({runs}) without token counts.":
+    "用量未知：服务器记了 {runs} 次运行，但没有 token 数。",
+  "No usage recorded for it yet.": "还没有它的用量记录。",
+  "Its usage could not be read.": "读不到它的用量。",
+  "{count} unknown": "{count} 项未知",
+  "{count} not recorded yet": "{count} 位还没有记录",
+  "{count} still running": "{count} 次还在进行",
+  Experts: "成员",
+  Merges: "汇总",
+  Total: "合计",
+  "This conversation's turns could not be read.": "读不到当前对话的回合。",
+  "Not merged in this conversation yet.": "还没有在当前对话里汇总。",
+  "{tokens} (merges: {count})": "{tokens}（{count} 次）",
+  "Experts plus merges ({count}).": "成员加 {count} 次汇总。",
+  "Experts only; no merge yet.": "只含成员，还没有汇总。",
+  "Left out, no figure: {count}.": "有 {count} 项没有数字，未计入。",
+  "This conversation also has turns the server started on its own ({count}), such as a summary after experts deliver: {tokens}. They have no message from you and are not counted in any team.":
+    "当前对话里还有 {count} 轮是服务器自己发起的（比如专家交付后的自动汇总）：{tokens}。这些回合没有你发的消息，不计入任何专家团。",
+  "usage unknown": "用量未知",
+  "Without a figure: {count}.": "其中 {count} 轮没有数字。",
   // T-0426: data cleanup and document delivery teams.
   "Data cleanup": "数据清洗",
   "Three experts work on one CSV file: one lists what is wrong, one writes a cleaned copy, one sets the checks the copy must pass. The original file stays as it is.":

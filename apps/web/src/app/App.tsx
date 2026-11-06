@@ -5598,6 +5598,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     manager={peers.manager}
                     roster={peers.roster}
                     workspace={activeWorkspacePath}
+                    sessionId={session.opened.session_id}
                     workspaceLabel={workspaceName(
                       activeWorkspacePath || t("Workspace"),
                     )}

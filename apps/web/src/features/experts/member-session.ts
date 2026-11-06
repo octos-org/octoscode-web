@@ -2,16 +2,23 @@ import {
   OctosUiProtocolError,
   type HydratedFileMutation,
   type HydratedTurn,
+  type ProjectionEnvelopeV2,
   type SessionHydrateParams,
 } from "@octos-org/octoscode-client/protocol";
+import type { UsageCommands } from "@octos-org/octoscode-client/usage";
 
-/** The two calls a refreshed page needs on a member's own session. */
+/** The calls the page needs on sessions it does not hold: members, and the starting conversation's record. */
 export interface MemberSessionClient {
   hydrateSession(params: SessionHydrateParams): Promise<{
     turns?: readonly HydratedTurn[];
     file_mutations?: readonly HydratedFileMutation[];
+    replayed_projection_envelopes?: readonly ProjectionEnvelopeV2[];
   }>;
   interruptTurn(sessionId: string, turnId: string): Promise<unknown>;
+  /** The #1376 usage ledger; absent on a client that cannot read it. */
+  usageCommands?(
+    profileId: string,
+  ): Promise<Pick<UsageCommands, "scope" | "read">>;
 }
 
 /** The member's turns, and nothing else, from `session/hydrate`. */
@@ -35,6 +42,19 @@ export function readMemberFiles(
   return client
     .hydrateSession({ session_id: sessionId, include: ["messages"] })
     .then((result) => result.file_mutations ?? null);
+}
+
+/**
+ * The starting conversation's replayed records, where each merge turn's
+ * terminal keeps that turn's own usage. Core sends them with messages only.
+ */
+export function readConversationReplay(
+  client: MemberSessionClient,
+  sessionId: string,
+): Promise<readonly ProjectionEnvelopeV2[] | null> {
+  return client
+    .hydrateSession({ session_id: sessionId, include: ["messages"] })
+    .then((result) => result.replayed_projection_envelopes ?? null);
 }
 
 /**

@@ -80,6 +80,7 @@ const turnText = (frame: SentFrame) =>
 
 test.beforeEach(async ({ request }) => {
   await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
+  await request.post(FIXTURE_ORIGIN + "/__test__/usage/reset");
 });
 
 test("the entry stays hidden when the server cannot stage and read back peers", async ({
@@ -525,6 +526,7 @@ const fileReads = (sent: SentFrame[]) =>
   sent.filter(
     (frame) =>
       frame.method === "session/hydrate" &&
+      String(frame.params?.session_id).includes("#peer-") &&
       JSON.stringify(frame.params?.include) === '["messages"]',
   );
 
@@ -733,4 +735,122 @@ test("a writer whose answer claims a file the server never recorded is called ou
   expect(turnText(masterStarts(sent).at(-1)!)).not.toContain(
     "New files from experts",
   );
+});
+
+// T-0427: what a team cost. Each member's figure is its own session's ledger
+// part; a merge is one turn of this conversation, with that turn's own usage.
+test("shows each member's ledger usage and the merge's own, never a 0 for a member that reported none", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(page, "Review the plan. [nousage-seat-3]");
+  const team = center.locator("[data-expert-team]");
+  await expect(team.locator('[data-expert-state="finished"]')).toHaveCount(3, {
+    timeout: 20_000,
+  });
+  const usage = (seat: number) =>
+    team.locator(`[data-expert-usage$="-${seat}"]`);
+  await expect(usage(1)).toHaveText(
+    "Usage: 1,000 in · 100 out tokens · runs: 1",
+  );
+  // The prompt counts cache reads, as the usage page does.
+  await expect(usage(2)).toHaveText(
+    "Usage: 2,000 in · 200 out tokens · runs: 1",
+  );
+  await expect(usage(3)).toHaveText(
+    "Usage unknown: the server recorded runs (1) without token counts.",
+  );
+  const block = team.locator("[data-expert-team-usage]");
+  await expect(block).toContainText(
+    "Experts3,000 in · 300 out tokens1 unknown",
+  );
+  await expect(block).toContainText("Not merged in this conversation yet.");
+  await expect(block).toContainText(
+    "Total3,000 in · 300 out tokensExperts only; no merge yet.Left out, no figure: 1.",
+  );
+  // Each member's own session, once its turn is over; nothing else.
+  const reads = async () =>
+    (
+      (await (
+        await request.get(FIXTURE_ORIGIN + "/__test__/usage/reads")
+      ).json()) as { sessionId: string | null }[]
+    ).map((read) => read.sessionId);
+  await expect.poll(async () => (await reads()).length).toBe(3);
+  expect((await reads()).every((id) => id?.includes("#peer-"))).toBe(true);
+
+  await team
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(1);
+  await expect(page.getByText("Turn complete").first()).toBeVisible({
+    timeout: 20_000,
+  });
+  const back = await openExperts(page);
+  const merged = back.locator("[data-expert-team-usage]");
+  await expect(merged).toContainText("Merges12 in · 9 out tokens (merges: 1)");
+  await expect(merged).toContainText(
+    "Total3,012 in · 309 out tokensExperts plus merges (1).",
+  );
+  // Returning reads nothing again from the ledger.
+  expect(await reads()).toHaveLength(3);
+
+  await page.reload();
+  await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const again = await openExperts(page);
+  await expect(again.locator('[data-expert-usage$="-1"]')).toHaveText(
+    "Usage: 1,000 in · 100 out tokens · runs: 1",
+  );
+  await expect(again.locator("[data-expert-team-usage]")).toContainText(
+    "Total3,012 in · 309 out tokensExperts plus merges (1).",
+  );
+  const stored = await page.evaluate(
+    () =>
+      JSON.stringify({ ...localStorage }) +
+      JSON.stringify({ ...sessionStorage }),
+  );
+  expect(stored).not.toMatch(/3,012|3012|run_count/);
+});
+
+test("a failed member's run without tokens is unknown, and another team's merge is not counted", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const sent = observe(page);
+  await connect(page);
+  const center = await openExperts(page);
+  await startTeam(page, "First plan.");
+  const first = center.locator("[data-expert-team]");
+  await expect(first.locator('[data-expert-state="finished"]')).toHaveCount(3, {
+    timeout: 20_000,
+  });
+  await first
+    .getByRole("button", { name: "Merge results in this conversation" })
+    .click();
+  await expect.poll(() => masterStarts(sent).length).toBe(1);
+  await expect(page.getByText("Turn complete").first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await openExperts(page);
+  await startTeam(page, "Second plan. [fail-seat-3]", "research");
+  const second = center.locator('[data-expert-team^="research/"]');
+  await expect(
+    second.locator('[data-expert-member$="-3"] [data-expert-state="failed"]'),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(second.locator('[data-expert-usage$="-3"]')).toHaveText(
+    "Usage unknown: the server recorded runs (1) without token counts.",
+  );
+  const block = second.locator("[data-expert-team-usage]");
+  await expect(block).toContainText("Not merged in this conversation yet.");
+  await expect(block).toContainText("Total3,000 in · 300 out tokens");
+  await expect(
+    center.locator(
+      '[data-expert-team^="plan-review/"] [data-expert-team-usage]',
+    ),
+  ).toContainText("(merges: 1)");
 });
