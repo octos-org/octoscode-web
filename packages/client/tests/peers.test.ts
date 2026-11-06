@@ -178,6 +178,30 @@ describe("peer wire authority", () => {
     expect(parse(null)).not.toHaveProperty("last_outcome");
     expect(parse("exploded")).not.toHaveProperty("last_outcome");
   });
+  it("reads a row's master Session only from originator or master_session_id", () => {
+    // T-0082: a reload rebuilds the peer roster from gather, so these are the
+    // only fields that may attach a row to a master. An empty or non-string
+    // value attaches nothing; an unknown execution word is dropped.
+    const parse = (extra: Record<string, unknown>) =>
+      parsePeerGatherResult(
+        { profile_id: "dev", peers: [{ ...row, ...extra }] },
+        "dev",
+      )?.peers[0];
+    expect(
+      parse({
+        originator: "dev:api:web-1",
+        master_session_id: null,
+        execution: "unknown",
+      }),
+    ).toMatchObject({ originator: "dev:api:web-1", execution: "unknown" });
+    expect(parse({ master_session_id: "dev:api:web-2" })).toMatchObject({
+      master_session_id: "dev:api:web-2",
+    });
+    const none = parse({ originator: "", execution: "exploded" });
+    expect(none).not.toHaveProperty("originator");
+    expect(none).not.toHaveProperty("execution");
+    expect(parse({ originator: 7 })).not.toHaveProperty("originator");
+  });
   it("requires originating session AND profile on durable notifications", () => {
     const notification = {
       method: PEER_METHODS.STAGED,

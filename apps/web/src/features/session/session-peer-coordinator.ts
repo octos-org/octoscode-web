@@ -13,8 +13,11 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 import {
   parsePeerNotification,
+  peerIdentityForTopic,
   samePeerScope,
   type PeerCommands,
+  type PeerGatherEntry,
+  type PeerGatherResult,
 } from "@octos-org/octoscode-client/peer-protocol";
 import { isSandboxEscalation } from "../approval/approval-presentation.ts";
 import { LazyPeerManager } from "../peers/lazy-peer-manager.ts";
@@ -111,6 +114,17 @@ export interface SessionPeerCoordinatorOptions<
   bufferLimit?: number;
 }
 type Notification = Pick<RpcNotification, "method" | "params">;
+/** A native peer Session id: `<profile>:local:tui#peer-<slug>` (peerIdentityForTopic). */
+const NATIVE_PEER_SESSION_ID =
+  /^([^:#\s]+):local:tui#peer-([a-zA-Z0-9][a-zA-Z0-9_-]*)$/u;
+
+/** One native peer Session the server's blackboard lists. */
+export interface PeerDirectoryEntry {
+  readonly slug: string;
+  /** The peer's display name (its `name` file), falling back to the slug. */
+  readonly name: string;
+}
+
 interface Binding<
   Client extends PeerCoordinatorClient,
   Record extends PeerCoordinatorRecord<Client>,
@@ -128,6 +142,8 @@ interface Binding<
   opened: Map<string, Record>;
   adopted: Map<string, string>;
   closed: Set<string>;
+  /** Peers re-added from `peer/gather` after a reload (T-0082); never opened here. */
+  restored: Set<string>;
   /** Pre-dispatch idempotency keys for THIS master, keyed by the pending peer's
    * retry-stable kickoff `turnId`. Minted ONCE and reused on every retry so a
    * lost-ack replay dedupes server-side (design 1120 §4). Entries are dropped
@@ -296,6 +312,16 @@ export class SessionPeerCoordinator<
   readonly #options: SessionPeerCoordinatorOptions<Client, Record>;
   readonly #bindings = new Map<Record, Binding<Client, Record>>();
   readonly #listeners = new Set<() => void>();
+  /** Server-attested native peer Sessions from `peer/gather`, by identity. */
+  readonly #directory = new Map<string, PeerDirectoryEntry>();
+  /** Gather rows read so far, by profile then slug, for masters that bind later. */
+  readonly #rows = new Map<string, Map<string, PeerGatherEntry>>();
+  /** Peer-shaped Session ids already asked about (or being asked about). */
+  readonly #checked = new Set<string>();
+  /** Peer-shaped slugs waiting for a bound Session of their profile, by profile. */
+  readonly #candidates = new Map<string, Set<string>>();
+  /** Bumped by `clear()`, so a read from a previous login is dropped. */
+  #directoryEpoch = 0;
   #client: Client | null = null;
   #transport = 0;
   constructor(options: SessionPeerCoordinatorOptions<Client, Record>) {
@@ -319,7 +345,11 @@ export class SessionPeerCoordinator<
     const owner = [...this.#bindings.values()].find((binding) => {
       const staging =
         binding.adopted.get(record.scope.sessionId) ?? record.scope.sessionId;
-      return binding.opened.has(staging) || binding.closed.has(staging);
+      return (
+        binding.opened.has(staging) ||
+        binding.closed.has(staging) ||
+        binding.restored.has(staging)
+      );
     });
     return (owner ?? this.#bindings.get(record))?.record ?? null;
   }
@@ -338,6 +368,29 @@ export class SessionPeerCoordinator<
     // (`retirement cancels only its owner`).
     const master = this.getMaster(record);
     return master ? (this.#bindings.get(master)?.manager ?? null) : null;
+  }
+  /**
+   * The rows that make a Session a read-only peer view: the owner master's
+   * roster, plus every Session `peer/gather` attests is a native peer. The
+   * second half keeps a peer read-only after a reload even when the server
+   * does not say which master staged it.
+   */
+  readonlyRows(
+    record: Record,
+  ): readonly { readonly identity: string; readonly slug: string }[] {
+    const roster = this.get(record)?.snapshot().peers ?? [];
+    if (!this.#directory.size) return roster;
+    return [
+      ...roster,
+      ...[...this.#directory].map(([identity, entry]) => ({
+        identity,
+        slug: entry.slug,
+      })),
+    ];
+  }
+  /** Server-attested native peer Sessions, by identity (see `readonlyRows`). */
+  directory(): ReadonlyMap<string, PeerDirectoryEntry> {
+    return this.#directory;
   }
   getError(record: Record): string | null {
     return this.#bindings.get(record)?.error ?? null;
@@ -381,6 +434,7 @@ export class SessionPeerCoordinator<
         opened: new Map(),
         adopted: new Map(),
         closed: new Set(),
+        restored: new Set(),
         operations: new Map(),
         manager: new LazyPeerManager({
           commands: () => this.#bindings.get(record)?.commands ?? null,
@@ -492,6 +546,8 @@ export class SessionPeerCoordinator<
           binding.manager.observeNotification(notification, commands);
         }
         this.#publish();
+        this.#restoreInto(binding);
+        this.#askServer();
       })
       .catch(() => {
         if (current())
@@ -499,6 +555,104 @@ export class SessionPeerCoordinator<
             binding,
             "Peer controls could not be loaded. Inspect the peer sessions before retrying.",
           );
+      });
+  }
+
+  /**
+   * T-0082 cold restore. A reload empties every roster, and `session/list`
+   * carries no peer facts, so the host reports the Session ids it lists. An id
+   * shaped like a native peer (`<profile>:local:tui#peer-<slug>`) is only a
+   * reason to ask: `peer/gather`, filtered to those slugs, says which ARE
+   * peers. They join the directory, and each master gets back the peers the
+   * server says it staged. Ids already on a roster are not asked about.
+   */
+  noteSessions = (sessionIds: Iterable<string>): void => {
+    const roster = new Set(this.roster().map((peer) => peer.identity));
+    let added = false;
+    for (const id of sessionIds) {
+      const shape = NATIVE_PEER_SESSION_ID.exec(id);
+      if (
+        !shape ||
+        this.#checked.has(id) ||
+        this.#directory.has(id) ||
+        roster.has(id)
+      )
+        continue;
+      const [, profileId, slug] = shape as unknown as [string, string, string];
+      const slugs = this.#candidates.get(profileId) ?? new Set<string>();
+      if (slugs.has(slug)) continue;
+      slugs.add(slug);
+      this.#candidates.set(profileId, slugs);
+      added = true;
+    }
+    if (added) this.#askServer();
+  };
+
+  /** One filtered read per profile that has candidates and a bound Session. */
+  #askServer(): void {
+    for (const [profileId, slugs] of this.#candidates) {
+      const commands = [...this.#bindings.values()].find(
+        (binding) =>
+          binding.commands?.scope.profileId === profileId &&
+          binding.commands.capabilities.gather,
+      )?.commands;
+      if (!commands) continue;
+      this.#candidates.delete(profileId);
+      const asked = [...slugs].map((slug) =>
+        peerIdentityForTopic(profileId, `peer-${slug}`),
+      );
+      for (const id of asked) this.#checked.add(id);
+      const epoch = this.#directoryEpoch;
+      void commands
+        .gather({ slugs: [...slugs] })
+        .then((result) => {
+          if (epoch === this.#directoryEpoch) this.#learn(result);
+        })
+        .catch(() => {
+          // A failed read is asked again the next time the host lists them.
+          if (epoch === this.#directoryEpoch)
+            for (const id of asked) this.#checked.delete(id);
+        });
+    }
+  }
+
+  #learn(result: PeerGatherResult): void {
+    const rows = this.#rows.get(result.profile_id) ?? new Map();
+    for (const row of result.peers) {
+      rows.set(row.slug, row);
+      this.#directory.set(peerIdentityForTopic(result.profile_id, row.topic), {
+        slug: row.slug,
+        name: row.name?.trim() || row.slug,
+      });
+    }
+    this.#rows.set(result.profile_id, rows);
+    for (const binding of this.#bindings.values()) this.#restoreInto(binding);
+    this.#publish();
+  }
+
+  /** Put back the peers the server says THIS binding's master staged. */
+  #restoreInto(binding: Binding<Client, Record>): void {
+    const commands = binding.commands;
+    if (!commands) return;
+    const master = binding.record.scope.sessionId;
+    const mine = [
+      ...(this.#rows.get(commands.scope.profileId)?.values() ?? []),
+    ].filter((row) => (row.originator ?? row.master_session_id) === master);
+    if (!mine.length) return;
+    const version = binding.version;
+    void binding.manager
+      .restore(
+        { profile_id: commands.scope.profileId, peers: mine },
+        binding.record.scope.workspaceRoot,
+      )
+      .then((added) => {
+        if (
+          this.#bindings.get(binding.record) !== binding ||
+          binding.version !== version
+        )
+          return;
+        for (const identity of added) binding.restored.add(identity);
+        if (added.length) this.#publish();
       });
   }
 
@@ -904,5 +1058,10 @@ export class SessionPeerCoordinator<
     for (const record of this.#bindings.keys()) this.retire(record);
     this.#client = null;
     this.#transport += 1;
+    this.#directoryEpoch += 1;
+    this.#directory.clear();
+    this.#rows.clear();
+    this.#checked.clear();
+    this.#candidates.clear();
   }
 }

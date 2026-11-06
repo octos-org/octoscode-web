@@ -4,6 +4,7 @@ import type {
   PeerGatherResult,
   PeerFleetEntry,
   PeerGatherEntry,
+  PeerExecution,
   PeerTurnOutcomeRecord,
 } from "./peer-protocol.ts";
 // Keep receipt-only validation out of the background lifecycle subscription path.
@@ -15,6 +16,14 @@ const slug = (v: unknown): v is string =>
 const uint = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const optionalText = (v: unknown): boolean => v == null || text(v);
+const PEER_EXECUTIONS: ReadonlySet<PeerExecution> = new Set([
+  "queued",
+  "running",
+  "idle",
+  "failed",
+  "closed",
+  "unknown",
+]);
 // Newer outcome words are dropped rather than guessed at.
 const PEER_TURN_OUTCOMES: ReadonlySet<PeerTurnOutcomeRecord> = new Set([
   "completed",
@@ -120,6 +129,13 @@ export function parsePeerGatherResult(
       closed: row.closed,
       ...(PEER_TURN_OUTCOMES.has(row.last_outcome as PeerTurnOutcomeRecord)
         ? { last_outcome: row.last_outcome as PeerTurnOutcomeRecord }
+        : {}),
+      ...(PEER_EXECUTIONS.has(row.execution as PeerExecution)
+        ? { execution: row.execution as PeerExecution }
+        : {}),
+      ...(text(row.originator) ? { originator: row.originator } : {}),
+      ...(text(row.master_session_id)
+        ? { master_session_id: row.master_session_id }
         : {}),
     });
   }

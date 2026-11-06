@@ -22,6 +22,12 @@ import type { PeerRosterEntry } from "../peers/peer-roster.ts";
 
 interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   peerRoster?: readonly PeerRosterEntry[] | undefined;
+  /**
+   * Native peer Sessions the server's blackboard lists (`peer/gather`), by
+   * identity. A listed peer with no master on this page stays in its
+   * workspace list, titled by its name rather than its kickoff text.
+   */
+  peerDirectory?: ReadonlyMap<string, { readonly name: string }> | undefined;
   recentWorkspaces: readonly RecentWorkspace[];
   knownSessions: readonly KnownSessionRef[];
   /**
@@ -52,6 +58,7 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
 /** Session rows are presentation of server-confirmed references in this tab. */
 export function SessionSidebar({
   peerRoster,
+  peerDirectory,
   recentWorkspaces,
   knownSessions,
   sessionCatalog,
@@ -155,10 +162,12 @@ export function SessionSidebar({
           const selected = productId === selectedSessionId;
           const backgroundPrompt =
             backgroundBySession.get(productId)?.firstPrompt;
+          const peerName = peerDirectory?.get(item.sessionId)?.name;
           return {
             sessionId: item.sessionId,
             profileId: item.profileId,
             title:
+              (peerName ? t("Peer {value0}", { value0: peerName }) : null) ??
               item.title ??
               (selected
                 ? activePromptTitle
@@ -246,6 +255,7 @@ export function SessionSidebar({
     activePromptTitle,
     openingSessionId,
     peerRoster,
+    peerDirectory,
     sessionError,
     t,
   ]);

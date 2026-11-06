@@ -90,7 +90,10 @@ import {
   peerRowAttention,
 } from "../features/peers/peer-row-view.ts";
 import { toControlAnswers } from "../features/questions/answers.ts";
-import type { PeerRosterEntry } from "../features/peers/peer-roster.ts";
+import {
+  isPeerRunning,
+  type PeerRosterEntry,
+} from "../features/peers/peer-roster.ts";
 import type { PeerControlCommand } from "../features/control/peer-control-commands.ts";
 import {
   shortcutTargetIsTextInput,
@@ -1333,6 +1336,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspaceProduct.backgroundTurns,
     deletedSessionIds,
   ]);
+  // T-0082: peers staged before a reload are only listed as Sessions; let the
+  // coordinator ask the server which of them are peers and whose.
+  const notePeerSessions = peers.noteSessions;
+  useEffect(() => {
+    notePeerSessions(navigableSessions.map((ref) => ref.sessionId));
+  }, [navigableSessions, notePeerSessions]);
   // ---- Phone remote control -------------------------------------------
   const remoteServerLink = remoteLink(session.server);
   const remoteSelectedLive: LiveSessionSnapshot | null =
@@ -1943,10 +1952,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     message: string;
   } | null>(null);
   const readOnlyPeer =
-    peerReadonlySlug(
-      peers.manager?.snapshot().peers ?? [],
-      session.opened?.session_id ?? null,
-    ) !== null;
+    peerReadonlySlug(peers.readonlyRows, session.opened?.session_id ?? null) !==
+    null;
   const submit = async (override?: string, queueOnly = false) => {
     const text = (override ?? draftRef.current).trim();
     const attachedFiles = conversation.attachments?.getSnapshot().entries ?? [];
@@ -3912,20 +3919,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       !selfSeatHeld
                       ? { kind: "busy-elsewhere" }
                       : { kind: "responding" }
-                    : peers.manager
-                          ?.snapshot()
-                          .peers.some((peer) =>
-                            ["opening", "started"].includes(peer.status),
-                          )
+                    : peers.manager?.snapshot().peers.some(isPeerRunning)
                       ? {
                           kind: "peers-running",
                           count: peers.manager
-                            ?.snapshot()
-                            .peers.filter(
-                              (peer) =>
-                                peer.status === "opening" ||
-                                peer.status === "started",
-                            ).length,
+                            .snapshot()
+                            .peers.filter(isPeerRunning).length,
                         }
                       : selfSeatHeld
                         ? { kind: "peers-running", count: 1 }
@@ -4364,6 +4363,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 (workspaceError && savedLink ? savedLink.key : null)
               }
               peerRoster={peers.roster}
+              peerDirectory={peers.directory}
               peerActionRoster={peers.manager?.snapshot().peers ?? []}
               openingSessionId={openingSessionKey}
               sessionError={workspaceProduct.state.error}
@@ -5407,18 +5407,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         focusOnMount={
                           !compact && !settingsOpen && !workspacePicker.open
                         }
-                        peerRoster={peers.manager?.snapshot().peers ?? []}
+                        peerRoster={peers.readonlyRows}
                         peerSessionId={session.opened?.session_id ?? null}
-                        onReturnToMaster={() => {
-                          if (draftCapacityBlocked) return;
-                          void peers.returnToMaster().then((outcome) => {
-                            if (outcome !== "opened") return;
-                            if (compact) setSidebarCollapsed(true);
-                            requestAnimationFrame(() =>
-                              composerRef.current?.focus(),
-                            );
-                          });
-                        }}
+                        // Offered only when this page knows the master; a peer
+                        // the server lists without one stays read-only.
+                        onReturnToMaster={
+                          peers.hasMaster
+                            ? () => {
+                                if (draftCapacityBlocked) return;
+                                void peers.returnToMaster().then((outcome) => {
+                                  if (outcome !== "opened") return;
+                                  if (compact) setSidebarCollapsed(true);
+                                  requestAnimationFrame(() =>
+                                    composerRef.current?.focus(),
+                                  );
+                                });
+                              }
+                            : undefined
+                        }
                         sendBlockedReason={phoneSendBlockedReason}
                         value={draft}
                         onChange={(value) => {

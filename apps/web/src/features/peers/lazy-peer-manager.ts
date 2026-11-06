@@ -6,6 +6,7 @@ import {
   type PeerScope,
   type PeerPrepareParams,
   type PeerGatherParams,
+  type PeerGatherResult,
 } from "@octos-org/octoscode-client/peer-protocol";
 import type { RpcNotification } from "@octos-org/octoscode-client/protocol";
 import type {
@@ -226,6 +227,19 @@ export class LazyPeerManager {
     return manager && this.#current(source, epoch)
       ? manager.gather(params)
       : null;
+  }
+  /** Forward a cold restore (T-0082); it loads the module only when asked to. */
+  async restore(
+    result: PeerGatherResult,
+    cwd: string,
+  ): Promise<readonly string[]> {
+    this.syncAuthority();
+    const source = this.#commands;
+    const epoch = this.#epoch;
+    const manager = await this.#load();
+    return manager && this.#current(source, epoch)
+      ? manager.restore(result, cwd)
+      : [];
   }
   async retryOpen(identity: string): Promise<boolean> {
     this.syncAuthority();
