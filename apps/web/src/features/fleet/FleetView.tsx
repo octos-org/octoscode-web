@@ -214,17 +214,27 @@ export function FleetView({
   const [start, setStart] = useState<FleetStartState>(FLEET_START_IDLE);
   // Round 4 J2: Dismiss hides the uncertain-ack notice WITHOUT sending.
   const [startDismissed, setStartDismissed] = useState(false);
+  // T-0459: a NEW Start was minted over a standing refusal. The sink keeps
+  // reporting the OLD refusal until the new request is under way, so that
+  // report must not read as the new request's outcome meanwhile.
+  const [refusalSuperseded, setRefusalSuperseded] = useState(false);
   // Round 2 judge #2 / Round 4 J2: the sink's settle OUTRANKS the local latch —
   // the local machine has no way to learn the dispatch landed, so without the
   // settle the form sticks on "Starting…" forever.
-  const settle =
+  const reported =
     startState !== undefined && startState.kind !== "requesting"
       ? startState
       : undefined;
+  // The old refusal is gone once the sink reports anything else.
+  if (refusalSuperseded && reported?.kind !== "failed")
+    setRefusalSuperseded(false);
+  const settle =
+    reported?.kind === "failed" && refusalSuperseded ? undefined : reported;
   // Round 4 J2: an ACCEPTED settle CLEARS the form — a second Start is a NEW
   // request with a freshly minted id, and `fleetStartBegin` mints one only out
   // of `idle`, so the accepted settle reads as idle here. A refusal instead
-  // stands as the machine state: it KEEPS the brief and renders §6 copy below.
+  // stands as the machine state: it KEEPS the brief and renders §6 copy below
+  // until the operator starts again.
   const startMachine: FleetStartState =
     settle === undefined
       ? start
@@ -429,18 +439,27 @@ export function FleetView({
               !startAdmitted ||
               startMachine.kind === "requesting" ||
               // §4.3 "one Start = one dispatch": a local request still in flight
-              // closes the gate even while a STALE settle from the previous
-              // dispatch still stands.
-              start.kind === "requesting"
+              // closes the gate even while a STALE accepted settle from the
+              // previous dispatch still stands. A refusal settles it.
+              (start.kind === "requesting" && startMachine.kind !== "failed")
             }
             onClick={() => {
               if (!startAdmitted) return;
+              // T-0459: a refused dispatch started nothing on the server, so
+              // Start mints a NEW request from it — a fresh operation id, never
+              // a replay of the refused one (only the uncertain Retry reuses
+              // an id).
+              const from =
+                startMachine.kind === "failed"
+                  ? FLEET_START_IDLE
+                  : startMachine;
               const next = fleetStartBegin(
-                startMachine,
+                from,
                 nativeStartAvailable ? "native" : model,
                 brief,
               );
-              if (next === startMachine) return;
+              if (next === from) return;
+              if (startMachine.kind === "failed") setRefusalSuperseded(true);
               setStart(next);
               if (next.kind === "requesting")
                 // Round 4 J2: the submit carries the WHOLE Start identity —

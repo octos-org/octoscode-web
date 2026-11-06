@@ -435,7 +435,7 @@ test.describe("Fleet view (migrated console semantics)", () => {
   });
 
   // --------------------------------------------------------- refusals
-  test("a refused dispatch shows its bounded label, never server copy: a stale lease, then after a reload an unconfigured model", async ({
+  test("a refused dispatch shows its bounded label, never server copy, and Start tries again with a NEW request until one is accepted", async ({
     page,
     request,
   }) => {
@@ -461,17 +461,29 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await expect(fleet(page)).not.toContainText(RAW_STALE_COPY);
     await expect(fleet(page)).not.toContainText(RAW_DISPATCH_COPY);
 
-    // The operator reloads and tries again; now the lane's model is not
-    // configured on the server (`driver_model_unavailable`).
+    // Pressing Start again needs no reload and no edit: a refusal started
+    // nothing, so this is a NEW request (fresh operation id), now refused
+    // because the lane's model is not configured (`driver_model_unavailable`).
     await variant("refused");
-    await page.reload();
-    await expect(composer(page)).toBeEnabled();
-    await openFleet(page);
-    await startPeer(page);
+    await expect(fleetStart(page)).toBeEnabled();
+    await fleetStart(page).press("Enter");
     await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(2);
     await expect(fleet(page)).toContainText(DISPATCH_MODEL_UNAVAILABLE);
+    await expect(fleet(page)).not.toContainText(FENCE_STALE);
     await expect(fleet(page)).not.toContainText(RAW_DISPATCH_COPY);
     await expect(fleet(page)).not.toContainText("-32602");
     await expect(fleet(page)).not.toContainText("payload_digest");
+
+    // The operator rewrites the brief once the server accepts again: the
+    // third request is dispatched with its own id and adopts a row.
+    await variant("accepted");
+    await fleetBrief(page).fill("Second try after the refusals");
+    await fleetStart(page).press("Enter");
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(3);
+    const ids = w.calls(DISPATCH_METHOD).map((frame) => frame.operationId);
+    expect(ids.every(Boolean)).toBe(true);
+    expect(new Set(ids).size).toBe(3);
+    await adoptedRowSlug(page);
+    await expect(fleet(page)).not.toContainText(DISPATCH_MODEL_UNAVAILABLE);
   });
 });
