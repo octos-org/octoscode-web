@@ -2602,6 +2602,21 @@ const catalog: Readonly<Record<string, string>> = {
   "If information is missing, say what is missing instead of guessing.":
     "信息不够时写明缺什么，不要猜。",
   "You are “{name}”. Your angle: {focus}": "你是「{name}」。你的角度：{focus}",
+  // T-0440: a member's angle reworded for one team only.
+  "Adjust for this task": "按这次任务调整",
+  "Adjust {member}'s angle for this task": "按这次任务调整「{member}」的分工",
+  "{member}: angle for this task": "「{member}」这次的分工",
+  "Same as the default. One paragraph; line breaks become spaces.":
+    "和默认一样。写成一段，换行会变成空格。",
+  "For this team only; the built-in team keeps its own. One paragraph; line breaks become spaces. {count} of {max} characters.":
+    "只用于这一次，内置专家团不变。写成一段，换行会变成空格。{count}/{max} 字。",
+  "Use the default": "恢复默认",
+  "Use the default angle for {member}": "「{member}」恢复默认分工",
+  "Give {member} an angle for this task, or use the default.":
+    "给「{member}」写上这次的分工，或者恢复默认。",
+  "Adjusted for this task": "本次调整过",
+  "The server returned only part of the brief, so this member's angle for this task cannot be shown.":
+    "服务器只返回了部分简报，看不到这位成员这次的分工。",
   "Expert team": "专家团",
   "These are the results of the {team} team for this goal:":
     "下面是「{team}」针对这个目标的结果：",

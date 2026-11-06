@@ -14,6 +14,7 @@ import {
   membersToRead,
   newTeamTag,
   parseTeamBrief,
+  recordedFocus,
   resultBody,
   teamCopyName,
   teamWrites,
@@ -597,5 +598,145 @@ describe("teams that deliver a file", () => {
     expect(
       expertSummaryInstruction(en, unread!, (state) => state).instruction,
     ).not.toContain("recorded");
+  });
+});
+
+describe("a member's angle for one task (T-0440)", () => {
+  const cleanup = EXPERT_TEAMS.find((team) => team.id === "data-cleanup")!;
+  const start = (
+    t: typeof en,
+    template = review,
+    focus?: readonly (string | undefined)[],
+  ) =>
+    composeExpertTeam(t, template, {
+      goal: "Review docs/plan.md",
+      workspace: "/srv/work",
+      tag: "7f3a",
+      startedAt,
+      ...(focus ? { focus } : {}),
+    });
+  const own = "只看回滚：每一步能不能撤回，\n撤回要多久、谁来做。";
+
+  it("changes only that member's angle; names, rules and the others' angles stay", () => {
+    for (const t of [en, zhText]) {
+      const plain = start(t);
+      const edited = start(t, review, [undefined, own, undefined]);
+      expect(edited.names).toEqual(plain.names);
+      const oneLine = "只看回滚：每一步能不能撤回， 撤回要多久、谁来做。";
+      // The shared brief: only member 2's roster line differs.
+      const diff = (a: string, b: string) =>
+        a.split("\n").filter((line, index) => line !== b.split("\n")[index]);
+      expect(diff(edited.brief, plain.brief)).toEqual([
+        t("- {name}: {focus}", { name: plain.names[1]!, focus: oneLine }),
+      ]);
+      // Each member's own instruction: 1 and 3 keep the template's angle.
+      for (const index of [0, 2])
+        expect(edited.memberBriefs[index]!.split("\n").at(-1)).toBe(
+          plain.memberBriefs[index]!.split("\n").at(-1),
+        );
+      expect(edited.memberBriefs[1]!.split("\n").at(-1)).toBe(
+        t("You are “{name}”. Your angle: {focus}", {
+          name: plain.names[1]!,
+          focus: oneLine,
+        }),
+      );
+      // The built-in team itself is untouched.
+      expect(start(t).brief).toBe(plain.brief);
+    }
+  });
+
+  it("treats a blank override as the default", () => {
+    expect(start(en, review, [" \n ", undefined, ""]).brief).toBe(
+      start(en).brief,
+    );
+  });
+
+  it("keeps the writer's file rules and hand-off when its angle changes", () => {
+    const writer = cleanup.members.findIndex((member) => member.writes);
+    const focus = cleanup.members.map((_, index) =>
+      index === writer ? "Only fix the date column." : undefined,
+    );
+    const plain = start(zhText, cleanup);
+    const edited = start(zhText, cleanup, focus);
+    expect(edited.memberBriefs[writer]).toContain("Only fix the date column.");
+    expect(edited.memberBriefs[writer]).toContain("orders.cleaned-7f3a.csv");
+    expect(edited.brief).toContain(
+      zhText(
+        "Only {name} creates a file, as its angle says; everyone else only reads.",
+        {
+          name: plain.names[writer]!,
+        },
+      ),
+    );
+  });
+
+  it("reads each member's angle back from the server's brief, marking only the changed one", () => {
+    for (const t of [en, zhText]) {
+      for (const template of [review, cleanup]) {
+        const focus = template.members.map((_, index) =>
+          index === 1 ? own : undefined,
+        );
+        const team = start(t, template, focus);
+        team.names.forEach((name, index) => {
+          const member = template.members[index]!;
+          expect(recordedFocus(t, team.brief, name, member)).toEqual(
+            index === 1
+              ? {
+                  text: "只看回滚：每一步能不能撤回， 撤回要多久、谁来做。",
+                  adjusted: true,
+                }
+              : { text: t(member.focus), adjusted: false },
+          );
+        });
+      }
+    }
+  });
+
+  it("shows another language's line as the server has it, and nothing it lacks", () => {
+    const team = start(zhText, review, [undefined, own, undefined]);
+    // Read in English: the zh line cannot be split by the English wording.
+    const read = recordedFocus(
+      en,
+      team.brief,
+      team.names[1]!,
+      review.members[1]!,
+    );
+    expect(read).toEqual({
+      text: "只看回滚：每一步能不能撤回， 撤回要多久、谁来做。",
+      adjusted: false,
+    });
+    expect(recordedFocus(en, team.brief, "Nobody · 7f3a-9", null)).toBeNull();
+  });
+
+  it("does not put the template's angle where a cut brief lost the member's line", () => {
+    const team = start(en, review, [undefined, own, undefined]);
+    const cut = team.brief.slice(0, team.brief.indexOf("Members:"));
+    const rows = team.names.map((name, index) =>
+      gatherRow(name, `slug-${index}`, cut, { brief_truncated: true }),
+    );
+    const [view] = expertTeams(rows, [], "/srv/work", new Map(), new Map(), en);
+    expect(
+      view!.members.map((member) => [member.recordedFocus, member.focusUnread]),
+    ).toEqual([
+      [null, true],
+      [null, true],
+      [null, true],
+    ]);
+    const whole = team.names.map((name, index) =>
+      gatherRow(name, `slug-${index}`, team.brief),
+    );
+    const [full] = expertTeams(
+      whole,
+      [],
+      "/srv/work",
+      new Map(),
+      new Map(),
+      en,
+    );
+    expect(full!.members[1]!.recordedFocus).toEqual({
+      text: "只看回滚：每一步能不能撤回， 撤回要多久、谁来做。",
+      adjusted: true,
+    });
+    expect(full!.members[0]!.recordedFocus?.adjusted).toBe(false);
   });
 });
