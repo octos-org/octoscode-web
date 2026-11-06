@@ -260,6 +260,7 @@ export function SkillActionsContent({ state }: { state: SkillActionsState }) {
               <div key={key} data-skill-action={key}>
                 <button
                   type="button"
+                  role="menuitem"
                   className={controlStyles.option}
                   disabled={!action.available || busy}
                   title={
