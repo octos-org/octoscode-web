@@ -19,15 +19,27 @@ export const USAGE_RANGES: readonly {
 export const SESSIONS_PER_PAGE = 8;
 
 /**
- * Local calendar days, open-ended so a refresh picks up runs finished since.
+ * UTC calendar days anchored on the SERVER's clock (T-0432): the ledger
+ * groups by UTC day, so the browser's timezone and wall clock never enter
+ * the window. `serverNow` null means the server shared no time — a period
+ * cannot be computed honestly, so return null instead of guessing.
  * The server compares `from` inclusively against each run's timestamp.
  */
-export function rangeStart(range: UsageRange, now: Date): Date | undefined {
+export function rangeStart(
+  range: UsageRange,
+  serverNow: Date | null,
+): Date | undefined | null {
   if (range === "all") return undefined;
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  if (range === "7d") start.setDate(start.getDate() - 6);
-  if (range === "30d") start.setDate(start.getDate() - 29);
+  if (!serverNow) return null;
+  const start = new Date(
+    Date.UTC(
+      serverNow.getUTCFullYear(),
+      serverNow.getUTCMonth(),
+      serverNow.getUTCDate(),
+    ),
+  );
+  if (range === "7d") start.setUTCDate(start.getUTCDate() - 6);
+  if (range === "30d") start.setUTCDate(start.getUTCDate() - 29);
   return start;
 }
 

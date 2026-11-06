@@ -2812,6 +2812,10 @@ const catalog: Readonly<Record<string, string>> = {
   "By date (UTC)": "按日期（UTC）",
   "Date (UTC)": "日期（UTC）",
   "This server does not keep a usage ledger.": "这个服务器没有用量账本。",
+  "Couldn't confirm the sign-in for usage. Try again.":
+    "无法确认用量所属的登录身份。请重试。",
+  "The server did not share its clock, so this period cannot be computed. All time still works.":
+    "服务器没有给出它的时间，无法计算这个时间段。“全部时间”仍可用。",
   "The server no longer accepts this sign-in. Reconnect, then try again.":
     "服务器不再接受这次登录。重新连接后再试。",
   "This account cannot see usage here.": "这个账号无权查看这里的用量。",

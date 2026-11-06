@@ -123,8 +123,15 @@ describe("Core #1376 usage ledger", () => {
   });
 
   it("asks auth/me who the token is before choosing a route", async () => {
-    const fetchMock = vi.fn(async () =>
-      json({ user: { id: "admin", role: "admin" } }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ user: { id: "admin", role: "admin" } }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            date: "Fri, 06 Nov 2026 10:00:00 GMT",
+          },
+        }),
     );
     const usage = createUsageCommands({
       endpoint: "http://127.0.0.1:9/",
@@ -133,12 +140,37 @@ describe("Core #1376 usage ledger", () => {
       fetch: fetchMock as unknown as typeof fetch,
     });
     await expect(usage.scope()).resolves.toEqual({
-      kind: "profile",
-      profileId: "dev",
+      scope: { kind: "profile", profileId: "dev" },
+      // The server's own clock anchors the period windows (T-0432).
+      serverNow: new Date("2026-11-06T10:00:00.000Z"),
     });
     expect(String((fetchMock.mock.calls[0] as unknown as [URL])[0])).toBe(
       "http://127.0.0.1:9/api/auth/me",
     );
+  });
+
+  it("an auth/me 404 is a probe failure, never a missing ledger", async () => {
+    // T-0432: an older server without the auth route must not be reported as
+    // "this server does not keep a usage ledger".
+    for (const status of [404, 405, 503]) {
+      const usage = createUsageCommands({
+        endpoint,
+        profileId: "dev",
+        fetch: (async () =>
+          new Response("no route", { status })) as unknown as typeof fetch,
+      });
+      const error = await usage.scope().catch((cause) => cause);
+      expect(error).toMatchObject({ kind: "probe-failed", status });
+    }
+    // The ledger routes themselves still mean what they say.
+    const usage = createUsageCommands({
+      endpoint,
+      profileId: "dev",
+      fetch: (async () =>
+        new Response("no route", { status: 404 })) as unknown as typeof fetch,
+    });
+    const error = await usage.read({ kind: "mine" }).catch((cause) => cause);
+    expect(error).toMatchObject({ kind: "unsupported", status: 404 });
   });
 
   it("classifies failures without projecting response bodies", async () => {

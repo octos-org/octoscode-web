@@ -391,7 +391,10 @@ export function ExpertCenter({
     if (!due.length) return;
     usageScope.current ??= client
       .usageCommands(profileId)
-      .then(async (commands) => ({ commands, scope: await commands.scope() }))
+      .then(async (commands) => ({
+        commands,
+        scope: (await commands.scope()).scope,
+      }))
       .catch(() => null);
     const scoped = usageScope.current;
     for (const member of due) {

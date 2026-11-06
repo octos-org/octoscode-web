@@ -1672,8 +1672,16 @@ const http = createServer(async (request, response) => {
     );
     response.setHeader("Access-Control-Allow-Headers", "Authorization");
     response.setHeader("Access-Control-Allow-Methods", "GET");
+    // The page reads the server's clock off this header (T-0432).
+    response.setHeader("Access-Control-Expose-Headers", "Date");
+    if (usageLedger.dateHeader)
+      response.setHeader("Date", usageLedger.dateHeader);
     if (request.method === "OPTIONS") {
       response.writeHead(204).end();
+      return;
+    }
+    if (usageLedger.authStatus) {
+      response.writeHead(usageLedger.authStatus).end();
       return;
     }
     const token = authTokenFromUpgradeRequest(request);
@@ -7770,6 +7778,10 @@ async function handleUsageRead(request, response, path) {
     "Access-Control-Allow-Origin",
     request.headers.origin ?? "*",
   );
+  // The page reads the server's clock off this header (T-0432).
+  response.setHeader("Access-Control-Expose-Headers", "Date");
+  if (usageLedger.dateHeader)
+    response.setHeader("Date", usageLedger.dateHeader);
   response.setHeader("Access-Control-Allow-Headers", "Authorization, Accept");
   response.setHeader("Access-Control-Allow-Methods", "GET");
   if (request.method === "OPTIONS") {
@@ -7854,6 +7866,8 @@ async function handleUsageControl(request, response, path) {
       mode: "ok",
       failSession: null,
       delayAllMs: 0,
+      authStatus: 0,
+      dateHeader: null,
       reads: [],
       seeded: [],
     });
@@ -7864,6 +7878,11 @@ async function handleUsageControl(request, response, path) {
     usageLedger.mode = url.searchParams.get("mode") ?? "ok";
     usageLedger.failSession = url.searchParams.get("fail_session");
     usageLedger.delayAllMs = Number(url.searchParams.get("delay_all_ms") ?? 0);
+    // auth_status: what /api/auth/me answers (e.g. 404 — the probe must not
+    // become "no ledger"); date: overrides the Date header so tests pin the
+    // server's clock exactly (T-0432).
+    usageLedger.authStatus = Number(url.searchParams.get("auth_status") ?? 0);
+    usageLedger.dateHeader = url.searchParams.get("date") ?? null;
     response.writeHead(204).end();
     return;
   }
@@ -7892,7 +7911,9 @@ async function handleUsageControl(request, response, path) {
     }
     for (const run of seed.runs ?? []) {
       usageLedger.events.push({
-        timestamp: new Date(Date.now() - run.ago_ms).toISOString(),
+        timestamp: run.at
+          ? new Date(run.at).toISOString()
+          : new Date(Date.now() - run.ago_ms).toISOString(),
         profile_id: profile,
         session_id:
           run.session >= 0 ? ids[run.session] : `${profile}:api:unlisted`,
