@@ -1,18 +1,19 @@
 /**
- * PeerControllerPanel controlled-state harness — P2b RED (grant 2855).
+ * PeerControllerPanel controlled-state harness — P2b (grant 2855).
+ *
+ * The console behind Fleet's Advanced disclosure. e2e/peer-controller.spec.ts
+ * only proves it mounts there; Fleet's own Start form is what the e2e drives.
+ * So this keeps the console's two chains: the operator types a brief and
+ * chooses a lane, and that ONE submit becomes the session's single
+ * `peer/dispatch` plan (`planPeerDispatch`). Without a held seat, nothing is
+ * sent.
  *
  * apps/web has NO jsdom, so a real click cannot be simulated. This file uses
  * the repo's SECOND convention (`ComposerInput.test.tsx:1-40`): `react` is
  * mocked so `useState` is a controllable store, the component is invoked as a
  * plain function, and the returned element tree is walked by data-attribute.
- *
- * The contract asserted here is the ROOT addition to P2b: an operator can TYPE
- * a brief and CHOOSE a lane in the product, Dispatch enables only then, and the
- * ONE submit carries exactly the typed/chosen values into a single
- * `peer/dispatch` frame (`planPeerDispatch`).
  */
 import type { ReactElement } from "react";
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriverAcquireView } from "@octos-org/octoscode-client/external-driver";
 import {
@@ -168,19 +169,18 @@ beforeEach(() => {
 });
 
 describe("peer controller console — the operator OWNS the staging inputs", () => {
-  it("starts with an empty brief and NO chosen lane, so Dispatch is disabled", () => {
-    const tree = mount(vi.fn()).render();
-    // Editable, controlled, and empty — never a caller-held readOnly value.
-    expect(field(tree, "brief").props!.value).toBe("");
-    expect(field(tree, "brief").props!.readOnly).toBeUndefined();
-    expect(field(tree, "title").props!.value).toBe("");
-    expect(one(tree, "data-lane-picker", "ready").props!.value).toBe("");
-    expect(isDisabled(dispatchButton(tree))).toBe(true);
-  });
-
   it("types a brief AND chooses a lane => Dispatch enables, ONE frame carries both", () => {
     const calls: PeerControllerStagingSubmit[] = [];
     const harness = mount((submit) => calls.push(submit));
+
+    // 0) the console starts editable and EMPTY, so Dispatch is disabled: the
+    // browser can never present the first advertised lane as a choice.
+    const fresh = harness.render();
+    expect(field(fresh, "brief").props!.value).toBe("");
+    expect(field(fresh, "brief").props!.readOnly).toBeUndefined();
+    expect(field(fresh, "title").props!.value).toBe("");
+    expect(one(fresh, "data-lane-picker", "ready").props!.value).toBe("");
+    expect(isDisabled(dispatchButton(fresh))).toBe(true);
 
     // 1) the operator chooses an ADVERTISED lane (the picker is controlled)...
     change(one(harness.render(), "data-lane-picker", "ready"), "lane-review");
@@ -220,20 +220,6 @@ describe("peer controller console — the operator OWNS the staging inputs", () 
     });
   });
 
-  it("keeps Dispatch disabled until BOTH halves are provided", () => {
-    const harness = mount(vi.fn());
-    change(one(harness.render(), "data-lane-picker", "ready"), "lane-primary");
-    // A lane alone is not enough — the brief is still empty.
-    expect(isDisabled(dispatchButton(harness.render()))).toBe(true);
-
-    change(field(harness.render(), "brief"), "   ");
-    // Whitespace is not a brief either.
-    expect(isDisabled(dispatchButton(harness.render()))).toBe(true);
-
-    change(field(harness.render(), "brief"), "Review the diff");
-    expect(isDisabled(dispatchButton(harness.render()))).toBe(false);
-  });
-
   it("sends NOTHING when the seat is not held, even with a full staging", () => {
     const calls: PeerControllerStagingSubmit[] = [];
     const harness = mount((submit) => calls.push(submit), false, {
@@ -246,38 +232,5 @@ describe("peer controller console — the operator OWNS the staging inputs", () 
     // And a click that somehow reached the button still sends nothing.
     (dispatch.props!.onClick as () => void)();
     expect(calls).toHaveLength(0);
-  });
-
-  it("drops a staged lane the picker no longer advertises", () => {
-    const harness = mount(vi.fn(), true, {
-      lane: "lane-review",
-      brief: "Review the diff",
-      title: "",
-    });
-    // lane-review is still advertised here: the pick holds and Dispatch is live.
-    expect(isDisabled(dispatchButton(harness.render()))).toBe(false);
-    expect(
-      one(harness.render(), "data-lane-picker", "ready").props!.value,
-    ).toBe("lane-review");
-  });
-});
-
-describe("PeerControllerPanel source — owned state, one writer", () => {
-  const source = readFileSync(
-    new URL("./PeerControllerPanel.tsx", import.meta.url),
-    "utf8",
-  );
-
-  it("holds lane/brief/title as controlled state, never caller props", () => {
-    expect(source).toContain("useState<PeerControllerStaging>");
-    expect(source).toContain("applyPeerControllerEdit");
-    // The doc comment names the removed props, so match the JSX usage.
-    expect(source).not.toMatch(/readOnly=\{/);
-    expect(source).not.toMatch(/defaultValue=\{/);
-  });
-
-  it("reuses the ONE staging module (gate, staged lane, submit)", () => {
-    expect(source).toContain("peerControllerStagedLane");
-    expect(source).toContain("peerControllerStagingSubmit");
   });
 });

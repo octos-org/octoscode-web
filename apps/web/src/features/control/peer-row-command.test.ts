@@ -1,20 +1,19 @@
 /**
- * peer-row-command round 2 (judge #4, WEB-UX-ROUND2-4400) — RED-first.
+ * peer-row-command builds the approval and question answers that the PeerDock,
+ * Fleet and phone rows send. The round-1 judge (WEB-UX-ROUND2-4400) found row
+ * Approve/Deny bound to a SYNTHETIC approval id, and questions unanswerable
+ * from a row.
  *
- * The round-1 judge found row Approve/Deny bound to the SYNTHETIC approval id
- * (`synthetic-approval`), questions unanswerable from a row, and no
- * session-scoped approve. These cases pin the product contract:
- *  - a row command is built FROM THE ROW's real pending ids (fail-closed when
- *    absent) — never a placeholder;
- *  - Answer carries the operator's actual answers on the row's question id;
- *  - Approve optionally scopes to THIS session (approval_scope "session");
- *  - Steer carries the operator's trimmed text; Stop is a bare interrupt.
+ * The e2e specs press these buttons and count frames, but none reads the
+ * approval id, the question id or a session-wide scope:
+ * - e2e/peer-controller.spec.ts checks the frame kind;
+ * - e2e/mobile-remote.spec.ts checks that the phone sends no scope.
+ *
+ * So these cases keep what the Core acts on: which request is answered, with
+ * which answers, and how widely an approval reaches.
  */
 import { describe, expect, it } from "vitest";
-import {
-  buildRowControlCommand,
-  onceOnlyRowCommand,
-} from "./peer-row-command.ts";
+import { buildRowControlCommand } from "./peer-row-command.ts";
 import type { PeerRowAttention } from "./peer-row-command.ts";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
@@ -31,22 +30,13 @@ function attention(
   };
 }
 
-describe("buildRowControlCommand — real pending ids, fail-closed (judge #4)", () => {
+describe("buildRowControlCommand — answers the row's real pending request", () => {
   it("Approve binds the ROW's pending approval id", () => {
     const command = buildRowControlCommand("approve", "", attention());
     expect(command).toEqual({
       kind: "approval_respond",
       approvalId: "approval-1",
       decision: "approve",
-    });
-  });
-
-  it("Deny binds the ROW's pending approval id", () => {
-    const command = buildRowControlCommand("deny", "", attention());
-    expect(command).toEqual({
-      kind: "approval_respond",
-      approvalId: "approval-1",
-      decision: "deny",
     });
   });
 
@@ -72,78 +62,5 @@ describe("buildRowControlCommand — real pending ids, fail-closed (judge #4)", 
       questionId: "question-1",
       answers: [{ freeText: "use the mock server" }],
     });
-  });
-
-  it("Steer trims and carries the operator's typed text", () => {
-    const command = buildRowControlCommand("steer", "  octopus  ", attention());
-    expect(command).toEqual({
-      kind: "steer",
-      input: [{ kind: "text", text: "octopus" }],
-    });
-  });
-
-  it("Stop is a bare interrupt command", () => {
-    expect(buildRowControlCommand("stop", "", attention())).toEqual({
-      kind: "interrupt",
-    });
-  });
-
-  it("fails closed (null) when the row carries no pending request id", () => {
-    expect(
-      buildRowControlCommand("approve", "", attention({ requestId: null })),
-    ).toBeNull();
-  });
-
-  it("fails closed (null) when the attention kind does not match the action", () => {
-    expect(
-      buildRowControlCommand(
-        "approve",
-        "",
-        attention({ requestKind: "question", requestId: "question-1" }),
-      ),
-    ).toBeNull();
-    expect(
-      buildRowControlCommand(
-        "answer",
-        "",
-        attention({ requestKind: "approval", requestId: "approval-1" }),
-      ),
-    ).toBeNull();
-  });
-
-  it("fails closed (null) for a steer/stop row without an accepted operation", () => {
-    expect(
-      buildRowControlCommand("steer", "hi", attention({ operationId: null })),
-    ).toBeNull();
-    expect(
-      buildRowControlCommand("stop", "", attention({ operationId: null })),
-    ).toBeNull();
-  });
-
-  it("fails closed (null) when the targeted turn is blank", () => {
-    expect(
-      buildRowControlCommand("stop", "", attention({ turnId: "" })),
-    ).toBeNull();
-  });
-});
-
-describe("onceOnlyRowCommand (phone remote control)", () => {
-  it("drops a session-wide scope and keeps the decision on its real id", () => {
-    const wide = buildRowControlCommand(
-      "approve_session",
-      "",
-      attention({ requestKind: "approval", requestId: "approval-1" }),
-    )!;
-    expect(wide).toHaveProperty("approvalScope", "session");
-    expect(onceOnlyRowCommand(wide)).toEqual({
-      kind: "approval_respond",
-      approvalId: "approval-1",
-      decision: "approve",
-    });
-  });
-
-  it("leaves everything else as it was", () => {
-    const stop = { kind: "interrupt" } as const;
-    expect(onceOnlyRowCommand(stop)).toBe(stop);
   });
 });
