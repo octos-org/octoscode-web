@@ -23,6 +23,12 @@ export interface TimelineEntry {
   id: string;
   kind: TimelineKind;
   title: string;
+  /**
+   * The title is server data (a durable message's own role), shown verbatim:
+   * system rows otherwise read their title as client copy and translate it,
+   * and a role such as "system" would become a catalog label (T-0460).
+   */
+  serverTitle?: true;
   body: string;
   status: TimelineStatus;
   statusLabel?: string;

@@ -191,8 +191,10 @@ export function restoreCanonicalHydrate(
         return entry;
       matched.set(source.id, index);
       aliases.set(source.id, entry.id);
+      // The replay row's title wins, so whether it is server data follows it.
+      const { serverTitle: _sourceTitle, ...durableSource } = source;
       return {
-        ...source,
+        ...durableSource,
         ...entry,
         id: source.id,
         // Terminal error detail is authoritative from replay; transcript

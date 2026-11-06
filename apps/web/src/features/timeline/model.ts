@@ -131,6 +131,9 @@ export function timelineFromHydrate(
             : role === "tool"
               ? "Tool output"
               : message.role,
+      ...(role === "user" || role === "assistant" || role === "tool"
+        ? {}
+        : { serverTitle: true as const }),
       // Chat rows carry their files as attachments; tool and system rows
       // keep the paths in their text (their disclosure is a separate surface).
       ...(role === "user" || role === "assistant"
