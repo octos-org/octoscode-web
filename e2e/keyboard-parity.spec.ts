@@ -439,7 +439,7 @@ test("Alt+P toggles the peer dock fold, expanding and collapsing symmetrically",
 
     // Stage two peers through the PRODUCT's own `/peer` dialog, keyboard only
     // (the Send-prompt button is Enter-activated — no mouse anywhere, matching
-    // this file's mouse-free discipline and peer-dock.spec.ts:82-104).
+    // this file's mouse-free discipline).
     await input.fill("/peer");
     await page
       .getByRole("button", { name: "Send prompt", exact: true })

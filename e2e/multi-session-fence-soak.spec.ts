@@ -478,8 +478,8 @@ test("holds 12 Sessions + 3 native peers on one pooled socket, refuses a peer-ow
   // 4b) PeerDock roster DURING the soak. The App threads ONLY `peerDock`
   //     (App.tsx:1193) and ProductSidebar passes through neither `collapsed`
   //     nor `onToggle` (:744), so `PeerDock.tsx:206` always renders ROW mode —
-  //     the counts/landed PILL is unreachable in the live app (pinned by
-  //     peer-dock.spec.ts:148-153). Rows are therefore the only dock surface:
+  //     the counts/landed PILL is unreachable in the live app. Rows are
+  //     therefore the only dock surface:
   //     the 3 staged peers must each appear with a slug + one activity glyph.
   //     NOTE: `live`/`blocked`/`done` are stamped ONLY by
   //     `PeerManager.observeSessionEvent` (:426), which has NO production caller
