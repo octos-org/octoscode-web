@@ -376,6 +376,8 @@ test("keeps the workspace restore receipt through canonical refresh without rewi
   await composer(page).fill(prompt);
   await page.getByRole("button", { name: "Send prompt", exact: true }).click();
   await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
+  // The turn summary reads the list once for its own undo entry (T-0433).
+  await expect.poll(() => protocol.requests("snapshot/list").length).toBe(1);
   await sendSlashCommand(page, "/undo");
   const dialog = page.getByRole("dialog", {
     name: "Undo workspace changes",
@@ -389,7 +391,7 @@ test("keeps the workspace restore receipt through canonical refresh without rewi
     .getByRole("button", { name: "Confirm workspace restore", exact: true })
     .click();
   await expectHistoryRefreshHeld(request, sessionId, dialog);
-  expect(protocol.requests("snapshot/list")).toHaveLength(2);
+  expect(protocol.requests("snapshot/list")).toHaveLength(3);
   for (const frame of protocol.requests("snapshot/list"))
     expect(frame.params).toEqual({ session_id: sessionId });
   expect(

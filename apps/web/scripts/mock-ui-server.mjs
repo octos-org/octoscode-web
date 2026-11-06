@@ -1028,6 +1028,44 @@ const fixtureSnapshots = [
     timestamp_unix: 1_788_000_000,
   },
 ];
+// T-0433: what Core b7b360b7 lists for a profile with `snapshots.enabled`:
+// one `pre-turn <turn_id>` point per WS turn (newest first), and a
+// `pre-restore` point taken by every restore. Workspaces naming
+// "turn-undo-off" list with the opt-in off; other workspaces keep the old
+// fixture row only when they name "history-undo" and are otherwise off, as
+// Core ships by default.
+let snapshotCounter = 0;
+function snapshotId() {
+  snapshotCounter += 1;
+  return createHash("sha1").update(`snapshot-${snapshotCounter}`).digest("hex");
+}
+function turnUndoWorkspace(state) {
+  return /turn-undo/.test(state.workspaceRoot ?? "");
+}
+function recordTurnSnapshot(state, turnId) {
+  if (!turnUndoWorkspace(state) || state.skipTurnSnapshot) return;
+  state.turnSnapshots ??= [];
+  state.turnSnapshots.unshift({
+    id: snapshotId(),
+    label: `pre-turn ${turnId}`,
+    timestamp_unix: Math.floor(Date.now() / 1000),
+    turn_id: turnId,
+  });
+}
+function snapshotListing(state) {
+  if (turnUndoWorkspace(state))
+    return {
+      enabled: !/turn-undo-off/.test(state.workspaceRoot ?? ""),
+      available: true,
+      snapshots: state.turnSnapshots ?? [],
+    };
+  const fixture = /history-undo/.test(state.workspaceRoot ?? "");
+  return {
+    enabled: fixture,
+    available: true,
+    snapshots: fixture ? fixtureSnapshots : [],
+  };
+}
 function holdHistoryRefreshAfterMutation(sessionId) {
   if (historyRefreshArmed.delete(sessionId))
     sessionState(sessionId).holdHydrate = true;
@@ -2458,6 +2496,53 @@ const http = createServer(async (request, response) => {
       heldHistoryHydrates.clear();
       response.writeHead(204).end();
     } else response.writeHead(409).end("No matching fixture history control");
+    return;
+  }
+  if (
+    new URL(request.url, "http://fixture").pathname.startsWith(
+      "/__test__/snapshots/",
+    )
+  ) {
+    const url = new URL(request.url, "http://fixture");
+    const state = sessionStateBySessionId.get(
+      url.searchParams.get("session_id"),
+    );
+    if (!state) response.writeHead(409).end("Unknown fixture Session");
+    else if (
+      request.method === "GET" &&
+      url.pathname === "/__test__/snapshots/state"
+    )
+      response.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          snapshots: state.turnSnapshots ?? [],
+          restores: state.restores ?? [],
+        }),
+      );
+    else if (
+      request.method === "POST" &&
+      url.pathname === "/__test__/snapshots/next-restore"
+    ) {
+      state.nextRestore = url.searchParams.get("mode");
+      response.writeHead(204).end();
+    } else if (
+      request.method === "POST" &&
+      url.pathname === "/__test__/snapshots/forget-turns"
+    ) {
+      // A pruned undo point, or a turn Core kept none for.
+      state.turnSnapshots = (state.turnSnapshots ?? []).filter(
+        (snapshot) => !snapshot.turn_id,
+      );
+      state.skipTurnSnapshot = url.searchParams.get("next") === "skip";
+      response.writeHead(204).end();
+    } else if (
+      request.method === "POST" &&
+      url.pathname === "/__test__/snapshots/forget-restores"
+    ) {
+      state.turnSnapshots = (state.turnSnapshots ?? []).filter(
+        (snapshot) => snapshot.label !== "pre-restore",
+      );
+      response.writeHead(204).end();
+    } else response.writeHead(409).end("No matching fixture snapshot control");
     return;
   }
   if (
@@ -4925,24 +5010,65 @@ sockets.on("connection", (socket, request) => {
       if (request.method === "snapshot/list") {
         reply(socket, request.id, {
           session_id: sessionId,
-          enabled: true,
-          available: true,
-          snapshots: fixtureSnapshots,
+          ...snapshotListing(state),
         });
       } else if (request.method === "snapshot/restore") {
+        const listing = snapshotListing(state);
         if (
-          !fixtureSnapshots.some(
+          !listing.snapshots.some(
             (snapshot) => snapshot.id === request.params.snapshot_id,
           )
         ) {
-          replyError(socket, request.id, -32602, "Unknown workspace snapshot");
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            `restore failed: snapshot ${request.params.snapshot_id} not found`,
+          );
           return;
         }
+        state.restores ??= [];
+        state.restores.push(request.params.snapshot_id);
+        const mode = state.nextRestore;
+        state.nextRestore = null;
+        if (mode === "garbled") {
+          // Core took it, and answered something this client cannot read.
+          reply(socket, request.id, {
+            session_id: sessionId,
+            restored: "another-snapshot",
+            snapshots: [],
+          });
+          return;
+        }
+        if (mode === "drop") {
+          // The socket goes away after Core took the request: the outcome is unknown.
+          socket.close(1012, "fixture restart");
+          return;
+        }
+        if (mode) {
+          replyError(
+            socket,
+            request.id,
+            -32602,
+            mode === "conflict"
+              ? "restore failed: restore refused: files were edited after the snapshot was taken"
+              : mode === "running"
+                ? "cannot restore while a turn is running in this session — interrupt it first"
+                : "restore failed: failed to check out snapshot content",
+          );
+          return;
+        }
+        if (turnUndoWorkspace(state))
+          state.turnSnapshots.unshift({
+            id: snapshotId(),
+            label: "pre-restore",
+            timestamp_unix: Math.floor(Date.now() / 1000),
+          });
         holdHistoryRefreshAfterMutation(sessionId);
         reply(socket, request.id, {
           session_id: sessionId,
           restored: request.params.snapshot_id,
-          snapshots: fixtureSnapshots,
+          snapshots: snapshotListing(state).snapshots,
         });
       } else if (request.method === "session/fork") {
         const name = request.params.new_chat_id;
@@ -5067,6 +5193,7 @@ sockets.on("connection", (socket, request) => {
         if (state.activeTurn) return false;
         admitted = true;
         state.startedTurnIds.add(request.params.turn_id);
+        recordTurnSnapshot(state, request.params.turn_id);
         // Canonical per-thread sequence: ONE monotonic counter shared by
         // every event of this turn (user_message, assistant_delta,
         // assistant_persisted, turn_terminal). The terminal authored by a
@@ -6755,6 +6882,110 @@ function streamTurn(socket, sessionId, params, nextCursor) {
   const expertMember = stagedPeers.get(sessionId);
   if (expertMember?.brief.startsWith(EXPERT_TEAM_HEADER)) {
     streamExpertMember(socket, sessionId, turnId, expertMember, nextCursor);
+    return null;
+  }
+  if (turnUndoWorkspace(sessionState(sessionId))) {
+    // T-0433: a turn that writes a file and edits others from the shell, as
+    // the real walk does, so its summary counts changes worth undoing.
+    const tool = (seq, id, name, args, output) => {
+      notify(
+        socket,
+        sessionId,
+        threadId,
+        turnId,
+        seq,
+        nextCursor(),
+        "tool_start",
+        {
+          tool_call_id: id,
+          name,
+          ...(name === "write_file" ? { write_path: args.path } : {}),
+          arguments_preview: JSON.stringify(args),
+        },
+      );
+      notify(
+        socket,
+        sessionId,
+        threadId,
+        turnId,
+        seq + 1,
+        nextCursor(),
+        "tool_end",
+        {
+          tool_call_id: id,
+          status: "complete",
+          output_preview: output,
+        },
+      );
+    };
+    tool(
+      2,
+      `write-${turnId}`,
+      "write_file",
+      { path: "notes.txt" },
+      "notes.txt written",
+    );
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "progress/updated",
+        params: {
+          session_id: sessionId,
+          turn_id: turnId,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            kind: "file_mutation",
+            file_mutation: {
+              path: "notes.txt",
+              operation: "write",
+              preview_id: "00000000-0000-4000-8000-000000000433",
+            },
+          },
+        },
+      }),
+    );
+    tool(
+      4,
+      `shell-${turnId}`,
+      "shell",
+      { command: "rm old.txt && sed -i s/alpha/beta/ config.txt" },
+      "",
+    );
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      6,
+      nextCursor(),
+      "assistant_persisted",
+      {
+        text: "Completed with `pnpm check` and **all tests passing**.",
+        assistant_segment_id: "segment-1",
+        meta: {
+          message_id: `message-${turnId}`,
+          persisted_at: new Date().toISOString(),
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      7,
+      nextCursor(),
+      "turn_terminal",
+      {
+        outcome: "completed",
+        token_usage: { input_tokens: 12, output_tokens: 9 },
+      },
+    );
+    const state = sessionState(sessionId);
+    state.completedTurns.push(
+      settledTurnRecord(state, turnId, turnId, "completed"),
+    );
+    state.activeTurn = null;
     return null;
   }
   if (text === "Slow first token fixture") {

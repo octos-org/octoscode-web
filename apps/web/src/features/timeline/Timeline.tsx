@@ -66,6 +66,14 @@ interface TimelineProps {
    * only while the Session is empty so the memoized transcript stays stable.
    */
   emptyState?: ReactNode;
+  /** Undo / redo inside an ended turn's summary; `latest` is the transcript's last turn. */
+  turnUndo?: ((turn: TurnUndoSlot) => ReactNode) | undefined;
+}
+
+export interface TurnUndoSlot {
+  turnId: string;
+  changed: boolean;
+  latest: boolean;
 }
 
 export const Timeline = memo(function Timeline({
@@ -82,6 +90,7 @@ export const Timeline = memo(function Timeline({
   activity = null,
   workspaceFileReadAvailable = false,
   emptyState,
+  turnUndo,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -140,6 +149,9 @@ export const Timeline = memo(function Timeline({
     }
   });
   const endedTurns = endedTurnIds(entries);
+  const latestTurnId = entries.findLast(
+    (entry) => entry.turnId !== undefined,
+  )?.turnId;
   const recovered = recoveredFailuresByTurn(entries);
   const failedTurns = new Set(
     entries.flatMap((entry) =>
@@ -234,6 +246,15 @@ export const Timeline = memo(function Timeline({
               key={item.entry.id}
               turnId={item.turnId}
               entries={visibleEntries}
+              undo={
+                turnUndo
+                  ? (turn) =>
+                      turnUndo({
+                        ...turn,
+                        latest: item.turnId === latestTurnId,
+                      })
+                  : undefined
+              }
             />
           ) : item.type === "steps" ? (
             <StepGroup

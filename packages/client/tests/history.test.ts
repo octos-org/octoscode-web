@@ -71,17 +71,50 @@ describe("conversation and workspace history contracts", () => {
         row.id,
       ),
     ).toBeNull();
+    // Core b7b360b7 lists one commit under two refs when a restore's
+    // pre-restore point repeats an earlier one within a second (T-0433).
     expect(
       parseSnapshotList(
         {
           session_id: "s1",
           enabled: true,
           available: true,
-          snapshots: [row, row],
+          snapshots: [row, { ...row, label: "pre-restore" }],
         },
         "s1",
-      ),
-    ).toBeNull();
+      )?.snapshots,
+    ).toEqual([row]);
+  });
+  it("keeps a turn's undo point and nothing a malformed one claims", () => {
+    const turnRow = {
+      id: "checkpoint-2",
+      label: `pre-turn ${turnId}`,
+      timestamp_unix: 12346,
+      turn_id: turnId,
+    };
+    expect(
+      parseSnapshotList(
+        {
+          session_id: "s1",
+          enabled: true,
+          available: true,
+          snapshots: [{ ...turnRow, extra: "ignored" }, row],
+        },
+        "s1",
+      )?.snapshots,
+    ).toEqual([turnRow, row]);
+    for (const bad of ["", 7, null])
+      expect(
+        parseSnapshotList(
+          {
+            session_id: "s1",
+            enabled: true,
+            available: true,
+            snapshots: [{ ...turnRow, turn_id: bad }],
+          },
+          "s1",
+        ),
+      ).toBeNull();
   });
   it("accepts only the owning hydrated thread on rewind", () => {
     const thread = {
