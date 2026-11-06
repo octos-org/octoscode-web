@@ -219,19 +219,36 @@ export function connectorOAuthState(
 }
 
 /**
- * The provider revoked its side: a status read said this connector needs
- * signing in (T-0371). A remembered "authorized" must not outlive that
- * truth — drop it so the row answers from the server's report instead of
- * claiming a sign-in the provider no longer honours.
+ * The server's structured connector status decides what a remembered sign-in
+ * may still claim (T-0430, audit 2026-11-06 #347) — never the error text,
+ * whose wording is not a contract:
+ * - `failed`: a live ("now") sign-in is over — the provider revoked the token
+ *   or its refresh failed; drop it so the row asks for sign-in again. A
+ *   sign-in still waiting on a server restart keeps its "takes effect after
+ *   restart" note: the stale connection's failure is about the OLD state,
+ *   not the stored sign-in.
+ * - `connected`: the server confirmed the connection is live, so a
+ *   restart-pending sign-in settles to simply signed in.
  */
-export function noteConnectorUnauthorized(
+export function noteConnectorServerStatus(
   connection: object,
   profileId: string,
   connectorId: string,
+  status: string,
 ): void {
   const target = scopes.get(connection)?.get(profileId);
-  if (target?.states.get(connectorId)?.kind !== "authorized") return;
-  target.states.delete(connectorId);
+  const rememberedState = target?.states.get(connectorId);
+  if (!target || rememberedState?.kind !== "authorized") return;
+  if (status === "failed" && rememberedState.takesEffect === "now") {
+    target.states.delete(connectorId);
+  } else if (status === "connected" && rememberedState.takesEffect !== "now") {
+    target.states.set(connectorId, {
+      kind: "authorized",
+      takesEffect: "now",
+    });
+  } else {
+    return;
+  }
   target.version += 1;
   for (const listener of target.listeners) listener();
 }
