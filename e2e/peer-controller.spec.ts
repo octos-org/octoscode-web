@@ -3,6 +3,7 @@ import {
   COMPOSER_PLACEHOLDER,
   FIXTURE_ORIGIN,
   connectAndStartWorkspace,
+  runFolder,
 } from "./fixture-session.ts";
 
 /**
@@ -29,7 +30,11 @@ import {
  * The fixture is the opt-in `peer-control-*` family in
  * `apps/web/scripts/mock-ui-server.mjs` (plan 0810 §1-§3): the workspace
  * suffix encodes the variant (default | refused | stale | duplicate |
- * no-method | no-feature).
+ * no-method | no-feature | no-fleet); any other suffix is the default, and
+ * `/__test__/peer-control/variant` overrides it per Session.
+ *
+ * Each chain runs in a folder of its own run (`fleetFolder`), so a retry or
+ * `--repeat-each` never meets an earlier run's Sessions or rows (T-0435).
  *
  * CONSOLE-STATE CONTRACT (read, not assumed): a `peer/dispatch` refusal is a
  * typed JSON-RPC ERROR `data.kind` rendered through the Advanced panel's
@@ -196,92 +201,67 @@ async function startPeer(
   await fleetStart(page).press("Enter");
 }
 
-/** The slug of the adopted fleet row, read from Fleet's own DOM. */
+/** The slug of THE adopted fleet row, read from Fleet's own DOM. */
 async function adoptedRowSlug(page: Page): Promise<string> {
-  const first = fleetRows(page).first();
-  await expect(first).toBeVisible();
-  const slug = await first.getAttribute("data-fleet-row");
+  await expect(fleetRows(page)).toHaveCount(1);
+  const slug = await fleetRows(page).getAttribute("data-fleet-row");
   expect(slug).toBeTruthy();
   return slug as string;
+}
+
+/** A default-variant `peer-control-*` folder owned by this test run. */
+const fleetFolder = (name: string): string =>
+  runFolder(`${WORKSPACE_PREFIX}${name}`);
+
+/** The master Session this page opened first, from its own `session/open`. */
+function masterSession(w: ReturnType<typeof wire>): string {
+  const master = w.sent.find(
+    (frame) => frame.method === "session/open" && frame.sessionId !== null,
+  )?.sessionId;
+  expect(master).toBeTruthy();
+  return master as string;
 }
 
 test.describe("Fleet view (migrated console semantics)", () => {
   const cwd = (variant: string) => `/srv/work/${WORKSPACE_PREFIX}${variant}`;
 
-  // --------------------------------------------------- navigation + lanes
-  test("Fleet opens from the navigation footer and lists the mock's 2 lanes", async ({
+  // -------------------------------------------------- navigation + lanes
+  test("Fleet opens with only the advertised lanes, keeps the console behind Advanced, and every way out leaves it", async ({
     page,
   }) => {
     const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
+    const folder = fleetFolder("fleet-nav");
+    const name = folder.split("/").pop() as string;
+    await connectAndStartWorkspace(page, folder);
+    const sidebar = productNavigation(page);
+    const master = await sidebar
+      .locator('[role="treeitem"][aria-current="page"]')
+      .getAttribute("data-session-id");
+    expect(master).toBeTruthy();
+
     await openFleet(page);
-    // The picker shows exactly the advertised lane keys — the ONLY lane source.
+    // The picker shows exactly the advertised lane keys — the ONLY lane source,
+    // so an unknown lane cannot be chosen.
     await expect(fleetModel(page)).toBeEnabled();
-    const options = await fleetModel(page)
-      .locator("option:not([hidden])")
-      .allTextContents();
-    expect(options).toEqual([...LANE_KEYS]);
+    await expect(fleetModel(page).locator("option:not([hidden])")).toHaveText([
+      ...LANE_KEYS,
+    ]);
     // Empty state renders before any dispatch; no frames were sent.
     await expect(
       fleet(page).locator('[data-fleet-empty="true"]'),
     ).toBeVisible();
     expect(w.calls(DISPATCH_METHOD)).toHaveLength(0);
     expect(w.calls(ACQUIRE_METHOD)).toHaveLength(0);
-  });
 
-  test("sidebar Session selection and browser Back leave Fleet", async ({
-    page,
-  }) => {
-    const workspaceCwd = cwd("nav");
-    await connectAndStartWorkspace(page, workspaceCwd);
-    const sidebar = productNavigation(page);
-    const workspace = sidebar.locator(
-      '[role="treeitem"][aria-label="peer-control-nav"]',
-    );
-    await workspace
-      .getByRole("button", { name: "peer-control-nav", exact: true })
-      .hover();
+    // The protocol console exists ONLY behind the Advanced disclosure. Class
+    // names are hashed; the console carries its data-control-panel hook.
+    await expect(advancedConsole(page)).toHaveCount(0);
+    await expect(fleetAdvanced(page)).toHaveCount(1);
+    await fleetAdvanced(page).press("Enter");
+    await expect(advancedConsole(page)).toBeVisible();
+
+    // Settings leaves Fleet, and Fleet can be reopened afterwards.
     await sidebar
-      .getByRole("button", { name: "New session in peer-control-nav" })
-      .click();
-    await expect(
-      sidebar.locator('[role="treeitem"][data-session-id]'),
-    ).toHaveCount(2);
-    await openFleet(page);
-    await sidebar.locator('[role="treeitem"][data-session-id]').first().click();
-    await expect(page.locator("section.conversation")).toBeVisible();
-    await expect(composer(page)).toBeEnabled();
-    await expect(fleet(page)).toBeHidden();
-    await page.goBack();
-    await expect(fleet(page)).toBeHidden();
-  });
-
-  test("New Session leaves Fleet and opens the conversation", async ({
-    page,
-  }) => {
-    await connectAndStartWorkspace(page, cwd("new-session"));
-    const sidebar = productNavigation(page);
-    await openFleet(page);
-    const workspace = sidebar.locator(
-      '[role="treeitem"][aria-label="peer-control-new-session"]',
-    );
-    await workspace
-      .getByRole("button", { name: "peer-control-new-session", exact: true })
-      .hover();
-    await sidebar
-      .getByRole("button", { name: "New session in peer-control-new-session" })
-      .click();
-    await expect(composer(page)).toBeEnabled();
-    await expect(fleet(page)).toBeHidden();
-    await expect(
-      sidebar.locator('[role="treeitem"][data-session-id]'),
-    ).toHaveCount(2);
-  });
-
-  test("Settings navigation leaves Fleet and can return", async ({ page }) => {
-    await connectAndStartWorkspace(page, cwd("settings"));
-    await openFleet(page);
-    await productNavigation(page)
       .getByRole("button", { name: "Settings", exact: true })
       .click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
@@ -289,7 +269,32 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
     await openFleet(page);
-    await expect(fleet(page)).toBeVisible();
+
+    // New Session leaves Fleet and opens the conversation.
+    await sidebar
+      .locator(`[role="treeitem"][aria-label=${JSON.stringify(name)}]`)
+      .getByRole("button", { name, exact: true })
+      .hover();
+    await sidebar
+      .getByRole("button", { name: `New session in ${name}` })
+      .click();
+    await expect(composer(page)).toBeEnabled();
+    await expect(fleet(page)).toBeHidden();
+    await expect(
+      sidebar.locator('[role="treeitem"][data-session-id]'),
+    ).toHaveCount(2);
+
+    // Selecting a Session in the sidebar leaves Fleet, and browser Back does
+    // not bring it back.
+    await openFleet(page);
+    await sidebar
+      .locator(`[role="treeitem"][data-session-id=${JSON.stringify(master)}]`)
+      .click();
+    await expect(page.locator("section.conversation")).toBeVisible();
+    await expect(composer(page)).toBeEnabled();
+    await expect(fleet(page)).toBeHidden();
+    await page.goBack();
+    await expect(fleet(page)).toBeHidden();
   });
 
   test("unsupported Fleet capability disables the entry and explains why", async ({
@@ -328,31 +333,27 @@ test.describe("Fleet view (migrated console semantics)", () => {
     );
   });
 
-  // ------------------------------------------ the Start gate (3-way)
-  test("Start stays disabled until a model is chosen and a brief is typed", async ({
+  // ------------------------------------- Start -> adopted row -> row actions
+  test("Start opens only with model and brief, dispatches once per Start, and the row's Steer, Approve and Stop each send one frame", async ({
     page,
+    request,
   }) => {
-    await connectAndStartWorkspace(page, cwd(""));
+    await request.post(`${FIXTURE_ORIGIN}/__test__/peers/reset`);
+    const w = wire(page);
+    await connectAndStartWorkspace(page, fleetFolder("fleet-start"));
     await openFleet(page);
+
+    // The Start gate: a model AND a brief; clearing the brief closes it again.
     await expect(fleetStart(page)).toBeDisabled();
     await fleetModel(page).selectOption(CHOSEN_LANE);
     await expect(fleetStart(page)).toBeDisabled();
     await fleetBrief(page).fill("gate brief");
     await expect(fleetStart(page)).toBeEnabled();
-    // Clearing the brief closes the gate again.
     await fleetBrief(page).fill("");
     await expect(fleetStart(page)).toBeDisabled();
-  });
 
-  // ------------------------------------------------ start -> adopted row
-  test("Start acquires then emits exactly ONE peer/dispatch and adopts a Fleet row", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    await startPeer(page);
     // §4.3 wire order: acquire FIRST, then exactly one dispatch.
+    await startPeer(page);
     await expect
       .poll(() => w.calls(ACQUIRE_METHOD).length)
       .toBeGreaterThanOrEqual(1);
@@ -365,183 +366,112 @@ test.describe("Fleet view (migrated console semantics)", () => {
     );
     expect(acquireIndex).toBeGreaterThanOrEqual(0);
     expect(dispatchIndex).toBeGreaterThan(acquireIndex);
-    const frame = w.calls(DISPATCH_METHOD)[0];
-    expect(frame?.detail).toBe(CHOSEN_LANE);
-    expect(frame?.operationId).toBeTruthy();
-    // The accepted dispatch stages the adopted peer Session, so a row renders.
+    const first = w.calls(DISPATCH_METHOD)[0];
+    expect(first?.detail).toBe(CHOSEN_LANE);
+    expect(first?.operationId).toBeTruthy();
+
+    // The accepted dispatch stages the adopted peer Session, so a row renders,
+    // named "Peer N" — never a raw slug as identity (§4.3).
     const slug = await adoptedRowSlug(page);
-    // §4.3 row identity: "Peer N" numbering, never a raw slug as the label.
-    const label = fleetRow(page, slug).locator("span").first();
-    await expect(label).toContainText(/^Peer \d+$/);
-  });
+    await expect(fleetRow(page, slug)).toHaveAttribute(
+      "aria-label",
+      /^Peer \d+, /,
+    );
 
-  test("a second Start mints a DISTINCT operation id (no accidental replay)", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    await startPeer(page);
-    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
-    const first = w.calls(DISPATCH_METHOD)[0]?.operationId;
-    expect(first).toBeTruthy();
-    await startPeer(page);
-    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(2);
-    const second = w.calls(DISPATCH_METHOD)[1]?.operationId;
-    expect(second).toBeTruthy();
-    expect(second).not.toBe(first);
-  });
-
-  // -------------------------------------------- control from Fleet rows
-  test("Steer from the row emits exactly ONE peer/control steer frame", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    await startPeer(page);
-    const slug = await adoptedRowSlug(page);
-
-    const before = w.calls(CONTROL_METHOD).length;
+    // Steer: a blank row draft fails closed; the frame carries the OPERATOR's
+    // text and targets the ADOPTED turn.
+    let before = w.calls(CONTROL_METHOD).length;
     const steer = fleetAction(page, slug, "steer");
-    // §4.3: a blank row draft fails closed — Steer is disabled until typed.
     await expect(steer).toBeDisabled();
     await fleetSteerInput(page, slug).fill("octopus");
     await expect(steer).toBeEnabled();
     await steer.press("Enter");
     await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
-    const frame = w.calls(CONTROL_METHOD)[before];
-    expect(frame?.detail).toBe("steer");
-    // The frame carries the OPERATOR's text and targets the ADOPTED turn.
-    expect(frame?.steerText).toBe("octopus");
-    expect(frame?.expectedTurnId).toBe(ADOPTED_TURN_ID);
-  });
+    const steered = w.calls(CONTROL_METHOD)[before];
+    expect(steered?.detail).toBe("steer");
+    expect(steered?.steerText).toBe("octopus");
+    expect(steered?.expectedTurnId).toBe(ADOPTED_TURN_ID);
 
-  test("Approve from the row emits exactly ONE approval_respond frame", async ({
-    page,
-    request,
-  }) => {
-    // The fixture's staged-peer map is process-global and every Start in this
-    // file adopts the SAME synthetic slug, so clear it first: the activity
-    // frames below must reach THIS test's peer Session, not an earlier one's.
-    await request.post(`${FIXTURE_ORIGIN}/__test__/peers/reset`);
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    await startPeer(page);
-    const slug = await adoptedRowSlug(page);
-
-    // §4.4 / Round 4 C5: Approve is a FAIL-CLOSED affordance — it is offered
-    // only while that row is actually waiting for an approval, so a Working /
-    // Starting row exposes no Approve control at all.
+    // §4.4 / Round 4 C5: Approve is offered only while the row actually waits
+    // for an approval. The root composer cannot raise one: Start's acquire
+    // holds the external fence, so the fixture emits the peer's OWN
+    // `turn/started` + `approval/requested` on the same owner socket.
     await expect(fleetAction(page, slug, "approve")).toHaveCount(0);
-    // Raise a REAL pending approval on the adopted peer's OWN Session. The
-    // root composer cannot: Start's acquire holds the external fence, so the
-    // Core refuses `turn/start` with ExternalMasterHeld
-    // (mock-ui-server.mjs turn/start gate) — the fixture hook emits the peer's
-    // own `turn/started` + `approval/requested` on the same owner socket.
-    const master = w.sent.find(
-      (frame) => frame.method === "session/open" && frame.sessionId !== null,
-    )?.sessionId;
-    expect(master).toBeTruthy();
+    const master = masterSession(w);
     const drive = async (kind: string) => {
       const response = await request.post(
         `${FIXTURE_ORIGIN}/__test__/peer-control/peer-activity?session_id=${encodeURIComponent(
-          master as string,
+          master,
         )}&kind=${kind}&slug=${encodeURIComponent(slug)}`,
       );
       expect(response.status()).toBe(204);
     };
     await drive("turn");
     await drive("approval");
-    // The peer's own approval rides its own Session; the row settles once the
-    // coordinator has attributed it, which can outlast the default 5 s budget.
+    // The row settles once the coordinator has attributed the peer's own
+    // approval, which can outlast the default 5 s budget.
     await expect(fleetRow(page, slug)).toHaveAttribute(
       "data-fleet-status",
       "Waiting for your approval",
       { timeout: 20_000 },
     );
-
-    const before = w.calls(CONTROL_METHOD).length;
+    before = w.calls(CONTROL_METHOD).length;
     await fleetAction(page, slug, "approve").press("Enter");
     await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)[before]?.detail).toBe("approval_respond");
-  });
 
-  test("Stop from the row emits exactly ONE interrupt frame", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    await startPeer(page);
-    const slug = await adoptedRowSlug(page);
-
-    const before = w.calls(CONTROL_METHOD).length;
+    // Stop sends one interrupt.
+    before = w.calls(CONTROL_METHOD).length;
     await fleetAction(page, slug, "stop").press("Enter");
     await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)[before]?.detail).toBe("interrupt");
+
+    // A second Start mints a DISTINCT operation id (no accidental replay).
+    await startPeer(page);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(2);
+    const second = w.calls(DISPATCH_METHOD)[1]?.operationId;
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first?.operationId);
   });
 
   // --------------------------------------------------------- refusals
-  test("a stale lease refuses peer/dispatch with the bounded §6 label", async ({
+  test("a refused dispatch shows its bounded label, never server copy: a stale lease, then after a reload an unconfigured model", async ({
     page,
+    request,
   }) => {
     const w = wire(page);
-    await connectAndStartWorkspace(page, cwd("stale"));
+    await connectAndStartWorkspace(page, fleetFolder("fleet-refusals"));
+    const master = masterSession(w);
+    const variant = async (name: string) => {
+      const response = await request.post(
+        `${FIXTURE_ORIGIN}/__test__/peer-control/variant?session_id=${encodeURIComponent(
+          master,
+        )}&variant=${name}`,
+      );
+      expect(response.status()).toBe(204);
+    };
+
+    // This Session's lease is stale: the dispatch is refused with the typed
+    // `driver_fence_stale`, rendered through the §6 label on the row.
+    await variant("stale");
     await openFleet(page);
     await startPeer(page);
     await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
-    // §6 copy renders inline on the ROW (a refused receipt shows the recovery
-    // copy on the row, §4.3); the raw server detail never leaks.
     await expect(fleet(page)).toContainText(FENCE_STALE);
     await expect(fleet(page)).not.toContainText(RAW_STALE_COPY);
     await expect(fleet(page)).not.toContainText(RAW_DISPATCH_COPY);
-  });
 
-  test("a refused peer/dispatch renders the bounded label, never server copy", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, cwd("refused"));
+    // The operator reloads and tries again; now the lane's model is not
+    // configured on the server (`driver_model_unavailable`).
+    await variant("refused");
+    await page.reload();
+    await expect(composer(page)).toBeEnabled();
     await openFleet(page);
     await startPeer(page);
-    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(1);
+    await expect.poll(() => w.calls(DISPATCH_METHOD).length).toBe(2);
     await expect(fleet(page)).toContainText(DISPATCH_MODEL_UNAVAILABLE);
     await expect(fleet(page)).not.toContainText(RAW_DISPATCH_COPY);
     await expect(fleet(page)).not.toContainText("-32602");
     await expect(fleet(page)).not.toContainText("payload_digest");
-  });
-
-  // ------------------------------ protocol console stays behind Advanced
-  test("the protocol console renders ONLY behind Fleet's Advanced disclosure", async ({
-    page,
-  }) => {
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    // Default view: NO protocol surface. Class names are hashed; the console
-    // carries its data-control-panel hook wherever it mounts.
-    await expect(advancedConsole(page)).toHaveCount(0);
-    await fleetAdvanced(page).first().press("Enter");
-    await expect(advancedConsole(page)).toBeVisible();
-  });
-
-  // ------------------------------------------------------------ invariants
-  test("an unknown lane is unconstructible: the picker is the ONLY lane source", async ({
-    page,
-  }) => {
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    // Lane keys arrive asynchronously; wait for the picker to list them.
-    await expect
-      .poll(
-        async () =>
-          await fleetModel(page).locator("option:not([hidden])").count(),
-      )
-      .toBeGreaterThan(0);
-    const options = await fleetModel(page)
-      .locator("option:not([hidden])")
-      .allTextContents();
-    for (const option of options) expect(LANE_KEYS).toContain(option);
   });
 });
