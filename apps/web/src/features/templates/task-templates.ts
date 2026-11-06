@@ -13,7 +13,7 @@ import type { UiLanguage } from "../preferences/model.ts";
  * `example` is an illustrative excerpt of a typical result, shown as such. It
  * is not read from the server.
  */
-export type TaskTemplateCategory = "code" | "general";
+export type TaskTemplateCategory = "code" | "office" | "general";
 export type TaskTemplateAccess = "read" | "write";
 
 export interface TaskTemplateCopy {
@@ -125,7 +125,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "weekly-report",
-    category: "general",
+    category: "office",
     access: "write",
     copy: {
       en: {
@@ -148,7 +148,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "tidy-spreadsheet",
-    category: "general",
+    category: "office",
     access: "write",
     copy: {
       en: {
@@ -194,7 +194,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "polish-writing",
-    category: "general",
+    category: "office",
     access: "write",
     copy: {
       en: {
@@ -218,7 +218,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
   },
   {
     id: "slide-outline",
-    category: "general",
+    category: "office",
     access: "write",
     copy: {
       en: {
@@ -243,6 +243,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
 
 export const TASK_TEMPLATE_CATEGORIES: readonly TaskTemplateCategory[] = [
   "code",
+  "office",
   "general",
 ];
 

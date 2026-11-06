@@ -166,11 +166,23 @@ test("favorites and recent templates keep their order, save only template IDs an
   const recent = group(page, "Recently used").locator(
     "[data-shortcut-template]",
   );
-  const first = await recent.nth(0).boundingBox();
-  const second = await recent.nth(1).boundingBox();
-  expect(second!.x).toBe(first!.x);
-  expect(second!.y).toBeGreaterThan(first!.y + first!.height);
-  expect(first!.x + first!.width).toBeLessThanOrEqual(390);
+  // The phone layout may still be settling after the resize; measure both
+  // rows in one frame until it has.
+  await expect(recent).toHaveCount(3);
+  await expect
+    .poll(() =>
+      recent.evaluateAll((rows) => {
+        const [first, second] = rows.map((row) => row.getBoundingClientRect());
+        return (
+          !!first &&
+          !!second &&
+          second.x === first.x &&
+          second.y > first.y + first.height &&
+          first.right <= 390
+        );
+      }),
+    )
+    .toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     390,
   );

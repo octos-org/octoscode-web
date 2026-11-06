@@ -470,6 +470,171 @@
   opacity: 0.5;
 }
 
+/* Browsing the catalog: a search over names and descriptions, and a scene. */
+.browse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dsw-space-2) var(--dsw-space-3);
+}
+
+.searchField {
+  position: relative;
+  display: flex;
+  min-width: min(100%, 200px);
+  max-width: 360px;
+  flex: 1 1 240px;
+  align-items: center;
+}
+
+.searchField svg {
+  position: absolute;
+  left: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+}
+
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--dsw-control-h-md);
+  padding: 0 10px 0 31px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-control);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  transition: border-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.search::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.search:hover {
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.search:focus-visible {
+  border-color: var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+/* One scene at a time, as native radios: arrow keys move between them. */
+.scenes {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--dsw-specific-selector);
+}
+
+.scene {
+  position: relative;
+  display: inline-flex;
+  /* The app's form labels carry a bottom margin; a chip doesn't. */
+  margin: 0;
+}
+
+.scene input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.scene span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 7px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    box-shadow var(--dsw-motion-feedback) var(--dsw-ease-out),
+    color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+@media (hover: hover) {
+  .scene:hover span {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.scene:has(input:checked) span {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-shadow-lv1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.scene:has(input:focus-visible) span {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.count {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.home > .count:empty {
+  margin-top: 0;
+}
+
+.home > .browse + .count:not(:empty) {
+  margin-top: var(--dsw-space-2);
+}
+
+.empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 18px 20px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.empty p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.empty button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.empty button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.empty button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
 @media (max-width: 560px) {
   .home {
     padding-top: var(--dsw-space-2);
