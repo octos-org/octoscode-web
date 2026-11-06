@@ -1,4 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  COMPOSER_PLACEHOLDER,
+  FIXTURE_ORIGIN,
+  connectAndStartWorkspace,
+  runFolder,
+} from "./fixture-session.ts";
 
 /**
  * e2e — peer activity glyphs from REAL peer Session frames + per-session
@@ -18,33 +24,27 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  *
  * Drive paths are the PRODUCT's, never a test hook:
  *   • staging = `/peer` composer command -> `Session peers` dialog -> `Peers`
- *     spinbutton -> `Start peers` (matches peer-dock.spec.ts:82-104,
- *     capacity-and-peers.spec.ts:153, command-surface.spec.ts:511). There is NO
- *     `window.octos.preparePeers` bridge anywhere in product or fixture.
+ *     spinbutton -> `Start peers` (matches capacity-and-peers.spec.ts:153,
+ *     command-surface.spec.ts:511). There is NO `window.octos.preparePeers`
+ *     bridge anywhere in product or fixture.
  *   • `peer/prepare` answers with one `peer/staged` per peer
  *     (mock-ui-server.mjs:3344-3356); the dock row's `data-activity` /
  *     `data-peer-slug` hooks live at PeerDock.tsx:244-256.
- *   • connect fields are `Server origin` + `Auth token` (ConnectionPanel.tsx:65/:76)
- *     — the product label is NOT "Access token".
  *   • activity producers (mock-ui-server.mjs `emitPeerActivityFrame`): a ROOT
  *     composer text `Peer turn|approval|resolve|complete fixture <slug>` emits
  *     that peer Session's OWN frame on the shared owner socket — `turn/started`
  *     -> live, `approval/requested` -> blocked, `approval/decided` -> clears the
  *     block, `turn/completed` -> done.
  *
- * REACHABILITY LIMITS (UX4-4020 refresh). The dock's `collapsed` pill
- * (`formatPeerDockPill`, "N/N landed") renders ONLY in the collapsed branch,
- * and `App.tsx` threads `peerDockCollapsed`/`onPeerDockToggle` but not `collapsed` into
- * ProductSidebar -> PeerDock (`ProductSidebar.tsx:744`). So the landed pill and
- * every `[data-row-action]` stay UNREACHABLE in the live app; a blocked row's
- * Alt+Y path is inert here. Those two transitions are asserted through the
- * reachable `data-activity` surface instead, and the wiring gaps stay guarded
- * as negatives (peer-dock.spec.ts:9-22 owns the same two guards).
+ * The dock's whole life is ONE user chain (it absorbed peer-dock.spec.ts):
+ * hidden with no peers -> two staged idle rows -> a peer turn goes live -> its
+ * approval blocks the row while approval actions stay fail-closed -> the
+ * resolution clears it -> the turn lands done beside a live sibling ->
+ * `/peer clear` prunes only the done row. The collapsed "N/N landed" pill is
+ * not threaded into the live app (ProductSidebar.tsx:744), so it is not
+ * asserted here; `formatPeerDockPill` covers its copy.
  */
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const TOKEN = "tab-scoped-e2e-token";
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const PEER_COUNT = 2;
 const PEER_BRIEF = "Peer activity and restore triage";
 /** The fixture accepts any `/srv/work/*` path and opens a Session for it. */
@@ -84,42 +84,6 @@ function observe(page: Page): Observed {
     });
   });
   return observed;
-}
-
-/**
- * Connect AND start a workspace — copied verbatim from the helpers that pass in
- * run 8 (`capacity-and-peers.spec.ts:33-53`, `peer-dock.spec.ts:62-84`,
- * `auth-identity.spec.ts:addWorkspace`). The composer does not exist until a
- * Session is open: after `Connect` the product mounts the "Choose a workspace"
- * region, so `Add workspace` -> `Add & Start` must run before the prompt
- * composer is reachable. Skipping it is what killed all four cases in 2355.
- */
-async function connectAndStartWorkspace(
-  page: Page,
-  cwd: string,
-): Promise<void> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(productNavigation(page)).toBeVisible();
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await addWorkspace.getByLabel("Server workspace path").fill(cwd);
-  await addWorkspace
-    .getByRole("button", { name: /Add & Start|Start session/ })
-    .click();
-  // The started workspace path is rendered and the composer is now enabled.
-  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
-  await expect(composer(page)).toBeEnabled();
 }
 
 /** Stage `PEER_COUNT` peers through the REAL `/peer` dialog and await the rows. */
@@ -183,114 +147,120 @@ async function startPeerTurn(page: Page, slug: string): Promise<void> {
   );
 }
 
-test.describe("peer activity glyphs from real peer events", () => {
-  test("staging renders idle, then a peer turn flips the row to live", async ({
+test.describe("the peer dock follows each peer's own Session", () => {
+  test("rows go idle -> live -> blocked -> live -> done, approvals stay fail-closed, /peer clear prunes the done row", async ({
     page,
+    request,
   }) => {
-    test.setTimeout(60_000);
-    const observed = observe(page);
-    await connectAndStartWorkspace(page, CWD);
-    const slug = firstSlug(await stagePeers(page, observed));
+    test.setTimeout(120_000);
+    try {
+      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
+      const observed = observe(page);
+      await connectAndStartWorkspace(page, runFolder("peer-dock"));
 
-    const row = dockRow(page, slug);
-    // The real slug is both the visible name and accessible-name prefix.
-    await expect(dockActivity(page, slug)).toHaveAttribute(
-      "data-activity",
-      "idle",
-    );
-    await expect(row.locator("[data-activity]")).toHaveCount(1);
-    await expect(row).toHaveAccessibleName(new RegExp(`^${slug} idle`));
-    // The browser really drove `peer/prepare` (no fabricated counter).
-    expect(observed.sentMethods).toContain("peer/prepare");
+      // Hidden with no peers: `PeerDock.tsx:197-199` returns null for a null
+      // OR empty roster, so neither the region nor a row exists yet.
+      await expect(peerDock(page)).toHaveCount(0);
 
-    // `turn/started` on the peer's OWN Session -> the row goes live.
-    await startPeerTurn(page, slug);
-    await expect(row).toHaveAccessibleName(new RegExp(`^${slug} streaming`));
-  });
+      const slugs = await stagePeers(page, observed);
+      const [primary, sibling] = [
+        firstSlug(slugs),
+        slugs[1] ?? firstSlug(slugs),
+      ];
+      // The browser really drove `peer/prepare` (no fabricated counter), and
+      // each real slug is both the visible name and accessible-name prefix.
+      expect(observed.sentMethods).toContain("peer/prepare");
+      for (const slug of slugs) {
+        await expect(dockActivity(page, slug)).toHaveAttribute(
+          "data-activity",
+          "idle",
+        );
+        await expect(dockRow(page, slug)).toHaveAccessibleName(
+          new RegExp(`^${slug} idle`),
+        );
+      }
 
-  test("a peer approval blocks the row; Alt+Y stays fail-closed; a resolution clears it", async ({
-    page,
-  }) => {
-    test.setTimeout(60_000);
-    const observed = observe(page);
-    await connectAndStartWorkspace(page, CWD);
-    const slug = firstSlug(await stagePeers(page, observed));
+      // `turn/started` on the peer's OWN Session -> the row goes live.
+      await startPeerTurn(page, primary);
+      const row = dockRow(page, primary);
+      await expect(row).toHaveAccessibleName(
+        new RegExp(`^${primary} streaming`),
+      );
 
-    await startPeerTurn(page, slug);
+      // `approval/requested` on the peer's OWN Session -> blocked + `⚠ needs you`.
+      await sendPrompt(page, `Peer approval fixture ${primary}`);
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "blocked",
+      );
+      await expect(row).toHaveAccessibleName(/needs you/);
 
-    // `approval/requested` on the peer's OWN Session -> blocked + `⚠ needs you`.
-    await sendPrompt(page, `Peer approval fixture ${slug}`);
-    const row = dockRow(page, slug);
-    await expect(dockActivity(page, slug)).toHaveAttribute(
-      "data-activity",
-      "blocked",
-    );
-    await expect(row).toHaveAccessibleName(/needs you/);
+      // UX4-4020: App DOES thread `onApprovalRespond` now (App.tsx:1491 ->
+      // peers.approvalRespond), but the sink exists ONLY while a control seat is
+      // acquired (`...(controlAcquire === null ? {} : { approvalRespond })`),
+      // and THIS workspace advertises no session/driver methods — so no acquire,
+      // no sink, and the dock still renders no row actions (fail-closed as
+      // designed). Alt+Y must stay inert here; the positive path lives in
+      // peer-control.spec.ts / peer-controller.spec.ts on `peer-control-*`.
+      await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
+      await row.focus();
+      await expect(row).toBeFocused();
+      await row.press("Alt+KeyY");
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "blocked",
+      );
+      await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
+      // Answering a row is a no-op, so focus stays on the still-mounted row.
+      await expect(row).toBeFocused();
+      expect(observed.sentMethods).not.toContain("peer/control");
 
-    // UX4-4020: App DOES thread `onApprovalRespond` now (App.tsx:1491 ->
-    // peers.approvalRespond), but the sink exists ONLY while a control seat is
-    // acquired (`...(controlAcquire === null ? {} : { approvalRespond })`),
-    // and THIS workspace advertises no session/driver methods — so no acquire,
-    // no sink, and the dock still renders no row actions (fail-closed as
-    // designed). Alt+Y must stay inert here; the positive path lives in
-    // peer-control.spec.ts / peer-controller.spec.ts on `peer-control-*`.
-    await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
-    await row.focus();
-    await expect(row).toBeFocused();
-    await row.press("Alt+KeyY");
-    await expect(dockActivity(page, slug)).toHaveAttribute(
-      "data-activity",
-      "blocked",
-    );
-    await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
-    expect(observed.sentMethods).not.toContain("peer/control");
+      // The block clears on the peer's OWN resolution frame (`approval/decided`),
+      // which the coordinator folds as `attention-resolved` -> back to live.
+      await sendPrompt(page, `Peer resolve fixture ${primary}`);
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "live",
+      );
 
-    // The block clears on the peer's OWN resolution frame (`approval/decided`),
-    // which the coordinator folds as `attention-resolved` -> back to live.
-    await sendPrompt(page, `Peer resolve fixture ${slug}`);
-    await expect(dockActivity(page, slug)).toHaveAttribute(
-      "data-activity",
-      "live",
-    );
-  });
+      // A second live peer: the one that must survive the prune.
+      await startPeerTurn(page, sibling);
 
-  test("a peer turn terminal lands the row as done while its sibling stays unlanded", async ({
-    page,
-  }) => {
-    test.setTimeout(60_000);
-    const observed = observe(page);
-    await connectAndStartWorkspace(page, CWD);
-    const slugs = await stagePeers(page, observed);
-    const [primary, sibling] = [firstSlug(slugs), slugs[1] ?? firstSlug(slugs)];
+      // `turn/completed` on the peer's OWN Session -> that row lands `done`,
+      // and the sibling stays live.
+      await sendPrompt(page, `Peer complete fixture ${primary}`);
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "done",
+      );
+      await expect(dockRow(page, primary)).toHaveAccessibleName(
+        new RegExp(`^${primary} done`),
+      );
+      await expect(dockActivity(page, sibling)).toHaveAttribute(
+        "data-activity",
+        "live",
+      );
 
-    await startPeerTurn(page, primary);
-
-    // `turn/completed` on the peer's OWN Session -> that row lands `done`...
-    await sendPrompt(page, `Peer complete fixture ${primary}`);
-    await expect(dockActivity(page, primary)).toHaveAttribute(
-      "data-activity",
-      "done",
-    );
-    await expect(dockRow(page, primary)).toHaveAccessibleName(
-      new RegExp(`^${primary} done`),
-    );
-
-    // ...and the fleet count is real: the sibling never landed.
-    await expect(dockActivity(page, sibling)).not.toHaveAttribute(
-      "data-activity",
-      "done",
-    );
-
-    // Landed-count SURFACE limit: the "N/N landed" pill renders only in the
-    // dock's collapsed branch, and App threads the toggle but not `collapsed`
-    // (ProductSidebar.tsx:744) — so the pill stays unreachable here and the
-    // expanded fold control is the only count-bearing control present.
-    await expect(
-      peerDock(page).locator('button[aria-expanded="true"]'),
-    ).toHaveCount(1);
-    await expect(
-      peerDock(page).locator('button[aria-expanded="false"]'),
-    ).toHaveCount(0);
+      // `/peer clear` (brief 2600; TUI `clear_finished_peers` store.rs:1012-1043)
+      // is a CLIENT-side prune of the ACTIVE session's FINISHED rows only.
+      await sendPrompt(page, "/peer clear");
+      await expect
+        .poll(() => dockRow(page, primary).count(), { timeout: 15_000 })
+        .toBe(0);
+      await expect(dockRow(page, sibling)).toHaveCount(1);
+      await expect(dockActivity(page, sibling)).toHaveAttribute(
+        "data-activity",
+        "live",
+      );
+      // The count lands in the composer's polite live region, in the exact
+      // `peerClearAnnouncement(1)` wording (singular "peer").
+      await expect(
+        page.getByRole("status").filter({ hasText: "1 finished peer cleared" }),
+      ).toHaveCount(1);
+    } finally {
+      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
+      await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
+    }
   });
 });
 
@@ -353,70 +323,5 @@ test.describe("per-session interrupt-prompt restore", () => {
       .poll(() => selectedSession.getAttribute("data-session-id"))
       .toBe(sessionAId);
     await expect(composer(page)).toHaveValue(draft);
-  });
-});
-
-/**
- * `/peer clear` end-to-end (brief 2600; semantics from TUI `clear_finished_peers`
- * store.rs:1012-1043). Alt+A/Alt+P live in keyboard-parity.spec.ts; this row
- * covers the third affordance. `/peer clear` is a CLIENT-side prune of the
- * ACTIVE session's FINISHED rows only: a `done` peer is removed, a `live` one
- * survives, and the count lands in the composer's polite live region via
- * `peerClearAnnouncement` (peer-manager.ts:764, singular at count 1).
- */
-test.describe("/peer clear prunes finished peers from the active session", () => {
-  test("removes exactly the done row, keeps the live row, and announces the count", async ({
-    page,
-    request,
-  }) => {
-    test.setTimeout(120_000);
-    try {
-      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
-      const observed = observe(page);
-      await connectAndStartWorkspace(page, CWD);
-      const slugs = await stagePeers(page, observed);
-      const [primary, sibling] = [
-        firstSlug(slugs),
-        slugs[1] ?? firstSlug(slugs),
-      ];
-
-      // Two live peers: the one to land AND the one that must survive the prune.
-      await startPeerTurn(page, primary);
-      await startPeerTurn(page, sibling);
-
-      // Land ONLY the primary; the sibling stays live.
-      await sendPrompt(page, `Peer complete fixture ${primary}`);
-      await expect(dockActivity(page, primary)).toHaveAttribute(
-        "data-activity",
-        "done",
-      );
-      await expect(dockActivity(page, sibling)).toHaveAttribute(
-        "data-activity",
-        "live",
-      );
-      await expect(dockRow(page, primary)).toHaveCount(1);
-
-      // `/peer clear` — the product's own composer command, no test hook.
-      await sendPrompt(page, "/peer clear");
-
-      // Exactly the done row is pruned; the live row is untouched.
-      await expect
-        .poll(() => dockRow(page, primary).count(), { timeout: 15_000 })
-        .toBe(0);
-      await expect(dockRow(page, sibling)).toHaveCount(1);
-      await expect(dockActivity(page, sibling)).toHaveAttribute(
-        "data-activity",
-        "live",
-      );
-
-      // The count lands in the composer's polite live region, in the exact
-      // `peerClearAnnouncement(1)` wording (singular "peer").
-      await expect(
-        page.getByRole("status").filter({ hasText: "1 finished peer cleared" }),
-      ).toHaveCount(1);
-    } finally {
-      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
-      await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
-    }
   });
 });

@@ -4,6 +4,10 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import {
+  FIXTURE_ORIGIN as origin,
+  connectAndStartWorkspace,
+} from "./fixture-session.ts";
 
 /**
  * Focused peer session shows the read-only composer (audit row 7, brief 0915).
@@ -34,9 +38,6 @@ import {
  *     arm counter :509); `terminal/state` reports the held set (:1374).
  *   • `/__test__/terminal/release` / `/__test__/terminal/reset` / `/__test__/peers/reset`.
  */
-
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const token = "tab-scoped-e2e-token";
 
 const composer = (page: Page) => page.locator(".composer textarea");
 const hint = (page: Page) =>
@@ -69,30 +70,6 @@ function wire(page: Page) {
 }
 
 /** Keyboard-only connect: fill fields, activate every control with Enter. */
-async function connectAndStartWorkspace(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page.getByLabel("Auth token").fill(token);
-  await page
-    .getByRole("button", { name: "Connect", exact: true })
-    .press("Enter");
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
-  await add
-    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
-    .press("Enter");
-  await expect(composer(page)).toBeEnabled();
-}
-
 async function heldTurn(request: APIRequestContext, owner: string) {
   await expect
     .poll(async () => {
@@ -114,7 +91,7 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   request,
 }) => {
   const w = wire(page);
-  await connectAndStartWorkspace(page, "peer-readonly-composer");
+  await connectAndStartWorkspace(page, "/srv/work/peer-readonly-composer");
   const masterId = String(w.calls("session/open")[0]!.params!.session_id!);
   const masterTitle = await sessionRows(page)
     .first()

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openSessionController } from "./session-settings.ts";
+import { connectAndStartWorkspace } from "./fixture-session.ts";
 
 /**
  * peer/control seat semantics — SOURCE ONLY (draft, not executed), migrated to
@@ -13,9 +14,10 @@ import { openSessionController } from "./session-settings.ts";
  * activation, typed refusals bounded by the §6 label table, raw server copy
  * never rendered.
  *
- * Fail-closed negatives (no-method / no-feature) are asserted on the PANE: a
- * workspace that does not advertise `peer/control` mounts NO seat panel there
- * and sends zero frames.
+ * The fail-closed negative (no-feature) is asserted on the PANE: a workspace
+ * whose caps leave out `external_driver_v1` mounts NO seat panel there and
+ * sends zero frames. Fleet's no-fleet variant (peer-controller.spec.ts) covers
+ * a server with neither the method nor the feature.
  *
  * Fixture: the `peer-control-<variant>` family in mock-ui-server.mjs
  * (plan 0810 §1-§3). Variants: (default) accepted receipts; refused -> state
@@ -25,8 +27,6 @@ import { openSessionController } from "./session-settings.ts";
  * Frame observation is PROJECTED AT CAPTURE: only allowlisted public fields /
  * counts / request ids are retained — no payloads, no tokens, no server copy.
  */
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER = "Ask Octos to change, explain, or review code…";
 /** Wire method of the single control leaf. */
 const CONTROL_METHOD = "peer/control";
 /** Workspace NAME prefix; full path is `/srv/work/peer-control-<variant>`. */
@@ -166,25 +166,9 @@ async function connect(
   variant: string,
 ): Promise<{ workspace: string }> {
   const workspace = `${WORKSPACE_PREFIX}${variant}`;
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
-  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
+  await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   await openSessionController(page);
-  if (variant !== "no-method" && variant !== "no-feature") {
+  if (variant !== "no-feature") {
     // §5.2/pane: the ONLY acquisition paths are the pane/Fleet Take-control
     // affordances (Acquire seat in Advanced). Nothing auto-acquires.
     await page
@@ -199,15 +183,6 @@ async function connect(
 
 test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", () => {
   // ------------------------------------------------ fail-closed negatives
-  test("no seat panel when peer/control is unadvertised (no-method)", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connect(page, "no-method");
-    await expect(panel(page)).toHaveCount(0);
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(0);
-  });
-
   test("no seat panel when external_driver_v1 is unadvertised (no-feature)", async ({
     page,
   }) => {
@@ -217,8 +192,8 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     expect(w.calls(CONTROL_METHOD)).toHaveLength(0);
   });
 
-  // ------------------------------------------------------ one frame / command
-  test("each of the four commands emits exactly ONE peer/control frame", async ({
+  // ------------------------------------- one frame / command, accepted receipt
+  test("each command, from the keyboard or a click, emits exactly ONE frame and an accepted receipt", async ({
     page,
   }) => {
     const w = wire(page);
@@ -226,21 +201,13 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     await expect(
       panel(page).getByRole("group", { name: "Commands" }),
     ).toBeVisible();
-    for (const kind of COMMAND_KINDS) {
-      const before = w.calls(CONTROL_METHOD).length;
-      await command(page, kind).click();
-      await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
-    }
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(COMMAND_KINDS.length);
-  });
 
-  // -------------------------------------------- accepted receipt / duplicate
-  test("an accepted receipt renders its slug and duplicate:false", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connect(page, "");
-    await command(page, "steer").click();
+    // Keyboard reach: Steer is focusable and Enter activates it once.
+    const steer = command(page, "steer");
+    await steer.focus();
+    await expect(steer).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(1);
     await expect(receipt(page)).toBeVisible();
     // The mock mints a FIXED slug in every receipt.
     await expect(receipt(page).locator("[data-receipt-slug]")).toHaveText(
@@ -249,12 +216,21 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     await expect(
       receipt(page).locator('[data-receipt-duplicate="false"]'),
     ).toHaveText("Newly applied");
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
-    const reply = w.replyTo(w.calls(CONTROL_METHOD)[0]!);
     await w.settled(w.calls(CONTROL_METHOD)[0]!);
-    expect(reply?.receiptState).toBe("accepted");
+    expect(w.replyTo(w.calls(CONTROL_METHOD)[0]!)?.receiptState).toBe(
+      "accepted",
+    );
+
+    // The other three commands, clicked: one frame each, never a retry.
+    for (const kind of COMMAND_KINDS.filter((k) => k !== "steer")) {
+      const before = w.calls(CONTROL_METHOD).length;
+      await command(page, kind).click();
+      await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
+    }
+    expect(w.calls(CONTROL_METHOD)).toHaveLength(COMMAND_KINDS.length);
   });
 
+  // ------------------------------------------------------------ duplicate
   test("an idempotent replay renders duplicate:true", async ({ page }) => {
     const w = wire(page);
     // Only the `duplicate` workspace suffix mints duplicate:true receipts.
@@ -308,21 +284,6 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     await expect(
       pane.getByRole("alert").filter({ hasText: FENCE_STALE }),
     ).not.toContainText("fixture fence stale");
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
-  });
-
-  // ---------------------------------------------------- keyboard reach
-  test("commands are keyboard-reachable and still emit exactly one frame", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connect(page, "");
-    const steer = command(page, "steer");
-    await steer.focus();
-    await expect(steer).toBeFocused();
-    const before = w.calls(CONTROL_METHOD).length;
-    await page.keyboard.press("Enter");
-    await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
   });
 });
