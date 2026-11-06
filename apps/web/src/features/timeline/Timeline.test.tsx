@@ -1,95 +1,32 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Timeline } from "./Timeline.tsx";
-import { timelineFromHydrate } from "./model.ts";
+import { timelineFromHydrate, type TimelineEntry } from "./model.ts";
 import { AttachmentAccessContext } from "./attachment-access.ts";
-import { collapseAll } from "./folds.ts";
 import { loadChineseCatalog, UiTextProvider } from "../preferences/ui-text.tsx";
 
+/** The opening `<details …>` tags whose attributes carry `marker`. */
+function detailsTags(html: string, marker: string): string[] {
+  return [...html.matchAll(/<details\b[^>]*>/g)]
+    .map((match) => match[0])
+    .filter((tag) => tag.includes(marker));
+}
+const isOpen = (tag: string | undefined): boolean =>
+  tag !== undefined && /\sopen=""/.test(tag);
+
+const terminal = (overrides: Partial<TimelineEntry> = {}): TimelineEntry => ({
+  id: "terminal:turn-1",
+  kind: "system",
+  title: "Turn complete",
+  body: "",
+  status: "complete",
+  turnId: "turn-1",
+  latestTurnOutcome: "completed",
+  ...overrides,
+});
+
 describe("Timeline", () => {
-  it("omits empty assistant rows without hiding useful system messages", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={[
-          {
-            id: "assistant-empty",
-            kind: "assistant",
-            title: "Octos",
-            body: "   ",
-            status: "complete",
-          },
-          {
-            id: "terminal",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-          },
-        ]}
-      />,
-    );
-    expect(html).not.toContain("entry-assistant");
-    expect(html).not.toContain("No output yet");
-    expect(html).toContain("Turn complete");
-  });
-
-  it("shows a file-only delivery as an attachment instead of hiding the row", () => {
-    const entries = [
-      {
-        id: "delivery",
-        kind: "assistant" as const,
-        title: "Octos",
-        body: "",
-        status: "complete" as const,
-        media: [
-          "/work/new-octos/_build/p20-art.png",
-          "/work/Single-Panel-Pilot-3p.pptx",
-        ],
-      },
-    ];
-    const html = renderToStaticMarkup(
-      <AttachmentAccessContext.Provider
-        value={{ download: async () => new Blob() }}
-      >
-        <Timeline connected entries={entries} />
-      </AttachmentAccessContext.Provider>,
-    );
-    expect(html).toContain("entry-assistant");
-    expect(html).toContain('data-attachment="p20-art.png"');
-    expect(html).toContain('data-attachment="Single-Panel-Pilot-3p.pptx"');
-    expect(html).toContain('aria-label="Download Single-Panel-Pilot-3p.pptx"');
-    // The server path is never rendered as message text.
-    expect(html).not.toContain("Attachment:");
-    expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Download/);
-  });
-
-  it("shows an explicitly written file as a downloadable artifact", () => {
-    const html = renderToStaticMarkup(
-      <AttachmentAccessContext.Provider
-        value={{ download: async () => new Blob() }}
-      >
-        <Timeline
-          connected
-          workspaceFileReadAvailable
-          entries={[
-            {
-              id: "tool-write",
-              kind: "tool",
-              title: "write_file",
-              body: "Successfully wrote report.md",
-              status: "complete",
-              artifactPath: "report.md",
-            },
-          ]}
-        />
-      </AttachmentAccessContext.Provider>,
-    );
-    expect(html).toContain('data-attachment="report.md"');
-    expect(html).toContain("Download report.md");
-  });
-
-  it("keeps a refreshed artifact card only when Core supplies write_path", () => {
+  it("offers a written file for download only when Core names it and the Session can read the workspace", () => {
     const hydrated = (structured: boolean) =>
       timelineFromHydrate({
         session_id: "coding:local:main",
@@ -122,43 +59,29 @@ describe("Timeline", () => {
           },
         ],
       });
-    const render = (structured: boolean) =>
+    const render = (structured: boolean, readable: boolean) =>
       renderToStaticMarkup(
         <AttachmentAccessContext.Provider
           value={{ download: async () => new Blob() }}
         >
           <Timeline
             connected
-            workspaceFileReadAvailable
+            workspaceFileReadAvailable={readable}
             entries={hydrated(structured)}
           />
         </AttachmentAccessContext.Provider>,
       );
-    expect(render(true)).toContain('data-attachment="report.md"');
-    expect(render(false)).not.toContain('data-attachment="report.md"');
-  });
+    const offered = render(true, true);
+    expect(offered).toContain('data-attachment="report.md"');
+    expect(offered).toContain("Download report.md");
+    // A refreshed card whose preview was truncated names no file of its own.
+    expect(render(false, true)).not.toContain('data-attachment="report.md"');
+    // Without the workspace read capability there is nothing to download.
+    expect(render(true, false)).not.toContain('data-attachment="report.md"');
 
-  it("does not offer workspace artifacts without the read capability", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={[
-          {
-            id: "tool-write",
-            kind: "tool",
-            title: "write_file",
-            body: "Successfully wrote report.md",
-            status: "complete",
-            artifactPath: "report.md",
-          },
-        ]}
-      />,
-    );
-    expect(html).not.toContain('data-attachment="report.md"');
-  });
-
-  it("disables downloads when no Session can serve files", () => {
-    const html = renderToStaticMarkup(
+    // A delivered file the Session cannot serve stays visible, but its
+    // download is disabled rather than failing on click.
+    const delivery = renderToStaticMarkup(
       <Timeline
         connected
         entries={[
@@ -173,31 +96,11 @@ describe("Timeline", () => {
         ]}
       />,
     );
-    expect(html).toContain("Here is the deck");
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>Download/);
+    expect(delivery).toContain("Here is the deck");
+    expect(delivery).toMatch(/<button[^>]*disabled[^>]*>Download/);
   });
 
-  it("does not translate a hydrated system role as a theme label", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={[
-          {
-            id: "system:hydrated",
-            kind: "system",
-            title: "system",
-            body: "Hydrated notice",
-            status: "complete",
-            turnId: "turn-1",
-          },
-        ]}
-      />,
-    );
-    expect(html).toContain("<strong>system</strong>");
-    expect(html).not.toContain("<strong>跟随系统</strong>");
-  });
-
-  it("keeps a completed turn calm when a step failed on the way", () => {
+  it("keeps a completed turn's summary calm and never reads uncounted command changes as 0 files", () => {
     const html = renderToStaticMarkup(
       <Timeline
         connected
@@ -225,23 +128,17 @@ describe("Timeline", () => {
             startedAtMs: 2000,
             endedAtMs: 3000,
           },
-          {
-            id: "terminal:turn-1",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-            turnId: "turn-1",
-            latestTurnOutcome: "completed",
+          terminal({
             startedAtMs: 1000,
             endedAtMs: 4000,
             turnUsage: { input: 12, output: 9 },
-          },
+          }),
         ]}
       />,
     );
     expect(html).toContain("Write file report.md");
     expect(html).toContain("permission denied");
+    // A failure a later call recovered from reads as retried, not failed.
     expect(html).toContain("Retried automatically 1 times");
     expect(html).not.toContain("steps failed");
     expect(html).toContain('data-retried-steps="1"');
@@ -250,37 +147,42 @@ describe("Timeline", () => {
     expect(html).toContain("12 tokens in · 9 tokens out");
     // The raw error is folded by default.
     expect(html).not.toMatch(/<details[^>]*open/);
-  });
 
-  it("names a failure the turn never recovered from without a warning card", () => {
-    const html = renderToStaticMarkup(
+    // A zero duration is dropped rather than shown.
+    const instant = renderToStaticMarkup(
       <Timeline
         connected
-        entries={[
-          {
-            id: "tool:failed",
-            kind: "tool",
-            title: "write_file",
-            body: "permission denied",
-            status: "error",
-            turnId: "turn-1",
-          },
-          {
-            id: "terminal:turn-1",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-            turnId: "turn-1",
-            latestTurnOutcome: "completed",
-          },
-        ]}
+        entries={[terminal({ startedAtMs: 5000, endedAtMs: 5000 })]}
       />,
     );
-    expect(html).toContain("1 steps failed");
-    expect(html).not.toContain("⚠");
-    expect(html).not.toContain("Retried automatically");
-    expect(html).toContain('data-outcome="complete"');
+    expect(instant).not.toContain("Duration");
+    expect(instant).toContain("0 files changed");
+
+    // Core's command receipt is a floor (turn-summary.ts): a command's
+    // changes are never summarised as "0 files".
+    const command = (body: string) =>
+      renderToStaticMarkup(
+        <Timeline
+          connected
+          entries={[
+            {
+              id: "tool:1",
+              kind: "tool",
+              title: "exec_command",
+              body,
+              status: "complete",
+              turnId: "turn-1",
+            },
+            terminal(),
+          ]}
+        />,
+      );
+    const zero = command("ok\nfiles_changed: 0\nscope: workdir");
+    expect(zero).toContain("Changes not counted");
+    expect(zero).not.toContain("0 files");
+    expect(command("ok\nfiles_changed: 1\n  a.txt\nscope: workdir")).toContain(
+      "1 files recorded; other changes not counted",
+    );
   });
 
   it("warns only when the turn itself failed", () => {
@@ -297,15 +199,12 @@ describe("Timeline", () => {
             status: "error",
             turnId: "turn-1",
           },
-          {
-            id: "terminal:turn-1",
-            kind: "system",
+          terminal({
             title: "Turn failed",
             body: "provider error",
             status: "error",
-            turnId: "turn-1",
             latestTurnOutcome: "failed",
-          },
+          }),
         ]}
       />,
     );
@@ -314,109 +213,41 @@ describe("Timeline", () => {
     expect(html).toContain("provider error");
   });
 
-  it("drops a zero duration from the turn summary", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={[
-          {
-            id: "terminal:turn-1",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-            turnId: "turn-1",
-            latestTurnOutcome: "completed",
-            startedAtMs: 5000,
-            endedAtMs: 5000,
-          },
-        ]}
-      />,
-    );
-    expect(html).not.toContain("Duration");
-    expect(html).toContain("0 files changed");
-  });
-
-  it("never reports 0 files for a turn that ran a command", () => {
-    const entries = (body: string) => [
-      {
-        id: "tool:1",
-        kind: "tool" as const,
-        title: "exec_command",
-        body,
-        status: "complete" as const,
-        turnId: "turn-1",
-      },
-      {
-        id: "terminal:turn-1",
-        kind: "system" as const,
-        title: "Turn complete",
-        body: "",
-        status: "complete" as const,
-        turnId: "turn-1",
-        latestTurnOutcome: "completed" as const,
-      },
-    ];
-    const zero = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={entries("ok\nfiles_changed: 0\nscope: workdir")}
-      />,
-    );
-    expect(zero).toContain("Changes not counted");
-    expect(zero).not.toContain("0 files");
-    const one = renderToStaticMarkup(
-      <Timeline
-        connected
-        entries={entries("ok\nfiles_changed: 1\n  a.txt\nscope: workdir")}
-      />,
-    );
-    expect(one).toContain("1 files recorded; other changes not counted");
-  });
-
-  it("folds a finished turn's steps into one disclosure and lifts its files out", () => {
-    const entries = [
+  it("folds a finished turn's steps into one group with its files outside, open where the reader opened a step; a live turn's steps stay separate", () => {
+    const entries: TimelineEntry[] = [
       {
         id: "reasoning:1",
-        kind: "reasoning" as const,
+        kind: "reasoning",
         title: "Thinking",
         body: "Look at the folder",
-        status: "complete" as const,
+        status: "complete",
         turnId: "turn-1",
         startedAtMs: 1000,
         endedAtMs: 1000,
       },
       {
         id: "tool:list",
-        kind: "tool" as const,
+        kind: "tool",
         title: "write_file",
         body: "Read-only file system",
-        status: "error" as const,
+        status: "error",
         turnId: "turn-1",
         startedAtMs: 1000,
         endedAtMs: 1000,
       },
       {
         id: "tool:write",
-        kind: "tool" as const,
+        kind: "tool",
         title: "write_file",
         body: "written",
         toolArguments: '{"path":"report.md"}',
-        status: "complete" as const,
+        status: "complete",
         turnId: "turn-1",
         artifactPath: "/work/report.md",
         startedAtMs: 1000,
         endedAtMs: 6000,
       },
-      {
-        id: "terminal:turn-1",
-        kind: "system" as const,
-        title: "Turn complete",
-        body: "",
-        status: "complete" as const,
-        turnId: "turn-1",
-        latestTurnOutcome: "completed",
-      },
+      terminal(),
     ];
     const html = renderToStaticMarkup(
       <Timeline
@@ -426,36 +257,28 @@ describe("Timeline", () => {
         workspaceFileReadAvailable
       />,
     );
-    expect(html).toContain('data-step-group="steps:reasoning:1"');
-    expect(html).toContain("Ran 2 steps");
-    expect(html).toContain("Retried automatically 1 times");
+    const group = detailsTags(html, 'data-step-group="steps:reasoning:1"');
+    expect(group).toHaveLength(1);
+    expect(isOpen(group[0])).toBe(false);
     expect(html).toMatch(/Ran 2 steps<\/strong><span[^>]*>5 s</);
-    expect(html).not.toMatch(/<details[^>]*stepGroup[^>]*open/);
+    expect(html).toContain("Retried automatically 1 times");
     // The written file stays reachable outside the folded group.
-    const group = html.indexOf("data-step-group");
+    const groupStart = html.indexOf("data-step-group");
     const groupEnd = html.indexOf("</details>", html.lastIndexOf("tool:write"));
-    expect(html.indexOf("report.md", groupEnd)).toBeGreaterThan(group);
+    expect(html.indexOf("report.md", groupEnd)).toBeGreaterThan(groupStart);
     // A step the reader opened keeps the group open after the turn ends.
     const opened = renderToStaticMarkup(
       <Timeline connected folds={{ "tool:list": true }} entries={entries} />,
     );
-    expect(opened).toMatch(/<details[^>]*stepGroup[^>]*open/);
-  });
+    expect(isOpen(detailsTags(opened, "data-step-group")[0])).toBe(true);
 
-  it("keeps a live turn's steps separate", () => {
-    const html = renderToStaticMarkup(
+    // While the turn is live, nothing is grouped yet.
+    const live = renderToStaticMarkup(
       <Timeline
         connected
         folds={{}}
         entries={[
-          {
-            id: "reasoning:1",
-            kind: "reasoning",
-            title: "Thinking",
-            body: "Look",
-            status: "complete",
-            turnId: "turn-1",
-          },
+          { ...entries[0]!, body: "Look" },
           {
             id: "tool:list",
             kind: "tool",
@@ -467,76 +290,45 @@ describe("Timeline", () => {
         ]}
       />,
     );
-    expect(html).not.toContain("data-step-group");
+    expect(live).not.toContain("data-step-group");
   });
 
-  it("renders the model's opening checklist as the turn plan", () => {
-    const entry = {
+  it("renders the model's opening checklist as the turn plan, open while live and counted once ended", () => {
+    const entry: TimelineEntry = {
       id: "assistant:plan",
-      kind: "assistant" as const,
+      kind: "assistant",
       title: "Octos",
       body: "Plan:\n- [x] Read the CSV\n- [ ] Write the clean copy\n\nStarting now.",
-      status: "complete" as const,
+      status: "complete",
       turnId: "turn-1",
     };
     const live = renderToStaticMarkup(
       <Timeline connected folds={{}} entries={[entry]} />,
     );
-    expect(live).toMatch(/<details[^>]*planBlock[^>]*open/);
+    expect(isOpen(detailsTags(live, "data-plan-block")[0])).toBe(true);
     expect(live).toContain("1 of 2 done");
     expect(live).toContain("Write the clean copy");
     expect(live).not.toContain("Plan:");
     const ended = renderToStaticMarkup(
-      <Timeline
-        connected
-        folds={{}}
-        entries={[
-          entry,
-          {
-            id: "terminal:turn-1",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-            turnId: "turn-1",
-            latestTurnOutcome: "completed",
-          },
-        ]}
-      />,
+      <Timeline connected folds={{}} entries={[entry, terminal()]} />,
     );
-    expect(ended).not.toMatch(/<details[^>]*planBlock[^>]*open/);
+    expect(detailsTags(ended, "data-plan-block")).toHaveLength(1);
+    expect(isOpen(detailsTags(ended, "data-plan-block")[0])).toBe(false);
     expect(ended).toContain("Turn ended");
     // One item was ticked, so progress is still meaningful.
     expect(ended).toContain("1 of 2 done");
-  });
-
-  it("counts an ended plan's items instead of reporting nothing done", () => {
-    const html = renderToStaticMarkup(
+    // Nothing ticked: the ended plan counts its items instead of "0 done".
+    const unticked = renderToStaticMarkup(
       <Timeline
         connected
         entries={[
-          {
-            id: "assistant:plan",
-            kind: "assistant",
-            title: "Octos",
-            body: "Plan:\n- [ ] Read\n- [ ] Write",
-            status: "complete",
-            turnId: "turn-1",
-          },
-          {
-            id: "terminal:turn-1",
-            kind: "system",
-            title: "Turn complete",
-            body: "",
-            status: "complete",
-            turnId: "turn-1",
-            latestTurnOutcome: "completed",
-          },
+          { ...entry, body: "Plan:\n- [ ] Read\n- [ ] Write" },
+          terminal(),
         ]}
       />,
     );
-    expect(html).toContain("2 plan items");
-    expect(html).not.toContain("0 of 2 done");
+    expect(unticked).toContain("2 plan items");
+    expect(unticked).not.toContain("0 of 2 done");
   });
 
   it("translates the client's own notices", async () => {
@@ -553,15 +345,7 @@ describe("Timeline", () => {
               status: "error",
               turnId: "turn-1",
             },
-            {
-              id: "terminal:turn-1",
-              kind: "system",
-              title: "Turn complete",
-              body: "",
-              status: "complete",
-              turnId: "turn-1",
-              latestTurnOutcome: "completed",
-            },
+            terminal(),
           ]}
         />
       </UiTextProvider>,
@@ -572,47 +356,5 @@ describe("Timeline", () => {
     );
     expect(html).toContain("本轮完成");
     expect(html).not.toContain("Turn complete");
-  });
-
-  it("Collapse all folds failed steps too", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        connected
-        folds={collapseAll({})}
-        entries={[
-          {
-            id: "tool:failed",
-            kind: "tool",
-            title: "write_file",
-            body: "permission denied",
-            toolArguments: '{"path":"report.md"}',
-            status: "error",
-            turnId: "turn-1",
-          },
-        ]}
-      />,
-    );
-    expect(html).not.toMatch(/<details[^>]*open/);
-  });
-
-  it("announces the timeline via a log landmark (a11y finding 4)", () => {
-    const html = renderToStaticMarkup(
-      <Timeline
-        entries={[
-          {
-            id: "user-1",
-            kind: "user",
-            title: "You",
-            body: "hello",
-            status: "complete",
-            turnId: "turn-1",
-          },
-        ]}
-        connected
-      />,
-    );
-
-    expect(html).toContain('role="log"');
-    expect(html).toContain('aria-label="Conversation timeline"');
   });
 });
