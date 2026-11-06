@@ -14,7 +14,7 @@ import {
   deliverOAuthCallback,
   knownToUseOAuth,
   needsSignIn,
-  noteConnectorUnauthorized,
+  noteConnectorServerStatus,
   oauthFailure,
   oauthSettled,
   oauthVersion,
@@ -225,24 +225,60 @@ describe("connector sign-in", () => {
     });
   });
 
-  it("drops a remembered sign-in when a status read reports revocation", async () => {
-    // T-0371: the provider revoked out of band; the next server report must
-    // erase the remembered "Signed in" instead of displaying it as current.
+  it("lets the server's structured status decide a remembered sign-in", async () => {
+    // T-0430: a failed status ends a LIVE sign-in (provider revoked, refresh
+    // failed — any wording); a restart-pending one survives it and settles
+    // once the server reports connected. Error text is never consulted.
     const connection = {};
     const commands = fakeCommands();
     await begin(connection, commands);
     returnFromProvider("code=c&state=s1");
     await flush();
-    expect(connectorOAuthState(connection, "coding", "mcp-1")?.kind).toBe(
-      "authorized",
-    );
+    expect(connectorOAuthState(connection, "coding", "mcp-1")).toEqual({
+      kind: "authorized",
+      takesEffect: "now",
+    });
+
     const before = oauthVersion(connection, "coding");
-    noteConnectorUnauthorized(connection, "coding", "mcp-1");
+    noteConnectorServerStatus(connection, "coding", "mcp-1", "failed");
     expect(connectorOAuthState(connection, "coding", "mcp-1")).toBeUndefined();
     expect(oauthVersion(connection, "coding")).toBe(before + 1);
-    // Only a remembered success is cleared; anything else is left alone.
-    noteConnectorUnauthorized(connection, "coding", "mcp-1");
+    // Already cleared: a second report changes nothing.
+    noteConnectorServerStatus(connection, "coding", "mcp-1", "failed");
     expect(oauthVersion(connection, "coding")).toBe(before + 1);
+  });
+
+  it("keeps a restart-pending sign-in through a stale failure, then settles it on connected", async () => {
+    const connection = {};
+    const commands = fakeCommands({
+      completeOAuth: vi.fn(async () =>
+        done({
+          runtime: { restartRequired: true, effectiveFrom: "next_turn" },
+        }),
+      ),
+    });
+    await begin(connection, commands);
+    returnFromProvider("code=c&state=s1");
+    await flush();
+    expect(connectorOAuthState(connection, "coding", "mcp-1")).toEqual({
+      kind: "authorized",
+      takesEffect: "restart",
+    });
+
+    // The still-running old connection reports failed until the restart;
+    // the stored sign-in must keep its restart note instead of vanishing.
+    noteConnectorServerStatus(connection, "coding", "mcp-1", "failed");
+    expect(connectorOAuthState(connection, "coding", "mcp-1")).toEqual({
+      kind: "authorized",
+      takesEffect: "restart",
+    });
+
+    // Once the server confirms the connection is live, it is simply signed in.
+    noteConnectorServerStatus(connection, "coding", "mcp-1", "connected");
+    expect(connectorOAuthState(connection, "coding", "mcp-1")).toEqual({
+      kind: "authorized",
+      takesEffect: "now",
+    });
   });
 
   it("ignores another sign-in's return, and one from another origin", async () => {

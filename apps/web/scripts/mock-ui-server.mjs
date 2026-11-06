@@ -2604,7 +2604,10 @@ const http = createServer(async (request, response) => {
           row.status = "failed";
           row.tool_count = 0;
           row.tools = [];
-          row.error = `no stored OAuth tokens for MCP server '${row.url}'; run \`octos mcp login ${row.url}\` first`;
+          // The real Core's wording when a stored token expired and its
+          // refresh failed (audit 2026-11-06): the old error-text matcher
+          // misses this, only the structured failed status carries it.
+          row.error = `stored oauth token for MCP server '${row.url}' expired and refresh failed: invalid_grant`;
         }
       }
     }
@@ -5940,7 +5943,13 @@ sockets.on("connection", (socket, request) => {
         ...connectorRows(workspaceRoot),
         ...connectorSaved(workspaceRoot),
       ];
-      const runtime = workspaceRoot.includes("pinned")
+      // "oauth-restart": the row stays listed but the server only reloads
+      // connectors at restart, so after sign-in it keeps reporting the OLD
+      // connection's failure until then (audit 2026-11-06).
+      const restartMode =
+        workspaceRoot.includes("pinned") ||
+        workspaceRoot.includes("oauth-restart");
+      const runtime = restartMode
         ? {
             runtime_disposition: "restart_required",
             restart_required: true,
@@ -6083,14 +6092,14 @@ sockets.on("connection", (socket, request) => {
           return;
         }
         const row = rows.find((item) => item.id === flow.connectorId);
-        if (!workspaceRoot.includes("pinned")) {
+        if (!restartMode) {
           row.status = "connected";
           row.tool_count = 1;
           row.tools = ["lookup"];
           delete row.error;
         }
         reply(socket, request.id, {
-          status: workspaceRoot.includes("pinned") ? null : status(row),
+          status: restartMode ? null : status(row),
           runtime,
           connector: summary(row),
           completed: true,
@@ -6112,14 +6121,14 @@ sockets.on("connection", (socket, request) => {
           );
           return;
         }
-        if (!workspaceRoot.includes("pinned")) {
+        if (!restartMode) {
           row.status = "failed";
           row.tool_count = 0;
           row.tools = [];
           row.error = `no stored OAuth tokens for MCP server '${row.url}'; run \`octos mcp login ${row.url}\` first`;
         }
         reply(socket, request.id, {
-          status: workspaceRoot.includes("pinned") ? null : status(row),
+          status: restartMode ? null : status(row),
           runtime,
           connector: summary(row),
           revoked: true,

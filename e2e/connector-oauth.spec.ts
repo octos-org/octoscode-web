@@ -376,3 +376,38 @@ test("on a server that loads changes at restart, signing in says so", async ({
     row.getByRole("button", { name: "Revoke sign-in" }),
   ).toBeVisible();
 });
+
+test("a restart-pending sign-in survives refreshes until the server confirms connected", async ({
+  page,
+}) => {
+  // T-0430: on a restart-mode server the OLD connection keeps reporting its
+  // stale failure until the restart. A refresh must not erase the stored
+  // sign-in's "takes effect after restart" note (audit 2026-11-06 #347).
+  await connect(
+    page,
+    `/srv/work/connector-management-oauth-restart-${Date.now()}`,
+  );
+  const settings = await openConnectors(page);
+  const issues = settings.locator('[data-connector-id="issues"]');
+
+  const popupOpened = page.waitForEvent("popup");
+  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
+  const popup = await popupOpened;
+  await popup.getByRole("link", { name: "Allow", exact: true }).click();
+  await expect(issues).toContainText(
+    "Signed in. Takes effect after the server restarts.",
+  );
+
+  // The stale connection still reads failed; the note stays, no flip back to
+  // "Authorization required", and once the server reports connected the note
+  // settles to a plain signed-in.
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(issues).toContainText(
+    "Signed in. Takes effect after the server restarts.",
+  );
+  await expect(issues).not.toContainText("Authorization required");
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(issues).toContainText(
+    "Signed in. Takes effect after the server restarts.",
+  );
+});
