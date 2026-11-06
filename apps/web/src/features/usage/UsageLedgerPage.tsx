@@ -36,7 +36,7 @@ interface UsageLedgerPageProps {
 
 type ScopeState =
   | { status: "loading" }
-  | { status: "ready"; scope: UsageScope }
+  | { status: "ready"; scope: UsageScope; serverNow: Date | null }
   | { status: "failed"; failure: UsageFailure };
 
 interface SummaryState {
@@ -53,6 +53,7 @@ interface PageState {
 }
 
 const FAILURE_TEXT: Record<UsageFailure, string> = {
+  "probe-failed": "Couldn't confirm the sign-in for usage. Try again.",
   unsupported: "This server does not keep a usage ledger.",
   "signed-out":
     "The server no longer accepts this sign-in. Reconnect, then try again.",
@@ -92,9 +93,13 @@ export function UsageLedgerPage({
       .usageCommands(profileId)
       .then((usage) => usage.scope(request.signal))
       .then(
-        (scope) => {
+        (result) => {
           if (!request.signal.aborted)
-            setScopeState({ status: "ready", scope });
+            setScopeState({
+              status: "ready",
+              scope: result.scope,
+              serverNow: result.serverNow,
+            });
         },
         (reason: unknown) => {
           if (!request.signal.aborted)
@@ -106,6 +111,11 @@ export function UsageLedgerPage({
 
   const scopeKey =
     scopeState.status === "ready" ? scopeKeyOf(scopeState.scope) : null;
+  // The server's clock anchors every period window; absent, periods are
+  // disabled rather than guessed (T-0432).
+  const serverNow = scopeState.status === "ready" ? scopeState.serverNow : null;
+  const clockKey = serverNow ? serverNow.toISOString() : "unknown";
+  const clockKnown = serverNow !== null;
 
   const ordered = useMemo(
     () =>
@@ -121,7 +131,7 @@ export function UsageLedgerPage({
 
   // The totals: the whole ledger for the period, or one Session's part of it.
   const summaryKey = scopeKey
-    ? usageQueryKey(scopeKey, range, sessionFilter)
+    ? usageQueryKey(scopeKey, range, sessionFilter, clockKey)
     : null;
   useEffect(() => {
     if (!scopeKey || !summaryKey) return;
@@ -133,7 +143,18 @@ export function UsageLedgerPage({
         ? { ...current, loading: true, failure: null }
         : { key: summaryKey, loading: true, data: null, failure: null },
     );
-    const from = rangeStart(range, new Date());
+    const from = rangeStart(range, serverNow);
+    if (from === null) {
+      // The server shared no clock: a period cannot be computed honestly,
+      // so nothing is sent with an invented window (T-0432).
+      setSummary({
+        key: summaryKey,
+        loading: false,
+        data: null,
+        failure: null,
+      });
+      return () => request.abort();
+    }
     void client
       .usageCommands(profileId)
       .then((usage) =>
@@ -170,7 +191,9 @@ export function UsageLedgerPage({
   }, [client, profileId, scopeKey, summaryKey, range, sessionFilter, refresh]);
 
   // One read per Session on the visible page; nothing is added up across pages.
-  const pageKey = scopeKey ? usageQueryKey(scopeKey, range, pageIds) : null;
+  const pageKey = scopeKey
+    ? usageQueryKey(scopeKey, range, pageIds, clockKey)
+    : null;
   useEffect(() => {
     if (!scopeKey || !pageKey || !pageIds) return;
     const scope = JSON.parse(scopeKey) as UsageScope;
@@ -181,7 +204,11 @@ export function UsageLedgerPage({
         ? { ...current, loading: true }
         : { key: pageKey, loading: true, rows: new Map() },
     );
-    const from = rangeStart(range, new Date());
+    const from = rangeStart(range, serverNow);
+    if (from === null) {
+      setPageState({ key: pageKey, loading: false, rows: new Map() });
+      return () => request.abort();
+    }
     void (async () => {
       const usage = await client.usageCommands(profileId);
       for (const sessionId of ids) {
@@ -224,8 +251,10 @@ export function UsageLedgerPage({
     Boolean(shownSummary?.loading) ||
     Boolean(shownPage?.loading);
   const retry = () => {
-    if (scopeState.status === "failed") setScopeAttempt((value) => value + 1);
-    else setRefresh((value) => value + 1);
+    // A refresh re-reads the server's clock too, so a long-open page keeps
+    // its windows on the server's current UTC day (T-0432).
+    setScopeAttempt((value) => value + 1);
+    if (scopeState.status !== "failed") setRefresh((value) => value + 1);
   };
 
   return (
@@ -256,6 +285,7 @@ export function UsageLedgerPage({
                   type="radio"
                   name="usage-range"
                   checked={range === option.value}
+                  disabled={option.value !== "all" && !clockKnown}
                   onChange={() => setRange(option.value)}
                 />
                 <span>{t(option.label)}</span>
@@ -277,6 +307,14 @@ export function UsageLedgerPage({
         ) : scopeState.status === "loading" ? (
           <p className={styles.hint} role="status">
             {t("Reading usage…")}
+          </p>
+        ) : !clockKnown && range !== "all" ? (
+          // No server clock: the period cannot be computed honestly, so the
+          // page says so instead of sending an invented window (T-0432).
+          <p className={styles.hint} role="status" data-usage-clock>
+            {t(
+              "The server did not share its clock, so this period cannot be computed. All time still works.",
+            )}
           </p>
         ) : (
           <>

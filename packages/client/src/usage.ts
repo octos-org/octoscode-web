@@ -49,7 +49,13 @@ export interface UsageQuery {
 }
 
 export type UsageFailure =
-  "unsupported" | "signed-out" | "forbidden" | "invalid" | "failed";
+  | "unsupported"
+  | "signed-out"
+  | "forbidden"
+  | "invalid"
+  | "failed"
+  /** The auth/me probe failed — never read as "the server has no ledger". */
+  | "probe-failed";
 
 export class UsageReadError extends Error {
   readonly kind: UsageFailure;
@@ -75,7 +81,10 @@ export function createUsageCommands(options: {
   fetch?: typeof fetch;
 }) {
   const send = options.fetch ?? globalThis.fetch;
-  async function get(url: URL, signal?: AbortSignal): Promise<unknown> {
+  async function get(
+    url: URL,
+    signal?: AbortSignal,
+  ): Promise<{ value: unknown; serverTime: Date | null }> {
     const headers = new Headers({ Accept: "application/json" });
     if (options.token?.trim())
       headers.set("Authorization", "Bearer " + options.token.trim());
@@ -98,16 +107,37 @@ export function createUsageCommands(options: {
     if (!response.ok)
       throw new UsageReadError(failureFor(response.status), response.status);
     try {
-      return await response.json();
+      return {
+        value: await response.json(),
+        // The server's own clock (RFC 7231 Date header) anchors the period
+        // windows; the browser clock is never consulted for them (T-0432).
+        serverTime: readServerTime(response),
+      };
     } catch (cause) {
       if (cause instanceof Error && cause.name === "AbortError") throw cause;
       throw new UsageReadError("invalid", response.status);
     }
   }
   return {
-    async scope(signal?: AbortSignal): Promise<UsageScope> {
-      const me = await get(serverApiUrl(options.endpoint, "auth/me"), signal);
-      return usageScope(me, options.profileId);
+    async scope(
+      signal?: AbortSignal,
+    ): Promise<{ scope: UsageScope; serverNow: Date | null }> {
+      try {
+        const { value, serverTime } = await get(
+          serverApiUrl(options.endpoint, "auth/me"),
+          signal,
+        );
+        return {
+          scope: usageScope(value, options.profileId),
+          serverNow: serverTime,
+        };
+      } catch (reason) {
+        // An auth/me 404 is a probe failure (older server or route gone),
+        // never "the server keeps no usage ledger" (T-0432).
+        if (reason instanceof UsageReadError && reason.kind === "unsupported")
+          throw new UsageReadError("probe-failed", reason.status);
+        throw reason;
+      }
     },
     async read(
       scope: UsageScope,
@@ -117,7 +147,7 @@ export function createUsageCommands(options: {
       const url = serverApiUrl(options.endpoint, usageRoute(scope, query));
       if (query.from) url.searchParams.set("from", query.from.toISOString());
       if (query.to) url.searchParams.set("to", query.to.toISOString());
-      const value = await get(url, signal);
+      const { value } = await get(url, signal);
       const analytics = parseUsageAnalytics(value);
       if (!analytics) throw new UsageReadError("invalid", null);
       return analytics;
@@ -155,6 +185,13 @@ function failureFor(status: number): UsageFailure {
   if (status === 401) return "signed-out";
   if (status === 403) return "forbidden";
   return "failed";
+}
+
+function readServerTime(response: Response): Date | null {
+  const header = response.headers.get("date");
+  if (!header) return null;
+  const parsed = Date.parse(header);
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
 }
 
 export function parseUsageAnalytics(value: unknown): UsageAnalytics | null {

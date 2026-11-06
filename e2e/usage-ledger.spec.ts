@@ -296,3 +296,80 @@ test("reads at phone width without spilling sideways", async ({
     usage.getByRole("heading", { name: "One session" }),
   ).toBeInViewport();
 });
+
+test("periods follow the server's UTC clock, never the browser's", async ({
+  browser,
+  request,
+}) => {
+  // T-0432: the server pins its clock to 2026-11-06T00:10 UTC; the browser
+  // sits at UTC+14 (already 14:10 local). A run at 23:30 UTC the day before
+  // is yesterday by the server's clock, though still "today" locally — and
+  // local midnight is 10:00 UTC, so a local-midnight window would wrongly
+  // include it.
+  const context = await browser.newContext({
+    timezoneId: "Pacific/Kiritimati",
+    // The app keeps its own origin (a different port than the fixture);
+    // only the timezone changes.
+    baseURL: `http://127.0.0.1:${process.env.OCTOSCODE_E2E_WEB_PORT ?? "4173"}`,
+  });
+  const page = await context.newPage();
+  try {
+    await mode(
+      request,
+      "mode=ok&date=" + encodeURIComponent("Fri, 06 Nov 2026 00:10:00 GMT"),
+    );
+    const workspace = `/workspace/usage-utc-${Date.now()}`;
+    await seed(request, workspace, [
+      { session: 0, at: "2026-11-05T23:30:00.000Z", model: UNPRICED, input: 9 },
+      { session: 1, at: "2026-11-06T00:05:00.000Z", model: UNPRICED, input: 9 },
+    ]);
+    const usage = await openUsage(page, workspace);
+    await usage.getByRole("radio", { name: "Today" }).check();
+    // Only the 00:05 UTC run counts; the window sent is the UTC midnight —
+    // and never the browser's local midnight (10:00 UTC at UTC+14).
+    await expect(figure(usage, "Runs")).toHaveText("1");
+    const sent = await reads(request);
+    expect(sent.some((read) => read.from === "2026-11-06T00:00:00.000Z")).toBe(
+      true,
+    );
+    expect(sent.some((read) => read.from === "2026-11-05T10:00:00.000Z")).toBe(
+      false,
+    );
+    await usage.getByRole("radio", { name: "Last 7 days" }).check();
+    await expect(figure(usage, "Runs")).toHaveText("2");
+    // The by-day rows use the server's UTC keys: yesterday's run lands on
+    // 2026-11-05 even though it is still the 5th locally nowhere near UTC+14.
+    await expect(usage.locator('[data-usage-breakdown="day"]')).toContainText(
+      "2026-11-05",
+    );
+    await expect(usage.locator('[data-usage-breakdown="day"]')).toContainText(
+      "2026-11-06",
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test("an auth probe 404 is a retryable failure, never a missing ledger", async ({
+  page,
+  request,
+}) => {
+  // T-0432: auth/me 404 (older server, route gone) must not be read as
+  // "this server does not keep a usage ledger"; the usage route's own 404
+  // still means exactly that.
+  const workspace = `/workspace/usage-auth404-${Date.now()}`;
+  await seed(request, workspace, RUNS.slice(0, 1));
+  await mode(request, "mode=ok&auth_status=404");
+  const usage = await openUsage(page, workspace);
+  const failure = usage.locator('[data-usage-failure="probe-failed"]');
+  await expect(failure).toContainText(
+    "Couldn't confirm the sign-in for usage. Try again.",
+  );
+  await expect(failure).not.toContainText("usage ledger");
+  await expect(usage.locator("[data-usage-totals]")).toHaveCount(0);
+
+  // The probe recovers; the ledger then reads normally.
+  await mode(request, "mode=ok");
+  await failure.getByRole("button", { name: "Try again" }).click();
+  await expect(figure(usage, "Runs")).toHaveText("1");
+});

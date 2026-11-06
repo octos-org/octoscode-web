@@ -22,12 +22,22 @@ const totals = (patch: Partial<UsageTotals> = {}): UsageTotals => ({
 });
 
 describe("usage ledger page model", () => {
-  it("starts presets at local midnight and leaves the end open", () => {
-    const now = new Date(2026, 10, 5, 1, 30);
+  it("starts presets at the SERVER's UTC midnight and leaves the end open", () => {
+    // T-0432: the server says it is 2026-11-06T00:10Z; "today" starts at UTC
+    // midnight whatever the browser's timezone or wall clock says — a run at
+    // 23:30Z the day before belongs to yesterday, not today.
+    const now = new Date("2026-11-06T00:10:00.000Z");
     expect(rangeStart("all", now)).toBeUndefined();
-    expect(rangeStart("today", now)).toEqual(new Date(2026, 10, 5));
-    expect(rangeStart("7d", now)).toEqual(new Date(2026, 9, 30));
-    expect(rangeStart("30d", now)).toEqual(new Date(2026, 9, 7));
+    expect(rangeStart("today", now)).toEqual(
+      new Date("2026-11-06T00:00:00.000Z"),
+    );
+    expect(rangeStart("7d", now)).toEqual(new Date("2026-10-31T00:00:00.000Z"));
+    expect(rangeStart("30d", now)).toEqual(
+      new Date("2026-10-08T00:00:00.000Z"),
+    );
+    // No server clock: no invented window.
+    expect(rangeStart("today", null)).toBeNull();
+    expect(rangeStart("all", null)).toBeUndefined();
   });
 
   it("counts cache reads and writes as input, as the composer chip does", () => {
