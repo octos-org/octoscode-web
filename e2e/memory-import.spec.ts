@@ -284,11 +284,14 @@ test("a batch that fails stops the import and says how far it got", async ({
   await expect(alert).toContainText(
     "Stopped after 100 of 250 records. Written so far: 100 new · 0 updated · 0 unchanged.",
   );
+  // Invalid params are answered before Core writes anything.
   await expect(alert).toContainText(
-    "Batch 2 didn't finish: records[3]: rejected by server.",
+    "The server refused batch 2 (records 101–200): records[3]: rejected by server. It wrote nothing for that batch.",
   );
-  await expect(alert).toContainText("the 150 records after it were not sent");
+  await expect(alert).toContainText("The 50 records after it were not sent.");
   await expect(settings.getByText(/^Imported/)).toHaveCount(0);
+  // Sending the same refused batch again would only be refused again.
+  await expect(alert.getByRole("button")).toHaveCount(0);
   // The routed socket answers the second batch itself; there is no third.
   expect(ingestCalls).toBe(2);
   expect(ingests[0]!.params!.records).toHaveLength(100);
@@ -348,4 +351,204 @@ test("without ingest the import is off and says why", async ({ page }) => {
   await expect(settings).toContainText(
     "This server doesn't take memory writes, so files can't be imported.",
   );
+});
+
+/** Passes every frame through, except what `fault` takes over. */
+async function faultProxy(
+  page: Page,
+  fault: (
+    frame: { id?: string; method?: string },
+    call: number,
+  ) =>
+    | { reply: unknown }
+    | { dropReplyAndClose: true }
+    | { replaceResult: unknown }
+    | null,
+) {
+  const sent: Frame[] = [];
+  const held = new Map<string, "close" | { result: unknown }>();
+  await page.routeWebSocket(
+    (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
+    (route) => {
+      const server = route.connectToServer();
+      route.onMessage((message) => {
+        const frame = JSON.parse(String(message));
+        if (frame.method === "memory/ingest") sent.push(frame);
+        const plan =
+          frame.method === "memory/ingest" ? fault(frame, sent.length) : null;
+        if (plan && "reply" in plan) {
+          route.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: frame.id,
+              ...(plan.reply as object),
+            }),
+          );
+          return;
+        }
+        if (plan && "dropReplyAndClose" in plan) held.set(frame.id, "close");
+        if (plan && "replaceResult" in plan)
+          held.set(frame.id, { result: plan.replaceResult });
+        server.send(message);
+      });
+      server.onMessage((message) => {
+        const frame = JSON.parse(String(message));
+        const plan = frame.id !== undefined ? held.get(frame.id) : undefined;
+        if (plan === "close") {
+          // Core has committed; the reply never arrives.
+          held.delete(frame.id);
+          void route.close();
+          return;
+        }
+        if (plan) {
+          held.delete(frame.id);
+          route.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: frame.id,
+              result: plan.result,
+            }),
+          );
+          return;
+        }
+        route.send(message);
+      });
+    },
+  );
+  return sent;
+}
+
+test("a reply lost after the server wrote the batch is not sure, is read back, and is never resent on its own", async ({
+  page,
+}) => {
+  const mark = `lost${Date.now()}`;
+  const sent = await faultProxy(page, (_frame, call) =>
+    call === 2 ? { dropReplyAndClose: true } : null,
+  );
+  const { settings } = await start(page);
+  await search(settings, mark);
+  await expect(settings.getByText("No matching memories.")).toBeVisible();
+  await choose(
+    settings,
+    "lost.json",
+    JSON.stringify(Array.from({ length: 250 }, (_, i) => record(mark, i))),
+  );
+  await preview(settings)
+    .getByRole("button", { name: "Import 250 records" })
+    .click();
+  const alert = settings.getByRole("alert").filter({ hasText: "batch 2" });
+  await expect(alert).toContainText(
+    "Not sure whether batch 2 (records 101–200) was written",
+  );
+  await expect(alert).toContainText(
+    "The server may have written it before the reply was lost, so the page doesn't send it again on its own.",
+  );
+  // The connection was gone for the one automatic read-back.
+  await expect(alert).toContainText("couldn't be read. Still not sure.");
+  expect(sent).toHaveLength(2);
+
+  // Back on a connection, a read by hand finds what the server holds.
+  await expect(
+    alert.getByRole("button", { name: "Read batch 2 back again" }),
+  ).toBeEnabled({ timeout: 15_000 });
+  await alert.getByRole("button", { name: "Read batch 2 back again" }).click();
+  const status = settings
+    .getByRole("status")
+    .filter({ hasText: "Batch 2 (records 101–200)" });
+  await expect(status).toContainText(
+    "Reading it back found all its records on the server as sent.",
+  );
+  expect(sent).toHaveLength(2);
+  await status
+    .getByRole("button", { name: "Send the remaining 50 records" })
+    .click();
+  const done = settings.getByRole("status").filter({ hasText: "Imported" });
+  await expect(done).toContainText(
+    "Imported 150 records: 150 new · 0 updated · 0 unchanged.",
+  );
+  await expect(done).toContainText(
+    "100 records are on the server as sent: their reply was lost",
+  );
+  // Batch 2 went once; the rest went after it, by hand.
+  expect(sent).toHaveLength(3);
+  expect(sent.map((frame) => frame.params!.records![0]!.id)).toEqual([
+    `doc:octoscode-web:${mark}-0`,
+    `doc:octoscode-web:${mark}-100`,
+    `doc:octoscode-web:${mark}-200`,
+  ]);
+});
+
+test("a reply the page can't read is not sure; a read-back that finds the batch settles it", async ({
+  page,
+}) => {
+  const mark = `odd${Date.now()}`;
+  await faultProxy(page, () => ({ replaceResult: { inserted: "many" } }));
+  const { settings } = await start(page);
+  await search(settings, mark);
+  await expect(settings.getByText("No matching memories.")).toBeVisible();
+  await choose(
+    settings,
+    "odd.json",
+    JSON.stringify(Array.from({ length: 3 }, (_, i) => record(mark, i))),
+  );
+  await preview(settings)
+    .getByRole("button", { name: "Import 3 records" })
+    .click();
+  const status = settings
+    .getByRole("status")
+    .filter({ hasText: "records are on the server" });
+  await expect(status).toContainText(
+    "3 records are on the server as sent: their reply was lost, and reading them back found them. The server's counts for them are unknown.",
+  );
+  await expect(status.getByRole("button")).toHaveCount(0);
+  // The search on screen is read again: the imported records are listed.
+  await expect(
+    settings.getByRole("button", { name: new RegExp(`^${mark} record 0`) }),
+  ).toBeVisible();
+  await expect(settings.getByText("No matching memories.")).toHaveCount(0);
+});
+
+test("an internal error is not sure; a read-back that finds nothing offers to send the batch again", async ({
+  page,
+}) => {
+  const mark = `fail${Date.now()}`;
+  const sent = await faultProxy(page, (_frame, call) =>
+    call === 2
+      ? { reply: { error: { code: -32603, message: "recall upsert failed" } } }
+      : null,
+  );
+  const { settings } = await start(page);
+  await choose(
+    settings,
+    "fail.json",
+    JSON.stringify(Array.from({ length: 150 }, (_, i) => record(mark, i))),
+  );
+  await preview(settings)
+    .getByRole("button", { name: "Import 150 records" })
+    .click();
+  const alert = settings.getByRole("alert").filter({ hasText: "batch 2" });
+  await expect(alert).toContainText(
+    "Batch 2 (records 101–150) was not written: recall upsert failed.",
+  );
+  await expect(alert).toContainText(
+    "Read back: none of its 50 records are on the server as sent, so it was not written.",
+  );
+  await expect(
+    alert.getByRole("button", { name: "Read batch 2 back again" }),
+  ).toHaveCount(0);
+  expect(sent).toHaveLength(2);
+  await alert
+    .getByRole("button", { name: "Send from batch 2 again (50 records)" })
+    .click();
+  const status = settings.getByRole("status").filter({ hasText: "Imported" });
+  await expect(status).toContainText(
+    "Imported 150 records: 150 new · 0 updated · 0 unchanged.",
+  );
+  expect(sent).toHaveLength(3);
+  // The retry sent the very records and fingerprints of the first try.
+  expect(sent[2]!.params!.records).toEqual(sent[1]!.params!.records);
+  await search(settings, mark);
+  await expect(
+    settings.getByRole("button", { name: new RegExp(`^${mark} record 149`) }),
+  ).toBeVisible();
 });

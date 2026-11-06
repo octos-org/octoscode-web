@@ -1612,8 +1612,36 @@ const catalog: Readonly<Record<string, string>> = {
   "Stopped after {sent} of {total} records. Written so far: {counts}.":
     "共 {total} 条，发送到第 {sent} 条时停下。已写入：{counts}。",
   "Nothing was imported.": "没有导入任何内容。",
-  "Batch {batch} didn't finish: {reason}. The server reported nothing written for it; the {left} records after it were not sent.":
-    "第 {batch} 批没有完成：{reason}。服务器没有报告这一批写入了什么；后面的 {left} 条没有发送。",
+  "{count} records are on the server as sent: their reply was lost, and reading them back found them. The server's counts for them are unknown.":
+    "{count} 条已在服务器上，内容和发送的一致：它们的回复丢了，重新读取时找到了。服务器对这些记录的新增/更新/未变化计数未知。",
+  "The server refused batch {batch} (records {first}–{last}): {reason}. It wrote nothing for that batch.":
+    "服务器拒绝了第 {batch} 批（第 {first}–{last} 条）：{reason}。这一批没有写入任何内容。",
+  "Batch {batch} (records {first}–{last}) wasn't sent: {reason}.":
+    "第 {batch} 批（第 {first}–{last} 条）没有发出：{reason}。",
+  "Batch {batch} (records {first}–{last}) lost its reply: {reason}. Reading it back found all its records on the server as sent.":
+    "第 {batch} 批（第 {first}–{last} 条）的回复丢了：{reason}。重新读取后，这一批的记录都已在服务器上，内容和发送的一致。",
+  "Batch {batch} (records {first}–{last}) was not written: {reason}.":
+    "第 {batch} 批（第 {first}–{last} 条）没有写入：{reason}。",
+  "Not sure whether batch {batch} (records {first}–{last}) was written: {reason}.":
+    "不确定第 {batch} 批（第 {first}–{last} 条）是否写入：{reason}。",
+  "The server may have written it before the reply was lost, so the page doesn't send it again on its own.":
+    "服务器可能在回复丢失前已经写入，所以页面不会自动重发。",
+  "The {left} records after it were not sent.": "后面的 {left} 条没有发送。",
+  "Sending again replaces records by id, so nothing is added twice: records already on the server as sent come back as unchanged.":
+    "重新发送按 id 覆盖，不会重复添加：已在服务器上且内容一致的记录会计为未变化。",
+  "Read batch {batch} back again": "重新读取第 {batch} 批",
+  "Importing {name}…": "正在导入 {name}…",
+  "Send the remaining {count} records": "发送剩下的 {count} 条",
+  "Send from batch {batch} again ({count} records)":
+    "从第 {batch} 批重新发送（{count} 条）",
+  "This server can't read records back, so the page can't check. Search for a record from this batch to see whether it's there.":
+    "这个服务器不支持按 id 读取记录，页面无法核对。可以搜索这一批里的某条记录，看它在不在。",
+  "Read back: none of its {size} records are on the server as sent, so it was not written.":
+    "重新读取：这一批的 {size} 条都不在服务器上（或内容不同），所以没有写入。",
+  "Read back: {asSent} as sent · {missing} not on the server · {different} with other content · {unreadable} couldn't be read. Still not sure.":
+    "重新读取：{asSent} 条和发送的一致 · {missing} 条不在服务器上 · {different} 条内容不同 · {unreadable} 条读不到。仍不确定。",
+  "These results are from before the import; the search couldn't be read again. Search again to update them.":
+    "这些结果是导入前的，导入后没能重新搜索。再搜一次即可更新。",
   "Imported {sent} records: {counts}.": "已导入 {sent} 条：{counts}。",
   "The server accounted for {reported} of the {sent} records sent.":
     "发送了 {sent} 条，服务器只报告了其中 {reported} 条。",

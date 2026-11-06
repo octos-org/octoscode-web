@@ -1,3 +1,8 @@
+import { OctosUiProtocolError } from "@octos-org/octoscode-client/protocol";
+import type {
+  MemoryLoadResult,
+  MemoryRecord,
+} from "@octos-org/octoscode-client/memory";
 import { MEMORY_EXPORT_FORMAT } from "./memory-export.ts";
 
 /** Bounds on what the page will read; Core takes at most 500 per call. */
@@ -360,4 +365,110 @@ export async function fingerprinted(
       return { ...record, fingerprint: `sha256:${hex}` };
     }),
   );
+}
+
+/**
+ * Codes `memory/ingest` answers with before it writes anything: the request,
+ * its params, the caller or the runtime was refused (octos
+ * `handle_memory_ingest`). Its write is one transaction per call, but an
+ * internal error can follow a committed write (the index persists after the
+ * commit), so every other failure — internal errors, a timeout, a dropped
+ * connection, a reply this page couldn't read — leaves the batch unknown.
+ */
+const REFUSED_BEFORE_WRITE = new Set([
+  -32700, -32600, -32601, -32602, -32004, -32120, -32140,
+]);
+/** `memory/load` for an id the server doesn't hold. */
+const RECORD_NOT_FOUND = -32170;
+
+export type IngestFailure = "refused" | "uncertain";
+
+export function ingestFailure(reason: unknown): IngestFailure {
+  return reason instanceof OctosUiProtocolError &&
+    REFUSED_BEFORE_WRITE.has(reason.code)
+    ? "refused"
+    : "uncertain";
+}
+
+/** What reading a batch back found, record by record. */
+export interface ReadBack {
+  /** On the server with the content this file sent. */
+  asSent: number;
+  /** The server doesn't hold the id. */
+  missing: number;
+  /** The server holds the id with other content. */
+  different: number;
+  /** The read itself failed, so nothing is known about the record. */
+  unreadable: number;
+}
+
+/** Core's `Record::clamp`: trimmed, then cut to whole characters within bytes. */
+function clampBytes(text: string, max: number): string {
+  const encoded = new TextEncoder().encode(text);
+  if (encoded.length <= max) return text;
+  let end = max;
+  while (end > 0 && (encoded[end]! & 0xc0) === 0x80) end -= 1;
+  return new TextDecoder().decode(encoded.slice(0, end));
+}
+
+/**
+ * The fingerprint decides when both sides carry one; without Web Crypto none
+ * was sent, so the stored text is compared with this record as Core keeps it.
+ */
+export function storedAsSent(
+  sent: ImportRecord,
+  stored: MemoryRecord,
+): boolean {
+  if (sent.fingerprint && stored.fingerprint)
+    return sent.fingerprint === stored.fingerprint;
+  const body = sent.body.trim() ? clampBytes(sent.body, CORE_CAPS.body) : "";
+  return (
+    stored.kind === sent.kind &&
+    stored.source === sent.source &&
+    stored.title === clampBytes(sent.title.trim(), CORE_CAPS.title) &&
+    stored.abstract === clampBytes(sent.abstract.trim(), CORE_CAPS.abstract) &&
+    (stored.body ?? "") === body
+  );
+}
+
+/** Reads each record of a batch once, in order; never writes. */
+export async function readBack(
+  batch: readonly ImportRecord[],
+  load: (id: string) => Promise<MemoryLoadResult>,
+): Promise<ReadBack> {
+  const found: ReadBack = {
+    asSent: 0,
+    missing: 0,
+    different: 0,
+    unreadable: 0,
+  };
+  for (const record of batch) {
+    try {
+      const loaded = await load(record.id);
+      if (storedAsSent(record, loaded.record)) found.asSent += 1;
+      else found.different += 1;
+    } catch (reason) {
+      if (
+        reason instanceof OctosUiProtocolError &&
+        reason.code === RECORD_NOT_FOUND
+      )
+        found.missing += 1;
+      else found.unreadable += 1;
+    }
+  }
+  return found;
+}
+
+/**
+ * All there as sent: the batch is on the server. None there and every read
+ * answered: it was not written (the write is all or nothing). Anything else
+ * stays unknown.
+ */
+export function readBackVerdict(
+  found: ReadBack,
+  size: number,
+): "written" | "not-written" | "unknown" {
+  if (found.asSent === size) return "written";
+  if (found.asSent === 0 && found.unreadable === 0) return "not-written";
+  return "unknown";
 }
