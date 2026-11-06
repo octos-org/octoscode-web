@@ -57,6 +57,7 @@ import {
   lazy,
   type LazyExoticComponent,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -337,6 +338,10 @@ import { useConversationSearch } from "../features/timeline/use-conversation-sea
 import { useTabSessionLock } from "../features/session/use-tab-session-lock.ts";
 import { ShortcutHelp } from "../features/commands/ShortcutHelp.tsx";
 import { TabLockBanner } from "../features/session/TabLockBanner.tsx";
+import { TurnUndoControl } from "../features/history/TurnUndoControl.tsx";
+import type { TurnUndoSlot } from "../features/timeline/Timeline.tsx";
+import { useSessionTurnUndone } from "../features/history/turn-undo.ts";
+import { APPUI_SNAPSHOT_METHODS } from "@octos-org/octoscode-client/history";
 const ConversationSearch = lazyNamed(
   () => import("../features/timeline/ConversationSearch.tsx"),
   (module) => module.ConversationSearch,
@@ -2651,6 +2656,48 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       `${panelLayout.width}px`,
     );
   }, [panelLayout.width]);
+  // T-0433: undo / redo of the latest turn, inside its summary. Offered only
+  // to servers that advertise both snapshot methods; whether this turn has an
+  // undo point is Core's answer, read by the control itself.
+  const turnUndoScope = activeSessionKey
+    ? JSON.stringify([connection.endpoint, activeSessionKey])
+    : null;
+  const turnUndoAvailable =
+    supportsMethod(session.capabilities, APPUI_SNAPSHOT_METHODS.LIST) &&
+    supportsMethod(session.capabilities, APPUI_SNAPSHOT_METHODS.RESTORE);
+  const turnUndoRef = useRef({ protocol, safety });
+  turnUndoRef.current = { protocol, safety };
+  const turnUndoSource = useCallback(
+    () => turnUndoRef.current.protocol.historyBinding(),
+    [],
+  );
+  const refreshChangesAfterRestore = useCallback(() => {
+    const { safety } = turnUndoRef.current;
+    if (safety.diffReview.active) void safety.openDiffReview();
+  }, []);
+  const turnUndoAuthority = protocol.authorityKey;
+  const renderTurnUndo = useCallback(
+    (turn: TurnUndoSlot) =>
+      turnUndoScope ? (
+        <TurnUndoControl
+          key={turnUndoAuthority}
+          scope={turnUndoScope}
+          turnId={turn.turnId}
+          latest={turn.latest}
+          changed={turn.changed}
+          authorityKey={turnUndoAuthority}
+          source={turnUndoSource}
+          onSettled={refreshChangesAfterRestore}
+        />
+      ) : null,
+    [
+      turnUndoScope,
+      turnUndoAuthority,
+      turnUndoSource,
+      refreshChangesAfterRestore,
+    ],
+  );
+  const turnUndone = useSessionTurnUndone(turnUndoScope);
   const sessionPanel = (presentation: "column" | "drawer") => (
     <SessionPanelHost
       key={`${protocol.authorityKey}:${session.opened?.session_id ?? ""}`}
@@ -2671,6 +2718,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       onSelectPath={panelSelection.select}
       browse={workspaceBrowse}
       changes={safety.changes}
+      changesUndone={turnUndoAvailable && turnUndone}
       diffReview={safety.diffReview}
       onOpenPreview={(previewId) => void safety.openDiffReview(previewId)}
       onRefreshChanges={() => void safety.openDiffReview()}
@@ -4882,6 +4930,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             session.capabilities,
                             CORE_UI_METHODS.SESSION_FILES_READ,
                           )}
+                          turnUndo={
+                            turnUndoAvailable ? renderTurnUndo : undefined
+                          }
                           showThinking={conversation.showReasoning}
                           folds={timelineFolds}
                           onToggleFold={(id) =>

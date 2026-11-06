@@ -17,6 +17,8 @@ export interface WorkspaceSnapshot {
   id: string;
   label: string;
   timestamp_unix: number;
+  /** The WS turn this is the undo point of (`pre-turn <turn_id>`), when Core says so. */
+  turn_id?: string;
 }
 export interface SnapshotList {
   session_id: string;
@@ -71,14 +73,18 @@ function snapshotRows(value: unknown): WorkspaceSnapshot[] | null {
       !text(row.id) ||
       typeof row.label !== "string" ||
       !uint(row.timestamp_unix) ||
-      ids.has(row.id)
+      (row.turn_id !== undefined && !text(row.turn_id))
     )
       return null;
+    // Two refs can name one commit (same tree and label within a second), so
+    // Core may list an id twice. Newest first: the first row stands for it.
+    if (ids.has(row.id)) continue;
     ids.add(row.id);
     rows.push({
       id: row.id,
       label: row.label.slice(0, 512),
       timestamp_unix: row.timestamp_unix,
+      ...(typeof row.turn_id === "string" ? { turn_id: row.turn_id } : {}),
     });
   }
   return rows;

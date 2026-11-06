@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { TimelineEntry } from "./entry-model.ts";
 import { summarizeTurn } from "./turn-summary.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
@@ -11,9 +12,13 @@ import styles from "./TurnSummary.module.css";
 export function TurnSummary({
   turnId,
   entries,
+  undo,
 }: {
   turnId: string;
   entries: readonly TimelineEntry[];
+  /** Undo / redo for this turn, given whether it changed or may have changed files. */
+  undo?:
+    ((turn: { turnId: string; changed: boolean }) => ReactNode) | undefined;
 }) {
   const t = useUiText();
   const terminal = entries.find((entry) => entry.id === `terminal:${turnId}`);
@@ -116,6 +121,7 @@ export function TurnSummary({
           ) : null}
         </>
       ) : null}
+      {undo?.({ turnId, changed: recorded > 0 || summary.changesUnknown })}
     </section>
   );
 }

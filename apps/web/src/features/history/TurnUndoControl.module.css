@@ -1,0 +1,114 @@
+/* Undo / redo inside a turn summary: quiet until used, the same column. */
+.undo {
+  display: grid;
+  gap: var(--dsw-space-2);
+  padding-top: var(--dsw-space-2);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dsw-space-2);
+}
+
+.trigger,
+.primary,
+.secondary {
+  min-height: var(--dsw-control-h-sm);
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-control);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    border-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.trigger {
+  justify-self: start;
+}
+
+.primary {
+  border-color: transparent;
+  background: var(--dsw-alias-button-info-fill);
+  color: var(--dsw-alias-label-on-accent);
+}
+
+@media (hover: hover) {
+  .trigger:hover:not(:disabled),
+  .secondary:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  .primary:hover:not(:disabled) {
+    background: var(--dsw-alias-button-info-hover);
+  }
+}
+
+.trigger:focus-visible,
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.trigger:disabled,
+.primary:disabled,
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.confirm {
+  display: grid;
+  gap: var(--dsw-space-2);
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  border-radius: 8px;
+  background: var(--dsw-specific-tip);
+}
+
+.confirm p,
+.note,
+.notice,
+.progress,
+.failure p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--dsw-font-size-micro);
+  line-height: 1.6;
+}
+
+.confirm p {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.note,
+.progress {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.notice {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.notice:empty {
+  display: none;
+}
+
+.failure {
+  display: grid;
+  gap: 2px;
+  color: var(--dsw-alias-state-error-text);
+}
+
+.failure .detail {
+  color: var(--dsw-alias-label-tertiary);
+}

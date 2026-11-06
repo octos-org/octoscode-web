@@ -2321,6 +2321,50 @@ const catalog: Readonly<Record<string, string>> = {
   "{count} files recorded; other changes not counted":
     "记录到 {count} 个文件，其他改动未统计",
   "Changes not counted": "改动未统计",
+  // T-0433: undo / redo of the latest turn, inside its summary.
+  "Undo this turn": "撤销这一轮",
+  "Redo this turn": "恢复撤销",
+  "Undoing this turn…": "正在撤销这一轮…",
+  "Bringing this turn back…": "正在恢复这一轮的改动…",
+  "Confirm undo": "确认撤销",
+  "Confirm redo": "确认恢复",
+  "Put the workspace files back to how they were before this turn? The conversation stays. Changes made by commands are undone too, including ones not counted above.":
+    "把工作区文件恢复到这一轮开始前？对话会保留。命令行做的改动也会一起撤销，包括上面没统计到的。",
+  "Bring back this turn's file changes? If a file was edited after the undo, Core refuses instead of overwriting it.":
+    "恢复这一轮的文件改动？如果撤销后有文件又被改过，内核会拒绝恢复，不会覆盖它。",
+  "Undo file changes": "撤销文件改动",
+  "Bring changes back": "恢复改动",
+  "Undone. The files are back to how they were before this turn.":
+    "已撤销，文件回到了这一轮开始前的样子。",
+  "Done. This turn's file changes are back.": "已恢复这一轮的文件改动。",
+  "This turn's file changes were undone.": "这一轮的文件改动已撤销。",
+  "This turn's file changes were undone. The conversation is kept.":
+    "这一轮的文件改动已撤销，对话保留。",
+  "This turn has no undo point on the server.": "服务器上没有这一轮的撤销点。",
+  "The state before the undo is no longer on the server, so it cannot be brought back.":
+    "服务器上已经没有撤销前的状态，没法恢复。",
+  "Core said: {detail}": "内核原话：{detail}",
+  "Details: {detail}": "详情：{detail}",
+  "Not sent. Wait for running turns, queued prompts and questions in this workspace to finish, then try again.":
+    "没有发出。等这个工作区里正在跑的轮次、排队的消息和待回答的问题都结束后再试。",
+  "This turn's undo point is no longer on the server. No files were changed.":
+    "服务器上已经没有这一轮的撤销点，没有改动任何文件。",
+  "The state before the undo is no longer on the server. No files were changed.":
+    "服务器上已经没有撤销前的状态，没有改动任何文件。",
+  "Not sent, and no files were changed. Check the connection and try again.":
+    "没有发出，也没有改动任何文件。检查连接后再试。",
+  "Not undone: Core says files changed after its last undo or redo, and it will not overwrite them. The files are as they were.":
+    "没有撤销：内核说上次撤销或恢复之后又有文件被改过，它不会覆盖这些文件，文件保持原样。",
+  "Not brought back: files were edited after the undo, and Core will not overwrite them. Your edits are kept.":
+    "没有恢复：撤销之后有文件又被改过，内核不会覆盖它们，你的改动都还在。",
+  "Core did not undo this turn. Check the files in Changes.":
+    "内核没有撤销这一轮。去「改动」里看看文件。",
+  "Core did not bring this turn back. Check the files in Changes.":
+    "内核没有恢复这一轮的改动。去「改动」里看看文件。",
+  "No answer from Core, so it is unknown whether the files changed. Check the files in Changes before trying again; nothing is retried automatically.":
+    "没有收到内核的答复，不知道文件有没有变。先去「改动」里看看文件再决定；这里不会自动重试。",
+  "Core finished, but the conversation could not be refreshed. Reload the page to see the latest state.":
+    "内核已完成，但对话没能刷新。重新加载页面就能看到最新状态。",
   "Switched to write, but your request could not be sent again.":
     "已切到写入，但没能重新发送你的请求。",
   "{input} tokens in · {output} tokens out":

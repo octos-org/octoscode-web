@@ -20,6 +20,8 @@ interface ChangesViewProps {
   state: DiffReviewRuntimeState;
   /** Files this Session's tools touched, newest first. */
   changes: readonly SessionFileChange[];
+  /** The latest turn's file changes were undone; the list above is still the record. */
+  undone?: boolean;
   selectedPath: string | null;
   onOpenChange: (change: SessionFileChange) => void;
   onRefresh: () => void;
@@ -33,6 +35,7 @@ interface ChangesViewProps {
 export function ChangesView({
   state,
   changes,
+  undone = false,
   selectedPath,
   onOpenChange,
   onRefresh,
@@ -113,6 +116,15 @@ export function ChangesView({
       {!state.workspaceAvailable ? (
         <p className={styles.plainNotice}>
           {t("This server does not support uncommitted Git changes.")}
+        </p>
+      ) : null}
+      {undone && state.scope === "turn" && changes.length ? (
+        <p className={styles.plainNotice}>
+          {t(
+            state.workspaceAvailable
+              ? "The latest turn's file changes were undone. This list is what Octos recorded in this session; Uncommitted (Git) shows the files as they are now."
+              : "The latest turn's file changes were undone. This list is what Octos recorded in this session, not the files as they are now.",
+          )}
         </p>
       ) : null}
       {state.scope === "turn" ? (

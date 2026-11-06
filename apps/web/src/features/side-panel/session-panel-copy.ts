@@ -38,6 +38,10 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
       "这里显示本会话里改过的文件。服务器不支持列出工作区文件夹。",
     // Changes
     "Uncommitted (Git)": "未提交（Git）",
+    "The latest turn's file changes were undone. This list is what Octos recorded in this session; Uncommitted (Git) shows the files as they are now.":
+      "最后一轮的文件改动已撤销。这里列的是 Octos 在本会话记录的改动，「未提交（Git）」里才是文件现在的样子。",
+    "The latest turn's file changes were undone. This list is what Octos recorded in this session, not the files as they are now.":
+      "最后一轮的文件改动已撤销。这里列的是 Octos 在本会话记录的改动，不是文件现在的样子。",
     "Changed in this session": "本会话改过的文件",
     "Files Octos changes in this session show here.":
       "本会话里 Octos 改过的文件会显示在这里。",

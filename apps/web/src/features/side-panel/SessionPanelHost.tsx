@@ -38,6 +38,8 @@ export interface SessionPanelHostProps {
   onSelectPath: (path: string | null) => void;
   browse: WorkspaceBrowseAdapter | null;
   changes: readonly SessionFileChange[];
+  /** This tab undid the Session's latest turn (and has not redone it). */
+  changesUndone?: boolean;
   diffReview: DiffReviewRuntimeState;
   onOpenPreview: (previewId: string) => void;
   onRefreshChanges: () => void;
@@ -228,6 +230,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
           }
           selectedPath={props.selectedPath}
           changes={props.changes}
+          undone={props.changesUndone ?? false}
           onOpenChange={openChange}
           onRefresh={refresh}
           onScopeChange={props.onChangesScope}
