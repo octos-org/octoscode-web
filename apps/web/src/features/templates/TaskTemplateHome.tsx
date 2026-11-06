@@ -1,6 +1,6 @@
-import { useId } from "react";
-import type { UiLanguage } from "../preferences/model.ts";
-import { EyeIcon, PencilIcon } from "../../ui/Icon.tsx";
+import { useId, useRef, useState, type MouseEvent } from "react";
+import type { TemplateShortcuts, UiLanguage } from "../preferences/model.ts";
+import { EyeIcon, PencilIcon, StarIcon } from "../../ui/Icon.tsx";
 import {
   TASK_TEMPLATES,
   TASK_TEMPLATE_CATEGORIES,
@@ -30,6 +30,12 @@ interface HomeCopy {
   allowWrite: string;
   readSwitching: string;
   restoreSwitching: string;
+  favorites: string;
+  recent: string;
+  favorite: string;
+  addFavorite: string;
+  removeFavorite: string;
+  shortcutsUnsaved: string;
 }
 
 const COPY: Record<UiLanguage, HomeCopy> = {
@@ -56,6 +62,13 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     allowWrite: "Switch to workspace write",
     readSwitching: "Switching to read-only before this template can send…",
     restoreSwitching: "Restoring the previous permission…",
+    favorites: "Favorites",
+    recent: "Recently used",
+    favorite: "Favorite",
+    addFavorite: "Add to favorites",
+    removeFavorite: "Remove from favorites",
+    shortcutsUnsaved:
+      "Favorites and recent templates could not be saved in this browser. They will reset when the page reloads.",
   },
   zh: {
     heading: "想让 Octos 帮你做什么？",
@@ -78,6 +91,12 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     allowWrite: "切换到工作区写入",
     readSwitching: "正在切换到只读，确认后才会发送…",
     restoreSwitching: "正在恢复模板前的权限…",
+    favorites: "收藏",
+    recent: "最近使用",
+    favorite: "收藏",
+    addFavorite: "加入收藏",
+    removeFavorite: "取消收藏",
+    shortcutsUnsaved: "收藏和最近使用没能存进这个浏览器，刷新页面后会清空。",
   },
 };
 
@@ -180,7 +199,53 @@ export interface TaskTemplateHomeProps {
     | null
     | undefined;
   templatesDisabled?: boolean | undefined;
-  onUse: (template: TaskTemplate) => void;
+  /** Public catalog IDs from the display preferences; unknown IDs are skipped. */
+  shortcuts?: TemplateShortcuts | undefined;
+  shortcutsUnsaved?: boolean | undefined;
+  onToggleFavorite?: ((templateId: string) => void) | undefined;
+  /** `pointer` when clicked or tapped: the page must not move under it. */
+  onUse: (template: TaskTemplate, by: TemplateUseSource) => void;
+}
+
+export type TemplateUseSource = "pointer" | "keyboard";
+
+/** Recent rows leave out favorites, which already sit right above them. */
+export const RECENT_TEMPLATES_SHOWN = 3;
+
+function catalogTemplates(ids: readonly string[]): TaskTemplate[] {
+  return ids.flatMap((id) => findTaskTemplate(id) ?? []);
+}
+
+function scrollParent(node: HTMLElement): Element | null {
+  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+    const { overflowY } = getComputedStyle(parent);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      parent.scrollHeight > parent.clientHeight
+    )
+      return parent;
+  }
+  return document.scrollingElement;
+}
+
+/**
+ * A row or notice that appears above the clicked control would push it from
+ * under the pointer, and the second click of a double click would land on
+ * whatever moved there. Scroll by the shift so the control stays put.
+ */
+function keepUnderPointer(event: MouseEvent<HTMLElement>, change: () => void) {
+  const anchor = event.currentTarget;
+  if (event.detail === 0) {
+    change();
+    return;
+  }
+  const before = anchor.getBoundingClientRect().top;
+  change();
+  requestAnimationFrame(() => {
+    if (!anchor.isConnected) return;
+    const shift = anchor.getBoundingClientRect().top - before;
+    if (Math.abs(shift) >= 1) scrollParent(anchor)?.scrollBy(0, shift);
+  });
 }
 
 export function TaskTemplateHome({
@@ -192,10 +257,41 @@ export function TaskTemplateHome({
   writeAccess,
   readAccess,
   templatesDisabled = false,
+  shortcuts,
+  shortcutsUnsaved = false,
+  onToggleFavorite,
   onUse,
 }: TaskTemplateHomeProps) {
   const copy = COPY[language];
   const headingId = useId();
+  const homeRef = useRef<HTMLElement>(null);
+  // Recent rows keep the order this home opened with: reordering them under
+  // a double click would hand its second click to another template. The
+  // next home (a new Session or a reload) shows the updated order.
+  const [recentAtOpen] = useState(() => shortcuts?.recent ?? []);
+  const favorites = catalogTemplates(shortcuts?.favorites ?? []);
+  const favoriteIds = new Set(favorites.map((template) => template.id));
+  const recent = catalogTemplates(recentAtOpen)
+    .filter((template) => !favoriteIds.has(template.id))
+    .slice(0, RECENT_TEMPLATES_SHOWN);
+  const favorite = onToggleFavorite
+    ? {
+        ids: favoriteIds,
+        onToggle: onToggleFavorite,
+        // A starred or unstarred shortcut row moves; keep focus on the
+        // template's star wherever it now sits first.
+        onToggleMoved: (templateId: string) => {
+          onToggleFavorite(templateId);
+          requestAnimationFrame(() =>
+            homeRef.current
+              ?.querySelector<HTMLElement>(
+                `[data-favorite="${CSS.escape(templateId)}"]`,
+              )
+              ?.focus(),
+          );
+        },
+      }
+    : null;
   const noticeTemplate = notice
     ? findTaskTemplate(notice.templateId)
     : undefined;
@@ -203,6 +299,7 @@ export function TaskTemplateHome({
   const session = variant === "session";
   return (
     <section
+      ref={homeRef}
       className={styles.home}
       data-variant={variant}
       aria-labelledby={headingId}
@@ -263,7 +360,29 @@ export function TaskTemplateHome({
           </p>
         ) : null}
         {readAccess?.error ? <p data-tone="warn">{readAccess.error}</p> : null}
+        {shortcutsUnsaved ? (
+          <p data-tone="warn">{copy.shortcutsUnsaved}</p>
+        ) : null}
       </div>
+      {(
+        [
+          ["favorites", favorites],
+          ["recent", recent],
+        ] as const
+      ).map(([kind, templates]) =>
+        templates.length > 0 ? (
+          <ShortcutGroup
+            key={kind}
+            kind={kind}
+            templates={templates}
+            language={language}
+            selectedId={notice?.templateId}
+            disabled={templatesDisabled}
+            favorite={favorite}
+            onUse={onUse}
+          />
+        ) : null,
+      )}
       {TASK_TEMPLATE_CATEGORIES.map((category) => (
         <TemplateGroup
           key={category}
@@ -271,9 +390,143 @@ export function TaskTemplateHome({
           language={language}
           selectedId={notice?.templateId}
           disabled={templatesDisabled}
+          favorite={favorite}
           onUse={onUse}
         />
       ))}
+    </section>
+  );
+}
+
+interface FavoriteControl {
+  ids: ReadonlySet<string>;
+  onToggle: (templateId: string) => void;
+  onToggleMoved: (templateId: string) => void;
+}
+
+function namedLabel(language: UiLanguage, label: string, title: string) {
+  return `${label}${language === "zh" ? "：" : ": "}${title}`;
+}
+
+function FavoriteToggle({
+  template,
+  language,
+  favorite,
+  moves,
+}: {
+  template: TaskTemplate;
+  language: UiLanguage;
+  favorite: FavoriteControl;
+  moves: boolean;
+}) {
+  const copy = COPY[language];
+  const starred = favorite.ids.has(template.id);
+  return (
+    <button
+      type="button"
+      className={styles.favorite}
+      data-favorite={template.id}
+      aria-pressed={starred}
+      aria-label={namedLabel(
+        language,
+        copy.favorite,
+        template.copy[language].title,
+      )}
+      title={starred ? copy.removeFavorite : copy.addFavorite}
+      onClick={(event) =>
+        moves
+          ? favorite.onToggleMoved(template.id)
+          : keepUnderPointer(event, () => favorite.onToggle(template.id))
+      }
+    >
+      <StarIcon size={15} />
+    </button>
+  );
+}
+
+function use(
+  event: MouseEvent<HTMLElement>,
+  template: TaskTemplate,
+  onUse: (template: TaskTemplate, by: TemplateUseSource) => void,
+) {
+  keepUnderPointer(event, () =>
+    onUse(template, event.detail === 0 ? "keyboard" : "pointer"),
+  );
+}
+
+function AccessLabel({
+  access,
+  language,
+}: {
+  access: TaskTemplateAccess;
+  language: UiLanguage;
+}) {
+  return (
+    <span className={styles.access} data-access={access}>
+      {access === "read" ? <EyeIcon size={13} /> : <PencilIcon size={13} />}
+      {COPY[language].access[access]}
+    </span>
+  );
+}
+
+function ShortcutGroup({
+  kind,
+  templates,
+  language,
+  selectedId,
+  disabled,
+  favorite,
+  onUse,
+}: {
+  kind: "favorites" | "recent";
+  templates: readonly TaskTemplate[];
+  language: UiLanguage;
+  selectedId: string | undefined;
+  disabled: boolean;
+  favorite: FavoriteControl | null;
+  onUse: (template: TaskTemplate, by: TemplateUseSource) => void;
+}) {
+  const copy = COPY[language];
+  const headingId = useId();
+  return (
+    <section
+      className={styles.group}
+      data-shortcuts={kind}
+      aria-labelledby={headingId}
+    >
+      <h3 id={headingId}>{copy[kind]}</h3>
+      <ol className={styles.shortcuts}>
+        {templates.map((template) => {
+          const text = template.copy[language];
+          return (
+            <li
+              key={template.id}
+              className={styles.shortcut}
+              data-shortcut-template={template.id}
+              data-selected={template.id === selectedId || undefined}
+            >
+              <button
+                type="button"
+                className={styles.shortcutUse}
+                aria-label={namedLabel(language, copy.use, text.title)}
+                disabled={disabled}
+                onClick={(event) => use(event, template, onUse)}
+              >
+                <span className={styles.shortcutTitle}>{text.title}</span>
+                <AccessLabel access={template.access} language={language} />
+              </button>
+              {favorite ? (
+                <FavoriteToggle
+                  template={template}
+                  language={language}
+                  favorite={favorite}
+                  moves
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }
@@ -283,13 +536,15 @@ function TemplateGroup({
   language,
   selectedId,
   disabled,
+  favorite,
   onUse,
 }: {
   category: TaskTemplateCategory;
   language: UiLanguage;
   selectedId: string | undefined;
   disabled: boolean;
-  onUse: (template: TaskTemplate) => void;
+  favorite: FavoriteControl | null;
+  onUse: (template: TaskTemplate, by: TemplateUseSource) => void;
 }) {
   const copy = COPY[language];
   const headingId = useId();
@@ -310,27 +565,30 @@ function TemplateGroup({
               data-template={template.id}
               data-selected={template.id === selectedId || undefined}
             >
-              <h4>{text.title}</h4>
+              <div className={styles.cardHead}>
+                <h4>{text.title}</h4>
+                {favorite ? (
+                  <FavoriteToggle
+                    template={template}
+                    language={language}
+                    favorite={favorite}
+                    moves={false}
+                  />
+                ) : null}
+              </div>
               <p className={styles.summary}>{text.summary}</p>
               <figure className={styles.example}>
                 <figcaption>{copy.example}</figcaption>
                 <p>{text.example}</p>
               </figure>
               <div className={styles.footer}>
-                <span className={styles.access} data-access={template.access}>
-                  {template.access === "read" ? (
-                    <EyeIcon size={13} />
-                  ) : (
-                    <PencilIcon size={13} />
-                  )}
-                  {copy.access[template.access]}
-                </span>
+                <AccessLabel access={template.access} language={language} />
                 <button
                   type="button"
                   className={styles.use}
-                  aria-label={`${copy.use}${language === "zh" ? "：" : ": "}${text.title}`}
+                  aria-label={namedLabel(language, copy.use, text.title)}
                   disabled={disabled}
-                  onClick={() => onUse(template)}
+                  onClick={(event) => use(event, template, onUse)}
                 >
                   {copy.use}
                 </button>

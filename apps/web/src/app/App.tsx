@@ -244,6 +244,7 @@ import {
 import productStyles from "./AppProduct.module.css";
 import {
   TaskTemplateHome,
+  type TemplateUseSource,
   ResumeSessionLink,
   type ResumeTarget,
   type TemplateNotice,
@@ -3045,17 +3046,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       );
     });
   };
-  const chooseTemplate = (template: TaskTemplate) => {
+  const chooseTemplate = (template: TaskTemplate, by: TemplateUseSource) => {
+    // Only a person's choice counts as use; restoring a pending pick does not.
+    preferences.recordTemplateUse(template.id);
     if (session.opened && activeSessionKey) {
+      // A second click on the template already in the box changes nothing,
+      // so Undo still returns to the text from before the first click.
+      if (
+        templateNotice?.kind === "applied" &&
+        templateNotice.templateId === template.id &&
+        templateNotice.sessionKey === activeSessionKey &&
+        draftRef.current === templateNotice.text
+      )
+        return;
       applyTemplate(template, activeSessionKey);
       return;
     }
     setTemplateNotice({ kind: "pending", templateId: template.id });
+    // A click keeps the page where it is: scrolling to the folder field would
+    // put "Change server" under the second click of a double click.
     heroPickerRef.current
       ?.querySelector<HTMLElement>(
         "input:not([disabled]), button:not([disabled])",
       )
-      ?.focus();
+      ?.focus({ preventScroll: by === "pointer" });
   };
   useEffect(() => {
     if (
@@ -3105,6 +3119,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 : undefined,
           }
         : null;
+  const templateShortcuts = {
+    shortcuts: preferences.templates,
+    shortcutsUnsaved: preferences.templatesError !== null,
+    onToggleFavorite: preferences.toggleFavoriteTemplate,
+  };
   // Composer settings row: choosing another folder starts a new session
   // there and carries the unsent text along; a cancelled picker drops it.
   const carryDraftRef = useRef<{ text: string; fromKey: string | null } | null>(
@@ -4677,6 +4696,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         variant="chooser"
                         language={preferences.language}
                         notice={templateHomeNotice}
+                        {...templateShortcuts}
                         onUse={chooseTemplate}
                       />
                     ) : null}
@@ -4835,6 +4855,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                   templatePermission?.sessionKey ===
                                     activeSessionKey && templatePermission.busy
                                 }
+                                {...templateShortcuts}
                                 onUse={chooseTemplate}
                               />
                             ) : undefined

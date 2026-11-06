@@ -181,13 +181,14 @@
 }
 
 @media (hover: hover) {
-  .card:hover:has(.use:not(:disabled)) {
+  /* Over the star the card is not the target, so it does not light up. */
+  .card:hover:not(:has(.favorite:hover)):has(.use:not(:disabled)) {
     border-color: var(--dsw-alias-border-l2);
     box-shadow: var(--dsw-shadow-lv1);
   }
 
   /* Solid fill only where hover exists; on touch it would stick after a tap. */
-  .card:hover .use:not(:disabled) {
+  .card:hover:not(:has(.favorite:hover)) .use:not(:disabled) {
     border-color: var(--dsw-alias-state-business-primary);
     background: var(--dsw-alias-state-business-primary);
     color: var(--dsw-alias-label-on-accent);
@@ -212,7 +213,15 @@
   border-color: var(--dsw-alias-state-business-primary);
 }
 
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dsw-space-2);
+}
+
 .card h4 {
+  min-width: 0;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
@@ -322,6 +331,143 @@
 .use:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
+}
+
+/* Sits above the card-sized hit area of "Use this". */
+.favorite {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  flex: none;
+  width: var(--dsw-control-h-sm);
+  height: var(--dsw-control-h-sm);
+  margin: -4px -6px -4px 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--dsw-radius-control);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.favorite svg {
+  transition: fill var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.favorite[aria-pressed="true"] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.favorite[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+@media (hover: hover) {
+  .favorite:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+
+  .favorite[aria-pressed="true"]:hover {
+    color: var(--dsw-alias-state-business-primary);
+  }
+}
+
+.favorite:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 0;
+}
+
+/* Favorites and recent: one line per template, on the card grid's columns. */
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: var(--dsw-space-2) var(--dsw-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shortcut {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  padding-right: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  transition:
+    background-color var(--dsw-motion-feedback) var(--dsw-ease-out),
+    border-color var(--dsw-motion-feedback) var(--dsw-ease-out);
+}
+
+.shortcut .favorite {
+  margin: 0;
+}
+
+/* Title over access, so a long title keeps the full width of its row. */
+.shortcutUse {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 4px 9px 14px;
+  border: 0;
+  border-radius: 12px 0 0 12px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shortcutTitle {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .shortcut:has(.shortcutUse:hover:not(:disabled)) {
+    border-color: var(--dsw-alias-border-l2);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.shortcut:has(.shortcutUse:active:not(:disabled)) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.shortcut[data-selected] {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+/* The row is the button's visible shape, so the row carries its focus ring. */
+.shortcut:has(.shortcutUse:focus-visible) {
+  border-color: var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.shortcutUse:focus-visible {
+  outline: none;
+}
+
+.shortcutUse:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 @media (max-width: 560px) {

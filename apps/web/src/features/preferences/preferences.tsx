@@ -68,6 +68,9 @@ export function usePreferences() {
       setLanguage: providedStore?.setLanguage ?? ignoreChange,
       setVimMode: providedStore?.setVimMode ?? ignoreChange,
       save: providedStore?.save ?? cannotSave,
+      toggleFavoriteTemplate:
+        providedStore?.toggleFavoriteTemplate ?? ignoreChange,
+      recordTemplateUse: providedStore?.recordTemplateUse ?? ignoreChange,
     }),
     [providedStore, snapshot],
   );
