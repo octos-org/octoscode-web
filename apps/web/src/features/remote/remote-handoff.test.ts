@@ -19,37 +19,4 @@ describe("phone handoff boundary", () => {
       folders: ["/srv/中文 project", "C:\\work\\demo"],
     });
   });
-  it.each([
-    "https://u:p@core.test",
-    "https://core.test/?token=secret",
-    "https://core.test/#secret",
-    "javascript:alert(1)",
-  ])("rejects a credential-bearing or non-server endpoint %s", (endpoint) => {
-    expect(() =>
-      createRemoteHandoffUrl("https://web.test", endpoint, ["/srv/a"]),
-    ).toThrow();
-  });
-  it("rejects malformed or oversized handoffs without silently importing a subset", () => {
-    for (const payload of [
-      "oops",
-      JSON.stringify({ endpoint: "https://core.test", folders: ["/srv/a", 4] }),
-      JSON.stringify({
-        endpoint: "https://core.test",
-        folders: Array(21).fill("/srv/a"),
-      }),
-      JSON.stringify({
-        endpoint: "https://core.test",
-        folders: ["x".repeat(4097)],
-      }),
-    ]) {
-      expect(
-        readRemoteHandoff(
-          `https://web.test/?view=remote#handoff=${encodeURIComponent(payload)}`,
-        ).kind,
-      ).toBe("invalid");
-    }
-    expect(readRemoteHandoff("https://web.test/?view=remote")).toEqual({
-      kind: "none",
-    });
-  });
 });

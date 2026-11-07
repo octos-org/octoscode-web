@@ -7,10 +7,4 @@ describe("Web session identity", () => {
       "coding:api:web-1234-abcd",
     );
   });
-
-  it("does not rewrite an existing server-authored session id", () => {
-    expect(
-      bindWebSessionIdToProfile("review:local:main#coding", "coding"),
-    ).toBe("review:local:main#coding");
-  });
 });

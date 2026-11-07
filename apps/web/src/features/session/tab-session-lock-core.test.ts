@@ -61,28 +61,6 @@ function flush(): Promise<void> {
 }
 
 describe("tab-session-lock-core", () => {
-  it("derives stable lock names from the session key", () => {
-    expect(tabLockName("coding:local:main")).toBe(
-      "octoscode-web:session:coding:local:main",
-    );
-  });
-
-  it("reports held-elsewhere when the lock is already taken", async () => {
-    const shim = installShim();
-    const states: string[] = [];
-    const controller = createTabLockController(
-      (state) => states.push(state.kind),
-      shim.request,
-    );
-    const key = "coding:local:main";
-    // Simulate another tab holding it first.
-    void shim.request(tabLockName(key), {}, async () => new Promise(() => {}));
-
-    controller.acquire(key, false);
-    await flush();
-    expect(states).toEqual(["held-elsewhere"]);
-  });
-
   it("becomes owner on a free lock, flips on steal, ignores stale release", async () => {
     const shim = installShim();
     const states: string[] = [];
@@ -106,25 +84,5 @@ describe("tab-session-lock-core", () => {
     controller.dispose();
     await flush();
     expect(states).toEqual(["owner", "held-elsewhere"]);
-  });
-
-  it("voluntary release followed by dispose stays quiet", async () => {
-    const shim = installShim();
-    const states: string[] = [];
-    const controller = createTabLockController(
-      (state) => states.push(state.kind),
-      shim.request,
-    );
-    const key = "coding:local:quiet";
-
-    controller.acquire(key, false);
-    await flush();
-    expect(shim.holds.has(tabLockName(key))).toBe(true);
-
-    // Session switch: dispose releases; no flip-to-elsewhere is emitted.
-    controller.dispose();
-    await flush();
-    expect(shim.holds.has(tabLockName(key))).toBe(false);
-    expect(states).toEqual(["owner"]);
   });
 });

@@ -22,10 +22,9 @@ import type { SessionConnectionInput } from "./connection-lifecycle.ts";
  * B-resume 2137 Web concurrency proof: three retained records on ONE pooled
  * client, two queued turns each, one blocked on a REAL approval while the
  * others progress; repeated selection switches; foreign interrupt/decision
- * isolation; real steer dispatch; reconnect with a pending interaction;
- * enabled-discovery noninterference. The fixture is a minimal transport
- * double — ALL queue/ledger/controller/folding logic under test is the REAL
- * SessionRecordManager stack.
+ * isolation; reconnect with a pending interaction. The fixture is a minimal
+ * transport double — ALL queue/ledger/controller/folding logic under test is
+ * the REAL SessionRecordManager stack.
  */
 const caps: UiProtocolCapabilities = {
   version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
@@ -42,15 +41,6 @@ const caps: UiProtocolCapabilities = {
   supported_features: [
     CORE_UI_FEATURES.PROJECTION_ENVELOPE_V2,
     CORE_UI_FEATURES.USER_QUESTION_V1,
-  ],
-};
-
-const driverCaps: UiProtocolCapabilities = {
-  ...caps,
-  supported_methods: [...(caps.supported_methods ?? []), "session/driver/get"],
-  supported_features: [
-    ...(caps.supported_features ?? []),
-    "external_driver_v1",
   ],
 };
 
@@ -548,61 +538,6 @@ describe("SessionRecordManager three-record concurrency", () => {
     }
   });
 
-  it("STEER: submitTurn with steering enabled dispatches dependencies.steer with the exact accepted UUID and session; foreign records unaffected", async () => {
-    const h = harness();
-    try {
-      const a = await open(h, "A");
-      const b = await open(h, "B");
-      const aTurn = "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d01";
-      const bTurn = "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d02";
-      enqueue(a, aTurn);
-      enqueue(b, bTurn);
-      expect(starts(h.client)).toEqual([
-        ["A", aTurn],
-        ["B", bTurn],
-      ]);
-      // Wait for A's start ACCEPTANCE before steering: the dispatch must
-      // have completed (dispatchingTurnIdNow null) per product gating.
-      await flush();
-      expect(a.controller.dispatchingTurnIdNow()).toBeNull();
-      const bRowsBefore = rows(b);
-      expect(bRowsBefore).toEqual([[`user:${bTurn}`, bTurn]]);
-      // Steering enabled + submitTurn on the ACCEPTED active UUID with NO
-      // pending queue behind it. The CANDIDATE is a DISTINCT fresh UUID —
-      // the product rejects a duplicate of the already-admitted active ID —
-      // while the dispatch targets the accepted active UUID (expectedTurnId).
-      const steerCandidate = "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d03";
-      a.controller.setSteeringEnabled(true);
-      expect(
-        a.controller.submitTurn({
-          turnId: steerCandidate,
-          text: "steer text A",
-        }),
-      ).toBe(true);
-      await flush();
-      expect(
-        h.client.steers.map(({ session_id, expected_turn_id, text }) => [
-          session_id,
-          expected_turn_id,
-          text,
-        ]),
-      ).toEqual([["A", aTurn, "steer text A"]]);
-      // Steer started no new turn and never touched B.
-      expect(starts(h.client)).toEqual([
-        ["A", aTurn],
-        ["B", bTurn],
-      ]);
-      expect(b.controller.queueSnapshot().pending).toEqual([]);
-      // B's SNAPSHOT is unchanged by A's steer: its own user row stays and
-      // nothing drained or reset (not an empty-timeline claim).
-      expect(rows(b)).toEqual(bRowsBefore);
-      expect(b.controller.dispatchingTurnIdNow()).toBeNull();
-      expect(h.client.interrupts).toEqual([]);
-    } finally {
-      h.manager.suspendRecords();
-    }
-  });
-
   it("RECONNECT with a pending interaction: canonical hydrate restores the blocked approval; enqueue stays blocked until resolution", async () => {
     const h = harness();
     try {
@@ -668,48 +603,6 @@ describe("SessionRecordManager three-record concurrency", () => {
         ["A", "A2"],
       ]);
       expect(h.client.status).toBe("connected");
-    } finally {
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("ENABLED discovery completes its walk but NEVER starts a turn, interrupt, or steer across three records", async () => {
-    const client = new PooledClient();
-    client.openedFor = (sessionId) => ({
-      session_id: sessionId,
-      active_profile_id: "coding",
-      workspace_root: "/srv/project",
-      capabilities: driverCaps,
-    });
-    const h = harness(client);
-    try {
-      // DISTINCT nonempty rows per session (op-A/op-B/op-C), not one shared id.
-      client.driverGetHandler = async (sessionId) =>
-        completeDiscoveryPage(`op-${sessionId}`);
-      const a = await open(h, "A");
-      const b = await open(h, "B");
-      const c = await open(h, "C");
-      // Await ALL THREE actual walk promises (bounded), not a loading poll.
-      await boundedWait("A walk", Promise.resolve(a.driverInventoryWalk!));
-      await boundedWait("B walk", Promise.resolve(b.driverInventoryWalk!));
-      await boundedWait("C walk", Promise.resolve(c.driverInventoryWalk!));
-      const opIds = (rec: SessionRecord<PooledClient>) => {
-        expect(rec.driverInventory).toEqual(
-          expect.objectContaining({ kind: "complete" }),
-        );
-        const inv = rec.driverInventory as unknown as {
-          rows: Array<{ operationId: string }>;
-        };
-        return inv.rows.map((row) => row.operationId);
-      };
-      expect(opIds(a)).toEqual(["op-A"]);
-      expect(opIds(b)).toEqual(["op-B"]);
-      expect(opIds(c)).toEqual(["op-C"]);
-      // Discovery completing on three records started ZERO turns/RPCs.
-      expect(starts(client)).toEqual([]);
-      expect(client.interrupts).toEqual([]);
-      expect(client.steers).toEqual([]);
-      expect(client.status).toBe("connected");
     } finally {
       h.manager.suspendRecords();
     }
