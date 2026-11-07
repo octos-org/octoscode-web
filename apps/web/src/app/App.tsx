@@ -2713,7 +2713,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       revealTurnUndoOutcome,
     ],
   );
-  const turnUndone = useSessionTurnUndone(turnUndoScope);
+  // The same latest turn Timeline offers undo on: Changes says "undone" only
+  // while that turn is the undone one, never after a later turn (T-0465).
+  const latestTurnId =
+    conversation.timeline.findLast((entry) => entry.turnId !== undefined)
+      ?.turnId ?? null;
+  const turnUndone = useSessionTurnUndone(turnUndoScope, latestTurnId);
   const sessionPanel = (presentation: "column" | "drawer") => (
     <SessionPanelHost
       key={`${protocol.authorityKey}:${session.opened?.session_id ?? ""}`}

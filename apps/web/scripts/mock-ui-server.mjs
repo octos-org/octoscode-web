@@ -5039,6 +5039,19 @@ sockets.on("connection", (socket, request) => {
         state.restores.push(request.params.snapshot_id);
         const mode = state.nextRestore;
         state.nextRestore = null;
+        // Core's restore takes its `pre-restore` point first; an answer that
+        // is lost or unreadable does not undo that (T-0465).
+        const takePreRestore = () => {
+          if (turnUndoWorkspace(state))
+            state.turnSnapshots.unshift({
+              id: snapshotId(),
+              label: "pre-restore",
+              timestamp_unix: Math.floor(Date.now() / 1000),
+            });
+        };
+        // So does a refused conflicting or failing restore (Core ab819101); a
+        // turn running in the Session is refused before anything is taken.
+        if (mode && mode !== "running") takePreRestore();
         if (mode === "garbled") {
           // Core took it, and answered something this client cannot read.
           reply(socket, request.id, {
@@ -5066,12 +5079,7 @@ sockets.on("connection", (socket, request) => {
           );
           return;
         }
-        if (turnUndoWorkspace(state))
-          state.turnSnapshots.unshift({
-            id: snapshotId(),
-            label: "pre-restore",
-            timestamp_unix: Math.floor(Date.now() / 1000),
-          });
+        takePreRestore();
         holdHistoryRefreshAfterMutation(sessionId);
         reply(socket, request.id, {
           session_id: sessionId,

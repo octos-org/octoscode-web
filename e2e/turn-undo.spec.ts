@@ -232,8 +232,10 @@ test("a redo Core refuses over later edits shows Core's words and is not retried
     .getByRole("button", { name: "Bring changes back" })
     .click();
   const alert = summary(page).getByRole("alert");
+  // Without Core's structured reason (T-0467) the page never reads one out of
+  // the message: it says Core refused, in Core's own words.
   await expect(alert).toContainText(
-    "Not brought back: files were edited after the undo, and Core will not overwrite them. Your edits are kept.",
+    "Core did not bring this turn back. Check the files in Changes.",
   );
   await expect(alert).toContainText(
     "Core said: restore failed: restore refused: files were edited after the snapshot was taken",
@@ -248,6 +250,18 @@ test("a redo Core refuses over later edits shows Core's words and is not retried
       "This turn's file changes were undone. The conversation is kept.",
     ),
   ).toBeVisible();
+
+  // Core saved the current state before refusing; that point is this tab's
+  // own, so asking again is still sent once the edits are dealt with.
+  await (
+    await confirm(summary(page), "redo")
+  )
+    .getByRole("button", { name: "Bring changes back" })
+    .click();
+  await expect(
+    summary(page).getByText("Done. This turn's file changes are back."),
+  ).toBeVisible();
+  expect(protocol.requests("snapshot/restore")).toHaveLength(3);
 });
 
 test("no entry when snapshots are off", async ({ page }) => {
@@ -283,7 +297,7 @@ test("an honest note when Core kept no undo point for the turn", async ({
   expect(protocol.requests("snapshot/restore")).toHaveLength(0);
 });
 
-test("Core's failures, a vanished point and an unanswered restore are reported as they are", async ({
+test("Core's failures and a vanished point are reported as they are", async ({
   page,
   request,
 }) => {
@@ -318,25 +332,6 @@ test("Core's failures, a vanished point and an unanswered restore are reported a
   }
   expect(protocol.requests("snapshot/restore")).toHaveLength(2);
 
-  // Sent, and the answer cannot be read: unknown, never replayed. (The real
-  // walk drops the connection instead; this fixture's reconnect replays no
-  // turn summaries.)
-  await control(request, "next-restore", sessionId, "&mode=garbled");
-  await (
-    await confirm(summary(page), "undo")
-  )
-    .getByRole("button", { name: "Undo file changes" })
-    .click();
-  await expect(alert).toContainText(
-    "No answer from Core, so it is unknown whether the files changed.",
-  );
-  await expect(alert).toContainText("nothing is retried automatically");
-  await page.waitForTimeout(800);
-  expect(protocol.requests("snapshot/restore")).toHaveLength(3);
-  await expect(
-    summary(page).getByRole("button", { name: "Redo this turn" }),
-  ).toHaveCount(0);
-
   // The undo point went away (pruned) between showing the entry and confirming it.
   await expect(
     summary(page).getByRole("button", { name: "Undo this turn" }),
@@ -353,7 +348,7 @@ test("Core's failures, a vanished point and an unanswered restore are reported a
   await expect(
     summary(page).getByText("This turn has no undo point on the server."),
   ).toBeVisible();
-  expect(protocol.requests("snapshot/restore")).toHaveLength(3);
+  expect(protocol.requests("snapshot/restore")).toHaveLength(2);
 });
 
 test("Changes re-reads the workspace after an undo and says the session list is a record", async ({
@@ -394,6 +389,154 @@ test("Changes re-reads the workspace after an undo and says the session list is 
     changes.getByText(
       "The latest turn's file changes were undone. This list is what Octos recorded in this session; Uncommitted (Git) shows the files as they are now.",
     ),
+  ).toBeVisible();
+});
+
+// T-0465: what Core lists after this turn decides what is offered. A restore
+// this tab did not make (another tab, or an answer that never arrived) leaves
+// the turn unknown; an undo of an earlier turn says nothing about the files
+// once a later turn has run.
+test("an answer that never arrives leaves the turn unknown: nothing re-offered, nothing resent", async ({
+  page,
+  request,
+}) => {
+  const protocol = observeRpc(page);
+  await start(page, "/srv/work/turn-undo-lost");
+  await runTurn(page, "Change a file, then lose the answer");
+  const sessionId = String(
+    protocol.requests("session/open")[0]!.params!.session_id,
+  );
+  // Core restores, and its answer cannot be read. (The real walk drops the
+  // connection instead; this fixture's reconnect replays no turn summaries.)
+  await control(request, "next-restore", sessionId, "&mode=garbled");
+  await (
+    await confirm(summary(page), "undo")
+  )
+    .getByRole("button", { name: "Undo file changes" })
+    .click();
+  const alert = summary(page).getByRole("alert");
+  await expect(alert).toContainText(
+    "No answer from Core, so it is unknown whether the files changed.",
+  );
+  const unknown = summary(page).getByText(
+    "After this turn the workspace got saved states this page did not make",
+  );
+  await expect(unknown).toBeVisible();
+  await expect(summary(page).getByRole("button")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await expect(unknown).toBeVisible();
+  await expect(summary(page).getByRole("button")).toHaveCount(0);
+  await expect(
+    summary(page).getByText(
+      /Done\. This turn's file changes are back\.|Undone\. The files are back/,
+    ),
+  ).toHaveCount(0);
+  expect(protocol.requests("snapshot/restore")).toHaveLength(1);
+});
+
+test("another tab's undo leaves this tab's stale entry unsent and unsure", async ({
+  page,
+  browser,
+}) => {
+  const protocol = observeRpc(page);
+  await start(page, "/srv/work/turn-undo-tabs");
+  await runTurn(page, "Change a file seen from two tabs");
+  // The second tab opens the same Session from its link.
+  const other = await (await browser.newContext()).newPage();
+  const otherProtocol = observeRpc(other);
+  await other.goto(page.url());
+  await other.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await other
+    .getByLabel("Auth token", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await other.getByLabel("Auth token", { exact: true }).press("Enter");
+  await other.getByRole("button", { name: "Open conversation" }).click();
+  await expect(other.getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await expect(
+    summary(other).getByRole("button", { name: "Undo this turn" }),
+  ).toBeVisible();
+
+  await (
+    await confirm(summary(page), "undo")
+  )
+    .getByRole("button", { name: "Undo file changes" })
+    .click();
+  await expect(
+    summary(page).getByRole("button", { name: "Redo this turn" }),
+  ).toBeVisible();
+
+  // The other tab still shows the undo it read before: confirming it sends
+  // nothing, and it says it can no longer tell.
+  await (
+    await confirm(summary(other), "undo")
+  )
+    .getByRole("button", { name: "Undo file changes" })
+    .click();
+  await expect(summary(other).getByRole("alert")).toContainText(
+    "Not sent: Core lists newer saved states than this page made",
+  );
+  await expect(
+    summary(other).getByText(
+      "After this turn the workspace got saved states this page did not make",
+    ),
+  ).toBeVisible();
+  await expect(
+    summary(other).getByRole("button", { name: /this turn/ }),
+  ).toHaveCount(0);
+  expect(otherProtocol.requests("snapshot/restore")).toHaveLength(0);
+
+  // The tab that undid it can still bring it back.
+  await (
+    await confirm(summary(page), "redo")
+  )
+    .getByRole("button", { name: "Bring changes back" })
+    .click();
+  await expect(
+    summary(page).getByText("Done. This turn's file changes are back."),
+  ).toBeVisible();
+  expect(protocol.requests("snapshot/restore")).toHaveLength(2);
+  await other.context().close();
+});
+
+test("an undone turn stops marking Changes once a later turn runs", async ({
+  page,
+}) => {
+  await start(page, "/srv/work/turn-undo-later");
+  await runTurn(page, "First change, undone later");
+  await (
+    await confirm(summary(page), "undo")
+  )
+    .getByRole("button", { name: "Undo file changes" })
+    .click();
+  await expect(
+    summary(page).getByRole("button", { name: "Redo this turn" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^Session panel/ }).click();
+  await panel(page)
+    .getByRole("tab", { name: /^Changes/ })
+    .click();
+  const changes = panel(page).getByRole("tabpanel", { name: /^Changes/ });
+  await changes
+    .getByRole("button", { name: "This session", exact: true })
+    .click();
+  const note = changes.getByText("The latest turn's file changes were undone.");
+  await expect(note).toBeVisible();
+
+  await composer(page).fill("A second change after the undo");
+  await composer(page).press("Enter");
+  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(2);
+  await expect(note).toHaveCount(0);
+  const summaries = page.getByRole("region", { name: "Turn summary" });
+  await expect(summaries).toHaveCount(2);
+  await expect(
+    summaries.first().getByText("This turn's file changes were undone."),
+  ).toBeVisible();
+  await expect(
+    summaries.first().getByRole("button", { name: "Redo this turn" }),
+  ).toHaveCount(0);
+  await expect(
+    summaries.last().getByRole("button", { name: "Undo this turn" }),
   ).toBeVisible();
 });
 

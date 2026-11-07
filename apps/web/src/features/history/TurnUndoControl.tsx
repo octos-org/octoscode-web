@@ -75,7 +75,7 @@ export function TurnUndoControl({
   const action: TurnUndoAction | null =
     view.status === "ready" && changed
       ? "undo"
-      : view.status === "undone"
+      : view.status === "undone" && view.redo === "ok"
         ? "redo"
         : null;
   const confirm = async (chosen: TurnUndoAction) => {
@@ -89,6 +89,8 @@ export function TurnUndoControl({
     !action &&
     !view.busy &&
     !failure &&
+    view.status !== "undone" &&
+    view.status !== "moved" &&
     !(view.status === "missing" && changed)
   )
     return null;
@@ -105,14 +107,28 @@ export function TurnUndoControl({
           {t("This turn's file changes were undone. The conversation is kept.")}
         </p>
       ) : null}
-      {view.status === "undone" && view.redoGone ? (
+      {view.status === "undone" && view.redo === "gone" ? (
         <p className={styles.note}>
           {t(
             "The state before the undo is no longer on the server, so it cannot be brought back.",
           )}
         </p>
       ) : null}
-      {action && !(action === "redo" && view.redoGone) ? (
+      {view.status === "undone" && view.redo === "unclear" ? (
+        <p className={styles.note}>
+          {t(
+            "Core's answer did not single out the state before the undo, so it cannot be brought back here.",
+          )}
+        </p>
+      ) : null}
+      {view.status === "moved" ? (
+        <p className={styles.note}>
+          {t(
+            "After this turn the workspace got saved states this page did not make (another tab or Session, or a restore whose answer never arrived), so undo is not offered here. Check Changes for the files as they are now.",
+          )}
+        </p>
+      ) : null}
+      {action ? (
         <div className={styles.actions}>
           <button
             ref={triggerRef}
@@ -215,6 +231,7 @@ function failureText(failure: TurnUndoFailure): {
         detail: null,
       };
     case "gone":
+    case "moved":
       return { lead: failure.detail, detail: null };
     case "unsent":
       return {
@@ -226,6 +243,14 @@ function failureText(failure: TurnUndoFailure): {
         lead: undo
           ? "Not undone: Core says files changed after its last undo or redo, and it will not overwrite them. The files are as they were."
           : "Not brought back: files were edited after the undo, and Core will not overwrite them. Your edits are kept.",
+        detail: failure.detail,
+        fromCore: true,
+      };
+    case "running":
+      return {
+        lead: undo
+          ? "Not undone: a turn is running in this Session. Let it finish or stop it, then try again."
+          : "Not brought back: a turn is running in this Session. Let it finish or stop it, then try again.",
         detail: failure.detail,
         fromCore: true,
       };

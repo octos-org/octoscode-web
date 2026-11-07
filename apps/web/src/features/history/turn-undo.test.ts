@@ -189,60 +189,77 @@ describe("undo and redo", () => {
     const reloaded = fake({ lists: [listing([preRestore, preTurn])] });
     const again = controllerFor(reloaded.source).controller;
     await again.load();
-    expect(again.view).toMatchObject({ status: "undone", redoGone: false });
+    expect(again.view).toMatchObject({ status: "undone", redo: "ok" });
 
     resetTurnUndoControllers();
     const pruned = fake({ lists: [listing([preTurn])] });
     const gone = controllerFor(pruned.source).controller;
     await gone.load();
-    expect(gone.view).toMatchObject({ status: "undone", redoGone: true });
+    expect(gone.view).toMatchObject({ status: "undone", redo: "gone" });
     await gone.run("redo");
     expect(pruned.commands.restoreSnapshot).not.toHaveBeenCalled();
     expect(gone.view.failure).toMatchObject({ action: "redo", kind: "gone" });
   });
 
-  it("shows Core's conflict refusal as it is and never retries or overwrites", async () => {
+  it("reads a refusal's kind only from Core's structured reason, never its words, and never retries", async () => {
+    const setup = fake({ lists: [listing([preTurn])] });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    const words =
+      "restore failed: restore refused: files were edited after the snapshot was taken";
+    for (const [data, kind] of [
+      [undefined, "refused"],
+      [{ reason: "files_edited" }, "conflict"],
+      [{ reason: "turn_running" }, "running"],
+      [{ reason: "something_new" }, "refused"],
+    ] as const) {
+      setup.commands.restoreSnapshot.mockRejectedValueOnce(
+        new OctosUiProtocolError(-32602, words, data),
+      );
+      await controller.run("undo");
+      expect(controller.view).toMatchObject({
+        status: "ready",
+        failure: { action: "undo", kind, detail: words },
+      });
+    }
+    expect(setup.commands.restoreSnapshot).toHaveBeenCalledTimes(4);
+    expect(setup.lease.rehydrate).not.toHaveBeenCalled();
+    expect(controller.undone()).toBe(false);
+  });
+
+  it("a point Core took before refusing is this tab's own, so the turn stays offered", async () => {
+    const refusedPoint: WorkspaceSnapshot = {
+      id: "abab7777",
+      label: "pre-restore",
+      timestamp_unix: 105,
+    };
     const setup = fake({
       lists: [
         listing([preTurn]),
         listing([preTurn]),
         listing([preRestore, preTurn]),
+        listing([refusedPoint, preRestore, preTurn]),
       ],
     });
-    const { controller, onSettled } = controllerFor(setup.source);
-    await controller.load();
-    await controller.run("undo");
-    const message =
-      "restore failed: restore refused: files were edited after the snapshot was taken";
-    setup.commands.restoreSnapshot.mockRejectedValueOnce(
-      new OctosUiProtocolError(-32602, message),
-    );
-    await controller.run("redo");
-    expect(setup.commands.restoreSnapshot).toHaveBeenCalledTimes(2);
-    expect(controller.view).toMatchObject({
-      status: "undone",
-      done: null,
-      failure: { action: "redo", kind: "conflict", detail: message },
-    });
-    expect(controller.undone()).toBe(true);
-    expect(onSettled).toHaveBeenCalledTimes(2);
-  });
-
-  it("reports other Core refusals with Core's words and keeps the turn undoable", async () => {
-    const setup = fake({ lists: [listing([preTurn])] });
     const { controller } = controllerFor(setup.source);
     await controller.load();
-    const message =
-      "cannot restore while a turn is running in this session — interrupt it first";
-    setup.commands.restoreSnapshot.mockRejectedValueOnce(
-      new OctosUiProtocolError(-32602, message),
-    );
     await controller.run("undo");
+    setup.commands.restoreSnapshot.mockRejectedValueOnce(
+      new OctosUiProtocolError(-32602, "restore failed: restore refused"),
+    );
+    await controller.run("redo");
     expect(controller.view).toMatchObject({
-      status: "ready",
-      failure: { action: "undo", kind: "refused", detail: message },
+      status: "undone",
+      redo: "ok",
+      failure: { action: "redo", kind: "refused" },
     });
-    expect(setup.lease.rehydrate).not.toHaveBeenCalled();
+    await controller.run("redo");
+    expect(setup.commands.restoreSnapshot.mock.calls).toEqual([
+      [preTurn.id],
+      [preRestore.id],
+      [preRestore.id],
+    ]);
+    expect(controller.view).toMatchObject({ status: "ready", done: "redo" });
   });
 
   it("an unanswered restore is unknown: refreshed, not replayed, not claimed", async () => {
@@ -261,6 +278,159 @@ describe("undo and redo", () => {
       failure: { kind: "uncertain" },
     });
     expect(controller.undone()).toBe(false);
+  });
+
+  it("the way back is the pre-restore point Core lists above what this page saw, never the newest row", async () => {
+    // Core took a tool point right after this restore's own point.
+    const toolPoint: WorkspaceSnapshot = {
+      id: "cccc3333",
+      label: "pre-tool: write_file",
+      timestamp_unix: 102,
+    };
+    const setup = fake({
+      lists: [
+        listing([preTurn]),
+        listing([preTurn]),
+        listing([toolPoint, preRestore, preTurn]),
+      ],
+    });
+    setup.commands.restoreSnapshot.mockResolvedValueOnce({
+      session_id: "s1",
+      restored: preTurn.id,
+      snapshots: [toolPoint, preRestore, preTurn],
+    });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    await controller.run("undo");
+    await controller.run("redo");
+    expect(setup.commands.restoreSnapshot.mock.calls).toEqual([
+      [preTurn.id],
+      [preRestore.id],
+    ]);
+    expect(controller.view).toMatchObject({ status: "ready", done: "redo" });
+  });
+
+  it("undone without a single new pre-restore point: nothing is offered to bring back", async () => {
+    // Core reused an identical state, so its answer lists nothing new.
+    const setup = fake({ lists: [listing([preRestore, preTurn])] });
+    setup.commands.listSnapshots.mockResolvedValueOnce(listing([preTurn]));
+    setup.commands.listSnapshots.mockResolvedValueOnce(listing([preTurn]));
+    setup.commands.restoreSnapshot.mockResolvedValueOnce({
+      session_id: "s1",
+      restored: preTurn.id,
+      snapshots: [preTurn],
+    });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    await controller.run("undo");
+    expect(controller.view).toMatchObject({
+      status: "undone",
+      redo: "unclear",
+      done: "undo",
+    });
+    await controller.run("redo");
+    expect(setup.commands.restoreSnapshot.mock.calls).toEqual([[preTurn.id]]);
+  });
+
+  it("a restore this tab did not make (another tab, or an answer that never came) is unknown: nothing offered or sent", async () => {
+    const elsewhere: WorkspaceSnapshot = {
+      id: "dddd4444",
+      label: "pre-restore",
+      timestamp_unix: 103,
+    };
+    const setup = fake({ lists: [listing([elsewhere, preTurn])] });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    expect(controller.view.status).toBe("moved");
+    await controller.run("undo");
+    expect(setup.commands.restoreSnapshot).not.toHaveBeenCalled();
+
+    // This tab's own undo went unanswered, and Core did it: the list read
+    // after it shows a point this tab cannot claim, so nothing is offered.
+    resetTurnUndoControllers();
+    const lost = fake({
+      lists: [
+        listing([preTurn]),
+        listing([preTurn]),
+        listing([elsewhere, preTurn]),
+      ],
+    });
+    lost.commands.restoreSnapshot.mockRejectedValueOnce(
+      new OctosUiRequestTimeoutError(APPUI_SNAPSHOT_METHODS.RESTORE),
+    );
+    const own = controllerFor(lost.source).controller;
+    await own.load();
+    await own.run("undo");
+    expect(own.view).toMatchObject({
+      status: "moved",
+      done: null,
+      failure: { kind: "uncertain" },
+    });
+    await own.run("undo");
+    expect(lost.commands.restoreSnapshot).toHaveBeenCalledTimes(1);
+
+    // Undone here, then another tab restored again: the way back is not used.
+    resetTurnUndoControllers();
+    const redone = fake({
+      lists: [
+        listing([preTurn]),
+        listing([preTurn]),
+        listing([elsewhere, preRestore, preTurn]),
+      ],
+    });
+    const mine = controllerFor(redone.source).controller;
+    await mine.load();
+    await mine.run("undo");
+    await mine.run("redo");
+    expect(redone.commands.restoreSnapshot.mock.calls).toEqual([[preTurn.id]]);
+    expect(mine.view).toMatchObject({
+      status: "moved",
+      failure: { action: "redo", kind: "moved" },
+    });
+  });
+
+  it("this tab's own undo, redo and undo again stay offered", async () => {
+    const redoPoint: WorkspaceSnapshot = {
+      id: "eeee5555",
+      label: "pre-restore",
+      timestamp_unix: 104,
+    };
+    const again: WorkspaceSnapshot = { ...preRestore, id: "ffff6666" };
+    const setup = fake({
+      lists: [
+        listing([preTurn]),
+        listing([preTurn]),
+        listing([preRestore, preTurn]),
+        listing([redoPoint, preRestore, preTurn]),
+      ],
+    });
+    setup.commands.restoreSnapshot
+      .mockResolvedValueOnce({
+        session_id: "s1",
+        restored: preTurn.id,
+        snapshots: [preRestore, preTurn],
+      })
+      .mockResolvedValueOnce({
+        session_id: "s1",
+        restored: preRestore.id,
+        snapshots: [redoPoint, preRestore, preTurn],
+      })
+      .mockResolvedValueOnce({
+        session_id: "s1",
+        restored: preTurn.id,
+        snapshots: [again, redoPoint, preRestore, preTurn],
+      });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    await controller.run("undo");
+    await controller.run("redo");
+    await controller.run("undo");
+    expect(setup.commands.restoreSnapshot.mock.calls).toEqual([
+      [preTurn.id],
+      [preRestore.id],
+      [preTurn.id],
+    ]);
+    expect(controller.view).toMatchObject({ status: "undone", redo: "ok" });
   });
 
   it("sends nothing while work is running, or when the point went away", async () => {

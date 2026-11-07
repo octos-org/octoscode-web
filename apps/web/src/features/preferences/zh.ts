@@ -2341,6 +2341,16 @@ const catalog: Readonly<Record<string, string>> = {
   "This turn's file changes were undone. The conversation is kept.":
     "这一轮的文件改动已撤销，对话保留。",
   "This turn has no undo point on the server.": "服务器上没有这一轮的撤销点。",
+  "Core's answer did not single out the state before the undo, so it cannot be brought back here.":
+    "内核的答复里认不出撤销前的那个状态，所以这里没法恢复。",
+  "After this turn the workspace got saved states this page did not make (another tab or Session, or a restore whose answer never arrived), so undo is not offered here. Check Changes for the files as they are now.":
+    "这一轮之后，工作区里又有了不是本页留下的保存点（另一个标签页或会话，或者一次没收到答复的恢复），所以这里不再提供撤销。文件现在的样子请到「改动」里看。",
+  "Not sent: Core lists newer saved states than this page made, so the files may not be what this page last saw. No files were changed.":
+    "没有发出：内核列出了比本页更新、又不是本页留下的保存点，文件可能已经不是本页上次看到的样子。没有改动任何文件。",
+  "Not undone: a turn is running in this Session. Let it finish or stop it, then try again.":
+    "没有撤销：这个会话里有一轮正在运行。等它结束或先停止，再试一次。",
+  "Not brought back: a turn is running in this Session. Let it finish or stop it, then try again.":
+    "没有恢复：这个会话里有一轮正在运行。等它结束或先停止，再试一次。",
   "The state before the undo is no longer on the server, so it cannot be brought back.":
     "服务器上已经没有撤销前的状态，没法恢复。",
   "Core said: {detail}": "内核原话：{detail}",
