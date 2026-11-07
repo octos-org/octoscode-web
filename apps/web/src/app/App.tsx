@@ -843,10 +843,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     });
   // §4.4 case 22: defaults apply at CREATION only — one marker per created id.
   const appliedDefaultsForSession = useRef<Set<string>>(new Set());
-  // Judge r1 #7: a failed creation-time default is surfaced, not swallowed.
-  const [permissionDefaultError, setPermissionDefaultError] = useState<
-    string | null
-  >(null);
+  // Judge r1 #7: a failed creation-time default is surfaced, not swallowed,
+  // on the session it failed for.
+  const [permissionDefaultError, setPermissionDefaultError] = useState<{
+    sessionId: string;
+    message: string;
+  } | null>(null);
+  // The created session's launch id and the defaults it waits to receive:
+  // its own profile-bound id is only known once it is the open session.
+  const pendingPermissionDefaultRef = useRef<{
+    launchId: string;
+    defaults: SessionDefaults;
+  } | null>(null);
   const [conversationTab, setConversationTab] = useState<"chat" | "trajectory">(
     "chat",
   );
@@ -3647,17 +3655,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   };
   /**
    * §4.4 creation-only defaults (case 22): the sandbox draft rides the open
-   * seam; the permission mode is applied ONCE, right after creation, via the
-   * same permission/profile/set path the pane's Permissions section uses.
-   * Re-opening an existing session never enters this function, and the
-   * per-session marker blocks a second apply for the same created id.
+   * seam; the permission mode is applied ONCE, when the created session is
+   * open (the effect below), via the same permission/profile/set path the
+   * pane's Permissions section uses. Re-opening an existing session never
+   * enters this function, and the per-launch marker blocks a second apply.
    */
   const openSessionWithDefaults = async (
     sessionId: string,
     workspacePath: string,
   ): Promise<WorkspaceOpenOutcome> => {
     const defaults = sessionDefaults;
-    const outcome = await workspaceProduct.openSession({
+    if (defaults && !appliedDefaultsForSession.current.has(sessionId))
+      pendingPermissionDefaultRef.current = { launchId: sessionId, defaults };
+    return workspaceProduct.openSession({
       sessionId,
       cwd: workspacePath,
       ...(defaults?.sandbox.enabled
@@ -3670,25 +3680,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           }
         : {}),
     });
-    if (
-      outcome === "opened" &&
-      defaults &&
-      !appliedDefaultsForSession.current.has(sessionId)
-    ) {
-      appliedDefaultsForSession.current.add(sessionId);
-      // One permission/profile/set after creation (§7 New-session defaults).
-      try {
-        await applyPermissionDefault(sessionId, defaults);
-      } catch {
-        // Judge r1 #7: surface the failure. Never retried on reopen; the
-        // pane shows the server's live values and the operator can set them
-        // there — but the product must not silently swallow the miss.
-        setPermissionDefaultError(
-          t("Couldn't apply the new-session permission default"),
-        );
-      }
-    }
-    return outcome;
   };
 
   /** One permission/profile/set after creation (§7 New-session defaults). */
@@ -3698,7 +3689,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   ) => {
     const client = protocol.client;
     if (!client) return;
-    await client.setPermissionProfile({
+    const result = await client.setPermissionProfile({
       // The CREATED session id, never the render's previously selected one.
       session_id: sessionId,
       update: {
@@ -3706,7 +3697,42 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         network: defaults.network,
       },
     });
+    if (!result.applied || result.session_id !== sessionId)
+      throw new Error("The server did not apply the permission default.");
   };
+  // The created session is open: apply its defaults once, under the id the
+  // server opened it with (the launch id bound to its resolved profile).
+  useEffect(() => {
+    const pending = pendingPermissionDefaultRef.current;
+    const opened = session.opened;
+    if (!pending || !opened) return;
+    if (
+      opened.session_id !==
+      bindWebSessionIdToProfile(
+        pending.launchId,
+        opened.active_profile_id ?? "",
+      )
+    )
+      return;
+    pendingPermissionDefaultRef.current = null;
+    if (appliedDefaultsForSession.current.has(pending.launchId)) return;
+    appliedDefaultsForSession.current.add(pending.launchId);
+    void applyPermissionDefault(opened.session_id, pending.defaults)
+      .then(() => {
+        if (openedSessionIdRef.current === opened.session_id)
+          return safety.refreshPermission();
+      })
+      .catch(() =>
+        // Judge r1 #7: surface the failure. Never retried on reopen; the
+        // pane shows the server's live values and the operator can set them
+        // there — but the product must not silently swallow the miss.
+        setPermissionDefaultError({
+          sessionId: opened.session_id,
+          message: t("Couldn't apply the new-session permission default"),
+        }),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.opened]);
   const sessionWorkspaces = recentWorkspaces.filter(
     (workspace, index, workspaces) =>
       workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
@@ -6211,6 +6237,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             }}
             permissionsSection={{
               permission: permissionControl,
+              ...(permissionDefaultError &&
+              permissionDefaultError.sessionId === session.opened?.session_id
+                ? {
+                    saveState: {
+                      kind: "failed" as const,
+                      message: permissionDefaultError.message,
+                    },
+                  }
+                : {}),
               approvalPolicyReadback:
                 work.supervision.runtimeStatus?.approval_policy ?? null,
               approvalPolicyUnverified:
@@ -6259,13 +6294,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 : null
             }
             notice={
-              permissionDefaultError ??
-              (pendingProfileDefault
+              pendingProfileDefault
                 ? t(
                     "Saved. The server keeps running {value0} until it restarts",
                     { value0: runtimeModelLabel ?? t("the previous model") },
                   )
-                : null)
+                : null
             }
             permission={permissionControl}
             approvalPolicyReadback={
