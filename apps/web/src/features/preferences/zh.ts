@@ -833,6 +833,10 @@ const catalog: Readonly<Record<string, string>> = {
   Tokens: "token",
   Trajectory: "轨迹",
   "Try again": "重试",
+  "Couldn't read this folder.": "没能读取这个文件夹。",
+  "Nothing here.": "这里什么也没有。",
+  "The workspace as the server lists it, one folder at a time.":
+    "服务器给出的工作区，按文件夹逐层列出。",
   "Turn state": "轮次状态",
   "Turn:": "轮次：",
   Type: "类型",

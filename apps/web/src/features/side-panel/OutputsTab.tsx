@@ -19,6 +19,8 @@ export interface OutputsTabProps {
   tasks: readonly SupervisedTask[];
   selectedPath: string | null;
   selected: ReturnType<typeof resolvePanelFile>;
+  /** The server listed this workspace's tree (T-0417) — plain files preview. */
+  workspaceListed?: boolean | undefined;
   onSelectPath: (path: string | null) => void;
   onOpenDelivered: (reference: string) => void;
   onOpenTask?: ((taskId: string) => void) | undefined;
@@ -49,14 +51,25 @@ export function OutputsTab(props: OutputsTabProps) {
         ? access.downloadWorkspaceFile
         : null;
     // The same preview as the transcript: a written file through the
-    // workspace reader, a sent one through the delivered-file route.
+    // workspace reader, a sent one through the delivered-file route. A file
+    // picked in the workspace tree (T-0417) is no change of this Session but
+    // reads through the same workspace route.
+    const treeRead =
+      props.workspaceListed &&
+      !found &&
+      access?.downloadWorkspaceFile &&
+      access.workspacePathAvailable?.(props.selectedPath)
+        ? access.downloadWorkspaceFile
+        : null;
     const preview = deleted
       ? null
       : workspaceRead
         ? { reference: change!.path, workspaceFile: true }
-        : reference && access && access.deliveredPreviewAvailable !== false
-          ? { reference, workspaceFile: isWorkspaceUpload(reference) }
-          : null;
+        : treeRead
+          ? { reference: props.selectedPath, workspaceFile: true }
+          : reference && access && access.deliveredPreviewAvailable !== false
+            ? { reference, workspaceFile: isWorkspaceUpload(reference) }
+            : null;
     return (
       <div className={styles.stack}>
         <div className={styles.selectionActions}>

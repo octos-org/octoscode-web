@@ -949,6 +949,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     () => workspaceBrowseAdapter(protocol.client, session.capabilities),
     [protocol.client, session.capabilities],
   );
+  // T-0417: the real workspace tree over session/files.list's tree fields;
+  // the Files tab probes it and falls back to browse+changes on older Cores.
+  const workspaceTree = useMemo(() => {
+    if (!protocol.client || !session.opened) return null;
+    const client = protocol.client;
+    const sessionId = session.opened.session_id;
+    return {
+      list: (prefix: string, cursor?: string) =>
+        client
+          .sessionFilesCommands(sessionId)
+          .then((commands) => commands.list(prefix, cursor)),
+    };
+  }, [protocol.client, session.opened]);
   const skillsSettingsAvailable =
     Boolean(protocol.client && session.opened) &&
     supportsMethod(session.capabilities, APPUI_SKILL_METHODS.LIST);
@@ -2738,6 +2751,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       selectedPath={panelSelection.path}
       onSelectPath={panelSelection.select}
       browse={workspaceBrowse}
+      tree={workspaceTree}
       changes={safety.changes}
       changesUndone={turnUndoAvailable && turnUndone}
       diffReview={safety.diffReview}
