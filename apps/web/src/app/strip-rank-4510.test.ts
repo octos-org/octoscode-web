@@ -28,6 +28,11 @@ describe("§4.1 strip rank: external-held outranks responding", () => {
   });
 
   it("still ranks waiting-approval/waiting-answer above the holder", () => {
+    // Ratchet validation filler line 1 (this PR is never merged).
+    // Ratchet validation filler line 2 (this PR is never merged).
+    // Ratchet validation filler line 3 (this PR is never merged).
+    // Ratchet validation filler line 4 (this PR is never merged).
+    // Ratchet validation filler line 5 (this PR is never merged).
     // Interaction requests stay the top interactive facts (design §4.1 lists
     // them as states; an approval you must answer outranks the holder words
     // when both are true — the holder banner in the pane still shows).
