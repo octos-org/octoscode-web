@@ -435,7 +435,7 @@ test("a read-only session shows the reason instead of a composer on the phone", 
   expect(sentMethods.filter((method) => method === "turn/start")).toEqual([]);
 });
 
-test("a phone starts a new session in a watched folder and every screen sees it", async ({
+test("a phone starts a new session in a watched folder, keeps a refused first task as a draft, and every screen sees it", async ({
   browser,
   request,
 }) => {
@@ -476,7 +476,24 @@ test("a phone starts a new session in a watched folder and every screen sees it"
     sentMethods.filter((method) => method === "session/open"),
   ).toHaveLength(1);
 
+  // Core refuses the first task: the phone says so and keeps the draft.
+  await request.post(`${ORIGIN}/__test__/turn-start/hold-next`);
   await composer.fill("Phone first task");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect
+    .poll(async () => {
+      const state = (await (
+        await request.get(`${ORIGIN}/__test__/turn-start/state`)
+      ).json()) as { held?: { turn_id?: string } | null };
+      return state.held?.turn_id ?? null;
+    })
+    .not.toBeNull();
+  await request.post(`${ORIGIN}/__test__/turn-start/reject`);
+  await expect(page.getByText("本轮未被接受")).toBeVisible();
+  await expect(composer).toHaveValue("Phone first task");
+  await expect(
+    page.getByRole("button", { name: "停止", exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "发送提示" }).tap();
   await expect(page.getByText("本轮完成").first()).toBeVisible({
     timeout: 15_000,
@@ -557,41 +574,6 @@ test("a refused phone create says so, keeps nothing fake, and retries clean", as
     sentMethods.filter((method) => method === "session/open"),
   ).toHaveLength(2);
   await expect(page.getByText("新建会话失败，请重试。")).toHaveCount(0);
-});
-
-test("a rejected first task on a phone-created session keeps the draft", async ({
-  browser,
-  request,
-}) => {
-  const folder = "/workspace/remote-create-reject";
-  await scoped(request, folder);
-  const page = await phone(browser);
-  await connectPhone(page);
-  await watch(page, folder);
-  await page
-    .getByRole("button", { name: "在 remote-create-reject 中新建会话" })
-    .tap();
-  const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
-  await expect(composer).toBeEnabled();
-
-  await request.post(`${ORIGIN}/__test__/turn-start/hold-next`);
-  await composer.fill("Phone first task that gets rejected");
-  await page.getByRole("button", { name: "发送提示" }).tap();
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(`${ORIGIN}/__test__/turn-start/state`)
-      ).json()) as { held?: { turn_id?: string } | null };
-      return state.held?.turn_id ?? null;
-    })
-    .not.toBeNull();
-  await request.post(`${ORIGIN}/__test__/turn-start/reject`);
-
-  await expect(page.getByText("本轮未被接受")).toBeVisible();
-  await expect(composer).toHaveValue("Phone first task that gets rejected");
-  await expect(
-    page.getByRole("button", { name: "停止", exact: true }),
-  ).toHaveCount(0);
 });
 
 test("a rejected phone follow-up keeps the draft and tells the truth", async ({
