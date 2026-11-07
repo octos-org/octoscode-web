@@ -53,6 +53,11 @@ export {
 } from "./peer-row-view.ts";
 export type { PeerAnswerRequest } from "./peer-row-view.ts";
 import styles from "./PeerDock.module.css";
+import {
+  toControlAnswers,
+  toggleQuestionOption,
+  type DraftAnswer,
+} from "../questions/answers.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
 
 export interface PeerDockManager {
@@ -214,6 +219,11 @@ export function PeerDock({
   const [rowDrafts, setRowDrafts] = useState<Record<string, string>>({});
   const setDraft = (identity: string, value: string) =>
     setRowDrafts((current) => ({ ...current, [identity]: value }));
+  // The options picked on a question card, keyed by row and request so a new
+  // question starts with nothing picked.
+  const [rowChoices, setRowChoices] = useState<
+    Record<string, DraftAnswer["selectedLabels"]>
+  >({});
   // Hooks run unconditionally; the fallbacks keep the no-manager render inert.
   const snapshot = useSyncExternalStore(
     manager?.subscribe ?? subscribeNone,
@@ -276,6 +286,20 @@ export function PeerDock({
               const renewed = peer.turnChangedSinceAck === true;
               const rowKey = peer.rowKey ?? peer.identity;
               const draft = rowDrafts[rowKey] ?? "";
+              const choiceKey = `${rowKey}|${peer.requestId ?? ""}`;
+              const choices = rowChoices[choiceKey] ?? [];
+              // A question that takes no free text is answered by its options.
+              const freeTextAnswer =
+                peer.requestKind !== "question" ||
+                !peer.requestDetail ||
+                (peer.requestDetail as PeerQuestionDetail).allowFreeText;
+              // One answer: the picked options, else the typed text.
+              const answers = toControlAnswers([
+                {
+                  selectedLabels: choices,
+                  freeText: freeTextAnswer ? draft : "",
+                },
+              ]);
               return (
                 <>
                   <button
@@ -447,7 +471,7 @@ export function PeerDock({
                           </span>
                           {(
                             peer.requestDetail as PeerQuestionDetail
-                          ).options.map((option, optionIndex) => (
+                          ).options.map((option) => (
                             <label key={option.label} className={styles.status}>
                               <input
                                 type={
@@ -456,9 +480,19 @@ export function PeerDock({
                                     ? "checkbox"
                                     : "radio"
                                 }
-                                name={`${peer.requestId}:${optionIndex}`}
+                                name={choiceKey}
                                 value={option.label}
-                                defaultChecked={optionIndex === 0}
+                                checked={choices.includes(option.label)}
+                                onChange={() =>
+                                  setRowChoices((current) => ({
+                                    ...current,
+                                    [choiceKey]: toggleQuestionOption(
+                                      peer.requestDetail as PeerQuestionDetail,
+                                      { selectedLabels: choices, freeText: "" },
+                                      option.label,
+                                    ).selectedLabels,
+                                  }))
+                                }
                               />
                               {option.label}
                             </label>
@@ -469,7 +503,7 @@ export function PeerDock({
                   ) : null}
                   {actions.length > 0 ? (
                     <span className={styles.actions}>
-                      {(actions.includes("answer") ||
+                      {((actions.includes("answer") && freeTextAnswer) ||
                         actions.includes("steer")) && (
                         <input
                           className={styles.draft}
@@ -478,9 +512,11 @@ export function PeerDock({
                           data-row-draft={
                             actions.includes("answer") ? "answer" : "steer"
                           }
-                          aria-label={t("Enter steering text", {
-                            value0: label,
-                          })}
+                          aria-label={
+                            actions.includes("answer")
+                              ? t("Your answer for {value0}", { value0: label })
+                              : t("Enter steering text", { value0: label })
+                          }
                           onChange={(event) =>
                             setDraft(rowKey, event.target.value)
                           }
@@ -495,9 +531,10 @@ export function PeerDock({
                           aria-label={t(ROW_ACTION_ARIA[action], {
                             value0: label,
                           })}
+                          // Nothing picked and nothing typed: nothing to send.
+                          disabled={action === "answer" && answers.length === 0}
                           onClick={(event) => {
                             refocusRowButton(event);
-                            const answers = [{ freeText: draft.trim() }];
                             const command = buildRowControlCommand(
                               action,
                               draft,

@@ -23,6 +23,7 @@ export const PEER_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
   "Approve for this session": "本次会话内批准",
   "Approve {value0} for this session": "本次会话内批准 {value0}",
   "Answer {value0}": "回答 {value0}",
+  "Your answer for {value0}": "给 {value0} 的回答",
   "Steer {value0}": "插话 {value0}",
   "Stop {value0}": "停止 {value0}",
   "Peer started a new turn": "协作者开始了新的一轮",

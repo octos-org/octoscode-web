@@ -928,9 +928,10 @@ async function phoneWithBlockedPeer(
   browser: Browser,
   request: APIRequestContext,
   kind: "approval" | "approval-escalation" | "question",
+  where = "",
 ) {
   // "approval" must not match the "approval-escalation" folder's rows.
-  const name = runName(`peer-control-${kind}`);
+  const name = runName(`peer-control-${kind}${where}`);
   const folder = `/srv/work/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Hello from the desk");
@@ -966,14 +967,11 @@ async function phoneWithBlockedPeer(
       ).status(),
     ).toBe(204);
   const row = page.locator(`[data-fleet-row="${slug}"]`);
-  // A question-blocked row's Fleet wording is T-0493's to fix; its wait is
-  // observed on the dock card instead.
-  if (kind !== "question")
-    await expect(row).toHaveAttribute(
-      "data-fleet-status",
-      /approval|审批|批准/,
-      { timeout: 20_000 },
-    );
+  await expect(row).toHaveAttribute(
+    "data-fleet-status",
+    kind === "question" ? /answer|回答/ : /approval|审批|批准/,
+    { timeout: 20_000 },
+  );
   return { page, frames, slug, row };
 }
 
@@ -1043,7 +1041,36 @@ test("a peer's approval from the phone covers one request", async ({
   }
 });
 
-test("a peer's question is answered from the phone's dock by its own id", async ({
+test("a peer's question is answered from Fleet on the app's question card, by its own id", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const { page, frames, slug, row } = await phoneWithBlockedPeer(
+    browser,
+    request,
+    "question",
+  );
+  // A question is answered, never approved.
+  await expect(row.locator('[data-fleet-action="approve"]')).toHaveCount(0);
+  await expect(row.locator('[data-fleet-action="deny"]')).toHaveCount(0);
+  await row.locator('[data-fleet-action="answer"]').tap();
+  const card = page.getByRole("dialog", { name: "Checks", exact: true });
+  await expect(card).toBeVisible();
+  await card.getByRole("radio", { name: /^Full/ }).check();
+  await card.getByRole("button", { name: /^(Continue|继续)$/ }).tap();
+  await expect.poll(() => peerCommands(frames).length).toBe(1);
+  expect(peerCommands(frames)[0]).toEqual({
+    kind: "question_respond",
+    question_id: `peer-question-${slug}`,
+    answers: [{ free_text: "Full" }],
+  });
+  await expect(card).toBeHidden();
+  // The card opened over Fleet, which is still there.
+  await expect(row).toBeVisible();
+});
+
+test("a peer's question is answered from the phone's dock with the option picked", async ({
   browser,
   request,
 }) => {
@@ -1052,15 +1079,26 @@ test("a peer's question is answered from the phone's dock by its own id", async 
     browser,
     request,
     "question",
+    "-dock",
   );
   const dock = await openDockFromFleet(page, slug);
   const card = dock.locator("[data-peer-answer-card]");
   await expect(card).toContainText("Which checks should run?", {
     timeout: 20_000,
   });
-  // The row's typed answer is what it sends (choice handling is T-0493's).
-  await dock.locator('[data-row-draft="answer"]').fill("Full");
-  await dock.locator('[data-row-action="answer"]').tap();
+  const answer = dock.locator('[data-row-action="answer"]');
+  // Nothing is picked for the operator, so there is nothing to send yet.
+  await expect(card.getByRole("radio", { checked: true })).toHaveCount(0);
+  await expect(answer).toBeDisabled();
+  // This question takes no free text: its options are the answer.
+  await expect(dock.locator('[data-row-draft="answer"]')).toHaveCount(0);
+  // One group: the arrow key moves the pick, as in any radio group.
+  const fast = card.getByRole("radio", { name: "Fast" });
+  await fast.check();
+  await fast.press("ArrowDown");
+  await expect(card.getByRole("radio", { name: "Full" })).toBeChecked();
+  await expect(fast).not.toBeChecked();
+  await answer.tap();
   await expect.poll(() => peerCommands(frames).length).toBe(1);
   expect(peerCommands(frames)[0]).toEqual({
     kind: "question_respond",

@@ -361,15 +361,32 @@ describe("PeerDock on the phone remote control", () => {
 });
 
 describe("PeerDock row answer card (stateless, §4.3)", () => {
-  it("renders the question card's radio choices inline on the row", () => {
+  it("renders a single-choice question as one radio group with nothing picked", () => {
     const markup = renderToStaticMarkup(
       <PeerDock
         manager={managerFor([QUESTION_DETAIL_ROW_STANDALONE])}
         onRowAction={() => undefined}
       />,
     );
-    expect(markup).toContain('type="radio"');
-    expect(markup).toContain('name="req-question-d:0"');
+    const radios = markup.match(/<input type="radio"[^>]*>/g) ?? [];
+    expect(radios).toHaveLength(2);
+    const names = new Set(
+      radios.map((radio) => /name="([^"]*)"/.exec(radio)?.[1]),
+    );
+    expect(names.size).toBe(1);
+    expect(radios.join("")).not.toContain("checked");
+  });
+
+  it("labels the answer box as an answer, not steering", () => {
+    const markup = renderToStaticMarkup(
+      <PeerDock
+        manager={managerFor([QUESTION_DETAIL_ROW_STANDALONE])}
+        onRowAction={() => undefined}
+      />,
+    );
+    const box = /<input[^>]*data-row-draft="answer"[^>]*>/.exec(markup)?.[0];
+    expect(box).toMatch(/aria-label="Your answer for [^"]+"/);
+    expect(markup).not.toContain("Enter steering text");
   });
 });
 

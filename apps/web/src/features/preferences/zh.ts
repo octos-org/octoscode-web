@@ -510,6 +510,7 @@ const catalog: Readonly<Record<string, string>> = {
   streaming: "正在输出",
   Answer: "回答",
   "Answer {value0}": "回答 {value0}",
+  "Your answer for {value0}": "给 {value0} 的回答",
   "Approve once": "仅此一次批准",
   "Approve {value0} once": "仅此一次批准 {value0}",
   "Approve for this session": "本次会话内批准",
