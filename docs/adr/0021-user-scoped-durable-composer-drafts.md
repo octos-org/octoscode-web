@@ -81,4 +81,3 @@ it must not be documented as a guarantee to retain every unsent draft forever.
 - [Restore and editing integration](../../apps/web/src/app/App.tsx)
 - [Forget and identity changes](../../apps/web/src/app/ConnectionGate.tsx)
 - [Cache eviction checks](../../apps/web/src/features/session/session-draft-cache.test.ts)
-- [Durable eviction checks](../../apps/web/src/features/session/durable-session-drafts.test.ts)

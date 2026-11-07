@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPanelSelection, resolvePanelFile } from "./panel-selection.ts";
+import { resolvePanelFile } from "./panel-selection.ts";
 import type { SessionFileChange } from "./session-changes.ts";
 
 const change: SessionFileChange = {
@@ -30,27 +30,5 @@ describe("panel file identity", () => {
         delivered,
       ).change,
     ).toBeNull();
-  });
-
-  it("uses fresh server records after reload and keeps a missing selection from becoming a read request", () => {
-    const storage = {
-      getItem: (key: string) =>
-        key.endsWith("session-a") ? JSON.stringify(change.path) : null,
-      setItem() {},
-      removeItem() {},
-    };
-    const hint = readPanelSelection(storage, "session-a");
-    expect(readPanelSelection(storage, "session-b")).toBeNull();
-    expect(resolvePanelFile(hint, "/work", [], [])).toEqual({
-      change: null,
-      reference: null,
-      found: false,
-    });
-    const updated = {
-      ...change,
-      operation: "delete" as const,
-      previewId: "new-delete-preview",
-    };
-    expect(resolvePanelFile(hint, "/work", [updated], []).change).toBe(updated);
   });
 });

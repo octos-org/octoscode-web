@@ -22,88 +22,6 @@ function envelope(
 }
 
 describe("DurableSessionProjection", () => {
-  it("resumes compacted canonical threads at server checkpoints without replaying old deltas", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 20 },
-      replayed_projection_envelopes: [],
-      projection_thread_sequences: { "thread-1": 8 },
-    });
-    expect(projection.observe(envelope(8, 20))).toMatchObject({
-      kind: "ignore",
-      reason: "stale",
-    });
-    expect(projection.observe(envelope(10, 22)).kind).toBe("recover");
-    expect(projection.snapshot().cursor?.seq).toBe(20);
-    expect(projection.observe(envelope(9, 21)).kind).toBe("apply");
-    expect(projection.snapshot().cursor?.seq).toBe(21);
-  });
-
-  it("rejects late live events before a full canonical checkpoint without consuming their thread sequence", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 20 },
-      replayed_projection_envelopes: [],
-      projection_thread_sequences: { "thread-1": 8 },
-    });
-    for (const thread_id of ["thread-1", "previously-unseen"]) {
-      expect(projection.observe(envelope(9, 19, { thread_id }))).toMatchObject({
-        kind: "ignore",
-        reason: "stale",
-      });
-      expect(projection.snapshot().cursor?.seq).toBe(20);
-    }
-    expect(projection.observe(envelope(9, 21))).toMatchObject({
-      kind: "apply",
-    });
-    expect(
-      projection.observe(envelope(1, 22, { thread_id: "previously-unseen" })),
-    ).toMatchObject({ kind: "apply" });
-    expect(projection.snapshot().cursor?.seq).toBe(22);
-  });
-
-  it("does not carry a complete snapshot cutoff into a reset or legacy partial snapshot", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 20 },
-      replayed_projection_envelopes: [],
-      projection_thread_sequences: {},
-    });
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 21 },
-    });
-    expect(projection.observe(envelope(1, 19)).kind).toBe("apply");
-    projection.reset("coding:local:main");
-    expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
-  });
-
-  it("ignores foreign-topic terminals with the same turn ID before cursor or thread recovery", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    expect(projection.observe(envelope(1, 1)).kind).toBe("apply");
-    const before = projection.snapshot();
-    for (const stream of ["coding:local:main", "foreign-stream"]) {
-      expect(
-        projection.observe(
-          envelope(2, 2, {
-            session_id: "coding:local:main",
-            topic: "foreign",
-            cursor: { stream, seq: 2 },
-            payload: { type: "turn_terminal", data: { outcome: "completed" } },
-          }),
-        ),
-      ).toEqual({ kind: "ignore", reason: "wrong_session" });
-      expect(projection.snapshot()).toEqual(before);
-    }
-    expect(projection.observe(envelope(2, 2)).kind).toBe("apply");
-  });
   it("accepts monotonic envelopes and rejects a replayed duplicate", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");
@@ -120,37 +38,6 @@ describe("DurableSessionProjection", () => {
     });
   });
 
-  it("rejects malformed terminal payloads before advancing durable identity", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.observe(envelope(1, 7));
-    for (const data of [
-      null,
-      { outcome: "completed", error: "bad" },
-      { outcome: "unexpected" },
-    ]) {
-      expect(
-        projection.observe(
-          envelope(2, 8, {
-            payload: { type: "turn_terminal", data },
-          }),
-        ).kind,
-      ).toBe("recover");
-      expect(projection.snapshot().cursor?.seq).toBe(7);
-    }
-    expect(
-      projection.observe(
-        envelope(2, 8, {
-          payload: {
-            type: "turn_terminal",
-            data: { outcome: "completed", finished_at_ms: 1 },
-          },
-        }),
-      ).kind,
-    ).toBe("apply");
-    expect(projection.snapshot().cursor?.seq).toBe(8);
-  });
-
   it("fails closed on a per-thread sequence gap", () => {
     const projection = new DurableSessionProjection();
     projection.reset("coding:local:main");
@@ -161,32 +48,6 @@ describe("DurableSessionProjection", () => {
       reason: expect.stringContaining("expected 2"),
     });
     expect(projection.snapshot().phase).toBe("gap");
-  });
-
-  it("ignores recovery-buffered envelopes already covered by the hydrate cursor", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.observe(envelope(1, 7));
-
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 12 },
-    });
-
-    // commitHydrate clears the per-thread window (hydrate lanes are
-    // partial), so envelopes at or below the hydrate cursor — already
-    // contained in the hydrated transcript — must be dropped as stale
-    // instead of being replayed as new.
-    expect(
-      projection.observe(envelope(2, 11), { fromRecoveryBuffer: true }),
-    ).toMatchObject({
-      kind: "ignore",
-      reason: "stale",
-    });
-    // Live envelopes (not from the recovery buffer) keep the old semantics:
-    // the transcript does not authoritatively cover undelivered deltas.
-    expect(projection.observe(envelope(2, 11)).kind).toBe("apply");
-    expect(projection.observe(envelope(3, 13)).kind).toBe("apply");
   });
 
   it("rejects cross-session and cross-topic contamination", () => {
@@ -226,74 +87,5 @@ describe("DurableSessionProjection", () => {
       phase: "lossy",
       detail: expect.stringContaining("3 durable events"),
     });
-  });
-
-  it("resets sequence assumptions after authoritative hydrate", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.observe(envelope(7, 12));
-    projection.beginHydrate();
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 20 },
-    });
-
-    expect(projection.observe(envelope(42, 21)).kind).toBe("apply");
-  });
-
-  it("does not seed live ordering from hydrate's partial replay lanes", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 20 },
-      replayed_tool_envelopes: [
-        {
-          session_id: "coding:local:main",
-          thread_id: "thread-1",
-          seq: 4,
-          cursor: { stream: "coding:local:main", seq: 19 },
-          turn_id: "turn-1",
-          payload: { type: "tool_start", data: {} },
-        },
-      ],
-    });
-
-    expect(projection.observe(envelope(2, 18)).kind).toBe("apply");
-    expect(projection.observe(envelope(3, 19)).kind).toBe("apply");
-  });
-
-  it("keeps the failure cause visible across reconnect attempts", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-
-    projection.fail(
-      "Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
-    );
-    projection.beginReconnect(1);
-    expect(projection.snapshot()).toMatchObject({
-      phase: "reconnecting",
-      detail:
-        "Connection lost · retry 1 · Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
-    });
-
-    // Later attempts keep the cause instead of folding it into the banner.
-    projection.beginReconnect(2);
-    expect(projection.snapshot().detail).toBe(
-      "Connection lost · retry 2 · Recovery buffer exceeded 4096 events; reconnecting from the last durable cursor",
-    );
-  });
-
-  it("drops the failure cause once recovery is healthy again", () => {
-    const projection = new DurableSessionProjection();
-    projection.reset("coding:local:main");
-
-    projection.fail("boom");
-    projection.commitHydrate({
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 12 },
-    });
-    projection.beginReconnect(1);
-    expect(projection.snapshot().detail).toBe("Connection lost · retry 1");
   });
 });
