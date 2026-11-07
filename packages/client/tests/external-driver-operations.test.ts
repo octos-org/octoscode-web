@@ -456,6 +456,9 @@ describe("parseDriverOperationsPageResult", () => {
   });
 });
 
+// Deliberate cross-system pin: these numbers are the Core handler's wire
+// ceilings (ui_protocol.rs DRIVER_OPERATIONS_*); a silent drift would let the
+// client accept pages the server considers out of contract.
 describe("DRIVER_OPERATIONS_LIMITS", () => {
   it("pins Core wire constants", () => {
     expect(DRIVER_OPERATIONS_LIMITS).toEqual({
@@ -701,6 +704,9 @@ describe("parseDriverOperationsPageResult — captured scope fences", () => {
   });
 });
 
+// Deliberate fail-closed design: scope validation must fire even when the
+// page carries NO rows — a fence implemented as a row-only loop would accept
+// an empty page on a foreign/malformed captured scope (the "syntax hole").
 describe("captured-scope validation covers EMPTY and OMITTED pages", () => {
   const EMPTY = page({ items: [] });
   const baseOf = (master: string) => master.split("#")[0];

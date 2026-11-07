@@ -287,13 +287,9 @@ function harness(
 }
 
 describe("external driver control surface (1907 RED)", () => {
-  it("exposes driverAcquire on the factory result", () => {
-    const { control } = harness(FULL_CAPS);
-    expect(typeof control.driverAcquire).toBe("function");
-  });
-
-  it("keeps the read-only surface intact alongside the control methods", () => {
+  it("exposes the control methods while the read-only surface stays intact", () => {
     const { commands } = harness(FULL_CAPS);
+    expect(typeof commands.driverAcquire).toBe("function");
     const base: ExternalDriverCommands = commands;
     expect(typeof base.driverGet).toBe("function");
     expect(typeof base.nextExpectedRevision).toBe("function");
@@ -797,41 +793,9 @@ describe("decoders reject malformed native identity (no silent fallback)", () =>
     );
   });
 
-  it("claim rejects an occurrence that is neither payload nor continuation_ref", async () => {
-    await expectDecodeRejected("wakeClaim", CLAIM_ARGS, () =>
-      structuredClone({
-        ...CLAIM_REPLY,
-        occurrences: [
-          {
-            sequence: 1,
-            reason_kind: "child_complete",
-            dedupe_key: "dedupe-1",
-            payload_digest: "sha256:beef",
-            created_at_ms: 1_700_000_000_000,
-          },
-        ],
-      }),
-    );
-  });
-
-  it("claim rejects an occurrence carrying BOTH payload and continuation_ref", async () => {
-    await expectDecodeRejected("wakeClaim", CLAIM_ARGS, () =>
-      structuredClone({
-        ...CLAIM_REPLY,
-        occurrences: [
-          {
-            sequence: 1,
-            reason_kind: "child_complete",
-            dedupe_key: "dedupe-1",
-            payload: { goal_id: "g1" },
-            continuation_ref: "ref-1",
-            payload_digest: "sha256:beef",
-            created_at_ms: 1_700_000_000_000,
-          },
-        ],
-      }),
-    );
-  });
+  // The decidable-content rule (payload XOR continuation_ref) is owned by
+  // external-driver-wake-control.test.ts at the parser level; the wire path
+  // funnels through that same parser, so no separate wire-level dupe here.
 
   it("refuses a captured scope whose profile contradicts a qualified session", () => {
     expect(() =>

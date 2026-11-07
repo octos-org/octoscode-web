@@ -382,6 +382,9 @@ describe("dispatch target ambiguity is rejected OFFLINE (zero RPC)", () => {
 });
 
 describe("fence diagnostics name the ACTUAL method and leak nothing", () => {
+  // The diagnostic must name the leaf method the caller actually invoked —
+  // misnaming would send operators debugging the wrong RPC — and must never
+  // carry the proof material that the fence just rejected.
   it("a bad control fence reports peer/control, never peer/dispatch, and no proof", async () => {
     const { calls, commands } = leafContext(() =>
       structuredClone(CONTROL_REPLY),

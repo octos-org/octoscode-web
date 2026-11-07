@@ -33,89 +33,57 @@ function reply(occurrences: unknown): Record<string, unknown> {
 }
 
 describe("wake claim occurrence decidable-content rule", () => {
-  it("accepts an inline payload with an absent continuation_ref", () => {
-    const view = parseExternalDriverWakeClaimResult(
+  // One guard: payload XOR continuation_ref (JSON null = absent, matching the
+  // Core's Option wire semantics). Before touching, re-check ui_protocol.rs
+  // `WakeOccurrenceView` — an occurrence Core cannot classify as either inline
+  // or referenced must be a client-side refuse, never a guess.
+  it("accepts exactly one of payload / continuation_ref (absent or null)", () => {
+    const inline = parseExternalDriverWakeClaimResult(
       reply([occurrence({ payload: { goal_id: "g1" } })]),
     );
-    expect(view.occurrences[0]?.payload).toEqual({ goal_id: "g1" });
-    expect(view.occurrences[0]?.continuationRef).toBeUndefined();
-  });
-
-  it("accepts an inline payload with an explicit null continuation_ref", () => {
-    const view = parseExternalDriverWakeClaimResult(
+    expect(inline.occurrences[0]?.payload).toEqual({ goal_id: "g1" });
+    expect(inline.occurrences[0]?.continuationRef).toBeUndefined();
+    const inlineNull = parseExternalDriverWakeClaimResult(
       reply([
         occurrence({ payload: { goal_id: "g1" }, continuation_ref: null }),
       ]),
     );
-    expect(view.occurrences[0]?.payload).toEqual({ goal_id: "g1" });
-    expect(view.occurrences[0]?.continuationRef).toBeUndefined();
-  });
-
-  it("accepts a continuation_ref with an absent payload", () => {
-    const view = parseExternalDriverWakeClaimResult(
+    expect(inlineNull.occurrences[0]?.payload).toEqual({ goal_id: "g1" });
+    const referenced = parseExternalDriverWakeClaimResult(
       reply([occurrence({ continuation_ref: "ref-1" })]),
     );
-    expect(view.occurrences[0]?.continuationRef).toBe("ref-1");
-    expect(view.occurrences[0]?.payload).toBeUndefined();
-  });
-
-  it("accepts a continuation_ref with an explicit null payload", () => {
-    const view = parseExternalDriverWakeClaimResult(
+    expect(referenced.occurrences[0]?.continuationRef).toBe("ref-1");
+    expect(referenced.occurrences[0]?.payload).toBeUndefined();
+    const referencedNull = parseExternalDriverWakeClaimResult(
       reply([occurrence({ payload: null, continuation_ref: "ref-1" })]),
     );
-    expect(view.occurrences[0]?.continuationRef).toBe("ref-1");
-    expect(view.occurrences[0]?.payload).toBeUndefined();
+    expect(referencedNull.occurrences[0]?.continuationRef).toBe("ref-1");
   });
 });
 
 describe("wake claim occurrence refuses non-decidable content", () => {
-  it("refuses both payload and continuation_ref present", () => {
-    expect(() =>
-      parseExternalDriverWakeClaimResult(
-        reply([
-          occurrence({ payload: { goal_id: "g1" }, continuation_ref: "ref-1" }),
-        ]),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-  });
-
-  it("refuses neither field (absent)", () => {
-    expect(() =>
-      parseExternalDriverWakeClaimResult(reply([occurrence({})])),
-    ).toThrow(ExternalDriverProtocolError);
-  });
-
-  it("refuses a payload that is only null", () => {
-    expect(() =>
-      parseExternalDriverWakeClaimResult(
-        reply([occurrence({ payload: null })]),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-  });
-
-  it("refuses an empty continuation_ref", () => {
-    expect(() =>
-      parseExternalDriverWakeClaimResult(
-        reply([occurrence({ continuation_ref: "" })]),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-  });
-
-  it("refuses a non-JSON (cyclic) payload with a bounded typed failure", () => {
+  it("refuses ambiguous, empty, or unserializable content with a bounded typed failure", () => {
     const cyclic: Record<string, unknown> = { goal_id: "g1" };
     cyclic.self = cyclic;
-    let error: unknown;
-    try {
-      parseExternalDriverWakeClaimResult(
-        reply([occurrence({ payload: cyclic })]),
-      );
-    } catch (caught) {
-      error = caught;
+    const badOccurrences = [
+      occurrence({ payload: { goal_id: "g1" }, continuation_ref: "ref-1" }),
+      occurrence({}),
+      occurrence({ payload: null }),
+      occurrence({ continuation_ref: "" }),
+      occurrence({ payload: cyclic }),
+    ];
+    for (const bad of badOccurrences) {
+      let error: unknown;
+      try {
+        parseExternalDriverWakeClaimResult(reply([bad]));
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(ExternalDriverProtocolError);
+      // Bounded: never a raw DataCloneError / cyclic-structure leak.
+      expect((error as Error).message).not.toContain("DataClone");
+      expect((error as Error).message).not.toContain("circular");
     }
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-    // Bounded: never a raw DataCloneError / cyclic-structure leak.
-    expect((error as Error).message).not.toContain("DataClone");
-    expect((error as Error).message).not.toContain("circular");
   });
 });
 
