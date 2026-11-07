@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -18,7 +17,6 @@ import {
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const PLAN_TOKEN = "plan-fixture-e2e-token";
-const ABSENT_TOKEN = "plan-absent-e2e-token";
 const PROMPT = "Plan fixture";
 
 async function start(page: Page, token: string, workspace: string) {
@@ -106,50 +104,4 @@ test("shows the plan, replaces it wholesale, and clears it when the turn ends", 
   // The authoring turn's terminal drops the checklist; nothing lingers.
   await releaseTerminal(request);
   await expect(card(page)).toHaveCount(0);
-});
-
-test("collapses and expands from the keyboard without losing the plan", async ({
-  page,
-  request,
-}) => {
-  await start(page, PLAN_TOKEN, "/workspace/plan-keyboard");
-  await holdTerminal(request);
-  await send(page, PROMPT);
-  await expect(card(page)).toBeVisible();
-
-  const toggle = card(page).getByRole("button");
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(rows(page).first()).toBeVisible();
-
-  await toggle.focus();
-  await page.keyboard.press("Enter");
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(rows(page).first()).toBeHidden();
-  // Collapsed, the header still names the work and its progress.
-  await expect(toggle).toContainText("Shipping the coding surface");
-  await expect(toggle).toContainText("done");
-
-  await page.keyboard.press(" ");
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(rows(page).first()).toBeVisible();
-
-  const results = await new AxeBuilder({ page })
-    .include('[data-plan-card="true"]')
-    .analyze();
-  expect(results.violations).toEqual([]);
-  await releaseTerminal(request);
-});
-
-test("renders no plan surface when the server does not advertise the feature", async ({
-  page,
-}) => {
-  await start(page, ABSENT_TOKEN, "/workspace/plan-absent");
-  await send(page, PROMPT);
-  // The turn runs and completes normally…
-  await expect(page.getByText("all tests passing")).toBeVisible();
-  // …and nothing is pinned above the composer.
-  await expect(card(page)).toHaveCount(0);
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
 });

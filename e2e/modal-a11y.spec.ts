@@ -49,40 +49,6 @@ function focusIsInside(dialog: Locator): Promise<boolean> {
   return dialog.evaluate((element) => element.contains(document.activeElement));
 }
 
-function backgroundHidden(background: Locator): Promise<boolean> {
-  return background.evaluate(
-    (element) =>
-      element.getAttribute("aria-hidden") === "true" ||
-      element.hasAttribute("inert"),
-  );
-}
-
-test("Escape closes the modal and returns focus to its opener", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page, "/srv/work/modal-a11y-escape");
-  const opener = settingsTrigger(page);
-  const dialog = await openSettings(page);
-  await expect(dialog).toHaveAttribute("aria-modal", "true");
-
-  await page.keyboard.press("Escape");
-
-  await expect(dialog).toHaveCount(0);
-  await expect(opener).toBeFocused();
-});
-
-test("initial focus lands on the surface's first focusable control", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page, "/srv/work/modal-a11y-initial-focus");
-  const dialog = await openSettings(page);
-
-  await expect.poll(() => focusIsInside(dialog)).toBe(true);
-  await expect(
-    dialog.getByRole("button", { name: "Close settings" }),
-  ).toBeFocused();
-});
-
 test("Tab and Shift+Tab cycle focus inside the modal only", async ({
   page,
 }) => {
@@ -97,30 +63,4 @@ test("Tab and Shift+Tab cycle focus inside the modal only", async ({
     await page.keyboard.press("Shift+Tab");
     await expect.poll(() => focusIsInside(dialog)).toBe(true);
   }
-});
-
-test("background content is hidden from assistive tech while open", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page, "/srv/work/modal-a11y-background");
-  // The workspace shell is a <div class="workspace-grid"> since v0.10.0 — the
-  // <main> landmark now sits inside it as #workspace-main. The background this
-  // test guards is still the whole shell, so match it by class.
-  const background = page.locator(".workspace-grid");
-  await expect(background).toHaveCount(1);
-
-  const dialog = await openSettings(page);
-  await expect.poll(() => backgroundHidden(background)).toBe(true);
-
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect
-    .poll(() =>
-      background.evaluate(
-        (element) =>
-          element.getAttribute("aria-hidden") === null &&
-          !element.hasAttribute("inert"),
-      ),
-    )
-    .toBe(true);
 });

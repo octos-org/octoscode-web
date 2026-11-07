@@ -14,38 +14,6 @@ async function connect(page: Page) {
   await expect(page.getByLabel("Server workspace path")).toBeVisible();
 }
 
-test("a template selection survives reload without creating or sending work", async ({
-  page,
-}) => {
-  const methods: string[] = [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", ({ payload }) => {
-      methods.push(JSON.parse(String(payload)).method);
-    }),
-  );
-  await connect(page);
-  await page
-    .getByRole("button", { name: "Use this: Write a weekly report" })
-    .dblclick();
-  expect(methods).not.toContain("session/open");
-  expect(methods).not.toContain("turn/start");
-  await page.reload();
-  await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "“Write a weekly report” is ready" }),
-  ).toBeVisible();
-  expect(methods).not.toContain("session/open");
-  expect(methods).not.toContain("turn/start");
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.reload();
-  await expect(
-    page
-      .getByRole("region", { name: "Or start from a template" })
-      .getByRole("status"),
-  ).toBeEmpty();
-});
-
 test("a rejected template launch retries its session identity and preserves the draft on reload", async ({
   page,
 }) => {

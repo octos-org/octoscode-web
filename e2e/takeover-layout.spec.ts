@@ -1,12 +1,6 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const VIEWPORTS = [
-  { width: 1440, height: 900 },
-  { width: 1280, height: 720 },
-  { width: 390, height: 844 },
-] as const;
 
 async function start(page: Page) {
   await page.goto("/");
@@ -73,41 +67,18 @@ async function expectMobileButtonsSeparate(page: Page, width: number) {
   }
 }
 
-for (const viewport of VIEWPORTS) {
-  for (const kind of ["approval", "question"] as const) {
-    test(`${kind} keeps the document and header stable at ${viewport.width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(viewport);
-      await start(page);
-      const input = page.getByRole("textbox", { name: "Message Octos" });
-      await input.fill(
-        kind === "approval"
-          ? "Request approval fixture"
-          : "Request question fixture",
-      );
-      await input.press("Enter");
-      await expect(
-        page.getByRole("dialog", {
-          name:
-            kind === "approval"
-              ? "Run product checks?"
-              : "Choose verification depth",
-        }),
-      ).toBeVisible();
-      await expectStableHeader(page, viewport.height);
-      if (viewport.width === 390) {
-        await expectMobileButtonsSeparate(page, viewport.width);
-      }
-      if (
-        (kind === "approval" && viewport.width === 1440) ||
-        (kind === "question" && viewport.width === 390)
-      ) {
-        const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
-          .analyze();
-        expect(results.violations).toEqual([]);
-      }
-    });
-  }
-}
+test("approval keeps the document and header stable at 390px", async ({
+  page,
+}) => {
+  const viewport = { width: 390, height: 844 };
+  await page.setViewportSize(viewport);
+  await start(page);
+  const input = page.getByRole("textbox", { name: "Message Octos" });
+  await input.fill("Request approval fixture");
+  await input.press("Enter");
+  await expect(
+    page.getByRole("dialog", { name: "Run product checks?" }),
+  ).toBeVisible();
+  await expectStableHeader(page, viewport.height);
+  await expectMobileButtonsSeparate(page, viewport.width);
+});

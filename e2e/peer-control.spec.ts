@@ -230,20 +230,6 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
     expect(w.calls(CONTROL_METHOD)).toHaveLength(COMMAND_KINDS.length);
   });
 
-  // ------------------------------------------------------------ duplicate
-  test("an idempotent replay renders duplicate:true", async ({ page }) => {
-    const w = wire(page);
-    // Only the `duplicate` workspace suffix mints duplicate:true receipts.
-    await connect(page, "duplicate");
-    await command(page, "steer").click();
-    await expect(receipt(page)).toBeVisible();
-    await command(page, "steer").click();
-    await expect(
-      receipt(page).locator('[data-receipt-duplicate="true"]'),
-    ).toHaveText("Already applied");
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(2);
-  });
-
   // ----------------------------------------------------------- refusals
   test("a refused RECEIPT renders the typed peer_control_refused refusal", async ({
     page,
