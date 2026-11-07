@@ -5578,6 +5578,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                     }
                                   : null
                               }
+                              skillActions={
+                                skillsCapabilities &&
+                                session.opened &&
+                                !readOnlyPeer
+                                  ? {
+                                      client: skillsCapabilities.client,
+                                      profileId: protocol.profileId,
+                                      sessionId: session.opened.session_id,
+                                      capabilities:
+                                        skillsCapabilities.capabilities,
+                                    }
+                                  : null
+                              }
                               onAttachFiles={
                                 attachmentsAvailable
                                   ? () => attachInputRef.current?.click()
