@@ -433,15 +433,30 @@ test("360-message history stays readable while new output streams and unsafe Mar
       ),
     )
     .toBeLessThan(4);
+  const summaries = page.getByRole("region", {
+    name: "Turn summary",
+    exact: true,
+  });
+  const summariesBefore = await summaries.count();
   const before = await region.evaluate((el) => el.scrollTop);
   emit!("assistant_delta", { text: "Foreground continuation. " });
   emit!("turn_terminal", { outcome: "completed" });
+  // Wait for this output and its terminal to render, then hold the reader
+  // still across the next ten frames (the ResizeObserver pass and anything
+  // deferred after it), not just on the first read.
   await expect(
-    page.getByText("Stream chunk 24.", { exact: false }),
+    page.getByText("Foreground continuation.", { exact: false }),
   ).toBeAttached();
-  expect(
-    Math.abs((await region.evaluate((el) => el.scrollTop)) - before),
-  ).toBeLessThan(4);
+  await expect(summaries).toHaveCount(summariesBefore + 1);
+  const tops = await region.evaluate(async (el) => {
+    const out: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      await new Promise(requestAnimationFrame);
+      out.push(el.scrollTop);
+    }
+    return out;
+  });
+  for (const top of tops) expect(Math.abs(top - before)).toBeLessThan(4);
   await page.getByRole("button", { name: "Back to latest" }).click();
   for (const [width, height, theme] of [
     [320, 480, "dark"],
