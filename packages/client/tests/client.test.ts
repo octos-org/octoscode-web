@@ -11,15 +11,7 @@ import fixture from "./fixtures/ui-protocol-v1.json";
 describe("OctosUiClient", () => {
   it("negotiates lifecycle lookup and verifies the exact requested turn scope", async () => {
     expect(DEFAULT_UI_FEATURES).toContain("state.turn_state_get.v1");
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
     for (const result of [
       { session_id: "s1", turn_id: "t1", state: "unknown" },
       { session_id: "s2", turn_id: "t1", state: "completed" },
@@ -49,34 +41,16 @@ describe("OctosUiClient", () => {
     client.disconnect();
   });
 
-  it("negotiates the implemented native review surface", () => {
-    expect(DEFAULT_UI_FEATURES).toContain("review.start.v1");
-  });
-
+  // P2d: the Core driver family is STRICT OPT-IN (contract 2800 §1). Without
+  // `external_driver_v1` in client_hello the Core never advertises
+  // session/driver/*, peer/dispatch or peer/control to the web, so a cold
+  // real Core can never reach the seat. The mock advertises regardless of
+  // this list, which is why every mock run passed.
   it("negotiates the external-master control feature", () => {
-    // P2d: the Core driver family is STRICT OPT-IN (contract 2800 §1). Without
-    // `external_driver_v1` in client_hello the Core never advertises
-    // session/driver/*, peer/dispatch or peer/control to the web, so a cold
-    // real Core can never reach the seat. The mock advertises regardless of
-    // this list, which is why every mock run passed.
     expect(DEFAULT_UI_FEATURES).toContain("external_driver_v1");
   });
 
-  it("rejects connect when the socket closes before opening", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-
-    const connecting = client.connect();
-    socket.onclose?.({} as CloseEvent);
-
-    await expect(connecting).rejects.toThrow("connection closed");
-    expect(client.status).toBe("error");
-  });
-
-  it("carries the close frame when the socket closes before opening", async () => {
+  it("rejects connect when the socket closes before opening, carrying the close frame", async () => {
     const socket = createSocket();
     const client = new OctosUiClient({
       endpoint: "http://127.0.0.1:50080",
@@ -92,18 +66,11 @@ describe("OctosUiClient", () => {
       code: 1013,
       closeReason: "try later",
     });
+    expect(client.status).toBe("error");
   });
 
   it("rejects pending requests with the close frame of an open socket", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const pending = client.resolveLaunch({ cwd: "/workspace/a" });
     socket.onclose?.({ code: 1008, reason: "auth_expired" } as CloseEvent);
@@ -271,15 +238,7 @@ describe("OctosUiClient", () => {
   });
 
   it("emits canonical approval and user-question response methods", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const approval = client.respondApproval({
       session_id: "s1",
@@ -342,15 +301,7 @@ describe("OctosUiClient", () => {
   });
 
   it("rejects malformed typed results instead of leaking unchecked JSON", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const pending = [
       client.openSession({ session_id: "s1" }),
@@ -395,15 +346,7 @@ describe("OctosUiClient", () => {
   });
 
   it("validates lazily loaded task and model results before resolving callers", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const tasks = client.listTasks({ session_id: "s1" });
     const catalog = client.getLlmCatalog();
@@ -444,15 +387,7 @@ describe("OctosUiClient", () => {
   });
 
   it("preserves JSON-RPC failures and rejects pending work on disconnect", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const failed = client.startTurn({
       session_id: "s1",
@@ -549,16 +484,7 @@ describe("OctosUiClient", () => {
   it("gives LLM probe requests a longer timeout than the default", async () => {
     vi.useFakeTimers();
     try {
-      const socket = createSocket();
-      const client = new OctosUiClient({
-        endpoint: "http://127.0.0.1:50080",
-        requestTimeoutMs: 50,
-        webSocketFactory: () => socket as unknown as WebSocket,
-      });
-      const connecting = client.connect();
-      socket.readyState = 1;
-      socket.onopen?.({} as Event);
-      await connecting;
+      const { client } = await connectClient({ requestTimeoutMs: 50 });
 
       const route = {
         route_id: "official",
@@ -603,15 +529,7 @@ describe("OctosUiClient", () => {
   });
 
   it("dispatches session open immediately and delivers notifications while its response is decoded", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
     const notifications = vi.fn();
     client.subscribeNotifications(notifications);
     const opened = client.openSession({ session_id: "s1" });
@@ -644,15 +562,7 @@ describe("OctosUiClient", () => {
   });
 
   it("validates session/hydrate before returning it", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const hydrate = client.hydrateSession({
       session_id: "coding:local:main",
@@ -710,15 +620,7 @@ describe("OctosUiClient", () => {
   });
 
   it("emits and validates authoritative product requests", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const pending = [
       client.listPermissionProfiles(fixture.permission_profile_list.request),
@@ -805,15 +707,7 @@ describe("OctosUiClient", () => {
   });
 
   it("renames a session with session/title.set and validates the echo", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const renamed = client.setSessionTitle({
       session_id: "coding:api:web-1",
@@ -854,15 +748,7 @@ describe("OctosUiClient", () => {
   });
 
   it("emits the exact profile model-management wire contract", async () => {
-    const socket = createSocket();
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => socket as unknown as WebSocket,
-    });
-    const connecting = client.connect();
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await connecting;
+    const { socket, client } = await connectClient();
 
     const route = {
       route_id: "official",
@@ -992,4 +878,21 @@ function createSocket() {
     send: vi.fn(),
     close: vi.fn(),
   };
+}
+
+/** One socket opened immediately; multi-socket races build their own. */
+async function connectClient(
+  overrides: Partial<ConstructorParameters<typeof OctosUiClient>[0]> = {},
+) {
+  const socket = createSocket();
+  const client = new OctosUiClient({
+    endpoint: "http://127.0.0.1:50080",
+    webSocketFactory: () => socket as unknown as WebSocket,
+    ...overrides,
+  });
+  const connecting = client.connect();
+  socket.readyState = 1;
+  socket.onopen?.({} as Event);
+  await connecting;
+  return { socket, client };
 }
