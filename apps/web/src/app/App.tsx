@@ -2683,6 +2683,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (safety.diffReview.active) void safety.openDiffReview();
   }, []);
   const turnUndoAuthority = protocol.authorityKey;
+  // Only the latest turn's summary offers undo, and it ends the transcript:
+  // following the tail keeps its outcome in view (assigned below).
+  const revealLatestRef = useRef<() => void>(() => {});
+  const revealTurnUndoOutcome = useCallback(
+    () => revealLatestRef.current(),
+    [],
+  );
   const renderTurnUndo = useCallback(
     (turn: TurnUndoSlot) =>
       turnUndoScope ? (
@@ -2695,6 +2702,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           authorityKey={turnUndoAuthority}
           source={turnUndoSource}
           onSettled={refreshChangesAfterRestore}
+          revealOutcome={revealTurnUndoOutcome}
         />
       ) : null,
     [
@@ -2702,6 +2710,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       turnUndoAuthority,
       turnUndoSource,
       refreshChangesAfterRestore,
+      revealTurnUndoOutcome,
     ],
   );
   const turnUndone = useSessionTurnUndone(turnUndoScope);
@@ -2857,6 +2866,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     // The empty Session's template home reads from the top.
     conversation.timeline.length === 0,
   );
+  revealLatestRef.current = jumpToLatest;
   // The run's Session may still be loading; if the turn never renders (too old
   // for the loaded window) the reader stays at the latest output.
   useEffect(() => {

@@ -22,6 +22,12 @@ export interface TurnUndoControlProps {
   source: TurnUndoSource;
   /** Refresh what shows workspace files (the Changes tab) after a restore was sent. */
   onSettled: () => void;
+  /**
+   * Keep this summary's outcome in view once a restore settles. Refreshing
+   * the conversation can move it, and a phone shows only a few lines above
+   * the composer (T-0441).
+   */
+  revealOutcome: () => void;
 }
 
 /**
@@ -37,6 +43,7 @@ export function TurnUndoControl({
   authorityKey,
   source,
   onSettled,
+  revealOutcome,
 }: TurnUndoControlProps) {
   const t = useUiText();
   const controller = useMemo(
@@ -46,9 +53,13 @@ export function TurnUndoControl({
   const view = useTurnUndo(controller);
   const [confirming, setConfirming] = useState<TurnUndoAction | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [settled, setSettled] = useState(0);
   useLayoutEffect(() => {
     controller.attach(source, onSettled);
   });
+  useLayoutEffect(() => {
+    if (settled) revealOutcome();
+  }, [settled, revealOutcome]);
   useEffect(() => {
     if (latest) void controller.load();
   }, [controller, latest, authorityKey]);
@@ -70,6 +81,7 @@ export function TurnUndoControl({
   const confirm = async (chosen: TurnUndoAction) => {
     await controller.run(chosen);
     setConfirming(null);
+    setSettled((count) => count + 1);
     triggerRef.current?.focus({ preventScroll: true });
   };
   const failure = view.failure ? failureText(view.failure) : null;
