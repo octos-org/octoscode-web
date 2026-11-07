@@ -399,109 +399,6 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
 });
 
 /**
- * P0 regression (expected red on the old product): A2 is queued behind A1's
- * active turn. The ordering contract is: A1's terminal is HELD by the fixture
- * barrier; the user switches to B (B becomes selected while A1 is still
- * running server-side — allowed under the new persistent-record navigation
- * semantics); A1's terminal is then RELEASED; only after that may A2 be
- * accepted — and it must start against A's Session id while B STAYS selected.
- * No interrupt, no duplicate start, no queue corruption, no cross-Session
- * delivery.
- */
-test("drains a queued A2 after a released A1 terminal while B stays selected", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/queued-fifo-a2";
-  const a1Prompt = `${SLOW_PREFIX} A1-fifo-marker`;
-  const a2Prompt = "A2-fifo-marker";
-  const started = observeStartedTurns(page);
-  const interrupts = observeInterrupts(page);
-
-  await connectAndStartWorkspace(page, cwd);
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const aTitle = await selectedSessionTitle(sidebar);
-  const sessionA = sessionRowByTitle(sidebar, aTitle);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-  // Hold A1's terminal before the turn starts so it cannot drain A2 early.
-  await holdNextTerminal(request);
-
-  await composer.fill(a1Prompt);
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({
-    timeout: 10_000,
-  });
-  await composer.fill(a2Prompt);
-  await page.getByRole("button", { name: "Queue prompt" }).click();
-  await expect(page.getByText(/1 queued/)).toBeVisible();
-
-  // Switch to B while A1 is still server-active (terminal held). This is the
-  // new persistent-record navigation semantics: allowed even before A1's
-  // terminal, and it must not interrupt A1 or drop A2.
-  const workspace = sidebar.locator('[data-workspace-name="queued-fifo-a2"]');
-  await workspace
-    .getByRole("button", { name: "queued-fifo-a2", exact: true })
-    .hover();
-  await sidebar
-    .getByRole("button", { name: "New session in queued-fifo-a2" })
-    .click();
-  await expect(sessions).toHaveCount(2);
-  const bTitle = await selectedSessionTitle(sidebar);
-  const sessionB = sessionRowByTitle(sidebar, bTitle);
-  expect(bTitle).not.toBe(aTitle);
-  await expect(sessionB).toHaveAttribute("aria-current", "page");
-
-  // A2 must NOT have started yet: A1's terminal is still held.
-  expect(started().filter((turn) => turn.text === a2Prompt)).toHaveLength(0);
-  // No interrupt was ever sent while navigating away from a busy Session.
-  expect(interrupts()).toBe(0);
-
-  // Release A1's terminal: A2 drains against A's session id, B stays selected.
-  const a1Start = started().find((turn) => turn.text === a1Prompt);
-  expect(a1Start).toBeTruthy();
-  await releaseHeldTerminal(request, a1Start!.sessionId);
-
-  await expect
-    .poll(
-      () =>
-        started().filter(
-          (turn) =>
-            turn.text === a2Prompt && turn.sessionId === a1Start!.sessionId,
-        ).length,
-      { timeout: 15_000 },
-    )
-    .toBe(1);
-  await expect(sessionB).toHaveAttribute("aria-current", "page");
-  await expect(
-    conversation(page).getByText(a2Prompt, { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    conversation(page).getByText("A1-fifo-marker", { exact: false }),
-  ).toHaveCount(0);
-  expect(interrupts()).toBe(0);
-
-  // Refocus A: both prompts belong to A, each exactly once.
-  await sessionA.click();
-  await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(
-    conversation(page).getByText("A1-fifo-marker", { exact: false }),
-  ).toBeVisible({
-    timeout: 10_000,
-  });
-  await expect(
-    conversation(page).getByText(a2Prompt, { exact: true }),
-  ).toBeVisible();
-  await expect(conversation(page).getByText(COMPLETION_TEXT)).toHaveCount(2);
-  const turnsAgainstA = started().filter(
-    (turn) => turn.sessionId === a1Start!.sessionId,
-  );
-  expect(turnsAgainstA).toHaveLength(2);
-});
-
-/**
  * P0 regression: transcripts stay per-Session; reload restores the Session
  * that was current before reload, and re-opening a parked Session never
  * re-starts its completed turn.
@@ -567,6 +464,12 @@ test("keeps per-Session transcripts distinct and restores the pre-reload Session
   expect(started().length).toBe(turnsAfterFirst);
 });
 
+/**
+ * Also the P0 queued-FIFO regression: A2 queued behind A1's HELD terminal must
+ * not start while the user moves to B (no interrupt), must start against A's
+ * Session id only after A1's terminal is released, and B stays selected with
+ * none of A's text. Refocusing A shows both prompts exactly once.
+ */
 test("preserves native persisted segment finality across late deltas and the next background FIFO turn", async ({
   page,
   request,
