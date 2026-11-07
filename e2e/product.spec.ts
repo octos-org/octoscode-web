@@ -177,7 +177,6 @@ async function settleHeldTurnStart(
 
 test.afterEach(async ({ request }) => {
   await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
-  await request.post(`${FIXTURE_ORIGIN}/__test__/session-open/reset`);
 });
 
 test("keeps authentication when a remembered Session can no longer open", async ({
