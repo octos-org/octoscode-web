@@ -393,9 +393,21 @@ test("Enter steers a compatible running turn by default, while the Queue control
   expect(probe.calls("turn/steer")).toHaveLength(1);
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
 
-  // Tab still queues deliberately: the steer path must not swallow it.
-  await page.keyboard.press("Tab");
-  await expect.poll(() => probe.calls("turn/steer").length).toBe(1);
+  // Tab still queues deliberately: the steer path must not swallow it. Empty
+  // the FIFO first (Enter only steers while nothing is queued), then wait for
+  // the queued row before counting, so the count cannot pass before Tab has
+  // done anything.
+  await promptQueue(page)
+    .getByRole("button", { name: "Remove queued prompt 1" })
+    .click();
+  await expect(promptQueue(page)).toHaveCount(0);
+  await composer.fill("Queued with Tab after the active turn");
+  await composer.press("Tab");
+  await expect(promptQueue(page)).toContainText(
+    "Queued with Tab after the active turn",
+  );
+  expect(probe.calls("turn/steer")).toHaveLength(1);
+  expect(probe.calls("turn/interrupt")).toHaveLength(0);
 });
 
 test("a dropped native steer returns once to its owning FIFO while a different Session is selected", async ({
