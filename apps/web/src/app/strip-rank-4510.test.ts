@@ -24,8 +24,6 @@ describe("§4.1 strip rank: external-held outranks responding", () => {
     const respondingIndex = app.indexOf('{ kind: "responding" }');
     expect(holderIndex).toBeGreaterThan(-1);
     expect(respondingIndex).toBeGreaterThan(-1);
-    // The external-held branch must be evaluated EARLIER in the derivation
-    // than the responding branch (ternary chain order = rank).
     expect(holderIndex).toBeLessThan(respondingIndex);
   });
 
