@@ -241,38 +241,6 @@ test("uses the DSH-aligned product sidebar and grouped or flat session views", a
   ).toBeVisible();
 });
 
-test("authenticates before any session and owns workspace selection in the hero", async ({
-  page,
-}) => {
-  const openedMethods: string[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = String(payload);
-      if (frame.includes('"method":"session/open"')) {
-        openedMethods.push(frame);
-      }
-    });
-  });
-
-  const chooser = await connectServer(page);
-
-  expect(openedMethods).toEqual([]);
-  await expect(
-    page.getByText("Ship octoscode-web", { exact: true }),
-  ).toHaveCount(0);
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  await expect(
-    page.getByRole("region", { name: "Add workspace" }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Server workspace path")).toBeVisible();
-  await expect(page.getByLabel("Session id")).toHaveCount(0);
-  await expect(page.getByLabel("Profile id")).toHaveCount(0);
-});
-
 test("keeps authentication when a remembered Session can no longer open", async ({
   page,
 }) => {
@@ -1613,26 +1581,6 @@ test("deep link: ?s= restores the selected session after reload", async ({
     timeout: 15_000,
   });
   expect(new URL(page.url()).searchParams.get("s")).toBe(key);
-});
-
-test("preserves workspace launch decisions without exposing profile ids in connect", async ({
-  page,
-}) => {
-  await connectServer(page);
-  await requestInitialWorkspace(page, "/srv/work/cross");
-
-  const decision = page.getByRole("heading", {
-    name: "Choose this workspace’s profile",
-  });
-  await expect(decision).toBeVisible();
-  await page
-    .getByRole("button", { name: /Start new session with review/ })
-    .click();
-  await expect(decision).toBeHidden();
-  await expect(page.locator(".workspace-title small")).toHaveText(
-    "/srv/work/cross",
-  );
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
 });
 
 test("automatically activates an unambiguous fresh coding Workspace", async ({

@@ -76,10 +76,25 @@ test("explains missing authentication while preserving password privacy and IME 
   await expect(token).toHaveAttribute("type", "password");
 });
 
-test("starts a first workspace with the keyboard and focuses the useful field when adding another", async ({
+test("authenticates without opening a Session, starts a first workspace with the keyboard, and focuses the useful field when adding another", async ({
   page,
 }) => {
+  const sessionOpens: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (frame.includes('"method":"session/open"')) sessionOpens.push(frame);
+    });
+  });
   await connectWithKeyboard(page);
+  // Authentication alone opens no Session and shows no demo transcript; the
+  // workspace path is the only identity the operator supplies.
+  expect(sessionOpens).toEqual([]);
+  await expect(
+    page.getByText("Ship octoscode-web", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Session id")).toHaveCount(0);
+  await expect(page.getByLabel("Profile id")).toHaveCount(0);
   const path = page.getByLabel("Server workspace path");
   await expect(path).toBeFocused();
   await expect(
