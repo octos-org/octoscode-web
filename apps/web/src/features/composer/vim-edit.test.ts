@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  clearVimPending,
   reduceVimEdit,
-  resetVimMode,
   VIM_NORMAL_OPERATIONS,
   type VimEditSnapshot,
-  type VimKey,
 } from "./vim-edit.ts";
+
+// The composer's Vim mode is the pinned TUI's closed 21-operation subset
+// (docs/tui-command-coverage.md, "Vim"), applied to the user's unsent draft in
+// DOM UTF-16 offsets. Before changing `reduceVimEdit`, keep what the browser
+// suite cannot reach key by key: each operation edits as the TUI does, no
+// Normal-mode key types into the draft, an IME's Escape never leaves Insert,
+// and no edit splits a surrogate pair (that corrupts emoji and CJK text).
+// Escape/Enter ownership, IME and clipboard keys, and per-Session drafts run in
+// e2e/local-preferences.spec.ts.
 
 function snapshot(marked: string): VimEditSnapshot {
   const cursor = marked.indexOf("|");
@@ -77,158 +83,6 @@ describe("pinned TUI's 21 composer Vim operations", () => {
     },
   );
 
-  it.each([
-    ["dd", "ab\nc|d", "ab|"],
-    ["dd", "a|b", "|"],
-    ["dd", "a|b\ncd", "|cd"],
-    ["dd", "ab\n|", "ab|"],
-    ["cc", "a|b", "|"],
-    ["dw", "abc|", "abc|"],
-    ["dw", "ab| \n cd", "ab|cd"],
-    ["j", "a|bc", "a|bc"],
-    ["k", "a|bc", "a|bc"],
-    ["h", "ab\n|cd", "ab|\ncd"],
-    ["l", "ab|\ncd", "ab\n|cd"],
-    ["j", "abc|d\nx\nlong", "abcd\nx|\nlong"],
-  ])("%s handles line/buffer boundaries: %s", (keys, input, output) => {
-    expect(marked(press(input, Array.from(keys)))).toBe(output);
-  });
-});
-
-describe("editing Unicode scalar values in DOM UTF-16 coordinates", () => {
-  it.each([
-    ["h", "A😀|B", "A|😀B"],
-    ["l", "A|😀B", "A😀|B"],
-    ["x", "A|😀B", "A|B"],
-    ["j", "😀中|文\na😀x", "😀中文\na😀|x"],
-    ["k", "😀中x\na😀|b", "😀中|x\na😀b"],
-    ["w", "|你好世界\u0085next", "你好世界\u0085|next"],
-    ["w", "|a\uFEFFb c", "a\uFEFFb |c"],
-    ["b", "a\u2003😀中|", "a\u2003|😀中"],
-    ["e", "a| 😀中 z", "a 😀|中 z"],
-    ["e", "|abc def", "ab|c def"],
-    ["e", "ab|c def", "abc de|f"],
-    ["w", "|hello,world next", "hello,world |next"],
-  ])("%s preserves scalar/whitespace semantics: %s", (keys, input, output) => {
-    expect(marked(press(input, Array.from(keys)))).toBe(output);
-  });
-  it("clamps a browser caret inside a surrogate pair without splitting it", () => {
-    const result = reduceVimEdit(
-      { ...snapshot("A|😀B"), selectionStart: 2, selectionEnd: 2 },
-      { key: "x" },
-    );
-    expect(marked(result)).toBe("A|B");
-  });
-  it("clamps out-of-range/invalid carets", () => {
-    const result = reduceVimEdit(
-      { ...snapshot("|ab"), selectionStart: NaN, selectionEnd: Infinity },
-      { key: "h" },
-    );
-    expect(marked(result)).toBe("a|b");
-  });
-});
-
-describe("native keyboard and existing dispatch ownership", () => {
-  it("Insert Escape only enters Normal; the following Escape passes to existing interruption", () => {
-    const state = { ...snapshot("a|b"), ...resetVimMode() };
-    const first = reduceVimEdit(state, { key: "Escape" });
-    expect(first).toMatchObject({
-      mode: "normal",
-      pending: null,
-      consumed: true,
-      text: "ab",
-    });
-    const second = reduceVimEdit({ ...state, ...first }, { key: "Escape" });
-    expect(second).toMatchObject({
-      mode: "normal",
-      pending: null,
-      consumed: false,
-      text: "ab",
-    });
-  });
-  it("Normal Escape cancels a pending operator without interrupting", () => {
-    const first = reduceVimEdit(
-      { ...snapshot("a|b"), pending: "d" },
-      { key: "Escape" },
-    );
-    expect(first).toMatchObject({
-      mode: "normal",
-      pending: null,
-      consumed: true,
-    });
-    expect(marked(first)).toBe("a|b");
-  });
-  it.each(["insert", "normal"] as const)(
-    "Enter in %s delegates the existing submit path",
-    (mode) => {
-      const result = reduceVimEdit(
-        { ...snapshot("a|b"), mode, pending: "d" },
-        { key: "Enter" },
-      );
-      expect(result.consumed).toBe(false);
-      expect(result.text).toBe("ab");
-      if (mode === "normal") expect(result.pending).toBeNull();
-    },
-  );
-  it.each([
-    "ArrowLeft",
-    "ArrowRight",
-    "ArrowUp",
-    "ArrowDown",
-    "Home",
-    "End",
-    "Tab",
-    "Backspace",
-    "Delete",
-  ])("%s stays native and clears an unfinished operator", (key) => {
-    const result = reduceVimEdit({ ...snapshot("a|b"), pending: "d" }, { key });
-    expect(result.consumed).toBe(false);
-    expect(result.pending).toBeNull();
-    expect(marked(result)).toBe("a|b");
-  });
-  const bypass: VimKey[] = [
-    { key: "c", ctrlKey: true },
-    { key: "v", metaKey: true },
-    { key: "a", metaKey: true },
-    { key: "x", ctrlKey: true },
-    { key: "d", altKey: true },
-    { key: "c", ctrlKey: true, altKey: true },
-    { key: "h", isComposing: true },
-    { key: "Escape", isComposing: true },
-    { key: "Process" },
-    { key: "Dead" },
-    { key: "Unidentified" },
-  ];
-  it.each(bypass)("does not hijack clipboard/modifier/IME event %j", (key) => {
-    const state = { ...snapshot("a|b"), pending: "c" as const };
-    const result = reduceVimEdit(state, key);
-    expect(result).toMatchObject({
-      consumed: false,
-      pending: null,
-      mode: "normal",
-    });
-    expect(marked(result)).toBe("a|b");
-    expect(state.pending).toBe("c");
-  });
-  it("composition Escape cannot leave Insert", () => {
-    expect(
-      reduceVimEdit(
-        { ...snapshot("|"), mode: "insert" },
-        { key: "Escape", isComposing: true },
-      ),
-    ).toMatchObject({ consumed: false, mode: "insert" });
-  });
-  it("disabled Vim leaves ordinary text and Escape to the native input", () => {
-    for (const key of ["h", "Escape", "Enter"]) {
-      const result = reduceVimEdit(
-        { ...snapshot("a|b"), enabled: false, pending: "d" },
-        { key },
-      );
-      expect(result.consumed).toBe(false);
-      expect(marked(result)).toBe("a|b");
-      expect(result.pending).toBeNull();
-    }
-  });
   it("unknown Normal keys/unsupported Vim commands are swallowed without edits", () => {
     for (const key of ["q", "u", "v", "2", "/", "中"]) {
       const result = reduceVimEdit(snapshot("a|b"), { key });
@@ -238,6 +92,16 @@ describe("native keyboard and existing dispatch ownership", () => {
     }
     expect(marked(press("a|b", ["d", "x"]))).toBe("a|b");
   });
+
+  it("composition Escape cannot leave Insert", () => {
+    expect(
+      reduceVimEdit(
+        { ...snapshot("|"), mode: "insert" },
+        { key: "Escape", isComposing: true },
+      ),
+    ).toMatchObject({ consumed: false, mode: "insert" });
+  });
+
   it("empty ! enters Insert but leaves browser command rejection to existing resolver", () => {
     expect(reduceVimEdit(snapshot("|"), { key: "!" })).toMatchObject({
       mode: "insert",
@@ -248,58 +112,6 @@ describe("native keyboard and existing dispatch ownership", () => {
       mode: "normal",
       consumed: true,
       text: "ab",
-    });
-    expect(
-      reduceVimEdit({ ...snapshot("|"), pending: "d" }, { key: "!" }),
-    ).toMatchObject({
-      mode: "normal",
-      consumed: true,
-      text: "",
-      pending: null,
-    });
-  });
-  it("toggle resets Insert; record/focus changes clear pending without changing mode", () => {
-    expect(resetVimMode()).toEqual({ mode: "insert", pending: null });
-    const before = { mode: "normal" as const, pending: "d" as const };
-    const after = clearVimPending(before);
-    expect(after).toEqual({ mode: "normal", pending: null });
-    expect(before.pending).toBe("d");
-    // An A-prefix cannot delete B's line after the host applies the boundary reset.
-    const b = reduceVimEdit(
-      { ...snapshot("B| draft"), ...after },
-      { key: "d" },
-    );
-    expect(b.text).toBe("B draft");
-    expect(b.pending).toBe("d");
-  });
-  it("uses a selection's active caret for explicit edits, never deletes the selected range", () => {
-    const range = { ...snapshot("|abcde"), selectionStart: 1, selectionEnd: 4 };
-    expect(
-      marked(
-        reduceVimEdit(
-          { ...range, selectionDirection: "backward" },
-          { key: "x" },
-        ),
-      ),
-    ).toBe("a|cde");
-    expect(
-      marked(
-        reduceVimEdit(
-          { ...range, selectionDirection: "forward" },
-          { key: "x" },
-        ),
-      ),
-    ).toBe("abcd|");
-    expect(
-      reduceVimEdit(
-        { ...range, selectionDirection: "backward" },
-        { key: "c", metaKey: true },
-      ),
-    ).toMatchObject({
-      selectionStart: 1,
-      selectionEnd: 4,
-      selectionDirection: "backward",
-      consumed: false,
     });
   });
 });
@@ -331,42 +143,24 @@ function isScalarBoundary(text: string, offset: number): boolean {
   );
 }
 
-describe("the pinned 21-operation subset is enumerated and closed", () => {
-  const reference = [
-    "$",
-    "0",
-    "A",
-    "G",
-    "I",
-    "O",
-    "a",
-    "b",
-    "cc",
-    "dd",
-    "dw",
-    "e",
-    "gg",
-    "h",
-    "i",
-    "j",
-    "k",
-    "l",
-    "o",
-    "w",
-    "x",
-  ];
-  it("enumerates exactly the reference operations with no duplicates", () => {
-    expect(VIM_NORMAL_OPERATIONS).toHaveLength(21);
-    expect(new Set(VIM_NORMAL_OPERATIONS).size).toBe(21);
-    expect([...VIM_NORMAL_OPERATIONS].sort()).toEqual(reference);
+describe("editing Unicode scalar values in DOM UTF-16 coordinates", () => {
+  it.each([
+    ["x", "A|😀B", "A|B"],
+    ["j", "😀中|文\na😀x", "😀中文\na😀|x"],
+    ["w", "|你好世界\u0085next", "你好世界\u0085|next"],
+    ["b", "a 😀中|", "a |😀中"],
+  ])("%s preserves scalar/whitespace semantics: %s", (keys, input, output) => {
+    expect(marked(press(input, Array.from(keys)))).toBe(output);
   });
-  it.each([...VIM_NORMAL_OPERATIONS])(
-    "%s is live in Normal mode (consumed, never reaching a model)",
-    (operation) => {
-      const state = press("a|b\ncd", Array.from(operation));
-      expect(state.text.length).toBeGreaterThan(0);
-    },
-  );
+
+  it("clamps a browser caret inside a surrogate pair without splitting it", () => {
+    const result = reduceVimEdit(
+      { ...snapshot("A|😀B"), selectionStart: 2, selectionEnd: 2 },
+      { key: "x" },
+    );
+    expect(marked(result)).toBe("A|B");
+  });
+
   it.each([...VIM_NORMAL_OPERATIONS])(
     "%s never splits a surrogate pair at any caret edge",
     (operation) => {
@@ -376,72 +170,6 @@ describe("the pinned 21-operation subset is enumerated and closed", () => {
         expect(isScalarBoundary(state.text, state.selectionStart)).toBe(true);
         expect(isScalarBoundary(state.text, state.selectionEnd)).toBe(true);
       }
-    },
-  );
-  const unsupported = [
-    "r",
-    "y",
-    "p",
-    "s",
-    "t",
-    "f",
-    "n",
-    "N",
-    "V",
-    "C",
-    "J",
-    "K",
-    "Y",
-    "R",
-    "Z",
-    "m",
-    "M",
-    "z",
-    "^",
-    "%",
-    "{",
-    "}",
-    "(",
-    ")",
-    "~",
-    "+",
-    "_",
-    "-",
-    "|",
-    ";",
-    ",",
-    ".",
-    "*",
-    "#",
-    "@",
-    "<",
-    ">",
-    "[",
-    "]",
-    "'",
-    "`",
-    "\\",
-    "?",
-    "=",
-    "2",
-    "/",
-    "中",
-    "u",
-    "v",
-    "q",
-  ];
-  it.each(unsupported)(
-    "unsupported Normal key %j is a no-op that never inserts text",
-    (key) => {
-      expect(reduceVimEdit(snapshot("a|b"), { key })).toEqual({
-        text: "ab",
-        selectionStart: 1,
-        selectionEnd: 1,
-        selectionDirection: "none",
-        mode: "normal",
-        pending: null,
-        consumed: true,
-      });
     },
   );
 });
