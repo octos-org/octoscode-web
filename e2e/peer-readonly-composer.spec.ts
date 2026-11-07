@@ -145,11 +145,16 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await expect(sessionRows(page).filter({ hasText: slug })).toHaveCount(0);
   const peerRow = page.locator(`button[data-peer-slug="${slug}"]`);
   await expect(peerRow).toContainText(slug);
-  await peerRow.click();
+  // Activated without moving focus (as assistive tech can), so the composer
+  // still holds focus when it turns read-only.
+  await composer(page).focus();
+  await peerRow.dispatchEvent("click");
 
-  // The peer surface replaces the editable textarea with one aligned status.
+  // The peer surface replaces the editable textarea with one aligned status,
+  // and focus lands on it instead of dropping to the page (a11y review 0800 §1).
   await expect(composer(page)).toHaveCount(0);
   await expect(hint(page)).toBeVisible();
+  await expect(hint(page)).toBeFocused();
   await expect(hint(page)).toContainText("read-only");
   await expect(hint(page)).toContainText(slug);
   await expect(
