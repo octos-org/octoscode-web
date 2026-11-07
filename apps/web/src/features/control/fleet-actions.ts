@@ -7,93 +7,17 @@ import { randomUUID } from "../../shared/uuid.ts";
  * after an uncertain outcome reuses that id").
  *
  * PURE state (no React, no I/O) so it runs under node. The component holds ONE
- * `FleetStartState`; this module derives every transition:
+ * `FleetStartState`; the caller's sink reports how a Start settled (accepted,
+ * or failed with a bounded kind and the brief retained), and this module
+ * covers the form's own moves:
  *   idle → (begin: model + non-blank brief, no repeat) requesting
- *   requesting → settle: accepted (receipt identity) | failed (bounded kind,
- *                brief retained for retry)
- *   uncertain ack → retry KEEPS the operation id (server replays or reports
- *                the conflict; §6 row "no receipt within 15 s").
+ *   unknown → retry re-enters requesting with the SAME operation id (server
+ *             replays or reports the conflict; §6 row "no receipt within 15 s").
  *
  * The acquire (CAS on the observed revision) and the ONE `peer/dispatch` frame
  * stay in the caller's sink (use-octos-session's existing seams); this machine
  * only decides WHAT is in flight and WHAT the operator sees.
  */
-
-/** The CAS basis for ONE Start acquire, as `session/driver/get` disclosed it. */
-export interface FleetStartAcquireBasis {
-  /** This browser's stable driver id (octoscode-web:<uuid>). */
-  readonly driverId: string;
-  /** The OBSERVED revision; null when the inventory walk never completed. */
-  readonly observedRevision: number | null;
-}
-
-/** The proof ONE Start dispatch is fenced with (from the acquire reply). */
-export interface FleetStartProof {
-  readonly driverId: string;
-  readonly epoch: number;
-  readonly controlToken: string;
-}
-
-/** The dispatch frame ONE Start sends (camelCase; the leaf owns the wire). */
-export interface FleetStartDispatchFrame {
-  readonly driverId: string;
-  readonly epoch: number;
-  readonly controlToken: string;
-  readonly operationId: string;
-  readonly model: string;
-  readonly dispatch: {
-    readonly kind: "new_brief";
-    readonly brief: string;
-    readonly title: string;
-  };
-}
-
-/**
- * Fixes 4230: the acquire frame ONE Start sends — CAS on the OBSERVED revision
- * (design §5.2/§5.4: Start is the ONLY implicit acquisition, so START ITSELF
- * must acquire). Pure and IDEMPOTENT per machine state: the caller sends the
- * frame once; rebuilding it from the SAME state returns an equal value (never
- * a second acquire). Null when the revision is unknown — there is no CAS
- * basis, so nothing is sent (the operator sees the walk-failed copy).
- */
-export function buildFleetStartAcquire(
-  state: FleetStartState,
-  basis: FleetStartAcquireBasis,
-): { driverId: string; expectedRevision: number; leaseSeconds: number } | null {
-  if (state.kind !== "requesting") return null;
-  if (basis.observedRevision === null) return null;
-  if (basis.driverId === "") return null;
-  return {
-    driverId: basis.driverId,
-    expectedRevision: basis.observedRevision,
-    // The hook's own bounded lease; mirrored so the frame is complete.
-    leaseSeconds: 120,
-  };
-}
-
-/**
- * Fixes 4230: the dispatch frame ONE Start sends — fenced with the JUST-
- * acquired proof, carrying the machine's operation id (the replay key), the
- * chosen lane and the brief. Null when no proof is held: the OLD bug's exact
- * class (a dispatch planned with a fence nobody acquired sent NOTHING and the
- * row rested in 'Starting' for 150 s — live evidence 4200c s8).
- */
-export function buildFleetStartDispatch(
-  state: FleetStartState,
-  proof: FleetStartProof | null,
-): FleetStartDispatchFrame | null {
-  if (state.kind !== "requesting") return null;
-  if (proof === null) return null;
-  const title = state.brief.split("\n", 1)[0]?.slice(0, 60) ?? "";
-  return {
-    driverId: proof.driverId,
-    epoch: proof.epoch,
-    controlToken: proof.controlToken,
-    operationId: state.operationId,
-    model: state.laneKey,
-    dispatch: { kind: "new_brief", brief: state.brief, title },
-  };
-}
 
 /** The Start form's observable state. All copy is presentation-only. */
 export type FleetStartState =
@@ -140,15 +64,6 @@ export type FleetStartState =
 
 export const FLEET_START_IDLE: FleetStartState = Object.freeze({
   kind: "idle",
-}) as FleetStartState;
-
-/** A REQUESTING sentinel for callers that cannot construct one (tests only). */
-export const FLEET_START_REQUESTING: FleetStartState = Object.freeze({
-  kind: "requesting",
-  laneKey: "",
-  brief: "",
-  operationId: "",
-  attempt: 1,
 }) as FleetStartState;
 
 /** A minted operation id. Test seams inject a deterministic id. */
@@ -201,54 +116,6 @@ export function fleetStartSettle(
     brief: state.brief,
     operationId: state.operationId,
     slug: receipt.slug,
-  };
-}
-
-/**
- * Settle a FAILED Start: the bounded typed refusal kind is kept and the brief
- * is RETAINED (design §6 "kept: brief"), so the operator retries without
- * retyping. The operation id is kept too — a retry of the SAME staging reuses
- * it; a NEW Start (edit + begin) mints a fresh one through `fleetStartBegin`
- * after the caller resets to idle.
- */
-export function fleetStartFailure(
-  state: FleetStartState,
-  refusalKind: string,
-): FleetStartState {
-  if (state.kind !== "requesting") return state;
-  return {
-    kind: "failed",
-    laneKey: state.laneKey,
-    brief: state.brief,
-    operationId: state.operationId,
-    refusalKind,
-  };
-}
-
-/**
- * An UNCERTAIN acknowledgment (no receipt in 15 s, §6): the retry reuses the
- * SAME operation id — the server replays the duplicate or reports
- * `driver_operation_conflict` — so the operator never unknowingly sends a
- * second peer. Null for a non-requesting state.
- */
-export function fleetStartRetryKeepsOperationId(
-  state: FleetStartState,
-): FleetStartState | null {
-  if (state.kind !== "requesting") return null;
-  return { ...state, attempt: state.attempt + 1 };
-}
-
-/**
- * Round 4 J2: settle a REQUESTING Start as UNCERTAIN (15 s, no receipt).
- * Retry keeps the operation id; Dismiss (not modeled here) only hides copy.
- */
-export function fleetStartUncertain(state: FleetStartState): FleetStartState {
-  if (state.kind !== "requesting") return state;
-  return {
-    kind: "unknown",
-    laneKey: state.laneKey,
-    brief: state.brief,
-    operationId: state.operationId,
   };
 }
 
