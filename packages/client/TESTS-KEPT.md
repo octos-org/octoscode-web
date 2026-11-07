@@ -77,23 +77,23 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/external-driver-control.test.ts（留 15/39）
 
-| 测试                                                                                 | 类  | 守的性质                                             |
-| ------------------------------------------------------------------------------------ | --- | ---------------------------------------------------- |
-| ${name} fails closed when the feature is missing（it.each）                          | ③   | 门控离线 fail-closed                                 |
-| sends the captured scope, fence id, expected_revision and lease                      | ①   | driverAcquire 线协议                                 |
-| the decoded acquire capability is serialization-safe: no proof in JSON/debug         | ③   | proof 不进 JSON/调试视图                             |
-| release sends the fence, expected_revision and explicit next mode                    | ①   | driverRelease 线协议                                 |
-| dispatch sends the fence, operation id, exact model and target                       | ①   | peerDispatch 线协议                                  |
-| re-invoking the SAME operation re-encodes identically and keeps the ORIGINAL receipt | ④   | 重放幂等，原回执不可变                               |
-| control carries the accepted receipt facts and never the proof                       | ③   | control 回执无 proof                                 |
-| claim sends the fence and treats the cursor as opaque                                | ①   | wakeClaim 线协议+游标不透明                          |
-| dispatch rejects an adopted session that contradicts its slug                        | ③   | 畸形原生身份拒绝（无静默回退族代表）                 |
-| dispatch decodes the accepted turn-id form ${form}（it.each）                        | ④   | 回执 turn id 覆盖 Rust UUID 全形状（control 变体删） |
-| driverGet stays read-only: it never acquires and carries no proof                    | ⑤   | 只读面绝不隐式获取                                   |
-| control methods require an explicitly supplied proof argument                        | ③   | proof 必须显式传                                     |
-| refuses a control call with NO proof argument, offline (zero wire traffic)           | ③   | 无 proof 零线流量拒绝                                |
-| a rejected control RPC never echoes the raw server payload or proof                  | ③   | 拒绝不反显服务器原文/proof                           |
-| keeps the constructing session/topic for every control method                        | ④   | 构造期 scope 冻结，不重解析                          |
+| 测试                                                                                 | 类  | 守的性质                             |
+| ------------------------------------------------------------------------------------ | --- | ------------------------------------ |
+| ${name} fails closed when the feature is missing（it.each）                          | ③   | 门控离线 fail-closed                 |
+| sends the captured scope, fence id, expected_revision and lease                      | ①   | driverAcquire 线协议                 |
+| the decoded acquire capability is serialization-safe: no proof in JSON/debug         | ③   | proof 不进 JSON/调试视图             |
+| release sends the fence, expected_revision and explicit next mode                    | ①   | driverRelease 线协议                 |
+| dispatch sends the fence, operation id, exact model and target                       | ①   | peerDispatch 线协议                  |
+| re-invoking the SAME operation re-encodes identically and keeps the ORIGINAL receipt | ④   | 重放幂等，原回执不可变               |
+| control carries the accepted receipt facts and never the proof                       | ③   | control 回执无 proof                 |
+| claim sends the fence and treats the cursor as opaque                                | ①   | wakeClaim 线协议+游标不透明          |
+| dispatch rejects an adopted session that contradicts its slug                        | ③   | 畸形原生身份拒绝（无静默回退族代表） |
+| receipt turn identifiers cover every Rust Uuid::parse_str form（it.each）            | ④   | 回执 turn id 覆盖 Rust UUID 全形状   |
+| driverGet stays read-only: it never acquires and carries no proof                    | ⑤   | 只读面绝不隐式获取                   |
+| control methods require an explicitly supplied proof argument                        | ③   | proof 必须显式传                     |
+| refuses a control call with NO proof argument, offline (zero wire traffic)           | ③   | 无 proof 零线流量拒绝                |
+| a rejected control RPC never echoes the raw server payload or proof                  | ③   | 拒绝不反显服务器原文/proof           |
+| keeps the constructing session/topic for every control method                        | ④   | 构造期 scope 冻结，不重解析          |
 
 ### tests/external-driver-lease-control.test.ts（留 4/12）
 
@@ -120,16 +120,16 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/external-driver-peer-control.test.ts（留 8/26）
 
-| 测试                                                                         | 类  | 守的性质                           |
-| ---------------------------------------------------------------------------- | --- | ---------------------------------- |
-| refuses when the feature is not advertised                                   | ③   | 能力门控最先（离线零 RPC）         |
-| dispatch: a reply matching the MUTATED foreign operation/model is refused    | ④   | post-send 变更不可重定向解码围栏   |
-| refuses a valid-SHAPE foreign-master receipt (same slug, other base)         | ③   | 回执围栏到捕获 master/profile      |
-| rejects cross-variant command fields OFFLINE (zero RPC)                      | ③   | 跨变体命令字段离线拒绝             |
-| a bad control fence reports peer/control, never peer/dispatch, and no proof  | ③   | 围栏诊断点名真实方法且不泄漏       |
-| refuses a FOREIGN lane even when the resolved model LOOKS like the request   | ③   | 围栏请求的 lane 而非解析模型       |
-| REJECTS caller-injected session_id/model/workspaceRoot OFFLINE (zero frames) | ③   | 注入字段离线拒绝                   |
-| maps state:'refused' to ExternalDriverRefusalError('peer_control_refused')   | ④   | 类型化拒绝解码（非泛化 malformed） |
+| 测试                                                                        | 类  | 守的性质                           |
+| --------------------------------------------------------------------------- | --- | ---------------------------------- |
+| refuses when the feature is not advertised                                  | ③   | 能力门控最先（离线零 RPC）         |
+| dispatch: a reply matching the MUTATED foreign operation/model is refused   | ④   | post-send 变更不可重定向解码围栏   |
+| refuses a valid-SHAPE foreign-master receipt (same slug, other base)        | ③   | 回执围栏到捕获 master/profile      |
+| rejects cross-variant command fields OFFLINE (zero RPC)                     | ③   | 跨变体命令字段离线拒绝             |
+| a bad control fence reports peer/control, never peer/dispatch, and no proof | ③   | 围栏诊断点名真实方法且不泄漏       |
+| refuses a FOREIGN lane even when the resolved model LOOKS like the request  | ③   | 围栏请求的 lane 而非解析模型       |
+| REJECTS caller-injected session_id/model/workspaceRoot OFFLINE              | ③   | 注入字段离线拒绝                   |
+| maps state:'refused' to ExternalDriverRefusalError('peer_control_refused')  | ④   | 类型化拒绝解码（非泛化 malformed） |
 
 ### tests/external-driver-receipt.test.ts（留 7/28）
 
@@ -150,7 +150,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | accepts exactly one of payload / continuation_ref (absent or null)               | ③   | decidable-content 规则（present/absent/null 全组合） |
 | refuses ambiguous, empty, or unserializable content with a bounded typed failure | ④   | 环载荷等有界类型化失败                               |
 | freezes a CLONE and leaves the caller's raw payload unfrozen                     | ④   | 克隆冻结不冻调用方                                   |
-| preserves an own JSON \"**proto**\" key without prototype pollution              | ③   | 原型污染防护                                         |
+| preserves an own JSON "**proto**" key without prototype pollution                | ③   | 原型污染防护                                         |
 
 ### tests/external-driver.test.ts（留 16/61）
 
@@ -208,24 +208,13 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/inventory.test.ts（留 16/19）
 
-| 测试                                                                      | 类  | 守的性质                                            |
-| ------------------------------------------------------------------------- | --- | --------------------------------------------------- |
-| accepts actual nullable MCP fields from the rc11 reported inventory       | ④   | rc11 可空字段                                       |
-| projects MCP management fields without connector configuration            | ③   | 连接器配置/令牌不投影                               |
-| projects the T-0056 management facts and nothing else from the allowlist  | ③   | 管理事实白名单                                      |
-| projects only status fields and rejects duplicate or wrong-scope rows     | ③   | 只投影 status 字段 + 重复/错 scope 拒绝             |
-| rejects malformed nullable fields and unsafe counts                       | ④   | 畸形可空字段与 unsafe counts                        |
-| gates each status method before sending and validates returned scope      | ③   | 门控 + 返回 scope 校验（含错 scope connector 变体） |
-| sends exact connector management payloads without reading status          | ①   | 连接器管理 payload 精确                             |
-| reads what the server saved from Core's real create result                | ⑤   | Core 4748d11b 真实 create 结果                      |
-| a mutation result it can't read yields no connector, not an error         | ④   | 不可读 mutation 不报错不给 connector                |
-| marks a connector the server already lists, and carries a rebuild failure | ④   | 已列连接器的 rebuild 失败携带                       |
-| creates a stdio connector from an allowlist entry, never a command        | ③   | stdio 走 allowlist 绝不给 command                   |
-| uses method capabilities when Core #2912 omits the feature                | ⑤   | #2912 method-capability 回退                        |
-| reads a started sign-in and keeps the token storage out                   | ③   | token_storage 不投影                                |
-| opens only a web page                                                     | ③   | sign-in 只开 https 网页（javascript:/data: 拒绝）   |
-| sends the exact sign-in payloads                                          | ①   | sign-in payload 精确                                |
-| refuses a start result it can't open, and methods it wasn't offered       | ③   | 不可开结果/未提供方法 fail-closed                   |
+T-0491 已合并同类项，现存几乎都是独立链：rc11 可空字段（④）、连接器配置/令牌不投影（③）、T-0056 管理事实白名单（③）、旧服务器无 facts（④）、只投影 status 字段+重复/错 scope 行拒绝（③）、畸形可空字段与 unsafe
+counts（④）、门控+返回 scope 校验（③）、连接器管理 payload 精确（①）、Core
+4748d11b 真实 create 结果（⑤）、#2912
+method-capability 回退（⑤）、sign-in 只开网页（③
+javascript:/data: 安全）、sign-in
+payload 精确（①）、token_storage 不投影（③）、畸形 facts
+it.each（④）、不可读 mutation 不给 connector 不报错（④）、stdio 连接器走 allowlist 绝不给 command（③）。
 
 ### tests/media.test.ts（留 3/5）
 
@@ -272,9 +261,9 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/protocol-id.test.ts（留 1 矩阵）
 
-| 测试                                                                    | 类  | 守的性质                                                             |
-| ----------------------------------------------------------------------- | --- | -------------------------------------------------------------------- |
-| accepts/rejects/${label}/${baseName}+${termName} 循环矩阵（it.each ×4） | ④/⑤ | Rust uuid 1.20 try_parse 逐字节 parity（parser.rs 147-162 注释链接） |
+| 测试                                                                                 | 类  | 守的性质                                                             |
+| ------------------------------------------------------------------------------------ | --- | -------------------------------------------------------------------- |
+| isProtocolUuid Rust-parity 形状矩阵（accepted/rejected/非字符串/行终止符，循环展开） | ④/⑤ | Rust uuid 1.20 try_parse 逐字节 parity（parser.rs 147-162 注释链接） |
 
 ### tests/research.test.ts（留 2/5）
 
@@ -422,11 +411,11 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/usage.test.ts（留 3/8）
 
-| 测试                                                                       | 类  | 守的性质                                 |
-| -------------------------------------------------------------------------- | --- | ---------------------------------------- |
-| parses what a real Core returns, keeping the server's own groupings        | ①/⑤ | #1376 真实 Core 回执解析，保留服务器分组 |
-| sends the token only as a header, with the exact routes and RFC 3339 range | ③   | 令牌只走 header + 精确路由               |
-| classifies failures without projecting response bodies                     | ③   | 失败分类不投影响应体                     |
+| 测试                                                                         | 类  | 守的性质                                 |
+| ---------------------------------------------------------------------------- | --- | ---------------------------------------- |
+| parses what a real Core returns, keeping the server's own groupings          | ①/⑤ | #1376 真实 Core 回执解析，保留服务器分组 |
+| sends the token only as a header, with the exact routes and RFC 3339 request | ③   | 令牌只走 header + 精确路由               |
+| classifies failures without projecting response bodies                       | ③   | 失败分类不投影响应体                     |
 
 ## 执行备注（T-0503）
 
