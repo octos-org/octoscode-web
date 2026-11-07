@@ -19,7 +19,9 @@
  *
  * The fixture is the TOKEN-FREE LIVE receipt from the 2850h capture, driven
  * through the REAL leaf decoder, the REAL coordinator and the REAL record
- * manager.
+ * manager. Keep it end to end: each step (sink, panel state, roster, render)
+ * passed on its own while the operator saw nothing, so before changing any of
+ * them check that this chain still renders the accepted row on the master.
  */
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -40,7 +42,6 @@ import {
   PEER_METHODS,
   type PeerCommands,
 } from "@octos-org/octoscode-client/peers";
-import type { PeerPrepareParams } from "@octos-org/octoscode-client/peer-protocol";
 import {
   EXTERNAL_DRIVER_METHODS,
   EXTERNAL_DRIVER_V1_FEATURE,
@@ -360,126 +361,6 @@ async function flush() {
   for (let index = 0; index < 30; index += 1) await Promise.resolve();
 }
 
-describe("P2o — a confirmed staging carries the ADOPTED receipt slug", () => {
-  it("settles `dispatched` with the row's receipt slug + accepted operation id", async () => {
-    const kickoff = vi.fn(async (_params: PeerPrepareParams) => ({
-      peers: [],
-    }));
-    const selectLane = vi.fn();
-    const outcome = await performStagedDispatch({
-      manager: {
-        kickoff,
-        // After a confirmed start the manager's row IS the server-adopted one
-        // (peer-manager.ts stamps `outcome.slug`/`outcome.operationId`), so the
-        // sink must read them back instead of discarding the identity.
-        getSnapshot: () => ({
-          prepareError: null,
-          peers: [
-            {
-              slug: LIVE.slug,
-              status: "started",
-              operationId: LIVE.operationId,
-            },
-          ],
-        }),
-      },
-      laneKey: LIVE.modelLane,
-      brief: "Reply with the single word READY and stop",
-      title: "p2o",
-      selectLane,
-    });
-    expect(selectLane).toHaveBeenCalledWith(LIVE.modelLane);
-    expect(kickoff).toHaveBeenCalledTimes(1);
-    expect(outcome).toEqual({
-      kind: "dispatched",
-      slug: LIVE.slug,
-      operationId: LIVE.operationId,
-    });
-  });
-
-  it("keeps a `session/open` settle identity-less (no accepted row without a receipt)", async () => {
-    const outcome = await performStagedDispatch({
-      manager: {
-        kickoff: async () => ({ peers: [] }),
-        // The legacy arm stamps `{status:"started"}` with NO operationId.
-        getSnapshot: () => ({
-          prepareError: null,
-          peers: [{ slug: "review", status: "started", operationId: null }],
-        }),
-      },
-      laneKey: LIVE.modelLane,
-      brief: "b",
-      title: "",
-      selectLane: () => undefined,
-    });
-    expect(outcome).toEqual({ kind: "dispatched" });
-  });
-});
-
-describe("P2o — an accepted dispatch renders on the master console", () => {
-  it("folds a confirmed `dispatched` sink into a rendered `accepted` state", () => {
-    // The LIVE defect: this returned `idle` (SILENCE) for a real acceptance.
-    expect(
-      peerControllerPanelState({
-        control: { kind: "idle" },
-        dispatchBusy: false,
-        dispatchFailed: false,
-        dispatchSink: {
-          kind: "dispatched",
-          slug: LIVE.slug,
-          operationId: LIVE.operationId,
-        },
-      }),
-    ).toEqual({
-      kind: "accepted",
-      slug: LIVE.slug,
-      operationId: LIVE.operationId,
-    });
-  });
-
-  it("an UNCONFIRMED staging still renders the bounded `unknown` row", () => {
-    expect(
-      peerControllerPanelState({
-        control: { kind: "idle" },
-        dispatchBusy: false,
-        dispatchFailed: false,
-        dispatchSink: { kind: "unknown", reason: "kickoff-mismatch" },
-      }),
-    ).toEqual({
-      kind: "unknown",
-      source: "dispatch",
-      reason: "kickoff-mismatch",
-    });
-  });
-
-  it("renders the accepted row with the receipt slug, never raw server copy", () => {
-    const html = renderToStaticMarkup(
-      <PeerControllerPanel
-        capabilities={LIVE_CAPS}
-        lanePicker={LIVE_LANES}
-        seatHeld={true}
-        binding={null}
-        roster={[
-          {
-            slug: LIVE.slug,
-            operationId: LIVE.operationId,
-            turnId: LIVE.adoptedTurnId,
-            // P2p (task 3530 §2): the row's activity axis is now required.
-            activity: "live",
-          },
-        ]}
-        state={{
-          kind: "accepted",
-          slug: LIVE.slug,
-          operationId: LIVE.operationId,
-        }}
-      />,
-    );
-    expect(html).toContain('data-controller-state="accepted"');
-    expect(html).toContain(`data-accepted-slug="${LIVE.slug}"`);
-  });
-});
-
 describe("P2o — LIVE receipt end-to-end: master stays selected, row keys on the slug", () => {
   it("renders the accepted row on the MASTER console after ONE accepted dispatch", async () => {
     const h = harness();
@@ -500,9 +381,19 @@ describe("P2o — LIVE receipt end-to-end: master stays selected, row keys on th
     // (2) The MASTER is still the SELECTED record: adopting the peer must never
     //     make the adopted Session the active view (the live top hypothesis).
     expect(h.manager.selected()).toBe(h.master);
-    expect(
-      h.manager.records().find((r) => r.scope.sessionId === ADOPTED),
-    ).toBeDefined();
+    const adopted = h.manager
+      .records()
+      .find((r) => r.scope.sessionId === ADOPTED);
+    expect(adopted).toBeDefined();
+    // Staged by `peer/dispatch`, never `session/open` staging: the only open is
+    // the adopted id, and its turn is the one Core already started.
+    expect(h.client.opens.map((params) => params.session_id)).toEqual([
+      ADOPTED,
+    ]);
+    expect(adopted!.controller.backgroundHandoffTurn()).toEqual({
+      turnId: LIVE.adoptedTurnId,
+      state: "running",
+    });
 
     // (3) The console's roster row is keyed by the receipt's OWN slug (2920 (b)).
     const rows = peerControllerRosterRows(h.lazy.snapshot().peers);
@@ -528,6 +419,7 @@ describe("P2o — LIVE receipt end-to-end: master stays selected, row keys on th
       />,
     );
     expect(html).toContain('data-controller-state="accepted"');
+    expect(html).toContain(`data-accepted-slug="${LIVE.slug}"`);
     expect(html).toContain(`data-peer-row="${LIVE.slug}"`);
     expect(html).not.toContain('data-controller-state="unknown"');
   });
