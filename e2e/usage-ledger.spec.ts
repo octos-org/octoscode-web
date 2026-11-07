@@ -314,15 +314,17 @@ test("periods follow the server's UTC clock, never the browser's", async ({
   });
   const page = await context.newPage();
   try {
-    await mode(
-      request,
-      "mode=ok&date=" + encodeURIComponent("Fri, 06 Nov 2026 00:10:00 GMT"),
-    );
     const workspace = `/workspace/usage-utc-${Date.now()}`;
     await seed(request, workspace, [
       { session: 0, at: "2026-11-05T23:30:00.000Z", model: UNPRICED, input: 9 },
       { session: 1, at: "2026-11-06T00:05:00.000Z", model: UNPRICED, input: 9 },
     ]);
+    // The seed's reset clears the fixture's controls, so pin the server's
+    // clock AFTER seeding — never rely on the real date matching the runs.
+    await mode(
+      request,
+      "mode=ok&date=" + encodeURIComponent("Fri, 06 Nov 2026 00:10:00 GMT"),
+    );
     const usage = await openUsage(page, workspace);
     await usage.getByRole("radio", { name: "Today" }).check();
     // Only the 00:05 UTC run counts; the window sent is the UTC midnight —
