@@ -354,7 +354,7 @@ test("thread, turn and remembered-scope inspectors use exact owners and discard 
   expect(probe.calls("approval/scopes/clear")).toHaveLength(0);
 });
 
-test("Enter steers a compatible running turn by default — no /steer on needed", async ({
+test("Enter steers a compatible running turn by default, while the Queue control defers it", async ({
   page,
   request,
 }) => {
@@ -382,35 +382,20 @@ test("Enter steers a compatible running turn by default — no /steer on needed"
   });
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
 
-  // Tab still queues deliberately: the steer path must not swallow it.
-  await page.keyboard.press("Tab");
-  await expect.poll(() => probe.calls("turn/steer").length).toBe(1);
-});
-
-test("the Queue control defers compatible input that Enter would steer", async ({
-  page,
-  request,
-}) => {
-  const probe = observe(page);
-  await connect(page, probe, "steering-queue");
-  expect(
-    (await request.post(`${ORIGIN}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
-  await submit(page, "Queue-control active owner");
-  await expect.poll(() => probe.calls("turn/start").length).toBe(1);
-  const first = probe.calls("turn/start")[0]!;
-  await probe.settled(first);
-
+  // The Queue control defers compatible input that Enter would steer: the
+  // text rides the existing FIFO as a pending turn, never a second steer.
   const composer = page.getByPlaceholder(COMPOSER);
   await composer.fill("Explicitly queued after the active turn");
   await page.getByRole("button", { name: "Queue", exact: true }).click();
-  await expect.poll(() => probe.calls("turn/steer").length).toBe(0);
-  expect(probe.calls("turn/interrupt")).toHaveLength(0);
-  // The queued text rides the existing FIFO — visible as a pending turn.
   await expect(
     page.getByText("Explicitly queued after the active turn"),
   ).toBeVisible();
-  void first;
+  expect(probe.calls("turn/steer")).toHaveLength(1);
+  expect(probe.calls("turn/interrupt")).toHaveLength(0);
+
+  // Tab still queues deliberately: the steer path must not swallow it.
+  await page.keyboard.press("Tab");
+  await expect.poll(() => probe.calls("turn/steer").length).toBe(1);
 });
 
 test("a dropped native steer returns once to its owning FIFO while a different Session is selected", async ({
@@ -742,7 +727,7 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
   expect(await selectedSessionId(page)).toContain(b.sessionId);
 });
 
-test("native maintenance, self-paced and fixed loops send one typed creation each without automatic firing", async ({
+test("native maintenance, self-paced and fixed loops send one typed creation each, and only an explicit fire now runs a loop without changing its status", async ({
   page,
   request,
 }) => {
@@ -813,6 +798,62 @@ test("native maintenance, self-paced and fixed loops send one typed creation eac
     .getByRole("list", { name: "Loop list" })
     .getByRole("listitem")
     .filter({ hasText: "Native fixed interval check" });
+  const created = probe.calls("loop/create")[2]!;
+  await probe.settled(created);
+  const createdReply = probe.received.find((frame) => frame.id === created.id);
+  const loopId = (createdReply?.result as { loop_id?: string } | undefined)
+    ?.loop_id;
+  if (typeof loopId !== "string")
+    throw new Error("Expected a created native loop id");
+  // Creation never fires a loop; only the explicit control does.
+  expect(probe.calls("loop/fire_now")).toHaveLength(0);
+  await expect(row.getByRole("button", { name: /^Fire loop / })).toBeEnabled();
+  await row.getByRole("button", { name: /^Fire loop / }).click();
+  await expect.poll(() => probe.calls("loop/fire_now").length).toBe(1);
+  const fireCall = probe.calls("loop/fire_now")[0]!;
+  await probe.settled(fireCall);
+  expect(fireCall.params).toEqual({
+    session_id: a.sessionId,
+    loop_id: loopId,
+  });
+  const fireReply = probe.received.find((frame) => frame.id === fireCall.id);
+  const fireResult = fireReply?.result as
+    | {
+        ok?: boolean;
+        status?: string;
+        loop_id?: string;
+        loop?: {
+          status?: string;
+          loop_id?: string;
+          last_run_at_ms?: number | null;
+        };
+        fire?: {
+          queued?: boolean;
+          duplicate?: boolean;
+          continuation_id?: number;
+          reason?: string;
+        };
+      }
+    | undefined;
+  expect(fireResult?.ok).toBe(true);
+  expect(fireResult?.loop_id).toBe(loopId);
+  expect(fireResult?.loop?.loop_id).toBe(loopId);
+  // Core returns top-level status "queued" (the enqueue outcome) while the
+  // nested loop record keeps its own unchanged "active" status.
+  expect(fireResult?.status).toBe("queued");
+  expect(fireResult?.loop?.status).toBe("active");
+  expect(fireResult?.fire?.queued).toBe(true);
+  expect(fireResult?.fire?.duplicate).toBe(false);
+  expect(typeof fireResult?.fire?.continuation_id).toBe("number");
+  expect(fireResult?.fire?.reason).toBe("LoopFire");
+  // The fire is visible in the panel's status region.
+  await expect(
+    autonomy(page)
+      .getByRole("status")
+      .filter({ hasText: `${loopId} fired` }),
+  ).toContainText(`${loopId} fired`);
+  // Firing is not pausing: the loop stays active and pause remains available.
+  await expect(row.getByRole("button", { name: /^Pause loop / })).toBeEnabled();
   await row.getByRole("button", { name: /^Pause loop / }).click();
   await expect(
     row.getByRole("button", { name: /^Resume loop / }),
@@ -821,14 +862,13 @@ test("native maintenance, self-paced and fixed loops send one typed creation eac
   await expect(row.getByRole("button", { name: /^Pause loop / })).toBeEnabled();
   await row.getByRole("button", { name: /^Delete loop / }).click();
   await expect(row).toHaveCount(0);
-  const loopId = probe.calls("loop/pause")[0]!.params.loop_id;
   for (const method of ["loop/pause", "loop/resume", "loop/delete"])
     expect(probe.calls(method)[0]!.params).toEqual({
       session_id: a.sessionId,
       loop_id: loopId,
     });
   expect(probe.calls("loop/create")).toHaveLength(3);
-  expect(probe.calls("loop/fire_now")).toHaveLength(0);
+  expect(probe.calls("loop/fire_now")).toHaveLength(1);
   expect(probe.calls("turn/start")).toHaveLength(0);
 });
 
@@ -1201,77 +1241,5 @@ test("native monitors create, list, pause, resume and delete through typed recei
       session_id: a.sessionId,
       monitor_id: monitorId,
     });
-  expect(probe.calls("turn/start")).toHaveLength(0);
-});
-
-test("native fixed-loop fire now sends one typed manual receipt without changing loop status", async ({
-  page,
-}) => {
-  const probe = observe(page);
-  const a = await connect(page, probe, "fire-now");
-  const dialog = await openAutonomy(page, "/loop");
-  const form = dialog.getByRole("form", { name: "Create native loop" });
-  await form.getByLabel("Loop cadence").selectOption("fixed_interval");
-  await form.getByLabel("New loop prompt").fill("Native manual fire loop");
-  await form.getByLabel("Loop interval").fill("5min");
-  await form.getByRole("button", { name: "Create loop", exact: true }).click();
-  const row = dialog
-    .getByRole("list", { name: "Loop list" })
-    .getByRole("listitem")
-    .filter({ hasText: "Native manual fire loop" });
-  const created = probe.calls("loop/create")[0]!;
-  await probe.settled(created);
-  const createdReply = probe.received.find((frame) => frame.id === created.id);
-  const loopId = (createdReply?.result as { loop_id?: string } | undefined)
-    ?.loop_id;
-  if (typeof loopId !== "string")
-    throw new Error("Expected a created native loop id");
-  await expect(row.getByRole("button", { name: /^Fire loop / })).toBeEnabled();
-  await row.getByRole("button", { name: /^Fire loop / }).click();
-  const fireCall = probe.calls("loop/fire_now")[0]!;
-  await probe.settled(fireCall);
-  expect(probe.calls("loop/fire_now")).toHaveLength(1);
-  expect(fireCall.params).toEqual({
-    session_id: a.sessionId,
-    loop_id: loopId,
-  });
-  const fireReply = probe.received.find((frame) => frame.id === fireCall.id);
-  const fireResult = fireReply?.result as
-    | {
-        ok?: boolean;
-        status?: string;
-        loop_id?: string;
-        loop?: {
-          status?: string;
-          loop_id?: string;
-          last_run_at_ms?: number | null;
-        };
-        fire?: {
-          queued?: boolean;
-          duplicate?: boolean;
-          continuation_id?: number;
-          reason?: string;
-        };
-      }
-    | undefined;
-  expect(fireResult?.ok).toBe(true);
-  expect(fireResult?.loop_id).toBe(loopId);
-  expect(fireResult?.loop?.loop_id).toBe(loopId);
-  // Core returns top-level status "queued" (the enqueue outcome) while the
-  // nested loop record keeps its own unchanged "active" status.
-  expect(fireResult?.status).toBe("queued");
-  expect(fireResult?.loop?.status).toBe("active");
-  expect(fireResult?.fire?.queued).toBe(true);
-  expect(fireResult?.fire?.duplicate).toBe(false);
-  expect(typeof fireResult?.fire?.continuation_id).toBe("number");
-  expect(fireResult?.fire?.reason).toBe("LoopFire");
-  // The fire is visible in the panel's status region.
-  await expect(
-    autonomy(page)
-      .getByRole("status")
-      .filter({ hasText: `${loopId} fired` }),
-  ).toContainText(`${loopId} fired`);
-  // Firing is not pausing: the loop stays active and pause remains available.
-  await expect(row.getByRole("button", { name: /^Pause loop / })).toBeEnabled();
   expect(probe.calls("turn/start")).toHaveLength(0);
 });
