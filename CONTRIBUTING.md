@@ -37,6 +37,11 @@ checksummed pinned runtime gate described in
 - Preserve server-owned session, permission, diff, task, and replay truth.
 - Add unit coverage for decoders/reducers and a browser flow for material user
   behavior. Keep accessibility assertions on blocking surfaces.
+- Test lines may not grow on net: the `check` job compares a pull request's test
+  lines with its base and fails on any increase
+  (`node scripts/test-growth.mjs --base origin/main` shows the same numbers
+  locally). Pay for a new test by deleting as much elsewhere, or ask a
+  maintainer (alan0x, BH3GEI, ymote) to add the `test-growth-approved` label.
 - Record a new architectural decision when a change introduces a durable
   boundary or rejects a plausible alternative.
 - Preserve third-party notices for copied or substantially adapted code.
