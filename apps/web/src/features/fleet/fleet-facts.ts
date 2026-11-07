@@ -156,6 +156,8 @@ export interface FleetRosterPeerInput {
   readonly activity?: "idle" | "live" | "blocked" | "done";
   readonly outcome?: "finished" | "stopped" | "failed" | null;
   readonly outputTokens?: number;
+  /** What a blocked row waits on: its pending approval or question. */
+  readonly requestKind?: "approval" | "question" | null;
 }
 
 /** One roster source: the session whose peer manager holds these rows. */
@@ -197,6 +199,8 @@ export interface FleetUnionRow {
   /** Roster live axis (null for inventory-only rows). */
   readonly status: FleetUnionStatus | null;
   readonly activity: FleetRosterPeerInput["activity"] | null;
+  /** The roster's pending request kind (null for inventory-only rows). */
+  readonly requestKind: "approval" | "question" | null;
   readonly tokens: number | null;
   /** "Peer N · model" or "Peer N" — assigned in stable row order, never a slug. */
   readonly label: string;
@@ -265,6 +269,7 @@ export function unionFleetFacts(
       fact,
       status: roster === null ? null : rosterStatusOf(roster),
       activity: roster?.activity ?? null,
+      requestKind: roster?.requestKind ?? null,
       tokens: roster?.outputTokens ?? null,
       // Label assigned below, once the full order is known.
       label: "",
@@ -286,6 +291,7 @@ export function unionFleetFacts(
       fact: null,
       status: rosterStatusOf(roster),
       activity: roster.activity ?? null,
+      requestKind: roster.requestKind ?? null,
       tokens: roster.outputTokens ?? null,
       label: "",
       model: null,

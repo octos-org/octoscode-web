@@ -366,7 +366,13 @@ export function fleetModelOptions(
 export function fleetActionAvailability(input: {
   readonly statusWord: FleetStatusWord;
   readonly steerText?: string;
-}): { approve: boolean; deny: boolean; steer: boolean; stop: boolean } {
+}): {
+  approve: boolean;
+  deny: boolean;
+  answer: boolean;
+  steer: boolean;
+  stop: boolean;
+} {
   const awaitingApproval = input.statusWord === "Waiting for your approval";
   const awaitingAnswer = input.statusWord === "Waiting for your answer";
   const working = input.statusWord === "Working";
@@ -378,6 +384,7 @@ export function fleetActionAvailability(input: {
   return {
     approve: awaitingApproval,
     deny: awaitingApproval,
+    answer: awaitingAnswer,
     steer: working && (input.steerText ?? "").trim() !== "",
     stop,
   };

@@ -16,7 +16,7 @@ export function emptyAnswers(count: number): DraftAnswer[] {
 }
 
 export function toggleQuestionOption(
-  question: UserQuestion,
+  question: Pick<UserQuestion, "multiSelect">,
   answer: DraftAnswer,
   label: string,
 ): DraftAnswer {

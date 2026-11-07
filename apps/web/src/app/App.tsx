@@ -6063,12 +6063,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             peers.rowAction(entry, action, steerText ?? "");
                             return;
                           }
-                          if (
-                            entry.activity === "blocked" &&
-                            entry.requestKind === "question"
-                          ) {
-                            const request = peerAnswerRequest(entry);
-                            if (request) setPeerAnswerRow(entry);
+                          if (action === "answer") {
+                            if (
+                              entry.activity !== "blocked" ||
+                              entry.requestKind !== "question" ||
+                              !peerAnswerRequest(entry)
+                            )
+                              return;
+                            // The card opens over Fleet, which stays put.
+                            setPeerAnswerRow(entry);
                             return;
                           }
                           const command = buildRowControlCommand(

@@ -19,7 +19,12 @@ import {
   type FleetSessionOption,
   type FleetViewProps,
 } from "./FleetView.tsx";
-import type { FleetRosterPeer, FleetStatusWord } from "./fleet-model.ts";
+import {
+  fleetAwaitKind,
+  fleetStatusWord,
+  type FleetRosterPeer,
+  type FleetStatusWord,
+} from "./fleet-model.ts";
 import type { PeerManagerSnapshot } from "../peers/peer-roster.ts";
 import { EMPTY_PEER_SNAPSHOT } from "../peers/peer-roster.ts";
 import { peerApprovalEscalates } from "../peers/peer-row-view.ts";
@@ -120,6 +125,7 @@ export function FleetPane({
             ...(peer.outputTokens !== undefined
               ? { outputTokens: peer.outputTokens }
               : {}),
+            requestKind: peer.requestKind ?? null,
           })),
         },
       ],
@@ -203,7 +209,11 @@ function unionStatusWord(row: FleetUnionRow): FleetStatusWord {
   // Native peers may keep status="started" after activity completes.
   if (row.activity === "done" && row.status === "started")
     return "Finished" as const;
-  if (row.activity === "blocked") return "Waiting for your approval" as const;
+  if (row.activity === "blocked")
+    return fleetStatusWord({
+      phase: "awaiting",
+      kind: fleetAwaitKind(row.requestKind),
+    });
   if (row.status === null) return "Requested" as const;
   switch (row.status) {
     case "opening":

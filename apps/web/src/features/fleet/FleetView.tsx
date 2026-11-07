@@ -63,6 +63,9 @@ export interface FleetSessionOption {
 export type FleetGatherState =
   "idle" | "busy" | "queued" | "empty" | "blocked" | "stale" | "failed";
 
+/** What a Fleet row can ask of its peer. */
+export type FleetRowAction = "approve" | "deny" | "answer" | "steer" | "stop";
+
 export interface FleetViewProps {
   /**
    * The SAME `peerController` value App already derives — the roster rows,
@@ -120,7 +123,7 @@ export interface FleetViewProps {
   /** Sink: one row action addressed to that row's session/turn. */
   readonly onRowAction?: (
     row: { slug: string },
-    action: "approve" | "deny" | "steer" | "stop",
+    action: FleetRowAction,
     steerText?: string,
   ) => void;
   /** Round 2 judge #2: open Settings › Providers (the empty-state link). */
@@ -156,11 +159,10 @@ const STATUS_GLYPH: Readonly<Record<FleetStatusWord, string>> = {
 };
 
 /** §8: the disabled-action reason per action, one line each. */
-const ACTION_REASON: Readonly<
-  Record<"approve" | "deny" | "steer" | "stop", string>
-> = {
+const ACTION_REASON: Readonly<Record<FleetRowAction, string>> = {
   approve: "Only while waiting for approval",
   deny: "Only while waiting for approval",
+  answer: "Only while waiting for your answer",
   steer: "Only while working",
   stop: "Only while the peer is running",
 };
@@ -577,6 +579,8 @@ export function FleetView({
                     sessionName: sessionNameFor(sessions, peer),
                     controlSupported:
                       rowControlSupported && peer.controlSupported,
+                    // Only the peer/control path answers a peer's question.
+                    answerSupported: externalControlSupported,
                     steerText: steerDrafts[peer.slug] ?? "",
                     onSteerText: (value) =>
                       setSteerDrafts((current) => ({
@@ -611,6 +615,7 @@ export function FleetView({
                           peer,
                           sessionName: sessionNameFor(sessions, peer),
                           controlSupported: false,
+                          answerSupported: false,
                           steerText: "",
                           onSteerText: () => undefined,
                           onAction: () => undefined,
@@ -678,6 +683,7 @@ function renderFleetRow({
   peer,
   sessionName,
   controlSupported,
+  answerSupported,
   steerText,
   onSteerText,
   onAction,
@@ -686,12 +692,11 @@ function renderFleetRow({
   readonly peer: FleetRosterPeer;
   readonly sessionName: string;
   readonly controlSupported: boolean;
+  /** Answer opens the app's question card, which only the peer/control path sends. */
+  readonly answerSupported: boolean;
   readonly steerText: string;
   readonly onSteerText: (value: string) => void;
-  readonly onAction: (
-    action: "approve" | "deny" | "steer" | "stop",
-    steerText?: string,
-  ) => void;
+  readonly onAction: (action: FleetRowAction, steerText?: string) => void;
   /** The caller's translation function (the row builder is a plain function). */
   readonly t: (
     source: string,
@@ -740,7 +745,7 @@ function renderFleetRow({
       ) : null}
       {controlSupported && !terminal ? (
         <div className={styles.actions} role="group" aria-label={peer.label}>
-          {(["approve", "deny", "stop"] as const).map((action) => {
+          {(["approve", "deny", "answer", "stop"] as const).map((action) => {
             // Round 4 C5: Approve/Deny render ONLY while an approval is
             // pending (design §4.4) — no clutter of permanently-disabled
             // buttons beside a Working row; the disabled-reason tooltip stays
@@ -751,6 +756,12 @@ function renderFleetRow({
             )
               return null;
             if (action === "approve" && peer.approvalDenyOnly) return null;
+            if (
+              action === "answer" &&
+              (peer.statusWord !== "Waiting for your answer" ||
+                !answerSupported)
+            )
+              return null;
             const enabled = availability[action];
             const reasonId = `${peer.slug}-${action}-reason`;
             return (
@@ -828,11 +839,10 @@ function renderFleetRow({
   );
 }
 
-const ROW_ACTION_LABEL: Readonly<
-  Record<"approve" | "deny" | "steer" | "stop", string>
-> = {
+const ROW_ACTION_LABEL: Readonly<Record<FleetRowAction, string>> = {
   approve: "Approve",
   deny: "Deny",
+  answer: "Answer",
   steer: "Steer {value0}",
   stop: "Stop",
 };
