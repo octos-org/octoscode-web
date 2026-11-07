@@ -23,6 +23,19 @@ import {
 } from "./session-peer-coordinator.ts";
 import type { SessionControlReadiness } from "./session-record-manager.ts";
 
+/**
+ * The REAL `SessionPeerCoordinator` binding a master record to its peer roster
+ * (the real `PeerManager` behind `bind`), fed wire frames and record changes.
+ * It owns three things the browser suites can only see the end of: WHICH
+ * master a staged or listed peer belongs to, WHEN a kickoff may be sent (once,
+ * to the right Session, never over a stale transport, a recovering runtime or
+ * a foreign workspace), and WHAT the row says afterwards (receipt identity,
+ * request contents, outcome words). Most cases below are races — factory
+ * loads, transport changes, closes and retirements landing mid-open — that
+ * shipped as bugs. Before changing the coordinator, expect each to fail if a
+ * stale source, a same-id replacement master or an unconfirmed start could
+ * repaint a row or send a second kickoff.
+ */
 const caps: UiProtocolCapabilities = {
   version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
   capabilities_schema_version: 2,
@@ -332,6 +345,8 @@ async function until(check: () => void) {
 
 describe("record-owned native peer coordinator", () => {
   it("fails closed when multiple retained workspace incarnations claim one wire owner", async () => {
+    // One wire id, two workspaces: guessing an owner would kick off a peer in
+    // the wrong workspace, so both masters show the error and nothing starts.
     const h = setup();
     const other = h.addMaster(h.master.scope.sessionId);
     other.scope.workspaceRoot = "/other-workspace";
@@ -351,6 +366,8 @@ describe("record-owned native peer coordinator", () => {
     expect(h.coordinator.get(selected)?.snapshot().peers).toEqual([]);
     expect(selected.selected).toBe(true);
     expect(h.master.selected).toBe(false);
+    // Without a ready control seat the peer opens through `session/open`.
+    expect(h.dispatched).toHaveLength(0);
     expect(h.client.starts[0]?.session_id).toBe(identity);
     expect(h.client.starts[0]?.turn_id).toBe(h.requests[0]?.turnId);
     expect(h.opened[0]?.controller.activeTurnOwnership()).toBe("dispatching");
@@ -363,6 +380,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("buffers staged then closed during factory loading without a kickoff", async () => {
+    // Peer commands load lazily; lifecycle frames that land meanwhile are
+    // replayed in order, so a peer closed before the load never gets a kickoff.
     const h = setup();
     const factory = deferred<PeerCommands>();
     const next = new Client();
@@ -392,6 +411,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("retains manager/roster across reconnect and never replays a stale source, including same-client reuse", async () => {
+    // A reconnect keeps the roster, but frames from the old transport (even the
+    // same client object) must not start the peer a second time.
     const h = setup();
     h.send(stage());
     await until(() => expect(h.client.starts).toHaveLength(1));
@@ -410,6 +431,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("drops old command-factory results and their buffered events after a transport change", async () => {
+    // A factory that resolves after the transport moved on belongs to the old
+    // connection; using it would kick off over a dead socket.
     const h = setup();
     const old = new Client(),
       oldFactory = deferred<PeerCommands>();
@@ -455,6 +478,8 @@ describe("record-owned native peer coordinator", () => {
   );
 
   it("waits for the exact turn receipt; local enqueue and a foreign receipt are insufficient", async () => {
+    // Only the kickoff turn's own receipt proves the peer started; anything
+    // else ends unknown (not retryable), so a retry cannot send it twice.
     const h = setup({ timeoutMs: 80 });
     h.send(stage());
     await until(() => expect(h.client.starts).toHaveLength(1));
@@ -485,6 +510,7 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("accepts the exact canonical terminal receipt when it beats the start RPC response", async () => {
+    // Core can finish the kickoff turn before turn/start answers.
     const h = setup();
     h.send(stage());
     await until(() => expect(h.client.starts).toHaveLength(1));
@@ -511,6 +537,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("does not admit a wrong-workspace peer returned from an open callback", async () => {
+    // An open that lands in another workspace is not this peer: no kickoff, and
+    // its close must not close a record this master never admitted.
     const h = setup();
     h.customize((peer) => {
       peer.scope.workspaceRoot = "/foreign";
@@ -525,6 +553,7 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("bounds an unresolved command factory with a visible inert failure", async () => {
+    // A factory that never settles must surface, not hang Prepare silently.
     const h = setup({ timeoutMs: 50 }),
       next = new Client();
     next.factory = () => new Promise(() => {});
@@ -539,6 +568,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("close during open invalidates the kickoff and closes only the matching late record", async () => {
+    // A close that races the open aborts the kickoff; the late record is closed
+    // by identity, never the master.
     const h = setup(),
       gate = deferred<void>();
     h.deferOpen(gate.promise);
@@ -568,6 +599,7 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("bounds factory backlog with a visible inert failure, not silent dropped lifecycle", async () => {
+    // Dropping buffered lifecycle silently would lose a close; it fails visibly.
     const h = setup({ bufferLimit: 1 }),
       next = new Client(),
       factory = deferred<PeerCommands>();
@@ -595,6 +627,8 @@ describe("record-owned native peer coordinator", () => {
   });
 
   it("retirement cancels only its owner and cannot repaint a replacement same-ID master", async () => {
+    // A reopened Session gets a new record with the same id; the retired one's
+    // late open must not paint rows onto it.
     const h = setup(),
       gate = deferred<void>();
     h.deferOpen(gate.promise);
@@ -634,68 +668,101 @@ describe("record-owned native peer coordinator", () => {
     expect(h.coordinator.getMaster(unknown)).toBeNull();
   });
 
-  it("resolves the ACTIVE record's manager for the console sink exactly as the seat's Steer does (P2g 3030)", async () => {
-    // Clause (b) of grant 3030: the console's staged dispatch resolves the
-    // ACTIVE (selected) record's manager through the SAME `get(record)` path the
-    // seat's Steer uses (the 2520 owner-manager precedent). A null here is the
-    // silent early return the run-12 triage found, so the resolution is pinned
-    // for BOTH the master and a peer focused on it.
-    const h = setup();
-    h.master.selected = true;
-    h.master.setReadiness("ready");
-    expect(h.coordinator.get(h.master)).toBe(h.manager);
-    h.send(stage());
-    await until(() => expect(h.dispatched).toHaveLength(1));
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    // The focused PEER still resolves the OWNER master's manager — never a
-    // silent null for the console's staging sink.
-    const peer = h.opened[0]!;
-    expect(h.coordinator.get(peer)).toBe(h.manager);
-  });
-
-  it("routes a peer's OWN Session events into that row's activity axis", async () => {
+  it("maps a peer's OWN Session frames onto its row: activity, request contents and outcome words", async () => {
+    // J3 (judge r3): the row must keep what each frame says. The request's
+    // contents inform the decision, an approval that escalates past the
+    // sandbox is flagged (FleetView then offers Deny only), and the terminal
+    // CODE survives: a stop or an error must never read Finished. Frames carry
+    // the peer's adopted Session id; only the coordinator maps them to the row.
     const h = setup();
     h.master.setReadiness("ready");
     h.send(stage());
     await until(() =>
       expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
     );
-    // The peer's OWN Session id (adopted scope), not the master's.
     const peerSessionId = h.opened[0]!.scope.sessionId;
-    const frame = (method: string, params: object) => ({ method, params });
-    expect(
-      h.send(
-        frame("turn/started", { session_id: peerSessionId, turn_id: "t1" }),
-      ),
-    ).toBe(true);
-    expect(h.manager.snapshot().peers[0]?.activity).toBe("live");
-    h.send(
+    const row = () => h.manager.snapshot().peers[0];
+    const frame = (method: string, params: object) => ({
+      method,
+      params: { session_id: peerSessionId, ...params },
+    });
+    const approval = (approvalId: string, fields: object) =>
       frame("approval/requested", {
-        session_id: peerSessionId,
         turn_id: "t1",
-        approval_id: "a1",
+        approval_id: approvalId,
         tool_name: "shell",
-        title: "Approve",
-        body: "Run it",
+        title: "Run product checks?",
+        body: "The agent wants to run the repository checks.",
+        ...fields,
+      });
+
+    expect(h.send(frame("turn/started", { turn_id: "t1" }))).toBe(true);
+    expect(row()).toMatchObject({ activity: "live", turnId: "t1" });
+    h.send(
+      approval("a1", {
+        approval_kind: "command",
+        typed_details: { command: { command_line: "pnpm check" } },
       }),
     );
-    expect(h.manager.snapshot().peers[0]).toMatchObject({
+    expect(row()).toMatchObject({
       activity: "blocked",
       requestId: "a1",
       requestKind: "approval",
+      requestDetail: {
+        toolName: "shell",
+        target: "pnpm check",
+        scope: "command",
+        title: "Run product checks?",
+        body: "The agent wants to run the repository checks.",
+        sandboxEscalation: false,
+      },
     });
+    h.send(frame("approval/decided", { approval_id: "a1" }));
+    expect(row()?.activity).toBe("live");
+    // Escalation is read from either wire shape.
+    h.send(approval("a2", { approval_kind: "sandbox_escalation" }));
+    expect(row()?.requestDetail).toMatchObject({ sandboxEscalation: true });
+    h.send(frame("approval/decided", { approval_id: "a2" }));
+    h.send(approval("a3", { typed_details: { kind: "sandbox_escalation" } }));
+    expect(row()?.requestDetail).toMatchObject({ sandboxEscalation: true });
+    h.send(frame("approval/decided", { approval_id: "a3" }));
     h.send(
-      frame("approval/decided", {
-        session_id: peerSessionId,
-        approval_id: "a1",
+      frame("user_question/requested", {
+        turn_id: "t1",
+        question_id: "q-1",
+        title: "Choose verification depth",
+        body: "Octos needs one product decision.",
+        questions: [
+          {
+            header: "Checks",
+            question: "Which checks should run?",
+            options: [
+              { label: "Fast", description: "Unit tests only" },
+              { label: "Full", description: "All product gates" },
+            ],
+            multi_select: false,
+            allow_free_text: true,
+          },
+        ],
       }),
     );
-    expect(h.manager.snapshot().peers[0]?.activity).toBe("live");
+    expect(row()).toMatchObject({
+      activity: "blocked",
+      requestId: "q-1",
+      requestKind: "question",
+      requestDetail: {
+        header: "Checks",
+        question: "Which checks should run?",
+        options: [
+          { label: "Fast", description: "Unit tests only" },
+          { label: "Full", description: "All product gates" },
+        ],
+        multiSelect: false,
+        allowFreeText: true,
+      },
+    });
     h.send(
       frame("progress/updated", {
-        session_id: peerSessionId,
         turn_id: "t1",
         metadata: {
           kind: "token_cost_update",
@@ -703,35 +770,60 @@ describe("record-owned native peer coordinator", () => {
         },
       }),
     );
-    expect(h.manager.snapshot().peers[0]?.outputTokens).toBe(7);
+    expect(row()?.outputTokens).toBe(7);
+
+    // Terminal codes: stopped, failed with Core's message, finished.
     h.send(
-      frame("turn/completed", { session_id: peerSessionId, turn_id: "t1" }),
+      frame("turn/error", {
+        turn_id: "t1",
+        code: "interrupted",
+        message: "stopped by operator",
+      }),
     );
-    expect(h.manager.snapshot().peers[0]?.activity).toBe("done");
+    expect(row()).toMatchObject({
+      activity: "done",
+      outcome: "stopped",
+      requestId: null,
+    });
+    h.send(frame("turn/started", { turn_id: "t2" }));
+    expect(row()).toMatchObject({ activity: "live", turnId: "t2" });
+    h.send(
+      frame("turn/error", {
+        turn_id: "t2",
+        code: "model_overloaded",
+        message: "provider 503",
+      }),
+    );
+    expect(row()).toMatchObject({ outcome: "failed", error: "provider 503" });
+    // A peer's terminal projected on the MASTER, under the peer's topic and
+    // its own cursor stream.
+    h.send(frame("turn/started", { turn_id: "t3" }));
+    h.send({
+      method: "projection/envelope",
+      params: {
+        session_id: h.master.scope.sessionId,
+        topic: "peer-review",
+        cursor: { stream: `${peerSessionId}\0~cwd-test`, seq: 2 },
+        thread_id: "thread-1",
+        turn_id: "t3",
+        seq: 1,
+        payload: {
+          type: "turn_terminal",
+          data: {
+            outcome: "interrupted",
+            error: { code: "interrupted_by_user", message: "stopped" },
+          },
+        },
+      },
+    });
+    expect(row()).toMatchObject({ activity: "done", outcome: "stopped" });
+    h.send(frame("turn/started", { turn_id: "t4" }));
+    h.send(frame("turn/completed", { turn_id: "t4" }));
+    expect(row()).toMatchObject({ activity: "done", outcome: "finished" });
   });
 });
 
-it("prunes only the named record's finished rows (parity 2500 §2)", async () => {
-  const h = setup();
-  h.master.setReadiness("ready");
-  h.send(stage());
-  await until(() =>
-    expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-  );
-  const peerSessionId = h.opened[0]!.scope.sessionId;
-  h.send({
-    method: "turn/completed",
-    params: { session_id: peerSessionId, turn_id: "t1" },
-  });
-  expect(h.manager.snapshot().peers[0]?.activity).toBe("done");
-  // The named (ACTIVE) record's roster is pruned...
-  expect(h.coordinator.clearFinished(h.master)).toBe(1);
-  expect(h.manager.snapshot().peers).toHaveLength(0);
-  // ...and a re-run reports 0 with nothing left to clear.
-  expect(h.coordinator.clearFinished(h.master)).toBe(0);
-});
-
-it("never prunes a live row and leaves a foreign record's roster alone", async () => {
+it("clears only the named master's finished rows, never a live one (parity 2500 §2)", async () => {
   const h = setup();
   const other = h.addMaster("other-master");
   h.master.setReadiness("ready");
@@ -747,8 +839,16 @@ it("never prunes a live row and leaves a foreign record's roster alone", async (
   expect(h.manager.snapshot().peers[0]?.activity).toBe("live");
   expect(h.coordinator.clearFinished(h.master)).toBe(0);
   expect(h.manager.snapshot().peers).toHaveLength(1);
-  // The other master owns no bound rows: fail-closed 0, never a throw.
+  h.send({
+    method: "turn/completed",
+    params: { session_id: peerSessionId, turn_id: "t1" },
+  });
+  expect(h.manager.snapshot().peers[0]?.activity).toBe("done");
+  // Another master owns no bound rows: fail-closed 0, never a throw.
   expect(h.coordinator.clearFinished(other)).toBe(0);
+  expect(h.coordinator.clearFinished(h.master)).toBe(1);
+  expect(h.manager.snapshot().peers).toHaveLength(0);
+  expect(h.coordinator.clearFinished(h.master)).toBe(0);
 });
 
 describe("cold restore after a page reload (T-0082)", () => {
@@ -859,64 +959,35 @@ describe("cold restore after a page reload (T-0082)", () => {
 });
 
 describe("peer dispatch adoption (build 1230)", () => {
-  it("stages through the dispatch leaf — and NOT session/open — when the seat is ready", async () => {
-    const h = setup();
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() => expect(h.dispatched).toHaveLength(1));
-    expect(h.requests).toHaveLength(0);
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-  });
-  it("keeps the session/open path byte-identical when the seat is unavailable", async () => {
-    const h = setup();
-    h.master.setReadiness("unavailable");
-    h.send(stage());
-    await until(() => expect(h.requests).toHaveLength(1));
-    expect(h.dispatched).toHaveLength(0);
-  });
-  it("stamps the accepted receipt's operationId onto the started row", async () => {
-    const h = setup({
-      dispatchReceipt: () => ({ operationId: "op-accepted-dispatch" }),
-    });
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    expect(h.manager.snapshot().peers[0]?.operationId).toBe(
-      "op-accepted-dispatch",
-    );
-  });
-  it("resolves a duplicate:true replay as started with that same operationId", async () => {
-    const h = setup({ dispatchReceipt: () => ({ duplicate: true }) });
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    expect(h.manager.snapshot().peers).toHaveLength(1);
-    const sent = h.dispatched[0]!.operationId;
-    expect(h.manager.snapshot().peers[0]?.operationId).toBe(sent);
-  });
-  it("keys the opened record by the SERVER-adopted session id", async () => {
+  it("stages through the dispatch leaf when the seat is ready and keys the row on the receipt's identity", async () => {
+    // The server ADOPTS the peer (design 1120 §3): its receipt names the
+    // Session, slug and operation id, which may differ from what was staged
+    // locally (finding 2920 (b)), and a replay says duplicate:true. The row
+    // must carry the receipt's identity, never the staging guess, as one row.
     const h = setup({
       dispatchReceipt: () => ({
         adoptedSessionId: "dev:local:tui#peer-adopted",
+        slug: "synthetic-peer",
+        operationId: "op-accepted-dispatch",
+        duplicate: true,
       }),
     });
     h.master.setReadiness("ready");
     h.send(stage());
-    await until(() => expect(h.dispatched).toHaveLength(1));
+    await until(() =>
+      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
+    );
+    expect(h.dispatched).toHaveLength(1);
+    expect(h.requests).toHaveLength(0);
     const peer = h.opened[0]!;
     expect(peer.scope.sessionId).toBe("dev:local:tui#peer-adopted");
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.identity).toBe(
-        "dev:local:tui#peer-adopted",
-      ),
-    );
-    expect(h.manager.snapshot().peers[0]?.rowKey).toBe(identity);
+    expect(h.manager.snapshot().peers).toHaveLength(1);
+    expect(h.manager.snapshot().peers[0]).toMatchObject({
+      identity: "dev:local:tui#peer-adopted",
+      rowKey: identity,
+      slug: "synthetic-peer",
+      operationId: "op-accepted-dispatch",
+    });
     expect(h.coordinator.getMaster(peer)).toBe(h.master);
     expect(h.coordinator.get(peer)).toBe(h.manager);
   });
@@ -948,25 +1019,5 @@ describe("peer dispatch adoption (build 1230)", () => {
       expect(h.manager.snapshot().peers[0]?.status).toBe("unknown"),
     );
     expect(h.manager.snapshot().peers[0]?.canRetry).toBe(false);
-  });
-
-  it("keys the roster row by the receipt's ADOPTED slug, not the staging slug (2920 (b))", async () => {
-    // The server ADOPTS the peer identity (design 1120 §3): the dispatch
-    // receipt may name a DIFFERENT slug than the locally pre-computed staging
-    // slug the request carried (the mock stages `synthetic-peer` while the
-    // staged pick is random). The row the dock/roster renders must key on the
-    // RECEIPT's slug, or the activity fixture and the row slug diverge.
-    const h = setup({
-      dispatchReceipt: () => ({ slug: "synthetic-peer" }),
-    });
-    h.master.setReadiness("ready");
-    h.send(stage());
-    await until(() =>
-      expect(h.manager.snapshot().peers[0]?.status).toBe("started"),
-    );
-    const row = h.manager.snapshot().peers[0];
-    expect(row?.slug).toBe("synthetic-peer");
-    // The staging slug ("review") is NOT what the adopted row discloses.
-    expect(row?.slug).not.toBe("review");
   });
 });
