@@ -150,7 +150,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | accepts exactly one of payload / continuation_ref (absent or null)               | ③   | decidable-content 规则（present/absent/null 全组合） |
 | refuses ambiguous, empty, or unserializable content with a bounded typed failure | ④   | 环载荷等有界类型化失败                               |
 | freezes a CLONE and leaves the caller's raw payload unfrozen                     | ④   | 克隆冻结不冻调用方                                   |
-| preserves an own JSON "**proto**" key without prototype pollution                | ③   | 原型污染防护                                         |
+| preserves an own JSON \"__proto__\" key without prototype pollution                | ③   | 原型污染防护                                         |
 
 ### tests/external-driver.test.ts（留 16/61）
 
