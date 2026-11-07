@@ -41,10 +41,10 @@ import {
  * one the client minted, and the adopted turn is already running in Core, so
  * it must not become a queue head the ready drain would send again. A replayed
  * receipt is idempotent. Anything that fails — an unadvertised lane, no held
- * fence, a refusal from Core, or a master the facade does not retain — adopts
- * nothing and fabricates no record. Before changing the seam, check that a
- * foreign record still resolves NULL: adopting it would attach a peer to the
- * wrong owner.
+ * fence, a refusal from Core, Core opening a different Session than it
+ * adopted, or a master the facade does not retain — adopts nothing and
+ * fabricates no record. Before changing the seam, check that a foreign record
+ * still resolves NULL: adopting it would attach a peer to the wrong owner.
  */
 
 const MASTER = "coding:local:tui";
@@ -113,6 +113,8 @@ class PooledClient {
   readonly hydrates: SessionHydrateParams[] = [];
   readonly notifications = new Set<(n: RpcNotification) => void>();
   readonly statuses = new Set<(status: ConnectionStatus) => void>();
+  /** The Session id `session/open` answers with; by default the one asked for. */
+  answerAs: string | null = null;
   async connect() {
     this.setStatus("connected");
   }
@@ -142,7 +144,7 @@ class PooledClient {
     this.opens.push(params);
     return {
       opened: {
-        session_id: params.session_id,
+        session_id: this.answerAs ?? params.session_id,
         active_profile_id: PROFILE,
         workspace_root: WORKSPACE,
         capabilities: CAPS,
@@ -379,6 +381,22 @@ describe("peer/dispatch adopts the server's identity through the lazy facade", (
       h.manager.retireAll();
     },
   );
+
+  it("installs nothing when Core opens a different Session than its receipt adopted", async () => {
+    const h = await harness();
+    h.client.answerAs = "coding:local:tui#peer-beta";
+    const { outcome, peerDispatch } = await dispatch(h);
+    // Core accepted the frame, but the identity does not hold: the outcome is
+    // unknown (never accepted), and no record carries either id.
+    expect(outcome).toEqual({ kind: "unknown" });
+    expect(peerDispatch).toHaveBeenCalledTimes(1);
+    expect(h.manager.records()).toEqual([h.master]);
+    expect(h.client.opens.map((params) => params.session_id)).toEqual([
+      MASTER,
+      ADOPTED,
+    ]);
+    h.manager.retireAll();
+  });
 
   it("never adopts for a master the facade does not retain: no seam, no frame", async () => {
     const h = await harness();
