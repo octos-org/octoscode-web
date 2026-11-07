@@ -333,6 +333,12 @@ function rows(record: SessionRecord<PooledClient>) {
   return record.timeline.map(({ id, body }) => [id, body]);
 }
 
+// Real SessionRecordManager + controller + runtime on one pooled client
+// (ADR 0020, ADR 0005). Guarded chains: hydrate/live identity reconciliation
+// (no lost or doubled prose across rehydrate), eviction/close publication,
+// history-lease atomicity and fencing, caller-UUID admission and twin
+// folding, background FIFO drain, loss freeze without ambiguous replay, and
+// recovery superseded by epoch/client/evict/abort or a scope mismatch.
 describe("SessionRecordManager real record/controller/runtime integration", () => {
   const coreMessageHydrate = (id: string, state = "active", turnId = "A1") =>
     hydrate(id, {
@@ -1578,6 +1584,10 @@ class BoundedWatchdog {
   }
 }
 
+// Read-only `session/driver/get` discovery on the same manager: the shared
+// admission gate, multi-page/refusal parsing, latest-wins and lifecycle
+// cancellation with exact timer ownership, authority fences (pool, epoch,
+// generation, endpoint), and per-record session identity on a shared client.
 describe("SessionRecordManager read-only driver discovery", () => {
   function driverHarness(
     handler: PooledClient["driverGetHandler"],
@@ -1617,12 +1627,26 @@ describe("SessionRecordManager read-only driver discovery", () => {
     return record;
   }
 
-  it("session-ready refreshes ONLY the ready record; no turns, no selection effects", async () => {
+  it("session-ready walks the ready record ONCE: no turns, one page RPC, exact pre-walk timer baseline restored", async () => {
+    const watchdog = new BoundedWatchdog();
+    const timers = new TrackedTimers();
+    timers.install();
+    timers.arm();
     const { h, client } = driverHarness(async () => discoveryPage([]));
-    const a = await settledOpen(h, "s-a");
-    expect(a.driverInventory.kind).toBe("complete");
-    expect(client.starts).toEqual([]);
-    expect(a.driverInventoryRefresh).toBe(1);
+    try {
+      const baseline = timers.outstanding();
+      const a = await openOnly(h, "s-ready");
+      await watchdog.wait("walk", a.driverInventoryWalk!);
+      expect(a.driverInventory.kind).toBe("complete");
+      expect(a.driverInventoryRefresh).toBe(1);
+      expect(client.starts).toEqual([]);
+      expect(client.driverGetRequests.length).toBe(1);
+      expect(timers.outstanding()).toBe(baseline);
+    } finally {
+      watchdog.cancel();
+      h.manager.suspendRecords();
+      timers.restore();
+    }
   });
 
   it("P2m: a refresh of a SETTLED record never dips readiness back to unavailable", async () => {
@@ -1636,7 +1660,9 @@ describe("SessionRecordManager read-only driver discovery", () => {
     // Asserted on the DIP itself (not on `controlReadiness`: this fixture's caps
     // advertise `session/driver/get` + `external_driver_v1` but not
     // `peer/control`, so readiness is `unavailable` by design here). The dip is
-    // exactly the mechanism the bar's gate reads.
+    // exactly the mechanism the bar's gate reads. The cold-start half (a
+    // never-settled record still shows `loading`) is asserted on A/C in the
+    // three-records test below.
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -1659,37 +1685,6 @@ describe("SessionRecordManager read-only driver discovery", () => {
       expect.objectContaining({ kind: "complete" }),
     );
     expect(a.driverInventory.kind).toBe("complete");
-  });
-
-  it("P2m: a NEVER-settled record still shows `loading` (cold start unchanged)", async () => {
-    const gate = new Promise<void>(() => undefined); // never released
-    const { h } = driverHarness(async () => {
-      await gate;
-      return discoveryPage([]);
-    });
-    const a = await openOnly(h, "s-never-settled");
-    expect(a.driverInventory.kind).toBe("loading");
-    h.manager.suspendRecords();
-  });
-
-  it("capability-off sends ZERO discovery RPCs and stays unavailable", async () => {
-    const { h, client } = driverHarness(async () => {
-      throw new Error("must not be called");
-    }, caps);
-    const record = await settledOpen(h, "s-nocaps");
-    expect(record.driverInventory).toEqual({ kind: "unavailable" });
-    expect(client.driverGetRequests).toEqual([]);
-  });
-
-  it("select/reselect sends no discovery RPCs and never resets state", async () => {
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    const a = await settledOpen(h, "s-a");
-    const before = a.driverInventory;
-    const count = client.driverGetRequests.length;
-    h.manager.select(a.scope);
-    h.manager.select(a.scope);
-    expect(a.driverInventory).toBe(before);
-    expect(client.driverGetRequests.length).toBe(count);
   });
 
   it("records a multi-page inventory exactly once per row, terminal included", async () => {
@@ -1733,32 +1728,6 @@ describe("SessionRecordManager read-only driver discovery", () => {
     });
   });
 
-  it("overlapping refreshes: latest wins, stale success never lands", async () => {
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let calls = 0;
-    const { h } = driverHarness(async () => {
-      calls += 1;
-      if (calls === 1) await gate; // first (session-ready) walk stalls
-      return discoveryPage([]);
-    });
-    const record = await open(h, "s-overlap");
-    // Capture the FIRST (session-ready) walk before the refresh replaces
-    // the record's in-flight pointer with the newer walk's promise.
-    const firstWalk = record.driverInventoryWalk;
-    expect(firstWalk).not.toBeNull();
-    // Second explicit refresh supersedes the stalled session-ready walk.
-    const second = h.manager.refreshDriverInventory(record.scope);
-    release();
-    const firstOutcome = await firstWalk!;
-    expect(firstOutcome).toEqual({ kind: "error", reason: "stale" });
-    const outcome = await second;
-    expect(outcome.kind).toBe("complete");
-    expect(record.driverInventory.kind).toBe("complete");
-  });
-
   it("eviction invalidates a late response without touching others", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -1779,7 +1748,7 @@ describe("SessionRecordManager read-only driver discovery", () => {
     expect(b.driverInventory.kind).toBe("complete");
   });
 
-  it("lifecycle table: 4 actions x LOADER/PAGE boundary — entry observed, old walk settles stale while its REAL input stays UNSETTLED, zero/one page RPCs, exact timer baseline", async () => {
+  it("lifecycle table: 4 actions x LOADER/PAGE boundary — entry observed, old walk settles stale while its REAL input stays UNSETTLED, zero/one page RPCs, exact hung and restored timer counts", async () => {
     const actions: Array<{
       name: string;
       act: (
@@ -1831,6 +1800,11 @@ describe("SessionRecordManager read-only driver discovery", () => {
             void client.pendingPages.shift();
             client.driverGetHandlerNeverSettles = false;
           }
+          // While hung, exactly the walk's own deadline timers are pending:
+          // the loader race, or the page race plus the outer walk race.
+          expect(timers.outstanding()).toBe(
+            baseline + (boundary === "loader" ? 1 : 2),
+          );
           const oldWalk = rec.driverInventoryWalk!;
           act(rec, h);
           await watchdog.wait(`${name}/${boundary} old walk`, oldWalk);
@@ -1853,463 +1827,109 @@ describe("SessionRecordManager read-only driver discovery", () => {
     }
   });
 
-  it("a NEWER walk settles complete while the older hung one never lands", async () => {
-    const deferred: Array<() => void> = [];
-    let calls = 0;
-    const { h } = driverHarness(async () => {
-      const mine = calls;
-      calls += 1;
-      if (mine === 0) {
-        // older walk: NEVER settles (only cancellation clears its loading)
-        await new Promise<void>(() => undefined);
-      }
-      if (mine === 1) {
-        await new Promise<void>((r) => {
-          deferred.push(r);
-        });
-      }
-      return discoveryPage([]);
-    });
-    const a = await openOnly(h, "s-overlap2");
-    expect(a.driverInventory.kind).toBe("loading");
-    const older = a.driverInventoryWalk;
-    expect(older).not.toBeNull();
-    const newer = h.manager.refreshDriverInventory(a.scope); // newer walk
-    // The superseded walk must settle stale without its gate resolving.
-    expect(
-      await Promise.race([
-        older,
-        new Promise((_, rej) =>
-          setTimeout(
-            () => rej(new Error("overlap: old walk never settled")),
-            500,
-          ),
-        ),
-      ]),
-    ).toEqual({ kind: "error", reason: "stale" });
-    // Let the newer walk reach its gated page deterministically.
-    await new Promise((r) => setTimeout(r, 0));
-    expect(deferred.length).toBe(1);
-    deferred[0]!();
-    expect(await newer).toEqual(expect.objectContaining({ kind: "complete" }));
-    // Releasing the older gate (it never resolves anyway) cannot clobber.
-    await new Promise((r) => setTimeout(r, 0));
-    expect(a.driverInventory.kind).toBe("complete");
-    expect(a.driverInventoryWalk).toBeNull();
-  });
-
-  it("REQUIREMENT: three records on ONE pool, B selected, A+C refresh concurrently", async () => {
-    let calls = 0;
-    const gates: Array<() => void> = [];
-    const { h } = driverHarness(async () => {
-      const mine = calls;
-      calls += 1;
-      if (mine < 2) {
-        await new Promise<void>((r) => {
-          gates.push(r);
-        });
-      }
-      return discoveryPage([]);
-    });
-    const a = await openOnly(h, "s-a");
-    const c = await openOnly(h, "s-c");
-    const b = await settledOpen(h, "s-b");
-    h.manager.select(b.scope);
-    expect(b.selected).toBe(true);
-    expect(a.driverInventory.kind).toBe("loading");
-    expect(c.driverInventory.kind).toBe("loading");
-    // B (selected) completed its own refresh; A and C remain in-flight.
-    expect(b.driverInventory.kind).toBe("complete");
-    // settle A and C: only their own records update
-    for (const gate of gates) gate();
-    await a.driverInventoryWalk;
-    await c.driverInventoryWalk;
-    expect(a.driverInventory.kind).toBe("complete");
-    expect(c.driverInventory.kind).toBe("complete");
-    expect(
-      h.manager
-        .records()
-        .map((r) => r.scope.sessionId)
-        .sort(),
-    ).toEqual(["s-a", "s-b", "s-c"]);
-  });
-
-  it("(1) TRUE loader hang: driverGet NEVER started; cancel settles old walk (all lifecycles)", async () => {
-    for (const { name, act } of [
-      {
-        name: "suspend",
-        act: (_r: SessionRecord<PooledClient>, h: ReturnType<typeof harness>) =>
-          void h.manager.suspendRecords(),
-      },
-      {
-        name: "close",
-        act: (
-          rec: SessionRecord<PooledClient>,
-          h: ReturnType<typeof harness>,
-        ) => void h.manager.closeRetainedRecord(rec),
-      },
-      {
-        name: "evict",
-        act: (
-          rec: SessionRecord<PooledClient>,
-          h: ReturnType<typeof harness>,
-        ) => void h.manager.evict(rec.scope),
-      },
-      {
-        name: "retireAll",
-        act: (
-          _rec: SessionRecord<PooledClient>,
-          h: ReturnType<typeof harness>,
-        ) => void h.manager.retireAll(),
-      },
-    ] as const) {
-      const { h, client } = driverHarness(async () => discoveryPage([]));
-      client.loaderGate = new Promise<void>(() => undefined); // LOADER hangs
-      const a = await openOnly(h, `s-loader-${name}`);
-      expect(a.driverInventory.kind).toBe("loading");
-      const oldWalk = a.driverInventoryWalk!;
-      act(a, h);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      // driverGet was NEVER started for a loader hang.
-      expect(client.driverGetRequests.length).toBe(0);
-      expect(a.driverInventory.kind).not.toBe("loading");
-      expect(h.client.status).toBe("connected");
-    }
-  });
-
-  it("(1b) TRUE page hang: waits for driverGet ENTERED before cancel settles", async () => {
-    const { h, client } = driverHarness(
-      () => new Promise<never>(() => undefined),
-    );
-    const entered = new Promise<void>((resolve) => {
-      client.driverGetEntered.push(resolve);
-    });
-    const a = await openOnly(h, "s-page-entered");
-    await entered; // a real driverGet call has started
-    const oldWalk = a.driverInventoryWalk!;
-    h.manager.suspendRecords();
-    expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-    expect(a.driverInventory.kind).not.toBe("loading");
-  });
-
-  it("(1c) overlap replacement cancels an actually ENTERED deferred old LOADER walk whose gate stays pending; newer walk completes independently", async () => {
-    const watchdog = new BoundedWatchdog();
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    try {
-      // Old walk's LOADER gate stays pending FOREVER — never released.
-      const gate = deferred<void>();
-      client.loaderGate = gate.promise;
-      const enteredOld = new Promise<void>((resolve) => {
-        client.loaderEntries.push({ sessionId: "s-overlap-loader", resolve });
-      });
-      const a = await openOnly(h, "s-overlap-loader");
-      await watchdog.wait("old loader entry", enteredOld);
-      const oldWalk = a.driverInventoryWalk!;
-      // NEWER walk gets an independent UNGATED loader (field is per-call
-      // captured before the await, so clearing it now cannot affect the old
-      // loader that already captured its own pending gate).
-      client.loaderGate = null;
-      const newer = h.manager.refreshDriverInventory(a.scope);
-      // Old settles stale while its underlying gate input is STILL pending.
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      await watchdog.wait("newer walk", newer);
-      expect(await newer).toEqual(
-        expect.objectContaining({ kind: "complete" }),
-      );
-      expect(a.driverInventory.kind).toBe("complete");
-      // Gate intentionally left unresolved; manager consumed the stale walk.
-    } finally {
-      watchdog.cancel();
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("(1d) LATE loader RESOLVE after old walk settled stale: consumed, newer view unchanged", async () => {
-    const watchdog = new BoundedWatchdog();
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    let unhandledCleanup: (() => void) | null = null;
-    try {
-      const gate = deferred<void>();
-      client.loaderGate = gate.promise;
-      const enteredOld = new Promise<void>((resolve) => {
-        client.loaderEntries.push({ sessionId: "s-late-loader", resolve });
-      });
-      const a = await openOnly(h, "s-late-loader");
-      await watchdog.wait("old loader entry", enteredOld);
-      const oldWalk = a.driverInventoryWalk!;
-      client.loaderGate = null;
-      const newer = h.manager.refreshDriverInventory(a.scope);
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      await watchdog.wait("newer walk", newer);
-      expect(await newer).toEqual(
-        expect.objectContaining({ kind: "complete" }),
-      );
-      // Capture the EXACT newer completed inventory object BEFORE any late
-      // settlement; the late event must not replace or mutate it.
-      const newerInventory = a.driverInventory;
-      // Only AFTER old+newer settled: LATE-resolve the actual old input.
-      gate.resolve();
-      const flush = await flushAndCountUnhandled();
-      unhandledCleanup = flush.cleanup;
-      // Late resolution is consumed: no walk mutation, no extra page RPC,
-      // exact newer completed view object intact, connection unchanged.
-      expect(a.driverInventory).toBe(newerInventory); // object identity
-      expect(a.driverInventory).toEqual(newerInventory); // deep equality
-      expect(a.driverInventoryWalk).toBeNull();
-      expect(client.driverGetRequests.length).toBe(1);
-      expect(client.status).toBe("connected");
-      expect(flush.reasons).toEqual([]); // ZERO process unhandled rejections
-    } finally {
-      unhandledCleanup?.();
-      watchdog.cancel();
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("(1f) LATE page SUCCESS after old walk settled stale: genuine completed old page consumed, newer view unchanged", async () => {
-    const watchdog = new BoundedWatchdog();
-    // Distinguishable NEWER row: proves the surviving view is the NEWER
-    // walk's, and a late old page cannot clobber it.
-    const { h, client } = driverHarness(() =>
-      discoveryPage(
-        [{ operationId: "op-new", slug: "new-row", lifecycle: "started" }],
-        { complete: true },
-      ),
-    );
-    client.driverGetHandlerNeverSettles = true;
-    const entered = new Promise<void>((resolve) => {
-      client.driverGetEntered.push(resolve);
-    });
-    let unhandledCleanup: (() => void) | null = null;
-    try {
-      const a = await openOnly(h, "s-late-page");
-      await watchdog.wait("old page entry", entered);
-      // EXACT old deferred control captured while present — no optional
-      // skip — BEFORE re-enabling new requests.
-      expect(client.pendingPages.length).toBe(1);
-      const oldDeferred = client.pendingPages.shift()!;
-      client.driverGetHandlerNeverSettles = false;
-      const oldWalk = a.driverInventoryWalk!;
-      const newer = h.manager.refreshDriverInventory(a.scope);
-      await watchdog.wait("newer walk", newer);
-      expect(await newer).toEqual(
-        expect.objectContaining({ kind: "complete" }),
-      );
-      // Capture the EXACT newer completed inventory (with the NEWER row)
-      // BEFORE the late old settlement.
-      const newerInventory = a.driverInventory;
-      expect(newerInventory).toEqual(
-        expect.objectContaining({
-          kind: "complete",
-          rows: [expect.objectContaining({ operationId: "op-new" })],
-        }),
-      );
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      // Only AFTER settlement: LATE-resolve the actual old page call with a
-      // GENUINE valid but DISTINGUISHABLE old page (op-old row).
-      const flush = await flushAndCountUnhandled();
-      unhandledCleanup = flush.cleanup;
-      oldDeferred.resolve(
+  // Latest-wins replacement: old and newer inputs are both held at the same
+  // boundary on their own controls, so the old walk must settle stale on the
+  // replacement alone, before the newer walk lands. A LATE settle of the old
+  // input after both have settled must not replace or mutate the newer view
+  // or leak an unhandled rejection.
+  it.each([
+    { boundary: "loader", late: "resolve" },
+    { boundary: "loader", late: "reject" },
+    { boundary: "page", late: "resolve" },
+    { boundary: "page", late: "reject" },
+  ] as const)(
+    "replacing an ENTERED $boundary-hung walk settles it stale before the newer walk lands; a LATE old $late is consumed",
+    async ({ boundary, late }) => {
+      const watchdog = new BoundedWatchdog();
+      // Distinguishable NEWER row: the surviving view must be the newer walk's.
+      const newerPage = () =>
         discoveryPage(
-          [{ operationId: "op-old", slug: "old-row", lifecycle: "terminal" }],
+          [{ operationId: "op-new", slug: "new-row", lifecycle: "started" }],
           { complete: true },
-        ),
-      );
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
-      expect(a.driverInventory).toBe(newerInventory); // object identity
-      expect(a.driverInventory).toEqual(newerInventory); // deep equality
-      expect(a.driverInventoryWalk).toBeNull();
-      expect(client.driverGetRequests.length).toBe(2);
-      expect(client.status).toBe("connected");
-      expect(flush.reasons).toEqual([]); // ZERO process unhandled rejections
-    } finally {
-      unhandledCleanup?.();
-      watchdog.cancel();
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("(1g) LATE page REJECT(undefined) after old walk settled stale: consumed, no unhandled rejection", async () => {
-    const watchdog = new BoundedWatchdog();
-    const { h, client } = driverHarness(() =>
-      discoveryPage(
-        [{ operationId: "op-new-g", slug: "new-row-g", lifecycle: "started" }],
-        { complete: true },
-      ),
-    );
-    let unhandledCleanup: (() => void) | null = null;
-    try {
-      client.driverGetHandlerNeverSettles = true;
-      const entered = new Promise<void>((resolve) => {
-        client.driverGetEntered.push(resolve);
-      });
-      const a = await openOnly(h, "s-late-page-rej");
-      await watchdog.wait("old page entry", entered);
-      // EXACT old deferred control — no optional skip.
-      expect(client.pendingPages.length).toBe(1);
-      const oldDeferred = client.pendingPages.shift()!;
-      client.driverGetHandlerNeverSettles = false;
-      const oldWalk = a.driverInventoryWalk!;
-      const newer = h.manager.refreshDriverInventory(a.scope);
-      await watchdog.wait("newer walk", newer);
-      expect(await newer).toEqual(
-        expect.objectContaining({ kind: "complete" }),
-      );
-      const newerInventory = a.driverInventory;
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      // Only AFTER settlement: LATE-REJECT the actual old page input with
-      // undefined; the walk must consume it without unhandled rejection.
-      const flush = await flushAndCountUnhandled();
-      unhandledCleanup = flush.cleanup;
-      oldDeferred.reject(undefined);
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
-      expect(a.driverInventory).toBe(newerInventory); // object identity
-      expect(a.driverInventory).toEqual(newerInventory); // deep equality
-      expect(a.driverInventoryWalk).toBeNull();
-      expect(client.driverGetRequests.length).toBe(2);
-      expect(client.status).toBe("connected");
-      expect(flush.reasons).toEqual([]); // ZERO process unhandled rejections
-    } finally {
-      unhandledCleanup?.();
-      watchdog.cancel();
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("(1e) LATE loader REJECT(undefined) after old walk settled stale: consumed, no unhandled rejection", async () => {
-    const watchdog = new BoundedWatchdog();
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    let unhandledCleanup: (() => void) | null = null;
-    try {
-      const gate = deferred<void>();
-      client.loaderGate = gate.promise;
-      const entered = new Promise<void>((resolve) => {
-        client.loaderEntries.push({ sessionId: "s-late-loader-rej", resolve });
-      });
-      const a = await openOnly(h, "s-late-loader-rej");
-      await watchdog.wait("old loader entry", entered);
-      const oldWalk = a.driverInventoryWalk!;
-      client.loaderGate = null;
-      const newer = h.manager.refreshDriverInventory(a.scope);
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      await watchdog.wait("newer walk", newer);
-      expect(await newer).toEqual(
-        expect.objectContaining({ kind: "complete" }),
-      );
-      const newerInventory = a.driverInventory;
-      // Only AFTER settlement: LATE-reject the actual old loader input.
-      const flush = await flushAndCountUnhandled();
-      unhandledCleanup = flush.cleanup;
-      gate.reject(undefined);
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
-      expect(a.driverInventory).toBe(newerInventory); // object identity
-      expect(a.driverInventory).toEqual(newerInventory); // deep equality
-      expect(a.driverInventoryWalk).toBeNull();
-      expect(client.driverGetRequests.length).toBe(1);
-      expect(client.status).toBe("connected");
-      expect(flush.reasons).toEqual([]); // ZERO process unhandled rejections
-    } finally {
-      unhandledCleanup?.();
-      watchdog.cancel();
-      h.manager.suspendRecords();
-    }
-  });
-
-  it("(2a) EXACT timer baseline: entered hung LOADER holds ZERO driverGet + exactly ONE owned deadline timer; suspend settles stale; baseline restores EXACTLY; gate NEVER released", async () => {
-    const watchdog = new BoundedWatchdog();
-    const timers = new TrackedTimers();
-    timers.install();
-    timers.arm();
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    try {
-      const baseline = timers.outstanding();
-      const loaderEntered = (sessionId: string) =>
-        new Promise<void>((resolve) => {
-          client.loaderEntries.push({ sessionId, resolve });
-        });
-      const gate = deferred<void>();
-      client.loaderGate = gate.promise; // gate BEFORE open; NEVER released
-      const entered = loaderEntered("s-timer-loader");
-      const a = await openOnly(h, "s-timer-loader");
-      await watchdog.wait("loader entry", entered); // loader actually ENTERED and hung
-      // Hung at the LOADER: no driverGet page call was ever issued.
-      expect(client.driverGetRequests.length).toBe(0);
-      // Exactly the loader race's OWN single deadline timer is outstanding.
-      expect(timers.outstanding()).toBe(baseline + 1);
-      const oldWalk = a.driverInventoryWalk!;
-      h.manager.suspendRecords();
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      // EXACT restore: the walk-owned deadline timer is gone, back to the
-      // pre-walk baseline, with the gate NEVER released.
-      expect(timers.outstanding()).toBe(baseline);
-      expect(client.driverGetRequests.length).toBe(0);
-    } finally {
-      watchdog.cancel(); // bounded-wait cleanup on success AND failure
-      h.manager.suspendRecords(); // retire fixture: no async manager work survives
-      timers.restore(); // cleanup only AFTER baseline assertions
-    }
-  });
-
-  it("(2b) EXACT timer baseline: entered hung PAGE holds exactly page+outer TWO deadline timers; suspend settles stale; baseline restores EXACTLY; page NEVER released", async () => {
-    const watchdog = new BoundedWatchdog();
-    const timers = new TrackedTimers();
-    timers.install();
-    timers.arm();
-    const { h, client } = driverHarness(
-      () => new Promise<never>(() => undefined),
-    );
-    try {
-      const baseline = timers.outstanding();
-      const entered = new Promise<void>((resolve) => {
-        client.driverGetEntered.push(resolve);
-      });
-      const a = await openOnly(h, "s-timer-page");
-      await watchdog.wait("page entry", entered); // real driverGet ENTERED, hung
-      expect(client.driverGetRequests.length).toBe(1);
-      // Exactly page race + outer walk race = TWO deadline timers.
-      expect(timers.outstanding()).toBe(baseline + 2);
-      const oldWalk = a.driverInventoryWalk!;
-      h.manager.suspendRecords();
-      await watchdog.wait("old walk", oldWalk);
-      expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
-      // EXACT restore while the page promise NEVER resolves.
-      expect(timers.outstanding()).toBe(baseline);
-      expect(client.driverGetRequests.length).toBe(1);
-    } finally {
-      watchdog.cancel();
-      h.manager.suspendRecords();
-      timers.restore();
-    }
-  });
-
-  it("(2c) EXACT timer baseline: normal completed walk restores EXACT pre-walk baseline", async () => {
-    const watchdog = new BoundedWatchdog();
-    const timers = new TrackedTimers();
-    timers.install();
-    timers.arm();
-    const { h, client } = driverHarness(async () => discoveryPage([]));
-    try {
-      const baseline = timers.outstanding();
-      const a = await openOnly(h, "s-timer-normal");
-      await watchdog.wait("walk", a.driverInventoryWalk!);
-      expect(a.driverInventory.kind).toBe("complete");
-      expect(timers.outstanding()).toBe(baseline);
-      expect(client.driverGetRequests.length).toBe(1);
-    } finally {
-      watchdog.cancel();
-      h.manager.suspendRecords();
-      timers.restore();
-    }
-  });
+        );
+      const { h, client } = driverHarness(newerPage);
+      const sessionId = `s-late-${boundary}-${late}`;
+      const entered = () =>
+        boundary === "loader"
+          ? new Promise<void>((resolve) => {
+              client.loaderEntries.push({ sessionId, resolve });
+            })
+          : new Promise<void>((resolve) => {
+              client.driverGetEntered.push(resolve);
+            });
+      const oldGate = deferred<void>();
+      const newerGate = deferred<void>();
+      let unhandledCleanup: (() => void) | null = null;
+      try {
+        if (boundary === "loader") client.loaderGate = oldGate.promise;
+        else client.driverGetHandlerNeverSettles = true;
+        const enteredOld = entered();
+        const a = await openOnly(h, sessionId);
+        await watchdog.wait("old entry", enteredOld);
+        const oldWalk = a.driverInventoryWalk!;
+        // Each loader captured its own gate before awaiting it.
+        if (boundary === "loader") client.loaderGate = newerGate.promise;
+        const enteredNewer = entered();
+        const newer = h.manager.refreshDriverInventory(a.scope);
+        await watchdog.wait("newer entry", enteredNewer);
+        await watchdog.wait("old walk", oldWalk);
+        expect(await oldWalk).toEqual({ kind: "error", reason: "stale" });
+        // The stale old walk left the newer walk's in-flight state alone.
+        expect(a.driverInventory).toEqual({ kind: "loading" });
+        expect(a.driverInventoryWalk).not.toBeNull();
+        // EXACT page controls in call order — no optional skip.
+        const pages = client.pendingPages.splice(0);
+        expect(pages.length).toBe(boundary === "loader" ? 0 : 2);
+        if (boundary === "loader") newerGate.resolve();
+        else pages[1]!.resolve(newerPage());
+        await watchdog.wait("newer walk", newer);
+        expect(await newer).toEqual(
+          expect.objectContaining({
+            kind: "complete",
+            rows: [expect.objectContaining({ operationId: "op-new" })],
+          }),
+        );
+        const newerInventory = a.driverInventory;
+        const newerCopy = structuredClone(newerInventory);
+        const flush = await flushAndCountUnhandled();
+        unhandledCleanup = flush.cleanup;
+        if (boundary === "loader") {
+          if (late === "resolve") oldGate.resolve();
+          else oldGate.reject(undefined);
+        } else if (late === "resolve") {
+          // A GENUINE valid but distinguishable old page (op-old row).
+          pages[0]!.resolve(
+            discoveryPage(
+              [
+                {
+                  operationId: "op-old",
+                  slug: "old-row",
+                  lifecycle: "terminal",
+                },
+              ],
+              { complete: true },
+            ),
+          );
+        } else {
+          pages[0]!.reject(undefined);
+        }
+        await new Promise((r) => setTimeout(r, 0));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(a.driverInventory).toBe(newerInventory);
+        expect(a.driverInventory).toEqual(newerCopy);
+        expect(a.driverInventoryWalk).toBeNull();
+        expect(client.driverGetRequests.length).toBe(
+          boundary === "loader" ? 1 : 2,
+        );
+        expect(client.status).toBe("connected");
+        expect(flush.reasons).toEqual([]); // ZERO process unhandled rejections
+      } finally {
+        unhandledCleanup?.();
+        watchdog.cancel();
+        h.manager.suspendRecords();
+      }
+    },
+  );
 
   // ---- REAL fence evidence: each case mutates ONE real authority input in
   // the SAME harness (no second harness, no private-field tampering, no
@@ -2631,125 +2251,36 @@ describe("SessionRecordManager read-only driver discovery", () => {
     hFn.manager.suspendRecords();
   });
 
-  it("(4b) regression: A/C loaders stay pending while B opens LAST; every loader and driverGet keeps its own exact session ID", async () => {
-    const pageIds: string[] = [];
-    const { h, client } = driverHarness((sessionId) => {
-      pageIds.push(sessionId);
-      return discoveryPage([]);
-    });
-    // Bounded wait: fail fast with a label instead of hanging the file.
-    const boundedWait = async (label: string, wait: Promise<unknown>) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          wait,
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error(`${label}: bounded wait timed out`)),
-              2000,
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-    // Per-session deferred LOADER gates on the PLAIN instance field. The
-    // fixture captures the gate BEFORE its await, so each loader holds its
-    // OWN gate even when a later open replaces the field; B gets null.
+  it("THREE records on ONE pool: A/C loaders stay pending while B opens LAST, completes and is selected; every loader and page keeps its own session ID; real scoped projections, background drain, selection switches without resets", async () => {
+    const watchdog = new BoundedWatchdog();
+    // Each page answers with a row named after the session ID its own
+    // driverGet closure captured: a retargeted loader or a walk settled onto
+    // the wrong record shows up as a foreign row.
+    const { h, client } = driverHarness((sessionId) =>
+      discoveryPage(
+        [
+          {
+            operationId: `op-${sessionId}`,
+            slug: `row-${sessionId}`,
+            lifecycle: "started",
+          },
+        ],
+        { complete: true },
+      ),
+    );
+    // Per-session LOADER gates on the plain instance field: each loader
+    // captures its gate BEFORE its await, so a later open cannot replace it.
     const gates: Record<string, () => void> = {};
     const gateFor = (sessionId: string) => {
       const gate = deferred<void>();
       gates[sessionId] = gate.resolve;
-      client.loaderGate = gate.promise; // BEFORE this session's open
+      client.loaderGate = gate.promise;
     };
     const loaderEntered = (sessionId: string) =>
       new Promise<void>((resolve) => {
         client.loaderEntries.push({ sessionId, resolve });
       });
     try {
-      gateFor("s-a");
-      const enteredA = loaderEntered("s-a"); // observer BEFORE the open
-      const a = await openOnly(h, "s-a");
-      await boundedWait("loader entry A", enteredA); // deterministic: A's
-      // loader has ENTERED (and captured its own gate) before C's gate is
-      // installed — no reliance on open's microtask ordering.
-      gateFor("s-c");
-      const enteredC = loaderEntered("s-c"); // observer BEFORE the open
-      const c = await openOnly(h, "s-c");
-      await boundedWait("loader entry C", enteredC); // C entered before B
-      client.loaderGate = null; // B's loader (entered last) has NO gate
-      const enteredB = loaderEntered("s-b"); // observer BEFORE the open
-      const b = await openOnly(h, "s-b"); // B opens LAST, ungated
-      await boundedWait("loader entry B", enteredB);
-      // A/C have entered loaders but issued ZERO page RPCs; B (opened last,
-      // ungated) already completed its own discovery.
-      expect(pageIds).toEqual(["s-b"]);
-      expect(client.driverGetRequests.map((r) => r.sessionId)).toEqual(["s-b"]);
-      expect(a.driverInventory.kind).toBe("loading");
-      expect(c.driverInventory.kind).toBe("loading");
-      await settledInventory(b);
-      h.manager.select(b.scope);
-      expect(b.selected).toBe(true);
-      expect(a.driverInventory.kind).toBe("loading");
-      expect(c.driverInventory.kind).toBe("loading");
-      // Release C then A independently; their own driverGet closures must
-      // target C then A (page request order B, C, A).
-      gates["s-c"]!();
-      await boundedWait("walk C", Promise.resolve(c.driverInventoryWalk));
-      gates["s-a"]!();
-      await boundedWait("walk A", Promise.resolve(a.driverInventoryWalk));
-      // Loader ENTRY order is A, C, B; page REQUEST order is B, C, A — each
-      // call kept its own real ID even though B was the last open.
-      expect(client.loaderSessionArgs).toEqual(["s-a", "s-c", "s-b"]);
-      expect(client.driverGetRequests.map((r) => r.sessionId)).toEqual([
-        "s-b",
-        "s-c",
-        "s-a",
-      ]);
-      expect(pageIds).toEqual(["s-b", "s-c", "s-a"]);
-      expect(a.driverInventory.kind).toBe("complete");
-      expect(c.driverInventory.kind).toBe("complete");
-      expect(b.driverInventory.kind).toBe("complete");
-    } finally {
-      // Cleanup on ANY failure: release every gate, clear the field, and
-      // drain observers so nothing pending outlives this test.
-      for (const release of Object.values(gates)) release();
-      client.loaderGate = null;
-      for (const entry of client.loaderEntries.splice(0)) entry.resolve();
-    }
-  });
-
-  it("(4c) THREE records on ONE pool: A/C discovery pending while B completes+selected; real scoped projections, background drain, selection switches without resets, distinct per-record rows", async () => {
-    const watchdog = new BoundedWatchdog();
-    const { h, client } = driverHarness(() =>
-      discoveryPage(
-        [{ operationId: "op-b", slug: "row-b", lifecycle: "started" }],
-        { complete: true },
-      ),
-    );
-    const rowFor = (suffix: string) =>
-      discoveryPage(
-        [
-          {
-            operationId: `op-${suffix}`,
-            slug: `row-${suffix}`,
-            lifecycle: "started",
-          },
-        ],
-        { complete: true },
-      );
-    try {
-      const gates: Record<string, () => void> = {};
-      const gateFor = (sessionId: string) => {
-        const gate = deferred<void>();
-        gates[sessionId] = gate.resolve;
-        client.loaderGate = gate.promise;
-      };
-      const loaderEntered = (sessionId: string) =>
-        new Promise<void>((resolve) => {
-          client.loaderEntries.push({ sessionId, resolve });
-        });
       gateFor("s-a");
       const enteredA = loaderEntered("s-a");
       const a = await openOnly(h, "s-a");
@@ -2762,8 +2293,10 @@ describe("SessionRecordManager read-only driver discovery", () => {
       const enteredB = loaderEntered("s-b");
       const b = await openOnly(h, "s-b");
       await watchdog.wait("B loader entry", enteredB);
-      // B completes its own discovery and is selected while A/C pending.
+      // B completes its own discovery and is selected while A/C pending:
+      // their loaders entered first but issued ZERO page RPCs.
       await settledInventory(b);
+      expect(client.driverGetRequests.map((r) => r.sessionId)).toEqual(["s-b"]);
       h.manager.select(b.scope);
       expect(b.selected).toBe(true);
       expect(a.driverInventory.kind).toBe("loading");
@@ -2787,23 +2320,25 @@ describe("SessionRecordManager read-only driver discovery", () => {
         ["user:A2", "A2"],
       ]);
       expect(b.timeline).toEqual([]);
-      // Selection switches across all three and back with NO resets.
+      // Selection switches across all three and back with NO resets: no
+      // hydrate, no discovery RPC, B's settled inventory object untouched.
       const hydratesBefore = client.hydrates.length;
       const walkCount = client.driverGetRequests.length;
+      const bInventory = b.driverInventory;
       h.manager.select(a.scope);
       expect(a.selected).toBe(true);
       h.manager.select(c.scope);
       expect(c.selected).toBe(true);
       h.manager.select(b.scope);
+      h.manager.select(b.scope);
       expect(b.selected).toBe(true);
       expect(a.selected).toBe(false);
       expect(client.hydrates.length).toBe(hydratesBefore);
       expect(client.driverGetRequests.length).toBe(walkCount);
+      expect(b.driverInventory).toBe(bInventory);
       // While A/C discovery STILL pending, settle C then A independently.
-      client.driverGetHandler = async () => rowFor("c");
       gates["s-c"]!();
       await watchdog.wait("C walk", c.driverInventoryWalk!);
-      client.driverGetHandler = async () => rowFor("a");
       gates["s-a"]!();
       await watchdog.wait("A walk", a.driverInventoryWalk!);
       const opIdsOf = (rec: typeof a) => {
@@ -2815,16 +2350,31 @@ describe("SessionRecordManager read-only driver discovery", () => {
         };
         return inv.rows.map((r) => r.operationId);
       };
-      expect(opIdsOf(a)).toEqual(["op-a"]);
-      expect(opIdsOf(c)).toEqual(["op-c"]);
-      expect(opIdsOf(b)).toEqual(["op-b"]);
+      expect(opIdsOf(a)).toEqual(["op-s-a"]);
+      expect(opIdsOf(c)).toEqual(["op-s-c"]);
+      expect(opIdsOf(b)).toEqual(["op-s-b"]);
+      // Loader ENTRY order is A, C, B; page REQUEST order is B, C, A.
       expect(client.loaderSessionArgs).toEqual(["s-a", "s-c", "s-b"]);
+      expect(client.driverGetRequests.map((r) => r.sessionId)).toEqual([
+        "s-b",
+        "s-c",
+        "s-a",
+      ]);
+      expect(
+        h.manager
+          .records()
+          .map((r) => r.scope.sessionId)
+          .sort(),
+      ).toEqual(["s-a", "s-b", "s-c"]);
       expect(starts(client)).toEqual([
         ["s-a", "A1"],
         ["s-a", "A2"],
       ]);
       expect(client.status).toBe("connected");
     } finally {
+      // Release every gate so nothing pending outlives this test.
+      for (const release of Object.values(gates)) release();
+      client.loaderGate = null;
       watchdog.cancel();
       h.manager.suspendRecords();
     }
