@@ -544,6 +544,30 @@ test("Tab queues and Ctrl+X sends pending input while preserving the current dra
     page.getByRole("region", { name: "Queued prompts" }),
   ).toContainText("queued next task");
   await input.fill("unfinished draft");
+  // A selection keeps native cut; IME, key repeat and Command+X never force-send.
+  const owned = await input.evaluate((element: HTMLTextAreaElement) => {
+    const press = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", {
+        key: "x",
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      element.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    element.setSelectionRange(0, 10);
+    const cut = press({ ctrlKey: true });
+    element.setSelectionRange(0, 0);
+    return [
+      cut,
+      press({ ctrlKey: true, isComposing: true }),
+      press({ ctrlKey: true, repeat: true }),
+      press({ metaKey: true }),
+    ];
+  });
+  expect(owned).toEqual([false, false, false, false]);
+  expect(w.calls("turn/interrupt")).toHaveLength(0);
   await input.press("Home");
   await input.press("Control+x");
   await expect.poll(() => w.calls("turn/interrupt").length).toBe(1);

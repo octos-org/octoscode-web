@@ -492,6 +492,14 @@ test("Vim editing keeps Insert Escape and pending-operator Escape local, while N
     await command(page, "Vim active turn");
     const owner = wire.calls("turn/start")[0]!.params!.session_id!;
     await held(request, owner);
+    // The open command palette owns Escape ahead of Vim and the busy turn.
+    const palette = page.getByRole("listbox", { name: "Commands" });
+    await input(page).fill("/");
+    await expect(palette).toBeVisible();
+    await input(page).press("Escape");
+    await expect(palette).toBeHidden();
+    await expect(input(page)).toHaveAttribute("data-vim-mode", "insert");
+    expect(wire.calls("turn/interrupt")).toHaveLength(0);
     await input(page).fill("alpha beta");
     await input(page).press("Escape");
     await expect(input(page)).toHaveAttribute("data-vim-mode", "normal");
@@ -504,14 +512,17 @@ test("Vim editing keeps Insert Escape and pending-operator Escape local, while N
     await input(page).press("w");
     await input(page).press("x");
     await expect(input(page)).toHaveValue("alpha eta");
+    // React's controlled write resets the native caret; Vim's caret survives it.
+    await input(page).press("x");
+    await expect(input(page)).toHaveValue("alpha ta");
     await input(page).press("Enter");
-    await expect(promptQueue(page)).toContainText("alpha eta");
+    await expect(promptQueue(page)).toContainText("alpha ta");
     expect(wire.calls("turn/start")).toHaveLength(1);
     await release(request, owner);
     await expect.poll(() => wire.calls("turn/start").length).toBe(2);
     expect(wire.calls("turn/start")[1]!.params).toMatchObject({
       session_id: owner,
-      input: [{ kind: "text", text: "alpha eta" }],
+      input: [{ kind: "text", text: "alpha ta" }],
     });
     expect(wire.calls("turn/interrupt")).toHaveLength(0);
     await expect(promptQueue(page)).toHaveCount(0);
