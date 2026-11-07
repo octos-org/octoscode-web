@@ -927,7 +927,7 @@ test("a sandbox escalation can only be denied from the phone", async ({
 async function phoneWithBlockedPeer(
   browser: Browser,
   request: APIRequestContext,
-  kind: "approval" | "approval-escalation",
+  kind: "approval" | "approval-escalation" | "question",
 ) {
   // "approval" must not match the "approval-escalation" folder's rows.
   const name = runName(`peer-control-${kind}`);
@@ -966,9 +966,14 @@ async function phoneWithBlockedPeer(
       ).status(),
     ).toBe(204);
   const row = page.locator(`[data-fleet-row="${slug}"]`);
-  await expect(row).toHaveAttribute("data-fleet-status", /approval|审批|批准/, {
-    timeout: 20_000,
-  });
+  // A question-blocked row's Fleet wording is T-0493's to fix; its wait is
+  // observed on the dock card instead.
+  if (kind !== "question")
+    await expect(row).toHaveAttribute(
+      "data-fleet-status",
+      /approval|审批|批准/,
+      { timeout: 20_000 },
+    );
   return { page, frames, slug, row };
 }
 
@@ -1009,8 +1014,10 @@ test("a peer's approval from the phone covers one request", async ({
   await expect(row.locator('[data-fleet-action="approve"]')).toBeVisible();
   await row.locator('[data-fleet-action="approve"]').tap();
   await expect.poll(() => peerCommands(frames).length).toBe(1);
+  // The row's own pending id, never the console's synthetic one.
   expect(peerCommands(frames)[0]).toMatchObject({
     kind: "approval_respond",
+    approval_id: `peer-approval-${slug}`,
     decision: "approve",
   });
   expect(peerCommands(frames)[0]).not.toHaveProperty("approval_scope");
@@ -1030,8 +1037,36 @@ test("a peer's approval from the phone covers one request", async ({
   await expect
     .poll(() => peerCommands(frames).length)
     .toBeGreaterThanOrEqual(2);
-  for (const command of peerCommands(frames))
+  for (const command of peerCommands(frames)) {
     expect(command).not.toHaveProperty("approval_scope");
+    expect(command.approval_id).toBe(`peer-approval-${slug}`);
+  }
+});
+
+test("a peer's question is answered from the phone's dock by its own id", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const { page, frames, slug } = await phoneWithBlockedPeer(
+    browser,
+    request,
+    "question",
+  );
+  const dock = await openDockFromFleet(page, slug);
+  const card = dock.locator("[data-peer-answer-card]");
+  await expect(card).toContainText("Which checks should run?", {
+    timeout: 20_000,
+  });
+  // The row's typed answer is what it sends (choice handling is T-0493's).
+  await dock.locator('[data-row-draft="answer"]').fill("Full");
+  await dock.locator('[data-row-action="answer"]').tap();
+  await expect.poll(() => peerCommands(frames).length).toBe(1);
+  expect(peerCommands(frames)[0]).toEqual({
+    kind: "question_respond",
+    question_id: `peer-question-${slug}`,
+    answers: [{ free_text: "Full" }],
+  });
 });
 
 test("a peer's sandbox escalation can only be denied from the phone", async ({

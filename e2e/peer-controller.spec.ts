@@ -259,8 +259,10 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await expect(fleetAdvanced(page)).toHaveCount(1);
     await fleetAdvanced(page).press("Enter");
     await expect(advancedConsole(page)).toBeVisible();
+    await fleetBrief(page).fill("A brief kept while away");
 
-    // Settings leaves Fleet, and Fleet can be reopened afterwards.
+    // Settings leaves Fleet, and Fleet can be reopened afterwards with its
+    // unsent brief and its open console as they were.
     await sidebar
       .getByRole("button", { name: "Settings", exact: true })
       .click();
@@ -269,6 +271,8 @@ test.describe("Fleet view (migrated console semantics)", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
     await openFleet(page);
+    await expect(fleetBrief(page)).toHaveValue("A brief kept while away");
+    await expect(advancedConsole(page)).toBeVisible();
 
     // New Session leaves Fleet and opens the conversation.
     await sidebar

@@ -1199,6 +1199,9 @@ const SANDBOX_ESCALATION_DETAILS = {
 function peerApprovalId(slug) {
   return `peer-approval-${slug}`;
 }
+function peerQuestionId(slug) {
+  return `peer-question-${slug}`;
+}
 function emitPeerActivityFrame(socket, kind, slug) {
   const peerSessionId = peerSessionIdForSlug(slug);
   if (peerSessionId === null) return false;
@@ -1234,6 +1237,11 @@ function emitPeerActivityFrame(socket, kind, slug) {
       approval_kind: "sandbox_escalation",
       risk: "high",
       typed_details: SANDBOX_ESCALATION_DETAILS,
+    });
+  else if (kind === "question")
+    send("user_question/requested", {
+      ...questionRequest(peerSessionId, randomUUID()),
+      question_id: peerQuestionId(slug),
     });
   else if (kind === "resolve")
     send("approval/decided", {
@@ -2114,14 +2122,15 @@ const http = createServer(async (request, response) => {
     }
     if (url.pathname === "/__test__/peer-control/variant") {
       // Per-Session variant override (default derives from the workspace
-      // suffix): accepted | refused | stale | duplicate.
+      // suffix): accepted | refused | stale | duplicate, or
+      // acquire-refused-once (refuses the next session/driver/acquire only).
       peerControlVariantOverrides.set(
         state.sessionId,
         url.searchParams.get("variant") ?? "",
       );
     } else if (url.pathname === "/__test__/peer-control/peer-activity") {
       // Drive a DISPATCHED peer's own Session lifecycle (turn | approval |
-      // approval-escalation | resolve | complete). The root-composer trigger (PEER_ACTIVITY_TRIGGER)
+      // approval-escalation | question | resolve | complete). The root-composer trigger (PEER_ACTIVITY_TRIGGER)
       // cannot reach a peer-control workspace: Start's acquire makes the
       // binding external-held, and `turn/start` is then refused with
       // ExternalMasterHeld — so this is the ONLY way to observe an adopted row
@@ -2138,6 +2147,7 @@ const http = createServer(async (request, response) => {
           "turn",
           "approval",
           "approval-escalation",
+          "question",
           "resolve",
           "complete",
         ].includes(kind) ||
@@ -4050,6 +4060,21 @@ sockets.on("connection", (socket, request) => {
         return;
       }
       if (request.method === SESSION_DRIVER_ACQUIRE) {
+        // One refused acquire (another app still holds the seat), then the
+        // ordinary grant: lets a test drive a failed Resume chat and its retry.
+        if (
+          peerControlVariantOverrides.get(state.sessionId) ===
+          "acquire-refused-once"
+        ) {
+          peerControlVariantOverrides.delete(state.sessionId);
+          replyError(
+            socket,
+            request.id,
+            -32_050,
+            "Another driver still holds this session",
+          );
+          return;
+        }
         // Record the minted fence: every later control/dispatch must present
         // THIS epoch + token or refuse as `driver_fence_stale`.
         peerAcquires.set(state.sessionId, {
