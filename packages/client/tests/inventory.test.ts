@@ -42,10 +42,7 @@ const managementCapabilities: UiProtocolCapabilities = {
 };
 const mcpStatus = { ...scope, servers: [], summary };
 describe("runtime inventory contracts", () => {
-  it("accepts actual nullable MCP fields and the rc11 empty reported inventory", () => {
-    expect(
-      parseRuntimeMcp({ ...scope, servers: [], summary }, "s1", "p1")?.servers,
-    ).toEqual([]);
+  it("accepts actual nullable MCP fields from the rc11 reported inventory", () => {
     expect(
       parseRuntimeMcp(
         {
@@ -140,23 +137,22 @@ describe("runtime inventory contracts", () => {
     ]);
     for (const secret of ["filesystem-mcp", "/srv/shared", "secret-token"])
       expect(JSON.stringify(result)).not.toContain(secret);
-  });
-  it("keeps an empty allowlist and the reason management is unavailable", () => {
-    const result = parseRuntimeMcp(
-      {
-        ...mcpStatus,
-        can_manage: false,
-        manage_unavailable_reason: "requires_profile_write",
-        stdio_allowlist: [],
-      },
-      "s1",
-      "p1",
-    );
-    expect(result?.management).toEqual({
-      canManage: false,
-      reason: "requires_profile_write",
-    });
-    expect(result?.stdioAllowlist).toEqual([]);
+    // An unavailable management keeps its reason and an empty allowlist; an
+    // unlisted reason is passed through as reported instead of invented.
+    for (const reason of ["requires_profile_write", "temporary_maintenance"]) {
+      const unavailable = parseRuntimeMcp(
+        {
+          ...mcpStatus,
+          can_manage: false,
+          manage_unavailable_reason: reason,
+          stdio_allowlist: [],
+        },
+        "s1",
+        "p1",
+      );
+      expect(unavailable?.management).toEqual({ canManage: false, reason });
+      expect(unavailable?.stdioAllowlist).toEqual([]);
+    }
   });
   it("leaves the facts absent on an older server", () => {
     const legacy = parseRuntimeMcp(mcpStatus, "s1", "p1");
@@ -202,19 +198,6 @@ describe("runtime inventory contracts", () => {
         expect(result).not.toHaveProperty("stdioAllowlist");
     },
   );
-  it("keeps an unknown reason as reported", () => {
-    expect(
-      parseRuntimeMcp(
-        {
-          ...mcpStatus,
-          can_manage: false,
-          manage_unavailable_reason: "temporary_maintenance",
-        },
-        "s1",
-        "p1",
-      )?.management,
-    ).toEqual({ canManage: false, reason: "temporary_maintenance" });
-  });
   it("projects only status fields and rejects duplicate or wrong-scope rows", () => {
     const result = parseRuntimeTools(
       {
@@ -300,6 +283,8 @@ describe("runtime inventory contracts", () => {
       profile_id: "wrong",
       policy_id: "profile",
       tools: [],
+      servers: [],
+      summary,
     }));
     await expect(
       createInventoryCommands({ request }, "s1", "p1", capabilities).tools(),
@@ -317,6 +302,19 @@ describe("runtime inventory contracts", () => {
     });
     await expect(commands.mcp()).rejects.toThrow("not advertised");
     expect(request).toHaveBeenCalledTimes(1);
+
+    const wrongScopeMcp = vi.fn(async () => ({
+      ...mcpStatus,
+      profile_id: "other",
+    }));
+    const connectorCommands = createInventoryCommands(
+      { request: wrongScopeMcp },
+      "s1",
+      "p1",
+      managementCapabilities,
+    );
+    await expect(connectorCommands.mcp()).rejects.toThrow("wrong-scope");
+    expect(wrongScopeMcp).toHaveBeenCalledTimes(1);
   });
   it("sends exact connector management payloads without reading status", async () => {
     const request = vi.fn(async (method: string) => ({
@@ -535,17 +533,6 @@ describe("runtime inventory contracts", () => {
       profile_id: "p1",
       include_disabled: true,
     });
-  });
-  it("rejects wrong-scope connector status", async () => {
-    const request = vi.fn(async () => ({ ...mcpStatus, profile_id: "other" }));
-    const commands = createInventoryCommands(
-      { request },
-      "s1",
-      "p1",
-      managementCapabilities,
-    );
-    await expect(commands.mcp()).rejects.toThrow("wrong-scope");
-    expect(request).toHaveBeenCalledTimes(1);
   });
   describe("connector sign-in", () => {
     const oauthCapabilities: UiProtocolCapabilities = {
