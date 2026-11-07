@@ -150,7 +150,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | accepts exactly one of payload / continuation_ref (absent or null)               | ③   | decidable-content 规则（present/absent/null 全组合） |
 | refuses ambiguous, empty, or unserializable content with a bounded typed failure | ④   | 环载荷等有界类型化失败                               |
 | freezes a CLONE and leaves the caller's raw payload unfrozen                     | ④   | 克隆冻结不冻调用方                                   |
-| preserves an own JSON \"__proto__\" key without prototype pollution                | ③   | 原型污染防护                                         |
+| preserves an own JSON \"**proto**\" key without prototype pollution              | ③   | 原型污染防护                                         |
 
 ### tests/external-driver.test.ts（留 16/61）
 
@@ -208,13 +208,24 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/inventory.test.ts（留 16/19）
 
-T-0491 已合并同类项，现存几乎都是独立链：rc11 可空字段（④）、连接器配置/令牌不投影（③）、T-0056 管理事实白名单（③）、旧服务器无 facts（④）、只投影 status 字段+重复/错 scope 行拒绝（③）、畸形可空字段与 unsafe
-counts（④）、门控+返回 scope 校验（③）、连接器管理 payload 精确（①）、Core
-4748d11b 真实 create 结果（⑤）、#2912
-method-capability 回退（⑤）、sign-in 只开网页（③
-javascript:/data: 安全）、sign-in
-payload 精确（①）、token_storage 不投影（③）、畸形 facts
-it.each（④）、不可读 mutation 不给 connector 不报错（④）、stdio 连接器走 allowlist 绝不给 command（③）。
+| 测试                                                                      | 类  | 守的性质                                            |
+| ------------------------------------------------------------------------- | --- | --------------------------------------------------- |
+| accepts actual nullable MCP fields from the rc11 reported inventory       | ④   | rc11 可空字段                                       |
+| projects MCP management fields without connector configuration            | ③   | 连接器配置/令牌不投影                               |
+| projects the T-0056 management facts and nothing else from the allowlist  | ③   | 管理事实白名单                                      |
+| projects only status fields and rejects duplicate or wrong-scope rows     | ③   | 只投影 status 字段 + 重复/错 scope 拒绝             |
+| rejects malformed nullable fields and unsafe counts                       | ④   | 畸形可空字段与 unsafe counts                        |
+| gates each status method before sending and validates returned scope      | ③   | 门控 + 返回 scope 校验（含错 scope connector 变体） |
+| sends exact connector management payloads without reading status          | ①   | 连接器管理 payload 精确                             |
+| reads what the server saved from Core's real create result                | ⑤   | Core 4748d11b 真实 create 结果                      |
+| a mutation result it can't read yields no connector, not an error         | ④   | 不可读 mutation 不报错不给 connector                |
+| marks a connector the server already lists, and carries a rebuild failure | ④   | 已列连接器的 rebuild 失败携带                       |
+| creates a stdio connector from an allowlist entry, never a command        | ③   | stdio 走 allowlist 绝不给 command                   |
+| uses method capabilities when Core #2912 omits the feature                | ⑤   | #2912 method-capability 回退                        |
+| reads a started sign-in and keeps the token storage out                   | ③   | token_storage 不投影                                |
+| opens only a web page                                                     | ③   | sign-in 只开 https 网页（javascript:/data: 拒绝）   |
+| sends the exact sign-in payloads                                          | ①   | sign-in payload 精确                                |
+| refuses a start result it can't open, and methods it wasn't offered       | ③   | 不可开结果/未提供方法 fail-closed                   |
 
 ### tests/media.test.ts（留 3/5）
 
