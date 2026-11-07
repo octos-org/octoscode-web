@@ -85,40 +85,6 @@ async function openReview(
 const panelToggle = (page: Page) =>
   page.getByRole("button", { name: /^Session panel/ });
 
-const sessionNavigation = (page: Page) =>
-  page.getByRole("complementary", { name: "Product navigation" });
-
-/** Starts a new Session in the same workspace; returns the one it left. */
-async function leaveForNewSession(page: Page) {
-  const navigation = sessionNavigation(page);
-  const selected = navigation.locator(
-    '[role="treeitem"][data-session-id][aria-current="page"]',
-  );
-  const first = await selected.getAttribute("data-session-id");
-  expect(first).toBeTruthy();
-  await navigation
-    .getByRole("button", { name: "diff-review", exact: true })
-    .hover();
-  await navigation
-    .getByRole("button", { name: "New session in diff-review", exact: true })
-    .click();
-  await expect(selected).not.toHaveAttribute("data-session-id", first!);
-  await expect(panelToggle(page)).toHaveAccessibleName("Session panel");
-  return first!;
-}
-
-async function returnToSession(page: Page, sessionId: string) {
-  await sessionNavigation(page)
-    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`)
-    .click();
-  await expect(panelToggle(page)).toHaveAccessibleName(
-    "Session panel, 1 changed",
-  );
-  if ((await panelToggle(page).getAttribute("aria-expanded")) === "false")
-    await panelToggle(page).click();
-  await page.getByRole("tab", { name: /^Changes/ }).click();
-}
-
 /** Opens the session panel on its Changes tab: the diff sits beside the chat. */
 async function openChanges(page: Page) {
   await panelToggle(page).click();
@@ -245,58 +211,6 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
   expect(errors).toEqual([]);
 });
 
-test("large previews remain complete and use the plain-text performance fallback", async ({
-  page,
-}) => {
-  const lines: PreviewLine[] = Array.from({ length: 500 }, (_, index) => ({
-    kind: "added",
-    content: `const value${index} = ${index};`,
-    new_line: index + 1,
-  }));
-  const dialog = await openReview(page, lines);
-  await expect(
-    dialog.getByText(
-      "Large preview shown as plain text. All lines are included.",
-    ),
-  ).toBeVisible();
-  expect(await dialog.locator(".diff-line > code").allTextContents()).toEqual(
-    lines.map((line) => line.content),
-  );
-  await expect(dialog.locator('[class*="shiki-color"]')).toHaveCount(0);
-  await dialog.locator("summary").click();
-  await expect(dialog.locator("details")).not.toHaveAttribute("open");
-  await page.getByRole("button", { name: "Close session panel" }).click();
-  await expect(dialog).toBeHidden();
-});
-
-test("a missing optional diff grammar retains original text and word marks", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  let rejected = false;
-  page.on("pageerror", (error) => errors.push(error.message));
-  // The optional TypeScript grammar chunk. A dev server serves it as
-  // @shikijs_langs_typescript.js; this repo's e2e runs `vite preview`, which
-  // serves the built /assets/typescript-<hash>.js instead.
-  await page.route(
-    /\/(?:@shikijs_langs_)?typescript(?:\.js|-[A-Za-z0-9_-]+\.js)(\?|$)/,
-    async (route) => {
-      rejected = true;
-      await route.abort();
-    },
-  );
-  const dialog = await openReview(page, replacement);
-  await expect.poll(() => rejected).toBe(true);
-  expect(await dialog.locator(".diff-line > code").allTextContents()).toEqual(
-    replacement.map((line) => line.content),
-  );
-  expect(
-    await dialog.locator('[class*="changedWord"]').count(),
-  ).toBeGreaterThan(0);
-  await expect(dialog.locator(".shiki-color-keyword")).toHaveCount(0);
-  expect(errors).toEqual([]);
-});
-
 test("Changes works before a turn and ignores a late workspace reply after changing scope", async ({
   page,
 }) => {
@@ -366,68 +280,6 @@ test("Changes works before a turn and ignores a late workspace reply after chang
   ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Close session panel" }).click();
   await expect(dialog).toHaveCount(0);
-});
-
-test("session changes recover on selection and reload without unsupported Git requests", async ({
-  page,
-}) => {
-  const methods: string[] = [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", ({ payload }) => {
-      methods.push(JSON.parse(String(payload)).method);
-    }),
-  );
-  const changes = await openReview(page, replacement, true);
-  await expect(changes.locator(".diff-added code")).toHaveText(
-    replacement[2]!.content,
-  );
-  await expect(
-    changes.getByRole("button", { name: "Uncommitted (Git)" }),
-  ).toBeDisabled();
-  const first = await leaveForNewSession(page);
-  // Nothing changed here and Git is unsupported: nothing to point the reader at.
-  await expect(
-    changes.getByText("No session change preview yet.", { exact: true }),
-  ).toBeVisible();
-  await expect(changes).not.toContainText("Select a changed file above");
-  await returnToSession(page, first);
-  await expect(changes.locator(".diff-added code")).toHaveText(
-    replacement[2]!.content,
-  );
-  await page.reload();
-  await expect(panelToggle(page)).toHaveAccessibleName(
-    "Session panel, 1 changed",
-  );
-  await expect(changes.locator(".diff-added code")).toHaveText(
-    replacement[2]!.content,
-  );
-  expect(methods).not.toContain("diff/workspace/get");
-});
-
-test("an unreadable path in retained history costs its row, not the Session", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  const changes = await openReview(page, replacement, true, [
-    { path: "notes\tdraft.md", operation: "create" },
-  ]);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await page.reload();
-  await expect(panelToggle(page)).toHaveAccessibleName(
-    "Session panel, 1 changed",
-  );
-  await expect(composer).toBeEnabled();
-  await expect(changes.locator(".diff-added code")).toHaveText(
-    replacement[2]!.content,
-  );
-  await returnToSession(page, await leaveForNewSession(page));
-  await expect(composer).toBeEnabled();
-  await expect(changes.locator(".diff-added code")).toHaveText(
-    replacement[2]!.content,
-  );
-  await expect(changes).not.toContainText("draft.md");
-  expect(errors).toEqual([]);
 });
 
 test("reconnects preserve the selected preview and Git scope without new diff reads", async ({

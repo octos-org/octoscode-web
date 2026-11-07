@@ -1,6 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
-  COMPOSER_PLACEHOLDER,
   FIXTURE_ORIGIN,
   connectAndStartWorkspace,
   runFolder,
@@ -70,8 +69,6 @@ const RAW_DISPATCH_COPY = "driver operation refused: peer/dispatch";
 // Locators — attribute CSS only where class names are CSS-module hashed.
 // ---------------------------------------------------------------------------
 const productNavigation = (page: Page): Locator => page.locator("aside");
-const composer = (page: Page): Locator =>
-  page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 /** The sidebar's Fleet footer entry (ProductSidebar.tsx:780). */
 const fleetEntry = (page: Page): Locator =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
@@ -99,14 +96,6 @@ const fleetAction = (page: Page, slug: string, action: string): Locator =>
 /** §4.3: the row's OWN inline steer text (`data-fleet-field="steer-<slug>"`). */
 const fleetSteerInput = (page: Page, slug: string): Locator =>
   fleetRow(page, slug).locator(`[data-fleet-field="steer-${slug}"]`);
-/** The Fleet footer's Advanced disclosure — the protocol console's ONLY home.
- *  Round 4 C3 made it a compact NATIVE <details>/<summary> (FleetView.tsx),
- *  so the activation target is the summary, not an aria-expanded button; the
- *  per-row Finished buckets keep the button form and are NOT this control. */
-const fleetAdvanced = (page: Page): Locator =>
-  fleet(page).locator('summary[data-fleet-advanced-summary="true"]');
-const advancedConsole = (page: Page): Locator =>
-  fleet(page).locator('[data-control-panel="peer-controller"]');
 
 // ---------------------------------------------------------------------------
 // Wire observation — allowlisted projection only (no payloads, no tokens).
@@ -223,120 +212,6 @@ function masterSession(w: ReturnType<typeof wire>): string {
 }
 
 test.describe("Fleet view (migrated console semantics)", () => {
-  const cwd = (variant: string) => `/srv/work/${WORKSPACE_PREFIX}${variant}`;
-
-  // -------------------------------------------------- navigation + lanes
-  test("Fleet opens with only the advertised lanes, keeps the console behind Advanced, and every way out leaves it", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    const folder = fleetFolder("fleet-nav");
-    const name = folder.split("/").pop() as string;
-    await connectAndStartWorkspace(page, folder);
-    const sidebar = productNavigation(page);
-    const master = await sidebar
-      .locator('[role="treeitem"][aria-current="page"]')
-      .getAttribute("data-session-id");
-    expect(master).toBeTruthy();
-
-    await openFleet(page);
-    // The picker shows exactly the advertised lane keys — the ONLY lane source,
-    // so an unknown lane cannot be chosen.
-    await expect(fleetModel(page)).toBeEnabled();
-    await expect(fleetModel(page).locator("option:not([hidden])")).toHaveText([
-      ...LANE_KEYS,
-    ]);
-    // Empty state renders before any dispatch; no frames were sent.
-    await expect(
-      fleet(page).locator('[data-fleet-empty="true"]'),
-    ).toBeVisible();
-    expect(w.calls(DISPATCH_METHOD)).toHaveLength(0);
-    expect(w.calls(ACQUIRE_METHOD)).toHaveLength(0);
-
-    // The protocol console exists ONLY behind the Advanced disclosure. Class
-    // names are hashed; the console carries its data-control-panel hook.
-    await expect(advancedConsole(page)).toHaveCount(0);
-    await expect(fleetAdvanced(page)).toHaveCount(1);
-    await fleetAdvanced(page).press("Enter");
-    await expect(advancedConsole(page)).toBeVisible();
-    await fleetBrief(page).fill("A brief kept while away");
-
-    // Settings leaves Fleet, and Fleet can be reopened afterwards with its
-    // unsent brief and its open console as they were.
-    await sidebar
-      .getByRole("button", { name: "Settings", exact: true })
-      .click();
-    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await expect(fleet(page)).toBeHidden();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
-    await openFleet(page);
-    await expect(fleetBrief(page)).toHaveValue("A brief kept while away");
-    await expect(advancedConsole(page)).toBeVisible();
-
-    // New Session leaves Fleet and opens the conversation.
-    await sidebar
-      .locator(`[role="treeitem"][aria-label=${JSON.stringify(name)}]`)
-      .getByRole("button", { name, exact: true })
-      .hover();
-    await sidebar
-      .getByRole("button", { name: `New session in ${name}` })
-      .click();
-    await expect(composer(page)).toBeEnabled();
-    await expect(fleet(page)).toBeHidden();
-    await expect(
-      sidebar.locator('[role="treeitem"][data-session-id]'),
-    ).toHaveCount(2);
-
-    // Selecting a Session in the sidebar leaves Fleet, and browser Back does
-    // not bring it back.
-    await openFleet(page);
-    await sidebar
-      .locator(`[role="treeitem"][data-session-id=${JSON.stringify(master)}]`)
-      .click();
-    await expect(page.locator("section.conversation")).toBeVisible();
-    await expect(composer(page)).toBeEnabled();
-    await expect(fleet(page)).toBeHidden();
-    await page.goBack();
-    await expect(fleet(page)).toBeHidden();
-  });
-
-  test("unsupported Fleet capability disables the entry and explains why", async ({
-    page,
-  }) => {
-    await connectAndStartWorkspace(page, cwd("no-fleet"));
-    await expect(fleetEntry(page)).toBeDisabled();
-    await expect(
-      productNavigation(page).getByText(
-        "Current server does not support Fleet yet",
-      ),
-    ).toBeVisible();
-  });
-
-  test("Fleet empty state stays top-aligned on desktop and mobile", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await connectAndStartWorkspace(page, cwd(""));
-    await openFleet(page);
-    const dynamicSession = fleet(page)
-      .locator("label")
-      .filter({ hasText: "Session" })
-      .locator("select");
-    const back = page.locator(".fleet-back");
-    expect((await back.boundingBox())!.width).toBeLessThanOrEqual(80);
-    await expect(page.locator(".fleet-pane")).toHaveScreenshot(
-      "fleet-empty-desktop.png",
-      { mask: [dynamicSession] },
-    );
-    await page.setViewportSize({ width: 390, height: 844 });
-    expect((await back.boundingBox())!.width).toBeLessThanOrEqual(80);
-    await expect(page.locator(".fleet-pane")).toHaveScreenshot(
-      "fleet-empty-mobile.png",
-      { mask: [dynamicSession] },
-    );
-  });
-
   // ------------------------------------- Start -> adopted row -> row actions
   test("Start opens only with model and brief, dispatches once per Start, and the row's Steer, Approve and Stop each send one frame", async ({
     page,

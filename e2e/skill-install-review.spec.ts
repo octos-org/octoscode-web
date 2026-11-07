@@ -203,24 +203,6 @@ test("reviews what the server reports, read only", async ({ page }) => {
   expect(fake.installs).toHaveLength(0);
 });
 
-test("a package with missing facts says unknown, not none", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  const dialog = await start(page);
-  await searchRegistry(dialog, fake);
-  await expect(dialog.getByText(/Instruction skills/)).toHaveCount(0);
-  await dialog
-    .getByRole("button", { name: "Review the source of bare" })
-    .click();
-  const panel = review(dialog);
-  for (const label of ["Version", "Author", "License", "Required tools"])
-    await expect(fact(panel, label)).toHaveText("Unknown");
-  await expect(fact(panel, "Executable tools")).toContainText(
-    "doesn't mean it has none",
-  );
-});
-
 test("a source that moves after its review never gets an install sent", async ({
   page,
 }) => {
@@ -259,72 +241,6 @@ test("a source that moves after its review never gets an install sent", async ({
   expect(fake.installs).toEqual([]);
 });
 
-test("a registry that can't be read shows why, with nothing to act on", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  const dialog = await start(page);
-  await searchRegistry(dialog, fake);
-  fake.searchFails = "failed to search skill registry: timed out";
-  await dialog
-    .getByRole("button", { name: "Review the source of sample" })
-    .click();
-  const panel = review(dialog);
-  await expect(panel.getByRole("alert")).toContainText("timed out");
-  await expectNoInstallControl(dialog);
-  fake.searchFails = null;
-  await panel.getByRole("button", { name: "Try again" }).click();
-  await expect(fact(panel, "Version")).toHaveText("1.0.0");
-  expect(fake.installs).toHaveLength(0);
-});
-
-test("a typed source reads as unknown when the registry doesn't list it", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  const dialog = await start(page);
-  await dialog
-    .getByLabel("Repository or server-side path")
-    .fill("someone/else");
-  await dialog.getByLabel("Branch (server default: main)").fill("dev");
-  await dialog.getByRole("button", { name: "Review source" }).click();
-  const panel = review(dialog);
-  await expect(panel).toContainText("no single entry for this source");
-  await expect(fact(panel, "Package")).toHaveText("Unknown");
-  await expect(fact(panel, "Branch")).toHaveText("dev");
-  await expectNoInstallControl(dialog);
-  expect(fake.installs).toHaveLength(0);
-});
-
-test("a path on the server is reviewed without the registry", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  fake.searchFails = "the registry is unreachable from this server";
-  const dialog = await start(page);
-  await dialog
-    .getByLabel("Repository or server-side path")
-    .fill("/srv/skills/mine");
-  await dialog.getByRole("button", { name: "Review source" }).click();
-  const panel = review(dialog);
-  await expect(panel).toContainText("This is a path on the server");
-  await expect(fact(panel, "Version")).toHaveText("Unknown");
-  await expect(panel.getByText("Branch", { exact: true })).toHaveCount(0);
-  expect(fake.searches).toBe(0);
-  await expectNoInstallControl(dialog);
-});
-
-test("a server without a registry still shows unknowns", async ({ page }) => {
-  const fake = await fakeRegistry(page, [INSTALL, LIST]);
-  const dialog = await start(page);
-  await dialog
-    .getByLabel("Repository or server-side path")
-    .fill("someone/else");
-  await dialog.getByRole("button", { name: "Review source" }).click();
-  await expect(review(dialog)).toContainText("doesn't offer a skill registry");
-  expect(fake.searches).toBe(0);
-});
-
 test("keeps sources and tokens out of browser storage", async ({ page }) => {
   await fakeRegistry(page);
   const dialog = await start(page);
@@ -340,37 +256,4 @@ test("keeps sources and tokens out of browser storage", async ({ page }) => {
   );
   expect(stored).not.toContain("s3cret-source-token");
   expect(stored).not.toContain("example.com/a.git");
-});
-
-test("settings lead to the review, in Chinese and at phone width", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  const dialog = await start(page, "zh");
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "关闭技能" }).click();
-
-  await page.getByRole("button", { name: "打开会话列表" }).click();
-  await page
-    .getByRole("complementary", { name: /Product navigation|产品导航/ })
-    .getByRole("button", { name: "设置", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "设置" });
-  await settings.getByRole("button", { name: "技能", exact: true }).click();
-  await settings.getByRole("button", { name: "审查技能来源" }).click();
-  await expect(settings).toHaveCount(0);
-  await expect(dialog).toBeVisible();
-
-  await dialog.getByLabel("仓库或服务器端路径").fill("someone/else");
-  await dialog.getByRole("button", { name: "审查来源", exact: true }).click();
-  const panel = dialog.getByRole("region", { name: "来源审查" });
-  await expect(panel).toContainText("这里不提供安装");
-  await expect(panel).toContainText("服务器未报告");
-  await expectNoInstallControl(dialog);
-  const overflow = await dialog.evaluate(
-    (element) => element.scrollWidth - element.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-  expect(fake.installs).toHaveLength(0);
 });

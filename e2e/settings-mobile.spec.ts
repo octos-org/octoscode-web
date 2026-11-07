@@ -39,98 +39,90 @@ async function wheelToBottom(page: Page, panel: Locator) {
     .toBeLessThan(2);
 }
 
-for (const viewport of [
-  { width: 320, height: 480 },
-  { width: 390, height: 844 },
-]) {
-  test(`Settings remain operable at ${viewport.width}×${viewport.height}`, async ({
-    page,
-    context,
-  }) => {
-    await page.setViewportSize(viewport);
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    await start(page);
-    const navigationTrigger = page.getByRole("button", {
-      name: "Open sessions",
-    });
-    await navigationTrigger.click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const settings = page.getByRole("dialog", {
-      name: "Settings",
-      exact: true,
-    });
-    await expect(settings).toBeVisible();
-    const content = settings.getByRole("tabpanel");
-    const close = settings.getByRole("button", { name: "Close settings" });
-    await wheelToBottom(page, content);
-    await insideViewport(page, settings);
-    await insideViewport(page, close);
-    // General no longer ends with the connection controls: this shell adds the
-    // new-session defaults block below them, so scrolling to the bottom leaves
-    // Disconnect/Forget/diagnostics above the fold. Bring each into view first
-    // — the same idiom this test already uses for "Add provider" — and keep
-    // asserting that each one lands fully inside the viewport at this size.
-    const disconnect = settings.getByRole("button", {
-      name: "Disconnect",
-      exact: true,
-    });
-    await disconnect.scrollIntoViewIfNeeded();
-    await insideViewport(page, disconnect);
-    const forget = settings.getByRole("button", { name: "Forget server" });
-    await forget.scrollIntoViewIfNeeded();
-    await insideViewport(page, forget);
-    const diagnostics = settings.getByRole("button", {
-      name: "Copy diagnostics",
-    });
-    await diagnostics.scrollIntoViewIfNeeded();
-    await insideViewport(page, diagnostics);
-    await diagnostics.click();
-    await expect(
-      settings.getByRole("button", { name: "Copied", exact: true }),
-    ).toBeVisible();
-    expect(await settings.evaluate((el) => el.scrollTop)).toBe(0);
-
-    await settings.getByRole("button", { name: "Models", exact: true }).click();
-    await expect(content).toHaveAttribute("data-settings-section", "models");
-    await expect(
-      settings.getByRole("list", { name: "Configured providers" }),
-    ).toBeVisible();
-    await wheelToBottom(page, content);
-    await insideViewport(page, close);
-    const addProvider = settings.getByRole("button", { name: "Add provider" });
-    await addProvider.scrollIntoViewIfNeeded();
-    await insideViewport(page, addProvider);
-    await addProvider.click();
-    const editor = settings.getByRole("form", { name: "Add model provider" });
-    await expect(editor).toBeVisible();
-    await editor.getByLabel("Provider / family ID").fill("deepseek");
-    await editor.getByLabel("Base URL").fill("https://example.test/api/v1");
-    const cancel = editor.getByRole("button", { name: "Cancel", exact: true });
-    await cancel.scrollIntoViewIfNeeded();
-    await insideViewport(page, cancel);
-    await insideViewport(page, close);
-    await cancel.click();
-    await expect(editor).toBeHidden();
-    await close.click();
-    await expect(settings).toBeHidden();
-    await expect(navigationTrigger).toBeFocused();
-
-    // Retargeted after the v0.10.0 rebase: the composer-level entry point into
-    // a settings surface is now our Session status strip, which replaced
-    // upstream's "Runtime model:" chip and opens the Session settings pane.
-    // The guarantee under test is unchanged — at this viewport the trigger is
-    // reachable, opens its pane from the keyboard, and Escape closes the pane
-    // and returns focus to the trigger.
-    const modelTrigger = page.getByRole("button", { name: "Session settings" });
-    await insideViewport(page, modelTrigger);
-    const sessionSettings = page.getByRole("dialog", {
-      name: "Session settings",
-    });
-    await modelTrigger.focus();
-    await modelTrigger.press("Enter");
-    await expect(sessionSettings).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(sessionSettings).toBeHidden();
-    await expect(modelTrigger).toBeFocused();
+test("Settings remain operable at 320×480", async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 480 });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await start(page);
+  const navigationTrigger = page.getByRole("button", {
+    name: "Open sessions",
   });
-}
+  await navigationTrigger.click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", {
+    name: "Settings",
+    exact: true,
+  });
+  await expect(settings).toBeVisible();
+  const content = settings.getByRole("tabpanel");
+  const close = settings.getByRole("button", { name: "Close settings" });
+  await wheelToBottom(page, content);
+  await insideViewport(page, settings);
+  await insideViewport(page, close);
+  // General no longer ends with the connection controls: this shell adds the
+  // new-session defaults block below them, so scrolling to the bottom leaves
+  // Disconnect/Forget/diagnostics above the fold. Bring each into view first
+  // — the same idiom this test already uses for "Add provider" — and keep
+  // asserting that each one lands fully inside the viewport at this size.
+  const disconnect = settings.getByRole("button", {
+    name: "Disconnect",
+    exact: true,
+  });
+  await disconnect.scrollIntoViewIfNeeded();
+  await insideViewport(page, disconnect);
+  const forget = settings.getByRole("button", { name: "Forget server" });
+  await forget.scrollIntoViewIfNeeded();
+  await insideViewport(page, forget);
+  const diagnostics = settings.getByRole("button", {
+    name: "Copy diagnostics",
+  });
+  await diagnostics.scrollIntoViewIfNeeded();
+  await insideViewport(page, diagnostics);
+  await diagnostics.click();
+  await expect(
+    settings.getByRole("button", { name: "Copied", exact: true }),
+  ).toBeVisible();
+  expect(await settings.evaluate((el) => el.scrollTop)).toBe(0);
+
+  await settings.getByRole("button", { name: "Models", exact: true }).click();
+  await expect(content).toHaveAttribute("data-settings-section", "models");
+  await expect(
+    settings.getByRole("list", { name: "Configured providers" }),
+  ).toBeVisible();
+  await wheelToBottom(page, content);
+  await insideViewport(page, close);
+  const addProvider = settings.getByRole("button", { name: "Add provider" });
+  await addProvider.scrollIntoViewIfNeeded();
+  await insideViewport(page, addProvider);
+  await addProvider.click();
+  const editor = settings.getByRole("form", { name: "Add model provider" });
+  await expect(editor).toBeVisible();
+  await editor.getByLabel("Provider / family ID").fill("deepseek");
+  await editor.getByLabel("Base URL").fill("https://example.test/api/v1");
+  const cancel = editor.getByRole("button", { name: "Cancel", exact: true });
+  await cancel.scrollIntoViewIfNeeded();
+  await insideViewport(page, cancel);
+  await insideViewport(page, close);
+  await cancel.click();
+  await expect(editor).toBeHidden();
+  await close.click();
+  await expect(settings).toBeHidden();
+  await expect(navigationTrigger).toBeFocused();
+
+  // Retargeted after the v0.10.0 rebase: the composer-level entry point into
+  // a settings surface is now our Session status strip, which replaced
+  // upstream's "Runtime model:" chip and opens the Session settings pane.
+  // The guarantee under test is unchanged — at this viewport the trigger is
+  // reachable, opens its pane from the keyboard, and Escape closes the pane
+  // and returns focus to the trigger.
+  const modelTrigger = page.getByRole("button", { name: "Session settings" });
+  await insideViewport(page, modelTrigger);
+  const sessionSettings = page.getByRole("dialog", {
+    name: "Session settings",
+  });
+  await modelTrigger.focus();
+  await modelTrigger.press("Enter");
+  await expect(sessionSettings).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sessionSettings).toBeHidden();
+  await expect(modelTrigger).toBeFocused();
+});

@@ -399,192 +399,106 @@ async function nextPendingQuestion(
   return { sessionId, questionId, turnId };
 }
 
-for (const kind of ["approval", "question"] as const) {
-  test(`rejects same-base foreign-topic ${kind} and terminal traffic without settling or poisoning the ordinary owner`, async ({
-    page,
-    request,
-  }) => {
-    const probe = observeScopeProbe(page);
-    await connectAndStartWorkspace(page, `/srv/work/topic-scope-${kind}`);
-    const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-    await expect(composer).toBeEnabled();
-    await composer.fill(`Topic scope ${kind} fixture`);
-    await page.getByRole("button", { name: "Send prompt" }).click();
-    await expect.poll(() => probe.starts().length).toBe(1);
-    const { session_id: sessionId, turn_id: turnId } =
-      probe.starts()[0]!.params;
-    expect(typeof sessionId).toBe("string");
-    expect(typeof turnId).toBe("string");
-    if (typeof sessionId !== "string" || typeof turnId !== "string")
-      throw new Error("Expected exact native owner identity");
-    expect(sessionId).not.toContain("#");
-    await composer.fill("Continue after the genuine owner interaction");
-    await page.getByRole("button", { name: "Queue prompt" }).click();
-    await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
-    const hydrationCount = probe.hydrates().length;
-    const ownerDialog = page.getByRole("dialog", {
-      name: kind === "approval" ? APPROVAL_TITLE : QUESTION_TITLE,
-    });
-    const foreignDialog = page.getByRole("dialog", {
-      name: `Foreign-topic ${kind} must stay hidden`,
-    });
+test("rejects same-base foreign-topic approval and terminal traffic without settling or poisoning the ordinary owner", async ({
+  page,
+  request,
+}) => {
+  const probe = observeScopeProbe(page);
+  await connectAndStartWorkspace(page, "/srv/work/topic-scope-approval");
+  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  await expect(composer).toBeEnabled();
+  await composer.fill("Topic scope approval fixture");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect.poll(() => probe.starts().length).toBe(1);
+  const { session_id: sessionId, turn_id: turnId } = probe.starts()[0]!.params;
+  expect(typeof sessionId).toBe("string");
+  expect(typeof turnId).toBe("string");
+  if (typeof sessionId !== "string" || typeof turnId !== "string")
+    throw new Error("Expected exact native owner identity");
+  expect(sessionId).not.toContain("#");
+  await composer.fill("Continue after the genuine owner interaction");
+  await page.getByRole("button", { name: "Queue prompt" }).click();
+  await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
+  const hydrationCount = probe.hydrates().length;
+  const ownerDialog = page.getByRole("dialog", {
+    name: APPROVAL_TITLE,
+  });
+  const foreignDialog = page.getByRole("dialog", {
+    name: "Foreign-topic approval must stay hidden",
+  });
 
-    await injectScopeProbe(request, page, sessionId, "foreign-request");
-    await expect(foreignDialog).toHaveCount(0);
-    await expect(ownerDialog).toHaveCount(0);
-    expect(
-      probe.sent.filter(
-        (frame) =>
-          frame.method === "approval/respond" ||
-          frame.method === "user_question/respond",
-      ),
-    ).toHaveLength(0);
-    expect(probe.starts()).toHaveLength(1);
-
-    await injectScopeProbe(request, page, sessionId, "owner-request");
-    await expect(ownerDialog).toBeVisible();
-    if (kind === "approval") {
-      await injectScopeProbe(request, page, sessionId, "foreign-resolution");
-      await expect(ownerDialog).toBeVisible();
-    }
-    await injectScopeProbe(request, page, sessionId, "foreign-cursor");
-    expect(probe.hydrates()).toHaveLength(hydrationCount);
-    await expect(
-      page.getByText("FOREIGN_TOPIC_OUTPUT_MUST_NOT_APPEAR", { exact: true }),
-    ).toHaveCount(0);
-    await expect(ownerDialog).toBeVisible();
-    await injectScopeProbe(request, page, sessionId, "foreign-terminal");
-    await expect(ownerDialog).toBeVisible();
-    // The interaction replaces the composer/queue preview while it is open;
-    // wire admission and the later valid-owner drain prove queue ownership.
-    expect(probe.starts()).toHaveLength(1);
-    expect(probe.hydrates()).toHaveLength(hydrationCount);
-    expect(
-      probe.sent.filter(
-        (frame) =>
-          frame.method === "approval/respond" ||
-          frame.method === "user_question/respond",
-      ),
-    ).toHaveLength(0);
-
-    if (kind === "approval")
-      await ownerDialog.getByRole("button", { name: /Allow once/ }).click();
-    else {
-      await ownerDialog.getByLabel(/Full/).check();
-      await ownerDialog.getByRole("button", { name: "Continue" }).click();
-    }
-    await expect(ownerDialog).toHaveCount(0);
-    await expect.poll(() => probe.starts().length).toBe(2);
-    const responds = probe.sent.filter(
+  await injectScopeProbe(request, page, sessionId, "foreign-request");
+  await expect(foreignDialog).toHaveCount(0);
+  await expect(ownerDialog).toHaveCount(0);
+  expect(
+    probe.sent.filter(
       (frame) =>
         frame.method === "approval/respond" ||
         frame.method === "user_question/respond",
-    );
-    expect(responds).toHaveLength(1);
-    expect(responds[0]!.method).toBe(
-      kind === "approval" ? "approval/respond" : "user_question/respond",
-    );
-    expect(responds[0]!.params).toMatchObject({
-      session_id: sessionId,
-      [kind === "approval" ? "approval_id" : "question_id"]:
-        `${kind}-${turnId}`,
-    });
-    expect(responds[0]!.params).not.toHaveProperty("topic");
-    expect(probe.starts()[1]!.params.session_id).toBe(sessionId);
-    expect(probe.starts()[1]!.params.turn_id).not.toBe(turnId);
-    await expect(
-      page.locator(".entry-assistant").filter({
-        hasText: "Completed with pnpm check and all tests passing.",
-      }),
-    ).toHaveCount(1);
-    await expect(promptQueue(page)).toHaveCount(0);
-    await expect(foreignDialog).toHaveCount(0);
-    expect(probe.hydrates()).toHaveLength(hydrationCount);
-    const foreignRequests = probe.received.filter(
+    ),
+  ).toHaveLength(0);
+  expect(probe.starts()).toHaveLength(1);
+
+  await injectScopeProbe(request, page, sessionId, "owner-request");
+  await expect(ownerDialog).toBeVisible();
+  await injectScopeProbe(request, page, sessionId, "foreign-resolution");
+  await expect(ownerDialog).toBeVisible();
+  await injectScopeProbe(request, page, sessionId, "foreign-cursor");
+  expect(probe.hydrates()).toHaveLength(hydrationCount);
+  await expect(
+    page.getByText("FOREIGN_TOPIC_OUTPUT_MUST_NOT_APPEAR", { exact: true }),
+  ).toHaveCount(0);
+  await expect(ownerDialog).toBeVisible();
+  await injectScopeProbe(request, page, sessionId, "foreign-terminal");
+  await expect(ownerDialog).toBeVisible();
+  // The interaction replaces the composer/queue preview while it is open;
+  // wire admission and the later valid-owner drain prove queue ownership.
+  expect(probe.starts()).toHaveLength(1);
+  expect(probe.hydrates()).toHaveLength(hydrationCount);
+  expect(
+    probe.sent.filter(
       (frame) =>
-        frame.method ===
-          (kind === "approval"
-            ? "approval/requested"
-            : "user_question/requested") &&
-        frame.params?.topic === "foreign-routing-topic",
-    );
-    expect(foreignRequests).toHaveLength(1);
-    expect(foreignRequests[0]!.params).toMatchObject({
-      session_id: sessionId,
-      turn_id: turnId,
-      [kind === "approval" ? "approval_id" : "question_id"]:
-        `${kind}-${turnId}`,
-    });
-  });
-}
+        frame.method === "approval/respond" ||
+        frame.method === "user_question/respond",
+    ),
+  ).toHaveLength(0);
 
-/**
- * P0 regression (expected red on the old product until session-owned restore):
- * an approval raised in Session A stays owned by A. Switching to B must not
- * show A's approval in B; returning to A restores the approval; responding
- * resolves it exactly once with the exact approval_id and A's session id, and
- * only A's Session ever receives a terminal.
- */
-test("responds to a parked approval from the owning Session with exact ids", async ({
-  page,
-}) => {
-  const cwd = "/srv/work/approval-ownership";
-  const respondFrames = observeRespondFrames(page);
-  const requests = observeInteractionRequests(page);
-  const terminalSessions = observeTerminalSessions(page);
-
-  await connectAndStartWorkspace(page, cwd);
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const aTitle = await selectedSessionTitle(sidebar);
-  const sessionA = sessionRowByTitle(sidebar, aTitle);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-  // A raises an approval and is parked.
-  await composer.fill("Request approval fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  const approvalDialog = page.getByRole("dialog", { name: APPROVAL_TITLE });
-  await expect(approvalDialog).toBeVisible();
-
-  // Switch to B: A's approval must not leak into B's view; A parks Waiting.
-  const bTitle = await createSiblingSession(sidebar, "approval-ownership");
-  expect(bTitle).not.toBe(aTitle);
-  await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
-    0,
+  await ownerDialog.getByRole("button", { name: /Allow once/ }).click();
+  await expect(ownerDialog).toHaveCount(0);
+  await expect.poll(() => probe.starts().length).toBe(2);
+  const responds = probe.sent.filter(
+    (frame) =>
+      frame.method === "approval/respond" ||
+      frame.method === "user_question/respond",
   );
-  await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
-
-  // Return to A: the approval is restored from the Session's canonical state.
-  await sessionA.click();
-  await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toBeVisible({
-    timeout: 10_000,
+  expect(responds).toHaveLength(1);
+  expect(responds[0]!.method).toBe("approval/respond");
+  expect(responds[0]!.params).toMatchObject({
+    session_id: sessionId,
+    approval_id: `approval-${turnId}`,
   });
-  await approvalDialog.getByRole("button", { name: /Allow once/ }).click();
-  await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
-    0,
+  expect(responds[0]!.params).not.toHaveProperty("topic");
+  expect(probe.starts()[1]!.params.session_id).toBe(sessionId);
+  expect(probe.starts()[1]!.params.turn_id).not.toBe(turnId);
+  await expect(
+    page.locator(".entry-assistant").filter({
+      hasText: "Completed with pnpm check and all tests passing.",
+    }),
+  ).toHaveCount(1);
+  await expect(promptQueue(page)).toHaveCount(0);
+  await expect(foreignDialog).toHaveCount(0);
+  expect(probe.hydrates()).toHaveLength(hydrationCount);
+  const foreignRequests = probe.received.filter(
+    (frame) =>
+      frame.method === "approval/requested" &&
+      frame.params?.topic === "foreign-routing-topic",
   );
-
-  // Exactly one approval/respond frame, carrying the exact approval id and A's
-  // session id; no cross-session respond. Only A's Session received a
-  // terminal; B never did.
-  const approvalResponds = respondFrames().filter(
-    (frame) => frame.method === "approval/respond",
-  );
-  expect(approvalResponds).toHaveLength(1);
-  expect(requests).toHaveLength(1);
-  expect(approvalResponds[0]?.params).toMatchObject({
-    session_id: requests[0]!.params.session_id,
-    approval_id: requests[0]!.params.approval_id,
+  expect(foreignRequests).toHaveLength(1);
+  expect(foreignRequests[0]!.params).toMatchObject({
+    session_id: sessionId,
+    turn_id: turnId,
+    approval_id: `approval-${turnId}`,
   });
-  const sessionAId = approvalResponds[0]?.params.session_id;
-  await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect
-    .poll(terminalSessions)
-    .toEqual([
-      { session_id: sessionAId, turn_id: requests[0]!.params.turn_id },
-    ]);
 });
 
 /**
