@@ -36,6 +36,16 @@ async function scoped(request: APIRequestContext, folder: string) {
   ).toBe(204);
 }
 
+/**
+ * `base` made unique to this attempt: the fixture keeps every Session it
+ * created until the run ends, so a repeat or retry reusing a folder would
+ * find the Sessions an earlier attempt left there.
+ */
+function runName(base: string) {
+  const { repeatEachIndex, retry } = test.info();
+  return `${base}-run${repeatEachIndex}-${retry}`;
+}
+
 /** A desktop client opens `folder` and sends `prompt` there. */
 async function desktopSends(browser: Browser, folder: string, prompt: string) {
   const page = await (await browser.newContext()).newPage();
@@ -99,7 +109,8 @@ test("the overview shows waiting work and allows it once", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-approve";
+  const name = runName("remote-approve");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -120,7 +131,7 @@ test("the overview shows waiting work and allows it once", async ({
   const waiting = section(page, /^等你处理/);
   const row = waiting.getByRole("button", { name: /Run product checks\?/ });
   await expect(row).toBeVisible();
-  await expect(row).toContainText("remote-approve");
+  await expect(row).toContainText(name);
   await expect(row).toContainText("shell");
   await expectTouchSize(row);
   await expectTouchSize(page.getByRole("button", { name: "刷新" }));
@@ -233,7 +244,7 @@ test("a phone can deny, and never widens permissions", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-deny";
+  const folder = `/workspace/${runName("remote-deny")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -291,7 +302,8 @@ test("a follow-up from the phone runs and can be stopped", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-stop";
+  const name = runName("remote-stop");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -319,7 +331,7 @@ test("a follow-up from the phone runs and can be stopped", async ({
   // The overview counts it as running while it runs.
   await page.getByRole("button", { name: "返回手机遥控" }).tap();
   await expect(
-    section(page, /^运行中/).getByRole("button", { name: /remote-stop/ }),
+    section(page, /^运行中/).getByRole("button", { name: new RegExp(name) }),
   ).toBeVisible();
   await section(page, /^运行中/)
     .getByRole("button")
@@ -340,7 +352,7 @@ test("a phone follow-up completes on the same session and survives a reload", as
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-follow-up";
+  const folder = `/workspace/${runName("remote-follow-up")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -391,7 +403,7 @@ test("a read-only session shows the reason instead of a composer on the phone", 
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-readonly";
+  const folder = `/workspace/${runName("remote-readonly")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -439,7 +451,8 @@ test("a phone starts a new session in a watched folder, keeps a refused first ta
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-create";
+  const name = runName("remote-create");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -462,7 +475,7 @@ test("a phone starts a new session in a watched folder, keeps a refused first ta
   await connectPhone(page);
   await watch(page, folder);
   const create = page.getByRole("button", {
-    name: "在 remote-create 中新建会话",
+    name: `在 ${name} 中新建会话`,
   });
   await expect(create).toBeEnabled();
   // A double tap must mint exactly one session, never a parallel empty one.
@@ -539,7 +552,8 @@ test("a refused phone create says so, keeps nothing fake, and retries clean", as
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-create-refused";
+  const name = runName("remote-create-refused");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const page = await phone(browser);
   const sentMethods: string[] = [];
@@ -552,7 +566,7 @@ test("a refused phone create says so, keeps nothing fake, and retries clean", as
   await connectPhone(page);
   await watch(page, folder);
   const create = page.getByRole("button", {
-    name: "在 remote-create-refused 中新建会话",
+    name: `在 ${name} 中新建会话`,
   });
   await expect(create).toBeEnabled();
 
@@ -580,7 +594,7 @@ test("a rejected phone follow-up keeps the draft and tells the truth", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-reject";
+  const folder = `/workspace/${runName("remote-reject")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -620,7 +634,7 @@ test("an unreachable server reads as offline, and the overview recovers", async 
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-offline";
+  const folder = `/workspace/${runName("remote-offline")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Offline drill");
   await expect(desktop.getByText("Turn complete").first()).toBeVisible();
@@ -672,7 +686,10 @@ test("a session tapped in the overview's drawer opens it", async ({
   request,
 }) => {
   test.setTimeout(90_000);
-  const [first, second] = ["remote-drawer-a", "remote-drawer-b"];
+  const [first, second] = [
+    runName("remote-drawer-a"),
+    runName("remote-drawer-b"),
+  ];
   const page = await phone(browser);
   for (const name of [first, second]) {
     await scoped(request, `/workspace/${name}`);
@@ -731,7 +748,8 @@ test("a new session started from the overview's drawer opens", async ({
   request,
 }) => {
   test.setTimeout(90_000);
-  const folder = "/workspace/remote-new";
+  const name = runName("remote-new");
+  const folder = `/workspace/${name}`;
   const page = await phone(browser);
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Hello from the desk");
@@ -739,7 +757,7 @@ test("a new session started from the overview's drawer opens", async ({
   await connectPhone(page);
   await watch(page, folder);
   await page
-    .getByRole("button", { name: /New coding session.*remote-new/ })
+    .getByRole("button", { name: new RegExp(`New coding session.*${name}`) })
     .tap();
   const back = page.getByRole("button", { name: "返回手机遥控" });
   await back.tap();
@@ -763,7 +781,8 @@ test("on a wide screen the overview's list opens a session and stays", async ({
   request,
 }) => {
   test.setTimeout(90_000);
-  const folder = "/workspace/remote-wide";
+  const name = runName("remote-wide");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Hello from the desk");
   await expect(desktop.getByText("Hello from the desk").first()).toBeVisible();
@@ -777,7 +796,7 @@ test("on a wide screen the overview's list opens a session and stays", async ({
   await connectPhone(page);
   await watch(page, folder);
   await page
-    .getByRole("button", { name: /New coding session.*remote-wide/ })
+    .getByRole("button", { name: new RegExp(`New coding session.*${name}`) })
     .tap();
   const back = page.getByRole("button", { name: "返回手机遥控" });
   await back.tap();
@@ -812,7 +831,7 @@ test("the phone's y and s keys never widen an approval", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-keys";
+  const folder = `/workspace/${runName("remote-keys")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -849,7 +868,7 @@ test("a sandbox escalation can only be denied from the phone", async ({
   browser,
   request,
 }) => {
-  const folder = "/workspace/remote-escalation";
+  const folder = `/workspace/${runName("remote-escalation")}`;
   await scoped(request, folder);
   const desktop = await desktopSends(
     browser,
@@ -910,11 +929,8 @@ async function phoneWithBlockedPeer(
   request: APIRequestContext,
   kind: "approval" | "approval-escalation",
 ) {
-  // One folder per run: a retry or repeat must not find the Sessions an
-  // earlier attempt left in the fixture, and "approval" must not match the
-  // "approval-escalation" folder's rows.
-  const { retry, repeatEachIndex } = test.info();
-  const name = `peer-control-${kind}-run${repeatEachIndex}-${retry}`;
+  // "approval" must not match the "approval-escalation" folder's rows.
+  const name = runName(`peer-control-${kind}`);
   const folder = `/srv/work/${name}`;
   await scoped(request, folder);
   const desktop = await desktopSends(browser, folder, "Hello from the desk");
@@ -1056,7 +1072,8 @@ test("a phone template retries the same launch after failure and reload without 
   browser,
   request,
 }) => {
-  const folder = "/workspace/phone-template-retry";
+  const name = runName("phone-template-retry");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const page = await phone(browser);
   const opens: string[] = [];
@@ -1070,9 +1087,7 @@ test("a phone template retries the same launch after failure and reload without 
   );
   await connectPhone(page);
   await watch(page, folder);
-  await page
-    .getByRole("button", { name: "在 phone-template-retry 中从模板新建" })
-    .tap();
+  await page.getByRole("button", { name: `在 ${name} 中从模板新建` }).tap();
   const picker = page.getByRole("region", { name: "选择新会话模板" });
   await expect(picker).toBeVisible();
   expect(opens).toHaveLength(0);
@@ -1143,14 +1158,13 @@ test("a phone code template targets its new session and leaves the previous draf
   browser,
   request,
 }) => {
-  const folder = "/workspace/phone-code-template";
+  const name = runName("phone-code-template");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const page = await phone(browser);
   await connectPhone(page);
   await watch(page, folder);
-  await page
-    .getByRole("button", { name: "在 phone-code-template 中新建会话" })
-    .tap();
+  await page.getByRole("button", { name: `在 ${name} 中新建会话` }).tap();
   const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
   await composer.fill("Keep the previous session draft");
   await page.getByRole("button", { name: "返回手机遥控" }).tap();
@@ -1165,9 +1179,7 @@ test("a phone code template targets its new session and leaves the previous draf
     }),
   );
   await page.reload();
-  await page
-    .getByRole("button", { name: "在 phone-code-template 中从模板新建" })
-    .tap();
+  await page.getByRole("button", { name: `在 ${name} 中从模板新建` }).tap();
   await page
     .getByRole("region", { name: "选择新会话模板" })
     .getByRole("button", { name: "做同款：修一个 bug" })
@@ -1197,14 +1209,13 @@ test("choosing a blank phone session after a refused template does not restore t
   browser,
   request,
 }) => {
-  const folder = "/workspace/phone-template-to-blank";
+  const name = runName("phone-template-to-blank");
+  const folder = `/workspace/${name}`;
   await scoped(request, folder);
   const page = await phone(browser);
   await connectPhone(page);
   await watch(page, folder);
-  await page
-    .getByRole("button", { name: "在 phone-template-to-blank 中从模板新建" })
-    .tap();
+  await page.getByRole("button", { name: `在 ${name} 中从模板新建` }).tap();
   await request.post(`${ORIGIN}/__test__/session-open/reject-next`);
   await page
     .getByRole("region", { name: "选择新会话模板" })
@@ -1212,9 +1223,7 @@ test("choosing a blank phone session after a refused template does not restore t
     .tap();
   await expect(page.getByText("新建会话失败，请重试。")).toBeVisible();
   await request.post(`${ORIGIN}/__test__/session-open/reset`);
-  await page
-    .getByRole("button", { name: "在 phone-template-to-blank 中新建会话" })
-    .tap();
+  await page.getByRole("button", { name: `在 ${name} 中新建会话` }).tap();
   const composer = page.getByRole("textbox", { name: "给 Octos 发消息" });
   await expect(composer).toHaveValue("");
   await page.reload();
