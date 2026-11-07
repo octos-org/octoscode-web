@@ -6,11 +6,16 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { runFolder } from "./fixture-session.ts";
 
 // T-0433: "Undo this turn" in the latest turn's summary, wired to Core's
 // `pre-turn <turn_id>` snapshot, with redo through the `pre-restore` point.
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
+
+test.afterEach(async ({ request }) => {
+  await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
+});
 
 interface Frame {
   direction: "sent" | "received";
@@ -390,4 +395,104 @@ test("Changes re-reads the workspace after an undo and says the session list is 
       "The latest turn's file changes were undone. This list is what Octos recorded in this session; Uncommitted (Git) shows the files as they are now.",
     ),
   ).toBeVisible();
+});
+
+// T-0441: the phone remote control (`?view=remote`, 390×844, Chinese) opens a
+// session's conversation through the same timeline, so the latest turn's
+// summary offers the same undo/redo on the phone — reached from the overview,
+// and found again after a reload sends the phone back to it.
+test("a phone undoes and redoes the latest turn from the remote control, across a reload", async ({
+  browser,
+  request,
+}) => {
+  // A folder of this run's own, so the overview lists exactly its session.
+  const folder = runFolder("turn-undo-phone");
+  const name = folder.split("/").pop()!;
+  expect(
+    (
+      await request.post(
+        `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(folder)}`,
+      )
+    ).status(),
+  ).toBe(204);
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    locale: "zh-CN",
+  });
+  const page = await context.newPage();
+  const protocol = observeRpc(page);
+  await page.goto("/?view=remote");
+  await page.getByLabel("服务器地址").fill(FIXTURE_ORIGIN);
+  await page
+    .getByLabel("访问令牌", { exact: true })
+    .fill("tab-scoped-e2e-token");
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "手机遥控" })).toBeVisible();
+  await page.getByLabel("服务器上的文件夹路径").fill(folder);
+  await page.getByRole("button", { name: "盯住" }).tap();
+  await page.getByRole("button", { name: `在 ${name} 中新建会话` }).tap();
+  const phoneComposer = page.getByRole("textbox", { name: "给 Octos 发消息" });
+  await expect(phoneComposer).toBeEnabled();
+  await phoneComposer.fill("Change the app from the phone");
+  await page.getByRole("button", { name: "发送提示" }).tap();
+  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  const sessionId = String(
+    protocol.requests("session/open").at(-1)!.params!.session_id,
+  );
+  const turnId = String(protocol.requests("turn/start")[0]!.params!.turn_id);
+  const preTurn = (await snapshots(request, sessionId)).snapshots.find(
+    (snapshot) => snapshot.turn_id === turnId,
+  )!;
+  expect(preTurn).toBeTruthy();
+
+  const phoneSummary = page.getByRole("region", { name: "本轮汇总" }).last();
+  await phoneComposer.fill("还没发的草稿");
+  await phoneSummary.getByRole("button", { name: "撤销这一轮" }).tap();
+  const undo = phoneSummary.getByRole("group", { name: "确认撤销" });
+  await expect(undo).toBeInViewport();
+  // A double tap on the confirm sends one restore.
+  await undo
+    .getByRole("button", { name: "撤销文件改动" })
+    .evaluate((node: HTMLButtonElement) => {
+      node.click();
+      node.click();
+    });
+  // The outcome stays where it was asked for, not under the composer, after
+  // the conversation refresh and the composer have settled.
+  const undone = phoneSummary.getByText(
+    "已撤销，文件回到了这一轮开始前的样子。",
+  );
+  await expect(undone).toBeInViewport();
+  await page.waitForTimeout(600);
+  await expect(undone).toBeInViewport();
+  await expect(
+    phoneSummary.getByRole("button", { name: "恢复撤销" }),
+  ).toBeVisible();
+  expect(
+    protocol.requests("snapshot/restore").map((frame) => frame.params),
+  ).toEqual([{ session_id: sessionId, snapshot_id: preTurn.id }]);
+  await expect(phoneComposer).toHaveValue("还没发的草稿");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "手机遥控" })).toBeVisible();
+  const recent = page
+    .getByRole("region", { name: /^最近/ })
+    .getByRole("button");
+  await expect(recent).toHaveCount(1);
+  await recent.tap();
+  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
+  await phoneSummary.getByRole("button", { name: "恢复撤销" }).tap();
+  await phoneSummary
+    .getByRole("group", { name: "确认恢复" })
+    .getByRole("button", { name: "恢复改动" })
+    .tap();
+  await expect(
+    phoneSummary.getByText("已恢复这一轮的文件改动。"),
+  ).toBeInViewport();
+  expect(protocol.requests("snapshot/restore")).toHaveLength(2);
+  await context.close();
 });
