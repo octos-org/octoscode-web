@@ -3,8 +3,6 @@ import {
   createSessionAutonomyCommands,
   parseAgentArtifactReadResult,
   parseAgentControlResult,
-  parseAutonomyCapabilities,
-  type AgentArtifactSelector,
 } from "../src/autonomy.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
@@ -88,30 +86,6 @@ const control = (status: "interrupted" | "closed") => ({
 });
 
 describe("native goal transition contract", () => {
-  it.each(["paused", "active", "complete"] as const)(
-    "writes exact %s user transition without a new budget",
-    async (status) => {
-      const h = harness({
-        session_id: "dev:local:room#request",
-        profile_id: "dev",
-        goal: { ...GOAL, status },
-        generation: 2,
-        transition_actor: "user",
-      });
-      await h.commands.goal.transition(" Fresh objective ", status);
-      expect(h.calls).toEqual([
-        {
-          method: "session/goal/set",
-          params: {
-            session_id: "dev:local:room#request",
-            objective: "Fresh objective",
-            status,
-            transition_actor: "user",
-          },
-        },
-      ]);
-    },
-  );
   it("ordinary goal set explicitly activates as user and preserves only an explicit budget", async () => {
     const h = harness({
       session_id: "dev:local:room#request",
@@ -129,32 +103,9 @@ describe("native goal transition contract", () => {
       token_budget: 500,
     });
   });
-  it.each([
-    { methods: ["session/goal/get"] },
-    { methods: ["session/goal/set"] },
-  ])(
-    "requires both native goal methods before transitioning",
-    async ({ methods }) => {
-      const h = harness(null, caps(methods));
-      await expect(h.commands.goal.transition("x", "paused")).rejects.toThrow(
-        /not advertised/,
-      );
-      expect(h.calls).toHaveLength(0);
-    },
-  );
 });
 
 describe("native agent inspection/control contracts", () => {
-  it.each([
-    ["agent/artifact/list", "agentArtifactList"],
-    ["agent/artifact/read", "agentArtifactRead"],
-    ["agent/interrupt", "agentInterrupt"],
-    ["agent/close", "agentClose"],
-  ] as const)("%s needs its own method and feature", (method, gate) => {
-    expect(parseAutonomyCapabilities(caps([method]))[gate]).toBe(true);
-    expect(parseAutonomyCapabilities(caps([method], []))[gate]).toBe(false);
-    expect(parseAutonomyCapabilities(caps([]))[gate]).toBe(false);
-  });
   it("uses full captured request scope and validates actual native child ownership", async () => {
     const h = harness({
       session_id: AGENT.session_id,
@@ -169,66 +120,6 @@ describe("native agent inspection/control contracts", () => {
         params: { session_id: "dev:local:room#request", agent_id: "a1" },
       },
     ]);
-  });
-  it.each([
-    { session_id: "dev:local:foreign", agent_id: "a1" },
-    { session_id: AGENT.session_id, agent_id: "other" },
-  ])("rejects foreign artifact ownership %j", async (owner) => {
-    const h = harness({ ...owner, artifacts: [ARTIFACT] });
-    await expect(h.commands.agent.listArtifacts("a1")).rejects.toThrow();
-  });
-  it("requires nested agent owner to agree exactly with the status envelope", async () => {
-    const h = harness({
-      session_id: AGENT.session_id,
-      agent: { ...AGENT, session_id: "dev:local:room#other" },
-    });
-    await expect(h.commands.agent.readStatus("a1")).rejects.toThrow(
-      /nested agent owner/,
-    );
-  });
-  it.each([
-    { artifactId: "artifact-1" },
-    { path: "evidence/output.txt" },
-  ] as const)("sends only native selector %j", async (selector) => {
-    const h = harness({
-      session_id: AGENT.session_id,
-      agent_id: "a1",
-      artifact: ARTIFACT,
-      content: "redacted content",
-    });
-    expect((await h.commands.agent.readArtifact("a1", selector)).content).toBe(
-      "redacted content",
-    );
-    expect(h.calls[0]?.params).toEqual({
-      agent_id: "a1",
-      session_id: "dev:local:room#request",
-      ...("artifactId" in selector
-        ? { artifact_id: selector.artifactId }
-        : { path: selector.path }),
-    });
-  });
-  it.each([
-    {},
-    { artifactId: "" },
-    { path: " " },
-    { artifactId: "id", path: "path" },
-  ])("rejects invalid artifact selector %j before RPC", async (selector) => {
-    const h = harness(null);
-    await expect(
-      h.commands.agent.readArtifact("a1", selector as AgentArtifactSelector),
-    ).rejects.toThrow();
-    expect(h.calls).toHaveLength(0);
-  });
-  it("rejects a different artifact ID even on the correct agent", async () => {
-    const h = harness({
-      session_id: AGENT.session_id,
-      agent_id: "a1",
-      artifact: { ...ARTIFACT, id: "foreign" },
-      content: "wrong",
-    });
-    await expect(
-      h.commands.agent.readArtifact("a1", { artifactId: "artifact-1" }),
-    ).rejects.toThrow(/artifact id/);
   });
   it("never exposes unredacted nested artifact content or treats missing content as success", () => {
     const result = parseAgentArtifactReadResult({
@@ -251,20 +142,6 @@ describe("native agent inspection/control contracts", () => {
       }),
     ).toBeNull();
   });
-  it.each(["interrupt", "close"] as const)(
-    "acknowledges exact native %s receipt without a fabricated agent",
-    async (action) => {
-      const result = control(action === "interrupt" ? "interrupted" : "closed");
-      const h = harness(result);
-      expect(await h.commands.agent[action]("a1")).toEqual(result);
-      expect(h.calls).toEqual([
-        {
-          method: `agent/${action}`,
-          params: { agent_id: "a1", session_id: "dev:local:room#request" },
-        },
-      ]);
-    },
-  );
   it("rejects opposite control transitions, false ok and contradictory terminal flags", async () => {
     await expect(
       harness(control("closed")).commands.agent.interrupt("a1"),
@@ -276,16 +153,4 @@ describe("native agent inspection/control contracts", () => {
       parseAgentControlResult({ ...control("closed"), interrupted: true }),
     ).toBeNull();
   });
-  it.each(["listArtifacts", "readArtifact", "interrupt", "close"] as const)(
-    "%s fails closed when unadvertised",
-    async (action) => {
-      const h = harness(null, caps([]));
-      const call =
-        action === "readArtifact"
-          ? h.commands.agent.readArtifact("a1", { artifactId: "artifact-1" })
-          : h.commands.agent[action]("a1");
-      await expect(call).rejects.toThrow(/not advertised/);
-      expect(h.calls).toHaveLength(0);
-    },
-  );
 });

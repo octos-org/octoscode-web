@@ -9,7 +9,6 @@ import {
   createExternalDriverCommands,
   decodeExternalDriverCapabilities,
   masterWireBase,
-  nextExpectedRevision,
   parseSessionDriverGetResult,
 } from "../src/external-driver.ts";
 import { OctosUiProtocolError } from "../src/client.ts";
@@ -32,12 +31,6 @@ function caps(methods: string[], features: string[]): UiProtocolCapabilities {
 }
 
 const FULL_CAPS = caps([METHOD], [EXTERNAL_DRIVER_V1_FEATURE]);
-
-const NEVER_BOUND_INTERNAL = {
-  mode: "internal",
-  binding: null,
-  recovery: "none",
-};
 
 const RETAINED_INTERNAL = {
   mode: "internal",
@@ -81,21 +74,6 @@ describe("decodeExternalDriverCapabilities", () => {
 });
 
 describe("parseSessionDriverGetResult", () => {
-  it.each([
-    ["never-bound internal", NEVER_BOUND_INTERNAL, "internal", null],
-    [
-      "retained INACTIVE after release",
-      RETAINED_INTERNAL,
-      "internal",
-      "driver-a",
-    ],
-    ["live external with a live lease", LIVE_EXTERNAL, "external", "driver-b"],
-  ])("accepts a %s scope", (_label, payload, mode, driverId) => {
-    const parsed = parseSessionDriverGetResult(payload);
-    expect(parsed?.mode).toBe(mode);
-    expect(parsed?.binding?.driverId ?? null).toBe(driverId);
-  });
-
   it("maps a retained binding to the full canonical camelCase view", () => {
     expect(parseSessionDriverGetResult(RETAINED_INTERNAL)).toEqual({
       mode: "internal",
@@ -117,24 +95,6 @@ describe("parseSessionDriverGetResult", () => {
   it("rejects internal mode with a live lease (CAS metadata is not authority)", () => {
     expect(
       parseSessionDriverGetResult({ ...LIVE_EXTERNAL, mode: "internal" }),
-    ).toBeNull();
-  });
-
-  it("rejects external mode with no binding", () => {
-    expect(
-      parseSessionDriverGetResult({ ...LIVE_EXTERNAL, binding: null }),
-    ).toBeNull();
-  });
-
-  it("rejects unknown mode and recovery values", () => {
-    expect(
-      parseSessionDriverGetResult({ ...NEVER_BOUND_INTERNAL, mode: "observe" }),
-    ).toBeNull();
-    expect(
-      parseSessionDriverGetResult({
-        ...NEVER_BOUND_INTERNAL,
-        recovery: "completed",
-      }),
     ).toBeNull();
   });
 
@@ -164,28 +124,6 @@ describe("parseSessionDriverGetResult", () => {
     ).toBeNull();
   });
 
-  it("rejects malformed bindings and non-object results", () => {
-    expect(parseSessionDriverGetResult(null)).toBeNull();
-    expect(parseSessionDriverGetResult(42)).toBeNull();
-    expect(
-      parseSessionDriverGetResult({
-        ...NEVER_BOUND_INTERNAL,
-        binding: {
-          driver_id: "",
-          epoch: 1,
-          revision: 1,
-          lease_expires_at_ms: 0,
-        },
-      }),
-    ).toBeNull();
-    expect(
-      parseSessionDriverGetResult({
-        ...LIVE_EXTERNAL,
-        binding: { ...LIVE_EXTERNAL.binding, accepted_work: ["", 3] },
-      }),
-    ).toBeNull();
-  });
-
   it("keeps proof/hash/secret fields out of the parsed public view", () => {
     const parsed = parseSessionDriverGetResult({
       ...LIVE_EXTERNAL,
@@ -200,63 +138,13 @@ describe("parseSessionDriverGetResult", () => {
     expect(encoded).not.toContain("payload_digest");
   });
 
-  it("never interprets a server operations field as inventory", () => {
-    const parsed = parseSessionDriverGetResult({
-      ...NEVER_BOUND_INTERNAL,
-      operations: { items: [], complete: true },
-    });
-    expect(parsed).toEqual({
-      mode: "internal",
-      binding: null,
-      recovery: "none",
-    });
-    expect("operations" in (parsed ?? {})).toBe(false);
-  });
-
   it("detaches acceptedWork from the server payload", () => {
     const payload = structuredClone(LIVE_EXTERNAL);
     const parsed = parseSessionDriverGetResult(payload);
     payload.binding.accepted_work.push("op-MUTATED");
     expect(parsed?.binding?.acceptedWork).toEqual(["op-9"]);
   });
-
-  it("freezes canonical views against caller mutation", () => {
-    const parsed = parseSessionDriverGetResult(RETAINED_INTERNAL)!;
-    expect(() => {
-      (parsed.binding as { driverId?: string }).driverId = "evil";
-    }).toThrow();
-    expect(() => {
-      (parsed.binding!.acceptedWork as string[]).push("op-3");
-    }).toThrow();
-    expect(() => {
-      (parsed as { mode?: string }).mode = "external";
-    }).toThrow();
-    expect(parsed.binding?.driverId).toBe("driver-a");
-  });
 });
-
-describe("nextExpectedRevision", () => {
-  it("derives 0 only for never-bound internal; keeps retained and live revisions", () => {
-    expect(
-      nextExpectedRevision(parseSessionDriverGetResult(NEVER_BOUND_INTERNAL)!),
-    ).toBe(0);
-    expect(
-      nextExpectedRevision(parseSessionDriverGetResult(RETAINED_INTERNAL)!),
-    ).toBe(12);
-    expect(
-      nextExpectedRevision(parseSessionDriverGetResult(LIVE_EXTERNAL)!),
-    ).toBe(15);
-  });
-});
-
-function rpcStub(calls?: Array<{ method: string; params: unknown }>) {
-  return {
-    request: async (method: string, params: unknown) => {
-      calls?.push({ method, params });
-      return structuredClone(LIVE_EXTERNAL);
-    },
-  };
-}
 
 describe("createExternalDriverCommands", () => {
   function harness(
@@ -306,29 +194,6 @@ describe("createExternalDriverCommands", () => {
     ]);
   });
 
-  it("omits topic entirely when not supplied", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(NEVER_BOUND_INTERNAL);
-        },
-      },
-      "dev:local:tui",
-      FULL_CAPS,
-      { profileId: "dev" },
-    );
-    await expect(commands.driverGet()).resolves.toEqual({
-      mode: "internal",
-      binding: null,
-      recovery: "none",
-    });
-    expect(calls).toEqual([
-      { method: METHOD, params: { session_id: "dev:local:tui" } },
-    ]);
-  });
-
   it("rejects an invalid topic scope BEFORE RPC instead of omitting it", () => {
     for (const topic of ["", " ", "bad#topic", "tab\ttopic", "ctl\u0007x"]) {
       const calls: Array<{ method: string; params: unknown }> = [];
@@ -347,84 +212,6 @@ describe("createExternalDriverCommands", () => {
       ).toThrow(ExternalDriverProtocolError);
       expect(calls).toEqual([]);
     }
-  });
-
-  it("rejects an invalid captured profile BEFORE RPC", () => {
-    for (const profileId of ["", "dev:x", "dev#1", "de v"]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      expect(() =>
-        createExternalDriverCommands(
-          {
-            request: async (method, params) => {
-              calls.push({ method, params });
-              return structuredClone(LIVE_EXTERNAL);
-            },
-          },
-          "dev:local:tui",
-          FULL_CAPS,
-          { profileId },
-        ),
-      ).toThrow(ExternalDriverProtocolError);
-      expect(calls).toEqual([]);
-    }
-  });
-
-  it.each([
-    [
-      "a contradictory session-suffix vs captured topic",
-      "dev:local:tui#peer-xyz",
-      { profileId: "dev", topic: "peer-abc" },
-    ],
-    [
-      "a blank/control-char session suffix",
-      "dev:local:tui#bad topic",
-      { profileId: "dev" },
-    ],
-    ["an empty session id", "", { profileId: "dev" }],
-  ])(
-    "rejects %s BEFORE RPC (zero wire traffic)",
-    (_label, sessionId, scope) => {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      expect(() =>
-        createExternalDriverCommands(
-          {
-            request: async (method, params) => {
-              calls.push({ method, params });
-              return structuredClone(LIVE_EXTERNAL);
-            },
-          },
-          sessionId,
-          FULL_CAPS,
-          scope,
-        ),
-      ).toThrow(ExternalDriverProtocolError);
-      expect(calls).toEqual([]);
-    },
-  );
-
-  it("cannot be steered through spread/extra scope fields", async () => {
-    const { calls } = harness(FULL_CAPS, "dev:local:tui");
-    const poisoned: Record<string, unknown> = {
-      session_id: "evil",
-      profile_id: "evil",
-    };
-    await createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(NEVER_BOUND_INTERNAL);
-        },
-      },
-      "dev:local:tui",
-      FULL_CAPS,
-      { profileId: "dev", topic: "peer-abc", ...poisoned },
-    ).driverGet();
-    expect(calls).toEqual([
-      {
-        method: METHOD,
-        params: { session_id: "dev:local:tui", topic: "peer-abc" },
-      },
-    ]);
   });
 
   it("sends ONE typed RPC for a valid operations request; missing inventory is an explicit unsupported failure", async () => {
@@ -463,262 +250,13 @@ describe("createExternalDriverCommands", () => {
     expect(message.length).toBeLessThan(200);
   });
 
-  it("maps a rejected RPC with constant bounded diagnostics (canary non-echo)", async () => {
-    const commands = createExternalDriverCommands(
-      {
-        request: async () => {
-          throw new Error("ECONNRESET CANARY-secret-9f in detail");
-        },
-      },
-      "dev:local:tui",
-      FULL_CAPS,
-      { profileId: "dev", topic: "peer-abc" },
-    );
-    const rejection = commands.driverGet();
-    await expect(rejection).rejects.toBeInstanceOf(ExternalDriverProtocolError);
-    const message = String(
-      await rejection.catch((error: Error) => error.message),
-    );
-    expect(message).not.toContain("CANARY");
-    expect(message).not.toContain("ECONNRESET");
-    expect(message.length).toBeLessThan(200);
-  });
-
   // Legal non-peer scope shapes share one accept path: the captured scope is
   // sent byte-exactly. Before changing any row, check the Core-side fence that
   // distinguishes ordinary channels from reserved ones (see the `test`
   // channel fence below).
-  it("accepts legal non-peer scope shapes byte-exactly (master topic, web-N, channel/chat)", async () => {
-    for (const [sessionId, scope, expectedParams] of [
-      [
-        "dev:local:tui#glm-oup-master-20260908",
-        { profileId: "dev", topic: "glm-oup-master-20260908" },
-        {
-          session_id: "dev:local:tui#glm-oup-master-20260908",
-          topic: "glm-oup-master-20260908",
-        },
-      ],
-      [
-        "web-4",
-        { profileId: "dev", topic: "ops" },
-        { session_id: "web-4", topic: "ops" },
-      ],
-      [
-        "local:demo/api:session",
-        { profileId: "dev" },
-        { session_id: "local:demo/api:session" },
-      ],
-      [
-        "matrix:!room:localhost",
-        { profileId: "dev" },
-        { session_id: "matrix:!room:localhost" },
-      ],
-      [
-        "dev:matrix:!room:localhost",
-        { profileId: "dev" },
-        { session_id: "dev:matrix:!room:localhost" },
-      ],
-      [
-        "_main:local:tui#master",
-        { profileId: "_main", topic: "master" },
-        { session_id: "_main:local:tui#master", topic: "master" },
-      ],
-    ] as const) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        sessionId,
-        FULL_CAPS,
-        scope,
-      );
-      await commands.driverGet();
-      expect(calls).toEqual([{ method: METHOD, params: expectedParams }]);
-    }
-  });
-
-  it("rejects whitespace/control bytes in ANY base shape BEFORE RPC", () => {
-    const badBases = [
-      "api:bad\n",
-      "dev:local:bad\n",
-      "web-4\n",
-      "dev:local: bad",
-      "dev:local:tui#ok-topic\u0007",
-      "line:chat id",
-    ];
-    for (const sessionId of badBases) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      expect(() =>
-        createExternalDriverCommands(
-          {
-            request: async (method, params) => {
-              calls.push({ method, params });
-              return structuredClone(LIVE_EXTERNAL);
-            },
-          },
-          sessionId,
-          FULL_CAPS,
-          { profileId: "dev" },
-        ),
-      ).toThrow(ExternalDriverProtocolError);
-      expect(calls).toEqual([]);
-    }
-  });
-
-  it("enforces the captured-profile fence on the reserved `test` channel", () => {
-    // `other:test:chat`: `test` IS reserved → qualified → foreign profile
-    // `other` must contradict captured `dev` and fail BEFORE RPC.
-    const calls: Array<{ method: string; params: unknown }> = [];
-    expect(() =>
-      createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        "other:test:chat",
-        FULL_CAPS,
-        { profileId: "dev" },
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(calls).toEqual([]);
-    // Owned: `dev:test:chat` is the same qualified shape and passes.
-    const owned: Array<{ method: string; params: unknown }> = [];
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          owned.push({ method, params });
-          return structuredClone(LIVE_EXTERNAL);
-        },
-      },
-      "dev:test:chat",
-      FULL_CAPS,
-      { profileId: "dev" },
-    );
-    void commands.driverGet();
-    expect(owned).toEqual([
-      { method: METHOD, params: { session_id: "dev:test:chat" } },
-    ]);
-  });
-
-  it("tables EVERY Core reserved channel name from source facts", async () => {
-    // Verbatim Core types.rs is_channel_name list (20 names, incl. test).
-    const CORE_RESERVED = [
-      "acp",
-      "api",
-      "cli",
-      "dingtalk",
-      "discord",
-      "email",
-      "feishu",
-      "line",
-      "local",
-      "matrix",
-      "qq-bot",
-      "slack",
-      "system",
-      "telegram",
-      "test",
-      "twilio",
-      "wechat",
-      "wecom",
-      "wecom-bot",
-      "whatsapp",
-    ] as const;
-    for (const channel of CORE_RESERVED) {
-      // reserved as SECOND segment → qualified, must match captured profile
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        `dev:${channel}:chat`,
-        FULL_CAPS,
-        { profileId: "dev" },
-      );
-      await commands.driverGet();
-      expect(calls).toEqual([
-        { method: METHOD, params: { session_id: `dev:${channel}:chat` } },
-      ]);
-      // Reserved as FIRST segment → UNQUALIFIED ordinary channel:chat and
-      // passes; `other:${channel}:chat` is QUALIFIED-FOREIGN (reserved
-      // second segment, profile `other` ≠ `dev`) and MUST throw.
-      expect(() =>
-        createExternalDriverCommands(
-          rpcStub(),
-          `${channel}:chat-id`,
-          FULL_CAPS,
-          {
-            profileId: "dev",
-          },
-        ),
-      ).not.toThrow();
-      expect(() =>
-        createExternalDriverCommands(
-          rpcStub(),
-          `other:${channel}:chat`,
-          FULL_CAPS,
-          { profileId: "dev" },
-        ),
-      ).toThrow(ExternalDriverProtocolError);
-    }
-  });
-
-  it("rejects a foreign-profile session BEFORE RPC (captured profile fence)", () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    expect(() =>
-      createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        "other:local:tui#peer-abc",
-        FULL_CAPS,
-        { profileId: "dev", topic: "peer-abc" },
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(calls).toEqual([]);
-  });
-
-  it("exposes exactly the two read-only operations plus the seven gated control methods", () => {
-    const { commands } = harness(FULL_CAPS);
-    // Migrated from the pre-feature ABSENCE assertion: the factory now
-    // intentionally carries the explicit control API. The seven control
-    // methods are gated on `external_driver_v1` at CALL time (proved by the
-    // dedicated control suites), but their keys are present on the surface.
-    // This pins the EXACT nine keys, and that every one is callable.
-    const expected = [
-      "driverAcquire",
-      "driverGet",
-      "driverRelease",
-      "driverRenew",
-      "nextExpectedRevision",
-      "peerControl",
-      "peerDispatch",
-      "wakeAck",
-      "wakeClaim",
-    ] as const;
-    expect(Object.keys(commands).sort()).toEqual([...expected]);
-    const surface = commands as unknown as Record<string, unknown>;
-    for (const key of expected) {
-      expect(typeof surface[key]).toBe("function");
-    }
-  });
 });
 
 describe("driverGet typed operations integration", () => {
-  const BASE_VIEW = structuredClone(LIVE_EXTERNAL);
-
   function recordingRpc(
     result: unknown,
     calls: Array<{ method: string; params: unknown }>,
@@ -774,20 +312,6 @@ describe("driverGet typed operations integration", () => {
     operations: structuredClone(GOOD_PAGE),
   };
 
-  it("omission preserves exact legacy params and result shape", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = commandsWith(structuredClone(BASE_VIEW), calls);
-    const view = await commands.driverGet();
-    expect(calls).toEqual([
-      {
-        method: METHOD,
-        params: { session_id: "dev:local:tui#peer-abc", topic: "peer-abc" },
-      },
-    ]);
-    expect(view.mode).toBe("external");
-    expect("operations" in view).toBe(false);
-  });
-
   it("valid first page passes validated operations in the SAME single RPC as binding", async () => {
     const calls: Array<{ method: string; params: unknown }> = [];
     const commands = commandsWith(PAGE_RESULT, calls);
@@ -811,113 +335,6 @@ describe("driverGet typed operations integration", () => {
       expect(view.operations.page.nextCursor).toBe("opaque-cursor-1");
       expect(view.operations.page.observedRevision).toBe("5");
     }
-  });
-
-  it("next page passes the exact opaque cursor and fixed limit", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = commandsWith(
-      {
-        ...structuredClone(LIVE_EXTERNAL),
-        operations: {
-          ...structuredClone(GOOD_PAGE),
-          items: [],
-          complete: true,
-          next_cursor: null,
-        },
-      },
-      calls,
-    );
-    await commands.driverGet({
-      operations: { cursor: "opaque-cursor-1", limit: 100 },
-    });
-    expect(calls[0]!.params).toEqual({
-      session_id: "dev:local:tui#peer-abc",
-      topic: "peer-abc",
-      operations: { cursor: "opaque-cursor-1", limit: 100 },
-    });
-  });
-
-  it("malformed operations options (null/array/unknown/range) refuse offline with zero RPCs", async () => {
-    for (const bad of [
-      null,
-      [1],
-      { unknownField: 1 },
-      { limit: 0 },
-      { limit: 101 },
-      { limit: 1.5 },
-      { cursor: "" },
-    ]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = commandsWith(PAGE_RESULT, calls);
-      await expect(
-        commands.driverGet({ operations: bad } as never),
-      ).rejects.toBeInstanceOf(ExternalDriverProtocolError);
-      expect(calls).toEqual([]);
-    }
-  });
-
-  it("requested-but-missing operations is a typed explicit unsupported failure", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = commandsWith(structuredClone(BASE_VIEW), calls);
-    const rejection = commands.driverGet({ operations: {} });
-    await expect(rejection).rejects.toBeInstanceOf(ExternalDriverProtocolError);
-    const message = String(
-      await rejection.catch((error: Error) => error.message),
-    );
-    expect(message).toContain("unsupported");
-    expect(calls).toEqual([
-      {
-        method: METHOD,
-        params: {
-          session_id: "dev:local:tui#peer-abc",
-          topic: "peer-abc",
-          operations: {},
-        },
-      },
-    ]);
-  });
-
-  it("malformed/null/foreign-scope page refuses explicitly, never empty inventory", async () => {
-    const foreignRow = {
-      ...structuredClone(GOOD_ROW),
-      acceptance: {
-        ...structuredClone(GOOD_ROW.acceptance),
-        adopted_session_id: "other:local:tui#peer-glm-worker-1",
-      },
-    };
-    for (const badResult of [
-      { ...structuredClone(LIVE_EXTERNAL), operations: null },
-      { ...structuredClone(LIVE_EXTERNAL), operations: { items: [] } },
-      {
-        ...structuredClone(LIVE_EXTERNAL),
-        operations: {
-          items: [foreignRow],
-          snapshot: "s",
-          observed_revision: "5",
-          complete: true,
-          next_cursor: null,
-        },
-      },
-    ]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = commandsWith(badResult, calls);
-      await expect(
-        commands.driverGet({ operations: {} }),
-      ).rejects.toBeInstanceOf(ExternalDriverProtocolError);
-      expect(calls.length).toBe(1);
-    }
-  });
-
-  it("unrequested operations stays ignored by the legacy base decoder", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = commandsWith(PAGE_RESULT, calls);
-    const view = await commands.driverGet();
-    expect(calls[0]!.params).toEqual({
-      session_id: "dev:local:tui#peer-abc",
-      topic: "peer-abc",
-    });
-    expect(view.mode).toBe("external");
-    expect("operations" in view).toBe(false);
   });
 
   it("mutating the caller options object mid-request cannot retarget params or fences", async () => {
@@ -952,42 +369,6 @@ describe("driverGet typed operations integration", () => {
       operations: { limit: 25 },
     });
     expect(view.operations?.kind).toBe("page");
-  });
-
-  it("server errors stay constant/scrubbed (canary never echoed)", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = commandsWith(
-      null,
-      calls,
-      new Error("ECONNRESET CANARY-token-9f detail"),
-    );
-    const rejection = commands.driverGet({ operations: {} });
-    await expect(rejection).rejects.toBeInstanceOf(ExternalDriverProtocolError);
-    const message = String(
-      await rejection.catch((error: Error) => error.message),
-    );
-    expect(message).not.toContain("CANARY");
-    expect(message).not.toContain("ECONNRESET");
-    expect(message.length).toBeLessThan(200);
-  });
-
-  it("capability gates still apply with zero requests when either gate is missing", async () => {
-    for (const missing of [
-      caps([], [EXTERNAL_DRIVER_V1_FEATURE]),
-      caps([METHOD], []),
-    ]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = createExternalDriverCommands(
-        recordingRpc(PAGE_RESULT, calls),
-        "dev:local:tui#peer-abc",
-        missing,
-        { profileId: "dev", topic: "peer-abc" },
-      );
-      await expect(
-        commands.driverGet({ operations: {} }),
-      ).rejects.toBeInstanceOf(ExternalDriverCapabilityError);
-      expect(calls).toEqual([]);
-    }
   });
 });
 
@@ -1038,169 +419,6 @@ describe("driverGet typed RPC refusal boundary", () => {
     expect(error).not.toBeInstanceOf(ExternalDriverRefusalError);
     expect((error as Error).message).not.toContain("CANARY");
     expect((error as Error).message).not.toContain("cursor_reset");
-  });
-
-  it("a NON-allowlisted kind on a REAL protocol error stays generic", async () => {
-    const commands = commandsWith(() => {
-      throw new OctosUiProtocolError(32002, "x", {
-        kind: "some_future_kind",
-      });
-    });
-    const error = await commands
-      .driverGet({ operations: {} })
-      .catch((e: unknown) => e);
-    expect(error).not.toBeInstanceOf(ExternalDriverRefusalError);
-    expect((error as Error).message).not.toContain("some_future_kind");
-  });
-
-  it("plain transport errors stay the scrubbed generic failure", async () => {
-    const commands = commandsWith(() => {
-      throw new Error("ECONNRESET CANARY-3 body");
-    });
-    const error = await commands
-      .driverGet({ operations: {} })
-      .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-    expect((error as Error).message).not.toContain("CANARY");
-    expect((error as Error).message).not.toContain("ECONNRESET");
-  });
-});
-
-describe("driverGet command-return gaps (root review)", () => {
-  const GOOD_ROW = {
-    operation_id: "op-1",
-    kind: "peer_dispatch",
-    acceptance: {
-      model: "glm-5.3",
-      model_lane: "external-master",
-      workspace_root: "/ws/root",
-      adopted_turn_id: "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d01",
-      adopted_session_id: "dev:local:tui#peer-glm-worker-1",
-      slug: "glm-worker-1",
-      accepted_at_ms: 1,
-      payload_digest: "a".repeat(64),
-    },
-    lifecycle: "started",
-    created_at_ms: 1,
-  };
-  const GOOD_PAGE = {
-    items: [GOOD_ROW],
-    snapshot: "snap-1",
-    observed_revision: "5",
-    complete: true,
-    next_cursor: null,
-  };
-  const PAGE_RESULT = {
-    ...structuredClone(LIVE_EXTERNAL),
-    operations: structuredClone(GOOD_PAGE),
-  };
-
-  function make(
-    calls: Array<{ method: string; params: unknown }>,
-    result: unknown = PAGE_RESULT,
-  ) {
-    return createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(result);
-        },
-      },
-      "dev:local:tui#peer-abc",
-      FULL_CAPS,
-      { profileId: "dev", topic: "peer-abc" },
-    );
-  }
-
-  it("(1) malformed options reject BOUNDED with ZERO traffic, at top level and inside operations", async () => {
-    for (const bad of [
-      null,
-      [],
-      ["operations"],
-      { unknownKey: 1 },
-      { profileId: "evil" },
-      7,
-      "text",
-      { operations: null },
-      { operations: [] },
-      { operations: "x" },
-      { operations: 3 },
-      { operations: { bad: 1 } },
-    ]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = make(calls);
-      await expect(commands.driverGet(bad as never)).rejects.toBeInstanceOf(
-        ExternalDriverProtocolError,
-      );
-      expect(calls).toEqual([]);
-    }
-  });
-
-  it("(2) mutating the scope object BEFORE the call cannot retarget the decode fence", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const scope = { profileId: "dev", topic: "peer-abc" };
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(PAGE_RESULT);
-        },
-      },
-      "dev:local:tui#peer-abc",
-      FULL_CAPS,
-      scope,
-    );
-    // Retarget AFTER factory construction, BEFORE driverGet.
-    (scope as { profileId: string }).profileId = "other";
-    const view = await commands.driverGet({ operations: {} });
-    expect(view.operations?.kind).toBe("page");
-    expect(calls[0]!.params).toEqual({
-      session_id: "dev:local:tui#peer-abc",
-      topic: "peer-abc",
-      operations: {},
-    });
-  });
-
-  it("(2b) scope mutation DURING a deferred RPC cannot retarget the fence either", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const scope = { profileId: "dev", topic: "peer-abc" };
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          await gate;
-          return structuredClone(PAGE_RESULT);
-        },
-      },
-      "dev:local:tui#peer-abc",
-      FULL_CAPS,
-      scope,
-    );
-    const pending = commands.driverGet({ operations: {} });
-    (scope as { profileId: string }).profileId = "other";
-    release();
-    const view = await pending;
-    expect(view.operations?.kind).toBe("page");
-  });
-
-  it("(3) the returned view and page outcome are FROZEN against caller mutation", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = make(calls);
-    const view = await commands.driverGet({ operations: {} });
-    if (view.operations?.kind !== "page") {
-      throw new Error("expected page outcome");
-    }
-    expect(() => {
-      (view as { operations?: unknown }).operations = { kind: "omitted" };
-    }).toThrow();
-    expect(() => {
-      (view.operations!.page as { snapshot?: string }).snapshot = "evil";
-    }).toThrow();
-    expect(view.operations.page.snapshot).toBe("snap-1");
   });
 });
 

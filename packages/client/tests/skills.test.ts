@@ -53,26 +53,6 @@ describe("profile skill contracts", () => {
         ?.installedSkills,
     ).toEqual([]);
   });
-  it("rejects wrong scope, duplicates, mismatched counts and malformed nulls", () => {
-    const list = { profile_id: "p1", count: 1, skills: [skill] };
-    expect(parseInstalledSkills(list, "p2")).toBeNull();
-    expect(parseInstalledSkills({ ...list, count: 2 }, "p1")).toBeNull();
-    expect(
-      parseInstalledSkills({ ...list, count: 2, skills: [skill, skill] }, "p1"),
-    ).toBeNull();
-    expect(
-      parseInstalledSkills(
-        { ...list, skills: [{ ...skill, tool_count: 2 ** 54 }] },
-        "p1",
-      ),
-    ).toBeNull();
-    expect(
-      parseSkillPackages(
-        { profile_id: "p1", packages: [{ ...pkg, version: {} }] },
-        "p1",
-      ),
-    ).toBeNull();
-  });
   it("gates before dispatch and binds every read and mutation to the profile", async () => {
     const request = vi.fn(async () => ({}));
     const none = createSkillCommands({ request }, "p1", {

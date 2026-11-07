@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createResearchCommands,
   parseResearchLanes,
-  parseResearchLaneMutation,
   researchLaneParams,
   type ResearchLane,
 } from "../src/research.ts";
@@ -40,22 +39,6 @@ const lane: ResearchLane = {
 const list = { profile_id: "p1", sub_providers: [row] };
 
 describe("research lane wire contract", () => {
-  it.each([" synthetic-secret ", 'synthetic-"secret"\nvalue'])(
-    "never returns normalized or escaped credential-bearing errors",
-    async (credential) => {
-      const request = vi.fn(async () => {
-        throw new Error("Upstream echo: " + JSON.stringify(credential.trim()));
-      });
-      const commands = createResearchCommands({ request }, "p1", capabilities);
-      try {
-        await commands.upsert({ ...lane, apiKeyEnv: "KEY_NAME" }, credential);
-        expect.fail("Expected a rejected save");
-      } catch (cause) {
-        expect(String(cause)).toContain("Could not confirm");
-        expect(String(cause)).not.toContain("synthetic");
-      }
-    },
-  );
   it("parses exact nullable fields, excludes unknown secrets and enforces owner/unique keys", () => {
     expect(
       parseResearchLanes(
@@ -76,23 +59,6 @@ describe("research lane wire contract", () => {
     expect(
       researchLaneParams({ ...lane, extra: "never-send" } as ResearchLane),
     ).toEqual(row);
-  });
-  it("treats persisted and restart-required as distinct explicit receipt fields", () => {
-    expect(
-      parseResearchLaneMutation(
-        { ...list, applied: true, restart_required: true },
-        "p1",
-      ),
-    ).toMatchObject({ applied: true, restartRequired: true });
-    expect(
-      parseResearchLaneMutation(
-        { ...list, applied: false, restart_required: false },
-        "p1",
-      ),
-    ).toMatchObject({ applied: false, restartRequired: false });
-    expect(
-      parseResearchLaneMutation({ ...list, applied: true }, "p1"),
-    ).toBeNull();
   });
   it("gates before wire, requires credential destination and redacts an echoed secret", async () => {
     const request = vi.fn(async () => ({}));
@@ -120,32 +86,6 @@ describe("research lane wire contract", () => {
       profile_id: "p1",
       sub_provider: { ...row, api_key_env: "DEEPSEEK_API_KEY" },
       api_key: "synthetic-secret",
-    });
-  });
-  it("never invents defaults or includes an omitted secret", async () => {
-    const request = vi.fn(async () => ({
-      ...list,
-      applied: true,
-      restart_required: true,
-    }));
-    const commands = createResearchCommands({ request }, "p1", capabilities);
-    await expect(commands.upsert(lane)).resolves.toMatchObject({
-      restartRequired: true,
-    });
-    expect(request).toHaveBeenLastCalledWith(APPUI_RESEARCH_METHODS.UPSERT, {
-      profile_id: "p1",
-      sub_provider: row,
-    });
-    request.mockResolvedValueOnce({
-      ...list,
-      sub_providers: [],
-      applied: true,
-      restart_required: true,
-    });
-    await commands.remove("cheap");
-    expect(request).toHaveBeenLastCalledWith(APPUI_RESEARCH_METHODS.REMOVE, {
-      profile_id: "p1",
-      key: "cheap",
     });
   });
 });

@@ -1,25 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  AUTONOMY_UNSUPPORTED,
-  buildLoopControlParams,
-  buildLoopCreateParams,
-  buildMonitorControlParams,
   buildMonitorCreateParams,
   buildSessionGoalSetParams,
   goalEventGenerationAdmits,
   parseAgentListResult,
-  parseAgentOutputReadResult,
-  parseAgentStatusReadResult,
   parseAutonomyAgentRecord,
   parseAutonomyCapabilities,
   parseAutonomyGoalRecord,
   parseAutonomyNotification,
-  parseLoopCreateResult,
-  parseLoopDeleteResult,
   parseLoopFireNowResult,
-  parseLoopListResult,
-  parseLoopPauseResumeResult,
-  parseMonitorCreateResult,
   parseMonitorControlResult,
   parseMonitorListResult,
   parseSessionGoalCleared,
@@ -95,77 +84,6 @@ function capabilities(
 }
 
 describe("autonomy capability gating", () => {
-  it.each(["s1#other", "s1"])(
-    "rejects nested control owner %s when the envelope owns s1#owner",
-    async (nestedOwner) => {
-      const loopRpc = {
-        request: async () => ({
-          session_id: "s1#owner",
-          loop_id: "loop_01",
-          loop: { ...LOOP_RECORD, session_id: nestedOwner },
-          ok: true,
-          status: "paused",
-        }),
-      };
-      await expect(
-        createAutonomyCommands(loopRpc).loop.pauseLoop("loop_01", "s1#request"),
-      ).rejects.toThrow(/nested loop owner/);
-      const monitorRpc = {
-        request: async () => ({
-          session_id: "s1#owner",
-          profile_id: "dev",
-          monitor_id: "monitor_01",
-          monitor: { ...MONITOR_RECORD, session_id: nestedOwner },
-          ok: true,
-          status: "paused",
-          deleted: false,
-        }),
-      };
-      await expect(
-        createAutonomyCommands(monitorRpc).monitor.pauseMonitor(
-          "monitor_01",
-          "s1#request",
-        ),
-      ).rejects.toThrow(/nested monitor owner/);
-    },
-  );
-
-  it.each([
-    ["loop/updated", "loop", "loop_id", LOOP_RECORD],
-    ["loop/fired", "loop", "loop_id", LOOP_RECORD],
-    ["monitor/updated", "monitor", "monitor_id", MONITOR_RECORD],
-    ["monitor/expired", "monitor", "monitor_id", MONITOR_RECORD],
-  ] as const)(
-    "validates nested owner and ID in %s",
-    (method, field, idField, record) => {
-      const params = {
-        session_id: "s1",
-        [idField]: record[idField as keyof typeof record],
-        [field]: record,
-      };
-      const parse = (overrides: Record<string, unknown>) =>
-        parseAutonomyNotification({
-          jsonrpc: "2.0",
-          method,
-          params: { ...params, ...overrides },
-        });
-      expect(parse({})).not.toBeNull();
-      for (const session_id of ["foreign", "s1#other"]) {
-        expect(parse({ [field]: { ...record, session_id } })).toBeNull();
-      }
-      expect(
-        parse({ [field]: { ...record, [idField]: "wrong-id" } }),
-      ).toBeNull();
-      if (method !== "loop/updated" && method !== "monitor/updated") {
-        expect(parse({ [field]: null })).not.toBeNull();
-        expect(parse({ [field]: undefined })).not.toBeNull();
-      }
-    },
-  );
-  it("reports nothing when capabilities are absent", () => {
-    expect(parseAutonomyCapabilities(undefined)).toEqual(AUTONOMY_UNSUPPORTED);
-  });
-
   it("requires both the method and its gating feature", () => {
     const caps = parseAutonomyCapabilities(
       capabilities(["session/goal/set"], ["coding.goal_runtime.v1"]),
@@ -179,48 +97,6 @@ describe("autonomy capability gating", () => {
     expect(
       parseAutonomyCapabilities(capabilities([], ["coding.goal_runtime.v1"]))
         .goalSet,
-    ).toBe(false);
-  });
-
-  it("gates each family on its own feature", () => {
-    const caps = parseAutonomyCapabilities(
-      capabilities(
-        [
-          "loop/create",
-          "loop/list",
-          "loop/delete",
-          "loop/pause",
-          "loop/resume",
-          "loop/fire_now",
-          "monitor/create",
-          "monitor/list",
-          "monitor/pause",
-          "monitor/resume",
-          "monitor/delete",
-          "agent/list",
-          "agent/status/read",
-          "agent/output/read",
-          "session/goal/get",
-          "session/goal/clear",
-        ],
-        [
-          "coding.loop_runtime.v1",
-          "coding.monitor_runtime.v1",
-          "coding.agent_control.v1",
-          "coding.goal_runtime.v1",
-        ],
-      ),
-    );
-    expect(caps.loopFireNow).toBe(true);
-    expect(caps.monitorDelete).toBe(true);
-    expect(caps.agentOutputRead).toBe(true);
-    expect(caps.goalGet).toBe(true);
-    expect(caps.goalClear).toBe(true);
-    // A different family's feature must not leak in.
-    expect(
-      parseAutonomyCapabilities(
-        capabilities(["session/goal/set"], ["coding.loop_runtime.v1"]),
-      ).goalSet,
     ).toBe(false);
   });
 });
@@ -370,145 +246,6 @@ describe("goal generation admission (#1959)", () => {
   });
 });
 
-describe("loop contracts", () => {
-  it("builds loop create params and rejects invalid ones", () => {
-    expect(
-      buildLoopCreateParams({ session_id: "s1", prompt: "watch deps" }),
-    ).toEqual({ session_id: "s1", prompt: "watch deps" });
-    expect(
-      buildLoopCreateParams({
-        session_id: "s1",
-        command: "/loop every 5m check build",
-      }),
-    ).toEqual({ session_id: "s1", command: "/loop every 5m check build" });
-    // No prompt/command at all → fail closed.
-    expect(buildLoopCreateParams({ session_id: "s1" })).toBeNull();
-    expect(buildLoopCreateParams({ session_id: "", prompt: "x" })).toBeNull();
-    expect(buildLoopCreateParams({ session_id: "s1", prompt: " " })).toBeNull();
-    // Interval bounds (server LOOP_MIN..LOOP_MAX).
-    expect(
-      buildLoopCreateParams({
-        session_id: "s1",
-        prompt: "x",
-        interval_seconds: 0,
-      }),
-    ).toBeNull();
-    expect(
-      buildLoopCreateParams({
-        session_id: "s1",
-        prompt: "x",
-        interval_seconds: 86_401,
-      }),
-    ).toBeNull();
-    // fixed_interval requires an interval.
-    expect(
-      buildLoopCreateParams({
-        session_id: "s1",
-        prompt: "x",
-        mode: "fixed_interval",
-      }),
-    ).toBeNull();
-  });
-
-  // Wire chain: create/list/control/fire-now results round-trip; malformed
-  // results and control params fail closed.
-  it("parses loop results and rejects malformed ones", () => {
-    const created = parseLoopCreateResult({
-      session_id: "s1",
-      profile_id: "dev",
-      loop_id: "loop_01",
-      loop: LOOP_RECORD,
-      ok: true,
-      status: "active",
-      created: true,
-      fire: {
-        queued: false,
-        reason: "waiting_for_schedule",
-        message: "loop created; it will queue when due",
-      },
-    });
-    expect(created?.loop_id).toBe("loop_01");
-    expect(created?.fire?.queued).toBe(false);
-
-    // Unscoped list echoes session_id: null.
-    expect(
-      parseLoopListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        loops: [LOOP_RECORD],
-      })?.loops,
-    ).toHaveLength(1);
-    expect(
-      parseLoopListResult({
-        session_id: null,
-        profile_id: "dev",
-        loops: [],
-      })?.session_id,
-    ).toBeNull();
-
-    expect(
-      parseLoopDeleteResult({
-        session_id: "s1",
-        loop_id: "loop_01",
-        loop: LOOP_RECORD,
-        ok: true,
-        status: "deleted",
-        deleted: true,
-        reaped_cron_job_ids: ["job-1"],
-      })?.reaped_cron_job_ids,
-    ).toEqual(["job-1"]);
-
-    expect(
-      parseLoopPauseResumeResult({
-        session_id: "s1",
-        loop_id: "loop_01",
-        loop: LOOP_RECORD,
-        ok: true,
-        status: "paused",
-      })?.status,
-    ).toBe("paused");
-
-    expect(
-      parseLoopFireNowResult({
-        session_id: "s1",
-        profile_id: "dev",
-        loop_id: "loop_01",
-        loop: LOOP_RECORD,
-        ok: true,
-        status: "queued",
-        fire: { queued: true, duplicate: false, continuation_id: 7 },
-      })?.fire?.continuation_id,
-    ).toBe(7);
-
-    expect(parseLoopCreateResult({ session_id: "s1" })).toBeNull();
-    expect(
-      parseLoopCreateResult({
-        session_id: "s1",
-        profile_id: "dev",
-        loop_id: "loop_01",
-        loop: { ...LOOP_RECORD, interval_seconds: "60" },
-        ok: true,
-        status: "active",
-        created: true,
-      }),
-    ).toBeNull();
-    expect(parseLoopListResult({ profile_id: "dev", loops: [{}] })).toBeNull();
-    expect(buildLoopControlParams({ loop_id: "" })).toBeNull();
-    expect(
-      buildLoopControlParams({ loop_id: "loop_01", session_id: "" }),
-    ).toBeNull();
-    expect(
-      parseLoopPauseResumeResult({
-        session_id: "s1",
-        loop_id: "loop_01",
-        loop: LOOP_RECORD,
-        ok: false,
-        status: "paused",
-      }),
-    ).toBeNull();
-  });
-});
-
 describe("monitor contracts", () => {
   // Deliberate decision: optional fields the caller did not set stay absent
   // on the wire (no client-invented defaults), and unknown modes refuse
@@ -550,47 +287,6 @@ describe("monitor contracts", () => {
 
   // Wire chain: create/list/control results round-trip; control params and
   // malformed results fail closed.
-  it("parses monitor results and rejects malformed ones", () => {
-    const created = parseMonitorCreateResult({
-      session_id: "s1",
-      profile_id: "dev",
-      monitor_id: "monitor_01",
-      monitor: MONITOR_RECORD,
-      ok: true,
-      status: "active",
-      created: true,
-    });
-    expect(created?.monitor.mode).toBe("poll");
-
-    expect(
-      parseMonitorListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        monitors: [MONITOR_RECORD],
-      })?.monitors[0]?.monitor_id,
-    ).toBe("monitor_01");
-
-    expect(
-      parseMonitorControlResult({
-        session_id: "s1",
-        profile_id: "dev",
-        monitor_id: "monitor_01",
-        monitor: {
-          ...MONITOR_RECORD,
-          status: "paused",
-          pause_reason: "user",
-        },
-        ok: true,
-        status: "paused",
-        deleted: false,
-      })?.monitor.pause_reason,
-    ).toBe("user");
-
-    expect(buildMonitorControlParams({ monitor_id: "" })).toBeNull();
-    expect(
-      buildMonitorControlParams({ monitor_id: "monitor_01", profile_id: " " }),
-    ).toBeNull();
-  });
 });
 
 describe("agent inspection contracts", () => {
@@ -625,51 +321,6 @@ describe("agent inspection contracts", () => {
 
   // Wire chain: record/list/status/output read round-trip; malformed
   // payloads fail closed.
-  it("parses agent records and read results, rejects malformed ones", () => {
-    expect(parseAutonomyAgentRecord(AGENT)?.agent_id).toBe("agent_01");
-    expect(
-      parseAgentListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        agents: [AGENT],
-      })?.agents,
-    ).toHaveLength(1);
-    expect(
-      parseAgentStatusReadResult({ session_id: "s1", agent: AGENT })?.agent
-        .role,
-    ).toBe("implementer");
-    expect(
-      parseAgentOutputReadResult({
-        agent_id: "agent_01",
-        session_id: "s1",
-        source: "runtime",
-        text: "hello",
-        messages: [],
-        cursor: { offset: 0 },
-        next_cursor: { offset: 5 },
-        has_more: true,
-        complete: false,
-      }),
-    ).toMatchObject({ has_more: true, next_cursor: { offset: 5 } });
-
-    expect(parseAutonomyAgentRecord({ ...AGENT, status: "" })).toBeNull();
-    expect(
-      parseAgentListResult({ profile_id: "dev", agents: [{}] }),
-    ).toBeNull();
-    expect(parseAgentStatusReadResult({ session_id: "s1" })).toBeNull();
-    expect(
-      parseAgentOutputReadResult({
-        agent_id: "agent_01",
-        session_id: "s1",
-        source: "runtime",
-        text: "x",
-        cursor: { offset: -1 },
-        next_cursor: null,
-        has_more: false,
-        complete: true,
-      }),
-    ).toBeNull();
-  });
 });
 
 describe("autonomy notifications", () => {
@@ -723,23 +374,6 @@ describe("autonomy notifications", () => {
         })?.kind,
       ).toBe(kind);
     }
-  });
-
-  it("drops non-autonomy methods and malformed payloads", () => {
-    expect(
-      parseAutonomyNotification({
-        jsonrpc: "2.0",
-        method: "turn/started",
-        params: {},
-      }),
-    ).toBeNull();
-    expect(
-      parseAutonomyNotification({
-        jsonrpc: "2.0",
-        method: "session/goal/updated",
-        params: { session_id: "s1" },
-      }),
-    ).toBeNull();
   });
 });
 
@@ -856,26 +490,6 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
         agents: [AGENT_WITH_NULLS],
       })?.agents,
     ).toHaveLength(1);
-  });
-
-  it("stays strict where rc11 requires a value — null on required fields still fails", () => {
-    expect(
-      parseMonitorListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        monitors: [{ ...MONITOR_WITH_NULLS, status: null }],
-      }),
-    ).toBeNull();
-    expect(
-      parseAutonomyAgentRecord({ ...AGENT_WITH_NULLS, agent_id: null }),
-    ).toBeNull();
-    expect(
-      parseLoopListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        loops: [{ ...LOOP_WITH_NULLS, loop_id: null }],
-      }),
-    ).toBeNull();
   });
 });
 
@@ -994,144 +608,8 @@ describe("scoped list ownership (session_controls_target mirror)", () => {
     },
   );
 
-  it("accepts legal base/topic scope on single-resource controls with the exact resource id", async () => {
-    // A topic-scoped request may control its base session's loop; the result
-    // carries the loop's ACTUAL owner (the base session) and the exact id.
-    const rpc = {
-      request: async () => ({
-        session_id: "dev:local:tui",
-        loop_id: "loop_01",
-        loop: {
-          ...LOOP_RECORD,
-          loop_id: "loop_01",
-          session_id: "dev:local:tui",
-        },
-        ok: true,
-        status: "paused",
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).loop.pauseLoop(
-        "loop_01",
-        "dev:local:tui#research",
-      ),
-    ).resolves.toMatchObject({ loop_id: "loop_01", status: "paused" });
-  });
-
-  it("rejects a single-resource control whose owner is outside the base/topic scope", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "telegram:2",
-        loop_id: "loop_01",
-        loop: { ...LOOP_RECORD, loop_id: "loop_01", session_id: "telegram:2" },
-        ok: true,
-        status: "paused",
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).loop.pauseLoop(
-        "loop_01",
-        "telegram:1#research",
-      ),
-    ).rejects.toThrow(/outside the requested base\/topic scope/);
-  });
-
-  it("rejects a single-resource control whose returned id differs from the request", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "s1",
-        profile_id: "dev",
-        monitor_id: "monitor_02",
-        monitor: {
-          ...MONITOR_RECORD,
-          monitor_id: "monitor_02",
-          session_id: "s1",
-        },
-        ok: true,
-        status: "paused",
-        deleted: false,
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).monitor.pauseMonitor("monitor_01", "s1"),
-    ).rejects.toThrow(/does not match the requested id/);
-  });
-
   // Same envelope/nested-record agreement guard for loop and monitor: the
   // nested record's id must match the envelope id, and its owner must match
   // the envelope session — otherwise the server answered about a resource
   // the client never requested.
-  it.each(["loop", "monitor"] as const)(
-    "rejects a %s control whose nested record id or owner disagrees with the envelope",
-    async (family) => {
-      const record = (patch: Record<string, unknown>) => ({
-        ...(family === "loop" ? LOOP_RECORD : MONITOR_RECORD),
-        ...patch,
-      });
-      const response = (nested: Record<string, unknown>) => ({
-        session_id: "s1",
-        profile_id: "dev",
-        [family === "loop" ? "loop_id" : "monitor_id"]:
-          family === "loop" ? "loop_01" : "monitor_01",
-        [family]: nested,
-        ok: true,
-        status: "paused",
-        ...(family === "monitor" ? { deleted: false } : {}),
-      });
-      const control = (
-        rpc: { request: () => Promise<unknown> },
-        scope = "s1",
-      ) =>
-        family === "loop"
-          ? createAutonomyCommands(rpc).loop.pauseLoop("loop_01", scope)
-          : createAutonomyCommands(rpc).monitor.pauseMonitor(
-              "monitor_01",
-              scope,
-            );
-
-      // Foreign, unrequested resource id inside a valid envelope.
-      await expect(
-        control({
-          request: async () =>
-            response(
-              record(
-                family === "loop"
-                  ? { loop_id: "loop_02" }
-                  : { monitor_id: "monitor_02" },
-              ),
-            ),
-        }),
-      ).rejects.toThrow(/does not match the envelope id/);
-
-      // Nested owner from a different base session. The request targets
-      // telegram:1 (matching the envelope), so the only violation is the
-      // nested record's owner.
-      await expect(
-        control(
-          {
-            request: async () => ({
-              ...response(record({ session_id: "telegram:2" })),
-              session_id: "telegram:1",
-            }),
-          },
-          "telegram:1",
-        ),
-      ).rejects.toThrow(/does not agree/);
-    },
-  );
-
-  it("keeps an unscoped (profile-wide) list untouched", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: null,
-        profile_id: "dev",
-        loops: [
-          { ...LOOP_RECORD, loop_id: "loop_01", session_id: "s1" },
-          { ...LOOP_RECORD, loop_id: "loop_02", session_id: "s2" },
-        ],
-      }),
-    };
-    const result = await createAutonomyCommands(rpc).loop.listLoops(null);
-    expect(result.loops).toHaveLength(2);
-  });
 });

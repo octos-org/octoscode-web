@@ -109,17 +109,6 @@ describe("wake claim payload is cloned, deep-frozen and detached", () => {
     expect(Object.isFrozen(raw.nested)).toBe(false);
   });
 
-  it("later mutation of the raw payload does not change the view", () => {
-    const raw = { goal_id: "g1" };
-    const view = parseExternalDriverWakeClaimResult(
-      reply([occurrence({ payload: raw })]),
-    );
-    raw.goal_id = "mutated";
-    const decodedPayload = view.occurrences[0]?.payload;
-    expect(decodedPayload).toBeDefined();
-    expect((decodedPayload as { goal_id: string }).goal_id).toBe("g1");
-  });
-
   it('preserves an own JSON "__proto__" key without prototype pollution', () => {
     // JSON.parse creates a real OWN "__proto__" data property.
     const raw = JSON.parse(

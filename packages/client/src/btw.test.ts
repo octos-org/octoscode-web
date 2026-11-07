@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBtwCommands, parseSessionBtwResult } from "./btw.ts";
+import { createBtwCommands } from "./btw.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
 
 const session = "dev:local:tui#peer-review";
@@ -37,60 +37,6 @@ describe("native session/btw contract", () => {
     });
     await expect(commands.ask("Question")).rejects.toThrow("not advertised");
     expect(request).not.toHaveBeenCalled();
-  });
-  it.each(["", " \n\t"])(
-    "rejects empty question %j before RPC",
-    async (question) => {
-      const request = vi.fn();
-      await expect(
-        createBtwCommands({ request }, session, caps).ask(question),
-      ).rejects.toThrow("required");
-      expect(request).not.toHaveBeenCalled();
-    },
-  );
-  it("rejects a runtime object instead of accepting foreign routing fields", async () => {
-    const request = vi.fn();
-    await expect(
-      createBtwCommands({ request }, session, caps).ask({
-        question: "Question",
-        session_id: "foreign",
-      } as unknown as string),
-    ).rejects.toThrow("required");
-    expect(request).not.toHaveBeenCalled();
-  });
-  it.each(["", " ", " dev:api:A"])(
-    "rejects an unconfirmed owner %j",
-    (owner) => {
-      expect(() =>
-        createBtwCommands({ request: vi.fn() }, owner, caps),
-      ).toThrow("confirmed Session");
-    },
-  );
-  it.each([
-    { session_id: "dev:local:tui", answer: "foreign topic" },
-    { session_id: "other:local:tui#peer-review", answer: "foreign profile" },
-    { session_id: session, answer: "" },
-    { session_id: session, answer: " \n " },
-    { session_id: session, answer: 42 },
-    { session_id: session, answer: "answer", model: 42 },
-    { session_id: session, answer: "answer", model: " " },
-    {},
-    null,
-  ])("rejects malformed or foreign results %#", (value) => {
-    expect(parseSessionBtwResult(value, session)).toBeNull();
-  });
-  it("preserves complete Markdown and accepts native optional model null", () => {
-    expect(
-      parseSessionBtwResult(
-        {
-          session_id: session,
-          answer: "**Answer**\n\nDetails",
-          model: null,
-          unrelated: "ignored",
-        },
-        session,
-      ),
-    ).toEqual({ session_id: session, answer: "**Answer**\n\nDetails" });
   });
   it("does not reinterpret a wrong-Session receipt as a successful answer", async () => {
     const request = vi

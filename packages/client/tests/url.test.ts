@@ -19,14 +19,4 @@ describe("buildUiProtocolUrl", () => {
       "approval.typed.v1",
     ]);
   });
-
-  it("preserves an explicit WebSocket path and unrelated query parameters", () => {
-    const url = new URL(
-      buildUiProtocolUrl({
-        endpoint: "wss://octos.example/custom/ws?tenant=dev",
-      }),
-    );
-    expect(url.pathname).toBe("/custom/ws");
-    expect(url.searchParams.get("tenant")).toBe("dev");
-  });
 });

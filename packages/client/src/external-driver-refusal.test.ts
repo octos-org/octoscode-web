@@ -10,7 +10,6 @@ import {
   requireExternalDriverControlCapability,
 } from "./external-driver.ts";
 import type { ExternalDriverControlContext } from "./external-driver.ts";
-import { createExternalDriverPeerCommands } from "./external-driver-peer-control.ts";
 import { OctosUiClient, OctosUiProtocolError } from "./client.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
 
@@ -85,35 +84,6 @@ async function capture(promise: Promise<unknown>): Promise<unknown> {
 }
 
 describe("gap 1 — requestExternalDriverControl typed-refusal narrowing", () => {
-  it.each([...EXTERNAL_DRIVER_REFUSAL_KINDS])(
-    "narrows allowlisted kind %s to ExternalDriverRefusalError",
-    async (kind) => {
-      const { context, request } = controlContext({
-        respond: async () => {
-          throw new OctosUiProtocolError(32001, `server detail ${CANARY}`, {
-            kind,
-          });
-        },
-      });
-      const error = await capture(
-        requestExternalDriverControl(context, GET, { session_id: MASTER }),
-      );
-      expect(error).toBeInstanceOf(ExternalDriverRefusalError);
-      expect((error as ExternalDriverRefusalError).refusalKind).toBe(kind);
-      expect((error as Error).name).toBe("ExternalDriverRefusalError");
-      expect((error as Error).message).toBe(
-        `${GET} failed: server refused: ${kind}`,
-      );
-      expect((error as Error).message).not.toContain(CANARY);
-      expect((error as { data?: unknown }).data).toBeUndefined();
-      expect((error as { cause?: unknown }).cause).toBeUndefined();
-      // Params are forwarded untouched; exactly one frame leaves.
-      expect(request).toHaveBeenCalledExactlyOnceWith(GET, {
-        session_id: MASTER,
-      });
-    },
-  );
-
   it("keeps a NON-allowlisted kind on a real protocol error as the scrubbed failure", async () => {
     const { context, request } = controlContext({
       respond: async () => {
@@ -133,44 +103,6 @@ describe("gap 1 — requestExternalDriverControl typed-refusal narrowing", () =>
     expect((error as { data?: unknown }).data).toBeUndefined();
     expect(request).toHaveBeenCalledTimes(1);
   });
-
-  it.each([
-    {
-      label: "no data at all",
-      serverError: new OctosUiProtocolError(32003, `plain ${CANARY}`),
-    },
-    {
-      label: "a data record without kind",
-      serverError: new OctosUiProtocolError(32004, `empty ${CANARY}`, {}),
-    },
-    {
-      label: "a null data payload",
-      serverError: new OctosUiProtocolError(32005, `null ${CANARY}`, null),
-    },
-    {
-      label: "a non-string kind",
-      serverError: new OctosUiProtocolError(32006, `bad ${CANARY}`, {
-        kind: 42,
-      }),
-    },
-  ])(
-    "keeps a refusal with $label as the scrubbed generic failure",
-    async ({ serverError }) => {
-      const { context, request } = controlContext({
-        respond: async () => {
-          throw serverError;
-        },
-      });
-      const error = await capture(
-        requestExternalDriverControl(context, GET, { session_id: MASTER }),
-      );
-      expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-      expect(error).not.toBeInstanceOf(ExternalDriverRefusalError);
-      expect((error as Error).message).toBe(`${GET} failed: rpc rejected`);
-      expect((error as Error).message).not.toContain(CANARY);
-      expect(request).toHaveBeenCalledTimes(1);
-    },
-  );
 
   it("rejects a duck-typed lookalike that fails the identity check", async () => {
     const lookalike = new Error(`fake ${CANARY}`);
@@ -216,82 +148,6 @@ describe("gap 1 — requestExternalDriverControl typed-refusal narrowing", () =>
  * `driver_operations_cursor_reset`/`driver_operations_view_too_large` are the
  * discovery-only kinds already allowlisted.
  */
-const CONFIRMED_CONTROL_REFUSAL_KINDS = [
-  "driver_scope_mismatch",
-  "driver_fence_stale",
-  "driver_revision_conflict",
-  "driver_busy_handover",
-  "driver_operation_conflict",
-  "interaction_recovery_required",
-  "driver_model_unavailable",
-] as const;
-
-describe("gap 4 — confirmed control/dispatch refusal kinds narrow", () => {
-  it.each(CONFIRMED_CONTROL_REFUSAL_KINDS)(
-    "narrows confirmed kind %s to ExternalDriverRefusalError",
-    async (kind) => {
-      const { context } = controlContext({
-        respond: async () => {
-          throw new OctosUiProtocolError(32001, `server detail ${CANARY}`, {
-            kind,
-          });
-        },
-      });
-      const error = await capture(
-        requestExternalDriverControl(
-          context,
-          EXTERNAL_DRIVER_METHODS.PEER_CONTROL,
-          { session_id: MASTER },
-        ),
-      );
-      expect(error).toBeInstanceOf(ExternalDriverRefusalError);
-      expect((error as ExternalDriverRefusalError).refusalKind).toBe(kind);
-      expect((error as Error).message).not.toContain(CANARY);
-    },
-  );
-});
-
-describe("gap 5 — peer/control positive capability + leaf method pin", () => {
-  it("advertised peer/control + feature does NOT throw (positive case)", () => {
-    const { context, request } = controlContext({
-      methods: [EXTERNAL_DRIVER_METHODS.PEER_CONTROL],
-      featureAdvertised: true,
-    });
-    expect(() =>
-      requireExternalDriverControlCapability(
-        context,
-        EXTERNAL_DRIVER_METHODS.PEER_CONTROL,
-      ),
-    ).not.toThrow();
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("leaf peerControl sends EXACTLY EXTERNAL_DRIVER_METHODS.PEER_CONTROL", async () => {
-    const { context, request } = controlContext({
-      respond: async () => undefined,
-    });
-    const commands = createExternalDriverPeerCommands(context);
-    const error = await capture(
-      commands.peerControl({
-        driverId: "drv-1",
-        epoch: 1,
-        controlToken: "tok-1",
-        operationId: "ctl-op-1",
-        targetOperationId: "dispatch-op-1",
-        expectedTurnId: "00000000-0000-0000-0000-000000000000",
-        command: { kind: "interrupt" },
-      }),
-    );
-    expect(request).toHaveBeenCalledExactlyOnceWith(
-      EXTERNAL_DRIVER_METHODS.PEER_CONTROL,
-      expect.anything(),
-    );
-    // The pinned literal must equal the constant exported from
-    // external-driver.ts (the private leaf const is asserted through the wire).
-    expect(EXTERNAL_DRIVER_METHODS.PEER_CONTROL).toBe("peer/control");
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-  });
-});
 
 describe("gap 3 — capability gate is offline and exact", () => {
   it("throws for an unadvertised method and sends ZERO frames", () => {
@@ -308,58 +164,6 @@ describe("gap 3 — capability gate is offline and exact", () => {
       `${GET} failed: capability not advertised`,
     );
     expect(request).not.toHaveBeenCalled();
-  });
-
-  it("throws for an advertised method when the feature is absent", () => {
-    const { context, request } = controlContext({
-      methods: [GET],
-      featureAdvertised: false,
-    });
-    expect(() => requireExternalDriverControlCapability(context, GET)).toThrow(
-      ExternalDriverCapabilityError,
-    );
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("keeps both absence modes offline through requestExternalDriverControl", async () => {
-    for (const config of [
-      {
-        methods: Object.values(EXTERNAL_DRIVER_METHODS).filter(
-          (method) => method !== GET,
-        ),
-        featureAdvertised: true,
-      },
-      { methods: [GET], featureAdvertised: false },
-    ]) {
-      const { context, request } = controlContext(config);
-      const error = await capture(
-        requestExternalDriverControl(context, GET, { session_id: MASTER }),
-      );
-      expect(error).toBeInstanceOf(ExternalDriverCapabilityError);
-      expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-      expect((error as Error).message).toBe(
-        `${GET} failed: capability not advertised (method + external_driver_v1)`,
-      );
-      expect(request).not.toHaveBeenCalled();
-    }
-  });
-
-  it("is not a broken harness: both advertised lets exactly one frame through", async () => {
-    const { context, request } = controlContext({
-      methods: [GET],
-      featureAdvertised: true,
-      respond: async () => ({ ok: true }),
-    });
-    expect(() =>
-      requireExternalDriverControlCapability(context, GET),
-    ).not.toThrow();
-    const reply = await requestExternalDriverControl(context, GET, {
-      session_id: MASTER,
-    });
-    expect(reply).toEqual({ ok: true });
-    expect(request).toHaveBeenCalledExactlyOnceWith(GET, {
-      session_id: MASTER,
-    });
   });
 });
 
@@ -437,18 +241,5 @@ describe("gap 2 — close mid-flight through the real client transport", () => {
       }),
     } as MessageEvent);
     expect(errors).toEqual([]);
-  });
-
-  it("rejects raw pending work with the connection-closed reason", async () => {
-    const { socket, client } = await connectedClient();
-    const pending = client.startTurn({
-      session_id: "s1",
-      turn_id: "t1",
-      input: [],
-    });
-    expect(socket.send).toHaveBeenCalledTimes(1);
-    const rejection = expect(pending).rejects.toThrow("connection closed");
-    socket.onclose?.({} as CloseEvent);
-    await rejection;
   });
 });

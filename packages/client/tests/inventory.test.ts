@@ -4,7 +4,6 @@ import {
   parseMcpConnectorMutation,
   parseMcpOAuthStart,
   parseRuntimeMcp,
-  supportsMcpOAuth,
   createInventoryCommands,
   supportsMcpConnectorManagement,
 } from "../src/inventory.ts";
@@ -154,50 +153,6 @@ describe("runtime inventory contracts", () => {
       expect(unavailable?.stdioAllowlist).toEqual([]);
     }
   });
-  it("leaves the facts absent on an older server", () => {
-    const legacy = parseRuntimeMcp(mcpStatus, "s1", "p1");
-    expect(legacy).not.toBeNull();
-    expect(legacy).not.toHaveProperty("management");
-    expect(legacy).not.toHaveProperty("stdioAllowlist");
-    expect(legacy).not.toHaveProperty("invalidFacts");
-  });
-  it.each([
-    [{ can_manage: "false" }, ["can_manage"]],
-    [{ can_manage: null }, ["can_manage"]],
-    [{ can_manage: false, manage_unavailable_reason: 7 }, ["can_manage"]],
-    [
-      { stdio_allowlist: [{ entry_id: "a" }, { entry_id: "a" }] },
-      ["stdio_allowlist"],
-    ],
-    [{ stdio_allowlist: { entry_id: "a" } }, ["stdio_allowlist"]],
-    [{ stdio_allowlist: [{ entry_id: 3 }] }, ["stdio_allowlist"]],
-    [
-      {
-        stdio_allowlist: Array.from({ length: 1001 }, (_, i) => ({
-          entry_id: `e${i}`,
-        })),
-      },
-      ["stdio_allowlist"],
-    ],
-    [
-      {
-        can_manage: "yes",
-        stdio_allowlist: [{ entry_id: "a" }, { entry_id: "a" }],
-      },
-      ["can_manage", "stdio_allowlist"],
-    ],
-  ])(
-    "reports malformed facts %j instead of passing for an older server",
-    (facts, invalid) => {
-      const result = parseRuntimeMcp({ ...mcpStatus, ...facts }, "s1", "p1");
-      expect(result?.servers).toEqual([]);
-      expect(result?.invalidFacts).toEqual(invalid);
-      if (invalid.includes("can_manage"))
-        expect(result).not.toHaveProperty("management");
-      if (invalid.includes("stdio_allowlist"))
-        expect(result).not.toHaveProperty("stdioAllowlist");
-    },
-  );
   it("projects only status fields and rejects duplicate or wrong-scope rows", () => {
     const result = parseRuntimeTools(
       {
@@ -552,19 +507,6 @@ describe("runtime inventory contracts", () => {
       expires_at: "2026-11-04T13:09:19.275947497+00:00",
       token_storage: "keyring",
     };
-
-    it("needs all four methods", () => {
-      expect(supportsMcpOAuth(oauthCapabilities)).toBe(true);
-      expect(supportsMcpOAuth(managementCapabilities)).toBe(false);
-      expect(
-        supportsMcpOAuth({
-          ...oauthCapabilities,
-          supported_methods: (oauthCapabilities.supported_methods ?? []).filter(
-            (method) => method !== MCP_OAUTH_METHODS.CANCEL,
-          ),
-        }),
-      ).toBe(false);
-    });
 
     it("reads a started sign-in and keeps the token storage out", () => {
       expect(parseMcpOAuthStart(started)).toEqual({

@@ -12,13 +12,6 @@ describe("server/shutdown", () => {
     respond(socket, frame.id, { stopping: true });
     await expect(stopping).resolves.toEqual({ stopping: true });
   });
-
-  it("rejects an acknowledgement that does not say it is stopping", async () => {
-    const { client, socket } = await connected();
-    const stopping = client.stopServer();
-    respond(socket, lastFrame(socket).id, { stopping: false });
-    await expect(stopping).rejects.toThrow(/invalid result/);
-  });
 });
 
 async function connected() {

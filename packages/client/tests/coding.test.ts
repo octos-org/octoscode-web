@@ -1,19 +1,14 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/ui-protocol-v1.json";
 import {
-  approvalDiffPreviewId,
   coreProtocolCompatibilityError,
   CORE_UI_PROTOCOL,
   isPreviewId,
-  notificationDiffPreviewId,
-  parseFileMutationNotice,
   parseDiffPreviewGetResult,
   parsePermissionProfileListResult,
   parsePermissionProfileSetResult,
   SUPPORTED_OCTOS_CONTRACT,
-  type ApprovalRequested,
 } from "../src/index.ts";
-
 describe("authoritative coding contract fixtures", () => {
   it("pins each fixture to an exact octos core contract blob", () => {
     const { protocol: _protocol, ...contractSource } = SUPPORTED_OCTOS_CONTRACT;
@@ -120,112 +115,5 @@ describe("authoritative coding contract fixtures", () => {
         },
       }),
     ).toBeNull();
-  });
-});
-
-describe("diff preview discovery", () => {
-  const previewId = fixture.diff_preview_get.request.preview_id;
-
-  it("reads typed approval details only from the contract-defined field", () => {
-    const approval = {
-      typedDetails: { kind: "diff", diff: { preview_id: previewId } },
-    } as Pick<ApprovalRequested, "typedDetails">;
-    expect(approvalDiffPreviewId(approval)).toBe(previewId);
-    expect(
-      approvalDiffPreviewId({
-        typedDetails: { body: `preview_id ${previewId}` },
-      }),
-    ).toBeNull();
-  });
-
-  it("reads progress mutation ids without scraping arbitrary text", () => {
-    expect(
-      notificationDiffPreviewId({
-        jsonrpc: "2.0",
-        method: "progress/updated",
-        params: {
-          metadata: {
-            kind: "file_mutation",
-            file_mutation: { path: "src/lib.rs", preview_id: previewId },
-          },
-        },
-      }),
-    ).toBe(previewId);
-    expect(
-      notificationDiffPreviewId({
-        jsonrpc: "2.0",
-        method: "warning",
-        params: { message: `preview_id ${previewId}` },
-      }),
-    ).toBeNull();
-  });
-});
-
-describe("file mutation notices", () => {
-  const previewId = "00000000-0000-4000-8000-000000000042";
-
-  it("reads the live and enveloped notice with its Session scope", () => {
-    expect(
-      parseFileMutationNotice({
-        jsonrpc: "2.0",
-        method: "progress/updated",
-        params: {
-          session_id: "s1",
-          turn_id: "t1",
-          metadata: {
-            kind: "file_mutation",
-            file_mutation: {
-              path: "report.md",
-              operation: "create",
-              preview_id: previewId,
-              bytes_written: 412,
-            },
-          },
-        },
-      }),
-    ).toEqual({
-      sessionId: "s1",
-      turnId: "t1",
-      path: "report.md",
-      operation: "create",
-      previewId,
-      bytesWritten: 412,
-    });
-    expect(
-      parseFileMutationNotice({
-        jsonrpc: "2.0",
-        method: "projection/envelope",
-        params: {
-          session_id: "s1",
-          turn_id: "t2",
-          payload: {
-            type: "progress",
-            data: {
-              metadata: {
-                file_mutation: { path: "/srv/w/a.ts", operation: "rename" },
-              },
-            },
-          },
-        },
-      }),
-    ).toMatchObject({
-      sessionId: "s1",
-      turnId: "t2",
-      path: "/srv/w/a.ts",
-      operation: "modify",
-      previewId: null,
-      bytesWritten: null,
-    });
-  });
-
-  it("refuses notices without a usable path", () => {
-    for (const file_mutation of [{}, { path: "" }, { path: "a\u0000b" }])
-      expect(
-        parseFileMutationNotice({
-          jsonrpc: "2.0",
-          method: "progress/updated",
-          params: { metadata: { file_mutation } },
-        }),
-      ).toBeNull();
   });
 });

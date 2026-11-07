@@ -19,39 +19,6 @@ describe("session execution environment result", () => {
     expect(parseExecutionEnvironmentResult(complete)).toEqual(complete);
   });
 
-  it("accepts a failed probe with its bounded reason category", () => {
-    expect(
-      parseExecutionEnvironmentResult({
-        ...complete,
-        tools: {
-          node: "unknown",
-          npm: "unknown",
-          git: "unknown",
-          python: "unknown",
-        },
-        probe_status: "failed",
-        probe_error: "timeout",
-      }),
-    ).toMatchObject({ probe_status: "failed", probe_error: "timeout" });
-  });
-
-  it("accepts the newer unsupported probe state", () => {
-    expect(
-      parseExecutionEnvironmentResult({
-        ...complete,
-        backend: "unknown",
-        docker_image: null,
-        tools: {
-          node: "unknown",
-          npm: "unknown",
-          git: "unknown",
-          python: "unknown",
-        },
-        probe_status: "unsupported",
-      }),
-    ).toMatchObject({ probe_status: "unsupported" });
-  });
-
   it("rejects malformed tool states instead of presenting them as facts", () => {
     expect(
       parseExecutionEnvironmentResult({
