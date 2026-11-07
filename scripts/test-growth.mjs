@@ -162,12 +162,17 @@ async function growthApproval(pullRequest) {
   if (!last || last.event !== "labeled")
     return { approved: false, note: `No ${LABEL} label.` };
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  const maintainer = MAINTAINERS.some((login) => same(login, last.login));
-  if (maintainer && last.type !== "Bot" && !same(last.login, author))
-    return { approved: true, by: last.login };
+  const refusal = !MAINTAINERS.some((login) => same(login, last.login))
+    ? `only ${MAINTAINERS.join(", ")} may approve`
+    : last.type === "Bot"
+      ? "a bot may not approve"
+      : same(last.login, author)
+        ? "no one may approve their own pull request"
+        : null;
+  if (refusal === null) return { approved: true, by: last.login };
   return {
     approved: false,
-    note: `${LABEL} was added by ${last.login}, which does not count: only ${MAINTAINERS.join(", ")} may approve, and not on their own pull request.`,
+    note: `${LABEL} was added by ${last.login}, which does not count: ${refusal}.`,
   };
 }
 
