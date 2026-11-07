@@ -274,25 +274,13 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   const input = composer(page);
   await input.focus();
 
-  // Esc dismisses the palette and must NOT interrupt (TUI: Esc on the slash
-  // popup closes the menu; no turn is active — event_loop.rs:2631-2649).
-  await input.press("/");
-  await expect(palette(page)).toBeVisible();
-  await input.press("Escape");
-  await expect(palette(page)).toHaveCount(0);
-  await expect(input).not.toHaveAttribute("aria-controls");
-  expect(w.calls("turn/interrupt")).toHaveLength(0);
-
   // Bare Esc with no live turn is inert (TUI close/focus ladder never
-  // interrupts: event_loop.rs:2013-2038). The Web keeps the dismissed draft,
-  // so clear it before probing the interrupt path.
-  await input.fill("");
+  // interrupts: event_loop.rs:2013-2038).
   await input.press("Escape");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
-  // With a HELD live turn, Esc interrupts exactly that turn (TUI active_turn →
-  // interrupt_command, event_loop.rs:2013-2022; parity precedent
-  // local-preferences.spec.ts:589-615).
+  // Hold a live turn first: with none, an Esc that leaked past the palette
+  // would have nothing to interrupt, so the palette check could not fail.
   expect(
     (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
   ).toBe(204);
@@ -300,6 +288,21 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   await input.press("Enter");
   const owner = w.calls("turn/start").at(-1)!.params!.session_id!;
   await heldTurn(request, owner);
+
+  // Esc dismisses the palette and must NOT interrupt (TUI: Esc on the slash
+  // popup closes the menu — event_loop.rs:2631-2649).
+  await input.press("/");
+  await expect(palette(page)).toBeVisible();
+  await input.press("Escape");
+  await expect(palette(page)).toHaveCount(0);
+  await expect(input).not.toHaveAttribute("aria-controls");
+  expect(w.calls("turn/interrupt")).toHaveLength(0);
+
+  // Only a bare Esc interrupts exactly that turn (TUI active_turn →
+  // interrupt_command, event_loop.rs:2013-2022; parity precedent
+  // local-preferences.spec.ts:589-615). The Web keeps the dismissed draft,
+  // so clear it first.
+  await input.fill("");
   await input.press("Escape");
   await expect.poll(() => w.calls("turn/interrupt").length).toBe(1);
   expect(w.calls("turn/interrupt")[0]!.params).toMatchObject({

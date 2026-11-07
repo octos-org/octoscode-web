@@ -114,6 +114,10 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await dialog
     .getByRole("spinbutton", { name: "Peers", exact: true })
     .fill("1");
+  // Hold the peer's kickoff turn so it is still live at step 4a.
+  expect(
+    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
+  ).toBe(204);
   await dialog
     .getByRole("button", { name: "Start peers", exact: true })
     .press("Enter");
@@ -167,6 +171,9 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   // 4a. Peer surface is interrupt-inert: Esc sends NO turn/interrupt
   //     (a11y review 0800 §1 — the disabled composer's Esc path never fires;
   //      interrupt authority stays master-side, TUI app/render.rs:1699-1708).
+  //     The peer's kickoff turn is held at the server, so a leaked Esc would
+  //     have a live turn to interrupt.
+  await heldTurn(request, peerId);
   await page.keyboard.press("Escape");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
