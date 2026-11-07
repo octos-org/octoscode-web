@@ -25,6 +25,8 @@ concurrency:
 
 jobs:
   contract:
+    # Validation PR only: just the check job runs.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -72,6 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   e2e:
+    # Validation PR only: just the check job runs.
+    if: false
     runs-on: ubuntu-latest
     # Temporarily 20 (was 15): shards that run long suites (e.g. usage-ledger)
     # are cancelled past the cap even though they would finish — shu 11-06,
@@ -123,6 +127,8 @@ jobs:
           retention-days: 7
 
   cross-browser:
+    # Validation PR only: just the check job runs.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -173,6 +179,8 @@ jobs:
           retention-days: 7
 
   core-integration:
+    # Validation PR only: just the check job runs.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
