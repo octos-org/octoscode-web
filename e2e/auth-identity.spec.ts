@@ -133,11 +133,22 @@ test("binds a cross-profile launch to the resolved profile before open", async (
   });
 
   await connectToWorkspaceChooser(page, ADMIN_FIXTURE_TOKEN);
+  // Connect never asks for a profile id; the launch decision supplies it.
+  await expect(page.getByLabel("Profile id")).toHaveCount(0);
   await addWorkspace(page, "/srv/work/cross");
+  const decision = page.getByRole("heading", {
+    name: "Choose this workspace’s profile",
+  });
+  await expect(decision).toBeVisible();
   await page
     .getByRole("button", { name: /Start new session with review/ })
     .click();
 
+  await expect(decision).toBeHidden();
+  // The opened Session's folder is the requested workspace.
+  await expect(
+    page.getByRole("button", { name: /^Folder \/srv\/work\/cross\./ }),
+  ).toBeVisible();
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
   await expect
     .poll(() => opens.some((params) => params.profile_id === "review"))
