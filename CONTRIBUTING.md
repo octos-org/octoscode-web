@@ -42,6 +42,9 @@ checksummed pinned runtime gate described in
   (`node scripts/test-growth.mjs --base origin/main` shows the same numbers
   locally). Pay for a new test by deleting as much elsewhere, or ask a
   maintainer (alan0x, BH3GEI, ymote) to add the `test-growth-approved` label.
+- [`apps/web/TESTS-KEPT.md`](apps/web/TESTS-KEPT.md) lists the apps/web unit
+  tests that stay, each with its category and what it guards; apps/web unit
+  tests not on it are slated for deletion.
 - Record a new architectural decision when a change introduces a durable
   boundary or rejects a plausible alternative.
 - Preserve third-party notices for copied or substantially adapted code.

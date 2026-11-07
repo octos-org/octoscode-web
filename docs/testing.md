@@ -17,6 +17,9 @@ complete gate before review. A fixture pass is not live Core or model evidence.
 | Deployment            | `pnpm build && pnpm deploy:verify`              | artifact, CSP, nginx contract, and size budgets                                    |
 | Complete local gate   | `pnpm check`                                    | all deterministic non-browser gates                                                |
 
+[`apps/web/TESTS-KEPT.md`](../apps/web/TESTS-KEPT.md) lists the apps/web unit
+tests that stay; apps/web unit tests not on it are slated for deletion.
+
 Install Chromium once with `pnpm exec playwright install chromium`. The browser
 gate defaults to bundled Chromium; opt into an installed release channel with
 `OCTOSCODE_E2E_CHANNEL=chrome` or `msedge`.
