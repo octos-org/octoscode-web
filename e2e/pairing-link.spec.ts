@@ -51,6 +51,8 @@ test("a good link connects with no token box and leaves nothing in the address",
 }) => {
   await stagePairing(request, "fresh");
   const errors = watchErrors(page);
+  const logs: string[] = [];
+  page.on("console", (message) => logs.push(message.text()));
   const leakedReferrers: string[] = [];
   page.on("request", (request) => {
     if (request.headers().referer?.includes("pair="))
@@ -132,6 +134,8 @@ test("a good link connects with no token box and leaves nothing in the address",
     ]),
   );
   expect(everything).not.toContain(CODE);
+  // Nor does the code or the link reach the browser console.
+  expect(logs.filter((line) => line.includes(CODE))).toEqual([]);
   expect(errors).toEqual([]);
 });
 

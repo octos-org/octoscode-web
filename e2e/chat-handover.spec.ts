@@ -150,6 +150,12 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     await connectAndStartWorkspace(page, `${CWD}handover-refused`);
     const pane = await openAdvanced(page);
     await expect(pane).toContainText(FOREIGN_HOLDER);
+    // The holder's disclosed lease expiry, so the operator knows when to retry.
+    await expect(
+      pane
+        .locator("dt", { hasText: "Lease expiry" })
+        .locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText(await page.evaluate(() => new Date(0).toLocaleTimeString()));
     await pane.getByRole("button", { name: "Close", exact: true }).click();
 
     const upload = await uploadedDraft(page);
@@ -179,17 +185,39 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     await expect(attached(page)).toHaveCount(0);
   });
 
-  test("Resume chat and an owned seat release control before sending once", async ({
+  test("a refused Resume chat can be retried, and Resume chat and an owned seat release control before sending once", async ({
     page,
+    request,
   }) => {
     const w = wire(page);
     await connectAndStartWorkspace(page, `${CWD}handover-resume`);
     await sendPrompt(page, "hand back and send once");
     await expect(composer(page)).toHaveValue("hand back and send once");
+    const master = (
+      JSON.parse(new URL(page.url()).searchParams.get("s")!) as string[]
+    )[2]!;
+    expect(
+      (
+        await request.post(
+          `${FIXTURE_ORIGIN}/__test__/peer-control/variant?session_id=${encodeURIComponent(master)}&variant=acquire-refused-once`,
+        )
+      ).status(),
+    ).toBe(204);
     const pane = await openAdvanced(page);
     const resume = pane
       .locator('[data-session-config-action="resume-chat"]')
       .first();
+    await expect(resume).toBeEnabled();
+    // The seat is still held: the failure is shown, nothing is sent, the draft
+    // stays, and Resume chat is offered again.
+    const refused = pane.getByRole("alert").filter({
+      hasText: "Couldn't hand back control — your message wasn't sent",
+    });
+    await expect(refused).toHaveCount(0);
+    await resume.click();
+    await expect(refused).toBeVisible();
+    expect(w.calls(START_METHOD)).toHaveLength(0);
+    await expect(composer(page)).toHaveValue("hand back and send once");
     await expect(resume).toBeEnabled();
     await resume.click();
 
@@ -202,7 +230,12 @@ test.describe("§5.2 composer handover (external-held session)", () => {
           ),
         )
         .map((frame) => frame.method),
-    ).toEqual(["session/driver/acquire", RELEASE_METHOD, START_METHOD]);
+    ).toEqual([
+      "session/driver/acquire",
+      "session/driver/acquire",
+      RELEASE_METHOD,
+      START_METHOD,
+    ]);
     expect(w.calls(RELEASE_METHOD)[0]?.releaseNext).toBe("internal");
     expect(w.calls(START_METHOD)[0]?.prompt).toBe("hand back and send once");
     await expect(composer(page)).toHaveValue("");

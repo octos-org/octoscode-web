@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
 import { ConnectionPanel, type ConnectionDraft } from "./ConnectionPanel.tsx";
 
 /**
  * Round 3 item 7 (judge #7): connection-error destinations — the rejected-
  * token failure FOCUSES the token field and KEEPS the value; the actions the
- * classifier names actually render.
+ * classifier names actually render. The App's own wiring (token probe →
+ * classifier → this panel) runs end to end in e2e/final-input.spec.ts.
  */
-const app = readFileSync(new URL("../../app/App.tsx", import.meta.url), "utf8");
 const value: ConnectionDraft = {
   endpoint: "https://octos.example.test",
   token: "kept-token-value",
@@ -37,11 +36,5 @@ describe("rejected-token failure focuses the field and keeps the value", () => {
     expect(html).toContain("Retry");
     // The draft is kept (the input renders the typed value).
     expect(html).not.toContain('value=""');
-  });
-
-  it("App threads the classifier's focus flag + actions into the panel", () => {
-    expect(app).toContain("focusTokenField");
-    expect(app).toContain("failureActions");
-    expect(app).toMatch(/connectFailureCopy\(classified/);
   });
 });

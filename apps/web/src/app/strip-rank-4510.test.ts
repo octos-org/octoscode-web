@@ -6,6 +6,15 @@ import { describe, expect, it } from "vitest";
  * session' (external-held) must OUTRANK 'Responding' — a foreign holder while
  * a turn is active still owns the session, and the operator must see that
  * first (the design's ordering also matches the pane's holder banner).
+ *
+ * A deliberate source-order contract (kept by T-0492): the strip's third
+ * segment is one ternary chain inline in App.tsx, so its rank IS the order of
+ * these branches, and nothing renders that derivation without the whole App.
+ * No fixture state holds a foreign seat during an active turn, so no e2e can
+ * show the rank either. Risk: this reads App.tsx text. Moving the derivation
+ * into a function fails it loudly — then test the function and delete this;
+ * a rank change made without reordering these literals would slip past it.
+ * The kinds and their copy: features/session-config/SessionStatusStrip.tsx.
  */
 const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 

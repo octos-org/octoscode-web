@@ -136,9 +136,13 @@ test("connection actions can be reached by scrolling at 320×320", async ({
   await expect(
     page.getByText("Could not connect", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  // The server refused the token: say so, keep it and focus it for a fix.
+  const token = page.getByLabel("Auth token", { exact: true });
+  await expect(page.getByText("The server refused this token")).toBeVisible();
+  await expect(page.getByText("Re-enter the token")).toBeVisible();
+  await expect(token).toBeFocused();
+  await expect(token).toHaveValue("incorrect-fixture-token");
+  await token.fill("tab-scoped-e2e-token");
   await page.mouse.wheel(0, 2000);
   await connect.click();
   await expect(page.getByLabel("Server workspace path")).toBeVisible();
