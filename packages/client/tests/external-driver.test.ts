@@ -67,54 +67,53 @@ const LIVE_EXTERNAL = {
 describe("decodeExternalDriverCapabilities", () => {
   it("requires BOTH the advertised method and external_driver_v1", () => {
     expect(decodeExternalDriverCapabilities(FULL_CAPS).available).toBe(true);
-  });
-
-  it("fails closed when the method is missing", () => {
-    const decoded = decodeExternalDriverCapabilities(
+    const noMethod = decodeExternalDriverCapabilities(
       caps([], [EXTERNAL_DRIVER_V1_FEATURE]),
     );
-    expect(decoded.available).toBe(false);
-    expect(decoded.methodAdvertised).toBe(false);
-    expect(decoded.featureAdvertised).toBe(true);
-  });
-
-  it("fails closed when the feature is missing", () => {
-    const decoded = decodeExternalDriverCapabilities(caps([METHOD], []));
-    expect(decoded.available).toBe(false);
-    expect(decoded.methodAdvertised).toBe(true);
-    expect(decoded.featureAdvertised).toBe(false);
+    expect(noMethod.available).toBe(false);
+    expect(noMethod.methodAdvertised).toBe(false);
+    expect(noMethod.featureAdvertised).toBe(true);
+    const noFeature = decodeExternalDriverCapabilities(caps([METHOD], []));
+    expect(noFeature.available).toBe(false);
+    expect(noFeature.methodAdvertised).toBe(true);
+    expect(noFeature.featureAdvertised).toBe(false);
   });
 });
 
 describe("parseSessionDriverGetResult", () => {
-  it("accepts a never-bound internal scope with binding null", () => {
-    expect(parseSessionDriverGetResult(NEVER_BOUND_INTERNAL)).toEqual({
+  it.each([
+    ["never-bound internal", NEVER_BOUND_INTERNAL, "internal", null],
+    [
+      "retained INACTIVE after release",
+      RETAINED_INTERNAL,
+      "internal",
+      "driver-a",
+    ],
+    ["live external with a live lease", LIVE_EXTERNAL, "external", "driver-b"],
+  ])("accepts a %s scope", (_label, payload, mode, driverId) => {
+    const parsed = parseSessionDriverGetResult(payload);
+    expect(parsed?.mode).toBe(mode);
+    expect(parsed?.binding?.driverId ?? null).toBe(driverId);
+  });
+
+  it("maps a retained binding to the full canonical camelCase view", () => {
+    expect(parseSessionDriverGetResult(RETAINED_INTERNAL)).toEqual({
       mode: "internal",
-      binding: null,
-      recovery: "none",
+      binding: {
+        driverId: "driver-a",
+        epoch: 7,
+        revision: 12,
+        leaseExpiresAtMs: 0,
+        workspaceRoot: "/ws/root",
+        acceptedWork: ["op-1", "op-2"],
+      },
+      recovery: "interrupted",
     });
   });
 
-  it("accepts a retained INACTIVE binding after release/internal", () => {
-    const parsed = parseSessionDriverGetResult(RETAINED_INTERNAL);
-    expect(parsed?.binding).toEqual({
-      driverId: "driver-a",
-      epoch: 7,
-      revision: 12,
-      leaseExpiresAtMs: 0,
-      workspaceRoot: "/ws/root",
-      acceptedWork: ["op-1", "op-2"],
-    });
-    expect(parsed?.mode).toBe("internal");
-    expect(parsed?.recovery).toBe("interrupted");
-  });
-
-  it("accepts a live external binding with a live lease", () => {
-    const parsed = parseSessionDriverGetResult(LIVE_EXTERNAL);
-    expect(parsed?.mode).toBe("external");
-    expect(parsed?.binding?.leaseExpiresAtMs).toBe(1_700_000_000_000);
-  });
-
+  // Design: Core's CAS metadata (a live lease) is not authority over the
+  // session's declared driver mode — an internal-mode session with a live
+  // lease is a contradictory server payload and must fail closed, not guess.
   it("rejects internal mode with a live lease (CAS metadata is not authority)", () => {
     expect(
       parseSessionDriverGetResult({ ...LIVE_EXTERNAL, mode: "internal" }),
@@ -237,19 +236,13 @@ describe("parseSessionDriverGetResult", () => {
 });
 
 describe("nextExpectedRevision", () => {
-  it("derives revision 0 ONLY for a never-bound internal scope", () => {
+  it("derives 0 only for never-bound internal; keeps retained and live revisions", () => {
     expect(
       nextExpectedRevision(parseSessionDriverGetResult(NEVER_BOUND_INTERNAL)!),
     ).toBe(0);
-  });
-
-  it("keeps the retained revision after release/internal", () => {
     expect(
       nextExpectedRevision(parseSessionDriverGetResult(RETAINED_INTERNAL)!),
     ).toBe(12);
-  });
-
-  it("uses the live external revision", () => {
     expect(
       nextExpectedRevision(parseSessionDriverGetResult(LIVE_EXTERNAL)!),
     ).toBe(15);
@@ -285,21 +278,19 @@ describe("createExternalDriverCommands", () => {
     return { calls, commands };
   }
 
-  it("fails closed before any wire traffic when the method is missing", async () => {
-    const { calls, commands } = harness(caps([], [EXTERNAL_DRIVER_V1_FEATURE]));
-    await expect(commands.driverGet()).rejects.toBeInstanceOf(
-      ExternalDriverCapabilityError,
-    );
-    expect(calls).toEqual([]);
-  });
-
-  it("fails closed before any wire traffic when the feature is missing", async () => {
-    const { calls, commands } = harness(caps([METHOD], []));
-    await expect(commands.driverGet()).rejects.toBeInstanceOf(
-      ExternalDriverCapabilityError,
-    );
-    expect(calls).toEqual([]);
-  });
+  it.each([
+    ["the method", caps([], [EXTERNAL_DRIVER_V1_FEATURE])],
+    ["the feature", caps([METHOD], [])],
+  ])(
+    "fails closed before any wire traffic when %s is missing",
+    async (_label, capabilities) => {
+      const { calls, commands } = harness(capabilities);
+      await expect(commands.driverGet()).rejects.toBeInstanceOf(
+        ExternalDriverCapabilityError,
+      );
+      expect(calls).toEqual([]);
+    },
+  );
 
   it("sends exactly the captured owning session/topic scope", async () => {
     const { calls, commands } = harness(FULL_CAPS);
@@ -378,59 +369,38 @@ describe("createExternalDriverCommands", () => {
     }
   });
 
-  it("rejects a contradictory session-suffix vs captured topic BEFORE RPC", () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    expect(() =>
-      createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
+  it.each([
+    [
+      "a contradictory session-suffix vs captured topic",
+      "dev:local:tui#peer-xyz",
+      { profileId: "dev", topic: "peer-abc" },
+    ],
+    [
+      "a blank/control-char session suffix",
+      "dev:local:tui#bad topic",
+      { profileId: "dev" },
+    ],
+    ["an empty session id", "", { profileId: "dev" }],
+  ])(
+    "rejects %s BEFORE RPC (zero wire traffic)",
+    (_label, sessionId, scope) => {
+      const calls: Array<{ method: string; params: unknown }> = [];
+      expect(() =>
+        createExternalDriverCommands(
+          {
+            request: async (method, params) => {
+              calls.push({ method, params });
+              return structuredClone(LIVE_EXTERNAL);
+            },
           },
-        },
-        "dev:local:tui#peer-xyz",
-        FULL_CAPS,
-        { profileId: "dev", topic: "peer-abc" },
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(calls).toEqual([]);
-  });
-
-  it("rejects a blank/control-char session suffix BEFORE RPC", () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    expect(() =>
-      createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        "dev:local:tui#bad topic",
-        FULL_CAPS,
-        { profileId: "dev" },
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(calls).toEqual([]);
-  });
-
-  it("rejects an empty session id BEFORE RPC", () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    expect(() =>
-      createExternalDriverCommands(
-        {
-          request: async (method, params) => {
-            calls.push({ method, params });
-            return structuredClone(LIVE_EXTERNAL);
-          },
-        },
-        "",
-        FULL_CAPS,
-        { profileId: "dev" },
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(calls).toEqual([]);
-  });
+          sessionId,
+          FULL_CAPS,
+          scope,
+        ),
+      ).toThrow(ExternalDriverProtocolError);
+      expect(calls).toEqual([]);
+    },
+  );
 
   it("cannot be steered through spread/extra scope fields", async () => {
     const { calls } = harness(FULL_CAPS, "dev:local:tui");
@@ -514,58 +484,46 @@ describe("createExternalDriverCommands", () => {
     expect(message.length).toBeLessThan(200);
   });
 
-  it("supports an ordinary MASTER topic scope byte-exactly (non-peer topics are legal)", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(LIVE_EXTERNAL);
-        },
-      },
-      "dev:local:tui#glm-oup-master-20260908",
-      FULL_CAPS,
-      { profileId: "dev", topic: "glm-oup-master-20260908" },
-    );
-    await commands.driverGet();
-    expect(calls).toEqual([
-      {
-        method: METHOD,
-        params: {
+  // Legal non-peer scope shapes share one accept path: the captured scope is
+  // sent byte-exactly. Before changing any row, check the Core-side fence that
+  // distinguishes ordinary channels from reserved ones (see the `test`
+  // channel fence below).
+  it("accepts legal non-peer scope shapes byte-exactly (master topic, web-N, channel/chat)", async () => {
+    for (const [sessionId, scope, expectedParams] of [
+      [
+        "dev:local:tui#glm-oup-master-20260908",
+        { profileId: "dev", topic: "glm-oup-master-20260908" },
+        {
           session_id: "dev:local:tui#glm-oup-master-20260908",
           topic: "glm-oup-master-20260908",
         },
-      },
-    ]);
-  });
-
-  it("accepts a bare opaque Web session ID byte-exactly (web-N under confirmed profile auth)", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          return structuredClone(LIVE_EXTERNAL);
-        },
-      },
-      "web-4",
-      FULL_CAPS,
-      { profileId: "dev", topic: "ops" },
-    );
-    await commands.driverGet();
-    expect(calls).toEqual([
-      { method: METHOD, params: { session_id: "web-4", topic: "ops" } },
-    ]);
-  });
-
-  it("accepts ordinary channel/chat scope incl. colon chat ids before RPC", async () => {
-    for (const sessionId of [
-      "local:demo/api:session",
-      "matrix:!room:localhost",
-      "dev:matrix:!room:localhost",
-      "_main:local:tui#master",
-      "web-4",
-    ]) {
+      ],
+      [
+        "web-4",
+        { profileId: "dev", topic: "ops" },
+        { session_id: "web-4", topic: "ops" },
+      ],
+      [
+        "local:demo/api:session",
+        { profileId: "dev" },
+        { session_id: "local:demo/api:session" },
+      ],
+      [
+        "matrix:!room:localhost",
+        { profileId: "dev" },
+        { session_id: "matrix:!room:localhost" },
+      ],
+      [
+        "dev:matrix:!room:localhost",
+        { profileId: "dev" },
+        { session_id: "dev:matrix:!room:localhost" },
+      ],
+      [
+        "_main:local:tui#master",
+        { profileId: "_main", topic: "master" },
+        { session_id: "_main:local:tui#master", topic: "master" },
+      ],
+    ] as const) {
       const calls: Array<{ method: string; params: unknown }> = [];
       const commands = createExternalDriverCommands(
         {
@@ -576,20 +534,10 @@ describe("createExternalDriverCommands", () => {
         },
         sessionId,
         FULL_CAPS,
-        {
-          profileId: sessionId.startsWith("_main") ? "_main" : "dev",
-          ...(sessionId.includes("#") ? { topic: "master" } : {}),
-        },
+        scope,
       );
       await commands.driverGet();
-      expect(calls).toEqual([
-        {
-          method: METHOD,
-          params: sessionId.includes("#")
-            ? { session_id: sessionId, topic: "master" }
-            : { session_id: sessionId },
-        },
-      ]);
+      expect(calls).toEqual([{ method: METHOD, params: expectedParams }]);
     }
   });
 
@@ -1164,7 +1112,7 @@ describe("driverGet command-return gaps (root review)", () => {
     );
   }
 
-  it("(1) null/array/unknown-only top-level options reject BOUNDED, ZERO traffic", async () => {
+  it("(1) malformed options reject BOUNDED with ZERO traffic, at top level and inside operations", async () => {
     for (const bad of [
       null,
       [],
@@ -1173,18 +1121,6 @@ describe("driverGet command-return gaps (root review)", () => {
       { profileId: "evil" },
       7,
       "text",
-    ]) {
-      const calls: Array<{ method: string; params: unknown }> = [];
-      const commands = make(calls);
-      await expect(commands.driverGet(bad as never)).rejects.toBeInstanceOf(
-        ExternalDriverProtocolError,
-      );
-      expect(calls).toEqual([]);
-    }
-  });
-
-  it("(1b) null/array/unknown inside operations ALSO reject with zero traffic", async () => {
-    for (const bad of [
       { operations: null },
       { operations: [] },
       { operations: "x" },
@@ -1274,38 +1210,30 @@ describe("control-character boundary guards (native wire shape)", () => {
   // boundaries (0x00-0x1f and 0x7f) and nothing wider.
   const TURN = "123e4567-e89b-42d3-a456-426614174000";
 
-  it("rejects C0/DEL control bytes in a captured master base", () => {
+  // The C0/DEL boundary is one guard applied at every identity surface
+  // (captured base, topic, adopted identity). Keep the positive rows: they pin
+  // that printable bytes — including `!` — are NOT swept into the reject.
+  it("rejects C0/DEL control bytes at every identity surface", () => {
     expect(masterWireBase("dev", "dev")).toBe("dev");
     expect(masterWireBase("dev!", "dev")).toBe("dev!");
-    expect(masterWireBase("dev\u001e", "dev")).toBeNull();
-    expect(masterWireBase("dev\u001f", "dev")).toBeNull();
-    expect(masterWireBase("dev\u007f", "dev")).toBeNull();
-    expect(masterWireBase("dev\u0000", "dev")).toBeNull();
+    for (const base of ["dev", "dev#ops"]) {
+      expect(masterWireBase(`${base}\u001e`, "dev")).toBeNull();
+      expect(masterWireBase(`${base}\u001f`, "dev")).toBeNull();
+      expect(masterWireBase(`${base}\u007f`, "dev")).toBeNull();
+      expect(masterWireBase(`${base}\u0000`, "dev")).toBeNull();
+    }
     // Whitespace stays rejected by the separate, unchanged `\s` guard.
     expect(masterWireBase("dev\u0020", "dev")).toBeNull();
-  });
-
-  it("rejects C0/DEL control bytes in an ordinary topic", () => {
-    expect(masterWireBase("dev#ops", "dev")).toBe("dev");
-    expect(masterWireBase("dev#ops\u001f", "dev")).toBeNull();
-    expect(masterWireBase("dev#ops\u007f", "dev")).toBeNull();
-  });
-
-  it("rejects C0/DEL control bytes in an adopted native-shared identity", () => {
     expect(adoptedIdentityIsNativeShared(TURN, "dev#peer-abc", "abc")).toBe(
       true,
     );
     expect(adoptedIdentityIsNativeShared(TURN, "dev!#peer-abc", "abc")).toBe(
       true,
     );
-    expect(
-      adoptedIdentityIsNativeShared(TURN, "dev\u001f#peer-abc", "abc"),
-    ).toBe(false);
-    expect(
-      adoptedIdentityIsNativeShared(TURN, "dev\u007f#peer-abc", "abc"),
-    ).toBe(false);
-    expect(
-      adoptedIdentityIsNativeShared(TURN, "dev\u0020#peer-abc", "abc"),
-    ).toBe(false);
+    for (const base of ["dev\u001f", "dev\u007f", "dev\u0020"]) {
+      expect(
+        adoptedIdentityIsNativeShared(TURN, `${base}#peer-abc`, "abc"),
+      ).toBe(false);
+    }
   });
 });
