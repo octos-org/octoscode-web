@@ -96,20 +96,14 @@ const tick = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
+// Steering puts a correction INTO the turn Core is running instead of queueing
+// a new one (docs/tui-command-coverage.md `/steer`, docs/protocol.md
+// turn/steer_dropped). It is only safe against an ACCEPTED owner, so anything
+// uncertain falls back to the FIFO, text Core hands back returns exactly once
+// ahead of later drafts, an ambiguous send is never replayed, and a suspended
+// transport's late answers cannot touch the new one. Before changing it, expect
+// these to fail if a correction could be sent twice, lost, or reordered.
 describe("record-owned native steering", () => {
-  it("queues directly when the live server cannot steer without attempting dispatch", async () => {
-    const h = fixture();
-    await tick();
-    h.dependencies.canSteer = () => false;
-    expect(h.controller.canSteerText(undefined)).toBe(false);
-    expect(h.submit()).toBe(true);
-    expect(h.dependencies.steer).not.toHaveBeenCalled();
-    expect(
-      h.controller.queueSnapshot().pending.map((turn) => turn.text),
-    ).toEqual(["correction"]);
-    expect(h.timeline().some((item) => item.kind === "system")).toBe(false);
-  });
-
   it("send now interrupts once, preserves drafts, and waits for terminal before dispatch", async () => {
     const h = fixture();
     const restore = vi.fn();
@@ -202,52 +196,58 @@ describe("record-owned native steering", () => {
     await tick();
     expect(h.controller.snapshot().pending).toEqual([]);
   });
-  it("respects steering off and never changes explicit enqueueTurn semantics", async () => {
+  it("never steers an explicit enqueueTurn (a native peer kickoff stays a turn)", async () => {
     const h = fixture();
     await tick();
-    h.controller.setSteeringEnabled(false);
-    h.submit();
+    h.controller.enqueueTurn({ turnId: S, text: "native peer kickoff" });
     expect(h.dependencies.steer).not.toHaveBeenCalled();
-    expect(h.controller.snapshot().pending[0]?.turnId).toBe(S);
-    const other = fixture();
-    await tick();
-    other.controller.enqueueTurn({ turnId: S, text: "native peer kickoff" });
-    expect(other.dependencies.steer).not.toHaveBeenCalled();
   });
-  it("queues before ACK instead of racing a second Core turn", () => {
-    const start = deferred<void>();
-    const h = fixture({ start: start.promise });
-    h.submit();
-    expect(h.dependencies.steer).not.toHaveBeenCalled();
-    expect(h.controller.snapshot().pending[0]?.turnId).toBe(S);
-  });
-  it.each(["pending", "interrupt", "media", "reasoning", "unavailable"])(
-    "keeps the FIFO for %s",
-    async (mode) => {
-      const h = fixture();
-      await tick();
-      const steer = h.dependencies.steer;
-      if (mode === "pending")
-        h.controller.enqueueTurn({ turnId: B, text: "earlier" });
-      if (mode === "interrupt") await h.controller.interrupt();
-      if (mode === "unavailable") delete h.dependencies.steer;
-      const media = [
-        { path: "up/handle/photo.png", mime: "image/png", size_bytes: 7 },
-      ];
+  it.each([
+    "pending",
+    "interrupt",
+    "media",
+    "reasoning",
+    "unavailable",
+    "server cannot steer",
+    "steering off",
+    // No accepted owner yet: steering would race a second Core turn.
+    "unacknowledged start",
+  ])("keeps the FIFO for %s", async (mode) => {
+    const h = fixture(
+      mode === "unacknowledged start"
+        ? { start: deferred<void>().promise }
+        : {},
+    );
+    if (mode !== "unacknowledged start") await tick();
+    const steer = h.dependencies.steer;
+    if (mode === "pending")
+      h.controller.enqueueTurn({ turnId: B, text: "earlier" });
+    if (mode === "interrupt") await h.controller.interrupt();
+    if (mode === "unavailable") delete h.dependencies.steer;
+    if (mode === "server cannot steer") {
+      h.dependencies.canSteer = () => false;
+      expect(h.controller.canSteerText(undefined)).toBe(false);
+    }
+    if (mode === "steering off") h.controller.setSteeringEnabled(false);
+    const media = [
+      { path: "up/handle/photo.png", mime: "image/png", size_bytes: 7 },
+    ];
+    expect(
       h.controller.submitTurn({
         turnId: S,
         text: "correction",
         ...(mode === "media" ? { media } : {}),
         ...(mode === "reasoning" ? { reasoningEffort: "high" } : {}),
-      });
-      expect(steer).not.toHaveBeenCalled();
-      expect(h.controller.snapshot().pending.at(-1)).toMatchObject({
-        turnId: S,
-        ...(mode === "media" ? { media } : {}),
-        ...(mode === "reasoning" ? { reasoningEffort: "high" } : {}),
-      });
-    },
-  );
+      }),
+    ).toBe(true);
+    expect(steer).not.toHaveBeenCalled();
+    expect(h.timeline().some((item) => item.kind === "system")).toBe(false);
+    expect(h.controller.snapshot().pending.at(-1)).toMatchObject({
+      turnId: S,
+      ...(mode === "media" ? { media } : {}),
+      ...(mode === "reasoning" ? { reasoningEffort: "high" } : {}),
+    });
+  });
   it("steers into the captured accepted owner without interrupt or another start", async () => {
     const h = fixture();
     await tick();
@@ -352,53 +352,42 @@ describe("record-owned native steering", () => {
     h.receipt.resolve({ turn_id: A, steered: true });
     await tick();
   });
-  it("does not replay ambiguous sends and only resumes unrelated queue after canonical recovery", async () => {
-    const h = fixture();
-    await tick();
-    h.submit();
-    h.controller.enqueueTurn({ turnId: B, text: "later" });
-    h.receipt.reject(new Error("timeout"));
-    await tick();
-    h.controller.settleTurn(A);
-    expect(h.client.startTurn).toHaveBeenCalledTimes(1);
-    expect(
-      h.timeline().some((row) => row.title === "Steering outcome unknown"),
-    ).toBe(true);
-    expect(
-      h
-        .timeline()
-        .some((row) => row.title === "Steering delivery not confirmed"),
-    ).toBe(false);
-    h.controller.reconcileFromHydrate({
-      session_id: "master#peer",
-      turns: [],
-    } as unknown as SessionHydrateResult);
-    h.controller.resumePendingTurn();
-    expect(h.client.startTurn.mock.calls.at(-1)?.[0].turn_id).toBe(B);
-  });
-  it("Retry queued delivery clears the latch and dispatches the unattempted head", async () => {
-    // Regression for the audit v10 P1: the retry control's dispatch guard
-    // required attemptedTurns.has — the latched+settled case has an
-    // UNattempted head, so clicking Retry cleared the latch while the
-    // queue stalled forever.
-    const h = fixture();
-    await tick();
-    h.submit();
-    h.controller.enqueueTurn({ turnId: B, text: "later" });
-    h.receipt.reject(new Error("timeout"));
-    await tick();
-    h.controller.settleTurn(A);
-    expect(h.client.startTurn).toHaveBeenCalledTimes(1);
-    expect(
-      h.timeline().some((row) => row.title === "Steering outcome unknown"),
-    ).toBe(true);
-
-    // The retry control (user click) — no resumePendingTurn needed.
-    expect(h.controller.retrySteerDelivery()).toBe(true);
-    await tick();
-    expect(h.client.startTurn.mock.calls.at(-1)?.[0].turn_id).toBe(B);
-    expect(h.controller.retrySteerDelivery()).toBe(false);
-  });
+  it.each(["canonical recovery", "a Retry click"] as const)(
+    "does not replay an ambiguous steer and resumes the unrelated queue only after %s",
+    async (path) => {
+      const h = fixture();
+      await tick();
+      h.submit();
+      h.controller.enqueueTurn({ turnId: B, text: "later" });
+      h.receipt.reject(new Error("timeout"));
+      await tick();
+      h.controller.settleTurn(A);
+      expect(h.client.startTurn).toHaveBeenCalledTimes(1);
+      expect(
+        h.timeline().some((row) => row.title === "Steering outcome unknown"),
+      ).toBe(true);
+      expect(
+        h
+          .timeline()
+          .some((row) => row.title === "Steering delivery not confirmed"),
+      ).toBe(false);
+      if (path === "canonical recovery") {
+        h.controller.reconcileFromHydrate({
+          session_id: "master#peer",
+          turns: [],
+        } as unknown as SessionHydrateResult);
+        h.controller.resumePendingTurn();
+      } else {
+        // Audit v10 P1: the latched-and-settled head was never attempted, and
+        // Retry used to clear the latch while the queue stalled for good.
+        expect(h.controller.retrySteerDelivery()).toBe(true);
+        await tick();
+      }
+      expect(h.client.startTurn.mock.calls.at(-1)?.[0].turn_id).toBe(B);
+      if (path === "a Retry click")
+        expect(h.controller.retrySteerDelivery()).toBe(false);
+    },
+  );
   it("a late confirmed return can resolve a timeout without inventing or duplicating input", async () => {
     const h = fixture();
     await tick();

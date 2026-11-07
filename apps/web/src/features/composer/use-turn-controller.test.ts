@@ -16,6 +16,14 @@ import {
 } from "./use-turn-controller.ts";
 import { PromptTurnQueue, type PromptTurn } from "./turn-queue.ts";
 
+// The REAL queue-backed controller over a recording client: what is sent, in
+// what order, and who owns the live turn. Each case is a race that shipped or
+// a protocol boundary (docs/protocol.md "Turn ownership during Session
+// navigation", ADR 0019, runtime review 2026-09-15 P1): one turn/start per
+// prompt, FIFO never crossing a turn Core may still be running, a lost or
+// late answer read as unknown rather than rejected, ownership never carried
+// to a replacement transport. Before changing the controller, expect these to
+// fail if a prompt could be sent twice, skipped, or sent over another turn.
 describe("queue-backed turn controller async authority", () => {
   it("restores local presentation from a sent receipt without reclaiming a transport lease or resending", async () => {
     const receipt = new Set<string>();
@@ -840,68 +848,48 @@ describe("queue-backed turn controller async authority", () => {
     expect(harness.dispatchEvents).toEqual([]);
   });
 
-  it("uses recovery hydrate as the authoritative ACK without waiting forever for the RPC", async () => {
-    const start = deferred<void>();
-    const client = fakeClient({ start: () => start.promise });
-    const harness = renderController(client);
+  it.each([
+    ["active", "running"],
+    ["completed", "completed"],
+  ] as const)(
+    "takes a recovery hydrate listing the in-flight start as %s for its ACK",
+    async (state, handoff) => {
+      const start = deferred<void>();
+      const client = fakeClient({ start: () => start.promise });
+      const harness = renderController(client);
 
-    harness.controller.enqueuePrompt("recover this start");
-    const turnId = harness.activeTurnId();
-    harness.controller.reconcileFromHydrate(
-      {
-        session_id: "session-a",
-        cursor: { stream: "session-a", seq: 3 },
-        turns: [{ turn_id: turnId, state: "active" }],
-      },
-      true,
-    );
+      harness.controller.enqueuePrompt("recover this start");
+      const turnId = harness.activeTurnId();
+      harness.controller.reconcileFromHydrate(
+        {
+          session_id: "session-a",
+          cursor: { stream: "session-a", seq: 3 },
+          turns: [{ turn_id: turnId, state }],
+        },
+        true,
+      );
 
-    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
-      "dispatching",
-      "accepted",
-    ]);
-    expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
-    expect(harness.controller.backgroundHandoffTurn()).toEqual({
-      turnId,
-      state: "running",
-    });
+      expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+        "dispatching",
+        "accepted",
+      ]);
+      expect(harness.controller.backgroundHandoffTurn()).toEqual({
+        turnId,
+        state: handoff,
+      });
+      if (state === "active")
+        expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
+      else expect(harness.controller.snapshot().active).toBeNull();
 
-    start.resolve(undefined);
-    await start.promise;
-    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
-      "dispatching",
-      "accepted",
-    ]);
-  });
-
-  it("admits and settles an in-flight start when recovery already proves it terminal", async () => {
-    const start = deferred<void>();
-    const client = fakeClient({ start: () => start.promise });
-    const harness = renderController(client);
-
-    harness.controller.enqueuePrompt("already finished");
-    const turnId = harness.activeTurnId();
-    harness.controller.reconcileFromHydrate(
-      {
-        session_id: "session-a",
-        cursor: { stream: "session-a", seq: 4 },
-        turns: [{ turn_id: turnId, state: "completed" }],
-      },
-      true,
-    );
-
-    expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
-      "dispatching",
-      "accepted",
-    ]);
-    expect(harness.controller.snapshot().active).toBeNull();
-    expect(harness.controller.backgroundHandoffTurn()).toEqual({
-      turnId,
-      state: "completed",
-    });
-    start.resolve(undefined);
-    await start.promise;
-  });
+      // The RPC's own late answer changes nothing.
+      start.resolve(undefined);
+      await start.promise;
+      expect(harness.dispatchEvents.map((event) => event.state)).toEqual([
+        "dispatching",
+        "accepted",
+      ]);
+    },
+  );
 
   it("does not send interrupt while turn/start is still dispatching", async () => {
     const start = deferred<void>();
@@ -953,7 +941,7 @@ describe("queue-backed turn controller async authority", () => {
     expect(restored).toEqual(["draft a"]);
   });
 
-  it("gives a stopped turn's attachments back with its prompt", async () => {
+  it("gives a stopped turn's prompt and attachments back once per session, and drops it on reset", async () => {
     const restored: unknown[][] = [];
     const client = fakeClient();
     const harness = renderController(client, {
@@ -962,7 +950,7 @@ describe("queue-backed turn controller async authority", () => {
     const media = [{ path: "up/x/a.csv", mime: "text/csv", size_bytes: 3 }];
     harness.controller.enqueueTurn({
       turnId: crypto.randomUUID(),
-      text: "summarize this",
+      text: "first draft",
       media,
     });
     await vi.waitFor(() => {
@@ -970,22 +958,8 @@ describe("queue-backed turn controller async authority", () => {
     });
     await harness.controller.interrupt();
     harness.controller.settleTurn(harness.activeTurnId());
-    expect(restored).toEqual([["summarize this", "session-a", media]]);
-  });
-
-  it("re-arms one pending restore per session and drops it on reset", async () => {
-    const restored: string[] = [];
-    const client = fakeClient();
-    const harness = renderController(client, {
-      onInterruptPromptRestore: (prompt) => restored.push(prompt),
-    });
-    harness.controller.enqueuePrompt("first draft");
-    await vi.waitFor(() => {
-      expect(harness.controller.activeTurnOwnership()).toBe("local-owner");
-    });
-    await harness.controller.interrupt();
-    harness.controller.settleTurn(harness.activeTurnId());
-    expect(restored).toEqual(["first draft"]);
+    const first = [["first draft", "session-a", media]];
+    expect(restored).toEqual(first);
 
     harness.controller.enqueuePrompt("second draft");
     await vi.waitFor(() => {
@@ -995,21 +969,7 @@ describe("queue-backed turn controller async authority", () => {
     await harness.controller.interrupt();
     harness.controller.reset();
     harness.controller.settleTurn(second);
-    expect(restored).toEqual(["first draft"]);
-  });
-
-  it("treats a hydrated active turn as observed, never as owner of this socket", () => {
-    const client = fakeClient();
-    const harness = renderController(client);
-
-    harness.controller.reconcileFromHydrate({
-      session_id: "session-a",
-      cursor: { stream: "session-a", seq: 2 },
-      turns: [{ turn_id: "server-turn", state: "active" }],
-    });
-
-    expect(harness.controller.backgroundHandoffTurn()).toBeNull();
-    expect(harness.controller.activeTurnOwnership()).toBe("observed");
+    expect(restored).toEqual(first);
   });
 
   it("retains the local transport owner after terminal until it is handed off", async () => {
@@ -1206,64 +1166,47 @@ function reviewAck(
 }
 
 describe("native review on the existing turn controller", () => {
-  it("dispatches an optional review prompt and exact UUID without an ordinary user turn", async () => {
-    const client = fakeClient();
-    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
-      request.markSent();
-      return reviewAck(request);
-    });
-    const h = renderController(client, { startReview });
-    expect(
-      h.controller.enqueueTurn({
-        kind: "review",
+  it.each([
+    ["  check races  ", "check races"],
+    ["  ", undefined],
+  ] as const)(
+    "dispatches review text %j under its exact UUID without an ordinary user turn",
+    async (text, prompt) => {
+      const client = fakeClient();
+      const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
+        request.markSent();
+        return reviewAck(request);
+      });
+      const h = renderController(client, { startReview });
+      expect(
+        h.controller.enqueueTurn({ kind: "review", turnId: reviewId, text }),
+      ).toBe(true);
+      await Promise.resolve();
+      expect(startReview).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          client,
+          sessionId: "session-a",
+          turnId: reviewId,
+        }),
+      );
+      // A blank prompt is omitted, never manufactured into model input.
+      if (prompt) expect(startReview.mock.calls[0]![0].prompt).toBe(prompt);
+      else expect(startReview.mock.calls[0]![0]).not.toHaveProperty("prompt");
+      expect(client.startTurn).not.toHaveBeenCalled();
+      expect(h.timeline.some((entry) => entry.kind === "user")).toBe(false);
+      expect(
+        h.timeline.some((entry) => entry.title === "Native code review"),
+      ).toBe(true);
+      expect(h.controller.backgroundHandoffTurn()).toMatchObject({
         turnId: reviewId,
-        text: "  check races  ",
-      }),
-    ).toBe(true);
-    await Promise.resolve();
-    expect(startReview).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        client,
-        sessionId: "session-a",
-        turnId: reviewId,
-        prompt: "check races",
-      }),
-    );
-    expect(client.startTurn).not.toHaveBeenCalled();
-    expect(h.timeline.some((entry) => entry.kind === "user")).toBe(false);
-    expect(
-      h.timeline.some((entry) => entry.title === "Native code review"),
-    ).toBe(true);
-    expect(h.controller.backgroundHandoffTurn()).toMatchObject({
-      turnId: reviewId,
-      state: "running",
-    });
-    expect(h.dispatchEvents.map((event) => event.state)).toEqual([
-      "dispatching",
-      "accepted",
-    ]);
-  });
-
-  it("omits the default review prompt instead of manufacturing model input", async () => {
-    const startReview = vi.fn(async (request: NativeReviewStartRequest) => {
-      request.markSent();
-      return reviewAck(request);
-    });
-    const h = renderController(fakeClient(), { startReview });
-    expect(
-      h.controller.enqueueTurn({
-        kind: "review",
-        turnId: reviewId,
-        text: "  ",
-      }),
-    ).toBe(true);
-    await Promise.resolve();
-    expect(startReview.mock.calls[0]![0]).not.toHaveProperty("prompt");
-    expect(h.controller.snapshot().active).toMatchObject({
-      kind: "review",
-      text: "",
-    });
-  });
+        state: "running",
+      });
+      expect(h.dispatchEvents.map((event) => event.state)).toEqual([
+        "dispatching",
+        "accepted",
+      ]);
+    },
+  );
 
   it("fails closed without a starter, with active work, or with unsupported review arguments", () => {
     const h = renderController(fakeClient());
@@ -1565,41 +1508,28 @@ describe("another attached client owns the session's turn", () => {
     };
   }
 
-  it("adopts a live turn it never queued and marks it as not ours", () => {
-    const harness = renderController(fakeClient());
-    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
-    const active = harness.controller.snapshot().active;
-    expect(active?.turnId).toBe(OTHER_TURN);
-    expect(active?.origin).toBe("adopted");
-    // Adoption is for display only — it must never dispatch anything.
-    expect(harness.controller.snapshot().pending).toHaveLength(0);
-  });
+  it("adopts another client's live turn only when this app holds nothing for that session", () => {
+    // Adoption is display only: it never dispatches, never crosses sessions,
+    // and never stomps a turn this app may still own. Only one turn can be
+    // active server-side, so a foreign start over ours means our view is
+    // stale; hydrate reconciles that with the full ownership rules.
+    const idle = renderController(fakeClient());
+    idle.controller.observeSteerDropped(turnStarted(OTHER_TURN, "session-b"));
+    expect(idle.controller.snapshot().active).toBeNull();
+    idle.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    expect(idle.controller.snapshot().active).toMatchObject({
+      turnId: OTHER_TURN,
+      origin: "adopted",
+    });
+    expect(idle.controller.snapshot().pending).toHaveLength(0);
 
-  it("does not mark this app's own turn as adopted", () => {
-    const harness = renderController(fakeClient());
-    harness.controller.enqueuePrompt("mine");
-    const mine = harness.activeTurnId();
-    harness.controller.observeSteerDropped(turnStarted(mine));
-    expect(harness.controller.snapshot().active?.origin).toBeUndefined();
-  });
-
-  it("ignores a foreign start while this app already holds the foreground", () => {
-    // Only one turn can be active server-side, so this means our view is
-    // stale; hydrate reconciles it with the full ownership rules rather than
-    // this fast path stomping a turn we may still own.
-    const harness = renderController(fakeClient());
-    harness.controller.enqueuePrompt("mine");
-    const mine = harness.activeTurnId();
-    harness.controller.observeSteerDropped(turnStarted(OTHER_TURN));
-    expect(harness.controller.snapshot().active?.turnId).toBe(mine);
-  });
-
-  it("ignores a start for a different session", () => {
-    const harness = renderController(fakeClient());
-    harness.controller.observeSteerDropped(
-      turnStarted(OTHER_TURN, "session-b"),
-    );
-    expect(harness.controller.snapshot().active).toBeNull();
+    const busy = renderController(fakeClient());
+    busy.controller.enqueuePrompt("mine");
+    const mine = busy.activeTurnId();
+    busy.controller.observeSteerDropped(turnStarted(mine));
+    expect(busy.controller.snapshot().active?.origin).toBeUndefined();
+    busy.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+    expect(busy.controller.snapshot().active?.turnId).toBe(mine);
   });
 
   it.each(["before reply", "after reply"] as const)(
@@ -1654,45 +1584,30 @@ describe("another attached client owns the session's turn", () => {
     },
   );
 
-  it("keeps untyped refusals on the rejection path and advances the queue", async () => {
-    const reply = deferred<void>();
-    const client = fakeClient({ start: () => reply.promise });
-    const harness = renderController(client);
-    harness.controller.enqueuePrompt("my message");
-    harness.controller.enqueuePrompt("next local prompt");
-    client.startTurn.mockImplementation(async () => undefined);
-    reply.reject(
-      new OctosUiProtocolError(
-        -32600,
-        "turn/start: a turn is already running for this session",
-      ),
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(harness.controller.snapshot().active?.text).toBe(
-      "next local prompt",
-    );
-    expect(client.startTurn).toHaveBeenCalledTimes(2);
-    expect(harness.timeline.map((entry) => entry.title)).toContain(
-      "Turn rejected",
-    );
-  });
-
-  it("leaves every other rejection on the existing failure path", async () => {
-    const harness = renderController(
-      fakeClient({
-        start: async () => {
-          throw new OctosUiProtocolError(-32602, "cwd is not accessible");
-        },
-      }),
-    );
-    harness.controller.enqueuePrompt("my message");
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(harness.timeline.map((entry) => entry.title)).toContain(
-      "Turn rejected",
-    );
-  });
+  it.each([
+    [-32600, "turn/start: a turn is already running for this session"],
+    [-32602, "cwd is not accessible"],
+  ] as const)(
+    "keeps an untyped %i refusal on the rejection path and advances the queue",
+    async (code, message) => {
+      const reply = deferred<void>();
+      const client = fakeClient({ start: () => reply.promise });
+      const harness = renderController(client);
+      harness.controller.enqueuePrompt("my message");
+      harness.controller.enqueuePrompt("next local prompt");
+      client.startTurn.mockImplementation(async () => undefined);
+      reply.reject(new OctosUiProtocolError(code, message));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(harness.controller.snapshot().active?.text).toBe(
+        "next local prompt",
+      );
+      expect(client.startTurn).toHaveBeenCalledTimes(2);
+      expect(harness.timeline.map((entry) => entry.title)).toContain(
+        "Turn rejected",
+      );
+    },
+  );
 });
 
 function renderController(

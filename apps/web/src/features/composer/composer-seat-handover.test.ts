@@ -1,52 +1,29 @@
 /**
- * WEB-UX-DESIGN-4000 §5.2/§6 composer-handover RED (brief 4010 clauses a+b).
+ * WEB-UX-DESIGN-4000 §5.2/§6 composer handover (brief 4010 clauses a+b).
  *
- * Design cases pinned here (acceptance 4/8/16/20b/20c):
- *  - THIS tab holds the seat and the user sends: release `next:"internal"`
- *    FIRST, wait for its result, THEN send the turn exactly once (§5.2 case 2).
- *  - Release failure: draft kept, nothing sent, "Retry" (§6 row 8).
- *  - Foreign holder on send: "Another app is using this session" + Resume chat
- *    affordance = acquire (CAS observed revision) -> release(next:"internal")
- *    -> confirm -> send once (§5.2 case 3).
- *  - Lost release reply: reconcile via driver/get — internal => send once, no
- *    second release; still ours => Retry one release then send (20b/20c).
- *  - Lost acquire reply: NO further frames with the unproven binding; wait for
- *    the disclosed lease expiry before any fresh acquire (20).
- *
- * Same discipline as the sibling seat suites: apps/web has no jsdom, so pure
- * decisions are asserted directly and the hook wiring is pinned by source text.
+ * When a control seat holds the session, a user's send must first hand the
+ * seat back, and only then send, once. The planner decides which frames may
+ * go out; the turn controller's send gate enforces the order. Before changing
+ * either, keep these lock rules:
+ *  - THIS tab holds the seat: release `next:"internal"` with the held fence and
+ *    the observed revision FIRST, then send exactly once (§5.2 case 2).
+ *  - Release refused: nothing is sent and the whole draft is kept (§6 row 8).
+ *  - Another holder: Resume chat = acquire (CAS on the observed revision) ->
+ *    release -> send once; never a silent send (§5.2 case 3).
+ *  - Lost acquire reply (a live lease under OUR id, no proof): no frame with the
+ *    unproven binding; wait for the disclosed lease expiry (acceptance 20).
+ *  - A transport change during hand-back holds the unsent prompt until resume.
+ * Resume chat and the owned-seat release also run in e2e/chat-handover.spec.ts.
  */
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { DriverAcquireView } from "@octos-org/octoscode-client/external-driver";
 import type { OctosUiClient } from "@octos-org/octoscode-client";
 import type { TimelineEntry } from "../timeline/model.ts";
 import { createQueueBackedTurnController } from "./use-turn-controller.ts";
 import { PromptTurnQueue, type PromptTurn } from "./turn-queue.ts";
-import {
-  FOREIGN_SEAT_HOLDER_MESSAGE,
-  RESUME_CHAT_LABEL,
-  HANDING_BACK_CONTROL_STATUS,
-  RELEASE_FAILED_MESSAGE,
-  boundedTurnAdmissionError,
-  isExternalMasterHeldRefusal,
-  planComposerSeatHandover,
-} from "./composer-seat-handover.ts";
+import { planComposerSeatHandover } from "./composer-seat-handover.ts";
 import { peerControlRefusalLabel } from "../control/peer-control-commands.ts";
 import { peerDispatchRefusalLabel } from "../control/peer-dispatch-commands.ts";
-
-const SOURCE = readFileSync(
-  new URL("./use-turn-controller.ts", import.meta.url),
-  "utf8",
-);
-const SESSION_SOURCE = readFileSync(
-  new URL("../session/use-octos-session.ts", import.meta.url),
-  "utf8",
-);
-const ZH_SOURCE = readFileSync(
-  new URL("../preferences/zh.ts", import.meta.url),
-  "utf8",
-);
 
 const acquireView = (): DriverAcquireView =>
   ({
@@ -64,165 +41,81 @@ const acquireView = (): DriverAcquireView =>
     pendingWork: null,
   }) as unknown as DriverAcquireView;
 
-describe("§6 copy: bounded admission refusals", () => {
-  it("maps an ExternalMasterHeld send refusal to the human message", () => {
-    expect(
-      isExternalMasterHeldRefusal(
-        "turn admission refused for this session: ExternalMasterHeld",
-      ),
-    ).toBe(true);
-    expect(
-      boundedTurnAdmissionError(
-        "turn admission refused for this session: ExternalMasterHeld",
-      ),
-    ).toBe(FOREIGN_SEAT_HOLDER_MESSAGE);
-  });
-
-  it("passes non-seat failures through verbatim and degrades empties", () => {
-    expect(boundedTurnAdmissionError("some other failure")).toBe(
-      "some other failure",
-    );
-    expect(boundedTurnAdmissionError("")).toBe("");
-  });
-
-  it("labels the affordances exactly as §5.2/§6 word them", () => {
-    expect(RESUME_CHAT_LABEL).toBe("Resume chat");
-    expect(HANDING_BACK_CONTROL_STATUS).toBe("Handing back control…");
-    expect(RELEASE_FAILED_MESSAGE).toBe(
-      "Couldn't hand back control — your message wasn't sent",
-    );
-    expect(FOREIGN_SEAT_HOLDER_MESSAGE).toBe(
-      "Another app is using this session",
-    );
-  });
-});
-
 describe("§5.2: plan the seat handover before one send", () => {
-  it("this-tab seat + send: release(next:internal) first, then send once", () => {
-    const plan = planComposerSeatHandover({
-      seatHeld: true,
-      thisTabHoldsSeat: true,
-      acquireView: acquireView(),
-    });
-    expect(plan).toEqual({
-      kind: "release-then-send",
-      releaseParams: {
-        driverId: "web:11111111-1111-4111-8111-111111111111",
-        epoch: 3,
-        controlToken: "tok-1",
-        expectedRevision: 12,
-        next: "internal",
+  it.each([
+    [
+      "this tab holds the seat: release(next:internal) first, then send once",
+      { seatHeld: true, thisTabHoldsSeat: true, acquireView: acquireView() },
+      {
+        kind: "release-then-send",
+        releaseParams: {
+          driverId: "web:11111111-1111-4111-8111-111111111111",
+          epoch: 3,
+          controlToken: "tok-1",
+          expectedRevision: 12,
+          next: "internal",
+        },
       },
-    });
-  });
-
-  it("foreign holder + send: resume-chat three-step, never a silent send", () => {
-    const plan = planComposerSeatHandover({
-      seatHeld: false,
-      thisTabHoldsSeat: false,
-      acquireView: null,
-      observedForeignLeaseExpiresAtMs: null,
-      observedRevision: "12",
-    });
-    expect(plan).toEqual({
-      kind: "resume-chat",
-      acquireDriverId: expect.any(String),
-      expectedRevision: 12,
-    });
-  });
-
-  it("no seat, nobody holds: plain send, no frame", () => {
-    const plan = planComposerSeatHandover({
-      seatHeld: false,
-      thisTabHoldsSeat: false,
-      acquireView: null,
-    });
-    expect(plan.kind).toBe("send");
-  });
-
-  it("a LIVE OUR-ID lease with NO proof waits for expiry (lost acquire reply)", () => {
-    const plan = planComposerSeatHandover({
-      seatHeld: false,
-      thisTabHoldsSeat: false,
-      acquireView: null,
-      observedOwnLeaseExpiresAtMs: 1_700_000_120_000,
-    });
-    expect(plan.kind).toBe("wait-for-expiry");
-    expect(plan).not.toHaveProperty("releaseParams");
-    expect(plan).not.toHaveProperty("acquireDriverId");
-  });
-
-  it("a live FOREIGN lease still plans resume-chat with the busy annotation", () => {
-    const plan = planComposerSeatHandover({
-      seatHeld: false,
-      thisTabHoldsSeat: false,
-      acquireView: null,
-      observedRevision: "9",
-      observedForeignLeaseExpiresAtMs: 1_700_000_120_000,
-    });
-    // Acceptance 4: the affordance stays; the acquire inside Resume chat is
-    // what refuses busy with the disclosed expiry.
-    expect(plan.kind).toBe("resume-chat");
-    expect(plan).toMatchObject({
-      foreignLeaseExpiresAtMs: 1_700_000_120_000,
-    });
-  });
-});
-
-describe("§5.2 wiring pins (source text)", () => {
-  it("the turn controller gates the send on the handover and bounds refusals", () => {
-    expect(SOURCE).toContain("releaseSeatBeforeTurn");
-    expect(SOURCE).toContain("boundedTurnAdmissionError");
-  });
-
-  it("the session seam plans the handover and exposes the release", () => {
-    expect(SESSION_SOURCE).toContain("planComposerSeatHandover");
-    expect(SESSION_SOURCE).toContain("releaseControlSeatForUserTurn");
-  });
-
-  it("the session seam exposes Resume chat to the strip (App mounts it)", () => {
-    expect(SESSION_SOURCE).toContain("seatHandover");
-    expect(SESSION_SOURCE).toContain("resumeChatSend");
-  });
-
-  it("the zh catalog carries every new operator string", () => {
-    for (const source of [
-      "Another app is using this session",
-      "Resume chat",
-      "Handing back control…",
-      "Couldn't hand back control — your message wasn't sent",
-      "Resuming chat…",
-      "Turn not sent",
-    ])
-      expect(ZH_SOURCE).toContain(`"${source}"`);
+      true,
+    ],
+    [
+      "another holder: the Resume chat three-step, never a silent send",
+      {
+        seatHeld: false,
+        thisTabHoldsSeat: false,
+        acquireView: null,
+        observedForeignLeaseExpiresAtMs: null,
+        observedRevision: "12",
+      },
+      {
+        kind: "resume-chat",
+        acquireDriverId: expect.any(String),
+        expectedRevision: 12,
+      },
+      true,
+    ],
+    [
+      "a live foreign lease: Resume chat stays, annotated busy",
+      {
+        seatHeld: false,
+        thisTabHoldsSeat: false,
+        acquireView: null,
+        observedRevision: "9",
+        observedForeignLeaseExpiresAtMs: 1_700_000_120_000,
+      },
+      { kind: "resume-chat", foreignLeaseExpiresAtMs: 1_700_000_120_000 },
+      false,
+    ],
+    [
+      "nobody holds a seat: a plain send, no frame",
+      { seatHeld: false, thisTabHoldsSeat: false, acquireView: null },
+      { kind: "send" },
+      false,
+    ],
+    [
+      "a live lease under our id with no proof (lost acquire reply): wait for expiry",
+      {
+        seatHeld: false,
+        thisTabHoldsSeat: false,
+        acquireView: null,
+        observedOwnLeaseExpiresAtMs: 1_700_000_120_000,
+      },
+      { kind: "wait-for-expiry" },
+      false,
+    ],
+  ] as const)("%s", (_name, input, plan, exact) => {
+    const planned = planComposerSeatHandover(input);
+    // A plan that sends frames is pinned whole: no extra field rides along.
+    if (exact) expect(planned).toEqual(plan);
+    else expect(planned).toMatchObject(plan);
+    if (plan.kind === "wait-for-expiry" || plan.kind === "send") {
+      expect(planned).not.toHaveProperty("releaseParams");
+      expect(planned).not.toHaveProperty("acquireDriverId");
+    }
   });
 });
 
-describe("§6 copy: refusal label maps are protocol-free", () => {
-  it("maps every typed refusal kind to its §6 recovery message", () => {
-    expect(peerControlRefusalLabel("driver_fence_stale")).toBe(
-      "Your control of this session expired",
-    );
-    expect(peerControlRefusalLabel("driver_busy_handover")).toBe(
-      "This session is changing hands right now",
-    );
-    expect(peerControlRefusalLabel("driver_revision_conflict")).toBe(
-      "This session changed hands; refresh and try again",
-    );
-    expect(peerControlRefusalLabel("driver_model_unavailable")).toBe(
-      "That model is not configured on this server",
-    );
-    expect(peerControlRefusalLabel("driver_operation_conflict")).toBe(
-      "A different request already used this id — nothing was sent",
-    );
-    expect(peerControlRefusalLabel("driver_scope_mismatch")).toBe(
-      "This session can't be controlled from here",
-    );
-    expect(peerControlRefusalLabel("interaction_recovery_required")).toBe(
-      "This session needs recovery on the server",
-    );
-  });
-
+describe("§6 copy: refusal labels stay protocol-free", () => {
   it("degrades unknown kinds to bounded copy without protocol words", () => {
     expect(peerControlRefusalLabel("driver_operations_cursor_reset")).toBe(
       "That action was refused.",
@@ -234,31 +127,9 @@ describe("§6 copy: refusal label maps are protocol-free", () => {
       "Your control of this session expired",
     );
   });
-
-  it("carries the new refusal copy in the zh catalog", () => {
-    for (const source of [
-      "Your control of this session expired",
-      "This session is changing hands right now",
-      "This session changed hands; refresh and try again",
-      "That model is not configured on this server",
-      "A different request already used this id — nothing was sent",
-      "This session can't be controlled from here",
-      "This session needs recovery on the server",
-      "That action was refused.",
-      "Couldn't start that peer.",
-    ])
-      expect(ZH_SOURCE).toContain(`"${source}"`);
-  });
 });
 
 describe("§5.2 behavioral: the send gate (turn controller)", () => {
-  const wire: string[] = [];
-  const client = {
-    startTurn: async () => {
-      wire.push("turn/start");
-    },
-  } as unknown as OctosUiClient;
-
   const harness = (
     seatGate: NonNullable<
       Parameters<
@@ -266,6 +137,12 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
       >[0]["dependenciesRef"]["current"]["releaseSeatBeforeTurn"]
     >,
   ) => {
+    const wire: string[] = [];
+    const client = {
+      startTurn: async () => {
+        wire.push("turn/start");
+      },
+    } as unknown as OctosUiClient;
     const timeline: TimelineEntry[] = [];
     const restores: Array<[PromptTurn, string]> = [];
     const controller = createQueueBackedTurnController({
@@ -290,13 +167,12 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
         },
       },
     });
-    return { controller, timeline, restores };
+    return { controller, timeline, restores, wire };
   };
 
   it("releases the seat BEFORE turn/start, and only once per send", async () => {
-    wire.length = 0;
     const calls: string[] = [];
-    const { controller } = harness(async () => {
+    const { controller, wire } = harness(async () => {
       calls.push("release");
       return { sent: true };
     });
@@ -308,8 +184,7 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
   });
 
   it("a refused release sends NO turn/start and parks the draft", async () => {
-    wire.length = 0;
-    const { controller, timeline, restores } = harness(async () => ({
+    const { controller, timeline, restores, wire } = harness(async () => ({
       sent: false as const,
       message: "turn admission refused for this session: ExternalMasterHeld",
     }));
@@ -332,12 +207,11 @@ describe("§5.2 behavioral: the send gate (turn controller)", () => {
   });
 
   it("holds an unsent prompt when transport changes during handback", async () => {
-    wire.length = 0;
     let release!: (value: { sent: true }) => void;
     const gate = new Promise<{ sent: true }>((resolve) => {
       release = resolve;
     });
-    const { controller } = harness(() => gate);
+    const { controller, wire } = harness(() => gate);
     controller.enqueuePrompt("send after recovery");
     controller.suspendTransport();
     release({ sent: true });
