@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDownIcon, FileIcon, FolderIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
@@ -13,6 +13,7 @@ import {
   type FileTreeNode,
 } from "./file-tree.ts";
 import type { SessionFileChange } from "./session-changes.ts";
+import type { WorkspaceTreeEntry } from "@octos-org/octoscode-client/session-files";
 import styles from "./SessionPanelTabs.module.css";
 
 export interface FilesTabProps {
@@ -21,8 +22,32 @@ export interface FilesTabProps {
   selectedPath: string | null;
   /** Server folder listing (directories only); null when not offered. */
   browse: WorkspaceBrowseAdapter | null;
+  /**
+   * The real workspace tree (T-0416): one folder's page per call, `prefix`
+   * workspace-relative. Null before probing; the adapter resolves
+   * `supported: false` on an older Core, which keeps the browse fallback.
+   */
+  tree: {
+    list(
+      prefix: string,
+      cursor?: string,
+    ): Promise<
+      | {
+          supported: true;
+          page: { entries: WorkspaceTreeEntry[]; nextCursor: string | null };
+        }
+      | { supported: false }
+    >;
+  } | null;
+  /** The host's probe of the root page: undefined while probing, null on older Cores. */
+  treePage:
+    | { entries: WorkspaceTreeEntry[]; nextCursor: string | null }
+    | null
+    | undefined;
   changes: readonly SessionFileChange[];
   onOpenChange: (change: SessionFileChange) => void;
+  /** Open a workspace file that is not a change (tree mode): select + preview. */
+  onOpenPath: (path: string) => void;
 }
 
 interface FolderState {
@@ -35,19 +60,386 @@ interface FolderState {
   hidden?: number;
 }
 
+interface TreeFolderState {
+  entries?: WorkspaceTreeEntry[];
+  nextCursor?: string | null;
+  loading?: boolean;
+  failed?: boolean;
+}
+
+/**
+ * The workspace as the server lists it (T-0417): folders and files, one
+ * folder page at a time, changed files still badged from this Session's
+ * record. Probing an older Core resolves `supported: false` and the caller
+ * keeps the browse/changes view instead of an invented tree.
+ */
+function WorkspaceTree({
+  root,
+  selectedPath,
+  tree,
+  firstPage,
+  changes,
+  onOpenChange,
+  onOpenPath,
+}: {
+  root: string;
+  selectedPath: string | null;
+  tree: NonNullable<FilesTabProps["tree"]>;
+  /** The probe's root page, so the tree does not list the root twice. */
+  firstPage: { entries: WorkspaceTreeEntry[]; nextCursor: string | null };
+  changes: readonly SessionFileChange[];
+  onOpenChange: (change: SessionFileChange) => void;
+  onOpenPath: (path: string) => void;
+}) {
+  const t = useUiText();
+  const [folders, setFolders] = useState<Map<string, TreeFolderState>>(
+    () =>
+      new Map([
+        ["", { entries: firstPage.entries, nextCursor: firstPage.nextCursor }],
+      ]),
+  );
+  const [expanded, setExpanded] = useState(() => new Set<string>([""]));
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
+  const generation = useRef(0);
+
+  useEffect(() => {
+    generation.current += 1;
+    return () => {
+      generation.current += 1;
+    };
+    // The root page arrives already probed; nothing to reload on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root, tree]);
+  useEffect(() => {
+    if (!selectedPath || isOutsideWorkspace(selectedPath)) return;
+    const parents = selectedPath
+      .split("/")
+      .slice(0, -1)
+      .map((_, index, parts) => parts.slice(0, index + 1).join("/"));
+    setExpanded((current) => new Set([...current, ...parents]));
+    // A restored selection (reload) expands its folders from server facts,
+    // not from the browser's last listing (T-0417).
+    for (const parent of parents) {
+      const state = foldersRef.current.get(parent);
+      if (!state?.entries && !state?.loading) void load(parent);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPath]);
+
+  const load = async (prefix: string, cursor?: string) => {
+    const requestGeneration = generation.current;
+    const current = foldersRef.current.get(prefix) ?? {};
+    if (current.loading || (current.entries && cursor === undefined)) return;
+    setFolders((map) =>
+      new Map(map).set(prefix, { ...current, loading: true, failed: false }),
+    );
+    try {
+      const result = await tree.list(prefix, cursor);
+      if (requestGeneration !== generation.current) return;
+      if (!result.supported) return; // Caller watches the probe itself.
+      setFolders((map) =>
+        new Map(map).set(prefix, {
+          entries: cursor
+            ? [...(current.entries ?? []), ...result.page.entries]
+            : result.page.entries,
+          nextCursor: result.page.nextCursor,
+        }),
+      );
+    } catch {
+      if (requestGeneration !== generation.current) return;
+      setFolders((map) =>
+        new Map(map).set(prefix, { ...current, failed: true }),
+      );
+    }
+  };
+
+  const toggle = (path: string) => {
+    const open = !expanded.has(path);
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (open) next.add(path);
+      else next.delete(path);
+      return next;
+    });
+    if (open) void load(path);
+  };
+
+  const changeByPath = new Map(changes.map((change) => [change.path, change]));
+  const changedUnder = (prefix: string) =>
+    changes.filter(
+      (change) =>
+        !isOutsideWorkspace(change.path) &&
+        change.path.startsWith(prefix ? `${prefix}/` : ""),
+    ).length;
+
+  const renderFolder = (prefix: string): ReactNode => {
+    const state = folders.get(prefix);
+    const entries = state?.entries ?? [];
+    const nodes: ReactNode[] = [];
+    for (const entry of entries) {
+      if (entry.kind === "dir") {
+        nodes.push(
+          <li key={entry.path}>
+            <TreeFolderRow
+              name={entry.name}
+              changed={changedUnder(entry.path)}
+              expanded={expanded.has(entry.path)}
+              onToggle={() => toggle(entry.path)}
+            />
+            {expanded.has(entry.path) ? renderFolder(entry.path) : null}
+          </li>,
+        );
+      } else {
+        const change = changeByPath.get(entry.path);
+        nodes.push(
+          <li key={entry.path}>
+            <TreeFileRow
+              name={entry.name}
+              selected={entry.path === selectedPath}
+              change={change ?? null}
+              onOpen={() =>
+                change ? onOpenChange(change) : onOpenPath(entry.path)
+              }
+            />
+          </li>,
+        );
+      }
+    }
+    // A changed file the listing did not return (deleted since, or below the
+    // listed depth) still shows from this Session's record.
+    const listed = new Set(entries.map((entry) => entry.path));
+    for (const change of changes) {
+      const directParent = change.path.split("/").slice(0, -1).join("/");
+      if (
+        directParent === prefix &&
+        !listed.has(change.path) &&
+        !isOutsideWorkspace(change.path)
+      ) {
+        nodes.push(
+          <li key={change.path}>
+            <TreeFileRow
+              name={change.path.split("/").at(-1)!}
+              selected={change.path === selectedPath}
+              change={change}
+              onOpen={() => onOpenChange(change)}
+            />
+          </li>,
+        );
+      }
+    }
+    return (
+      <ul className={styles.tree} role="list">
+        {nodes}
+        {state?.loading ? (
+          <li className={styles.treeNote} role="status">
+            {t("Loading…")}
+          </li>
+        ) : null}
+        {state?.failed ? (
+          <li className={styles.treeNote}>
+            {t("Couldn't read this folder.")}{" "}
+            <button
+              type="button"
+              onClick={() =>
+                void load(
+                  prefix,
+                  foldersRef.current.get(prefix)?.nextCursor ?? undefined,
+                )
+              }
+            >
+              {t("Try again")}
+            </button>
+          </li>
+        ) : null}
+        {state?.nextCursor ? (
+          <li className={styles.treeNote}>
+            <button
+              type="button"
+              onClick={() => void load(prefix, state.nextCursor!)}
+            >
+              {t("Show more")}
+            </button>
+          </li>
+        ) : null}
+        {state?.entries && !entries.length && !nodes.length ? (
+          <li className={styles.treeNote}>{t("Nothing here.")}</li>
+        ) : null}
+      </ul>
+    );
+  };
+
+  const outside = changes.filter((change) => isOutsideWorkspace(change.path));
+  const rootName =
+    root.replace(/\/+$/, "").split("/").filter(Boolean).at(-1) ?? root;
+
+  return (
+    <div className={styles.stack}>
+      <section aria-label={t("Workspace folder")}>
+        <p className={styles.treeRoot} title={root}>
+          <FolderIcon size={16} />
+          <strong>{rootName || root}</strong>
+        </p>
+        {renderFolder("")}
+      </section>
+      {outside.length ? (
+        <section className={styles.section} aria-labelledby="files-outside">
+          <div className={styles.sectionTitle}>
+            <h3 id="files-outside">{t("Outside this folder")}</h3>
+            <span>{outside.length}</span>
+          </div>
+          <ul className={styles.tree} role="list">
+            {outside.map((change) => (
+              <li key={change.path}>
+                <TreeFileRow
+                  name={change.path}
+                  selected={change.path === selectedPath}
+                  change={change}
+                  onOpen={() => onOpenChange(change)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <p className={styles.note}>
+        {t("The workspace as the server lists it, one folder at a time.")}
+      </p>
+    </div>
+  );
+}
+
+function TreeFolderRow({
+  name,
+  changed,
+  expanded,
+  onToggle,
+}: {
+  name: string;
+  changed: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const t = useUiText();
+  return (
+    <button
+      type="button"
+      className={styles.treeRow}
+      aria-expanded={expanded}
+      onClick={onToggle}
+    >
+      <ChevronDownIcon size={12} className={styles.treeChevron} />
+      <FolderIcon size={15} />
+      <span className={styles.treeName}>{name}</span>
+      {changed ? (
+        <span className={styles.treeBadge}>
+          <span className="sr-only">
+            {t("{count} changed", { count: changed })}
+          </span>
+          <span aria-hidden="true">{changed}</span>
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function TreeFileRow({
+  name,
+  selected,
+  change,
+  onOpen,
+}: {
+  name: string;
+  selected: boolean;
+  change: SessionFileChange | null;
+  onOpen: () => void;
+}) {
+  const t = useUiText();
+  const status = !change
+    ? null
+    : change.operation === "create"
+      ? "added"
+      : change.operation === "delete"
+        ? "deleted"
+        : "modified";
+  return (
+    <button
+      type="button"
+      className={styles.treeRow}
+      aria-current={selected ? "true" : undefined}
+      title={
+        change
+          ? change.previewId
+            ? t("Show the change to {name}", { name })
+            : t("Core kept no diff for this change.")
+          : t("Preview {name}", { name })
+      }
+      onClick={onOpen}
+    >
+      <span className={styles.treeChevron} />
+      <FileIcon size={15} />
+      <span className={styles.treeName}>{name}</span>
+      {status ? (
+        <span className={`file-status status-${status}`} aria-hidden="true">
+          {status === "added" ? "A" : status === "deleted" ? "D" : "M"}
+        </span>
+      ) : null}
+      {status ? (
+        <span className="sr-only">
+          {", "}
+          {t(
+            status === "added"
+              ? "New"
+              : status === "deleted"
+                ? "Deleted"
+                : "Edited",
+          )}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 /**
  * The workspace folder as a tree. Folders come from the server's listing;
  * files are the ones this Session changed. Directory browsing does not give
  * us a complete workspace file tree.
  */
-export function FilesTab({
+export function FilesTab(props: FilesTabProps) {
+  const t = useUiText();
+  const { root, tree, treePage } = props;
+  // The host probes the tree listing; an older Core answers with the legacy
+  // flat shape and we keep the browse/changes view (T-0417).
+  if (!tree || treePage === null) return <BrowseFilesTab {...props} />;
+  if (treePage === undefined) {
+    return (
+      <p className={styles.note} role="status">
+        {t("Loading folders…")}
+      </p>
+    );
+  }
+  return (
+    <WorkspaceTree
+      root={root}
+      selectedPath={props.selectedPath}
+      tree={tree}
+      firstPage={treePage}
+      changes={props.changes}
+      onOpenChange={props.onOpenChange}
+      onOpenPath={props.onOpenPath}
+    />
+  );
+}
+
+function BrowseFilesTab({
   root,
   selectedPath,
   browse,
   changes,
   onOpenChange,
-}: FilesTabProps) {
+}: Omit<FilesTabProps, "tree" | "onOpenPath">) {
   const t = useUiText();
+
   const [folders, setFolders] = useState(
     () => new Map<string, FolderState>([["", { absolute: root }]]),
   );

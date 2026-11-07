@@ -608,6 +608,22 @@ export class OctosUiClient {
   }
 
   /** Core #1376 usage ledger: authenticated REST beside the RPC wire. */
+  /**
+   * The workspace file tree (T-0416's session/files.list tree fields); the
+   * caller falls back when the Core is too old to answer them.
+   */
+  async sessionFilesCommands(sessionId: string) {
+    const { listWorkspaceTree } = await import("./session-files.ts");
+    return {
+      list: (prefix: string, cursor?: string) =>
+        listWorkspaceTree(
+          (method, params) => this.request(method, params),
+          sessionId,
+          { prefix, ...(cursor ? { cursor } : {}) },
+        ),
+    };
+  }
+
   async usageCommands(profileId: string) {
     const { createUsageCommands } = await import("./usage.ts");
     return createUsageCommands({

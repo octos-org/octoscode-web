@@ -6037,6 +6037,34 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "session/files/read") {
       const path = request.params.path;
+      // T-0417: tree workspaces serve their listed files directly.
+      const TREE_CONTENT = {
+        "README.md": "tree workspace readme\n",
+        "src/main.rs": 'fn main() {\n    println!("tree");\n}\n',
+        "src/nested/deep.txt": "deep tree content\n",
+        "docs/guide.md": "# Guide\n",
+        "docs/notes.md": "# Notes\n",
+        "docs/spec.md": "# Spec\n",
+      };
+      const treeContent = (openedWorkspaceBySocket.get(socket) ?? "").includes(
+        "file-tree",
+      )
+        ? TREE_CONTENT[path]
+        : undefined;
+      if (treeContent !== undefined) {
+        const bytes = Buffer.from(treeContent);
+        reply(socket, request.id, {
+          session_id: sessionId,
+          path,
+          size_bytes: bytes.length,
+          offset: 0,
+          eof: true,
+          mime_type: "text/plain",
+          encoding: "base64",
+          content_base64: bytes.toString("base64"),
+        });
+        return;
+      }
       const entry = [...deliveredFiles.entries()].find(([key]) => {
         if (!key.startsWith(`${sessionId}\n`)) return false;
         if (path.startsWith(".artifacts/delivered/")) {
@@ -6579,6 +6607,60 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/files.list") {
+      // T-0417 tree listing (UPCR-2026-RDA916EB5 shape): only workspaces
+      // marked "file-tree" answer the tree fields; everyone else gets the
+      // legacy flat listing, so the web's fallback stays exercised.
+      if (
+        (request.params.prefix !== undefined ||
+          request.params.depth !== undefined) &&
+        (openedWorkspaceBySocket.get(socket) ?? "").includes("file-tree")
+      ) {
+        const TREE = {
+          "": [
+            { filename: "src", path: "src", kind: "dir" },
+            { filename: "docs", path: "docs", kind: "dir" },
+            { filename: "README.md", path: "README.md", kind: "file" },
+          ],
+          src: [
+            { filename: "nested", path: "src/nested", kind: "dir" },
+            { filename: "main.rs", path: "src/main.rs", kind: "file" },
+          ],
+          "src/nested": [
+            { filename: "deep.txt", path: "src/nested/deep.txt", kind: "file" },
+          ],
+          docs: [
+            { filename: "guide.md", path: "docs/guide.md", kind: "file" },
+            { filename: "notes.md", path: "docs/notes.md", kind: "file" },
+            { filename: "spec.md", path: "docs/spec.md", kind: "file" },
+          ],
+        };
+        const prefix = request.params.prefix ?? "";
+        if (!(prefix in TREE)) {
+          replyError(socket, request.id, -32602, `prefix not found: ${prefix}`);
+          return;
+        }
+        let entries = TREE[prefix];
+        let nextCursor;
+        // Page the docs folder to exercise keyset pagination.
+        if (prefix === "docs" && !request.params.cursor) {
+          entries = entries.slice(0, 2);
+          nextCursor = entries.at(-1).path;
+        } else if (request.params.cursor) {
+          const at = entries.findIndex(
+            (entry) => entry.path === request.params.cursor,
+          );
+          entries = at >= 0 ? entries.slice(at + 1) : [];
+        }
+        reply(socket, request.id, {
+          files: entries.map((entry) => ({
+            ...entry,
+            size_bytes: 100,
+            modified_at: "2026-11-07T00:00:00Z",
+          })),
+          ...(nextCursor ? { next_cursor: nextCursor } : {}),
+        });
+        return;
+      }
       const delivered = [...deliveredFiles.entries()]
         .filter(
           ([key, file]) =>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PlanUpdated,
   UiProtocolCapabilities,
@@ -10,7 +10,7 @@ import type { AttachmentAccess } from "../timeline/attachment-access.ts";
 import type { WorkspaceBrowseAdapter } from "../workspace-create/workspace-browse.ts";
 import type { AutonomyClient } from "../autonomy/binding.ts";
 import { AutomationTab } from "./AutomationTab.tsx";
-import { FilesTab } from "./FilesTab.tsx";
+import { FilesTab, type FilesTabProps } from "./FilesTab.tsx";
 import { OutputsTab } from "./OutputsTab.tsx";
 import { OverviewTab } from "./OverviewTab.tsx";
 import type { SessionPanelTab } from "./panel-layout.ts";
@@ -37,6 +37,10 @@ export interface SessionPanelHostProps {
   selectedPath: string | null;
   onSelectPath: (path: string | null) => void;
   browse: WorkspaceBrowseAdapter | null;
+  /** The real workspace tree (T-0417); null without the listing surface. */
+  tree: FilesTabProps["tree"];
+  /** Open a workspace file that is not a recorded change: select + preview. */
+  onOpenPath?: ((path: string) => void) | undefined;
   changes: readonly SessionFileChange[];
   /** This tab undid the Session's latest turn (and has not redone it). */
   changesUndone?: boolean;
@@ -65,6 +69,39 @@ export interface SessionPanelHostProps {
 /** The session panel with its tabs wired to the open Session's state. */
 export function SessionPanelHost(props: SessionPanelHostProps) {
   const t = useUiText();
+  // T-0417: probe the workspace tree once per root. undefined while probing;
+  // null when this Core answers with the legacy flat listing (older server).
+  const [treeProbe, setTreeProbe] = useState<{
+    root: string;
+    page:
+      | {
+          entries: { name: string; path: string; kind: "file" | "dir" }[];
+          nextCursor: string | null;
+        }
+      | null
+      | undefined;
+  }>({ root: props.workspaceRoot, page: undefined });
+  useEffect(() => {
+    const tree = props.tree;
+    if (!tree) return;
+    let live = true;
+    const root = props.workspaceRoot;
+    setTreeProbe({ root, page: undefined });
+    tree.list("").then(
+      (result) =>
+        live &&
+        setTreeProbe({ root, page: result.supported ? result.page : null }),
+      () => live && setTreeProbe({ root, page: null }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [props.tree, props.workspaceRoot]);
+  const treePage =
+    props.tree && treeProbe.root === props.workspaceRoot
+      ? treeProbe.page
+      : undefined;
+  const treeListed = props.tree !== null && Boolean(treePage);
   const selected = resolvePanelFile(
     props.selectedPath,
     props.workspaceRoot,
@@ -120,7 +157,17 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
       props.onOpenPreview(selectedPreviewId);
     else props.onRefreshChanges();
   };
-  const missing = props.selectedPath !== null && !selected.found;
+  // A tree-picked file is no Session change or delivery, yet readable from
+  // the workspace — only the retained-records miss is "gone" (T-0417).
+  const workspaceReadable =
+    treeListed &&
+    props.selectedPath !== null &&
+    Boolean(
+      props.access?.downloadWorkspaceFile &&
+      props.access.workspacePathAvailable?.(props.selectedPath),
+    );
+  const missing =
+    props.selectedPath !== null && !selected.found && !workspaceReadable;
 
   const written = props.changes.filter(
     (change) => change.operation !== "delete",
@@ -211,8 +258,15 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
           root={props.workspaceRoot}
           selectedPath={props.selectedPath}
           browse={props.browse}
+          tree={props.tree}
+          treePage={treePage}
           changes={props.changes}
           onOpenChange={openChange}
+          onOpenPath={(path) =>
+            props.onOpenPath
+              ? props.onOpenPath(path)
+              : (props.onSelectPath(path), props.onTabChange("outputs"))
+          }
         />
       ) : props.tab === "changes" ? (
         <ChangesView
@@ -240,6 +294,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
           changes={props.changes}
           delivered={props.delivered}
           access={props.access}
+          workspaceListed={treeListed}
           tasks={props.tasks}
           selectedPath={props.selectedPath}
           selected={selected}
