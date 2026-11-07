@@ -5,14 +5,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      update_visual_snapshots:
-        description: "Regenerate e2e visual baselines in the CI environment"
-        type: boolean
-        default: false
-      visual_spec_filter:
-        description: "Which visual spec to update"
-        default: e2e/visual.spec.ts
 
 permissions:
   contents: read
@@ -73,16 +65,10 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    # Temporarily 20 (was 15): shards that run long suites (e.g. usage-ledger)
-    # are cancelled past the cap even though they would finish — shu 11-06,
-    # runs 42234677151 e2e(4) / 42205260930 e2e(3). Test diet is the real
-    # fix; this just stops the false cancellations. No new shards.
-    timeout-minutes: 20
+    timeout-minutes: 15
     # Playwright runs the suite with a single worker on purpose (the specs
     # share one stateful fixture process), so the way to keep it inside the
     # cap is more jobs, not more workers: each shard gets its own fixture.
-    # Baseline regeneration stays on shard 1, which is where
-    # e2e/visual.spec.ts lands.
     strategy:
       fail-fast: false
       matrix:
@@ -98,21 +84,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      # Baseline regeneration: dispatch with update_visual_snapshots=true,
-      # then download the visual-baselines artifact and commit it (keeps
-      # baselines rendered by the same engine and fonts as CI).
       - name: Run all browser regressions
-        if: inputs.update_visual_snapshots != true
         run: pnpm test:e2e --shard=${{ matrix.shard }}/4
-      - name: Regenerate visual baselines
-        if: inputs.update_visual_snapshots == true && matrix.shard == 1
-        run: pnpm test:e2e e2e/visual.spec.ts --update-snapshots
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: failure() || inputs.update_visual_snapshots == true
-        with:
-          name: visual-baselines-shard-${{ matrix.shard }}
-          path: e2e/visual.spec.ts-snapshots/
-          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
