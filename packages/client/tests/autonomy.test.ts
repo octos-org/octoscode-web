@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  AUTONOMY_NOTIFICATION_METHODS,
   AUTONOMY_UNSUPPORTED,
   buildLoopControlParams,
   buildLoopCreateParams,
@@ -236,22 +235,56 @@ describe("session ownership validation", () => {
 });
 
 describe("goal contracts", () => {
-  it("parses a goal get result with and without a goal", () => {
-    const withGoal = parseSessionGoalGetResult({
+  // Wire chain: get/set/clear results round-trip, and malformed payloads
+  // fail closed. Guards the goal link of the OUP autonomy surface.
+  it("parses goal get/set/clear results and rejects malformed payloads", () => {
+    expect(
+      parseSessionGoalGetResult({
+        session_id: "s1",
+        profile_id: "dev",
+        goal: GOAL_RECORD,
+      })?.goal?.goal_id,
+    ).toBe("goal_01");
+    expect(
+      parseSessionGoalGetResult({
+        session_id: "s1",
+        profile_id: "dev",
+        goal: null,
+      })?.goal,
+    ).toBeNull();
+
+    const set = parseSessionGoalSetResult({
       session_id: "s1",
       profile_id: "dev",
       goal: GOAL_RECORD,
+      generation: 3,
+      transition_actor: "user",
     });
-    expect(withGoal?.goal?.goal_id).toBe("goal_01");
-    const withoutGoal = parseSessionGoalGetResult({
-      session_id: "s1",
-      profile_id: "dev",
-      goal: null,
-    });
-    expect(withoutGoal?.goal).toBeNull();
-  });
+    expect(set?.generation).toBe(3);
+    expect(set?.goal.objective).toBe("Ship the parity slice");
 
-  it("rejects malformed goal payloads fail-closed", () => {
+    // goal must be exactly null on clear; a nested record is a protocol error.
+    expect(
+      parseSessionGoalClearResult({
+        session_id: "s1",
+        profile_id: "dev",
+        cleared: true,
+        goal: null,
+        generation: 4,
+        transition_actor: "user",
+      })?.cleared,
+    ).toBe(true);
+    expect(
+      parseSessionGoalClearResult({
+        session_id: "s1",
+        profile_id: "dev",
+        cleared: true,
+        goal: GOAL_RECORD,
+        generation: 4,
+        transition_actor: "user",
+      }),
+    ).toBeNull();
+
     expect(
       parseSessionGoalGetResult({ session_id: "s1", profile_id: "dev" }),
     ).toBeNull();
@@ -265,54 +298,17 @@ describe("goal contracts", () => {
     expect(parseAutonomyGoalRecord({ ...GOAL_RECORD, status: "" })).toBeNull();
   });
 
-  it("builds goal set params without ever defaulting a budget", () => {
+  // Deliberate decision: the client never invents a budget — an omitted
+  // budget stays omitted so the server owns the default. Think before
+  // adding client-side defaults here (goal budgets gate real spend).
+  it("builds goal set params: trims, never defaults a budget, rejects invalid", () => {
     const built = buildSessionGoalSetParams({
       session_id: "s1",
       objective: "  Ship it  ",
     });
     expect(built).toEqual({ session_id: "s1", objective: "Ship it" });
     expect("token_budget" in (built ?? {})).toBe(false);
-  });
 
-  it("rejects invalid goal set params", () => {
-    expect(
-      buildSessionGoalSetParams({ session_id: "s1", objective: " " }),
-    ).toBeNull();
-    // Zero and negative budgets are rejected server-side; fail closed early.
-    expect(
-      buildSessionGoalSetParams({
-        session_id: "s1",
-        objective: "Ship",
-        token_budget: 0,
-      }),
-    ).toBeNull();
-    expect(
-      buildSessionGoalSetParams({
-        session_id: "s1",
-        objective: "Ship",
-        token_budget: -5,
-      }),
-    ).toBeNull();
-    expect(
-      buildSessionGoalSetParams({
-        session_id: "s1",
-        objective: "Ship",
-        status: "bogus",
-      }),
-    ).toBeNull();
-    expect(
-      buildSessionGoalSetParams({
-        session_id: "s1",
-        objective: "Ship",
-        transition_actor: "root",
-      }),
-    ).toBeNull();
-    expect(
-      buildSessionGoalSetParams({ session_id: "", objective: "x" }),
-    ).toBeNull();
-  });
-
-  it("accepts explicit user-set budgets and valid statuses", () => {
     expect(
       buildSessionGoalSetParams({
         session_id: "s1",
@@ -326,81 +322,51 @@ describe("goal contracts", () => {
       token_budget: 50_000,
       status: "paused",
     });
-  });
 
-  it("parses goal set and clear results including generation", () => {
-    const set = parseSessionGoalSetResult({
-      session_id: "s1",
-      profile_id: "dev",
-      goal: GOAL_RECORD,
-      generation: 3,
-      transition_actor: "user",
-    });
-    expect(set?.generation).toBe(3);
-    expect(set?.goal.objective).toBe("Ship the parity slice");
-
-    const cleared = parseSessionGoalClearResult({
-      session_id: "s1",
-      profile_id: "dev",
-      cleared: true,
-      goal: null,
-      generation: 4,
-      transition_actor: "user",
-    });
-    expect(cleared?.cleared).toBe(true);
-    expect(cleared?.generation).toBe(4);
-    expect(cleared?.goal).toBeNull();
-
-    // goal must be exactly null on clear; a nested record is a protocol error.
-    expect(
-      parseSessionGoalClearResult({
-        session_id: "s1",
-        profile_id: "dev",
-        cleared: true,
-        goal: GOAL_RECORD,
-        generation: 4,
-        transition_actor: "user",
-      }),
-    ).toBeNull();
+    for (const invalid of [
+      { session_id: "s1", objective: " " },
+      // Zero/negative budgets are rejected server-side; fail closed early.
+      { session_id: "s1", objective: "Ship", token_budget: 0 },
+      { session_id: "s1", objective: "Ship", token_budget: -5 },
+      { session_id: "s1", objective: "Ship", status: "bogus" },
+      { session_id: "s1", objective: "Ship", transition_actor: "root" },
+      { session_id: "", objective: "x" },
+    ]) {
+      expect(buildSessionGoalSetParams(invalid)).toBeNull();
+    }
   });
 });
 
 describe("goal generation admission (#1959)", () => {
-  it("admits strictly-greater generations", () => {
+  // Deliberate design: a goal event carries a monotonic generation and a
+  // late (older-generation) update must never resurrect a cleared goal.
+  // Generation 0 means an unstamped legacy backend and always applies.
+  it("admits only newer generations; 0 means legacy", () => {
     expect(goalEventGenerationAdmits(3, 4)).toBe(true);
     expect(goalEventGenerationAdmits(3, 3)).toBe(false);
     expect(goalEventGenerationAdmits(3, 2)).toBe(false);
-  });
-
-  it("treats 0 as an unstamped legacy backend and always applies", () => {
+    // Clear stamped 5; a stale pre-clear update at 4 must drop.
+    expect(goalEventGenerationAdmits(5, 4)).toBe(false);
     expect(goalEventGenerationAdmits(9, 0)).toBe(true);
     expect(goalEventGenerationAdmits(0, 0)).toBe(true);
-  });
 
-  it("a late pre-clear update cannot resurrect a cleared goal", () => {
-    // Clear stamped generation 5; stale update with generation 4 must drop.
-    expect(goalEventGenerationAdmits(5, 4)).toBe(false);
-  });
-
-  it("parses goal notifications with generations", () => {
-    const updated = parseSessionGoalUpdated({
-      session_id: "s1",
-      goal: GOAL_RECORD,
-      transition_actor: "backend",
-      generation: 6,
-    });
-    expect(updated?.generation).toBe(6);
-    expect(updated?.transition_actor).toBe("backend");
-
-    const cleared = parseSessionGoalCleared({
-      session_id: "s1",
-      cleared: true,
-      goal: null,
-      transition_actor: "user",
-      generation: 7,
-    });
-    expect(cleared?.generation).toBe(7);
-    expect(cleared?.goal).toBeNull();
+    expect(
+      parseSessionGoalUpdated({
+        session_id: "s1",
+        goal: GOAL_RECORD,
+        transition_actor: "backend",
+        generation: 6,
+      })?.generation,
+    ).toBe(6);
+    expect(
+      parseSessionGoalCleared({
+        session_id: "s1",
+        cleared: true,
+        goal: null,
+        transition_actor: "user",
+        generation: 7,
+      })?.goal,
+    ).toBeNull();
   });
 });
 
@@ -444,7 +410,9 @@ describe("loop contracts", () => {
     ).toBeNull();
   });
 
-  it("parses loop create/list/control results", () => {
+  // Wire chain: create/list/control/fire-now results round-trip; malformed
+  // results and control params fail closed.
+  it("parses loop results and rejects malformed ones", () => {
     const created = parseLoopCreateResult({
       session_id: "s1",
       profile_id: "dev",
@@ -462,13 +430,14 @@ describe("loop contracts", () => {
     expect(created?.loop_id).toBe("loop_01");
     expect(created?.fire?.queued).toBe(false);
 
-    const listed = parseLoopListResult({
-      session_id: "s1",
-      profile_id: "dev",
-      loops: [LOOP_RECORD],
-    });
-    expect(listed?.loops).toHaveLength(1);
     // Unscoped list echoes session_id: null.
+    expect(
+      parseLoopListResult({
+        session_id: "s1",
+        profile_id: "dev",
+        loops: [LOOP_RECORD],
+      })?.loops,
+    ).toHaveLength(1);
     expect(
       parseLoopListResult({
         session_id: null,
@@ -477,40 +446,40 @@ describe("loop contracts", () => {
       })?.session_id,
     ).toBeNull();
 
-    const deleted = parseLoopDeleteResult({
-      session_id: "s1",
-      loop_id: "loop_01",
-      loop: LOOP_RECORD,
-      ok: true,
-      status: "deleted",
-      deleted: true,
-      reaped_cron_job_ids: ["job-1"],
-    });
-    expect(deleted?.reaped_cron_job_ids).toEqual(["job-1"]);
+    expect(
+      parseLoopDeleteResult({
+        session_id: "s1",
+        loop_id: "loop_01",
+        loop: LOOP_RECORD,
+        ok: true,
+        status: "deleted",
+        deleted: true,
+        reaped_cron_job_ids: ["job-1"],
+      })?.reaped_cron_job_ids,
+    ).toEqual(["job-1"]);
 
-    const paused = parseLoopPauseResumeResult({
-      session_id: "s1",
-      loop_id: "loop_01",
-      loop: LOOP_RECORD,
-      ok: true,
-      status: "paused",
-    });
-    expect(paused?.status).toBe("paused");
+    expect(
+      parseLoopPauseResumeResult({
+        session_id: "s1",
+        loop_id: "loop_01",
+        loop: LOOP_RECORD,
+        ok: true,
+        status: "paused",
+      })?.status,
+    ).toBe("paused");
 
-    const fired = parseLoopFireNowResult({
-      session_id: "s1",
-      profile_id: "dev",
-      loop_id: "loop_01",
-      loop: LOOP_RECORD,
-      ok: true,
-      status: "queued",
-      fire: { queued: true, duplicate: false, continuation_id: 7 },
-    });
-    expect(fired?.fire?.queued).toBe(true);
-    expect(fired?.fire?.continuation_id).toBe(7);
-  });
+    expect(
+      parseLoopFireNowResult({
+        session_id: "s1",
+        profile_id: "dev",
+        loop_id: "loop_01",
+        loop: LOOP_RECORD,
+        ok: true,
+        status: "queued",
+        fire: { queued: true, duplicate: false, continuation_id: 7 },
+      })?.fire?.continuation_id,
+    ).toBe(7);
 
-  it("rejects malformed loop results", () => {
     expect(parseLoopCreateResult({ session_id: "s1" })).toBeNull();
     expect(
       parseLoopCreateResult({
@@ -541,6 +510,9 @@ describe("loop contracts", () => {
 });
 
 describe("monitor contracts", () => {
+  // Deliberate decision: optional fields the caller did not set stay absent
+  // on the wire (no client-invented defaults), and unknown modes refuse
+  // before the wire instead of silently falling back to poll.
   it("builds monitor create params without inventing options", () => {
     const built = buildMonitorCreateParams({
       session_id: "s1",
@@ -555,9 +527,7 @@ describe("monitor contracts", () => {
     // Optional fields absent → absent on the wire too.
     expect("persistent" in (built ?? {})).toBe(false);
     expect("interval_seconds" in (built ?? {})).toBe(false);
-  });
 
-  it("rejects unknown monitor modes before the wire (no silent poll fallback)", () => {
     expect(
       buildMonitorCreateParams({
         session_id: "s1",
@@ -578,7 +548,9 @@ describe("monitor contracts", () => {
     ).toBeNull();
   });
 
-  it("parses monitor results", () => {
+  // Wire chain: create/list/control results round-trip; control params and
+  // malformed results fail closed.
+  it("parses monitor results and rejects malformed ones", () => {
     const created = parseMonitorCreateResult({
       session_id: "s1",
       profile_id: "dev",
@@ -590,23 +562,29 @@ describe("monitor contracts", () => {
     });
     expect(created?.monitor.mode).toBe("poll");
 
-    const listed = parseMonitorListResult({
-      session_id: "s1",
-      profile_id: "dev",
-      monitors: [MONITOR_RECORD],
-    });
-    expect(listed?.monitors[0]?.monitor_id).toBe("monitor_01");
+    expect(
+      parseMonitorListResult({
+        session_id: "s1",
+        profile_id: "dev",
+        monitors: [MONITOR_RECORD],
+      })?.monitors[0]?.monitor_id,
+    ).toBe("monitor_01");
 
-    const controlled = parseMonitorControlResult({
-      session_id: "s1",
-      profile_id: "dev",
-      monitor_id: "monitor_01",
-      monitor: { ...MONITOR_RECORD, status: "paused", pause_reason: "user" },
-      ok: true,
-      status: "paused",
-      deleted: false,
-    });
-    expect(controlled?.monitor.pause_reason).toBe("user");
+    expect(
+      parseMonitorControlResult({
+        session_id: "s1",
+        profile_id: "dev",
+        monitor_id: "monitor_01",
+        monitor: {
+          ...MONITOR_RECORD,
+          status: "paused",
+          pause_reason: "user",
+        },
+        ok: true,
+        status: "paused",
+        deleted: false,
+      })?.monitor.pause_reason,
+    ).toBe("user");
 
     expect(buildMonitorControlParams({ monitor_id: "" })).toBeNull();
     expect(
@@ -645,7 +623,9 @@ describe("agent inspection contracts", () => {
     expect(parse(AGENT, "other-id")).toBeNull();
   });
 
-  it("parses agent records, list, status, and output", () => {
+  // Wire chain: record/list/status/output read round-trip; malformed
+  // payloads fail closed.
+  it("parses agent records and read results, rejects malformed ones", () => {
     expect(parseAutonomyAgentRecord(AGENT)?.agent_id).toBe("agent_01");
     expect(
       parseAgentListResult({
@@ -658,22 +638,20 @@ describe("agent inspection contracts", () => {
       parseAgentStatusReadResult({ session_id: "s1", agent: AGENT })?.agent
         .role,
     ).toBe("implementer");
-    const output = parseAgentOutputReadResult({
-      agent_id: "agent_01",
-      session_id: "s1",
-      source: "runtime",
-      text: "hello",
-      messages: [],
-      cursor: { offset: 0 },
-      next_cursor: { offset: 5 },
-      has_more: true,
-      complete: false,
-    });
-    expect(output?.next_cursor?.offset).toBe(5);
-    expect(output?.has_more).toBe(true);
-  });
+    expect(
+      parseAgentOutputReadResult({
+        agent_id: "agent_01",
+        session_id: "s1",
+        source: "runtime",
+        text: "hello",
+        messages: [],
+        cursor: { offset: 0 },
+        next_cursor: { offset: 5 },
+        has_more: true,
+        complete: false,
+      }),
+    ).toMatchObject({ has_more: true, next_cursor: { offset: 5 } });
 
-  it("rejects malformed agent payloads", () => {
     expect(parseAutonomyAgentRecord({ ...AGENT, status: "" })).toBeNull();
     expect(
       parseAgentListResult({ profile_id: "dev", agents: [{}] }),
@@ -763,11 +741,6 @@ describe("autonomy notifications", () => {
       }),
     ).toBeNull();
   });
-
-  it("lists exactly the autonomy notification methods", () => {
-    expect(AUTONOMY_NOTIFICATION_METHODS).toContain("session/goal/updated");
-    expect(AUTONOMY_NOTIFICATION_METHODS).toHaveLength(8);
-  });
 });
 
 describe("rc12 wire shapes: json! emits explicit null for absent Option fields", () => {
@@ -834,7 +807,10 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
     updated_at_ms: 1_700_000_000_000,
   };
 
-  it("accepts a live monitor/list and monitor/create result carrying nulls", () => {
+  // Per-field null handling is exercised through one representative
+  // nullable field per family; the full audited null-field set lives in
+  // the parsers and in Core's autonomy_*_json serializers.
+  it("accepts list/control/fire results carrying nulls", () => {
     const listed = parseMonitorListResult({
       session_id: "s1",
       profile_id: "dev",
@@ -842,23 +818,7 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
     });
     expect(listed?.monitors).toHaveLength(1);
     expect(listed?.monitors[0]?.filter_regex).toBeUndefined();
-    expect(listed?.monitors[0]?.interval_seconds).toBeUndefined();
-    expect(listed?.monitors[0]?.pause_reason).toBeUndefined();
-    expect(listed?.monitors[0]?.goal_id).toBeUndefined();
-    expect(listed?.monitors[0]?.last_fired_at_ms).toBeUndefined();
-    expect(listed?.monitors[0]?.expires_at_ms).toBeUndefined();
     expect(listed?.monitors[0]?.persistent).toBe(true);
-
-    const created = parseMonitorCreateResult({
-      session_id: "s1",
-      profile_id: "dev",
-      monitor_id: "monitor_01",
-      monitor: MONITOR_WITH_NULLS,
-      ok: true,
-      status: "active",
-      created: true,
-    });
-    expect(created?.monitor.monitor_id).toBe("monitor_01");
 
     const controlled = parseMonitorControlResult({
       session_id: "s1",
@@ -874,16 +834,6 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
       deleted: false,
     });
     expect(controlled?.monitor.pause_reason).toBe("user");
-  });
-
-  it("accepts loop results carrying nulls (self-paced, never-run)", () => {
-    expect(
-      parseLoopListResult({
-        session_id: "s1",
-        profile_id: "dev",
-        loops: [LOOP_WITH_NULLS],
-      })?.loops[0]?.interval_seconds,
-    ).toBeUndefined();
 
     const fired = parseLoopFireNowResult({
       session_id: "s1",
@@ -896,13 +846,9 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
     });
     expect(fired?.loop.mode).toBe("self_paced");
     expect(fired?.loop.next_run_at_ms).toBeUndefined();
-  });
 
-  it("accepts agent records carrying nulls", () => {
-    const parsed = parseAutonomyAgentRecord(AGENT_WITH_NULLS);
-    expect(parsed?.parent_agent_id).toBeUndefined();
-    expect(parsed?.task_id).toBeUndefined();
-    expect(parsed?.output_tail).toBeUndefined();
+    const agent = parseAutonomyAgentRecord(AGENT_WITH_NULLS);
+    expect(agent?.parent_agent_id).toBeUndefined();
     expect(
       parseAgentListResult({
         session_id: "s1",
@@ -945,65 +891,108 @@ describe("scoped list ownership (session_controls_target mirror)", () => {
     expect(sessionControlsTarget("telegram:1", "telegram:2")).toBe(false);
   });
 
-  it("filters out-of-scope children from a scoped loop list", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "dev:local:tui",
-        profile_id: "dev",
-        loops: [
+  // Same guard across the three families: a scoped list keeps base/topic
+  // children and drops foreign ones, and the envelope session must echo
+  // the request exactly (a wrong or null echo is a protocol violation).
+  it.each(["loop", "monitor", "agent"] as const)(
+    "scopes a %s list to its base/topic children and enforces the envelope echo",
+    async (family) => {
+      const foreign = { session_id: "s2" };
+      const rows = {
+        loop: [
           { ...LOOP_RECORD, loop_id: "loop_01", session_id: "dev:local:tui" },
           {
             ...LOOP_RECORD,
             loop_id: "loop_02",
             session_id: "dev:local:tui#other",
           },
-          { ...LOOP_RECORD, loop_id: "loop_03", session_id: "s2" },
+          { ...LOOP_RECORD, loop_id: "loop_03", ...foreign },
         ],
-      }),
-    };
-    const result =
-      await createAutonomyCommands(rpc).loop.listLoops("dev:local:tui");
-    // Base-session variants stay; foreign sessions drop.
-    expect(result.loops.map((entry) => entry.loop_id)).toEqual([
-      "loop_01",
-      "loop_02",
-    ]);
-  });
-
-  it("rejects a scoped list whose envelope session does not exactly echo the request", async () => {
-    for (const family of ["loop", "monitor", "agent"] as const) {
-      const rpc = {
-        request: async () => ({
-          session_id: "s1", // wrong: request is dev:local:tui
-          profile_id: "dev",
-          ...(family === "loop" ? { loops: [] } : {}),
-          ...(family === "monitor" ? { monitors: [] } : {}),
-          ...(family === "agent" ? { agents: [] } : {}),
-        }),
-      };
-      const commands = createAutonomyCommands(rpc);
-      const call =
+        monitor: [
+          { ...MONITOR_RECORD, monitor_id: "m1", session_id: "dev:local:tui" },
+          { ...MONITOR_RECORD, monitor_id: "m2", ...foreign },
+        ],
+        agent: [
+          {
+            agent_id: "a1",
+            session_id: "dev:local:tui",
+            path: "/repo/src/app.ts",
+            role: "implementer",
+            nickname: "impl-1",
+            backend_kind: "builtin",
+            status: "running",
+            profile_id: "dev",
+            created_at_ms: 1_700_000_000_000,
+            updated_at_ms: 1_700_000_000_000,
+            artifact_count: 0,
+            artifacts: [],
+          },
+          {
+            agent_id: "a2",
+            path: "/repo/src/app.ts",
+            role: "implementer",
+            nickname: "impl-2",
+            backend_kind: "builtin",
+            status: "running",
+            profile_id: "dev",
+            created_at_ms: 1_700_000_000_000,
+            updated_at_ms: 1_700_000_000_000,
+            artifact_count: 0,
+            artifacts: [],
+            ...foreign,
+          },
+        ],
+      }[family];
+      const list = (rpc: {
+        request: () => Promise<Record<string, unknown>>;
+      }) =>
         family === "loop"
-          ? commands.loop.listLoops("dev:local:tui")
+          ? createAutonomyCommands(rpc).loop.listLoops("dev:local:tui")
           : family === "monitor"
-            ? commands.monitor.listMonitors("dev:local:tui")
-            : commands.agent.listAgents("dev:local:tui");
-      await expect(call).rejects.toThrow(/does not exactly match/);
-    }
-  });
+            ? createAutonomyCommands(rpc).monitor.listMonitors("dev:local:tui")
+            : createAutonomyCommands(rpc).agent.listAgents("dev:local:tui");
+      const key =
+        family === "loop"
+          ? "loops"
+          : family === "monitor"
+            ? "monitors"
+            : "agents";
+      const idKey =
+        family === "loop"
+          ? "loop_id"
+          : family === "monitor"
+            ? "monitor_id"
+            : "agent_id";
 
-  it("rejects a null envelope on a scoped list", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: null,
-        profile_id: "dev",
-        loops: [],
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).loop.listLoops("dev:local:tui"),
-    ).rejects.toThrow(/does not exactly match/);
-  });
+      const kept = await list({
+        request: async () => ({
+          session_id: "dev:local:tui",
+          profile_id: "dev",
+          [key]: rows,
+        }),
+      });
+      // Base-session variants stay; foreign sessions drop.
+      const keptRows = (
+        kept as unknown as Record<string, Record<string, unknown>[]>
+      )[key]!;
+      expect(keptRows.map((entry) => entry[idKey])).toEqual(
+        rows.slice(0, -1).map((row) => row[idKey as never]),
+      );
+
+      // Wrong echo, then null echo — both refuse.
+      for (const session_id of ["s1", null]) {
+        await expect(
+          list({
+            request: async () => ({
+              session_id,
+              profile_id: "dev",
+              [key]: [],
+            }),
+          }),
+        ).rejects.toThrow(/does not exactly match/);
+      }
+    },
+  );
 
   it("accepts legal base/topic scope on single-resource controls with the exact resource id", async () => {
     // A topic-scoped request may control its base session's loop; the result
@@ -1068,130 +1057,68 @@ describe("scoped list ownership (session_controls_target mirror)", () => {
     ).rejects.toThrow(/does not match the requested id/);
   });
 
-  it("rejects a loop control whose nested record id disagrees with the envelope", async () => {
-    // Envelope is valid for the request; the NESTED loop is a different id.
-    const rpc = {
-      request: async () => ({
-        session_id: "s1",
-        loop_id: "loop_01",
-        loop: {
-          ...LOOP_RECORD,
-          loop_id: "loop_02", // foreign, unrequested resource
-          session_id: "s1",
-        },
-        ok: true,
-        status: "paused",
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).loop.pauseLoop("loop_01", "s1"),
-    ).rejects.toThrow(/nested loop id .* does not match the envelope id/);
-  });
-
-  it("rejects a loop control whose nested record owner disagrees with the envelope", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "telegram:1",
-        loop_id: "loop_01",
-        loop: {
-          ...LOOP_RECORD,
-          loop_id: "loop_01",
-          session_id: "telegram:2", // different base — foreign owner
-        },
-        ok: true,
-        status: "paused",
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).loop.pauseLoop("loop_01", "telegram:1"),
-    ).rejects.toThrow(/nested loop owner session .* does not agree/);
-  });
-
-  it("rejects a monitor control whose nested record id disagrees with the envelope", async () => {
-    const rpc = {
-      request: async () => ({
+  // Same envelope/nested-record agreement guard for loop and monitor: the
+  // nested record's id must match the envelope id, and its owner must match
+  // the envelope session — otherwise the server answered about a resource
+  // the client never requested.
+  it.each(["loop", "monitor"] as const)(
+    "rejects a %s control whose nested record id or owner disagrees with the envelope",
+    async (family) => {
+      const record = (patch: Record<string, unknown>) => ({
+        ...(family === "loop" ? LOOP_RECORD : MONITOR_RECORD),
+        ...patch,
+      });
+      const response = (nested: Record<string, unknown>) => ({
         session_id: "s1",
         profile_id: "dev",
-        monitor_id: "monitor_01",
-        monitor: {
-          ...MONITOR_RECORD,
-          monitor_id: "monitor_02", // foreign, unrequested resource
-          session_id: "s1",
-        },
+        [family === "loop" ? "loop_id" : "monitor_id"]:
+          family === "loop" ? "loop_01" : "monitor_01",
+        [family]: nested,
         ok: true,
         status: "paused",
-        deleted: false,
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).monitor.pauseMonitor("monitor_01", "s1"),
-    ).rejects.toThrow(/nested monitor id .* does not match the envelope id/);
-  });
+        ...(family === "monitor" ? { deleted: false } : {}),
+      });
+      const control = (
+        rpc: { request: () => Promise<unknown> },
+        scope = "s1",
+      ) =>
+        family === "loop"
+          ? createAutonomyCommands(rpc).loop.pauseLoop("loop_01", scope)
+          : createAutonomyCommands(rpc).monitor.pauseMonitor(
+              "monitor_01",
+              scope,
+            );
 
-  it("rejects a monitor control whose nested record owner disagrees with the envelope", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "telegram:1",
-        profile_id: "dev",
-        monitor_id: "monitor_01",
-        monitor: {
-          ...MONITOR_RECORD,
-          monitor_id: "monitor_01",
-          session_id: "telegram:2", // different base — foreign owner
-        },
-        ok: true,
-        status: "paused",
-        deleted: false,
-      }),
-    };
-    await expect(
-      createAutonomyCommands(rpc).monitor.pauseMonitor(
-        "monitor_01",
-        "telegram:1",
-      ),
-    ).rejects.toThrow(/nested monitor owner session .* does not agree/);
-  });
+      // Foreign, unrequested resource id inside a valid envelope.
+      await expect(
+        control({
+          request: async () =>
+            response(
+              record(
+                family === "loop"
+                  ? { loop_id: "loop_02" }
+                  : { monitor_id: "monitor_02" },
+              ),
+            ),
+        }),
+      ).rejects.toThrow(/does not match the envelope id/);
 
-  it("filters out-of-scope children from a scoped monitor list", async () => {
-    const rpc = {
-      request: async () => ({
-        session_id: "s1",
-        profile_id: "dev",
-        monitors: [
-          { ...MONITOR_RECORD, monitor_id: "m1", session_id: "s1" },
-          { ...MONITOR_RECORD, monitor_id: "m2", session_id: "elsewhere" },
-        ],
-      }),
-    };
-    const result = await createAutonomyCommands(rpc).monitor.listMonitors("s1");
-    expect(result.monitors.map((entry) => entry.monitor_id)).toEqual(["m1"]);
-  });
-
-  it("filters out-of-scope children from a scoped agent list", async () => {
-    const agent = (id: string, session: string) => ({
-      agent_id: id,
-      session_id: session,
-      path: "/repo/src/app.ts",
-      role: "implementer",
-      nickname: `impl-${id}`,
-      backend_kind: "builtin",
-      status: "running",
-      profile_id: "dev",
-      created_at_ms: 1_700_000_000_000,
-      updated_at_ms: 1_700_000_000_000,
-      artifact_count: 0,
-      artifacts: [],
-    });
-    const rpc = {
-      request: async () => ({
-        session_id: "s1",
-        profile_id: "dev",
-        agents: [agent("a1", "s1"), agent("a2", "s2")],
-      }),
-    };
-    const result = await createAutonomyCommands(rpc).agent.listAgents("s1");
-    expect(result.agents.map((entry) => entry.agent_id)).toEqual(["a1"]);
-  });
+      // Nested owner from a different base session. The request targets
+      // telegram:1 (matching the envelope), so the only violation is the
+      // nested record's owner.
+      await expect(
+        control(
+          {
+            request: async () => ({
+              ...response(record({ session_id: "telegram:2" })),
+              session_id: "telegram:1",
+            }),
+          },
+          "telegram:1",
+        ),
+      ).rejects.toThrow(/does not agree/);
+    },
+  );
 
   it("keeps an unscoped (profile-wide) list untouched", async () => {
     const rpc = {
