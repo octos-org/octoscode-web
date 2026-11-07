@@ -5,6 +5,13 @@ import type { PromptTurn } from "../composer/turn-queue.ts";
 import { SessionComposerDrafts } from "./session-composer-drafts.ts";
 import { AttachmentDraftStore } from "../media/attachment-drafts.ts";
 
+// What a user typed, attached and chose for thinking belongs to ONE Session
+// record (ADR 0021) and must survive every way a send can fail: returned
+// unsent, refused, stopped, redone. Each queue entry captures its own text,
+// media and effort at admission; a returned draft comes back in order without
+// replacing newer input; a retired record can no longer touch anything.
+// Before changing SessionComposerDrafts, expect these to fail if a draft,
+// image or choice could be lost, duplicated or applied to another Session.
 // This suite tests draft capture only; dispatch/recovery authority is covered by
 // the real queue-controller/record integration suites, not simulated here.
 function fixture() {
@@ -147,8 +154,8 @@ describe("record-owned composer inputs", () => {
     drafts.setShowReasoning(a, true);
     expect(drafts.get(a).showReasoning).toBe(false);
   });
-  it("restores server thinking choice once and captures each queue entry independently", () => {
-    const { a, b, drafts, submissions } = fixture();
+  it("restores server thinking choice once, captures each queue entry independently, and ignores a retired owner", () => {
+    const { a, b, drafts, submissions, retire } = fixture();
     expect(drafts.get(a).effort).toBe("high");
     expect(drafts.get(b).effort).toBeUndefined();
     expect(drafts.enqueue(a, "first")).toBe(true);
@@ -165,15 +172,14 @@ describe("record-owned composer inputs", () => {
     expect(new Set(submissions.map((turn) => turn.turnId)).size).toBe(3);
     expect(submissions[2]).not.toHaveProperty("reasoningEffort");
     expect(drafts.get(a).effort).toBeUndefined();
-  });
-  it("retired owners cannot enqueue or mutate a new Session's inputs", () => {
-    const { a, drafts, submissions, retire } = fixture();
-    drafts.get(a);
+
+    // A retired record can neither send nor change the inputs a new one gets.
+    drafts.setEffort(a, "low");
     retire();
     drafts.setEffort(a, "max");
-    expect(drafts.get(a).effort).toBe("high");
+    expect(drafts.get(a).effort).toBe("low");
     expect(drafts.enqueue(a, "stale")).toBe(false);
-    expect(submissions).toEqual([]);
+    expect(submissions).toHaveLength(3);
   });
   it("failed local admission reports kept draft and leaves input choice unchanged", () => {
     const { a, drafts, submissions, block } = fixture();
