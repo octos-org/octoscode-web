@@ -468,11 +468,11 @@ test("keeps a server-accepted turn and sibling records on the same pooled socket
   await expect.poll(() => ownerSocketClosed).toBe(true);
 });
 
-test("selects a New Session before the source turn/start acknowledgement arrives", async ({
+test("keeps A's held start across a New Session, retained targets and a return to A, then settles it in the background", async ({
   page,
   request,
 }) => {
-  const cwd = "/srv/work/delayed-turn-start-new-session";
+  const cwd = "/srv/work/delayed-turn-start-navigation";
   const sessionOpens = observeSessionOpens(page);
   let interruptRequests = 0;
   page.on("websocket", (socket) => {
@@ -486,11 +486,41 @@ test("selects a New Session before the source turn/start acknowledgement arrives
 
   const sidebar = productNavigation(page);
   const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
+  const workspace = sidebar.locator(
+    '[data-workspace-name="delayed-turn-start-navigation"]',
+  );
+  const selectedSessionId = async () => {
+    const sessionId = await sidebar
+      .locator('[role="treeitem"][data-session-id][aria-current="page"]')
+      .getAttribute("data-session-id");
+    if (!sessionId) throw new Error("Expected a selected Session id");
+    return sessionId;
+  };
+  const clickNewSession = async () => {
+    await workspace
+      .getByRole("button", {
+        name: "delayed-turn-start-navigation",
+        exact: true,
+      })
+      .hover();
+    await sidebar
+      .getByRole("button", {
+        name: "New session in delayed-turn-start-navigation",
+      })
+      .click();
+  };
+
+  // A, plus one retained record B opened before A's start is held.
   await expect(sessions).toHaveCount(1);
-  const originalSessionId = await sessions
-    .first()
-    .getAttribute("data-session-id");
-  if (!originalSessionId) throw new Error("Expected a confirmed Session id");
+  const sessionAId = await selectedSessionId();
+  await clickNewSession();
+  await expect(sessions).toHaveCount(2);
+  const sessionBId = await selectedSessionId();
+  expect(sessionBId).not.toBe(sessionAId);
+  const sessionA = sessionRowById(sidebar, sessionAId);
+  const sessionB = sessionRowById(sidebar, sessionBId);
+  await sessionA.click();
+  await expect(sessionA).toHaveAttribute("aria-current", "page");
 
   await holdNextTurnStart(request);
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
@@ -500,6 +530,7 @@ test("selects a New Session before the source turn/start acknowledgement arrives
   const held = await waitForHeldTurnStart(request);
   expect(held.armed).toBe(false);
 
+  // /stop cannot interrupt a turn Octos has not accepted yet.
   await composer.fill("/stop");
   await page.getByRole("button", { name: "Queue prompt" }).click();
   await expect(
@@ -507,28 +538,14 @@ test("selects a New Session before the source turn/start acknowledgement arrives
   ).toBeVisible();
   expect(interruptRequests).toBe(0);
 
+  // A New Session opens and is selected at once; A's start is not resent.
   const opensBeforeNavigation = sessionOpens.length;
-  const workspace = sidebar.locator(
-    '[data-workspace-name="' + "delayed-turn-start-new-session" + '"]',
-  );
-  await workspace
-    .getByRole("button", {
-      name: "delayed-turn-start-new-session",
-      exact: true,
-    })
-    .hover();
-  await sidebar
-    .getByRole("button", {
-      name: "New session in delayed-turn-start-new-session",
-    })
-    .click();
-
-  await expect(sessions).toHaveCount(2);
+  await clickNewSession();
+  await expect(sessions).toHaveCount(3);
   await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
-  await expect(sessionRowsExcept(sidebar, originalSessionId)).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  const sessionCId = await selectedSessionId();
+  expect([sessionAId, sessionBId]).not.toContain(sessionCId);
+  const sessionC = sessionRowById(sidebar, sessionCId);
   expect(await waitForHeldTurnStart(request)).toEqual(held);
   await expect(
     sidebar.locator('[role="alert"]').filter({
@@ -536,15 +553,43 @@ test("selects a New Session before the source turn/start acknowledgement arrives
     }),
   ).toHaveCount(0);
 
-  await settleHeldTurnStart(request, "release");
+  // Retained targets are selected immediately, without another open.
+  await sessionB.click();
+  await expect(sessionB).toHaveAttribute("aria-current", "page");
+  await sessionC.click();
+  await expect(sessionC).toHaveAttribute("aria-current", "page");
+  await sessionC.click();
 
-  await expect(sessions).toHaveCount(2);
-  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
-  const siblingSession = sessionRowsExcept(sidebar, originalSessionId);
-  await expect(siblingSession).toHaveAttribute("aria-current", "page");
+  // Returning to A before the acknowledgement shows the held start, not a
+  // cancelled one, and no queued navigation.
+  await sessionA.click();
+  await expect(sessionA).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "New Session opens next" }),
+  ).toHaveCount(0);
+  await sessionC.click();
+  await expect(sessionC).toHaveAttribute("aria-current", "page");
+
+  // Release: A completes in the background and the latest target keeps the
+  // selection. The only open since A's start was C's own. (Sidebar ids are
+  // scope keys, not the raw session/open ids, so the guard is the count.)
+  await settleHeldTurnStart(request, "release");
   await expect(
     sidebar.locator('[title="Completed in background"]'),
   ).toBeVisible();
+  await expect(sessionC).toHaveAttribute("aria-current", "page");
+  await expect(sessionB).not.toHaveAttribute("aria-current", "page");
+  await expect(sessions).toHaveCount(3);
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
+
+  // A's own record carries the reply to the start it never cancelled.
+  await sessionA.click();
+  await expect(sessionA).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByText("Completed with pnpm check and all tests passing."),
+  ).toBeVisible();
+  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
 });
 
 test("keeps B selected when A's unacknowledged start is rejected", async ({
@@ -721,343 +766,132 @@ test("keeps a missing timed-out turn unknown until a targeted lookup confirms te
   await expect(composer).toHaveValue("Keep this recovery draft");
 });
 
-test("recovers A's held start after B is already selected without reopening B", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/recovery-admits-held-turn";
-  const sessionOpens = observeSessionOpens(page);
-  const hydrateSessions: string[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = String(payload);
-      if (!frame.includes('"method":"session/hydrate"')) return;
-      const hydrate = JSON.parse(frame) as {
-        params?: { session_id?: unknown };
-      };
-      if (typeof hydrate.params?.session_id === "string") {
-        hydrateSessions.push(hydrate.params.session_id);
-      }
-    });
-  });
-  await connectAndStartWorkspace(page, cwd);
-
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  await holdNextTurnStart(request);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill(
-    "Recover this accepted turn before the RPC reply arrives",
-  );
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  const held = await waitForHeldTurnStart(request);
-  if (!held.held) throw new Error("Expected the held Session identity");
-
-  const opensBeforeNavigation = sessionOpens.length;
-  const workspace = sidebar.locator(
-    '[data-workspace-name="' + "recovery-admits-held-turn" + '"]',
-  );
-  await workspace
-    .getByRole("button", { name: "recovery-admits-held-turn", exact: true })
-    .hover();
-  await sidebar
-    .getByRole("button", { name: "New session in recovery-admits-held-turn" })
-    .click();
-  await expect(sessions).toHaveCount(2);
-  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
-  await expect(
-    page.getByRole("status").filter({ hasText: "New Session opens next" }),
-  ).toHaveCount(0);
-
-  const hydratesBeforeRecovery = hydrateSessions.length;
-  await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
-
-  await expect(sessions).toHaveCount(2);
-  await expect.poll(() => sessionOpens.length).toBe(opensBeforeNavigation + 1);
-  await expect
-    .poll(
-      () =>
-        hydrateSessions
-          .slice(hydratesBeforeRecovery)
-          .filter((sessionId) => sessionId === held.held?.session_id).length,
-    )
-    .toBe(1);
-  await expect(page.getByRole("button", { name: /^Starting/ })).toHaveCount(0);
-  await expect(
-    page.getByRole("status").filter({ hasText: /opens next|recovery before/ }),
-  ).toHaveCount(0);
-
-  await settleHeldTurnStart(request, "release");
-  await expect(sessions).toHaveCount(2);
-  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
-  await expect(
-    sidebar.locator('[title="Completed in background"]'),
-  ).toBeVisible();
-});
-
-test("parks a recovery-admitted approval as Waiting, not Working", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/recovery-admits-waiting-turn";
-  await connectAndStartWorkspace(page, cwd);
-
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const originalSessionId = await sessions
-    .first()
-    .getAttribute("data-session-id");
-  if (!originalSessionId) throw new Error("Expected the source Session id");
-
-  await holdNextTurnStart(request);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill("Request approval fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await waitForHeldTurnStart(request);
-
-  const workspace = sidebar.locator(
-    '[data-workspace-name="' + "recovery-admits-waiting-turn" + '"]',
-  );
-  await workspace
-    .getByRole("button", {
-      name: "recovery-admits-waiting-turn",
-      exact: true,
-    })
-    .hover();
-  await sidebar
-    .getByRole("button", {
-      name: "New session in recovery-admits-waiting-turn",
-    })
-    .click();
-
-  await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
-
-  await expect(sessions).toHaveCount(2);
-  await expect(sessionRowById(sidebar, originalSessionId)).not.toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
-  await expect(sidebar.locator('[title="Working in background"]')).toHaveCount(
-    0,
-  );
-
-  await settleHeldTurnStart(request, "release");
-  await expect(sidebar.locator('[title="Waiting for input"]')).toBeVisible();
-});
-
+// Recovery (lossy replay) while B is selected admits A's held start from
+// hydrate and any interaction frames buffered during it. Each row must park A
+// in its true state, hydrate A exactly once and never reopen B.
 for (const scenario of [
   {
-    name: "request",
-    prompt: "Buffer approval during recovery fixture",
-    expectedStatus: "Waiting for input",
-    staleStatus: "Working in background",
+    name: "a plain turn",
+    workspace: "recovery-admits-held-turn",
+    prompt: "Recover this accepted turn before the RPC reply arrives",
+    recovered: "Working in background",
+    stale: "Waiting for input",
+    released: "Completed in background",
   },
   {
-    name: "resolution",
+    name: "a hydrated approval",
+    workspace: "recovery-admits-waiting-turn",
+    prompt: "Request approval fixture",
+    recovered: "Waiting for input",
+    stale: "Working in background",
+    released: "Waiting for input",
+  },
+  {
+    name: "a buffered approval request",
+    workspace: "recovery-buffered-approval-request",
+    prompt: "Buffer approval during recovery fixture",
+    recovered: "Waiting for input",
+    stale: "Working in background",
+    released: "Waiting for input",
+  },
+  {
+    name: "a buffered approval resolution",
+    workspace: "recovery-buffered-approval-resolution",
     prompt: "Resolve approval during recovery fixture",
-    expectedStatus: "Working in background",
-    staleStatus: "Waiting for input",
+    recovered: "Working in background",
+    stale: "Waiting for input",
+    released: "Completed in background",
   },
 ] as const) {
-  test(`folds a buffered approval ${scenario.name} before parking the Session`, async ({
+  test(`recovers A's held start with ${scenario.name} while B stays selected and unopened`, async ({
     page,
     request,
   }) => {
-    const cwd = `/srv/work/recovery-buffered-approval-${scenario.name}`;
-    await connectAndStartWorkspace(page, cwd);
+    const sessionOpens = observeSessionOpens(page);
+    const hydrateSessions: string[] = [];
+    page.on("websocket", (socket) => {
+      socket.on("framesent", ({ payload }) => {
+        const frame = String(payload);
+        if (!frame.includes('"method":"session/hydrate"')) return;
+        const hydrate = JSON.parse(frame) as {
+          params?: { session_id?: unknown };
+        };
+        if (typeof hydrate.params?.session_id === "string") {
+          hydrateSessions.push(hydrate.params.session_id);
+        }
+      });
+    });
+    await connectAndStartWorkspace(page, `/srv/work/${scenario.workspace}`);
 
     const sidebar = productNavigation(page);
     const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
     await expect(sessions).toHaveCount(1);
-    const originalSessionId = await sessions
-      .first()
-      .getAttribute("data-session-id");
+    const originalSessionId = await sessions.getAttribute("data-session-id");
     if (!originalSessionId) throw new Error("Expected the source Session id");
 
     await holdNextTurnStart(request);
     const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
     await composer.fill(scenario.prompt);
     await page.getByRole("button", { name: "Send prompt" }).click();
-    await waitForHeldTurnStart(request);
+    const held = await waitForHeldTurnStart(request);
+    const heldSessionId = held.held?.session_id;
+    if (!heldSessionId) throw new Error("Expected the held Session identity");
 
-    const workspaceName = `recovery-buffered-approval-${scenario.name}`;
+    const opensBeforeNavigation = sessionOpens.length;
     const workspace = sidebar.locator(
-      '[data-workspace-name="' + workspaceName + '"]',
+      '[data-workspace-name="' + scenario.workspace + '"]',
     );
     await workspace
-      .getByRole("button", { name: workspaceName, exact: true })
+      .getByRole("button", { name: scenario.workspace, exact: true })
       .hover();
     await sidebar
-      .getByRole("button", { name: `New session in ${workspaceName}` })
+      .getByRole("button", { name: `New session in ${scenario.workspace}` })
       .click();
+    await expect(sessions).toHaveCount(2);
+    await expect
+      .poll(() => sessionOpens.length)
+      .toBe(opensBeforeNavigation + 1);
+    await expect(
+      page.getByRole("status").filter({ hasText: "New Session opens next" }),
+    ).toHaveCount(0);
+
+    const hydratesBeforeRecovery = hydrateSessions.length;
     await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
 
     await expect(sessions).toHaveCount(2);
+    await expect
+      .poll(
+        () =>
+          hydrateSessions
+            .slice(hydratesBeforeRecovery)
+            .filter((sessionId) => sessionId === heldSessionId).length,
+      )
+      .toBe(1);
     await expect(
       sessionRowById(sidebar, originalSessionId),
     ).not.toHaveAttribute("aria-current", "page");
     await expect(
-      sidebar.locator(`[title="${scenario.expectedStatus}"]`),
+      sidebar.locator(`[title="${scenario.recovered}"]`),
     ).toBeVisible();
+    await expect(sidebar.locator(`[title="${scenario.stale}"]`)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Starting/ })).toHaveCount(
+      0,
+    );
     await expect(
-      sidebar.locator(`[title="${scenario.staleStatus}"]`),
+      page
+        .getByRole("status")
+        .filter({ hasText: /opens next|recovery before/ }),
     ).toHaveCount(0);
+    expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
 
     await settleHeldTurnStart(request, "release");
+    await expect(
+      sidebar.locator(`[title="${scenario.released}"]`),
+    ).toBeVisible();
+    await expect(sessions).toHaveCount(2);
+    expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
   });
 }
-
-test("returns to A before acknowledgement without cancelling its held start", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/cancel-delayed-turn-navigation";
-  const sessionOpens = observeSessionOpens(page);
-  await connectAndStartWorkspace(page, cwd);
-
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const originalSessionId = await sessions
-    .first()
-    .getAttribute("data-session-id");
-  if (!originalSessionId) throw new Error("Expected source Session id");
-  const originalSession = sessionRowById(sidebar, originalSessionId);
-
-  await holdNextTurnStart(request);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill("Continue this turn while I open another Session");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
-  await waitForHeldTurnStart(request);
-
-  const opensBeforeNavigation = sessionOpens.length;
-  const workspace = sidebar.locator(
-    '[data-workspace-name="' + "cancel-delayed-turn-navigation" + '"]',
-  );
-  await workspace
-    .getByRole("button", {
-      name: "cancel-delayed-turn-navigation",
-      exact: true,
-    })
-    .hover();
-  await sidebar
-    .getByRole("button", {
-      name: "New session in cancel-delayed-turn-navigation",
-    })
-    .click();
-
-  const pending = page
-    .getByRole("status")
-    .filter({ hasText: "New Session opens next" });
-  await expect(sessions).toHaveCount(2);
-  await expect(sessionRowsExcept(sidebar, originalSessionId)).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await originalSession.click();
-  await expect(originalSession).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
-  await expect(pending).toHaveCount(0);
-
-  await settleHeldTurnStart(request, "release");
-
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await expect(sessions).toHaveCount(2);
-  await expect(originalSession).toHaveAttribute("aria-current", "page");
-  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
-  await expect(
-    page.getByText("Completed with pnpm check and all tests passing."),
-  ).toBeVisible();
-  expect(sessionOpens).toHaveLength(opensBeforeNavigation + 1);
-  await expect(
-    sidebar.locator('[title="Completed in background"]'),
-  ).toHaveCount(0);
-});
-
-test("selects each retained target immediately while A's acknowledgement remains held", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/delayed-turn-start-latest-target";
-  const sessionOpens = observeSessionOpens(page);
-  await connectAndStartWorkspace(page, cwd);
-
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  const workspace = sidebar.locator(
-    '[data-workspace-name="delayed-turn-start-latest-target"]',
-  );
-  const newSession = sidebar.getByRole("button", {
-    name: "New session in delayed-turn-start-latest-target",
-  });
-  const selectedSession = () =>
-    sidebar.locator('[role="treeitem"][data-session-id][aria-current="page"]');
-  const selectedSessionId = async () => {
-    const sessionId = await selectedSession().getAttribute("data-session-id");
-    if (!sessionId) throw new Error("Expected a selected Session id");
-    return sessionId;
-  };
-  const clickNewSession = async () => {
-    await workspace
-      .getByRole("button", {
-        name: "delayed-turn-start-latest-target",
-        exact: true,
-      })
-      .hover();
-    await newSession.click();
-  };
-
-  await expect(sessions).toHaveCount(1);
-  const originalSessionId = await selectedSessionId();
-  await clickNewSession();
-  await expect(sessions).toHaveCount(2);
-  const middleSessionId = await selectedSessionId();
-
-  await clickNewSession();
-  await expect(sessions).toHaveCount(3);
-  const latestSessionId = await selectedSessionId();
-
-  const originalSession = sessionRowById(sidebar, originalSessionId);
-  const middleSession = sessionRowById(sidebar, middleSessionId);
-  const latestSession = sessionRowById(sidebar, latestSessionId);
-  await originalSession.click();
-  await expect(originalSession).toHaveAttribute("aria-current", "page");
-
-  await holdNextTurnStart(request);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill("Continue this turn while I open another Session");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
-  await waitForHeldTurnStart(request);
-
-  const opensBeforeNavigation = sessionOpens.length;
-  await middleSession.click();
-  await expect(middleSession).toHaveAttribute("aria-current", "page");
-  await latestSession.click();
-  await expect(latestSession).toHaveAttribute("aria-current", "page");
-  await latestSession.click();
-  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
-
-  await settleHeldTurnStart(request, "release");
-
-  await expect(latestSession).toHaveAttribute("aria-current", "page");
-  await expect(middleSession).not.toHaveAttribute("aria-current", "page");
-  await expect(sessions).toHaveCount(3);
-  expect(sessionOpens).toHaveLength(opensBeforeNavigation);
-  expect(sessionOpens.slice(opensBeforeNavigation)).not.toContainEqual({
-    sessionId: middleSessionId,
-  });
-  expect(sessionOpens.slice(opensBeforeNavigation)).not.toContainEqual({
-    sessionId: latestSessionId,
-  });
-  await expect(
-    sidebar.locator('[title="Completed in background"]'),
-  ).toBeVisible();
-});
 
 test("keeps A's held start and socket intact when B's candidate open fails", async ({
   page,
