@@ -33,13 +33,13 @@ injected during the build. A prebuilt artifact must match the desired connection
 defaults, although tests explicitly enter their fixture origin.
 
 Install Firefox and WebKit with `pnpm exec playwright install firefox webkit`
-for the small continuous smoke lane. Its separate config keeps Chromium-only
-visual baselines and the Long Animation Frames gate in the main suite. The
-default fixture hydrates a fixed durable transcript; smoke verifies that known
-history and unsent drafts reopen. It does not prove that every newly generated
-fixture response was persisted. Scenario-specific recovery tests and the real
-Core gate supply that evidence. Keyboard and accessibility assertions do not
-claim real VoiceOver, NVDA or physical-mobile coverage.
+for the small continuous smoke lane. Its separate config keeps the Chromium-only
+Long Animation Frames gate in the main suite. The default fixture hydrates a
+fixed durable transcript; smoke verifies that known history and unsent drafts
+reopen. It does not prove that every newly generated fixture response was
+persisted. Scenario-specific recovery tests and the real Core gate supply that
+evidence. Keyboard and accessibility assertions do not claim real VoiceOver,
+NVDA or physical-mobile coverage.
 
 ## Multi-Session browser gate
 
