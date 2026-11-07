@@ -67,11 +67,11 @@ export function ComposerInput(props: ComposerInputProps) {
   const commandMode =
     props.commandCount > 0 || props.value.trimStart().startsWith("/");
   const textarea = useRef<HTMLTextAreaElement>(null);
-  // a11y review 0800 §1: disabling a FOCUSED textarea drops focus to <body>.
+  // a11y review 0800 §1: unmounting a FOCUSED textarea drops focus to <body>.
   // Keep a legal landing (the status row) and the intent to use it — focus is
   // only moved on the read-only EDGE, so an unfocused composer is never stolen.
   const statusRow = useRef<HTMLDivElement>(null);
-  const hadFocus = useRef(false);
+  const focusedAtFlip = useRef(false);
   const peerReadOnly = useRef(false);
   const mode = useRef({
     ...resetVimMode(),
@@ -123,20 +123,26 @@ export function ComposerInput(props: ComposerInputProps) {
     }
   });
   // a11y review 0800 §1: when the session flips peer-readonly while the operator
-  // was typing, `disabled` would drop focus to <body>. Land it on the status row
-  // instead — on the EDGE only (a stable read-only re-render must not re-steal
-  // focus), and only if the textarea actually held focus at the flip.
+  // was typing, unmounting the textarea would drop focus to <body>. Land it on
+  // the status row instead — on the EDGE only (a stable read-only re-render must
+  // not re-steal focus), and only if the composer's textarea actually held focus
+  // at the flip. Read that while rendering the flip, like the reconcile above:
+  // the browser blurs the focused textarea while React removes it, before any
+  // effect runs, so by then neither `onBlur` state nor `activeElement` knows.
+  // A Session switch remounts this input straight into read-only; the textarea
+  // it replaces is then the one the shared `inputRef` still names.
   const peerReadOnlyNow = readOnlyPeerSlug !== null;
+  if (peerReadOnlyNow && !peerReadOnly.current) {
+    const node = textarea.current ?? props.inputRef?.current ?? null;
+    focusedAtFlip.current =
+      node !== null && node.ownerDocument.activeElement === node;
+  }
   useLayoutEffect(() => {
     const was = peerReadOnly.current;
+    const focused = focusedAtFlip.current;
     peerReadOnly.current = peerReadOnlyNow;
-    if (
-      peerReadOnlyNow &&
-      !was &&
-      (hadFocus.current || document.activeElement === textarea.current)
-    ) {
-      statusRow.current?.focus();
-    }
+    focusedAtFlip.current = false;
+    if (peerReadOnlyNow && !was && focused) statusRow.current?.focus();
   }, [peerReadOnlyNow]);
   if (readOnlyPeerSlug !== null) {
     return (
@@ -183,11 +189,7 @@ export function ComposerInput(props: ComposerInputProps) {
         aria-label={t("Message Octos")}
         data-vim-mode={vimMode ? mode.current.mode : "off"}
         onChange={(event) => props.onChange(event.currentTarget.value)}
-        onFocus={() => {
-          hadFocus.current = true;
-        }}
         onBlur={() => {
-          hadFocus.current = false;
           mode.current = {
             ...mode.current,
             ...clearVimPending(mode.current),
