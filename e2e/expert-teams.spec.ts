@@ -166,64 +166,6 @@ test("starts a team, shows each member's progress and result, and merges them he
   expect(merge).not.toContain("These experts have no result");
 });
 
-test("a failed member and a stopped member are named, and the merge leaves them out", async ({
-  page,
-}) => {
-  test.setTimeout(90_000);
-  const sent = observe(page);
-  await connect(page);
-  const center = await openExperts(page);
-  await startTeam(page, "Review the rollout plan. [fail-seat-3] [slow-seat-2]");
-
-  const team = center.locator("[data-expert-team]");
-  const member = (seat: number) =>
-    team.locator(`[data-expert-member$="-${seat}"]`);
-  await expect(member(1).locator('[data-expert-state="finished"]')).toBeVisible(
-    {
-      timeout: 20_000,
-    },
-  );
-  await expect(member(3).locator('[data-expert-state="failed"]')).toBeVisible();
-  await member(3).getByText("Technical details").click();
-  await expect(member(3).getByText(/stub model is down/)).toBeVisible();
-  await expect(
-    member(2).locator('[data-expert-state="working"]'),
-  ).toBeVisible();
-
-  await member(2).getByRole("button", { name: "Stop" }).click();
-  await expect
-    .poll(
-      () => sent.filter((frame) => frame.method === "turn/interrupt").length,
-    )
-    .toBe(1);
-  await expect(
-    member(2).locator('[data-expert-state="stopped"]'),
-  ).toBeVisible();
-  await expect(member(2).getByRole("button", { name: "Stop" })).toHaveCount(0);
-  await expect(
-    team.getByText("1 of 3 done · 1 did not finish · 1 stopped"),
-  ).toBeVisible();
-  await expect(
-    team.getByText(
-      "2 experts have no result yet. Merging now leaves their part out.",
-    ),
-  ).toBeVisible();
-
-  const before = masterStarts(sent).length;
-  await team
-    .getByRole("button", { name: "Merge results in this conversation" })
-    .click();
-  await expect.poll(() => masterStarts(sent).length).toBe(before + 1);
-  const gathers = sent.filter((frame) => frame.method === "peer/gather");
-  const slugs = gathers.at(-1)!.params!.slugs as string[];
-  expect(slugs).toHaveLength(1);
-  expect(slugs[0]).toMatch(/-1$/);
-  const merge = turnText(masterStarts(sent).at(-1)!);
-  expect(merge).toContain("These experts have no result");
-  expect(merge).toContain("Risk reviewer (Stopped)");
-  expect(merge).toContain("User reviewer (Failed)");
-});
-
 test("renders member Markdown, the merge names the experts, and a refresh keeps both", async ({
   page,
 }) => {
@@ -349,7 +291,7 @@ test("a server without last_outcome trusts only the front matter, and the merge 
 const interrupts = (sent: SentFrame[]) =>
   sent.filter((frame) => frame.method === "turn/interrupt");
 
-test("after a refresh a working member shows as working and can be stopped once", async ({
+test("a failed member is named, a working member survives a refresh and is stopped once, and the merge leaves both out", async ({
   page,
   request,
 }) => {
@@ -364,6 +306,9 @@ test("after a refresh a working member shows as working and can be stopped once"
   });
   await expect(team.locator('[data-expert-state="failed"]')).toHaveCount(1);
   await expect(team.locator('[data-expert-state="working"]')).toHaveCount(1);
+  const failed = team.locator('[data-expert-member$="-3"]');
+  await failed.getByText("Technical details").click();
+  await expect(failed.getByText(/stub model is down/)).toBeVisible();
   const slowStart = memberStarts(sent).find((frame) =>
     String(frame.params?.session_id).endsWith("-2"),
   )!;
@@ -399,6 +344,11 @@ test("after a refresh a working member shows as working and can be stopped once"
   await expect(
     rebuilt.getByText("1 of 3 done · 1 did not finish · 1 stopped"),
   ).toBeVisible();
+  await expect(
+    rebuilt.getByText(
+      "2 experts have no result yet. Merging now leaves their part out.",
+    ),
+  ).toBeVisible();
 
   // Another refresh: still stopped, from the member's session, and nothing
   // is stopped again.
@@ -428,6 +378,7 @@ test("after a refresh a working member shows as working and can be stopped once"
   const gathers = sent.filter((frame) => frame.method === "peer/gather");
   expect(gathers.at(-1)!.params!.slugs).toEqual([expect.stringMatching(/-1$/)]);
   const merge = turnText(masterStarts(sent).at(-1)!);
+  expect(merge).toContain("These experts have no result");
   expect(merge).toContain("Risk reviewer (Stopped)");
   expect(merge).toContain("User reviewer (Failed)");
 });
@@ -739,7 +690,7 @@ test("a writer whose answer claims a file the server never recorded is called ou
 
 // T-0427: what a team cost. Each member's figure is its own session's ledger
 // part; a merge is one turn of this conversation, with that turn's own usage.
-test("shows each member's ledger usage and the merge's own, never a 0 for a member that reported none", async ({
+test("shows each member's ledger usage and the merge's own, never a 0 for a member that reported none, and keeps that merge out of another team", async ({
   page,
   request,
 }) => {
@@ -815,41 +766,24 @@ test("shows each member's ledger usage and the merge's own, never a 0 for a memb
       JSON.stringify({ ...sessionStorage }),
   );
   expect(stored).not.toMatch(/3,012|3012|run_count/);
-});
 
-test("a failed member's run without tokens is unknown, and another team's merge is not counted", async ({
-  page,
-}) => {
-  test.setTimeout(90_000);
-  const sent = observe(page);
-  await connect(page);
-  const center = await openExperts(page);
-  await startTeam(page, "First plan.");
-  const first = center.locator("[data-expert-team]");
-  await expect(first.locator('[data-expert-state="finished"]')).toHaveCount(3, {
-    timeout: 20_000,
-  });
-  await first
-    .getByRole("button", { name: "Merge results in this conversation" })
-    .click();
-  await expect.poll(() => masterStarts(sent).length).toBe(1);
-  await expect(page.getByText("Turn complete").first()).toBeVisible({
-    timeout: 20_000,
-  });
-  await openExperts(page);
+  // A second team here: its failed member's run without tokens is unknown,
+  // and the first team's merge is not counted as its own.
   await startTeam(page, "Second plan. [fail-seat-3]", "research");
-  const second = center.locator('[data-expert-team^="research/"]');
+  const second = again.locator('[data-expert-team^="research/"]');
   await expect(
     second.locator('[data-expert-member$="-3"] [data-expert-state="failed"]'),
   ).toBeVisible({ timeout: 20_000 });
   await expect(second.locator('[data-expert-usage$="-3"]')).toHaveText(
     "Usage unknown: the server recorded runs (1) without token counts.",
   );
-  const block = second.locator("[data-expert-team-usage]");
-  await expect(block).toContainText("Not merged in this conversation yet.");
-  await expect(block).toContainText("Total3,000 in · 300 out tokens");
+  const secondBlock = second.locator("[data-expert-team-usage]");
+  await expect(secondBlock).toContainText(
+    "Not merged in this conversation yet.",
+  );
+  await expect(secondBlock).toContainText("Total3,000 in · 300 out tokens");
   await expect(
-    center.locator(
+    again.locator(
       '[data-expert-team^="plan-review/"] [data-expert-team-usage]',
     ),
   ).toContainText("(merges: 1)");

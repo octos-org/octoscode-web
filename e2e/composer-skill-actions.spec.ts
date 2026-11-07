@@ -37,7 +37,7 @@ const progress = (page: Page, sessionId: string, status = "succeeded") =>
     `${FIXTURE_ORIGIN}/__test__/skill/job/progress?session_id=${encodeURIComponent(sessionId)}&status=${status}`,
   );
 
-test("runs a skill action from the composer and tracks its job across a refresh", async ({
+test("runs a skill action from the composer, retries a failed job into a new job, and tracks the jobs across a refresh", async ({
   page,
 }) => {
   const frames = invocations(page);
@@ -67,19 +67,34 @@ test("runs a skill action from the composer and tracks its job across a refresh"
     0,
   );
 
-  // Progress arrives live, then the result.
+  // Progress arrives live.
   await progress(page, sessionId, "running");
   await expect(
     menu.locator("[data-skill-job] [data-job-status='running']"),
   ).toBeVisible();
+
+  // The provider fails this job: Retry starts a NEW job, never a prompt.
+  await progress(page, sessionId, "failed");
+  await expect(
+    menu.locator("[data-skill-job] [data-job-status='failed']"),
+  ).toBeVisible();
+  await expect(menu.getByText(/refused the document/)).toBeVisible();
+  await menu.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(menu.locator("[data-skill-job]")).toHaveCount(2);
   await progress(page, sessionId);
   await expect(
     menu.locator("[data-skill-job] [data-job-status='succeeded']"),
   ).toBeVisible();
   await menu.getByText("Result details").click();
   await expect(menu.getByText("protocol action fixture")).toBeVisible();
+  expect(
+    frames.filter((frame) => frame.method === "skill/action/invoke"),
+  ).toHaveLength(2);
+  expect(frames.filter((frame) => frame.method === "turn/start")).toHaveLength(
+    0,
+  );
 
-  // A refresh shows the SAME server job; nothing is invoked again.
+  // A refresh shows the SAME server jobs; nothing is invoked again.
   await page.reload();
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
@@ -89,43 +104,13 @@ test("runs a skill action from the composer and tracks its job across a refresh"
     .getByRole("button", { name: "Actions", exact: true })
     .click();
   const again = page.getByRole("dialog", { name: "Skill actions" });
-  await expect(again.locator("[data-skill-job]")).toHaveCount(1);
+  await expect(again.locator("[data-skill-job]")).toHaveCount(2);
   await expect(
     again.locator("[data-skill-job] [data-job-status='succeeded']"),
   ).toBeVisible();
   expect(
     frames.filter((frame) => frame.method === "skill/action/invoke"),
-  ).toHaveLength(1);
-});
-
-test("a failed job can be retried from the composer", async ({ page }) => {
-  const sessionId = await start(
-    page,
-    `/workspace/composer-skill-actions-retry-${Date.now()}`,
-  );
-  await page
-    .locator("[data-skill-actions]")
-    .getByRole("button", { name: "Actions", exact: true })
-    .click();
-  const menu = page.getByRole("dialog", { name: "Skill actions" });
-  await menu.getByText("Run document probe").click();
-  await menu.getByRole("button", { name: "Run", exact: true }).click();
-  // Wait for the invoke round trip before the provider side fails the job.
-  await expect(
-    menu.locator("[data-skill-job] [data-job-status='queued']"),
-  ).toBeVisible();
-  await progress(page, sessionId, "failed");
-  await expect(
-    menu.locator("[data-skill-job] [data-job-status='failed']"),
-  ).toBeVisible();
-  await expect(menu.getByText(/refused the document/)).toBeVisible();
-
-  await menu.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(menu.locator("[data-skill-job]")).toHaveCount(2);
-  await progress(page, sessionId);
-  await expect(
-    menu.locator("[data-skill-job] [data-job-status='succeeded']"),
-  ).toBeVisible();
+  ).toHaveLength(2);
 });
 
 test("a server without the skill action surface shows no chip", async ({
