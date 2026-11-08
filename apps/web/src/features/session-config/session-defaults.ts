@@ -49,6 +49,18 @@ const MODES: readonly DefaultsPermissionMode[] = [
 ];
 const NETWORKS: readonly DefaultsNetworkPolicy[] = ["deny", "allow"];
 
+export function isDefaultsPermissionMode(
+  value: unknown,
+): value is DefaultsPermissionMode {
+  return MODES.includes(value as DefaultsPermissionMode);
+}
+
+export function isDefaultsNetworkPolicy(
+  value: unknown,
+): value is DefaultsNetworkPolicy {
+  return NETWORKS.includes(value as DefaultsNetworkPolicy);
+}
+
 function scopedKey(endpoint?: string): string {
   const origin = endpoint?.trim();
   return origin

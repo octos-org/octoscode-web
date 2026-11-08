@@ -1327,6 +1327,11 @@ const catalog: Readonly<Record<string, string>> = {
   "Couldn't resume chat — nothing was sent": "无法恢复聊天 — 未发送任何内容",
   "Couldn't apply the new-session permission default":
     "无法应用新会话权限默认值",
+  "The server hasn't confirmed your new-session permission default, so sending is blocked in this session.":
+    "服务器尚未确认新会话权限默认值，此会话暂不能发送。",
+  "Retry permission default": "重试权限默认值",
+  "Applying your new-session permission default. Sending waits until the server confirms it.":
+    "正在应用新会话权限默认值，服务器确认后才能发送。",
   "Open a project first": "请先打开一个项目",
   "Peers run inside a session. Choose a workspace to continue.":
     "智能体在会话中运行。请选择一个工作区以继续。",

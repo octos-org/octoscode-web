@@ -218,6 +218,15 @@ import {
   type SessionDefaults,
 } from "../features/session-config/session-defaults.ts";
 import {
+  confirmPermissionDefault,
+  loadPermissionDefaultGates,
+  openedFromLaunch,
+  savePermissionDefaultGates,
+  withoutPermissionDefaultGate,
+  type PermissionDefaultGate,
+  type PermissionDefaultGates,
+} from "../features/session-config/permission-default-gate.ts";
+import {
   classifyConnectFailure,
   connectFailureCopy,
   probeRejectedToken,
@@ -843,12 +852,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     });
   // §4.4 case 22: defaults apply at CREATION only — one marker per created id.
   const appliedDefaultsForSession = useRef<Set<string>>(new Set());
-  // Judge r1 #7: a failed creation-time default is surfaced, not swallowed,
-  // on the session it failed for.
-  const [permissionDefaultError, setPermissionDefaultError] = useState<{
-    sessionId: string;
-    message: string;
-  } | null>(null);
+  // A created session sends nothing until the server confirms its permission
+  // default; a failure stays on that session, with a retry (see the module).
+  const [permissionDefaultGates, setPermissionDefaultGates] =
+    useState<PermissionDefaultGates>(() =>
+      loadPermissionDefaultGates(browserStorage("sessionStorage")),
+    );
+  useEffect(() => {
+    savePermissionDefaultGates(
+      browserStorage("sessionStorage"),
+      permissionDefaultGates,
+    );
+  }, [permissionDefaultGates]);
   // The created session's launch id and the defaults it waits to receive:
   // its own profile-bound id is only known once it is the open session.
   const pendingPermissionDefaultRef = useRef<{
@@ -2007,6 +2022,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         : (conversation.queue.active?.turnId ?? null),
     );
     if (intent.kind === "empty-command") return;
+    // Nothing that can start model work runs before the server confirms this
+    // session's permission default; the composer notice says why.
+    if (
+      permissionDefaultGate &&
+      (intent.kind === "prompt" ||
+        intent.kind === "btw" ||
+        intent.kind === "gather" ||
+        intent.kind === "native-review")
+    )
+      return;
     if (intent.kind === "prompt" && conversation.turnRecovery) return;
     if (
       intent.kind === "prompt" &&
@@ -3682,23 +3707,38 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     });
   };
 
-  /** One permission/profile/set after creation (§7 New-session defaults). */
-  const applyPermissionDefault = async (
+  /**
+   * One permission/profile/set for a created session (§7 New-session
+   * defaults). The session stays gated until the server confirms it: no
+   * connection, an error, `applied: false` or another session's reply all
+   * leave it failed, with a retry, never marked applied.
+   */
+  const applyPermissionDefault = (
     sessionId: string,
-    defaults: SessionDefaults,
+    gate: Pick<PermissionDefaultGate, "mode" | "network">,
   ) => {
-    const client = protocol.client;
-    if (!client) return;
-    const result = await client.setPermissionProfile({
-      // The CREATED session id, never the render's previously selected one.
-      session_id: sessionId,
-      update: {
-        mode: defaults.permissionMode,
-        network: defaults.network,
-      },
-    });
-    if (!result.applied || result.session_id !== sessionId)
-      throw new Error("The server did not apply the permission default.");
+    const applying = { mode: gate.mode, network: gate.network };
+    setPermissionDefaultGates((gates) => ({
+      ...gates,
+      [sessionId]: { ...applying, phase: "applying" },
+    }));
+    // The CREATED session id, never the render's previously selected one.
+    void confirmPermissionDefault(protocol.client, sessionId, applying)
+      .then(() => {
+        setPermissionDefaultGates((gates) =>
+          withoutPermissionDefaultGate(gates, sessionId),
+        );
+        if (openedSessionIdRef.current === sessionId)
+          return safety.refreshPermission();
+      })
+      .catch(() =>
+        setPermissionDefaultGates((gates) =>
+          // Cleared meanwhile (the server reported the default in effect).
+          gates[sessionId]
+            ? { ...gates, [sessionId]: { ...applying, phase: "failed" } }
+            : gates,
+        ),
+      );
   };
   // The created session is open: apply its defaults once, under the id the
   // server opened it with (the launch id bound to its resolved profile).
@@ -3706,33 +3746,48 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const pending = pendingPermissionDefaultRef.current;
     const opened = session.opened;
     if (!pending || !opened) return;
-    if (
-      opened.session_id !==
-      bindWebSessionIdToProfile(
-        pending.launchId,
-        opened.active_profile_id ?? "",
-      )
-    )
-      return;
+    if (!openedFromLaunch(opened.session_id, pending.launchId)) return;
     pendingPermissionDefaultRef.current = null;
     if (appliedDefaultsForSession.current.has(pending.launchId)) return;
     appliedDefaultsForSession.current.add(pending.launchId);
-    void applyPermissionDefault(opened.session_id, pending.defaults)
-      .then(() => {
-        if (openedSessionIdRef.current === opened.session_id)
-          return safety.refreshPermission();
-      })
-      .catch(() =>
-        // Judge r1 #7: surface the failure. Never retried on reopen; the
-        // pane shows the server's live values and the operator can set them
-        // there — but the product must not silently swallow the miss.
-        setPermissionDefaultError({
-          sessionId: opened.session_id,
-          message: t("Couldn't apply the new-session permission default"),
-        }),
-      );
+    applyPermissionDefault(opened.session_id, {
+      mode: pending.defaults.permissionMode,
+      network: pending.defaults.network,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.opened]);
+  // A gated session whose server-confirmed permission already is the default
+  // (set by hand, or the server's own) needs nothing more.
+  useEffect(() => {
+    const result = safety.permission.result;
+    const gate = result ? permissionDefaultGates[result.session_id] : undefined;
+    if (
+      result &&
+      gate &&
+      result.current.mode === gate.mode &&
+      result.current.network === gate.network
+    )
+      setPermissionDefaultGates((gates) =>
+        withoutPermissionDefaultGate(gates, result.session_id),
+      );
+  }, [safety.permission.result, permissionDefaultGates]);
+  const openedSessionId = session.opened?.session_id;
+  const permissionDefaultGate =
+    openedSessionId === undefined
+      ? undefined
+      : (permissionDefaultGates[openedSessionId] ??
+        // Opened, but the apply effect has not run yet.
+        (pendingPermissionDefaultRef.current &&
+        openedFromLaunch(
+          openedSessionId,
+          pendingPermissionDefaultRef.current.launchId,
+        )
+          ? ({
+              mode: pendingPermissionDefaultRef.current.defaults.permissionMode,
+              network: pendingPermissionDefaultRef.current.defaults.network,
+              phase: "applying",
+            } satisfies PermissionDefaultGate)
+          : undefined));
   const sessionWorkspaces = recentWorkspaces.filter(
     (workspace, index, workspaces) =>
       workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
@@ -5326,6 +5381,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               ) : conversationTab === "trajectory" ? null : (
                 <>
                   {commandError ? <p role="alert">{commandError}</p> : null}
+                  {permissionDefaultGate?.phase === "failed" ? (
+                    <p className="field-note" role="alert">
+                      {t(
+                        "The server hasn't confirmed your new-session permission default, so sending is blocked in this session.",
+                      )}{" "}
+                      <button
+                        type="button"
+                        className="field-note-action"
+                        onClick={() =>
+                          openedSessionId &&
+                          applyPermissionDefault(
+                            openedSessionId,
+                            permissionDefaultGate,
+                          )
+                        }
+                      >
+                        {t("Retry permission default")}
+                      </button>
+                    </p>
+                  ) : permissionDefaultGate ? (
+                    <p className="field-note" role="status">
+                      {t(
+                        "Applying your new-session permission default. Sending waits until the server confirms it.",
+                      )}
+                    </p>
+                  ) : null}
                   {draftCapacityBlocked ? (
                     <p role="status">
                       {t(
@@ -6237,12 +6318,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             }}
             permissionsSection={{
               permission: permissionControl,
-              ...(permissionDefaultError &&
-              permissionDefaultError.sessionId === session.opened?.session_id
+              ...(permissionDefaultGate?.phase === "failed"
                 ? {
                     saveState: {
                       kind: "failed" as const,
-                      message: permissionDefaultError.message,
+                      message: t(
+                        "Couldn't apply the new-session permission default",
+                      ),
                     },
                   }
                 : {}),

@@ -29,12 +29,14 @@ test("a new session gets the saved permission default once, under its own id, an
   // and the page gets an error for it.
   const sets: { session_id?: string; update?: Record<string, unknown> }[] = [];
   const opens: string[] = [];
+  const starts: string[] = [];
   let refuse = false;
   await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
     const server = socket.connectToServer();
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.method === "session/open") opens.push(frame.params.session_id);
+      if (frame.method === "turn/start") starts.push(frame.params.session_id);
       if (frame.method === "permission/profile/set") {
         sets.push(frame.params);
         if (refuse) {
@@ -87,8 +89,7 @@ test("a new session gets the saved permission default once, under its own id, an
   const closePane = () =>
     page.getByRole("button", { name: "Close", exact: true }).click();
 
-  // The set goes to the id the session was opened with, once, and the pane
-  // then shows the default.
+  // The set goes to the id the session was opened with, once.
   const created = await newSession();
   const createdRow = new URL(page.url()).searchParams.get("s")!;
   await expect.poll(() => sets.length).toBe(1);
@@ -97,20 +98,22 @@ test("a new session gets the saved permission default once, under its own id, an
     update: { mode: "read_only" },
   });
   expect(opens.at(-1)).toBe(created);
-  let section = await permissions();
-  await expect(
-    section.getByRole("button", { name: /^Permission: Read/ }),
-  ).toBeVisible();
-  await expect(section.getByRole("alert")).toHaveCount(0);
-  await closePane();
 
-  // A refused default is reported on its own session, which keeps what the
-  // server says it has, and on no other.
+  // A refused default fails closed on its own session, which keeps what the
+  // server says it has: nothing is sent there until a retry is confirmed.
   refuse = true;
   const refused = await newSession();
+  const refusedRow = new URL(page.url()).searchParams.get("s")!;
   await expect.poll(() => sets.length).toBe(2);
   expect(sets[1]!.session_id).toBe(refused);
-  section = await permissions();
+  const blocked = page
+    .getByRole("alert")
+    .filter({ hasText: "sending is blocked in this session" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(blocked).toBeVisible();
+  await composer.fill("Only once the default applies");
+  await composer.press("Enter");
+  let section = await permissions();
   await expect(section.getByRole("alert")).toContainText(
     "Couldn't apply the new-session permission default",
   );
@@ -118,14 +121,36 @@ test("a new session gets the saved permission default once, under its own id, an
     section.getByRole("button", { name: /^Permission: Write/ }),
   ).toBeVisible();
   await closePane();
+  await expect(composer).toHaveValue("Only once the default applies");
   await sidebar
     .locator(`[role="treeitem"][data-session-id=${JSON.stringify(createdRow)}]`)
     .click();
+  // The other session shows its default and is not blocked.
   await expect.poll(opened).toBe(created);
+  await expect(blocked).toHaveCount(0);
   section = await permissions();
   await expect(
     section.getByRole("button", { name: /^Permission: Read/ }),
   ).toBeVisible();
   await expect(section.getByRole("alert")).toHaveCount(0);
-  expect(sets).toHaveLength(2);
+  await closePane();
+
+  refuse = false;
+  await sidebar
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(refusedRow)}]`)
+    .click();
+  await expect.poll(opened).toBe(refused);
+  await blocked
+    .getByRole("button", { name: "Retry permission default" })
+    .click();
+  await expect(blocked).toHaveCount(0);
+  expect(sets.slice(2)).toMatchObject([
+    { session_id: refused, update: { mode: "read_only" } },
+  ]);
+  expect(starts).not.toContain(refused);
+  await composer.press("Enter");
+  await expect
+    .poll(() => starts.filter((id) => id === refused))
+    .toHaveLength(1);
+  await expect(composer).toHaveValue("");
 });
