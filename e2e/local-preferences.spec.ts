@@ -4,8 +4,8 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const storageKey = "octoscode.web.display.v1";
 const token = "tab-scoped-e2e-token";
 const input = (page: Page) => page.locator(".composer textarea");
@@ -61,30 +61,6 @@ function observe(page: Page) {
     calls: (method: string) => sent.filter((frame) => frame.method === method),
     sockets: () => sockets,
   };
-}
-async function connect(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page.getByLabel("Auth token").fill(token);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await expect(chooser).toBeVisible();
-    if (
-      await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-    ) {
-      await chooser.getByRole("button", { name: "Add workspace" }).click();
-    }
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
-  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
-  await expect(input(page)).toBeEnabled();
 }
 async function title(page: Page) {
   const sessionId = await page
@@ -147,14 +123,16 @@ async function closePreferences(page: Page) {
 }
 async function hold(request: APIRequestContext) {
   expect(
-    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
+    (
+      await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`)
+    ).status(),
   ).toBe(204);
 }
 async function held(request: APIRequestContext, owner: string) {
   await expect
     .poll(async () => {
       const state = (await (
-        await request.get(`${origin}/__test__/terminal/state`)
+        await request.get(`${FIXTURE_ORIGIN}/__test__/terminal/state`)
       ).json()) as { held: { session_id: string }[] };
       return state.held.map((item) => item.session_id);
     })
@@ -164,7 +142,7 @@ async function release(request: APIRequestContext, owner: string) {
   expect(
     (
       await request.post(
-        `${origin}/__test__/terminal/release?session_id=${encodeURIComponent(owner)}`,
+        `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(owner)}`,
       )
     ).status(),
   ).toBe(204);
@@ -179,7 +157,7 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
 }) => {
   const wire = observe(page),
     workspace = "local-preferences-vim-interrupt";
-  await connect(page, workspace);
+  await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   await command(page, "/vimmode");
   const a = await title(page);
   await hold(request);
@@ -207,7 +185,7 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
     expect(wire.calls("turn/start")).toHaveLength(2);
     await release(request, bStart.session_id!);
   } finally {
-    await request.post(`${origin}/__test__/terminal/reset`);
+    await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
   }
 });
 
@@ -215,7 +193,7 @@ test("only explicit save persists display preferences; reload restores preferenc
   page,
 }) => {
   const wire = observe(page);
-  await connect(page, "local-preferences-save");
+  await connectAndStartWorkspace(page, "/srv/work/local-preferences-save");
   const before = await storage(page);
   await command(page, "/theme");
   await preferences(page)

@@ -1,26 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await expect(page.locator("aside")).toBeVisible();
-}
-
-async function startSession(page: Page, workspace: string) {
-  await connect(page);
-  const path = page.getByLabel("Server workspace path");
-  await path.fill(workspace);
-  await path.press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { expect, test } from "@playwright/test";
+import { connectAndStartWorkspace } from "./fixture-session";
 
 test("a new session gets the saved permission default once, under its own id, and a refused one is reported on that session", async ({
   page,
@@ -29,12 +8,30 @@ test("a new session gets the saved permission default once, under its own id, an
   // and the page gets an error for it.
   const sets: { session_id?: string; update?: Record<string, unknown> }[] = [];
   const opens: string[] = [];
+  const starts: string[] = [];
   let refuse = false;
+  // While set, the server advertises no launch/resolve, as an older Core: a
+  // new session then opens under its bare launch id, bound to no profile.
+  let noLaunchResolve = false;
+  const strip = (capabilities?: { supported_methods?: string[] }) => {
+    if (capabilities?.supported_methods)
+      capabilities.supported_methods = capabilities.supported_methods.filter(
+        (method) => method !== "launch/resolve",
+      );
+  };
   await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
     const server = socket.connectToServer();
+    server.onMessage((message) => {
+      if (!noLaunchResolve) return socket.send(message);
+      const frame = JSON.parse(String(message));
+      strip(frame.result?.capabilities);
+      strip(frame.result?.opened?.capabilities);
+      socket.send(JSON.stringify(frame));
+    });
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.method === "session/open") opens.push(frame.params.session_id);
+      if (frame.method === "turn/start") starts.push(frame.params.session_id);
       if (frame.method === "permission/profile/set") {
         sets.push(frame.params);
         if (refuse) {
@@ -53,7 +50,7 @@ test("a new session gets the saved permission default once, under its own id, an
   });
   const { repeatEachIndex, retry } = test.info();
   const name = `unfinished-defaults-apply-${repeatEachIndex}-${retry}`;
-  await startSession(page, `/workspace/${name}`);
+  await connectAndStartWorkspace(page, `/workspace/${name}`);
   const opened = () =>
     (JSON.parse(new URL(page.url()).searchParams.get("s")!) as string[])[2]!;
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -87,8 +84,7 @@ test("a new session gets the saved permission default once, under its own id, an
   const closePane = () =>
     page.getByRole("button", { name: "Close", exact: true }).click();
 
-  // The set goes to the id the session was opened with, once, and the pane
-  // then shows the default.
+  // The set goes to the id the session was opened with, once.
   const created = await newSession();
   const createdRow = new URL(page.url()).searchParams.get("s")!;
   await expect.poll(() => sets.length).toBe(1);
@@ -97,20 +93,22 @@ test("a new session gets the saved permission default once, under its own id, an
     update: { mode: "read_only" },
   });
   expect(opens.at(-1)).toBe(created);
-  let section = await permissions();
-  await expect(
-    section.getByRole("button", { name: /^Permission: Read/ }),
-  ).toBeVisible();
-  await expect(section.getByRole("alert")).toHaveCount(0);
-  await closePane();
 
-  // A refused default is reported on its own session, which keeps what the
-  // server says it has, and on no other.
+  // A refused default fails closed on its own session, which keeps what the
+  // server says it has: nothing is sent there until a retry is confirmed.
   refuse = true;
   const refused = await newSession();
+  const refusedRow = new URL(page.url()).searchParams.get("s")!;
   await expect.poll(() => sets.length).toBe(2);
   expect(sets[1]!.session_id).toBe(refused);
-  section = await permissions();
+  const blocked = page
+    .getByRole("alert")
+    .filter({ hasText: "sending is blocked in this session" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(blocked).toBeVisible();
+  await composer.fill("Only once the default applies");
+  await composer.press("Enter");
+  let section = await permissions();
   await expect(section.getByRole("alert")).toContainText(
     "Couldn't apply the new-session permission default",
   );
@@ -118,14 +116,54 @@ test("a new session gets the saved permission default once, under its own id, an
     section.getByRole("button", { name: /^Permission: Write/ }),
   ).toBeVisible();
   await closePane();
+  await expect(composer).toHaveValue("Only once the default applies");
   await sidebar
     .locator(`[role="treeitem"][data-session-id=${JSON.stringify(createdRow)}]`)
     .click();
+  // The other session shows its default and is not blocked.
   await expect.poll(opened).toBe(created);
+  await expect(blocked).toHaveCount(0);
   section = await permissions();
   await expect(
     section.getByRole("button", { name: /^Permission: Read/ }),
   ).toBeVisible();
   await expect(section.getByRole("alert")).toHaveCount(0);
-  expect(sets).toHaveLength(2);
+  await closePane();
+
+  refuse = false;
+  await sidebar
+    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(refusedRow)}]`)
+    .click();
+  await expect.poll(opened).toBe(refused);
+  await blocked
+    .getByRole("button", { name: "Retry permission default" })
+    .click();
+  await expect(blocked).toHaveCount(0);
+  expect(sets.slice(2)).toMatchObject([
+    { session_id: refused, update: { mode: "read_only" } },
+  ]);
+  expect(starts).not.toContain(refused);
+  await composer.press("Enter");
+  await expect
+    .poll(() => starts.filter((id) => id === refused))
+    .toHaveLength(1);
+  await expect(composer).toHaveValue("");
+
+  // A session opened under its bare launch id is not bound to the profile it
+  // runs under: the default is never sent to that id, and it stays blocked.
+  noLaunchResolve = true;
+  await page.reload();
+  const other = await newSession();
+  expect(other).toMatch(/^web-/);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "was not sent" }),
+  ).toBeVisible();
+  await composer.fill("Never under the wrong profile");
+  await composer.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Retry permission default" }),
+  ).toHaveCount(0);
+  await expect(composer).toHaveValue("Never under the wrong profile");
+  expect(sets).toHaveLength(3);
+  expect(starts).not.toContain(other);
 });

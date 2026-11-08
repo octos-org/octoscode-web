@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const TOKEN = "tab-scoped-e2e-token";
 const CWD = "/srv/work/native-workflows-fleet";
 
 interface SentFrame {
@@ -20,27 +19,6 @@ function observe(page: Page): SentFrame[] {
   return sent;
 }
 
-async function connect(page: Page): Promise<void> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(TOKEN);
-  await page
-    .getByRole("button", { name: "Connect", exact: true })
-    .press("Enter");
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible())
-    await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(CWD);
-  await add
-    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
-    .press("Enter");
-  await expect(page.getByText(CWD, { exact: true })).toBeVisible();
-}
-
 test("native Fleet uses prepare/open/start, gather, steer and interrupt", async ({
   page,
   request,
@@ -49,7 +27,7 @@ test("native Fleet uses prepare/open/start, gather, steer and interrupt", async 
   const sent = observe(page);
   await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
-  await connect(page);
+  await connectAndStartWorkspace(page, CWD);
 
   const entry = page.locator('aside [data-fleet-nav="entry"]');
   await expect(entry).toBeEnabled();
