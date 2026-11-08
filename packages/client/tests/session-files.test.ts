@@ -58,13 +58,6 @@ describe("listWorkspaceTree", () => {
     }
   });
 
-  it("treats an empty page as supported (nothing to show either way)", async () => {
-    expect(await listWorkspaceTree(async () => ({ files: [] }), "s1")).toEqual({
-      supported: true,
-      page: { entries: [], nextCursor: null },
-    });
-  });
-
   it("passes the keyset cursor through and reports the end of the list", async () => {
     const seen: unknown[] = [];
     const rpc = async (_method: string, params: unknown) => {

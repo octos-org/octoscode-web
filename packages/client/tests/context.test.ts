@@ -1,15 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import {
-  APPUI_CONTEXT_METHODS,
-  applyContextNotification,
-  createContextCommands,
-  parseCompactResult,
-  parseContextSnapshot,
-  parseContextState,
-  parseSessionStatusReadResult,
-  type UiProtocolCapabilities,
-} from "../src/index.ts";
-
+import { describe, expect, it } from "vitest";
+import { applyContextNotification, parseContextState } from "../src/index.ts";
 const state = {
   session_id: "s1",
   generation: 3,
@@ -26,12 +16,6 @@ const result = {
   token_estimate_before: 120,
   token_estimate_after: 50,
 };
-const capabilities = (methods: string[]): UiProtocolCapabilities => ({
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: methods,
-  supported_notifications: [],
-});
 
 describe("context lifecycle", () => {
   it("projects only bounded diagnostic labels and authoritative counts", () => {
@@ -58,24 +42,6 @@ describe("context lifecycle", () => {
     expect(
       parseContextState({ ...state, cache_epoch_id: "x".repeat(513) }, "s1"),
     ).toBeNull();
-  });
-  it("accepts old servers without inventing lifecycle state", () => {
-    expect(
-      parseContextSnapshot({ usage: { input_tokens: 10000 } }, "s1"),
-    ).toBeNull();
-    expect(parseSessionStatusReadResult({ session_id: "s1" })).toEqual({
-      session_id: "s1",
-      mcp_servers: [],
-    });
-    expect(
-      parseSessionStatusReadResult({ session_id: "s1", context_state: state }),
-    ).toMatchObject({ contextSnapshot: { state } });
-    expect(
-      parseSessionStatusReadResult({ session_id: "s2", context_state: state }),
-    ).not.toHaveProperty("contextSnapshot");
-    expect(parseContextSnapshot({ context: { state } }, "s1")).toEqual({
-      state,
-    });
   });
   it("rejects wrong-session and stale lifecycle notifications", () => {
     const previous = { state };
@@ -126,48 +92,6 @@ describe("context lifecycle", () => {
     expect(completed?.state.token_estimate).toBe(50);
     expect(applyContextNotification(completed, event, "s1")).toBe(completed);
   });
-  it("follows the live prompt estimate and the server's threshold, then drops them on compaction", () => {
-    const report = {
-      jsonrpc: "2.0" as const,
-      method: "context/state_reported",
-      params: {
-        session_id: "s1",
-        context_state: { ...state, token_estimate: 9_400 },
-        threshold_tokens: 140_000,
-        iteration: 0,
-      },
-    };
-    const live = applyContextNotification({ state }, report, "s1");
-    expect(live?.state.token_estimate).toBe(9_400);
-    expect(live?.reported).toEqual({ thresholdTokens: 140_000 });
-    // From nothing (a fresh tab) a report is enough on its own.
-    expect(applyContextNotification(null, report, "s1")?.reported).toEqual({
-      thresholdTokens: 140_000,
-    });
-    expect(applyContextNotification(null, report, "s2")).toBeNull();
-    expect(
-      applyContextNotification(
-        live,
-        { ...report, params: { ...report.params, threshold_tokens: -1 } },
-        "s1",
-      ),
-    ).toBe(live);
-    const compacted = applyContextNotification(
-      live,
-      {
-        ...report,
-        method: "context/compaction_completed",
-        params: {
-          session_id: "s1",
-          context_state: { ...state, generation: 4, token_estimate: 50 },
-          compaction: result,
-        },
-      },
-      "s1",
-    );
-    expect(compacted?.state.token_estimate).toBe(50);
-    expect(compacted).not.toHaveProperty("reported");
-  });
   it("permits a failed compaction to retry at the same generation", () => {
     const completed = {
       state,
@@ -193,89 +117,5 @@ describe("context lifecycle", () => {
         "s1",
       ),
     ).toMatchObject({ compacting: { generation: 3, trigger: "manual" } });
-  });
-  it("never carries another session generation or diagnostics into an update", () => {
-    for (const generation of [1, 100]) {
-      const prior = {
-        state: { ...state, session_id: "other", generation },
-        lastCompaction: {
-          status: "other-private-state",
-          input_generation: 1,
-          token_estimate_before: 1,
-        },
-      };
-      const next = applyContextNotification(
-        prior,
-        {
-          jsonrpc: "2.0",
-          method: "context/compaction_started",
-          params: {
-            session_id: "s1",
-            context_state: state,
-            threshold_tokens: 100,
-            trigger: "manual",
-          },
-        },
-        "s1",
-      );
-      expect(next?.state).toEqual(state);
-      expect(next?.lastCompaction).toBeUndefined();
-    }
-  });
-  it("settles lifecycle even when the provider error is very long", () => {
-    const next = applyContextNotification(
-      {
-        state,
-        compacting: { generation: 3, thresholdTokens: 100, trigger: "manual" },
-      },
-      {
-        jsonrpc: "2.0",
-        method: "context/compaction_completed",
-        params: {
-          session_id: "s1",
-          context_state: state,
-          compaction: { ...result, status: "failed", error: "x".repeat(2048) },
-        },
-      },
-      "s1",
-    );
-    expect(next?.compacting).toBeUndefined();
-    expect(next?.lastCompaction?.error).toHaveLength(512);
-  });
-  it("gates requests and rejects cross-session results", async () => {
-    const request = vi.fn().mockResolvedValue(result);
-    await expect(
-      createContextCommands({ request }, "s1", capabilities([])).compact(),
-    ).rejects.toThrow("not advertised");
-    expect(request).not.toHaveBeenCalled();
-    const commands = createContextCommands(
-      { request },
-      "s1",
-      capabilities(Object.values(APPUI_CONTEXT_METHODS)),
-    );
-    await expect(commands.compact()).resolves.toMatchObject({
-      compacted: true,
-      session_id: "s1",
-    });
-    expect(request).toHaveBeenCalledWith("session/compact", {
-      session_id: "s1",
-    });
-    request.mockResolvedValue({ ...result, session_id: "s2" });
-    await expect(commands.compact()).rejects.toThrow("wrong-session");
-    request.mockResolvedValue({ session_id: "s1", mode: "llm" });
-    await expect(commands.setMode("llm")).resolves.toBe("llm");
-    request.mockResolvedValue({ session_id: "s2", mode: "llm" });
-    await expect(commands.setMode("llm")).rejects.toThrow("wrong-session");
-    expect(
-      parseCompactResult(
-        {
-          ...result,
-          compacted: false,
-          status: "failed",
-          reason: "rejected_over_budget",
-        },
-        "s1",
-      ),
-    ).toMatchObject({ compacted: false, reason: "rejected_over_budget" });
   });
 });

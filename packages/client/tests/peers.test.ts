@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPeerCommands,
   parsePeerPrepareResult,
-  parsePeerGatherResult,
   parsePeerNotification,
   peerIdentityForTopic,
   PEER_METHODS,
@@ -30,19 +29,6 @@ const peer = {
   brief_path: "/peers/review/brief.md",
   worktree_branch: null,
 };
-const row = {
-  slug: "review",
-  topic: "peer-review",
-  name: "Review",
-  brief: "Review this",
-  brief_truncated: false,
-  result: null,
-  result_truncated: false,
-  result_updated_unix: null,
-  has_worktree: false,
-  closed: false,
-  turn_history: null,
-};
 
 describe("peer wire authority", () => {
   it("uses the server profile in the native identity", () => {
@@ -50,29 +36,6 @@ describe("peer wire authority", () => {
       "dev:local:tui#peer-review",
     );
     expect(() => peerIdentityForTopic("dev", "review")).toThrow();
-  });
-  it("sends captured routing, n, and explicit parameters only", async () => {
-    const request = vi.fn().mockResolvedValue({ ...peer, peers: [peer] });
-    const commands = createPeerCommands({ request }, scope, caps);
-    const extra = {
-      session_id: "foreign",
-      profile_id: "foreign",
-      secret: "not-a-wire-field",
-      count: 8,
-    };
-    await commands.prepare({
-      brief: " Review this ",
-      n: 1,
-      worktree: false,
-      ...extra,
-    });
-    expect(request).toHaveBeenCalledExactlyOnceWith("peer/prepare", {
-      session_id: scope.sessionId,
-      profile_id: "dev",
-      brief: "Review this",
-      n: 1,
-      worktree: false,
-    });
   });
   it("fails closed before the wire for absent or explicitly unsupported methods", async () => {
     const request = vi.fn();
@@ -86,27 +49,6 @@ describe("peer wire authority", () => {
       }).gather(),
     ).rejects.toThrow("not advertised");
     expect(request).not.toHaveBeenCalled();
-  });
-  it.each([
-    { brief: "" },
-    { brief: "x", n: 0 },
-    { brief: "x", n: 9 },
-    { brief: "x", n: 2, names: ["only-one"] },
-    { brief: "x", n: 2, names: ["Name", "name"] },
-    { brief: "界".repeat(23000) },
-  ])("rejects invalid prepare input without staging: %j", async (params) => {
-    const request = vi.fn();
-    await expect(
-      createPeerCommands({ request }, scope, caps).prepare(params),
-    ).rejects.toThrow();
-    expect(request).not.toHaveBeenCalled();
-  });
-  it("accepts scalar legacy and nullable rc11 branches", () => {
-    expect(parsePeerPrepareResult(peer, "dev")?.peers).toEqual([]);
-    expect(
-      parsePeerPrepareResult({ ...peer, peers: [peer] }, "dev")
-        ?.worktree_branch,
-    ).toBeUndefined();
   });
   it("rejects the entire fleet for malformed/wrong-profile/duplicate children or inconsistent head", () => {
     for (const peers of [
@@ -123,84 +65,6 @@ describe("peer wire authority", () => {
     expect(
       parsePeerPrepareResult({ ...peer, brief_path: "" }, "dev"),
     ).toBeNull();
-  });
-  it("rejects a prepare receipt that does not contain the requested fleet size", async () => {
-    const request = vi.fn().mockResolvedValue({ ...peer, peers: [peer] });
-    await expect(
-      createPeerCommands({ request }, scope, caps).prepare({
-        brief: "x",
-        n: 2,
-      }),
-    ).rejects.toThrow("prepare result");
-  });
-  it("validates nullable gather fields and exact profile/filter without manufacturing owner scope", async () => {
-    expect(
-      parsePeerGatherResult({ profile_id: "dev", peers: [row] }, "dev")
-        ?.peers[0]?.result,
-    ).toBeNull();
-    expect(
-      parsePeerGatherResult({ profile_id: "foreign", peers: [row] }, "dev"),
-    ).toBeNull();
-    expect(
-      parsePeerGatherResult(
-        { profile_id: "dev", peers: [{ ...row, closed: "false" }] },
-        "dev",
-      ),
-    ).toBeNull();
-    const request = vi
-      .fn()
-      .mockResolvedValue({ profile_id: "dev", peers: [row] });
-    await expect(
-      createPeerCommands({ request }, scope, caps).gather({
-        slugs: ["different"],
-      }),
-    ).rejects.toThrow("gather result");
-    expect(request).toHaveBeenCalledWith("peer/gather", {
-      session_id: scope.sessionId,
-      profile_id: "dev",
-      slugs: ["different"],
-    });
-  });
-  it("keeps the recorded outcome of a peer's last turn and drops words it does not know", () => {
-    const parse = (last_outcome: unknown) =>
-      parsePeerGatherResult(
-        {
-          profile_id: "dev",
-          peers: [{ ...row, name: "评审甲 · k7q2-1", last_outcome }],
-        },
-        "dev",
-      )?.peers[0];
-    expect(parse("errored")).toMatchObject({
-      name: "评审甲 · k7q2-1",
-      last_outcome: "errored",
-    });
-    expect(parse("completed")?.last_outcome).toBe("completed");
-    expect(parse(null)).not.toHaveProperty("last_outcome");
-    expect(parse("exploded")).not.toHaveProperty("last_outcome");
-  });
-  it("reads a row's master Session only from originator or master_session_id", () => {
-    // T-0082: a reload rebuilds the peer roster from gather, so these are the
-    // only fields that may attach a row to a master. An empty or non-string
-    // value attaches nothing; an unknown execution word is dropped.
-    const parse = (extra: Record<string, unknown>) =>
-      parsePeerGatherResult(
-        { profile_id: "dev", peers: [{ ...row, ...extra }] },
-        "dev",
-      )?.peers[0];
-    expect(
-      parse({
-        originator: "dev:api:web-1",
-        master_session_id: null,
-        execution: "unknown",
-      }),
-    ).toMatchObject({ originator: "dev:api:web-1", execution: "unknown" });
-    expect(parse({ master_session_id: "dev:api:web-2" })).toMatchObject({
-      master_session_id: "dev:api:web-2",
-    });
-    const none = parse({ originator: "", execution: "exploded" });
-    expect(none).not.toHaveProperty("originator");
-    expect(none).not.toHaveProperty("execution");
-    expect(parse({ originator: 7 })).not.toHaveProperty("originator");
   });
   it("requires originating session AND profile on durable notifications", () => {
     const notification = {

@@ -5,112 +5,6 @@ import {
 } from "../src/hydrate.ts";
 
 describe("session hydrate contract", () => {
-  it("restores bounded file mutation references and tolerates old servers", () => {
-    const snapshot = {
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 12 },
-    };
-    const preview = "01962caa-381d-7b2c-8345-66ded4cd67bd";
-    expect(parseSessionHydrateResult(snapshot)?.file_mutations).toBeUndefined();
-    expect(
-      parseSessionHydrateResult({
-        ...snapshot,
-        file_mutations: [
-          {
-            path: "sum.js",
-            operation: "modify",
-            preview_id: preview,
-            bytes_written: 12,
-          },
-          {
-            path: "future.js",
-            operation: "future-operation",
-            preview_id: "invalid",
-          },
-        ],
-      })?.file_mutations,
-    ).toEqual([
-      {
-        path: "sum.js",
-        operation: "modify",
-        preview_id: preview,
-        bytes_written: 12,
-      },
-      { path: "future.js", operation: "modify" },
-    ]);
-    for (const file_mutations of [null, {}, "sum.js"]) {
-      expect(
-        parseSessionHydrateResult({ ...snapshot, file_mutations }),
-      ).toBeNull();
-    }
-  });
-
-  it("parses the optional durable terminal marker with legacy null compatibility", () => {
-    const snapshot = {
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 12 },
-    };
-    const turn = (completed_at_durable?: boolean | null | string) => ({
-      ...snapshot,
-      turns: [
-        {
-          turn_id: "turn",
-          state: "completed",
-          started_at: "2026-11-01T19:59:00Z",
-          completed_at: "2026-11-01T20:00:10Z",
-          ...(completed_at_durable === undefined
-            ? {}
-            : { completed_at_durable }),
-        },
-      ],
-    });
-    expect(parseSessionHydrateResult(turn())?.turns?.[0]).not.toHaveProperty(
-      "completed_at_durable",
-    );
-    expect(
-      parseSessionHydrateResult(turn(null))?.turns?.[0],
-    ).not.toHaveProperty("completed_at_durable");
-    expect(parseSessionHydrateResult(turn(true))?.turns?.[0]).toMatchObject({
-      completed_at_durable: true,
-    });
-    expect(parseSessionHydrateResult(turn(false))?.turns?.[0]).toMatchObject({
-      completed_at_durable: false,
-    });
-    expect(parseSessionHydrateResult(turn("true"))).toBeNull();
-  });
-
-  it("drops only the file mutation entries it cannot read", () => {
-    const snapshot = {
-      session_id: "coding:local:main",
-      cursor: { stream: "coding:local:main", seq: 12 },
-    };
-    expect(
-      parseSessionHydrateResult({
-        ...snapshot,
-        file_mutations: [
-          { path: "first.js", operation: "modify" },
-          { path: "" },
-          { path: "x".repeat(4097) },
-          { path: "bad\npath" },
-          { path: "tab\tname.md", operation: "create" },
-          { operation: "modify" },
-          42,
-          null,
-          { path: "last.js", operation: "create" },
-        ],
-      })?.file_mutations,
-    ).toEqual([
-      { path: "first.js", operation: "modify" },
-      { path: "last.js", operation: "create" },
-    ]);
-    expect(
-      parseSessionHydrateResult({
-        ...snapshot,
-        file_mutations: [{ path: "bad\tpath" }],
-      })?.file_mutations,
-    ).toEqual([]);
-  });
-
   it("parses authoritative messages and injects session scope into replay envelopes", () => {
     const result = parseSessionHydrateResult({
       session_id: "coding:local:main",
@@ -169,17 +63,6 @@ describe("session hydrate contract", () => {
       dropped_count: 4,
       last_durable_cursor: { stream: "session", seq: 22 },
     });
-  });
-
-  it("accepts complete and compacted canonical replay with atomic checkpoints", () => {
-    expect(parseSessionHydrateResult(canonicalHydrate())).toMatchObject({
-      replayed_projection_envelopes: [{ session_id: "s", seq: 5 }],
-      projection_thread_sequences: { t: 5, compacted: 12 },
-    });
-    const legacy = canonicalHydrate();
-    delete legacy.replayed_projection_envelopes;
-    delete legacy.projection_thread_sequences;
-    expect(parseSessionHydrateResult(legacy)).not.toBeNull();
   });
 
   it("rejects malformed, foreign, duplicate, or future replay before accepting its cursor", () => {

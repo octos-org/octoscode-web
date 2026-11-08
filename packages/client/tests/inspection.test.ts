@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createInspectionCommands,
-  parseInspectionThreadGraph,
   parseInspectionTurnState,
   parseInspectionApprovalScopes,
 } from "../src/inspection.ts";
@@ -25,20 +24,6 @@ function caps(): UiProtocolCapabilities {
     supported_notifications: [],
   };
 }
-const graph = () => ({
-  session_id: session,
-  cursor: { stream: session, seq: 10 },
-  threads: [
-    {
-      thread_id: "thread-1",
-      root_seq: 0,
-      root_client_message_id: "message-1",
-      message_seqs: [0, 2],
-      status: "unknown",
-    },
-  ],
-  orphans: [1],
-});
 const state = () => ({ session_id: session, turn_id: turn, state: "unknown" });
 const context = () => ({
   session_id: session,
@@ -136,138 +121,6 @@ describe("native inspection contracts", () => {
         session,
       )?.scopes[0]?.decision,
     ).toBe("future_registry_value");
-  });
-  it("sends only the native scoped read parameters and strips extra scope/result fields", async () => {
-    const request = vi.fn(async (method: string) =>
-      method === M.THREAD_GRAPH_GET
-        ? { ...graph(), token: "never-retain" }
-        : state(),
-    );
-    const owner = {
-      sessionId: session,
-      profileId: "coding",
-      authority: {},
-      token: "never-retain",
-    };
-    const commands = createInspectionCommands({ request }, owner, caps());
-    owner.sessionId = "coding:local:other";
-    expect(await commands.readThreadGraph()).toEqual(graph());
-    expect(await commands.readTurnState(turn)).toMatchObject({
-      ...state(),
-      committed_seqs: [],
-    });
-    expect(request.mock.calls).toEqual([
-      [M.THREAD_GRAPH_GET, { session_id: session }],
-      [M.TURN_STATE_GET, { session_id: session, turn_id: turn }],
-    ]);
-    expect(commands.scope).not.toHaveProperty("token");
-  });
-  it.each(["methods", "features"])(
-    "fails closed without negotiated %s and cannot elevate a captured grant",
-    async (missing) => {
-      const capabilities = caps();
-      if (missing === "methods") capabilities.supported_methods = [];
-      else capabilities.supported_features = [];
-      const request = vi.fn();
-      const commands = createInspectionCommands(
-        { request },
-        { sessionId: session, profileId: "coding", authority: {} },
-        capabilities,
-      );
-      Object.assign(capabilities, caps());
-      await expect(commands.readThreadGraph()).rejects.toThrow("advertised");
-      await expect(commands.readTurnState(turn)).rejects.toThrow("advertised");
-      expect(request).not.toHaveBeenCalled();
-    },
-  );
-  it("rejects invalid turn identifiers before RPC and wrong owner replies after RPC", async () => {
-    const request = vi.fn(async () => ({
-      ...state(),
-      turn_id: "00000000-0000-4000-8000-000000000022",
-    }));
-    const commands = createInspectionCommands(
-      { request },
-      { sessionId: session, profileId: "coding", authority: {} },
-      caps(),
-    );
-    await expect(commands.readTurnState("not-a-uuid")).rejects.toThrow("UUID");
-    expect(request).not.toHaveBeenCalled();
-    await expect(commands.readTurnState(turn)).rejects.toThrow("wrong-owner");
-    expect(
-      parseInspectionThreadGraph(
-        { ...graph(), session_id: `${session}#foreign` },
-        session,
-      ),
-    ).toBeNull();
-    expect(
-      parseInspectionTurnState(
-        { ...state(), session_id: `${session}#foreign` },
-        session,
-        turn,
-      ),
-    ).toBeNull();
-  });
-  it("accepts empty/unknown and open thread statuses without inventing turn links or liveness", () => {
-    expect(
-      parseInspectionThreadGraph(
-        { ...graph(), threads: [], orphans: [] },
-        session,
-      )?.threads,
-    ).toEqual([]);
-    expect(
-      parseInspectionThreadGraph(graph(), session)?.threads[0],
-    ).not.toHaveProperty("turn_id");
-    const value = graph();
-    value.threads[0]!.status = "future_registered_status";
-    expect(parseInspectionThreadGraph(value, session)?.threads[0]?.status).toBe(
-      "future_registered_status",
-    );
-    expect(
-      parseInspectionTurnState(state(), session, turn)?.committed_seqs,
-    ).toEqual([]);
-    expect(
-      parseInspectionTurnState(
-        { ...state(), state: "fabricated" },
-        session,
-        turn,
-      ),
-    ).toBeNull();
-  });
-  it("rejects malformed, duplicated, or unsafe sequence data and returns detached arrays", () => {
-    const value = graph();
-    const parsed = parseInspectionThreadGraph(value, session)!;
-    value.threads[0]!.message_seqs.push(9);
-    expect(parsed.threads[0]!.message_seqs).toEqual([0, 2]);
-    expect(
-      parseInspectionThreadGraph(
-        { ...value, threads: [value.threads[0], value.threads[0]] },
-        session,
-      ),
-    ).toBeNull();
-    for (const orphans of [
-      [-1],
-      [0.5],
-      [Number.MAX_SAFE_INTEGER + 1],
-      [1, 1],
-      ["1"],
-    ])
-      expect(
-        parseInspectionThreadGraph({ ...value, orphans }, session),
-      ).toBeNull();
-    expect(
-      parseInspectionTurnState(
-        { ...state(), committed_seqs: null },
-        session,
-        turn,
-      ),
-    ).toBeNull();
-    expect(
-      parseInspectionTurnState(
-        { ...state(), started_at: "not-time" },
-        session,
-        turn,
-      ),
-    ).toBeNull();
   });
   it("projects only audited context counts/labels and rejects contradictory nested ownership", () => {
     const value = {

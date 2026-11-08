@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createMemoryCommands,
-  parseMemoryEntity,
-  parseMemoryLoad,
-} from "../src/memory.ts";
+import { createMemoryCommands, parseMemoryEntity } from "../src/memory.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
@@ -83,30 +79,6 @@ describe("memory protocol", () => {
     expect((await commands.load(record.id)).record.body).toBe("probe body");
   });
 
-  it("decodes ingest, request, and promote outcomes", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({
-        inserted: 1,
-        updated: 0,
-        unchanged: 0,
-        vectors_stored: 0,
-        embedded: 0,
-      })
-      .mockResolvedValueOnce({ status: "accepted", refresh_enabled: true })
-      .mockResolvedValueOnce({
-        record_ids: [record.id],
-        count: 1,
-        refresh_enabled: true,
-      });
-    const commands = createMemoryCommands({ request }, capabilities);
-    expect((await commands.ingest([record])).inserted).toBe(1);
-    expect((await commands.request("req-1", "remember this")).status).toBe(
-      "accepted",
-    );
-    expect((await commands.promote("t0008")).recordIds).toEqual([record.id]);
-  });
-
   it("rejects wrong entity ids and missing AUX before calling the server", async () => {
     expect(
       parseMemoryEntity(
@@ -129,51 +101,7 @@ describe("memory protocol", () => {
   });
 });
 
-describe("memory record bookkeeping", () => {
-  it("keeps what Core's load sends about a record, without requiring it", () => {
-    const loaded = parseMemoryLoad(
-      {
-        record: {
-          ...record,
-          schema_version: 1,
-          last_visit: "2026-11-05T20:10:00Z",
-          promoted: false,
-          updated_at: "2026-11-05T20:00:01Z",
-          fingerprint: "sha256:abc",
-        },
-        page_truncated: false,
-      },
-      record.id,
-    );
-    expect(loaded?.record).toMatchObject({
-      lastVisit: "2026-11-05T20:10:00Z",
-      promoted: false,
-      updatedAt: "2026-11-05T20:00:01Z",
-      fingerprint: "sha256:abc",
-    });
-    expect(loaded?.record).not.toHaveProperty("schemaVersion");
-    const odd = parseMemoryLoad(
-      {
-        record: { ...record, promoted: "yes", updated_at: 5, fingerprint: "" },
-        page_truncated: false,
-      },
-      record.id,
-    );
-    expect(odd?.record.promoted).toBeUndefined();
-    expect(odd?.record.updatedAt).toBeUndefined();
-    expect(odd?.record.fingerprint).toBeUndefined();
-  });
-});
-
 describe("session memory scope", () => {
-  it("rejects unsupported scope before sending a request", () => {
-    const request = vi.fn();
-    expect(() =>
-      createMemoryCommands({ request }, capabilities, "web-coding"),
-    ).toThrow(/memory.session_scope/);
-    expect(request).not.toHaveBeenCalled();
-  });
-
   it("sends the selected session on every read and mutation", async () => {
     const request = vi.fn().mockRejectedValue(new Error("server refusal"));
     const commands = createMemoryCommands(

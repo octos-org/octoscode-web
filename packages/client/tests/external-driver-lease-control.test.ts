@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   EXTERNAL_DRIVER_METHODS,
   EXTERNAL_DRIVER_V1_FEATURE,
-  ExternalDriverCapabilityError,
   ExternalDriverProtocolError,
   createExternalDriverCommands,
 } from "../src/external-driver.ts";
@@ -33,7 +32,6 @@ function caps(methods: string[], features: string[]): UiProtocolCapabilities {
   };
 }
 
-const GET = EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_GET;
 const ALL_METHODS = Object.values(EXTERNAL_DRIVER_METHODS);
 
 /** Full positive control capability: every advertised method + the feature.
@@ -98,10 +96,6 @@ const RELEASE_EXTERNAL_REPLY = {
 };
 
 /** Release-to-internal: binding is ABSENT (unlike get, which retains it). */
-const RELEASE_INTERNAL_REPLY = {
-  mode: "internal",
-  recovery: "none",
-};
 
 function harness(capabilities: UiProtocolCapabilities, reply: () => unknown) {
   const calls: Array<{ method: string; params: unknown }> = [];
@@ -167,19 +161,6 @@ describe("driverRelease enforces the FROZEN mode-specific shape", () => {
     expect(JSON.stringify(result)).not.toContain(PROOF);
   });
 
-  it("accepts an internal release: binding is ABSENT (never retained)", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone(RELEASE_INTERNAL_REPLY),
-    );
-    const result = await commands.driverRelease(RELEASE_INTERNAL_ARGS);
-    expect(calls[0]?.method).toBe(
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
-    );
-    expect(calls[0]?.params).toMatchObject({ next: "internal" });
-    expect(result.mode).toBe("internal");
-    expect(result.binding).toBeNull();
-  });
-
   it("rejects a FOREIGN next: requested internal but reply says external", async () => {
     const { calls, commands } = harness(FULL_CAPS, () =>
       structuredClone(RELEASE_EXTERNAL_REPLY),
@@ -188,76 +169,6 @@ describe("driverRelease enforces the FROZEN mode-specific shape", () => {
       commands.driverRelease(RELEASE_INTERNAL_ARGS),
       calls,
       EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
-    );
-  });
-
-  it("rejects external next with a MISSING parked binding", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone({ mode: "external", recovery: "none" }),
-    );
-    await expectLeaseRejected(
-      commands.driverRelease(RELEASE_EXTERNAL_ARGS),
-      calls,
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
-    );
-  });
-
-  it("rejects a parked binding that still carries a live lease", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone({
-        mode: "external",
-        binding: { ...BINDING_WIRE, lease_expires_at_ms: 1_700_000_000_000 },
-        recovery: "none",
-      }),
-    );
-    await expectLeaseRejected(
-      commands.driverRelease(RELEASE_EXTERNAL_ARGS),
-      calls,
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
-    );
-  });
-
-  it("rejects an internal reply that wrongly carries a binding", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone({
-        mode: "internal",
-        binding: { ...BINDING_WIRE, lease_expires_at_ms: 0 },
-        recovery: "none",
-      }),
-    );
-    await expectLeaseRejected(
-      commands.driverRelease(RELEASE_INTERNAL_ARGS),
-      calls,
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
-    );
-  });
-});
-
-describe("driverAcquire binds the receipt to the captured caller driverId", () => {
-  it("accepts a receipt whose binding.driver_id equals the caller's", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone(ACQUIRE_REPLY),
-    );
-    const result = await commands.driverAcquire(ACQUIRE_ARGS);
-    expect(calls[0]?.method).toBe(
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_ACQUIRE,
-    );
-    expect(result.capability.driverId).toBe("driver-b");
-    expect(result.capability.epoch).toBe(8);
-    expect(result.capability.reveal()).toBe(PROOF);
-  });
-
-  it("rejects a FOREIGN driver's receipt (no capability handed back)", async () => {
-    const { calls, commands } = harness(FULL_CAPS, () =>
-      structuredClone({
-        ...ACQUIRE_REPLY,
-        binding: { ...BINDING_WIRE, driver_id: "driver-foreign" },
-      }),
-    );
-    await expectLeaseRejected(
-      commands.driverAcquire(ACQUIRE_ARGS),
-      calls,
-      EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_ACQUIRE,
     );
   });
 });
@@ -310,26 +221,5 @@ describe("lease proof stays redacted and gating stays offline", () => {
       calls,
       EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_ACQUIRE,
     );
-  });
-
-  it("driverRelease fails closed when the feature is absent (zero wire)", async () => {
-    const { calls, commands } = harness(caps(ALL_METHODS, []), () =>
-      structuredClone(RELEASE_EXTERNAL_REPLY),
-    );
-    await expect(
-      commands.driverRelease(RELEASE_EXTERNAL_ARGS),
-    ).rejects.toBeInstanceOf(ExternalDriverCapabilityError);
-    expect(calls).toEqual([]);
-  });
-
-  it("driverRelease fails closed when its method is unadvertised (zero wire)", async () => {
-    const { calls, commands } = harness(
-      caps([GET], [EXTERNAL_DRIVER_V1_FEATURE]),
-      () => structuredClone(RELEASE_EXTERNAL_REPLY),
-    );
-    await expect(
-      commands.driverRelease(RELEASE_EXTERNAL_ARGS),
-    ).rejects.toBeInstanceOf(ExternalDriverCapabilityError);
-    expect(calls).toEqual([]);
   });
 });

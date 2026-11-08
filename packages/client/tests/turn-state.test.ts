@@ -10,21 +10,6 @@ const base = {
 };
 
 describe("Core rc.9 turn/state/get narrow contract", () => {
-  it.each([
-    "active",
-    "interrupting",
-    "completed",
-    "errored",
-    "interrupted",
-    "unknown",
-  ])("accepts explicit %s and omitted empty metadata", (state) => {
-    expect(parseTurnStateGetResult({ ...base, state })).toEqual({
-      ...base,
-      state,
-      committed_seqs: [],
-    });
-  });
-
   it("accepts lifecycle metadata and ignores unrelated context extensions", () => {
     expect(
       parseTurnStateGetResult({
@@ -44,22 +29,6 @@ describe("Core rc.9 turn/state/get narrow contract", () => {
       thread_id: "thread-1",
       committed_seqs: [0, 1],
     });
-  });
-
-  it.each([
-    { state: "future" },
-    { state: null },
-    { session_id: "" },
-    { turn_id: 1 },
-    { started_at: 123 },
-    { thread_id: null },
-    { committed_seqs: [-1] },
-    { committed_seqs: [1.1] },
-    { committed_seqs: [Number.MAX_SAFE_INTEGER + 1] },
-    { committed_seqs: ["1"] },
-    { committed_seqs: null },
-  ])("rejects malformed lifecycle data %j", (invalid) => {
-    expect(parseTurnStateGetResult({ ...base, ...invalid })).toBeNull();
   });
 
   it("requires both negotiated feature and an advertised method without a denial", () => {

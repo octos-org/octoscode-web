@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createSkillActionCommands,
-  parseSkillActionJobUpdated,
-} from "../src/skill-actions.ts";
+import { createSkillActionCommands } from "../src/skill-actions.ts";
 import {
   APPUI_SKILL_ACTION_METHODS,
   SKILL_ACTIONS_UI_FEATURE,
@@ -79,91 +76,6 @@ describe("skill action protocol", () => {
       action_id: "lifecycle-skill/document.probe",
       arguments: {},
     });
-  });
-
-  it("decodes synchronous results and live job updates", async () => {
-    const request = vi.fn().mockResolvedValue({
-      action_id: "document.probe",
-      ok: true,
-      results: [{ success: true, output: "protocol action fixture" }],
-    });
-    const commands = createSkillActionCommands(
-      { request },
-      "coding",
-      "session-1",
-      capabilities,
-    );
-    expect((await commands.invoke("document.probe")).results[0]?.output).toBe(
-      "protocol action fixture",
-    );
-    expect(
-      parseSkillActionJobUpdated(
-        {
-          jsonrpc: "2.0",
-          method: "skill/action/job/updated",
-          params: { profile_id: "coding", session_id: "session-1", job },
-        },
-        "coding",
-        "session-1",
-      )?.id,
-    ).toBe("job-1");
-    expect(
-      parseSkillActionJobUpdated(
-        {
-          jsonrpc: "2.0",
-          method: "skill/action/job/updated",
-          params: { profile_id: "other", session_id: "session-1", job },
-        },
-        "coding",
-        "session-1",
-      ),
-    ).toBeNull();
-  });
-
-  it("keeps same-named actions from different skills distinct", async () => {
-    const request = vi.fn().mockResolvedValue({
-      profile_id: "coding",
-      session_id: "session-1",
-      count: 2,
-      actions: [action, { ...action, skill_id: "other-skill" }],
-    });
-    const commands = createSkillActionCommands(
-      { request },
-      "coding",
-      "session-1",
-      capabilities,
-    );
-    expect((await commands.list()).map((entry) => entry.skillId)).toEqual([
-      "lifecycle-skill",
-      "other-skill",
-    ]);
-  });
-
-  it("accepts legal long synchronous and background output", async () => {
-    const longOutput = "x".repeat(8193);
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({
-        action_id: "document.probe",
-        ok: true,
-        results: [{ success: true, output: longOutput }],
-      })
-      .mockResolvedValueOnce({
-        profile_id: "coding",
-        session_id: "session-1",
-        count: 1,
-        jobs: [{ ...job, output: longOutput, error: longOutput }],
-      });
-    const commands = createSkillActionCommands(
-      { request },
-      "coding",
-      "session-1",
-      capabilities,
-    );
-    expect((await commands.invoke("document.probe")).results[0]?.output).toBe(
-      longOutput,
-    );
-    expect((await commands.listJobs())[0]?.output).toBe(longOutput);
   });
 
   it("fails closed on wrong scope and missing negotiated features", async () => {

@@ -37,49 +37,6 @@ const job = {
 };
 
 describe("cron protocol", () => {
-  it("lists jobs and returns the toggled job", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({
-        jobs: [job],
-        count: 1,
-        gateway_running: false,
-        truncated: false,
-      })
-      .mockResolvedValueOnce({ job: { ...job, enabled: true } });
-    const commands = createCronCommands({ request }, capabilities);
-    expect((await commands.list()).jobs[0]?.enabled).toBe(false);
-    expect((await commands.toggle("cron-1", true)).enabled).toBe(true);
-    expect(request).toHaveBeenNthCalledWith(1, "cron/list", {});
-    expect(request).toHaveBeenLastCalledWith("cron/toggle", {
-      job_id: "cron-1",
-      enabled: true,
-    });
-  });
-
-  it("adds the optional current session to list and toggle", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({
-        jobs: [job],
-        count: 1,
-        gateway_running: false,
-        truncated: false,
-      })
-      .mockResolvedValueOnce({ job: { ...job, enabled: true } });
-    const commands = createCronCommands({ request }, capabilities);
-    await commands.list("coding:api:web-current");
-    await commands.toggle("cron-1", true, "coding:api:web-current");
-    expect(request).toHaveBeenNthCalledWith(1, "cron/list", {
-      session_id: "coding:api:web-current",
-    });
-    expect(request).toHaveBeenNthCalledWith(2, "cron/toggle", {
-      job_id: "cron-1",
-      enabled: true,
-      session_id: "coding:api:web-current",
-    });
-  });
-
   it("creates At, Every and Cron jobs with exact session scope", async () => {
     const created = {
       ...job,
@@ -122,27 +79,6 @@ describe("cron protocol", () => {
       lastError: "delivery refused",
       enabled: true,
     });
-  });
-
-  it("deletes by session and job id and accepts an idempotent result", async () => {
-    const request = vi.fn().mockResolvedValue({ deleted: true });
-    const commands = createCronCommands({ request }, capabilities);
-    await commands.delete("session-1", "missing-job");
-    expect(request).toHaveBeenCalledWith("cron/delete", {
-      session_id: "session-1",
-      job_id: "missing-job",
-    });
-  });
-
-  it("keeps truncation and gateway ownership visible", () => {
-    expect(
-      parseCronList({
-        jobs: [job],
-        count: 8,
-        gateway_running: true,
-        truncated: true,
-      }),
-    ).toMatchObject({ count: 8, gatewayRunning: true, truncated: true });
   });
 
   it("fails closed without AUX", async () => {

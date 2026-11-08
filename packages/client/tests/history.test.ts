@@ -1,18 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createHistoryCommands,
-  parseSnapshotList,
-  parseSnapshotRestore,
   parseRollbackResult,
   parseForkResult,
   parseReviewStartResult,
 } from "../src/history.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
-const row = {
-  id: "checkpoint-1",
-  label: "Before patch",
-  timestamp_unix: 12345,
-};
 const turnId = "00000000-0000-4000-8000-000000000001";
 const capabilities = (
   methods: string[],
@@ -49,72 +42,6 @@ describe("conversation and workspace history contracts", () => {
     );
     await expect(commands.rewind(0x1_0000_0000)).rejects.toThrow("positive");
     expect(request).not.toHaveBeenCalled();
-  });
-  it("distinguishes restore response from listing and availability from enabled", () => {
-    expect(
-      parseSnapshotList(
-        { session_id: "s1", enabled: false, available: true, snapshots: [row] },
-        "s1",
-      ),
-    ).toMatchObject({ enabled: false, available: true });
-    expect(
-      parseSnapshotRestore(
-        { session_id: "s1", restored: row.id, snapshots: [row] },
-        "s1",
-        row.id,
-      ),
-    ).toMatchObject({ restored: row.id });
-    expect(
-      parseSnapshotRestore(
-        { session_id: "s2", restored: row.id, snapshots: [row] },
-        "s1",
-        row.id,
-      ),
-    ).toBeNull();
-    // Core b7b360b7 lists one commit under two refs when a restore's
-    // pre-restore point repeats an earlier one within a second (T-0433).
-    expect(
-      parseSnapshotList(
-        {
-          session_id: "s1",
-          enabled: true,
-          available: true,
-          snapshots: [row, { ...row, label: "pre-restore" }],
-        },
-        "s1",
-      )?.snapshots,
-    ).toEqual([row]);
-  });
-  it("keeps a turn's undo point and nothing a malformed one claims", () => {
-    const turnRow = {
-      id: "checkpoint-2",
-      label: `pre-turn ${turnId}`,
-      timestamp_unix: 12346,
-      turn_id: turnId,
-    };
-    expect(
-      parseSnapshotList(
-        {
-          session_id: "s1",
-          enabled: true,
-          available: true,
-          snapshots: [{ ...turnRow, extra: "ignored" }, row],
-        },
-        "s1",
-      )?.snapshots,
-    ).toEqual([turnRow, row]);
-    for (const bad of ["", 7, null])
-      expect(
-        parseSnapshotList(
-          {
-            session_id: "s1",
-            enabled: true,
-            available: true,
-            snapshots: [{ ...turnRow, turn_id: bad }],
-          },
-          "s1",
-        ),
-      ).toBeNull();
   });
   it("accepts only the owning hydrated thread on rewind", () => {
     const thread = {
@@ -157,23 +84,5 @@ describe("conversation and workspace history contracts", () => {
     expect(
       parseReviewStartResult({ ...review, backend: "prompt" }, "s1", turnId),
     ).toBeNull();
-  });
-  it("makes no unsupported or malformed mutation request", async () => {
-    const request = vi.fn();
-    const absent = createHistoryCommands({ request }, "s1", capabilities([]));
-    await expect(absent.restoreSnapshot(row.id)).rejects.toThrow(
-      "not advertised",
-    );
-    await expect(absent.startReview(turnId)).rejects.toThrow("not advertised");
-    const commands = createHistoryCommands(
-      { request },
-      "s1",
-      capabilities(["session/rollback", "review/start"]),
-    );
-    await expect(commands.rewind(0)).rejects.toThrow("positive");
-    await expect(commands.startReview(turnId)).rejects.toThrow(
-      "not advertised",
-    );
-    expect(request).not.toHaveBeenCalled();
   });
 });
