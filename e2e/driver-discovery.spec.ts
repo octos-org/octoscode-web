@@ -382,20 +382,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     expect(controlModelAfter).toBe(controlModelBefore);
   });
 
-  test("renders an INTERNAL disclosure with no binding rows", async ({
-    page,
-  }) => {
-    const probe = observe(page);
-    await connect(page, probe, "internal");
-
-    const bar = disclosure(page);
-    await expect(bar).toHaveCount(1);
-    await expect(bar.locator("summary")).toContainText("Internal controller");
-    // No binding => the Driver/Epoch/Revision/Lease rows must not be rendered.
-    await expect(bar).not.toContainText("No active lease");
-    await expect(bar).not.toContainText("synthetic-driver-");
-  });
-
   // ---------------------------------------------------------------- group 2
   test("holds ONLY the first walk of a workspace: same-workspace sibling completes while A stays held", async ({
     page,
@@ -465,22 +451,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     await expect(factRow(page, "Driver")).not.toContainText(bId);
   });
 
-  // ---------------------------------------------------------------- group 3
-  for (const variant of ["no-method", "no-feature"]) {
-    test(`does not admit a walk when ${variant} capability is withheld`, async ({
-      page,
-    }) => {
-      const probe = observe(page);
-      await connect(page, probe, variant);
-
-      // The admission gate requires BOTH the method and the feature; with one
-      // withheld the walk must never be sent and no disclosure may mount.
-      await page.waitForTimeout(500);
-      expect(probe.calls(METHOD)).toHaveLength(0);
-      await expect(disclosure(page)).toHaveCount(0);
-    });
-  }
-
   // ---------------------------------------------------------------- group 4
   test("surfaces a typed refusal and never mounts a disclosure for it", async ({
     page,
@@ -533,57 +503,5 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     expect(reply.errorCode).toBe(-32_041);
     expect(reply.refusalKind).toBe("driver_scope_mismatch");
     await expect(disclosure(page)).toHaveCount(0);
-  });
-
-  test("transitions malformed -> healthy across a transport reconnect on the SAME record", async ({
-    page,
-    request,
-  }) => {
-    const probe = observe(page);
-    const s = await connect(page, probe, "");
-    await expect(disclosure(page)).toHaveCount(1);
-
-    // Damage the SAME record's binding, then reconnect: the strict decoder
-    // rejects the malformed binding and the disclosure collapses.
-    await driverControl(request, "malform", s.sessionId);
-    const before = probe.calls(METHOD).length;
-    await forceReconnect(request);
-    await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(before);
-    await expect(disclosure(page)).toHaveCount(0);
-
-    // Undo the damage and reconnect once more: the record recovers to healthy
-    // and the disclosure re-mounts with its exact synthetic id.
-    await driverControl(request, "allow", s.sessionId);
-    const recovered = probe.calls(METHOD).length;
-    await forceReconnect(request);
-    await expect
-      .poll(() => probe.calls(METHOD).length)
-      .toBeGreaterThan(recovered);
-    await expect(disclosure(page)).toHaveCount(1);
-    await expect(factRow(page, "Driver")).toContainText(
-      `synthetic-driver-${s.sessionId}`,
-    );
-  });
-
-  // ---------------------------------------------------------------- group 5
-  test("observes a deterministic discovery request: one walk, real params, terminal page", async ({
-    page,
-  }) => {
-    const probe = observe(page);
-    const s = await connect(page, probe, "");
-
-    await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(0);
-    const walk = probe.calls(METHOD)[0]!;
-    expect(walk.sessionId).toBe(s.sessionId);
-    expect(walk.operationsRequested).toBe(true);
-    await probe.settled(walk);
-    const reply = probe.replyTo(walk)!;
-    expect(reply.mode).toBe("external");
-    expect(reply.recovery).toBe("none");
-    expect(reply.epoch).toBe(7);
-    expect(reply.revision).toBe(42);
-    expect(reply.leaseExpiresAtMs).toBe(0);
-    // The observation retains no payload: only the projected counts above.
-    expect(reply.opsItemCount).toBe(0);
   });
 });

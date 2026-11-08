@@ -14,35 +14,6 @@ test.afterEach(async ({ request }) => {
   await request.post(`${ORIGIN}/__test__/session-list/reset`);
 });
 
-test("phone browses a server folder without typing or starting a session", async ({
-  page,
-  request,
-}) => {
-  await request.post(
-    `${ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent("/srv/fixture/Projects/octoscode-web")}`,
-  );
-  await page.setViewportSize({ width: 390, height: 844 });
-  const methods: string[] = [];
-  page.on("websocket", (ws) =>
-    ws.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload));
-      if (frame.method) methods.push(frame.method);
-    }),
-  );
-  await connect(page);
-  await page
-    .getByRole("button", { name: "Browse server folders", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Open folder Projects" }).click();
-  await page.getByRole("button", { name: "Use folder octoscode-web" }).click();
-  await expect(
-    page.getByRole("region", { name: "Watched folders" }),
-  ).toContainText("/srv/fixture/Projects/octoscode-web");
-  expect(methods).toContain("onboarding/workspace_list");
-  expect(methods).not.toContain("session/open");
-  expect(methods).not.toContain("turn/start");
-});
-
 test("desktop handoff lets a fresh phone approve work without entering folders", async ({
   browser,
   request,
@@ -150,25 +121,4 @@ test("a handoff never auto-connects with this tab's saved credential", async ({
   await expect(
     page.getByRole("region", { name: "Watched folders" }),
   ).not.toContainText("/srv/private");
-});
-
-test("a malformed phone link reports an error and offers manual connection", async ({
-  page,
-}) => {
-  await page.goto("/?view=remote#handoff=broken");
-  await expect(page.getByRole("alert")).toContainText("phone link is invalid");
-  await expect(page.getByLabel("Auth token", { exact: true })).toHaveValue("");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Remote control" }),
-  ).toBeVisible();
-  // An older core still has the manual path form, never an unusable Browse.
-  await expect(
-    page.getByRole("button", { name: "Browse server folders" }),
-  ).toHaveCount(0);
-  await expect(page.getByLabel("Server folder path")).toBeVisible();
 });

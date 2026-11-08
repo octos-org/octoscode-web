@@ -97,28 +97,6 @@ export function fleetStartBegin(
   };
 }
 
-/** The receipt identity ONE settle hands the state machine. */
-export interface FleetStartReceipt {
-  readonly kind: "accepted";
-  readonly slug: string;
-  readonly operationId: string;
-}
-
-/** Settle a REQUESTING Start from the sink's receipt (accepted) outcome. */
-export function fleetStartSettle(
-  state: FleetStartState,
-  receipt: FleetStartReceipt,
-): FleetStartState {
-  if (state.kind !== "requesting") return state;
-  return {
-    kind: "accepted",
-    laneKey: state.laneKey,
-    brief: state.brief,
-    operationId: state.operationId,
-    slug: receipt.slug,
-  };
-}
-
 /** Round 4 J2: a Retry from the UNCERTAIN state re-enters requesting, SAME id. */
 export function fleetStartRetryFromUncertain(
   state: FleetStartState,

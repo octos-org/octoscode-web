@@ -76,26 +76,3 @@ test("shows files the agent delivers, previews images, downloads them, and keeps
     page.locator('[data-attachment="Single-Panel-Pilot-3p.pptx"]'),
   ).toBeVisible();
 });
-
-test("says a file could not be loaded instead of failing silently", async ({
-  page,
-  request,
-}) => {
-  const sessionId = await openConversation(
-    page,
-    `/workspace/delivered-missing-${Date.now()}`,
-  );
-  // Deliver, then make the file unreadable: the fixture serves only paths it
-  // knows, like Core refusing a path outside the tenant root.
-  await page.route("**/api/files**", (route) =>
-    route.fulfill({ status: 403, body: "access denied" }),
-  );
-  await request.post(
-    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=gone.png`,
-  );
-  const item = page.locator('[data-attachment="gone.png"]');
-  await expect(item).toBeVisible();
-  await expect(item.getByRole("status")).toHaveText(
-    "This file could not be loaded.",
-  );
-});

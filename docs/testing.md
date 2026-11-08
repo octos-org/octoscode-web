@@ -33,13 +33,13 @@ injected during the build. A prebuilt artifact must match the desired connection
 defaults, although tests explicitly enter their fixture origin.
 
 Install Firefox and WebKit with `pnpm exec playwright install firefox webkit`
-for the small continuous smoke lane. Its separate config keeps Chromium-only
-visual baselines and the Long Animation Frames gate in the main suite. The
-default fixture hydrates a fixed durable transcript; smoke verifies that known
-history and unsent drafts reopen. It does not prove that every newly generated
-fixture response was persisted. Scenario-specific recovery tests and the real
-Core gate supply that evidence. Keyboard and accessibility assertions do not
-claim real VoiceOver, NVDA or physical-mobile coverage.
+for the small continuous smoke lane. Its separate config keeps the Chromium-only
+Long Animation Frames gate in the main suite. The default fixture hydrates a
+fixed durable transcript; smoke verifies that known history and unsent drafts
+reopen. It does not prove that every newly generated fixture response was
+persisted. Scenario-specific recovery tests and the real Core gate supply that
+evidence. Keyboard and accessibility assertions do not claim real VoiceOver,
+NVDA or physical-mobile coverage.
 
 ## Multi-Session browser gate
 
@@ -101,9 +101,9 @@ The browser suites prove:
 The fixture's explicit acknowledgement and terminal barriers avoid using short
 delays as proof of admission or concurrency. Controls include
 `/__test__/turn-start/{hold-next,state,admit,release,reject,reset}`,
-`/__test__/terminal/{hold-next,state,release,reset}`,
-`/__test__/session-open/{reject-next,reset}`, `/__test__/disconnect`, and
-`/__test__/replay-lossy`. Controls are fixture-only and are not product RPCs.
+`/__test__/terminal/{hold-next,state,release,reset}`, `/__test__/disconnect`,
+and `/__test__/replay-lossy`. Controls are fixture-only and are not product
+RPCs.
 
 History tests use `/__test__/history/{hold-refresh,state,release,reset}` to
 pause only the post-mutation canonical hydrate, not the initial history read.

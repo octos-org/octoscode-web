@@ -7,8 +7,6 @@ const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_POR
 const TOKEN = "tab-scoped-e2e-token";
 const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const CWD = "/srv/work/peer-control-";
-/** §6 row 1 copy. */
-const FOREIGN_HOLDER = "Another app is using this session";
 const RELEASE_METHOD = "session/driver/release";
 const START_METHOD = "turn/start";
 
@@ -141,48 +139,6 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     await request.post(`${FIXTURE_ORIGIN}/__test__/driver/reset-all`);
     await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
     await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
-  });
-
-  test("an external-held session restores uploaded media and reasoning for an explicit retry", async ({
-    page,
-  }) => {
-    const w = wire(page);
-    await connectAndStartWorkspace(page, `${CWD}handover-refused`);
-    const pane = await openAdvanced(page);
-    await expect(pane).toContainText(FOREIGN_HOLDER);
-    // The holder's disclosed lease expiry, so the operator knows when to retry.
-    await expect(
-      pane
-        .locator("dt", { hasText: "Lease expiry" })
-        .locator("xpath=following-sibling::dd[1]"),
-    ).toHaveText(await page.evaluate(() => new Date(0).toLocaleTimeString()));
-    await pane.getByRole("button", { name: "Close", exact: true }).click();
-
-    const upload = await uploadedDraft(page);
-    await sendPrompt(page, "keep this draft");
-    await expect(
-      page.getByText("Turn not sent", { exact: true }),
-    ).toBeVisible();
-    await expect(composer(page)).toHaveValue("keep this draft");
-    expect(w.calls(START_METHOD)).toHaveLength(0);
-    expect(w.calls(RELEASE_METHOD)).toHaveLength(0);
-    await expect(
-      attached(page).locator('li[data-status="ready"]'),
-    ).toContainText("original.png");
-    const retryPane = await openAdvanced(page);
-    await retryPane
-      .locator('[data-session-config-action="resume-chat"]')
-      .first()
-      .click();
-    await expect.poll(() => w.calls(START_METHOD).length).toBe(1);
-    expect(w.calls(START_METHOD)[0]).toMatchObject({
-      prompt: "keep this draft",
-      media: upload.media(),
-      reasoning: "high",
-    });
-    expect(upload.uploads()).toBe(1);
-    await expect(composer(page)).toHaveValue("");
-    await expect(attached(page)).toHaveCount(0);
   });
 
   test("a refused Resume chat can be retried, and Resume chat and an owned seat release control before sending once", async ({

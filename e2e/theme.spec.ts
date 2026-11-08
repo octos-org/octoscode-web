@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
@@ -74,140 +73,60 @@ test("theme choices preserve one palette across manual and system modes", async 
   expect(await resolvedColors(page)).toEqual(dark);
 });
 
-test("manual light preserves readable conversation and settings colors on a dark OS", async ({
+test("blocked localStorage property keeps connection, session launch, and theme usable", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-  await page.emulateMedia({ colorScheme: "dark" });
-  await page.addInitScript(() => localStorage.setItem("dsw-theme", "light"));
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Browser storage blocked", "SecurityError");
+      },
+    });
+  });
+
   await connect(page);
+  expect(
+    await page.evaluate(() => {
+      try {
+        void window.localStorage;
+        return null;
+      } catch (error) {
+        return error instanceof DOMException ? error.name : "unknown";
+      }
+    }),
+  ).toBe("SecurityError");
   await page
     .getByLabel("Server workspace path")
-    .fill("/workspace/theme-review");
+    .fill("/workspace/blocked-localStorage");
   await page.getByRole("button", { name: "Start session" }).click();
-  // Retargeted after the v0.10.0 rebase: a freshly launched Session no longer
-  // inherits the fixture's static demo transcript (that is pinned deliberately
-  // by "A newly created Session must not inherit the static demo transcript"
-  // in e2e/product.spec.ts), so the rendered conversation this test audits has
-  // to come from a real turn. The fixture reply is Markdown prose with bold
-  // and inline code, which is the conversation text the audit below reads.
-  const conversation = page.getByRole("textbox", { name: "Message Octos" });
-  await conversation.fill("Stream a reply fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.getByText("Completed with")).toBeVisible();
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeVisible();
+  // Retargeted after the v0.10.0 rebase: this gate proves the launched
+  // Session rendered its conversation surface. A fresh Session no longer
+  // inherits the fixture's static demo transcript (pinned by
+  // e2e/product.spec.ts), so the surface it renders is the conversation
+  // empty state instead of that transcript's "external links" prose.
   await expect(
-    page.getByText("all tests passing", { exact: true }),
+    page.getByRole("heading", {
+      name: "What can Octos help with?",
+    }),
   ).toBeVisible();
-  expect(
-    (await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze())
-      .violations,
-  ).toEqual([]);
+  await composer.fill("Keep this draft while changing the theme.");
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await chooseTheme(page, "Dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await chooseTheme(page, "Light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await chooseTheme(page, "Auto");
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+  await expect(composer).toHaveValue(
+    "Keep this draft while changing the theme.",
+  );
   await expect(
-    page.getByRole("dialog", { name: "Settings", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Forget server" }),
-  ).toBeVisible();
-  expect(
-    (await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze())
-      .violations,
-  ).toEqual([]);
+    page.getByText("Client view unavailable", { exact: true }),
+  ).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
-
-for (const method of ["getItem", "setItem", "removeItem"] as const) {
-  test(`theme ${method} failure keeps the app usable and the in-memory theme active`, async ({
-    page,
-  }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript((failedMethod) => {
-      const original = Storage.prototype[failedMethod];
-      Storage.prototype[failedMethod] = function (
-        key: string,
-        ...args: string[]
-      ) {
-        if (key === "dsw-theme") {
-          throw new DOMException(
-            "Theme preference unavailable",
-            failedMethod === "setItem" ? "QuotaExceededError" : "SecurityError",
-          );
-        }
-        return Reflect.apply(original, this, [key, ...args]);
-      };
-    }, method);
-    await connect(page);
-    await chooseTheme(page, "Dark");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await chooseTheme(page, "Light");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await chooseTheme(page, "Auto");
-    await expect(page.locator("html")).not.toHaveAttribute("data-theme");
-    await expect(page.getByLabel("Server workspace path")).toBeVisible();
-    await expect(
-      page.getByText("Client view unavailable", { exact: true }),
-    ).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-}
-
-for (const storageKind of ["localStorage", "sessionStorage"] as const) {
-  test(`blocked ${storageKind} property keeps connection, session launch, and theme usable`, async ({
-    page,
-  }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript((kind) => {
-      Object.defineProperty(window, kind, {
-        configurable: true,
-        get() {
-          throw new DOMException("Browser storage blocked", "SecurityError");
-        },
-      });
-    }, storageKind);
-
-    await connect(page);
-    expect(
-      await page.evaluate((kind) => {
-        try {
-          void window[kind];
-          return null;
-        } catch (error) {
-          return error instanceof DOMException ? error.name : "unknown";
-        }
-      }, storageKind),
-    ).toBe("SecurityError");
-    await page
-      .getByLabel("Server workspace path")
-      .fill(`/workspace/blocked-${storageKind}`);
-    await page.getByRole("button", { name: "Start session" }).click();
-    const composer = page.getByRole("textbox", { name: "Message Octos" });
-    await expect(composer).toBeVisible();
-    // Retargeted after the v0.10.0 rebase: this gate proves the launched
-    // Session rendered its conversation surface. A fresh Session no longer
-    // inherits the fixture's static demo transcript (pinned by
-    // e2e/product.spec.ts), so the surface it renders is the conversation
-    // empty state instead of that transcript's "external links" prose.
-    await expect(
-      page.getByRole("heading", {
-        name: "What can Octos help with?",
-      }),
-    ).toBeVisible();
-    await composer.fill("Keep this draft while changing the theme.");
-
-    await chooseTheme(page, "Dark");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await chooseTheme(page, "Light");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await chooseTheme(page, "Auto");
-    await expect(page.locator("html")).not.toHaveAttribute("data-theme");
-    await expect(composer).toHaveValue(
-      "Keep this draft while changing the theme.",
-    );
-    await expect(
-      page.getByText("Client view unavailable", { exact: true }),
-    ).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-}

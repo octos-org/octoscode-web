@@ -1072,9 +1072,7 @@ function holdHistoryRefreshAfterMutation(sessionId) {
 }
 let holdNextTurnStartAcknowledgement = false;
 let heldTurnStart = null;
-let executionEnvironmentMode = "complete";
 const turnStateBySession = new Map();
-let rejectNextSessionOpen = false;
 // Controlled terminal-release barrier. Each /__test__/terminal/hold-next arms
 // exactly ONE future completion tail (browser or peer): when that tail fires
 // it parks in heldTerminals (keyed by session) until an explicit per-Session
@@ -2335,43 +2333,6 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
-  // T-0419: a profile's configured overrides, as Core echoes them.
-  if (
-    request.method === "POST" &&
-    new URL(request.url, "http://fixture").pathname ===
-      "/__test__/model-overrides"
-  ) {
-    const url = new URL(request.url, "http://fixture");
-    const profileId = url.searchParams.get("profile") ?? defaultProfileId;
-    if (url.searchParams.get("reset") === "1") {
-      configuredModelsByProfile.delete(profileId);
-      response.writeHead(204).end();
-      return;
-    }
-    const target = configuredModelsForProfile(profileId).find(
-      (model) => model.model_id === url.searchParams.get("model"),
-    );
-    if (!target) {
-      response.writeHead(404).end();
-      return;
-    }
-    const contextWindow = Number(url.searchParams.get("context_window"));
-    if (contextWindow) target.context_window = contextWindow;
-    else delete target.context_window;
-    if (url.searchParams.get("lacks_vision") === "1")
-      target.model_hints = {
-        uses_completion_tokens: false,
-        fixed_temperature: false,
-        lacks_vision: true,
-        lacks_video: false,
-        retain_tool_images: false,
-        merge_system_messages: true,
-        reasoning_style: "none",
-      };
-    else delete target.model_hints;
-    response.writeHead(204).end();
-    return;
-  }
   // Deliver a file to a Session the way Core projects a `send_file` row: a
   // persisted assistant message whose media is a downloadable artifact path.
   if (
@@ -2657,28 +2618,8 @@ const http = createServer(async (request, response) => {
     response.writeHead(heldTurnStart?.admit() ? 204 : 409).end();
     return;
   }
-  if (
-    request.method === "POST" &&
-    request.url?.startsWith("/__test__/execution-environment/")
-  ) {
-    const mode = request.url.split("/").at(-1);
-    if (!["complete", "failed", "unsupported"].includes(mode)) {
-      response.writeHead(400).end();
-      return;
-    }
-    executionEnvironmentMode = mode;
-    response.writeHead(204).end();
-    return;
-  }
-  if (
-    request.method === "POST" &&
-    ["/__test__/cron/reset", "/__test__/cron/empty"].includes(request.url)
-  ) {
-    cronJobs.splice(
-      0,
-      cronJobs.length,
-      ...(request.url === "/__test__/cron/reset" ? [defaultCronJob()] : []),
-    );
+  if (request.method === "POST" && request.url === "/__test__/cron/reset") {
+    cronJobs.splice(0, cronJobs.length, defaultCronJob());
     nextCronJobId = 2;
     response.writeHead(204).end();
     return;
@@ -2697,40 +2638,10 @@ const http = createServer(async (request, response) => {
   }
   if (
     request.method === "POST" &&
-    request.url === "/__test__/oauth/provider-revoke"
-  ) {
-    // The provider revoked its token out of band (T-0371): the next status
-    // read reports the connector needs signing in again.
-    for (const rows of connectorRowsByWorkspace.values()) {
-      for (const row of rows) {
-        if (row.id === "issues") {
-          row.status = "failed";
-          row.tool_count = 0;
-          row.tools = [];
-          // The real Core's wording when a stored token expired and its
-          // refresh failed (audit 2026-11-06): the old error-text matcher
-          // misses this, only the structured failed status carries it.
-          row.error = `stored oauth token for MCP server '${row.url}' expired and refresh failed: invalid_grant`;
-        }
-      }
-    }
-    response.writeHead(204).end();
-    return;
-  }
-  if (
-    request.method === "POST" &&
     request.url === "/__test__/turn-start/reset"
   ) {
     holdNextTurnStartAcknowledgement = false;
     takeHeldTurnStart()?.reject();
-    response.writeHead(204).end();
-    return;
-  }
-  if (
-    request.method === "POST" &&
-    request.url === "/__test__/session-open/reject-next"
-  ) {
-    rejectNextSessionOpen = true;
     response.writeHead(204).end();
     return;
   }
@@ -2745,14 +2656,6 @@ const http = createServer(async (request, response) => {
     );
     effectiveRuntimeModelByProfile.clear();
     effectiveRuntimeModelByProfile.set(defaultProfileId, defaultRuntimeModel);
-    response.writeHead(204).end();
-    return;
-  }
-  if (
-    request.method === "POST" &&
-    request.url === "/__test__/session-open/reset"
-  ) {
-    rejectNextSessionOpen = false;
     response.writeHead(204).end();
     return;
   }
@@ -2868,25 +2771,6 @@ const http = createServer(async (request, response) => {
         `<a href="${escape(back({ error: "access_denied", error_description: "The person said no" }))}">Deny</a> ` +
         `<a href="${escape(back({ code: `bad-${flow.id}` }))}">Allow with a code the exchange refuses</a></main></html>`,
     );
-    return;
-  }
-  if (
-    request.method === "POST" &&
-    request.url === "/__test__/connectors/restart"
-  ) {
-    for (const [workspaceRoot, saved] of connectorSavedByWorkspace) {
-      connectorRows(workspaceRoot).push(
-        ...saved.map((row) => ({
-          ...row,
-          status: row.enabled ? "failed" : "disabled",
-          tool_count: 0,
-          tools: [],
-          ...(row.enabled ? { error: "MCP initialize failed" } : {}),
-        })),
-      );
-      saved.length = 0;
-    }
-    response.writeHead(204).end();
     return;
   }
   if (request.method === "POST" && request.url === "/__test__/terminal/reset") {
@@ -4621,16 +4505,6 @@ sockets.on("connection", (socket, request) => {
         rejectSessionScope(socket, request.id, scope);
         return;
       }
-      if (rejectNextSessionOpen) {
-        rejectNextSessionOpen = false;
-        replyError(
-          socket,
-          request.id,
-          -32_041,
-          "Fixture rejected the candidate session/open",
-        );
-        return;
-      }
       if (rejectedSessionIds.has(sessionId)) {
         replyError(
           socket,
@@ -5704,25 +5578,17 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/execution_environment/read") {
-      const complete = executionEnvironmentMode === "complete";
       reply(socket, request.id, {
-        backend:
-          executionEnvironmentMode === "unsupported" ? "unknown" : "docker",
-        docker_image:
-          executionEnvironmentMode === "unsupported"
-            ? null
-            : "node:22-bookworm",
+        backend: "docker",
+        docker_image: "node:22-bookworm",
         tools: {
-          node: complete ? "available" : "unknown",
-          npm: complete ? "available" : "unknown",
-          git: complete ? "available" : "unknown",
-          python: complete ? "missing" : "unknown",
+          node: "available",
+          npm: "available",
+          git: "available",
+          python: "missing",
         },
-        probe_status: executionEnvironmentMode,
+        probe_status: "complete",
         probed_at: "2026-11-01T00:00:00Z",
-        ...(executionEnvironmentMode === "failed"
-          ? { probe_error: "timeout" }
-          : {}),
       });
       return;
     }
