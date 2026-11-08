@@ -21,18 +21,34 @@ styling）。
 - **盘点**：`pnpm exec playwright test --list`
   列出 94 个 spec、485 个测试调用（参数变体展开后 515 个）。下表每一行都按文件和完整标题对过这份列表，各命中一个测试；参数化测试写明保留的那一个变体，其余变体随 T-0501 删。
 - **保留**：**166 个测试**，分布在 71 个文件（① 35、② 27、③ 37、④ 56、⑤
-  11，按首类计）。
+  11，按首类计）。T-0530 补回 2 条后为 **168 个**（② 28、③
+  38），另有 2 条并入已有链路，不增测试数。
 - **预计删后**：保留测试本身约 10,800 行；连同这些文件现有的全部 import 和 harness，上限约 18,400 行。e2e 约 1.1–1.8 万行，全仓约 2.9–3.7 万行。
+
+## T-0530 补回（11-08）
+
+2026-11-08 审计（`wake/audit/review-2026-11-08.md`）指出 #412 清单漏了跨功能和失败路径。T-0530 按当前 main 和 T-0528 的安全语义补回，不整文件恢复：
+
+- 新增 2 条：`template-interactions` 的只读模板等回执、`approval-clarity` 的
+  `applied` 回执。
+- 并入 2 条已有链路：`turn-undo`
+  主链加入 Core 拒绝的重做不重试、后续回合后不再重做；`delivered-files`
+  主链加入交付时快照。
+- 旧 localStorage 令牌清理留在 apps/web 单测一侧（T-0529），e2e 不重复。
+- 「回执」mock 提为 `e2e/permission-receipt.ts`，`approval-clarity`
+  3 条和模板 1 条共用；另有 5 个 spec 改用 `fixture-session.ts` 已导出的
+  `connectAndStartWorkspace`。测试行数净增 ≤ 0。
 
 ## 保留清单
 
-### approval-clarity.spec.ts（留 3/11）
+### approval-clarity.spec.ts（留 4/11）
 
-| 测试                                                                              | 类  | 守的链路                                                                  |
-| --------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------- |
-| switching stops the running workaround, then redoes the request with write access | ②   | 拒写后切到可写：先停掉正在跑的变通回合，再按原请求重做（权限×运行中回合） |
-| a late permission retry never starts in or clears another Session                 | ④   | 迟到的权限重试不在别的会话启动、也不清别的会话                            |
-| permission retry refuses a response that broadens network access                  | ③   | 权限重试拒绝扩大网络访问的应答（不越权）                                  |
+| 测试                                                                              | 类  | 守的链路                                                                                    |
+| --------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------- |
+| switching stops the running workaround, then redoes the request with write access | ②   | 拒写后切到可写：先停掉正在跑的变通回合，再按原请求重做（权限×运行中回合）                   |
+| a late permission retry never starts in or clears another Session                 | ④   | 迟到的权限重试不在别的会话启动、也不清别的会话                                              |
+| permission retry refuses a response that broadens network access                  | ③   | 权限重试拒绝扩大网络访问的应答（不越权）                                                    |
+| permission retry requires an applied workspace-write response                     | ③   | 权限重试只认 `applied` 回执：`applied:false` 时报错、不重做回合（fail-closed；T-0530 补回） |
 
 ### artifact-preview.spec.ts（留 2/12）
 
@@ -136,9 +152,9 @@ styling）。
 
 ### delivered-files.spec.ts（留 1/2）
 
-| 测试                                                                                      | 类  | 守的链路                              |
-| ----------------------------------------------------------------------------------------- | --- | ------------------------------------- |
-| shows files the agent delivers, previews images, downloads them, and keeps them on reload | ①   | 产物投递 → 预览/下载 → 刷新保留主流程 |
+| 测试                                                                                      | 类  | 守的链路                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| shows files the agent delivers, previews images, downloads them, and keeps them on reload | ①/④ | 产物投递 → 预览/下载 → 刷新保留主流程；原文件读不到且无交付时大小时，预览从 `.artifacts/delivered/` 交付时快照取大小（T-0530 并入，原 artifact-preview 一条） |
 
 ### diff-review.spec.ts（留 3/7）
 
@@ -487,11 +503,12 @@ styling）。
 | ------------------------------------------------------ | --- | ------------------------------------------ |
 | approval keeps the document and header stable at 390px | ①   | 窄视口接管时文档与头部稳定（手机独有边界） |
 
-### template-interactions.spec.ts（留 1/4）
+### template-interactions.spec.ts（留 1/4，另补回 task-templates.spec 1 条）
 
-| 测试                                                                        | 类  | 守的链路                                          |
-| --------------------------------------------------------------------------- | --- | ------------------------------------------------- |
-| a write template blocks read-only sending and offers one-click write access | ②   | 写入型模板挡住只读发送并提供一键可写（模板×权限） |
+| 测试                                                                        | 类  | 守的链路                                                                                    |
+| --------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------- |
+| a write template blocks read-only sending and offers one-click write access | ②   | 写入型模板挡住只读发送并提供一键可写（模板×权限）                                           |
+| a read-only template waits for the permission receipt before sending        | ②/③ | 只读模板等权限收窄回执到了才发；回执前再按发送也不发（模板×权限，fail-closed；T-0530 补回） |
 
 ### template-launch.spec.ts（留 1/2）
 
@@ -514,10 +531,10 @@ styling）。
 
 ### turn-undo.spec.ts（留 2/10）
 
-| 测试                                                                                      | 类  | 守的链路                                           |
-| ----------------------------------------------------------------------------------------- | --- | -------------------------------------------------- |
-| undo puts the turn's files back, keeps the conversation and draft, redo survives a reload | ①   | 撤销恢复文件、保留对话和草稿，重做熬过刷新         |
-| another tab's undo leaves this tab's stale entry unsent and unsure                        | ④   | 另一标签页撤销后，本页过期的条目不发送、标为不确定 |
+| 测试                                                                                      | 类  | 守的链路                                                                                                                                    |
+| ----------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| undo puts the turn's files back, keeps the conversation and draft, redo survives a reload | ①/② | 撤销恢复文件、保留对话和草稿，重做熬过刷新；Core 拒绝的重做以原话显示且不重试；后续回合跑过后旧轮不再提供重做（撤销×后续回合；T-0530 并入） |
+| another tab's undo leaves this tab's stale entry unsent and unsure                        | ④   | 另一标签页撤销后，本页过期的条目不发送、标为不确定                                                                                          |
 
 ### unfinished-flows.spec.ts（留 1/7）
 

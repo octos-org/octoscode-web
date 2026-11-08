@@ -1,22 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/cross-browser");
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
+import { connectAndStartWorkspace } from "./fixture-session";
 
 /**
  * The transcript must have content before searching: an empty timeline
@@ -36,7 +19,7 @@ async function earnTranscript(page: Page) {
 test("⌘F opens the search bar over an open session and matches transcript text", async ({
   page,
 }) => {
-  await connect(page);
+  await connectAndStartWorkspace(page, "/workspace/cross-browser");
   await earnTranscript(page);
   // The regression case for #197: the composer holds focus after a turn.
   await page.getByRole("textbox", { name: "Message Octos" }).click();

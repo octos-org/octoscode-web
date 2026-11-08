@@ -1,25 +1,12 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/workspace/approval-clarity-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { expect, test, type Page } from "@playwright/test";
+import { connectAndStartWorkspace } from "./fixture-session";
+import { holdPermissionReceipt } from "./permission-receipt";
 
 async function prepareReadOnly(page: Page, network = "Network blocked") {
-  await start(page);
+  await connectAndStartWorkspace(
+    page,
+    `/workspace/approval-clarity-${Date.now()}`,
+  );
   await page
     .getByRole("button", { name: /Session settings|Workspace write/ })
     .first()
@@ -100,34 +87,11 @@ test("switching stops the running workaround, then redoes the request with write
 test("a late permission retry never starts in or clears another Session", async ({
   page,
 }) => {
-  let armed = false;
-  let setId: string | null = null;
-  let held: { socket: WebSocketRoute; message: string | Buffer } | null = null;
-  let starts = 0;
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "turn/start") starts += 1;
-      if (armed && frame.method === "permission/profile/set") {
-        armed = false;
-        setId = frame.id;
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (setId && frame.id === setId && frame.result) {
-        held = { socket, message };
-        return;
-      }
-      socket.send(message);
-    });
-  });
+  const receipt = await holdPermissionReceipt(page);
   const { composer, retry } = await prepareDeniedWrite(page);
-  armed = true;
+  receipt.arm();
   await retry.click();
-  await expect.poll(() => Boolean(held)).toBe(true);
+  await expect.poll(receipt.isHeld).toBe(true);
   await page
     .locator("aside")
     .getByRole("button", { name: "Add workspace", exact: true })
@@ -138,55 +102,41 @@ test("a late permission retry never starts in or clears another Session", async 
     .fill("/workspace/permission-retry-other");
   await picker.getByLabel("Server workspace path").press("Enter");
   await composer.fill("DO NOT LOSE: unrelated B draft");
-  const before = starts;
-  const response = held!;
-  response.socket.send(response.message);
-  setId = null;
+  const before = receipt.starts();
+  receipt.release();
   await page.waitForTimeout(300);
   await expect(composer).toHaveValue("DO NOT LOSE: unrelated B draft");
-  expect(starts).toBe(before);
+  expect(receipt.starts()).toBe(before);
 });
 
 test("permission retry refuses a response that broadens network access", async ({
   page,
 }) => {
-  let armed = false;
-  let setId: string | null = null;
-  let held: {
-    socket: WebSocketRoute;
-    frame: { id?: string; result?: { current?: { network?: string } } };
-  } | null = null;
-  let starts = 0;
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "turn/start") starts += 1;
-      if (armed && frame.method === "permission/profile/set") {
-        armed = false;
-        setId = frame.id;
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (setId && frame.id === setId && frame.result) {
-        held = { socket, frame };
-        return;
-      }
-      socket.send(message);
-    });
-  });
+  const receipt = await holdPermissionReceipt(page);
   const { retry } = await prepareDeniedWrite(page);
-  armed = true;
+  receipt.arm();
   await retry.click();
-  await expect.poll(() => Boolean(held)).toBe(true);
-  held!.frame.result!.current!.network = "allow";
-  const before = starts;
-  held!.socket.send(JSON.stringify(held!.frame));
-  setId = null;
+  await expect.poll(receipt.isHeld).toBe(true);
+  const before = receipt.starts();
+  receipt.release((result) => (result.current!.network = "allow"));
   await expect(
     page.getByText("The server did not apply workspace write permission."),
   ).toBeVisible();
-  expect(starts).toBe(before);
+  expect(receipt.starts()).toBe(before);
+});
+
+test("permission retry requires an applied workspace-write response", async ({
+  page,
+}) => {
+  const receipt = await holdPermissionReceipt(page);
+  const { retry } = await prepareDeniedWrite(page);
+  receipt.arm();
+  await retry.click();
+  await expect.poll(receipt.isHeld).toBe(true);
+  const before = receipt.starts();
+  receipt.release((result) => (result.applied = false));
+  await expect(
+    page.getByText("The server did not apply workspace write permission."),
+  ).toBeVisible();
+  expect(receipt.starts()).toBe(before);
 });

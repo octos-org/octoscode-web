@@ -6,10 +6,10 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
 // T-0433: "Undo this turn" in the latest turn's summary, wired to Core's
 // `pre-turn <turn_id>` snapshot, with redo through the `pre-restore` point.
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
 
 test.afterEach(async ({ request }) => {
@@ -42,22 +42,6 @@ const timeline = (page: Page) =>
   page.getByRole("log", { name: "Conversation timeline" });
 const summary = (page: Page) =>
   page.getByRole("region", { name: "Turn summary" }).last();
-
-async function start(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  const manual = page.getByRole("button", { name: "Enter path manually" });
-  const pathInput = page.getByLabel("Server workspace path");
-  await expect(manual.or(pathInput).first()).toBeVisible();
-  if (await manual.isVisible().catch(() => false)) await manual.click();
-  await pathInput.fill(workspace);
-  await pathInput.press("Enter");
-  await expect(composer(page)).toBeEnabled();
-}
 
 async function runTurn(page: Page, text: string) {
   await composer(page).fill(text);
@@ -97,7 +81,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   request,
 }) => {
   const protocol = observeRpc(page);
-  await start(page, "/srv/work/turn-undo-walk");
+  await connectAndStartWorkspace(page, "/srv/work/turn-undo-walk");
   const prompt = "Change the app and then let me undo it";
   await runTurn(page, prompt);
   const sessionId = String(
@@ -186,6 +170,46 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     summary(page).getByRole("button", { name: "Redo this turn" }),
   ).toHaveCount(0);
   expect(protocol.requests("snapshot/restore")).toHaveLength(2);
+
+  // A redo Core refuses is reported in Core's own words and never retried.
+  const undo = await confirm(summary(page), "undo");
+  await undo.getByRole("button", { name: "Undo file changes" }).click();
+  await expect(
+    summary(page).getByRole("button", { name: "Redo this turn" }),
+  ).toBeVisible();
+  const conflict = await request.post(
+    `${FIXTURE_ORIGIN}/__test__/snapshots/next-restore?session_id=${encodeURIComponent(sessionId)}&mode=conflict`,
+  );
+  expect(conflict.status()).toBe(204);
+  const refused = await confirm(summary(page), "redo");
+  await refused.getByRole("button", { name: "Bring changes back" }).click();
+  const alert = summary(page).getByRole("alert");
+  await expect(alert).toContainText(
+    "Core did not bring this turn back. Check the files in Changes.",
+  );
+  await expect(alert).toContainText(
+    "Core said: restore failed: restore refused: files were edited after the snapshot was taken",
+  );
+  await page.waitForTimeout(500);
+  expect(protocol.requests("snapshot/restore")).toHaveLength(4);
+
+  // A later turn closes the way back: the undone turn offers no redo, and
+  // the new turn has its own undo.
+  await composer(page).fill("A second change after the undo");
+  await composer(page).press("Enter");
+  await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(2);
+  const summaries = page.getByRole("region", { name: "Turn summary" });
+  await expect(summaries).toHaveCount(2);
+  await expect(
+    summaries.first().getByText("This turn's file changes were undone."),
+  ).toBeVisible();
+  await expect(
+    summaries.first().getByRole("button", { name: "Redo this turn" }),
+  ).toHaveCount(0);
+  await expect(
+    summaries.last().getByRole("button", { name: "Undo this turn" }),
+  ).toBeVisible();
+  expect(protocol.requests("snapshot/restore")).toHaveLength(4);
 });
 
 test("another tab's undo leaves this tab's stale entry unsent and unsure", async ({
@@ -193,7 +217,7 @@ test("another tab's undo leaves this tab's stale entry unsent and unsure", async
   browser,
 }) => {
   const protocol = observeRpc(page);
-  await start(page, "/srv/work/turn-undo-tabs");
+  await connectAndStartWorkspace(page, "/srv/work/turn-undo-tabs");
   await runTurn(page, "Change a file seen from two tabs");
   // The second tab opens the same Session from its link.
   const other = await (await browser.newContext()).newPage();

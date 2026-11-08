@@ -1,20 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function startSession(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { connectAndStartWorkspace } from "./fixture-session";
+import { holdPermissionReceipt } from "./permission-receipt";
 
 async function useTemplate(page: Page, name: string) {
   await page
@@ -32,7 +18,7 @@ test("a write template blocks read-only sending and offers one-click write acces
       if (String(payload).includes('"method":"turn/start"')) starts += 1;
     }),
   );
-  await startSession(page, "/workspace/template-write-send-gate");
+  await connectAndStartWorkspace(page, "/workspace/template-write-send-gate");
   await useTemplate(page, "Fix a bug");
   await page.getByRole("button", { name: /^Permission:/ }).click();
   await page
@@ -60,4 +46,29 @@ test("a write template blocks read-only sending and offers one-click write acces
     page.getByRole("region", { name: "What can Octos help with?" }),
   ).toHaveCount(0);
   expect(starts).toBe(1);
+});
+
+test("a read-only template waits for the permission receipt before sending", async ({
+  page,
+}) => {
+  const receipt = await holdPermissionReceipt(page);
+  await connectAndStartWorkspace(page, "/workspace/templates-read-receipt");
+  const home = page.getByRole("region", { name: "What can Octos help with?" });
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  receipt.arm();
+  await useTemplate(page, "Review recent changes");
+  await composer.press("Enter");
+  await expect.poll(receipt.isHeld).toBe(true);
+  // Sending again while the receipt is outstanding sends nothing either.
+  await composer.press("Enter");
+  expect(receipt.starts()).toBe(0);
+  await expect(composer).toHaveValue(/^Review the recent changes/);
+  receipt.release();
+  await expect(home).toBeHidden();
+  expect(receipt.updates).toEqual([{ mode: "read_only" }]);
+  await expect(
+    page.getByRole("button", { name: /^Permission: Read/ }).first(),
+  ).toBeVisible();
+  await expect(page.locator(".entry-user")).toHaveCount(1);
+  expect(receipt.starts()).toBe(1);
 });

@@ -1,18 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
 async function openConversation(page: Page, cwd: string): Promise<string> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(cwd);
-  await page.getByLabel("Server workspace path").press("Enter");
+  await connectAndStartWorkspace(page, cwd);
   const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await expect(composer).toBeEnabled();
   await composer.fill("Show the Markdown transcript surface");
   await composer.press("Enter");
   await expect(
@@ -69,9 +60,58 @@ test("shows files the agent delivers, previews images, downloads them, and keeps
   // The server path is never shown as message text.
   await expect(page.getByText("Attachment:")).toHaveCount(0);
 
-  // Hydrate after reload restores both deliveries.
+  // Hydrate after reload restores both deliveries. With the original source
+  // gone and no size recorded at delivery, the image preview is sized from
+  // its delivery-time copy under .artifacts/delivered/.
+  const deliveredReads: string[] = [];
+  const withoutSizes = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(withoutSizes);
+    if (value === null || typeof value !== "object") return;
+    const record = value as { type?: unknown; data?: { size_bytes?: number } };
+    if (record.type === "file_attached" && record.data)
+      record.data.size_bytes = 0;
+    Object.values(record).forEach(withoutSizes);
+  };
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame.method === "session/files/read") {
+        if (!frame.params.path.startsWith(".artifacts/delivered/")) {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: frame.id,
+              error: {
+                code: -32004,
+                message: "workspace file was not found",
+                data: { kind: "workspace_file_not_found" },
+              },
+            }),
+          );
+          return;
+        }
+        deliveredReads.push(frame.params.path);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      withoutSizes(frame);
+      socket.send(JSON.stringify(frame));
+    });
+  });
   await page.reload();
-  await expect(page.locator('[data-attachment="p20-art.png"]')).toBeVisible();
+  const reloaded = page.locator('[data-attachment="p20-art.png"]');
+  await reloaded.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(
+    reloaded.locator('[data-artifact-kind="image"] img'),
+  ).toBeVisible();
+  expect(deliveredReads).toContainEqual(
+    expect.stringMatching(
+      /^\.artifacts\/delivered\/[0-9a-f]{32}\/p20-art\.png$/,
+    ),
+  );
   await expect(
     page.locator('[data-attachment="Single-Panel-Pilot-3p.pptx"]'),
   ).toBeVisible();
