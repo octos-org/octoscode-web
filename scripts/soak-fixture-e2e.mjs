@@ -130,7 +130,7 @@ const hydrate = (client, scope) =>
   client.call("session/hydrate", {
     session_id: scope.session_id,
     profile_id: scope.profile_id,
-    include: { messages: true, turns: true, pending_approvals: true },
+    include: ["messages", "turns", "pending_approvals"],
   });
 const terminal = (client, scope) =>
   client
