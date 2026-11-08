@@ -82,3 +82,4 @@ it must not be documented as a guarantee to retain every unsent draft forever.
 - [Forget and identity changes](../../apps/web/src/app/ConnectionGate.tsx)
 - [Cache eviction checks](../../apps/web/src/features/session/session-draft-cache.test.ts)
 - [Principal-scoped restore, Forget and eviction in the browser](../../e2e/connection-storage.spec.ts)
+- [Legacy token cleanup](../../apps/web/src/features/connection/remembered-token.test.ts)

@@ -66,3 +66,4 @@ contract tracked in
 - [Dialog lifetime](../../apps/web/src/features/activity/ActivityDialog.tsx)
 - [Refresh and authority handling](../../apps/web/src/features/activity/use-activity-catalog.ts)
 - [Bounded catalog reads](../../apps/web/src/features/activity/catalog.ts)
+- [Late-answer authority checks](../../apps/web/src/features/async/request-authority.test.ts)

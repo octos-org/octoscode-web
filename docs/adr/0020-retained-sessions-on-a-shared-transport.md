@@ -84,3 +84,4 @@ acceptance evidence remains in [Feature parity](../feature-parity.md).
 - [Session composition and navigation](../../apps/web/src/features/session/use-octos-session.ts)
 - [Concurrent queues and interaction isolation](../../apps/web/src/features/session/session-record-concurrency.test.ts)
 - [Approvals and queued turns kept per Session across one reconnecting transport](../../e2e/multi-session-recovery-soak.spec.ts)
+- [Fifteen records on one transport](../../apps/web/src/features/session/session-record-capacity.test.ts)

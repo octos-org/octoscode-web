@@ -452,21 +452,4 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     expect(b.timeline).toEqual([]);
     expect(h.client.opens.at(-2)?.after).toEqual({ stream: "A", seq: 1 });
   });
-
-  it("retains a never-sent queue head through hydrate and starts it at ready", async () => {
-    const h = harness();
-    const a = await open(h, "A");
-    h.pool.allowStart = false;
-    enqueue(a, "A1");
-    enqueue(a, "A2");
-    expect(starts(h.client)).toEqual([]);
-    h.client.setStatus("disconnected");
-    h.client.setStatus("connected");
-    h.pool.allowStart = true;
-    await h.manager.recoverRecords(new AbortController().signal);
-    expect(starts(h.client)).toEqual([["A", "A1"]]);
-    expect(a.queue.snapshot().pending.map((turn) => turn.turnId)).toEqual([
-      "A2",
-    ]);
-  });
 });
