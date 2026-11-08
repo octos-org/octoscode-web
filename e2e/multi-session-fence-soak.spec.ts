@@ -15,6 +15,11 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import {
+  observeStartedTurns,
+  observeInterrupts,
+  type StartedTurn,
+} from "./turn-observers";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
@@ -96,55 +101,6 @@ async function connectAndStartWorkspace(
     .getByRole("button", { name: /Add & Start|Start session/ })
     .click();
   await expect(page.getByText(cwd, { exact: true })).toBeVisible();
-}
-
-interface StartedTurn {
-  sessionId: string;
-  turnId: string;
-  text: string;
-}
-
-function observeStartedTurns(page: Page): () => StartedTurn[] {
-  const started: StartedTurn[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = String(payload);
-      if (!frame.includes('"method":"turn/start"')) return;
-      const request = JSON.parse(frame) as {
-        params?: {
-          session_id?: unknown;
-          turn_id?: unknown;
-          input?: Array<{ text?: unknown }>;
-        };
-      };
-      if (
-        typeof request.params?.session_id === "string" &&
-        typeof request.params.turn_id === "string"
-      ) {
-        started.push({
-          sessionId: request.params.session_id,
-          turnId: request.params.turn_id,
-          text:
-            typeof request.params.input?.[0]?.text === "string"
-              ? request.params.input[0].text
-              : "",
-        });
-      }
-    });
-  });
-  return () => started.slice();
-}
-
-function observeInterrupts(page: Page): () => number {
-  let interrupts = 0;
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      if (String(payload).includes('"method":"turn/interrupt"')) {
-        interrupts += 1;
-      }
-    });
-  });
-  return () => interrupts;
 }
 
 interface ProtocolFrame {
