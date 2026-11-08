@@ -336,8 +336,8 @@ test("reasoning visibility is retained per Session and does not change captured 
   await expect.poll(() => rpc("turn/start").length).toBe(2);
   expect(rpc("turn/start")[1]!.params).not.toHaveProperty("reasoning_effort");
   // UX5 folds: the reasoning entry renders COLLAPSED by default as a
-  // ThinkingDisclosure button whose summary is "Thinking · N s · N words"
-  // (folds.ts:83). Expand it to read the fixture's reasoning body.
+  // thinking fold button whose summary is "Thinking · N s · N words"
+  // (Timeline.tsx). Expand it to read the fixture's reasoning body.
   const reasoningB = reasoningEntries(page);
   await expect(reasoningB).toHaveCount(1);
   await expect(reasoningFold(page)).toBeVisible();

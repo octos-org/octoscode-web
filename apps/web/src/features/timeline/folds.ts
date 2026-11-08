@@ -1,5 +1,3 @@
-import type { TimelineEntry, TimelineStatus } from "./model.ts";
-
 /** Per-block expanded memory. Absent = folded (the default for both kinds). */
 export type FoldState = Readonly<{ [id: string]: boolean }>;
 
@@ -7,10 +5,6 @@ export const COLLAPSED_ALL = "__collapsed_all__";
 
 export function initialFoldState(): FoldState {
   return {};
-}
-
-export function isFoldExpanded(folds: FoldState, id: string): boolean {
-  return folds[id] === true;
 }
 
 export function toggleFold(folds: FoldState, id: string): FoldState {
@@ -37,17 +31,6 @@ export function expandAll(
 /** Explicit all-folded state, distinct from the unset error-auto-open default. */
 export function collapseAll(_folds: FoldState): FoldState {
   return { [COLLAPSED_ALL]: false };
-}
-
-/** Drops memory for blocks that left the bounded transcript window. */
-export function pruneFolds(
-  folds: FoldState,
-  liveIds: readonly string[],
-): FoldState {
-  const live = new Set(liveIds);
-  return Object.fromEntries(
-    Object.entries(folds).filter(([id]) => live.has(id)),
-  );
 }
 
 const TRUNCATED_TARGET_LENGTH = 24;
@@ -100,31 +83,6 @@ export function thinkingSummaryParts(input: ThinkingSummaryInput): {
     words: countWords(input.body),
     unit: cjk ? "characters" : "words",
   };
-}
-
-/** "Thinking · 12 s · 340 words" — one line, English source; zh via copy table. */
-export function thinkingSummary(input: ThinkingSummaryInput): string {
-  const { seconds, words } = thinkingSummaryParts(input);
-  return [
-    "Thinking",
-    seconds === undefined ? undefined : `${seconds} s`,
-    `${words} words`,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" · ");
-}
-
-export function toolStatusGlyph(status: TimelineStatus): string {
-  switch (status) {
-    case "running":
-      return "◐";
-    case "complete":
-      return "✓";
-    case "error":
-      return "✗";
-    case "info":
-      return "·";
-  }
 }
 
 const TARGET_KEYS = [
@@ -180,44 +138,4 @@ export function toolTarget(argumentsJson: string): string {
   return first.length > TRUNCATED_TARGET_LENGTH
     ? `${first.slice(0, TRUNCATED_TARGET_LENGTH)}…`
     : first;
-}
-
-export function toolHeaderLine(entry: {
-  title: string;
-  body: string;
-  status: TimelineStatus;
-  startedAtMs?: number | undefined;
-  endedAtMs?: number | undefined;
-}): string {
-  const seconds = durationSeconds(entry.startedAtMs, entry.endedAtMs);
-  return [
-    entry.title,
-    toolTarget(entry.body) || undefined,
-    toolStatusGlyph(entry.status),
-    seconds === undefined ? undefined : `${seconds} s`,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" · ");
-}
-
-/** The one-line header summary for a thinking block fold. */
-export function entryHeaderSummary(
-  entry: Pick<
-    TimelineEntry,
-    "id" | "kind" | "body" | "startedAtMs" | "endedAtMs"
-  >,
-): string {
-  return entry.kind === "reasoning"
-    ? thinkingSummary({
-        body: entry.body,
-        startedAtMs: entry.startedAtMs,
-        endedAtMs: entry.endedAtMs,
-      })
-    : toolHeaderLine({
-        title: entry.id,
-        body: entry.body,
-        status: "info",
-        startedAtMs: entry.startedAtMs,
-        endedAtMs: entry.endedAtMs,
-      });
 }
