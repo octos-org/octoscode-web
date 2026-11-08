@@ -31,8 +31,24 @@ test("a new session gets the saved permission default once, under its own id, an
   const opens: string[] = [];
   const starts: string[] = [];
   let refuse = false;
+  // While set, the server advertises no launch/resolve, as an older Core: a
+  // new session then opens under its bare launch id, bound to no profile.
+  let noLaunchResolve = false;
+  const strip = (capabilities?: { supported_methods?: string[] }) => {
+    if (capabilities?.supported_methods)
+      capabilities.supported_methods = capabilities.supported_methods.filter(
+        (method) => method !== "launch/resolve",
+      );
+  };
   await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
     const server = socket.connectToServer();
+    server.onMessage((message) => {
+      if (!noLaunchResolve) return socket.send(message);
+      const frame = JSON.parse(String(message));
+      strip(frame.result?.capabilities);
+      strip(frame.result?.opened?.capabilities);
+      socket.send(JSON.stringify(frame));
+    });
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.method === "session/open") opens.push(frame.params.session_id);
@@ -153,4 +169,22 @@ test("a new session gets the saved permission default once, under its own id, an
     .poll(() => starts.filter((id) => id === refused))
     .toHaveLength(1);
   await expect(composer).toHaveValue("");
+
+  // A session opened under its bare launch id is not bound to the profile it
+  // runs under: the default is never sent to that id, and it stays blocked.
+  noLaunchResolve = true;
+  await page.reload();
+  const other = await newSession();
+  expect(other).toMatch(/^web-/);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "was not sent" }),
+  ).toBeVisible();
+  await composer.fill("Never under the wrong profile");
+  await composer.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Retry permission default" }),
+  ).toHaveCount(0);
+  await expect(composer).toHaveValue("Never under the wrong profile");
+  expect(sets).toHaveLength(3);
+  expect(starts).not.toContain(other);
 });

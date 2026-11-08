@@ -1330,6 +1330,8 @@ const catalog: Readonly<Record<string, string>> = {
   "The server hasn't confirmed your new-session permission default, so sending is blocked in this session.":
     "服务器尚未确认新会话权限默认值，此会话暂不能发送。",
   "Retry permission default": "重试权限默认值",
+  "This session's id isn't bound to the profile it opened under, so your new-session permission default was not sent and sending is blocked in this session.":
+    "此会话的 id 没有绑定到它打开时所用的 profile，因此未发送新会话权限默认值，此会话暂不能发送。",
   "Applying your new-session permission default. Sending waits until the server confirms it.":
     "正在应用新会话权限默认值，服务器确认后才能发送。",
   "Open a project first": "请先打开一个项目",

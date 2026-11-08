@@ -3,6 +3,7 @@ import type {
   PermissionProfileSetResult,
 } from "@octos-org/octoscode-client/protocol";
 import type { StorageLike } from "../connection/preferences.ts";
+import { bindWebSessionIdToProfile } from "../session/session-identity.ts";
 import {
   isDefaultsNetworkPolicy,
   isDefaultsPermissionMode,
@@ -21,8 +22,14 @@ import {
 export interface PermissionDefaultGate {
   readonly mode: DefaultsPermissionMode;
   readonly network: DefaultsNetworkPolicy;
-  /** "applying" only while this page has a set in flight. */
-  readonly phase: "applying" | "failed";
+  /**
+   * "applying" only while this page has a set in flight. "other-profile": the
+   * launch opened under an id not bound to its profile (another profile, or
+   * the bare launch id on a server without launch/resolve), so the default is
+   * never sent there; only the server reporting the default in effect lifts
+   * the gate.
+   */
+  readonly phase: "applying" | "failed" | "other-profile";
 }
 
 export type PermissionDefaultGates = Readonly<
@@ -32,9 +39,24 @@ export type PermissionDefaultGates = Readonly<
 const GATES_KEY = "octoscode-web.permission-default-gates.v1";
 const MAX_GATES = 32;
 
-/** Whether `sessionId` is the Session opened from the fresh `launchId`. */
-export function openedFromLaunch(sessionId: string, launchId: string): boolean {
-  return sessionId === launchId || sessionId.endsWith(`:api:${launchId}`);
+/**
+ * How an opened Session relates to the pending fresh launch. "exact" is the
+ * launch id bound to the profile the server opened it under (#409) and the
+ * only Session the default is sent to; the same launch id under any other
+ * profile is "other-profile".
+ */
+export function launchMatch(
+  opened: { readonly session_id: string; readonly active_profile_id?: string },
+  launchId: string,
+): "exact" | "other-profile" | "none" {
+  const id = opened.session_id;
+  if (
+    id === bindWebSessionIdToProfile(launchId, opened.active_profile_id ?? "")
+  )
+    return "exact";
+  return id === launchId || id.endsWith(`:api:${launchId}`)
+    ? "other-profile"
+    : "none";
 }
 
 /**
@@ -71,7 +93,7 @@ export function withoutPermissionDefaultGate(
 }
 
 /**
- * A stored gate always loads as failed: a set that was in flight when the
+ * A stored "applying" gate loads as failed: a set that was in flight when the
  * page went away has no known outcome.
  */
 export function loadPermissionDefaultGates(
@@ -86,9 +108,13 @@ export function loadPermissionDefaultGates(
   if (typeof parsed !== "object" || parsed === null) return {};
   const gates: Record<string, PermissionDefaultGate> = {};
   for (const [sessionId, value] of Object.entries(parsed).slice(-MAX_GATES)) {
-    const { mode, network } = (value ?? {}) as Record<string, unknown>;
+    const { mode, network, phase } = (value ?? {}) as Record<string, unknown>;
     if (isDefaultsPermissionMode(mode) && isDefaultsNetworkPolicy(network))
-      gates[sessionId] = { mode, network, phase: "failed" };
+      gates[sessionId] = {
+        mode,
+        network,
+        phase: phase === "other-profile" ? "other-profile" : "failed",
+      };
   }
   return gates;
 }
@@ -105,7 +131,10 @@ export function savePermissionDefaultGates(
         GATES_KEY,
         JSON.stringify(
           Object.fromEntries(
-            entries.map(([id, { mode, network }]) => [id, { mode, network }]),
+            entries.map(([id, { mode, network, phase }]) => [
+              id,
+              { mode, network, phase },
+            ]),
           ),
         ),
       );

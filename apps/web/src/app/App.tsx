@@ -219,8 +219,8 @@ import {
 } from "../features/session-config/session-defaults.ts";
 import {
   confirmPermissionDefault,
+  launchMatch,
   loadPermissionDefaultGates,
-  openedFromLaunch,
   savePermissionDefaultGates,
   withoutPermissionDefaultGate,
   type PermissionDefaultGate,
@@ -3746,14 +3746,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const pending = pendingPermissionDefaultRef.current;
     const opened = session.opened;
     if (!pending || !opened) return;
-    if (!openedFromLaunch(opened.session_id, pending.launchId)) return;
+    const match = launchMatch(opened, pending.launchId);
+    if (match === "none") return;
     pendingPermissionDefaultRef.current = null;
     if (appliedDefaultsForSession.current.has(pending.launchId)) return;
     appliedDefaultsForSession.current.add(pending.launchId);
-    applyPermissionDefault(opened.session_id, {
+    const gate = {
       mode: pending.defaults.permissionMode,
       network: pending.defaults.network,
-    });
+    };
+    // The launch opened under another profile: never send the default to
+    // that id; the session stays blocked instead.
+    if (match === "other-profile")
+      setPermissionDefaultGates((gates) => ({
+        ...gates,
+        [opened.session_id]: { ...gate, phase: "other-profile" },
+      }));
+    else applyPermissionDefault(opened.session_id, gate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.opened]);
   // A gated session whose server-confirmed permission already is the default
@@ -3772,20 +3781,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       );
   }, [safety.permission.result, permissionDefaultGates]);
   const openedSessionId = session.opened?.session_id;
+  // Opened, but the apply effect above has not run yet: same matching.
+  const pendingLaunchMatch =
+    session.opened && pendingPermissionDefaultRef.current
+      ? launchMatch(
+          session.opened,
+          pendingPermissionDefaultRef.current.launchId,
+        )
+      : "none";
   const permissionDefaultGate =
     openedSessionId === undefined
       ? undefined
       : (permissionDefaultGates[openedSessionId] ??
-        // Opened, but the apply effect has not run yet.
-        (pendingPermissionDefaultRef.current &&
-        openedFromLaunch(
-          openedSessionId,
-          pendingPermissionDefaultRef.current.launchId,
-        )
+        (pendingPermissionDefaultRef.current && pendingLaunchMatch !== "none"
           ? ({
               mode: pendingPermissionDefaultRef.current.defaults.permissionMode,
               network: pendingPermissionDefaultRef.current.defaults.network,
-              phase: "applying",
+              phase:
+                pendingLaunchMatch === "exact" ? "applying" : "other-profile",
             } satisfies PermissionDefaultGate)
           : undefined));
   const sessionWorkspaces = recentWorkspaces.filter(
@@ -5400,6 +5413,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         {t("Retry permission default")}
                       </button>
                     </p>
+                  ) : permissionDefaultGate?.phase === "other-profile" ? (
+                    <p className="field-note" role="alert">
+                      {t(
+                        "This session's id isn't bound to the profile it opened under, so your new-session permission default was not sent and sending is blocked in this session.",
+                      )}
+                    </p>
                   ) : permissionDefaultGate ? (
                     <p className="field-note" role="status">
                       {t(
@@ -6318,7 +6337,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             }}
             permissionsSection={{
               permission: permissionControl,
-              ...(permissionDefaultGate?.phase === "failed"
+              ...(permissionDefaultGate &&
+              permissionDefaultGate.phase !== "applying"
                 ? {
                     saveState: {
                       kind: "failed" as const,
