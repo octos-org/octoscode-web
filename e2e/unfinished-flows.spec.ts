@@ -1,26 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await expect(page.locator("aside")).toBeVisible();
-}
-
-async function startSession(page: Page, workspace: string) {
-  await connect(page);
-  const path = page.getByLabel("Server workspace path");
-  await path.fill(workspace);
-  await path.press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { expect, test } from "@playwright/test";
+import { connectAndStartWorkspace } from "./fixture-session";
 
 test("a new session gets the saved permission default once, under its own id, and a refused one is reported on that session", async ({
   page,
@@ -71,7 +50,7 @@ test("a new session gets the saved permission default once, under its own id, an
   });
   const { repeatEachIndex, retry } = test.info();
   const name = `unfinished-defaults-apply-${repeatEachIndex}-${retry}`;
-  await startSession(page, `/workspace/${name}`);
+  await connectAndStartWorkspace(page, `/workspace/${name}`);
   const opened = () =>
     (JSON.parse(new URL(page.url()).searchParams.get("s")!) as string[])[2]!;
   await page.getByRole("button", { name: "Settings", exact: true }).click();

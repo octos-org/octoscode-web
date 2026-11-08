@@ -1,6 +1,6 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPOSER = "Ask Octos to change, explain, or review code…";
 const METHODS = [
   "profile/skills/list",
@@ -126,28 +126,6 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
   };
 }
 
-async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add
-    .getByLabel("Server workspace path")
-    .fill("/workspace/profile-mutation-test");
-  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
-}
-
 async function command(page: Page, name: string) {
   await page.getByPlaceholder(COMPOSER).fill(`/${name}`);
   await page.getByPlaceholder(COMPOSER).press("Enter");
@@ -157,7 +135,7 @@ test("skill removal holds the profile lock through deferred replies and deduplic
   page,
 }) => {
   const rpc = await interceptProfileWrites(page, true);
-  await connect(page);
+  await connectAndStartWorkspace(page, "/workspace/profile-mutation-test");
   await command(page, "skills");
   const dialog = page.getByRole("dialog", { name: "Profile skills" });
   await expect(
@@ -218,7 +196,7 @@ test("a failed credential write clears its input, consumes confirmation and requ
   page,
 }) => {
   const rpc = await interceptProfileWrites(page);
-  await connect(page);
+  await connectAndStartWorkspace(page, "/workspace/profile-mutation-test");
   await command(page, "research");
   const dialog = page.getByRole("dialog", { name: "Research provider lanes" });
   await expect(

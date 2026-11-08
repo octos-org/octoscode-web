@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const composer = (page: Page) =>
   page.getByPlaceholder("Ask Octos to change, explain, or review code…");
 const sidebar = (page: Page) => page.locator("aside");
@@ -44,31 +44,6 @@ function observe(page: Page) {
   return (method: string) =>
     requests.filter((request) => request.method === method);
 }
-async function connect(page: Page, cwd: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await expect(chooser).toBeVisible();
-    if (
-      await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-    ) {
-      await chooser.getByRole("button", { name: "Add workspace" }).click();
-    }
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(cwd);
-  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
-  await expect(composer(page)).toBeEnabled();
-  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
-}
 async function send(page: Page, text: string) {
   await composer(page).fill(text);
   await page.getByRole("button", { name: "Send prompt" }).click();
@@ -93,14 +68,14 @@ const row = (page: Page, sessionId: string) =>
     `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
   );
 const control = (name: string, sessionId: string, method?: string) =>
-  `${origin}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
+  `${FIXTURE_ORIGIN}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
 
 test("resume lists unverified candidates, refuses bare IDs, and requires confirmation plus canonical history", async ({
   page,
   request,
 }) => {
   const rpc = observe(page);
-  await connect(page, "/srv/work/native-workflows-resume");
+  await connectAndStartWorkspace(page, "/srv/work/native-workflows-resume");
   const owner = rpc("session/open").at(-1)!.params.session_id!;
   const seed = await request.post(control("seed-history", owner));
   expect(seed.status()).toBe(200);
@@ -160,7 +135,7 @@ test("canceling a held historical open cannot install a late transcript or steal
 }) => {
   const rpc = observe(page);
   const workspace = "native-workflows-resume-cancel";
-  await connect(page, `/srv/work/${workspace}`);
+  await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   const owner = rpc("session/open").at(-1)!.params.session_id!;
   const original = await title(page);
   const seed = await request.post(control("seed-history", owner));
@@ -235,7 +210,7 @@ test("resuming an already retained busy historical Session never reopens or rese
 }) => {
   const rpc = observe(page);
   const workspace = "native-workflows-resume-busy";
-  await connect(page, `/srv/work/${workspace}`);
+  await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   const owner = rpc("session/open").at(-1)!.params.session_id!;
   const seed = await request.post(control("seed-history", owner));
   expect(seed.status()).toBe(200);
@@ -263,14 +238,16 @@ test("resuming an already retained busy historical Session never reopens or rese
   };
   await resumeTarget();
   expect(
-    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
+    (
+      await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`)
+    ).status(),
   ).toBe(204);
   try {
     await send(page, "Historical A must remain busy across resume");
     await expect
       .poll(async () => {
         const state = (await (
-          await request.get(`${origin}/__test__/terminal/state`)
+          await request.get(`${FIXTURE_ORIGIN}/__test__/terminal/state`)
         ).json()) as { held: { session_id: string }[] };
         return state.held.map((entry) => entry.session_id);
       })
@@ -287,7 +264,7 @@ test("resuming an already retained busy historical Session never reopens or rese
     expect(
       (
         await request.post(
-          `${origin}/__test__/terminal/release?session_id=${encodeURIComponent(target.id)}`,
+          `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(target.id)}`,
         )
       ).status(),
     ).toBe(204);
@@ -305,7 +282,7 @@ test("resuming an already retained busy historical Session never reopens or rese
     expect(rpc("turn/start")).toHaveLength(1);
     expect(rpc("turn/interrupt")).toHaveLength(0);
   } finally {
-    await request.post(`${origin}/__test__/terminal/reset`);
+    await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
   }
 });
 
@@ -314,7 +291,7 @@ test("reasoning visibility is retained per Session and does not change captured 
 }) => {
   const rpc = observe(page);
   const workspace = "native-workflows-reasoning";
-  await connect(page, `/srv/work/${workspace}`);
+  await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   const a = await title(page);
   await send(page, "/thinking");
   let dialog = page.getByRole("dialog", { name: "Thinking effort" });

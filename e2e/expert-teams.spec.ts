@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const TOKEN = "tab-scoped-e2e-token";
 const CWD = "/srv/work/expert-teams";
 
 interface SentFrame {
@@ -18,27 +17,6 @@ function observe(page: Page): SentFrame[] {
     });
   });
   return sent;
-}
-
-async function connect(page: Page, cwd = CWD): Promise<void> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(TOKEN);
-  await page
-    .getByRole("button", { name: "Connect", exact: true })
-    .press("Enter");
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (await chooser.getByRole("button", { name: "Add workspace" }).isVisible())
-    await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(cwd);
-  await add
-    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
-    .press("Enter");
-  await expect(page.getByText(cwd, { exact: true })).toBeVisible();
 }
 
 async function openExperts(page: Page) {
@@ -88,7 +66,7 @@ test("starts a team, shows each member's progress and result, and merges them he
 }) => {
   test.setTimeout(90_000);
   const sent = observe(page);
-  await connect(page);
+  await connectAndStartWorkspace(page, CWD);
   const center = await openExperts(page);
   await expect(center.locator("[data-expert-template]")).toHaveCount(6);
 
@@ -167,7 +145,7 @@ test("a failed member is named, a working member survives a refresh and is stopp
 }) => {
   test.setTimeout(120_000);
   const sent = observe(page);
-  await connect(page);
+  await connectAndStartWorkspace(page, CWD);
   const center = await openExperts(page);
   await startTeam(page, "Check the release notes. [slow-seat-2] [fail-seat-3]");
   const team = center.locator("[data-expert-team]");
@@ -259,7 +237,7 @@ test("a reconnect keeps a working member working, and sends no stop by itself", 
 }) => {
   test.setTimeout(90_000);
   const sent = observe(page);
-  await connect(page);
+  await connectAndStartWorkspace(page, CWD);
   const center = await openExperts(page);
   await startTeam(page, "Read the changelog. [slow-seat-2]");
   const team = center.locator("[data-expert-team]");
