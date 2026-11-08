@@ -1,20 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const token = "tab-scoped-e2e-token";
-
-async function connect(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
 async function openConnectors(page: Page) {
   await page
@@ -58,12 +44,15 @@ async function storedValues(page: Page) {
 }
 
 test.beforeEach(async ({ request }) => {
-  await request.post(`${origin}/__test__/connectors/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/connectors/reset`);
 });
 
 test("signs a connector in through the provider and back", async ({ page }) => {
   const frames = sentFrames(page);
-  await connect(page, `/srv/work/connector-management-oauth-${Date.now()}`);
+  await connectAndStartWorkspace(
+    page,
+    `/srv/work/connector-management-oauth-${Date.now()}`,
+  );
   const settings = await openConnectors(page);
   const issues = settings.locator('[data-connector-id="issues"]');
   await expect(issues).toContainText("Authorization required");
@@ -151,7 +140,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   page,
 }) => {
   const workspace = `/srv/work/connector-management-oauth-${Date.now()}`;
-  await connect(page, workspace);
+  await connectAndStartWorkspace(page, workspace);
   let settings = await openConnectors(page);
   const popupOpened = page.waitForEvent("popup");
   await settings
@@ -190,7 +179,7 @@ test("a restart-pending sign-in survives refreshes until the server confirms con
   // T-0430: on a restart-mode server the OLD connection keeps reporting its
   // stale failure until the restart. A refresh must not erase the stored
   // sign-in's "takes effect after restart" note (audit 2026-11-06 #347).
-  await connect(
+  await connectAndStartWorkspace(
     page,
     `/srv/work/connector-management-oauth-restart-${Date.now()}`,
   );
