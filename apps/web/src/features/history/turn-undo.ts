@@ -221,9 +221,13 @@ class TurnUndoController {
       const response = await commands.restoreSnapshot(target);
       // Core restored: record what this restore took before anything else
       // can fail. Its `pre-restore` point is the one listed above the newest
-      // point this tab saw before sending; anything else would be a guess.
-      const taken = takenPoint(fresh, response.snapshots);
-      const own = [...(record?.own ?? []), ...(taken ? [taken] : [])];
+      // point this tab saw before sending, or that newest point itself when
+      // Core reused it; anything else would be a guess.
+      const taken = takenPoint(fresh, response.snapshots, true);
+      const own = [
+        ...(record?.own ?? []).filter((id) => id !== taken),
+        ...(taken ? [taken] : []),
+      ];
       this.#remember({
         turnId: this.#turnId,
         undone: action === "undo" ? { back: taken } : null,
@@ -281,7 +285,7 @@ class TurnUndoController {
       if (!this.#source) return;
       const binding = await this.#source();
       const after = await (await binding.commands()).listSnapshots();
-      const taken = takenPoint(before, after.snapshots);
+      const taken = takenPoint(before, after.snapshots, false);
       const record = this.#recall();
       if (taken)
         this.#remember({
@@ -353,15 +357,22 @@ class TurnUndoController {
 
 /**
  * The `pre-restore` point a restore took: the one Core lists above the newest
- * point this page saw before sending. None (Core reused an identical state)
- * or several (another restore at the same time) single nothing out.
+ * point this page saw before sending. Several (another restore at the same
+ * time) single nothing out. None above means Core reused its newest point,
+ * which it does only when the workspace tree is identical to it. A restore
+ * that succeeded always took its point first, so a reused `pre-restore`
+ * point is the state before this restore. A refusal may come before Core
+ * takes any point.
  */
 function takenPoint(
   before: SnapshotList,
   after: readonly WorkspaceSnapshot[],
+  restored: boolean,
 ): string | null {
   const newest = before.snapshots[0]?.id;
   const index = after.findIndex((snapshot) => snapshot.id === newest);
+  if (restored && index === 0 && after[0]!.label === "pre-restore")
+    return after[0]!.id;
   const above = (index < 0 ? after : after.slice(0, index)).filter(
     (snapshot) => snapshot.label === "pre-restore",
   );

@@ -4,6 +4,7 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { OctosUiRequestTimeoutError } from "@octos-org/octoscode-client";
+import { OctosUiProtocolError } from "@octos-org/octoscode-client/protocol";
 import {
   APPUI_SNAPSHOT_METHODS,
   type SnapshotList,
@@ -125,5 +126,50 @@ describe("undo and redo", () => {
       failure: { kind: "uncertain" },
     });
     expect(controller.undone()).toBe(false);
+  });
+
+  it("an undo retried after a failure can be redone to the point Core reused", async () => {
+    // The failed attempt's own pre-restore point; the retry finds the files
+    // unchanged, so Core reuses it and lists nothing new.
+    const failed = { ...preRestore, id: "cccc3333" };
+    const setup = fake({
+      lists: [
+        listing([preTurn]),
+        listing([preTurn]),
+        listing([failed, preTurn]),
+      ],
+    });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    setup.commands.restoreSnapshot.mockRejectedValueOnce(
+      new OctosUiProtocolError(-32603, "restore incomplete: created.txt"),
+    );
+    await controller.run("undo");
+    expect(controller.view).toMatchObject({ failure: { kind: "refused" } });
+    setup.commands.restoreSnapshot.mockResolvedValueOnce({
+      session_id: "s1",
+      restored: preTurn.id,
+      snapshots: [failed, preTurn],
+    });
+    await controller.run("undo");
+    expect(controller.view).toMatchObject({ status: "undone", redo: "ok" });
+    await controller.run("redo");
+    expect(setup.commands.restoreSnapshot).toHaveBeenLastCalledWith(failed.id);
+  });
+
+  it("a reused point that is not a pre-restore one leaves redo unclear", async () => {
+    const setup = fake({ lists: [listing([preTurn])] });
+    const { controller } = controllerFor(setup.source);
+    await controller.load();
+    setup.commands.restoreSnapshot.mockResolvedValueOnce({
+      session_id: "s1",
+      restored: preTurn.id,
+      snapshots: [preTurn],
+    });
+    await controller.run("undo");
+    expect(controller.view).toMatchObject({
+      status: "undone",
+      redo: "unclear",
+    });
   });
 });
