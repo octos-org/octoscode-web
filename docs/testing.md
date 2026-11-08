@@ -101,9 +101,9 @@ The browser suites prove:
 The fixture's explicit acknowledgement and terminal barriers avoid using short
 delays as proof of admission or concurrency. Controls include
 `/__test__/turn-start/{hold-next,state,admit,release,reject,reset}`,
-`/__test__/terminal/{hold-next,state,release,reset}`,
-`/__test__/session-open/{reject-next,reset}`, `/__test__/disconnect`, and
-`/__test__/replay-lossy`. Controls are fixture-only and are not product RPCs.
+`/__test__/terminal/{hold-next,state,release,reset}`, `/__test__/disconnect`,
+and `/__test__/replay-lossy`. Controls are fixture-only and are not product
+RPCs.
 
 History tests use `/__test__/history/{hold-refresh,state,release,reset}` to
 pause only the post-mutation canonical hydrate, not the initial history read.
