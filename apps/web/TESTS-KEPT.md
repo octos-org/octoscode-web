@@ -14,7 +14,8 @@ apps/web 单元测试的唯一保留清单（2026-11-07 起的测试瘦身做法
 - **当前**（main `7779b9f`，`wake/test-lines.py` 口径）：
   - 全仓 95,108 行 / 2,728 个；
   - 其中 apps/web 48,339 行 / 1,746 个（219 个文件）。
-- **保留**：58 个测试，分布在 38 个文件里。每一条都对过
+- **保留**：58 个测试，分布在 38 个文件里（T-0532 之后为 60 个，新增的 2 个都在
+  `history/turn-undo.test.ts`）。每一条都对过
   `vitest list`：按文件和标题各命中一条，`it.each` 那条整张表算一条。
 - **预计删后**：
   - 保留测试的函数体约 1,760 行。算上这 38 个文件现有的全部 import 和 harness，上限约 6,000 行；只为被删测试服务的 helper 会一起删，实际会落在两者之间。
@@ -56,31 +57,33 @@ apps/web 单元测试的唯一保留清单（2026-11-07 起的测试瘦身做法
 
 ## 4. 恢复、数据完整性、并发、协议帧
 
-| 测试（文件 › 标题）                                                                                                                           | 类  | 守的是什么                                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------------------- |
-| `session/session-record-integration.test.ts` › retains a never-sent queue head through hydrate and starts it at ready                         | 4   | 还没发出的排队提示熬过重连 hydrate，ready 后再发，不丢                                               |
-| `session/session-record-integration.test.ts` › admits caller UUID once and folds optimistic, canonical echo, and legacy twins exactly once    | 4   | 一条用户消息只出现一次：乐观行、canonical 回显和旧版双份合并成一条                                   |
-| `history/history-coordinator.test.ts` › does not replay an ambiguous rollback, even on repeated confirm                                       | 4   | 回滚结果不明时不重放，重复点确认也不会回滚两次                                                       |
-| `history/turn-undo.test.ts` › an unanswered restore is unknown: refreshed, not replayed, not claimed                                          | 4   | 撤销请求没收到答复就按「未知」处理：只刷新状态，不重发，也不说成功                                   |
-| `composer/use-turn-controller.test.ts` › treats a start timeout as an unknown outcome instead of a rejection                                  | 4   | turn/start 超时算「未知」，不算「被拒」：不重发提示，也不丢掉它（docs/protocol.md）                  |
-| `composer/use-turn-controller.test.ts` › restores an interrupted prompt on its OWN session's terminal, never another session's                | 4   | 被中断的提示只还给它自己的会话                                                                       |
-| `composer/use-turn-controller.test.ts` › does not send interrupt while turn/start is still dispatching                                        | 4   | turn/start 还没被确认时不发中断                                                                      |
-| `session/background-turn-manager.test.ts` › does not let an old terminal mutate a newer same-Session turn                                     | 4   | 旧回合的结束事件不会改写同一会话里的新回合（ADR 0019）                                               |
-| `session/durable-session.test.ts` › fails closed on a per-thread sequence gap                                                                 | 4   | 帧序号出现缺口就失败关闭，转为重新 hydrate（ADR 0005）                                               |
-| `session/durable-session.test.ts` › accepts monotonic envelopes and rejects a replayed duplicate                                              | 4   | 单调递增的帧照收，重放来的重复帧拒收（ADR 0005）                                                     |
-| `session/durable-session.test.ts` › turns replay_lossy into an explicit recovery request                                                      | 4   | 收到 `replay_lossy` 就发起明确的恢复请求（ADR 0005）                                                 |
-| `session/durable-session.test.ts` › rejects cross-session and cross-topic contamination                                                       | 4   | 别的会话或别的 topic 的帧不会混进来（ADR 0005）                                                      |
-| `session/active-session-runtime.test.ts` › rehydrates after lossy replay before delivering further notifications                              | 4   | 有损重放之后先重新 hydrate，再继续投递通知（ADR 0005）                                               |
-| `session/active-session-runtime.test.ts` › fails closed on the 4097th recovery event                                                          | 4   | 恢复缓冲超过 4096 条事件就丢弃缓冲，从最后一个持久游标重连，不无限缓存，也不投递残缺事件（ADR 0005） |
-| `session/active-session-runtime.test.ts` › fails closed when reconnect opens a different Session id                                           | 4   | 重连时打开的会话 id 不一致就失败关闭，不把别的会话当成这一个（ADR 0020）                             |
-| `timeline/canonical-hydrate.test.ts` › reconstructs event order without duplicating durable messages, reasoning, tools, or same-turn steers   | 4   | 刷新后用 Core 的 hydrate 重建对话：消息、推理、工具调用和同回合的插话都不重复、不乱序                |
-| `timeline/canonical-hydrate.test.ts` › restores an interrupted unpersisted prompt, partial answer, and error instead of an empty conversation | 4   | 刷新后，被中断回合里还没持久化的提示、半截回答和错误都还在，不会变成空对话                           |
-| `timeline/model.test.ts` › keeps the real Core persisted answer final when later-sequenced deltas arrive                                      | 4   | 已持久化的最终回答不会被晚到的 delta 改写                                                            |
-| `session/session-composer-drafts.test.ts` › keeps full returned drafts in order without replacing new images or another Session               | 4   | 发送失败退回的草稿完整、按序保留，不覆盖新加的图片，也不串到别的会话（ADR 0021）                     |
-| `session/session-draft-cache.test.ts` › refuses a new draft at its bound without evicting anyone’s unsent text                                | 4   | 草稿缓存满了就拒收新草稿，不挤掉已有的未发送文字（ADR 0021）                                         |
-| `session/tab-session-lock-core.test.ts` › becomes owner on a free lock, flips on steal, ignores stale release                                 | 4   | 跨标签页的会话锁：被别的标签页抢走时让出归属，过期的释放不算数（#56、#180）                          |
-| `supervision/model.test.ts` › uses UTF-8 byte offsets and fails closed on a live output gap                                                   | 4   | 任务输出流按 UTF-8 字节偏移拼接，遇到缺口就失败关闭，不拼出乱码或漏段                                |
-| `peers/peer-manager.test.ts` › surfaces rejected/ambiguous starts without retrying or issuing another UUID                                    | 4   | 协作者启动被拒或结果不明时不自动重试，也不换新 UUID；重试沿用原 UUID，Core 才能去重                  |
+| 测试（文件 › 标题）                                                                                                                           | 类  | 守的是什么                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| `session/session-record-integration.test.ts` › retains a never-sent queue head through hydrate and starts it at ready                         | 4   | 还没发出的排队提示熬过重连 hydrate，ready 后再发，不丢                                                               |
+| `session/session-record-integration.test.ts` › admits caller UUID once and folds optimistic, canonical echo, and legacy twins exactly once    | 4   | 一条用户消息只出现一次：乐观行、canonical 回显和旧版双份合并成一条                                                   |
+| `history/history-coordinator.test.ts` › does not replay an ambiguous rollback, even on repeated confirm                                       | 4   | 回滚结果不明时不重放，重复点确认也不会回滚两次                                                                       |
+| `history/turn-undo.test.ts` › an unanswered restore is unknown: refreshed, not replayed, not claimed                                          | 4   | 撤销请求没收到答复就按「未知」处理：只刷新状态，不重发，也不说成功                                                   |
+| `history/turn-undo.test.ts` › an undo retried after a failure can be redone to the point Core reused                                          | 4   | 失败后重试撤销成功、Core 复用了失败那次的 pre-restore 点时仍能恢复撤销，恢复到的正是那个点（T-0532，真实 Core 复现） |
+| `history/turn-undo.test.ts` › a reused point that is not a pre-restore one leaves redo unclear                                                | 4   | 复用的最新点不是 pre-restore 时不猜，恢复撤销仍判为不明（T-0532）                                                    |
+| `composer/use-turn-controller.test.ts` › treats a start timeout as an unknown outcome instead of a rejection                                  | 4   | turn/start 超时算「未知」，不算「被拒」：不重发提示，也不丢掉它（docs/protocol.md）                                  |
+| `composer/use-turn-controller.test.ts` › restores an interrupted prompt on its OWN session's terminal, never another session's                | 4   | 被中断的提示只还给它自己的会话                                                                                       |
+| `composer/use-turn-controller.test.ts` › does not send interrupt while turn/start is still dispatching                                        | 4   | turn/start 还没被确认时不发中断                                                                                      |
+| `session/background-turn-manager.test.ts` › does not let an old terminal mutate a newer same-Session turn                                     | 4   | 旧回合的结束事件不会改写同一会话里的新回合（ADR 0019）                                                               |
+| `session/durable-session.test.ts` › fails closed on a per-thread sequence gap                                                                 | 4   | 帧序号出现缺口就失败关闭，转为重新 hydrate（ADR 0005）                                                               |
+| `session/durable-session.test.ts` › accepts monotonic envelopes and rejects a replayed duplicate                                              | 4   | 单调递增的帧照收，重放来的重复帧拒收（ADR 0005）                                                                     |
+| `session/durable-session.test.ts` › turns replay_lossy into an explicit recovery request                                                      | 4   | 收到 `replay_lossy` 就发起明确的恢复请求（ADR 0005）                                                                 |
+| `session/durable-session.test.ts` › rejects cross-session and cross-topic contamination                                                       | 4   | 别的会话或别的 topic 的帧不会混进来（ADR 0005）                                                                      |
+| `session/active-session-runtime.test.ts` › rehydrates after lossy replay before delivering further notifications                              | 4   | 有损重放之后先重新 hydrate，再继续投递通知（ADR 0005）                                                               |
+| `session/active-session-runtime.test.ts` › fails closed on the 4097th recovery event                                                          | 4   | 恢复缓冲超过 4096 条事件就丢弃缓冲，从最后一个持久游标重连，不无限缓存，也不投递残缺事件（ADR 0005）                 |
+| `session/active-session-runtime.test.ts` › fails closed when reconnect opens a different Session id                                           | 4   | 重连时打开的会话 id 不一致就失败关闭，不把别的会话当成这一个（ADR 0020）                                             |
+| `timeline/canonical-hydrate.test.ts` › reconstructs event order without duplicating durable messages, reasoning, tools, or same-turn steers   | 4   | 刷新后用 Core 的 hydrate 重建对话：消息、推理、工具调用和同回合的插话都不重复、不乱序                                |
+| `timeline/canonical-hydrate.test.ts` › restores an interrupted unpersisted prompt, partial answer, and error instead of an empty conversation | 4   | 刷新后，被中断回合里还没持久化的提示、半截回答和错误都还在，不会变成空对话                                           |
+| `timeline/model.test.ts` › keeps the real Core persisted answer final when later-sequenced deltas arrive                                      | 4   | 已持久化的最终回答不会被晚到的 delta 改写                                                                            |
+| `session/session-composer-drafts.test.ts` › keeps full returned drafts in order without replacing new images or another Session               | 4   | 发送失败退回的草稿完整、按序保留，不覆盖新加的图片，也不串到别的会话（ADR 0021）                                     |
+| `session/session-draft-cache.test.ts` › refuses a new draft at its bound without evicting anyone’s unsent text                                | 4   | 草稿缓存满了就拒收新草稿，不挤掉已有的未发送文字（ADR 0021）                                                         |
+| `session/tab-session-lock-core.test.ts` › becomes owner on a free lock, flips on steal, ignores stale release                                 | 4   | 跨标签页的会话锁：被别的标签页抢走时让出归属，过期的释放不算数（#56、#180）                                          |
+| `supervision/model.test.ts` › uses UTF-8 byte offsets and fails closed on a live output gap                                                   | 4   | 任务输出流按 UTF-8 字节偏移拼接，遇到缺口就失败关闭，不拼出乱码或漏段                                                |
+| `peers/peer-manager.test.ts` › surfaces rejected/ambiguous starts without retrying or issuing another UUID                                    | 4   | 协作者启动被拒或结果不明时不自动重试，也不换新 UUID；重试沿用原 UUID，Core 才能去重                                  |
 
 ## 5. 有意的设计决定
 
