@@ -132,12 +132,15 @@ function connectorRows(workspaceRoot) {
               display_name: "Issue tracker",
               transport: "http",
               enabled: true,
+              oauth: true,
               status: "failed",
               tool_count: 0,
               tools: [],
               url: "https://issues.example.test/mcp",
+              // Core's words once a stored token expired and its refresh was
+              // refused (T-0430): nothing in them says "sign in".
               error:
-                "MCP initialize failed: Send message error Transport [rmcp::transport::worker::WorkerTransport<…>] error: Auth required, when send initialize request",
+                "stored oauth token for 'https://issues.example.test/mcp' expired and refresh failed: OAuth token refresh failed: Server returned error response: invalid_grant: refresh token revoked",
             },
           ]
         : []),
@@ -178,6 +181,8 @@ function connectorPayload(sessionId, profileId, workspaceRoot) {
       display_name: row.display_name,
       transport: row.transport,
       enabled: row.enabled,
+      // Core #3145: every row says whether the connector signs in.
+      oauth: row.oauth === true,
       status: row.status,
       tool_count: row.tool_count,
       tools: row.tools,
@@ -6327,6 +6332,7 @@ sockets.on("connection", (socket, request) => {
             display_name: input.name,
             transport: "http",
             enabled: true,
+            oauth: input.oauth === true,
             status: "connected",
             tool_count: 1,
             tools: ["fetch"],

@@ -55,9 +55,9 @@ test("signs a connector in through the provider and back", async ({ page }) => {
   );
   const settings = await openConnectors(page);
   const issues = settings.locator('[data-connector-id="issues"]');
+  // Core's oauth flag, not the error's words, asks for sign-in; others don't.
   await expect(issues).toContainText("Authorization required");
   await expect(issues).toContainText("This connector needs you to sign in.");
-  // A connector that works, or one failing for another reason, gets no sign-in.
   await expect(
     settings
       .locator('[data-connector-id="legacy"]')
@@ -65,7 +65,7 @@ test("signs a connector in through the provider and back", async ({ page }) => {
   ).toHaveCount(0);
 
   const popupOpened = page.waitForEvent("popup");
-  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
+  await issues.getByRole("button", { name: "Sign in again" }).click();
   const popup = await popupOpened;
   await expect(
     popup.getByRole("heading", { name: "Mock provider sign-in" }),
@@ -145,7 +145,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   const popupOpened = page.waitForEvent("popup");
   await settings
     .locator('[data-connector-id="issues"]')
-    .getByRole("button", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Sign in again" })
     .click();
   const popup = await popupOpened;
   await expect(
@@ -169,7 +169,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   await expect(issues).toContainText("Authorization required");
   await expect(issues).not.toContainText("Signed in");
   await expect(
-    issues.getByRole("button", { name: "Sign in", exact: true }),
+    issues.getByRole("button", { name: "Sign in again" }),
   ).toBeEnabled();
 });
 
@@ -187,7 +187,7 @@ test("a restart-pending sign-in survives refreshes until the server confirms con
   const issues = settings.locator('[data-connector-id="issues"]');
 
   const popupOpened = page.waitForEvent("popup");
-  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
+  await issues.getByRole("button", { name: "Sign in again" }).click();
   const popup = await popupOpened;
   await popup.getByRole("link", { name: "Allow", exact: true }).click();
   await expect(issues).toContainText(
