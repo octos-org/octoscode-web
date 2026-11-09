@@ -668,7 +668,12 @@ export function ConnectorsSettingsContent({
               const name = connectorName(server);
               const rowBusy = busy?.endsWith(`:${server.id}`) === true;
               const signIn = connectorOAuthState(client, profileId, server.id);
-              const usesOAuth = knownToUseOAuth(client, profileId, server.id);
+              // The server's row says the connector signs in (Core #3145), so
+              // a fresh page knows it too; this page's own sign-ins still
+              // count while a restart-pending runtime reports the old config.
+              const usesOAuth =
+                server.oauth === true ||
+                knownToUseOAuth(client, profileId, server.id);
               // A failed OAuth connector needs sign-in whatever the error's
               // wording (T-0430); the text match stays only as the fallback
               // for a server that never says the connector uses OAuth.

@@ -29,6 +29,11 @@ export interface RuntimeMcpServer {
   status: string;
   enabled: boolean;
   authorization?: string;
+  /**
+   * The connector's configured OAuth flag (Core #3145). Absent from older
+   * servers, which say nothing about whether a connector signs in.
+   */
+  oauth?: boolean;
   toolCount: number;
   tools: string[];
   error?: string;
@@ -209,6 +214,7 @@ export function parseRuntimeMcp(
       !nullableText(row.display_name) ||
       !nullableText(row.transport) ||
       (row.enabled !== undefined && typeof row.enabled !== "boolean") ||
+      (row.oauth !== undefined && typeof row.oauth !== "boolean") ||
       !nullableText(row.authorization) ||
       !nullableText(row.error)
     )
@@ -223,6 +229,7 @@ export function parseRuntimeMcp(
       ...(text(row.display_name) ? { displayName: row.display_name } : {}),
       ...(text(row.transport) ? { transport: row.transport } : {}),
       ...(text(row.authorization) ? { authorization: row.authorization } : {}),
+      ...(typeof row.oauth === "boolean" ? { oauth: row.oauth } : {}),
       ...(text(row.error) ? { error: row.error } : {}),
     });
   }
