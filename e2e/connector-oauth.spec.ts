@@ -65,7 +65,7 @@ test("signs a connector in through the provider and back", async ({ page }) => {
   ).toHaveCount(0);
 
   const popupOpened = page.waitForEvent("popup");
-  await issues.getByRole("button", { name: "Sign in again" }).click();
+  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
   const popup = await popupOpened;
   await expect(
     popup.getByRole("heading", { name: "Mock provider sign-in" }),
@@ -145,7 +145,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   const popupOpened = page.waitForEvent("popup");
   await settings
     .locator('[data-connector-id="issues"]')
-    .getByRole("button", { name: "Sign in again" })
+    .getByRole("button", { name: "Sign in", exact: true })
     .click();
   const popup = await popupOpened;
   await expect(
@@ -169,7 +169,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   await expect(issues).toContainText("Authorization required");
   await expect(issues).not.toContainText("Signed in");
   await expect(
-    issues.getByRole("button", { name: "Sign in again" }),
+    issues.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeEnabled();
 });
 
@@ -187,7 +187,7 @@ test("a restart-pending sign-in survives refreshes until the server confirms con
   const issues = settings.locator('[data-connector-id="issues"]');
 
   const popupOpened = page.waitForEvent("popup");
-  await issues.getByRole("button", { name: "Sign in again" }).click();
+  await issues.getByRole("button", { name: "Sign in", exact: true }).click();
   const popup = await popupOpened;
   await popup.getByRole("link", { name: "Allow", exact: true }).click();
   await expect(issues).toContainText(

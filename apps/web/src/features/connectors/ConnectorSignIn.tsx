@@ -189,7 +189,14 @@ export function ConnectorSignIn({
               )
         : (stateText(state, t) ??
           (needsSignIn ? t("This connector needs you to sign in.") : null));
-  const signedIn = usesOAuth || state?.kind === "authorized";
+  // A connector set up for OAuth may hold a sign-in to revoke. Whether it was
+  // ever signed in is only known from what happened on this page: the server
+  // keeps no sign-in history, and oauth: true says nothing about one.
+  const revocable = usesOAuth || state?.kind === "authorized";
+  const triedBefore =
+    state?.kind === "authorized" ||
+    state?.kind === "failed" ||
+    state?.kind === "revoked";
   // One place for what the server said: the sign-in's own error, then the connector's.
   const details = [
     state?.kind === "failed" &&
@@ -291,20 +298,22 @@ export function ConnectorSignIn({
         ) : (
           <button
             type="button"
-            className={needsSignIn && !signedIn ? local.primary : undefined}
+            className={
+              needsSignIn && state?.kind !== "authorized"
+                ? local.primary
+                : undefined
+            }
             disabled={locked || busy}
             onClick={signIn}
           >
             {state?.kind === "starting"
               ? t("Getting the sign-in page…")
-              : signedIn ||
-                  state?.kind === "failed" ||
-                  state?.kind === "revoked"
+              : triedBefore
                 ? t("Sign in again")
                 : t("Sign in")}
           </button>
         )}
-        {signedIn && !waiting ? (
+        {revocable && !waiting ? (
           <button
             type="button"
             className={local.danger}
