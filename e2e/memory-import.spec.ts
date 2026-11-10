@@ -1,11 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN } from "./fixture-session.ts";
+import { openMemory, startMemorySession } from "./memory-settings.ts";
 
 /**
  * T-0425: a memory file is previewed in full and written through the
  * existing `memory/ingest` only after confirmation, in batches, with the
  * server's own counts. Every ingest the page sends is counted here.
  */
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const TOKEN = "memory-e2e-token";
 
 type Frame = { method?: string; params?: { records?: { id: string }[] } };
@@ -18,27 +19,8 @@ async function start(page: Page) {
       if (sent.method === "memory/ingest") ingests.push(sent);
     }),
   );
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/workspace/memory-import-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings.getByRole("button", { name: "Memory", exact: true }).click();
-  await expect(
-    settings.locator("summary").getByText("Long-term memory"),
-  ).toBeVisible();
-  return { settings, ingests };
+  await startMemorySession(page, TOKEN, "memory-import");
+  return { settings: await openMemory(page), ingests };
 }
 
 const record = (mark: string, n: number, overrides = {}) => ({

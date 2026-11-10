@@ -1692,6 +1692,42 @@ const catalog: Readonly<Record<string, string>> = {
     "每条记录会带上内容指纹，服务器据此区分未变化和已更新。",
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
+  "Couldn't read the memories again: {reason}": "没能重新读取记忆：{reason}",
+  "Delete memory": "删除这条记忆",
+  "Delete this memory? Its archived copies go too, and it can't be undone.":
+    "删除这条记忆？它的归档副本也会一起删除，删除后无法恢复。",
+  "Deleted. The list below is the server's copy.":
+    "已删除。下面的列表是服务器上的内容。",
+  Dismiss: "关闭",
+  "Edit memory": "编辑记忆",
+  "Keep it": "保留",
+  "No long-term memories yet.": "还没有长期记忆。",
+  "Not deleted: {reason}": "没有删除：{reason}",
+  "Not saved: {reason}": "没有保存：{reason}",
+  "Saved. The list below is the server's copy.":
+    "已保存。下面的列表是服务器上的内容。",
+  "Showing {shown} of {total} memories; the rest can't be edited here.":
+    "显示 {total} 条中的 {shown} 条，其余的不能在这里编辑。",
+  "The server didn't confirm the change ({reason}). Its text on the server is shown above yours, which is still in the editor.":
+    "服务器没有确认这次修改（{reason}）。上方是它在服务器上的内容，你的文字还在编辑框里。",
+  "The server didn't confirm the delete ({reason}). The list shows what it holds now.":
+    "服务器没有确认这次删除（{reason}）。列表显示的是服务器现在的内容。",
+  "The server lists no editable entries in this long-term memory.":
+    "服务器没有列出这份长期记忆里可编辑的条目。",
+  "This list may be out of date. Use Refresh to read it from the server.":
+    "这个列表可能已经过时，点刷新从服务器重新读取。",
+  "This memory changed on the server after it was loaded, so it was not deleted. Check what it says now, and delete it again if you still want to.":
+    "这条记忆在加载后被服务器改过，所以没有删除。看看它现在的内容，仍要删除就再删一次。",
+  "This memory changed on the server after it was loaded, so your text was not saved. Its text on the server is shown above yours, which is still in the editor. Save again to replace it.":
+    "这条记忆在加载后被服务器改过，所以你的文字没有保存。上方是它在服务器上的内容，你的文字还在编辑框里，再保存一次即可替换。",
+  "This memory is no longer on the server, so your text was not saved.":
+    "这条记忆已经不在服务器上了，你的文字没有保存。",
+  "This memory was already gone from the server.":
+    "这条记忆在服务器上已经不存在了。",
+  "On the server: {text}": "服务器上的内容：{text}",
+  "Saved.": "已保存。",
+  "Deleted.": "已删除。",
+  "Your unsaved text": "你未保存的文字",
   Overview: "概览",
   "Searching…": "正在搜索…",
   "Remembering…": "正在记住…",

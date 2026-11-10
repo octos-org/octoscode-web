@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryCommands, parseMemoryEntity } from "../src/memory.ts";
+import {
+  createMemoryCommands,
+  parseMemoryEntity,
+  parseMemoryEntries,
+} from "../src/memory.ts";
 import {
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
 } from "../src/generated/core-contract.ts";
 import {
+  APPUI_MEMORY_ENTRY_METHODS,
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_REQUEST_METHOD,
 } from "../src/memory-methods.ts";
@@ -21,6 +26,7 @@ const capabilities: UiProtocolCapabilities = {
     CORE_UI_METHODS.MEMORY_INGEST,
     APPUI_MEMORY_REQUEST_METHOD,
     APPUI_MEMORY_PROMOTE_METHOD,
+    ...Object.values(APPUI_MEMORY_ENTRY_METHODS),
   ],
   supported_features: [CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1],
   supported_notifications: [],
@@ -35,6 +41,7 @@ const record = {
   body: "probe body",
   visits: 1,
 };
+const entry = { id: "^maaaaaa", text: "- tea ^maaaaaa", version: "v1" };
 
 describe("memory protocol", () => {
   it("decodes overview, entity, search, and load projections", async () => {
@@ -98,6 +105,27 @@ describe("memory protocol", () => {
     );
     await expect(commands.overview()).rejects.toThrow(/not advertised/);
     expect(request).not.toHaveBeenCalled();
+    // An entry list that could send an edit to the wrong entry is refused.
+    const list = (entries: unknown[], total = entries.length) =>
+      parseMemoryEntries({ entries, total, truncated: false });
+    expect(list([entry])?.entries[0]?.body).toBe("- tea");
+    expect(list([entry, entry])).toBeNull();
+    expect(list([entry], 2)).toBeNull();
+    expect(list([{ ...entry, text: "- tea ^mbbbbbb" }])).toBeNull();
+    // A receipt must name the entry, and a delete the version it was sent.
+    const receipts = createMemoryCommands(
+      {
+        request: vi
+          .fn()
+          .mockResolvedValue({ entry_id: entry.id, version: "v2" }),
+      },
+      capabilities,
+    );
+    const shown = { ...entry, body: "- tea" };
+    await expect(receipts.delete(shown)).rejects.toThrow(/mismatched/);
+    await expect(
+      receipts.edit({ ...shown, id: "^mbbbbbb" }, "x"),
+    ).rejects.toThrow(/mismatched/);
   });
 });
 
@@ -123,10 +151,13 @@ describe("session memory scope", () => {
       () => commands.ingest([record]),
       () => commands.request("remember", "text"),
       () => commands.promote("t0008"),
+      () => commands.entries(),
+      () => commands.edit({ ...entry, body: "- tea" }, "- coffee"),
+      () => commands.delete({ ...entry, body: "- tea" }),
     ]) {
       await expect(call()).rejects.toThrow("server refusal");
     }
-    expect(request).toHaveBeenCalledTimes(7);
+    expect(request).toHaveBeenCalledTimes(10);
     for (const [, params] of request.mock.calls)
       expect(params.session_id).toBe("web-coding");
   });

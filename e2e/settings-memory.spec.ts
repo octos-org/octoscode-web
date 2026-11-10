@@ -1,35 +1,10 @@
+import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN } from "./fixture-session.ts";
+import { openMemory, startMemorySession } from "./memory-settings.ts";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(page: Page, token = "memory-e2e-token") {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/workspace/settings-memory-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
-
-async function openMemory(page: Page, expectOverview = true) {
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings.getByRole("button", { name: "Memory", exact: true }).click();
-  if (expectOverview) {
-    await expect(
-      settings.locator("summary").getByText("Long-term memory"),
-    ).toBeVisible();
-  }
-  return settings;
-}
+const start = (page: Page, token = "memory-e2e-token") =>
+  startMemorySession(page, token, "settings-memory");
 
 test("ingest → search → detail survives a page refresh, and failures stay honest", async ({
   page,
@@ -107,15 +82,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
     settings.locator("summary").getByText("Long-term memory"),
   ).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const again = page.getByRole("dialog", { name: "Settings" });
-  await again.getByRole("button", { name: "Memory", exact: true }).click();
-  await expect(
-    again.locator("summary").getByText("Long-term memory"),
-  ).toBeVisible();
+  const again = await openMemory(page);
   await again.getByLabel("Search memories").fill("Refresh proof");
   await again.getByRole("button", { name: "Search", exact: true }).click();
   await again.getByRole("button", { name: /Refresh proof/ }).click();
@@ -142,4 +109,108 @@ test("fails closed when authenticated memory ownership differs from the Session 
   ).toBeVisible();
   await expect(settings.getByLabel("Memory content")).toHaveCount(0);
   expect(memoryCalls).toEqual([]);
+});
+
+test("long-term entries edit and delete on the server, and a failed change keeps the text", async ({
+  page,
+}) => {
+  const sent: { method?: string; params?: Record<string, unknown> }[] = [];
+  page.on("websocket", (ws) =>
+    ws.on("framesent", (frame) => sent.push(JSON.parse(String(frame.payload)))),
+  );
+  const control = (path: string) =>
+    page.request.post(`${FIXTURE_ORIGIN}/__test__/memory/${path}`);
+  await control("entries/reset");
+  await start(page, "memory-main-e2e-token");
+  const settings = await openMemory(page);
+  const entry = (text: string) =>
+    settings.getByRole("listitem").filter({ hasText: text });
+  const editor = settings.getByLabel("Edit memory");
+  await expect(settings.getByText(/not available in the current/)).toHaveCount(
+    0,
+  );
+
+  // An edit sends the text verbatim against the version on screen; the list
+  // then shows what the server stored, its own stamp included.
+  await entry("dark roast").getByRole("button", { name: "Edit" }).click();
+  await expect(editor).toHaveValue(
+    "- prefers dark roast coffee (updated: 2026-11-01)",
+  );
+  await editor.fill("- prefers green tea");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings.getByText(/^Saved\./)).toBeVisible();
+  await expect(entry("green tea").locator("p")).toHaveText(
+    "- prefers green tea (updated: 2026-11-10)",
+  );
+  const edit = sent.find((frame) => frame.method === "memory/edit")!.params!;
+  expect(edit).toMatchObject({
+    entry_id: "^maaaaaa",
+    version: createHash("sha256")
+      .update("- prefers dark roast coffee (updated: 2026-11-01) ^maaaaaa")
+      .digest("hex"),
+    content: "- prefers green tea",
+  });
+  expect(edit.session_id).toEqual(expect.any(String));
+
+  // Changed by another writer since it was loaded: refused, the server's
+  // text is shown, the draft stays, and saving again applies it.
+  await control(
+    `entries/set?id=${encodeURIComponent("^mbbbbbb")}&text=${encodeURIComponent("- works on the ledger (updated: 2026-11-09) ^mbbbbbb")}`,
+  );
+  await entry("billing").getByRole("button", { name: "Edit" }).click();
+  await editor.fill("- works on payments");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings.getByRole("alert")).toContainText(
+    "changed on the server",
+  );
+  await expect(editor).toHaveValue("- works on payments");
+  await expect(entry("ledger")).toContainText(
+    "On the server: - works on the ledger (updated: 2026-11-09)",
+  );
+  await expect(settings.getByText("billing")).toHaveCount(0);
+  // An unconfirmed save keeps the draft too.
+  await control("fail-next?method=memory/edit");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings.getByRole("alert")).toContainText("didn't confirm");
+  await expect(editor).toHaveValue("- works on payments");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(entry("payments")).toBeVisible();
+
+  // Delete asks first; keeping it changes nothing.
+  await entry("green tea")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await settings.getByRole("button", { name: "Keep it" }).click();
+  await entry("green tea")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await settings.getByRole("button", { name: "Delete memory" }).click();
+  await expect(settings.getByText(/^Deleted\./)).toBeVisible();
+  await expect(entry("green tea")).toHaveCount(0);
+
+  // Gone from the server before the save: the text is offered back.
+  await control(`entries/set?id=${encodeURIComponent("^mbbbbbb")}`);
+  await entry("payments").getByRole("button", { name: "Edit" }).click();
+  await editor.fill("- works on refunds");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings.getByRole("alert")).toContainText(
+    "no longer on the server",
+  );
+  await expect(settings.getByLabel("Your unsaved text")).toHaveValue(
+    "- works on refunds",
+  );
+  await expect(settings.getByText("No long-term memories yet.")).toBeVisible();
+
+  // After a reload the page shows the server's list, and no memory text was
+  // kept in the URL or browser storage.
+  await page.reload();
+  await expect(
+    (await openMemory(page)).getByText("No long-term memories yet."),
+  ).toBeVisible();
+  const kept = await page.evaluate(
+    () =>
+      location.href + JSON.stringify({ ...localStorage, ...sessionStorage }),
+  );
+  for (const text of ["green tea", "payments", "refunds", "ledger"])
+    expect(kept).not.toContain(text);
 });
