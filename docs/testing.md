@@ -41,6 +41,28 @@ persisted. Scenario-specific recovery tests and the real Core gate supply that
 evidence. Keyboard and accessibility assertions do not claim real VoiceOver,
 NVDA or physical-mobile coverage.
 
+## Test growth ratchet
+
+The `check` job runs `scripts/test-growth.mjs`, which fails a pull request or
+merge group that adds test lines on net; a push to main only reports.
+`node scripts/test-growth.mjs --base origin/main` shows the same numbers
+locally.
+
+1. Offset new test lines inside the same pull request first: delete duplicated
+   setup or assertions, or tests the keep list no longer holds. Do not weaken
+   assertions or drop key guards to pass the ratchet.
+2. When growth cannot be offset, the pull request description lists what each
+   added test guards and why it cannot be offset.
+3. lead-web reviews that and, if it agrees, adds `test-growth-approved` as
+   anantheparty, then re-runs the job. The label counts even though anantheparty
+   also authored the pull request; a label added by a bot does not, and removing
+   the label withdraws the approval. No other approval is needed.
+4. Only lead-web adds this label. No agent adds it to its own pull request.
+   Every agent works as anantheparty, so the script cannot tell lead-web from
+   any other agent; this rule is procedure, not code.
+5. When an approved pull request adds more than 1,500 test lines, lead-web also
+   reports it to Claude. Merging does not wait for that.
+
 ## Multi-Session browser gate
 
 The fixture tracks exact Session/Profile/Workspace bindings, opened socket

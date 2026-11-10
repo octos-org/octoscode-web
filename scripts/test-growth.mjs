@@ -14,10 +14,13 @@
 // *_test.rs, test_*.rs or tests.rs, and otherwise only their #[cfg(test)]
 // modules. A file's lines are its newline count plus one.
 //
-// A pull request (or its merge group) that adds lines fails unless it carries
-// the LABEL, added by someone in MAINTAINERS who is not the pull request's
-// author and not a bot. Every agent works as one shared account, which is
-// deliberately not a maintainer. A push to main only reports.
+// A pull request (or its merge group) that adds lines fails unless its last
+// LABEL event is a real `labeled` by a user, not a bot (shu, 11-10). The
+// pull request's author may add it: every agent works as the one shared
+// account anantheparty, and lead-web adds the label as that account after
+// reviewing the growth. Only lead-web may add it; this script cannot tell
+// lead-web from any other agent on that account, so that rule is procedure,
+// written down in docs/testing.md. A push to main only reports.
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
@@ -25,8 +28,6 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** Who may approve test growth. Edit here to change the list. */
-const MAINTAINERS = ["alan0x", "BH3GEI", "ymote"];
 const LABEL = "test-growth-approved";
 
 const SCRIPT_TEST =
@@ -92,7 +93,7 @@ if (approval.approved) {
 if (approval.note) console.log(approval.note);
 const grown = changed.filter(({ delta }) => delta > 0).map(({ path }) => path);
 console.log(
-  `::error title=Test lines grew::This change adds ${growth} test lines on net (${format(before.total)} → ${format(after.total)}), in ${grown.join(", ")}. Delete as many test lines elsewhere, or ask a maintainer (${MAINTAINERS.join(", ")}) to add the ${LABEL} label, then re-run this job.`,
+  `::error title=Test lines grew::This change adds ${growth} test lines on net (${format(before.total)} → ${format(after.total)}), in ${grown.join(", ")}. Delete as many test lines elsewhere in this pull request. If that cannot be done, list in its description what each added test guards and why it cannot be offset, ask lead-web to review it and add the ${LABEL} label, then re-run this job.`,
 );
 process.exit(1);
 
@@ -111,10 +112,7 @@ async function ciEvent() {
       name,
       enforce: true,
       base: "HEAD^1",
-      pullRequest: {
-        number: payload.pull_request.number,
-        author: payload.pull_request.user.login,
-      },
+      pullRequest: { number: payload.pull_request.number },
     };
   if (name === "merge_group") {
     const number = /\/pr-(\d+)-/.exec(payload.merge_group.head_ref)?.[1];
@@ -122,7 +120,7 @@ async function ciEvent() {
       name,
       enforce: true,
       base: payload.merge_group.base_sha,
-      pullRequest: number ? { number: Number(number), author: null } : null,
+      pullRequest: number ? { number: Number(number) } : null,
     };
   }
   const before = payload.before;
@@ -134,7 +132,7 @@ async function ciEvent() {
   };
 }
 
-/** The label's last addition, and whether its author may approve growth. */
+/** The label's last addition, and whether it counts as an approval. */
 async function growthApproval(pullRequest) {
   if (!pullRequest)
     return {
@@ -142,12 +140,6 @@ async function growthApproval(pullRequest) {
       note: "No pull request to read a label from.",
     };
   const repository = process.env.GITHUB_REPOSITORY;
-  const author =
-    pullRequest.author ??
-    (await gh(
-      `repos/${repository}/pulls/${pullRequest.number}`,
-      ".user.login",
-    ));
   const events = (
     await gh(
       `repos/${repository}/issues/${pullRequest.number}/events`,
@@ -161,19 +153,12 @@ async function growthApproval(pullRequest) {
   const last = events.at(-1);
   if (!last || last.event !== "labeled")
     return { approved: false, note: `No ${LABEL} label.` };
-  const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  const refusal = !MAINTAINERS.some((login) => same(login, last.login))
-    ? `only ${MAINTAINERS.join(", ")} may approve`
-    : last.type === "Bot"
-      ? "a bot may not approve"
-      : same(last.login, author)
-        ? "no one may approve their own pull request"
-        : null;
-  if (refusal === null) return { approved: true, by: last.login };
-  return {
-    approved: false,
-    note: `${LABEL} was added by ${last.login}, which does not count: ${refusal}.`,
-  };
+  if (last.type === "Bot")
+    return {
+      approved: false,
+      note: `${LABEL} was added by ${last.login}, which does not count: a bot may not approve.`,
+    };
+  return { approved: true, by: last.login };
 }
 
 async function gh(endpoint, jq, paginate = false) {

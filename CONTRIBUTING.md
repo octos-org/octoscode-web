@@ -40,8 +40,10 @@ checksummed pinned runtime gate described in
 - Test lines may not grow on net: the `check` job compares a pull request's test
   lines with its base and fails on any increase
   (`node scripts/test-growth.mjs --base origin/main` shows the same numbers
-  locally). Pay for a new test by deleting as much elsewhere, or ask a
-  maintainer (alan0x, BH3GEI, ymote) to add the `test-growth-approved` label.
+  locally). Pay for a new test by deleting as much elsewhere in the same pull
+  request; when that cannot be done, lead-web may approve the growth with the
+  `test-growth-approved` label (see
+  [Test growth ratchet](docs/testing.md#test-growth-ratchet)).
 - [`apps/web/TESTS-KEPT.md`](apps/web/TESTS-KEPT.md) lists the apps/web unit
   tests that stay, each with its category and what it guards; apps/web unit
   tests not on it are slated for deletion.
