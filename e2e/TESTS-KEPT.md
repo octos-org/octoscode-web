@@ -442,12 +442,13 @@ styling）。
 | one file stays selected across diff, output, reload and read failure | ②   | 同一个文件在 diff、输出、刷新和读失败之间保持选中 |
 | Files browses the real workspace tree and previews any file in it    | ①   | 侧栏浏览真实工作区树并预览任意文件                |
 
-### settings-memory.spec.ts（留 2/4）
+### settings-memory.spec.ts（留 3/5）
 
-| 测试                                                                              | 类  | 守的链路                                            |
-| --------------------------------------------------------------------------------- | --- | --------------------------------------------------- |
-| ingest → search → detail survives a page refresh, and failures stay honest        | ①   | 记忆写入、搜索、详情链熬过刷新，失败如实显示        |
-| fails closed when authenticated memory ownership differs from the Session profile | ③   | 记忆归属与会话 profile 不一致时失败关闭（身份隔离） |
+| 测试                                                                                | 类  | 守的链路                                                                             |
+| ----------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------ |
+| ingest → search → detail survives a page refresh, and failures stay honest          | ①   | 记忆写入、搜索、详情链熬过刷新，失败如实显示                                         |
+| fails closed when authenticated memory ownership differs from the Session profile   | ③   | 记忆归属与会话 profile 不一致时失败关闭（身份隔离）                                  |
+| long-term entries edit and delete on the server, and a failed change keeps the text | ①/③ | 记忆条目按版本编辑、确认后删除，冲突/未确认/已不在都如实且留住文字，刷新以服务器为准 |
 
 ### settings-mobile.spec.ts（留 1/1）
 

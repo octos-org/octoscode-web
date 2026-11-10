@@ -5,6 +5,7 @@ import {
   CORE_UI_METHODS,
 } from "./generated/core-contract.ts";
 import {
+  APPUI_MEMORY_ENTRY_METHODS,
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   APPUI_MEMORY_REQUEST_METHOD,
@@ -79,6 +80,24 @@ export interface MemoryPromoteResult {
   recordIds: string[];
   count: number;
   refreshEnabled: boolean;
+}
+/** One long-term entry as stored: `text` ends with the entry's own id. */
+export interface MemoryEntry {
+  id: string;
+  text: string;
+  version: string;
+  /** `text` without its trailing id: what an edit sends back verbatim. */
+  body: string;
+}
+export interface MemoryEntries {
+  entries: MemoryEntry[];
+  total: number;
+  truncated: boolean;
+}
+/** What the server stored (edit) or removed (delete). */
+export interface MemoryEntryReceipt {
+  entryId: string;
+  version: string;
 }
 
 const text = (value: unknown): value is string =>
@@ -290,6 +309,55 @@ export function parseMemoryPromote(value: unknown): MemoryPromoteResult | null {
     : null;
 }
 
+export function parseMemoryEntries(value: unknown): MemoryEntries | null {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.entries) ||
+    !count(value.total) ||
+    typeof value.truncated !== "boolean" ||
+    value.total < value.entries.length ||
+    (!value.truncated && value.total !== value.entries.length)
+  ) {
+    return null;
+  }
+  const entries: MemoryEntry[] = [];
+  const ids = new Set<string>();
+  for (const row of value.entries) {
+    if (
+      !isRecord(row) ||
+      !nonEmpty(row.id) ||
+      ids.has(row.id) ||
+      !nonEmpty(row.text) ||
+      !nonEmpty(row.version)
+    ) {
+      return null;
+    }
+    // Core appends the id after the body and its stamp; an entry whose text
+    // does not end that way cannot be edited without guessing.
+    const body = row.text.slice(0, -row.id.length);
+    if (!row.text.endsWith(row.id) || !/\s$/.test(body)) return null;
+    ids.add(row.id);
+    entries.push({
+      id: row.id,
+      text: row.text,
+      version: row.version,
+      body: body.trimEnd(),
+    });
+  }
+  return { entries, total: value.total, truncated: value.truncated };
+}
+
+export function parseMemoryEntryReceipt(
+  value: unknown,
+  expectedId: string,
+): MemoryEntryReceipt | null {
+  return isRecord(value) &&
+    value.entry_id === expectedId &&
+    nonEmpty(value.version)
+    ? { entryId: value.entry_id, version: value.version }
+    : null;
+}
+
 export function createMemoryCommands(
   client: { request(method: string, params: unknown): Promise<unknown> },
   capabilities: UiProtocolCapabilities,
@@ -398,6 +466,45 @@ export function createMemoryCommands(
       });
       const parsed = parseMemoryRequest(value);
       if (!parsed) throw new Error("Invalid memory request result");
+      return parsed;
+    },
+    async entries(): Promise<MemoryEntries> {
+      available(APPUI_MEMORY_ENTRY_METHODS.ENTRIES);
+      const value = await client.request(
+        APPUI_MEMORY_ENTRY_METHODS.ENTRIES,
+        scope,
+      );
+      const parsed = parseMemoryEntries(value);
+      if (!parsed) throw new Error("Invalid memory entries");
+      return parsed;
+    },
+    async edit(
+      entry: MemoryEntry,
+      content: string,
+    ): Promise<MemoryEntryReceipt> {
+      available(APPUI_MEMORY_ENTRY_METHODS.EDIT);
+      if (!nonEmpty(content)) throw new Error("Memory text is required");
+      const value = await client.request(APPUI_MEMORY_ENTRY_METHODS.EDIT, {
+        ...scope,
+        entry_id: entry.id,
+        version: entry.version,
+        content,
+      });
+      const parsed = parseMemoryEntryReceipt(value, entry.id);
+      if (!parsed) throw new Error("Invalid or mismatched memory edit receipt");
+      return parsed;
+    },
+    async delete(entry: MemoryEntry): Promise<MemoryEntryReceipt> {
+      available(APPUI_MEMORY_ENTRY_METHODS.DELETE);
+      const value = await client.request(APPUI_MEMORY_ENTRY_METHODS.DELETE, {
+        ...scope,
+        entry_id: entry.id,
+        version: entry.version,
+      });
+      const parsed = parseMemoryEntryReceipt(value, entry.id);
+      if (!parsed || parsed.version !== entry.version) {
+        throw new Error("Invalid or mismatched memory delete receipt");
+      }
       return parsed;
     },
     async promote(source: string): Promise<MemoryPromoteResult> {

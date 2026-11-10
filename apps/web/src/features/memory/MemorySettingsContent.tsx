@@ -1,6 +1,7 @@
 import { randomUUID } from "../../shared/uuid.ts";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
+  APPUI_MEMORY_ENTRY_METHODS,
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_SESSION_SCOPE_FEATURE,
   supportsFeature,
@@ -36,6 +37,7 @@ import {
   readBackVerdict,
   type ImportRecord,
 } from "./memory-import.ts";
+import { MemoryEntries } from "./MemoryEntries.tsx";
 import { MemoryImport, type ImportOutcome } from "./MemoryImport.tsx";
 import {
   dropImportRun,
@@ -86,6 +88,17 @@ export function MemorySettingsContent({
   const canIngest = supportsMethod(capabilities, CORE_UI_METHODS.MEMORY_INGEST);
   const canRequest = supportsMethod(capabilities, APPUI_MEMORY_REQUEST_METHOD);
   const canPromote = supportsMethod(capabilities, APPUI_MEMORY_PROMOTE_METHOD);
+  const canEntries = supportsMethod(
+    capabilities,
+    APPUI_MEMORY_ENTRY_METHODS.ENTRIES,
+  );
+  const canEdit =
+    canEntries && supportsMethod(capabilities, APPUI_MEMORY_ENTRY_METHODS.EDIT);
+  const canDelete =
+    canEntries &&
+    supportsMethod(capabilities, APPUI_MEMORY_ENTRY_METHODS.DELETE);
+  /** Bumped by Refresh so the entry list reads the server again too. */
+  const [entriesEpoch, setEntriesEpoch] = useState(0);
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MemoryRecord[] | null>(null);
@@ -542,6 +555,7 @@ export function MemorySettingsContent({
         capabilities,
         memorySessionId,
       );
+      setEntriesEpoch((epoch) => epoch + 1);
       setOverview(await commands.overview());
     } catch (reason) {
       setError(errorMessage(reason));
@@ -549,6 +563,30 @@ export function MemorySettingsContent({
       inflight.current = false;
       setRefreshing(false);
     }
+  };
+
+  /** The page's single action slot, for the entry list's edit and delete. */
+  const claimAction = (action: string) => {
+    if (busy || inflight.current) return false;
+    inflight.current = true;
+    setBusyAction(action);
+    return true;
+  };
+  const releaseAction = () => {
+    inflight.current = false;
+    setBusyAction(null);
+  };
+  /** A delete also scrubs daily notes; read the overview again, quietly. */
+  const overviewAfterChange = () => {
+    const scope = scopeKey;
+    void liveCommands()
+      .then((commands) => commands.overview())
+      .then(
+        (result) => {
+          if (live.current.scopeKey === scope) setOverview(result);
+        },
+        () => undefined,
+      );
   };
 
   if (!scopeVerified) {
@@ -591,11 +629,13 @@ export function MemorySettingsContent({
           {refreshing ? t("Refreshing…") : t("Refresh")}
         </button>
       </header>
-      <p className={styles.notice}>
-        {t(
-          "Editing and deleting memories are not available in the current protocol.",
-        )}
-      </p>
+      {!canEdit && !canDelete ? (
+        <p className={styles.notice}>
+          {t(
+            "Editing and deleting memories are not available in the current protocol.",
+          )}
+        </p>
+      ) : null}
       {error ? (
         <p className={styles.error} role="alert">
           {error}
@@ -612,12 +652,44 @@ export function MemorySettingsContent({
             ) : null}
             {overview ? (
               <>
-                <MemoryDocument
-                  title={t("Long-term memory")}
-                  text={overview.longTerm}
-                  truncated={overview.longTermTruncated}
-                  totalBytes={overview.longTermTotalBytes}
-                />
+                {canEntries ? (
+                  <MemoryEntries
+                    key={scopeKey}
+                    commands={() =>
+                      client.memoryCommands(capabilities, memorySessionId)
+                    }
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    epoch={entriesEpoch}
+                    disabled={busy || refreshing}
+                    claim={claimAction}
+                    release={releaseAction}
+                    onChanged={overviewAfterChange}
+                    unlisted={
+                      overview.longTerm ? (
+                        <>
+                          <p className={styles.meta}>
+                            {t(
+                              "The server lists no editable entries in this long-term memory.",
+                            )}
+                          </p>
+                          <MemoryText
+                            text={overview.longTerm}
+                            truncated={overview.longTermTruncated}
+                            totalBytes={overview.longTermTotalBytes}
+                          />
+                        </>
+                      ) : null
+                    }
+                  />
+                ) : (
+                  <MemoryDocument
+                    title={t("Long-term memory")}
+                    text={overview.longTerm}
+                    truncated={overview.longTermTruncated}
+                    totalBytes={overview.longTermTotalBytes}
+                  />
+                )}
                 <MemoryDocument
                   title={t("Today")}
                   text={overview.today}

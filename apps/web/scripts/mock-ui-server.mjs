@@ -31,6 +31,21 @@ const memoryRecords = new Map([
     },
   ],
 ]);
+// Long-term entries as Core #3179 lists them: the text ends with the id, and
+// the version is the text's SHA-256.
+const memoryEntries = new Map();
+const resetMemoryEntries = () => {
+  memoryEntries.clear();
+  for (const text of [
+    "- prefers dark roast coffee (updated: 2026-11-01) ^maaaaaa",
+    "- works on the billing service (updated: 2026-11-02) ^mbbbbbb",
+  ]) {
+    memoryEntries.set(text.slice(-8), text);
+  }
+};
+resetMemoryEntries();
+const memoryEntryVersion = (text) =>
+  createHash("sha256").update(text).digest("hex");
 const defaultCronJob = () => ({
   id: "cron-1",
   name: "Queue check",
@@ -2631,6 +2646,27 @@ const http = createServer(async (request, response) => {
   }
   if (
     request.method === "POST" &&
+    request.url === "/__test__/memory/entries/reset"
+  ) {
+    resetMemoryEntries();
+    response.writeHead(204).end();
+    return;
+  }
+  // Another writer (a consolidation, another tab) changes or removes one entry.
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname ===
+      "/__test__/memory/entries/set"
+  ) {
+    const params = new URL(request.url, "http://fixture").searchParams;
+    if (params.has("text"))
+      memoryEntries.set(params.get("id"), params.get("text"));
+    else memoryEntries.delete(params.get("id"));
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
     new URL(request.url, "http://fixture").pathname ===
       "/__test__/memory/fail-next"
   ) {
@@ -3196,6 +3232,9 @@ function capabilitiesFor(socket, state) {
           ...capabilities.supported_methods,
           "memory/request",
           "memory/promote",
+          "memory/entries",
+          "memory/edit",
+          "memory/delete",
         ],
       }
     : capabilities;
@@ -5831,12 +5870,16 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "memory/overview") {
+      // Where entries are listed, the long-term document is made of them.
+      const longTerm = memoryMainSockets.has(socket)
+        ? [...memoryEntries.values()].join("\n\n")
+        : "# Long-term memory\n\nProtocol memory fixture.";
       reply(socket, request.id, {
         overview: {
-          long_term: "# Long-term memory\n\nProtocol memory fixture.",
+          long_term: longTerm,
           long_term_updated_at: "2026-10-28T00:00:00Z",
           long_term_truncated: false,
-          long_term_total_bytes: 43,
+          long_term_total_bytes: Buffer.byteLength(longTerm),
           today: "Today’s memory note.",
           today_truncated: false,
           today_total_bytes: 20,
@@ -5920,6 +5963,81 @@ sockets.on("connection", (socket, request) => {
     }
     if (request.method === "memory/request") {
       reply(socket, request.id, { status: "accepted", refresh_enabled: true });
+      return;
+    }
+    if (request.method === "memory/entries") {
+      const entries = [...memoryEntries].map(([id, text]) => ({
+        id,
+        text,
+        version: memoryEntryVersion(text),
+      }));
+      reply(socket, request.id, {
+        entries,
+        total: entries.length,
+        truncated: false,
+      });
+      return;
+    }
+    if (
+      request.method === "memory/edit" ||
+      request.method === "memory/delete"
+    ) {
+      if (memoryFailNext.delete(request.method)) {
+        replyError(socket, request.id, -32_000, "memory backend unavailable");
+        return;
+      }
+      const { entry_id: id, version, content } = request.params;
+      const stored = memoryEntries.get(id);
+      if (stored === undefined) {
+        replyError(
+          socket,
+          request.id,
+          -32_170,
+          `memory_entry not found: ${id}`,
+          {
+            kind: "not_found",
+            resource_type: "memory_entry",
+            identifier: id,
+          },
+        );
+        return;
+      }
+      if (version !== memoryEntryVersion(stored)) {
+        replyError(
+          socket,
+          request.id,
+          -32_171,
+          `memory_entry version conflict: ${id}`,
+          {
+            kind: "version_conflict",
+            resource_type: "memory_entry",
+            identifier: id,
+            current_version: memoryEntryVersion(stored),
+          },
+        );
+        return;
+      }
+      if (request.method === "memory/delete") {
+        memoryEntries.delete(id);
+        reply(socket, request.id, { entry_id: id, version });
+        return;
+      }
+      if (content.split("\n").some((line) => !line.trim())) {
+        replyError(
+          socket,
+          request.id,
+          -32_602,
+          "invalid entry content: content must be a single block: empty lines would split the entry",
+        );
+        return;
+      }
+      const body = content.trimEnd();
+      const text = `${body}${body.includes("(updated:") ? "" : " (updated: 2026-11-10)"} ${id}`;
+      memoryEntries.set(id, text);
+      reply(socket, request.id, {
+        entry_id: id,
+        version: memoryEntryVersion(text),
+      });
       return;
     }
     if (request.method === "memory/promote") {
