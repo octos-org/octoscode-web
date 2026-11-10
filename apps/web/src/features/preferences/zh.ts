@@ -1878,8 +1878,6 @@ const catalog: Readonly<Record<string, string>> = {
   "Queued prompts": "排队的消息",
   "Read paths:": "可读路径：",
   "Read paths: {value0}": "可读路径：{value0}",
-  "Reload the page to try again. Reloading may stop running work and discard drafts and queued messages.":
-    "重新加载页面再试一次。重新加载可能会停止正在运行的工作，并丢弃草稿和排队的消息。",
   "Remove from queue": "移出队列",
   "Remove queued prompt {index}": "移除排队的第 {index} 条消息",
   "Required only if your server uses authentication.":
@@ -1928,8 +1926,12 @@ const catalog: Readonly<Record<string, string>> = {
     "这个服务器不支持检查回复状态。你可以先复制文字，再到设置里管理连接。",
   "This tab already keeps 50 unsent drafts. Send or clear this input before switching conversations. Copy it first if you want to keep it elsewhere.":
     "这个标签页已经存了 50 份未发送的草稿。切换对话前请先发送或清空这段输入；想留着的话先复制下来。",
-  "This view could not be displayed. Other parts of the app remain available.":
-    "这个界面没能显示，应用的其他部分仍可使用。",
+  "This view could not be displayed. Other parts of the app remain available. Reload the page to try again.":
+    "这个视图无法显示，应用的其它部分仍可使用。重新加载页面再试一次。",
+  "Octoscode was updated on the server, so this window can no longer load this view. Reload to use the new version.":
+    "Octoscode 已在服务器上更新，这个窗口无法再加载这个视图。重新加载以使用新版本。",
+  "Reloading keeps the drafts this browser saved; messages waiting to send are lost.":
+    "重新加载会保留这个浏览器已保存的草稿，等待发送的消息会丢失。",
   "Thought process": "思考过程",
   "Use this page": "使用当前页面",
   "Usually the address of this page. Change it to use another server.":

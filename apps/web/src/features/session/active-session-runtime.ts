@@ -475,6 +475,11 @@ export class ActiveSessionRuntime<
     return this.#authority;
   }
 
+  /** Detached by a lost transport and not yet resumed, restored or retired. */
+  isSuspended(): boolean {
+    return this.#authority === null && this.#suspendedAuthority !== null;
+  }
+
   isCurrent(authority: ActiveSessionAuthority<Client>): boolean {
     return (
       this.#authority?.generation === authority.generation &&

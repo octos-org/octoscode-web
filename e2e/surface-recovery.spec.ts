@@ -83,7 +83,8 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   await expect(
     error.getByRole("button", { name: "Models", exact: true }),
   ).toBeFocused();
-  await expect(error).toContainText("Reloading may stop running work");
+  await expect(error).toContainText("Reload the page to try again.");
+  await expect(error).toContainText("Reloading keeps the drafts");
   expect(closed).toBe(previouslyClosed);
   expect(starts).toHaveLength(1);
   expect(interrupts).toHaveLength(0);
@@ -97,6 +98,20 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   ).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => interrupts.length).toBe(1);
+
+  // Once the server serves another build, the same failure says it was updated.
+  await page.route("**/index.html", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /index-[\w-]+\.js/,
+      "index-x.js",
+    );
+    await route.fulfill({ response, body });
+  });
+  await settingsTrigger(page).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await expect(error).toContainText("Octoscode was updated on the server");
+  await expect(error).not.toContainText("Reload the page to try again.");
 });
 
 test("a late clipboard command result does not enter a different conversation", async ({

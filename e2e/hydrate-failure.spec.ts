@@ -6,8 +6,9 @@ async function controlledHydrates(page: Page) {
   const sockets: WebSocketRoute[] = [];
   const opens: string[] = [];
   const hydrates: string[] = [];
-  const control = { failures: 0 };
+  const control = { failures: 0, unreachable: false };
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    if (control.unreachable) return socket.close({ code: 1006 });
     sockets.push(socket);
     const server = socket.connectToServer();
     const requests = new Map<string, string>();
@@ -111,6 +112,23 @@ test("a failed reconnect hydrate retains the current Session, Changes and draft"
   );
   expect(probe.opens.length).toBeGreaterThan(1);
   expect(new Set(probe.opens).size).toBe(1);
+
+  // While Octos cannot be reached, the Session stays on screen, read-only, as
+  // reconnecting; nothing can be sent until it is back, draft and all.
+  probe.control.unreachable = true;
+  probe.sockets.at(-1)?.close({ code: 1006 });
+  await expect(page.getByText("Reconnecting to Octos")).toBeVisible();
+  await expect(timeline).toContainText("Review syntax fixture");
+  await expect(page.getByText("Choose a workspace")).toHaveCount(0);
+  await expect(composer).toHaveCount(0);
+  probe.control.unreachable = false;
+  await expect(composer).toHaveValue(
+    "Keep this draft through hydrate failure",
+    {
+      timeout: 15_000,
+    },
+  );
+  await expect(page.getByText("Reconnecting to Octos")).toHaveCount(0);
 });
 
 test("a cold hydrate failure stays honest and Start retries without a phantom record", async ({

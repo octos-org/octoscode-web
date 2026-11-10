@@ -228,7 +228,11 @@ test("a reply lost after the server wrote the batch is not sure, is read back, a
   await expect(alert).toContainText("couldn't be read. Still not sure.");
   expect(sent).toHaveLength(2);
 
-  // Back on a connection, a read by hand finds what the server holds.
+  // Back on a connection, a read by hand finds what the server holds. The
+  // Session stays on screen while it reconnects, so wait for that to end.
+  await expect(page.getByText("Reconnecting to Octos")).toHaveCount(0, {
+    timeout: 15_000,
+  });
   await expect(
     alert.getByRole("button", { name: "Read batch 2 back again" }),
   ).toBeEnabled({ timeout: 15_000 });
