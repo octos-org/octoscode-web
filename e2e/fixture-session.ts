@@ -41,6 +41,26 @@ export async function connectAndStartWorkspace(
 }
 
 /**
+ * Connect with `token` and start a Session by typing `cwd` into the workspace
+ * path, Enter for each step. Resolves once the composer accepts input.
+ */
+export async function startSession(
+  page: Page,
+  cwd: string,
+  token = FIXTURE_TOKEN,
+): Promise<void> {
+  await page.goto("/");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page.getByLabel("Auth token", { exact: true }).fill(token);
+  await page.getByLabel("Auth token", { exact: true }).press("Enter");
+  await page.getByLabel("Server workspace path").fill(cwd);
+  await page.getByLabel("Server workspace path").press("Enter");
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeEnabled();
+}
+
+/**
  * A `/srv/work` folder owned by this test run. The fixture keeps Sessions and
  * staged peers for the whole process, so a retry or `--repeat-each` run in a
  * fixed folder also matches the rows an earlier run left behind (T-0435).

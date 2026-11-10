@@ -1,20 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { startSession } from "./fixture-session.ts";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill("/workspace/final-input");
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
+const start = (page: Page) => startSession(page, "/workspace/final-input");
 
 async function withinViewport(page: Page, control: Locator) {
   const box = (await control.boundingBox())!;

@@ -1,24 +1,9 @@
 import { expect, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN } from "./fixture-session.ts";
+import { startSession } from "./fixture-session.ts";
 
 /** Connects with one of the fixture's memory tokens and starts a Session. */
-export async function startMemorySession(
-  page: Page,
-  token: string,
-  name: string,
-) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/workspace/${name}-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+export const startMemorySession = (page: Page, token: string, name: string) =>
+  startSession(page, `/workspace/${name}-${Date.now()}`, token);
 
 /** Opens Settings › Memory; by default waits for the overview to load. */
 export async function openMemory(page: Page, expectOverview = true) {

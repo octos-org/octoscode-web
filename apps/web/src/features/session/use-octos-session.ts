@@ -1878,6 +1878,15 @@ export function useOctosSession(): OctosSessionRuntime {
     () => null,
   );
   const connectionSnapshot = selectedSnapshot ?? serverConnection.snapshot;
+  // A lost transport detaches every record until the pool reconnects. The
+  // selected one keeps its last hydrate on screen, read-only, as reconnecting:
+  // its authority stays null, so nothing can be sent until it is resumed.
+  const viewSuspended = Boolean(
+    viewRecord &&
+    !viewRecord.closed &&
+    viewRecord.payload &&
+    viewRecord.runtime.isSuspended(),
+  );
   const interactionLedger = viewRecord?.interactions ?? null;
   const interactionSnapshot = useSyncExternalStore(
     interactionLedger?.subscribe ?? subscribeNone,
@@ -3837,8 +3846,12 @@ export function useOctosSession(): OctosSessionRuntime {
       error: connectionSnapshot.error,
       opened:
         connectionSnapshot.session?.opened ??
-        (viewRecord?.closed ? (viewRecord.payload?.opened ?? null) : null),
-      recovery: connectionSnapshot.recovery,
+        (viewRecord?.closed || viewSuspended
+          ? (viewRecord?.payload?.opened ?? null)
+          : null),
+      recovery: viewSuspended
+        ? { ...connectionSnapshot.recovery, phase: "reconnecting" }
+        : connectionSnapshot.recovery,
       diagnostics: connectionSnapshot.diagnostics,
       capabilities:
         connectionSnapshot.session?.capabilities ??

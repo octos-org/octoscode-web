@@ -1,8 +1,17 @@
-import { Component, Suspense, useId, useRef, type ReactNode } from "react";
+import {
+  Component,
+  Suspense,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ModalSurface } from "../../ui/ModalSurface.tsx";
 import styles from "./SurfaceBoundary.module.css";
 import settingsShell from "../../ui/SettingsSurface.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { servedBuildChanged } from "./served-build.ts";
 
 interface SurfaceBoundaryProps {
   children: ReactNode;
@@ -54,6 +63,19 @@ function UnavailableSurface({
   const settingsLoading = loading && loadingSize === "settings";
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  // After a deployment this window's chunks are gone; say so, not "failed".
+  const [updated, setUpdated] = useState(false);
+  useEffect(() => {
+    if (loading) return;
+    let current = true;
+    void servedBuildChanged().then(
+      (changed) => current && setUpdated(changed),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [loading]);
   const content = (
     <>
       <h2 id={titleId}>
@@ -66,13 +88,17 @@ function UnavailableSurface({
       ) : (
         <div role="alert">
           <p>
-            {t(
-              "This view could not be displayed. Other parts of the app remain available.",
-            )}
+            {updated
+              ? t(
+                  "Octoscode was updated on the server, so this window can no longer load this view. Reload to use the new version.",
+                )
+              : t(
+                  "This view could not be displayed. Other parts of the app remain available. Reload the page to try again.",
+                )}
           </p>
           <p>
             {t(
-              "Reload the page to try again. Reloading may stop running work and discard drafts and queued messages.",
+              "Reloading keeps the drafts this browser saved; messages waiting to send are lost.",
             )}
           </p>
         </div>
