@@ -10,19 +10,17 @@ import {
 import { createHistoryCommands } from "@octos-org/octoscode-client/history";
 import { SessionRecordManager } from "../session/session-record-manager.ts";
 import { createNativeReviewBinding } from "./native-review.ts";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 
-const caps: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [
+const caps: UiProtocolCapabilities = appuiCaps({
+  methods: [
     CORE_UI_METHODS.SESSION_OPEN,
     CORE_UI_METHODS.SESSION_HYDRATE,
     CORE_UI_METHODS.TURN_START,
     CORE_UI_METHODS.REVIEW_START,
   ],
-  supported_notifications: [],
-  supported_features: [CORE_UI_FEATURES.REVIEW_START_V1],
-};
+  features: [CORE_UI_FEATURES.REVIEW_START_V1],
+});
 async function flush() {
   for (let index = 0; index < 20; index += 1) await Promise.resolve();
 }

@@ -20,14 +20,12 @@ import type {
   PeerControlTarget,
 } from "./peer-control-commands.ts";
 import { PeerControlPanel } from "./PeerControlPanel.tsx";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 
-const ADMITTED: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 1,
-  supported_methods: [EXTERNAL_DRIVER_METHODS.PEER_CONTROL],
-  supported_notifications: [],
-  supported_features: [EXTERNAL_DRIVER_V1_FEATURE],
-};
+const ADMITTED: UiProtocolCapabilities = appuiCaps({
+  methods: [EXTERNAL_DRIVER_METHODS.PEER_CONTROL],
+  features: [EXTERNAL_DRIVER_V1_FEATURE],
+});
 
 const FENCE: PeerControlFence = {
   driverId: "drv-1",

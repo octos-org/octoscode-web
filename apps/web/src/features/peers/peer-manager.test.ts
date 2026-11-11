@@ -5,19 +5,17 @@ import {
   type PeerCommands,
 } from "@octos-org/octoscode-client/peers";
 import type { UiProtocolCapabilities } from "@octos-org/octoscode-client";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 import {
   PeerManager,
   type PeerOpenRequest,
   type PeerOpenOutcome,
 } from "./peer-manager.ts";
 
-const caps: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [PEER_METHODS.PREPARE, PEER_METHODS.GATHER],
-  supported_notifications: [PEER_METHODS.STAGED, PEER_METHODS.CLOSED],
-  supported_features: [],
-};
+const caps: UiProtocolCapabilities = appuiCaps({
+  methods: [PEER_METHODS.PREPARE, PEER_METHODS.GATHER],
+  notifications: [PEER_METHODS.STAGED, PEER_METHODS.CLOSED],
+});
 const peer = {
   slug: "review",
   topic: "peer-review",

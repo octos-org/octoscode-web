@@ -2,9 +2,17 @@ import { describe, expect, it } from "vitest";
 import { RequestAuthorityGate } from "./request-authority.ts";
 
 describe("RequestAuthorityGate", () => {
-  it("requires both the latest generation and its client/session scope", () => {
+  // One guard per property (T-0591 B1 merge): every original assertion from
+  // the four prior its is preserved here — the merge only shares the gate /
+  // client setup, never drops a check. Each `it` below names the property it
+  // still pins, so a regression in any one reads as its own failure.
+  function fresh() {
     const gate = new RequestAuthorityGate<object>();
-    const client = {};
+    return { gate, client: {} };
+  }
+
+  it("requires the latest generation, the exact client and the exact session scope", () => {
+    const { gate, client } = fresh();
     const authority = gate.begin(client, "session-a");
 
     expect(gate.isCurrent(authority, client, "session-a")).toBe(true);
@@ -12,19 +20,17 @@ describe("RequestAuthorityGate", () => {
     expect(gate.isCurrent(authority, client, "session-b")).toBe(false);
   });
 
-  it("lets a stale scope clean up only when no newer request owns the flag", () => {
-    const gate = new RequestAuthorityGate<object>();
-    const client = {};
-    const staleScope = gate.begin(client, "session-a");
+  it("lets a stale scope finish exactly once and refuses the second finish", () => {
+    const { gate } = fresh();
+    const staleScope = gate.begin({}, "session-a");
 
     expect(gate.isCurrent(staleScope, {}, "session-a")).toBe(false);
     expect(gate.finish(staleScope)).toBe(true);
     expect(gate.finish(staleScope)).toBe(false);
   });
 
-  it("does not let an older finally clear a newer request", () => {
-    const gate = new RequestAuthorityGate<object>();
-    const client = {};
+  it("keeps the newer request current and refuses the older finally", () => {
+    const { gate, client } = fresh();
     const older = gate.begin(client, "session-a");
     const newer = gate.begin(client, "session-b");
 
@@ -35,8 +41,7 @@ describe("RequestAuthorityGate", () => {
   });
 
   it("invalidates every completion owned by a reset projection", () => {
-    const gate = new RequestAuthorityGate<object>();
-    const client = {};
+    const { gate, client } = fresh();
     const authority = gate.begin(client, "session-a");
 
     gate.invalidate();
