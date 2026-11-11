@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startSession } from "./fixture-session";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const WORKSPACE = "/workspace/attention-check";
 const FINISHED = "Completed with pnpm check and all tests passing.";
 
@@ -60,22 +60,6 @@ async function instrument(
   }, result);
 }
 
-async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByLabel("Server workspace path").fill(WORKSPACE);
-  await page
-    .getByRole("button", { name: "Start session", exact: true })
-    .click();
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
-
 async function settings(page: Page) {
   await page
     .getByRole("complementary", { name: "Product navigation" })
@@ -124,7 +108,7 @@ test("denied desktop permission keeps tab counts working and Disconnect clears a
   page,
 }) => {
   await instrument(page, "denied");
-  await start(page);
+  await startSession(page, WORKSPACE);
   const originalTitle = await page.title();
   const dialog = await settings(page);
   expect(await page.evaluate(() => window.__attentionProbe.requests)).toBe(0);
@@ -160,7 +144,7 @@ test("a background Session completing while another is selected signals and ackn
   page,
 }) => {
   await instrument(page);
-  await start(page);
+  await startSession(page, WORKSPACE);
   const originalTitle = await page.title();
   await enable(page);
   const navigation = page.getByRole("complementary", {

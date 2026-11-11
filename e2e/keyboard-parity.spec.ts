@@ -4,6 +4,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 
 /**
  * Keyboard-parity e2e — parity targets cited from the native TUI keymap
@@ -22,8 +23,7 @@ import {
  * which hides it from ROLE queries — the class 0520 hardened elsewhere.
  */
 
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const token = "tab-scoped-e2e-token";
+const origin = FIXTURE_ORIGIN;
 const PALETTE_ID = "composer-command-palette";
 
 const composer = (page: Page) => page.locator(".composer textarea");
@@ -50,30 +50,6 @@ function wire(page: Page) {
 }
 
 /** Keyboard-only connect: fill fields, activate every control with Enter. */
-async function connectAndStartWorkspace(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page.getByLabel("Auth token").fill(token);
-  await page
-    .getByRole("button", { name: "Connect", exact: true })
-    .press("Enter");
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).press("Enter");
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(`/srv/work/${workspace}`);
-  await add
-    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
-    .press("Enter");
-  await expect(composer(page)).toBeEnabled();
-}
-
 test.afterEach(async ({ request }) => {
   await request.post(`${origin}/__test__/terminal/reset`);
   await request.post(`${origin}/__test__/turn-start/reset`);
@@ -83,7 +59,7 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   page,
 }) => {
   const w = wire(page);
-  await connectAndStartWorkspace(page, "keyboard-palette");
+  await connectAndStartWorkspace(page, "/srv/work/keyboard-palette");
   const input = composer(page);
   await input.focus(); // programmatic focus, no mouse
 
@@ -148,7 +124,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   request,
 }) => {
   const w = wire(page);
-  await connectAndStartWorkspace(page, "keyboard-esc");
+  await connectAndStartWorkspace(page, "/srv/work/keyboard-esc");
   const input = composer(page);
   await input.focus();
 

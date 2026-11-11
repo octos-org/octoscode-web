@@ -1,16 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  COMPOSER_PLACEHOLDER,
+  connectAndStartWorkspace,
+  FIXTURE_ORIGIN,
+} from "./fixture-session";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
 // The handover workspace starts idle with a parked external binding, so a
 // refused send reaches admission and an explicit acquire can resume chat.
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const TOKEN = "tab-scoped-e2e-token";
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const CWD = "/srv/work/peer-control-";
 const RELEASE_METHOD = "session/driver/release";
 const START_METHOD = "turn/start";
 
-const productNavigation = (page: Page) => page.locator("aside");
 const composer = (page: Page) => page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 const strip = (page: Page) =>
   page.getByRole("button", { name: /Session settings/ });
@@ -53,29 +54,6 @@ function wire(page: Page) {
     sent,
     calls: (method: string) => sent.filter((frame) => frame.method === method),
   };
-}
-
-async function connectAndStartWorkspace(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(productNavigation(page)).toBeVisible();
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(workspace);
-  await add
-    .getByRole("button", { name: /^(Add & Start|Start session)$/ })
-    .click();
-  await expect(composer(page)).toBeEnabled();
 }
 
 /** Open the pane's Advanced section (the seat's only product home, §4.2). */

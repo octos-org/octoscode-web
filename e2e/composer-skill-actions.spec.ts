@@ -1,21 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const token = "tab-scoped-e2e-token";
-
-async function start(page: Page, workspace: string): Promise<string> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-  const reference = new URL(page.url()).searchParams.get("s");
-  return (JSON.parse(reference!) as string[])[2]!;
-}
+import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
 
 function invocations(page: Page) {
   const frames: Array<{ method?: string; params?: Record<string, unknown> }> =
@@ -41,10 +25,8 @@ test("runs a skill action from the composer, retries a failed job into a new job
   page,
 }) => {
   const frames = invocations(page);
-  const sessionId = await start(
-    page,
-    `/workspace/composer-skill-actions-${Date.now()}`,
-  );
+  await startSession(page, `/workspace/composer-skill-actions-${Date.now()}`);
+  const sessionId = await openSessionId(page);
   const chip = page.locator("[data-skill-actions]");
   const trigger = chip.getByRole("button", { name: "Actions", exact: true });
 

@@ -1,22 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/draft-recovery");
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
+import { expect, test } from "@playwright/test";
+import { startSession } from "./fixture-session";
 
 test("reload restores exact unsent text without dispatching it, and sent drafts stay cleared", async ({
   page,
@@ -31,7 +14,7 @@ test("reload restores exact unsent text without dispatching it, and sent drafts 
     });
     server.onMessage((message) => socket.send(message));
   });
-  await start(page);
+  await startSession(page, "/workspace/draft-recovery");
   const input = page.getByRole("textbox", { name: "Message Octos" });
   const text = "  尚未发送的审阅说明 👩🏽‍💻\n\n保留最后的空白  ";
   await input.fill(text);
