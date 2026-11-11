@@ -437,3 +437,171 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 - 删后跑 `python3 wake/test-lines.py`
   回填「基线与预计」实测数字；注意 #410 起 CI 对净增测试行亮红灯，T-0503 纯删不受影响。
 - 注意 T-0500（e2e/TESTS-KEPT.md）与本清单独立，分别执行。
+
+---
+
+# 第二轮复审附录（T-0587，2026-11-11）
+
+**本附录只审计、映射，不删测试、不改产品。**
+第一轮的保留清单（上方）全部有效；本轮找的是**同一解码/身份/失败语义在多处各测一遍**的真实重复，以及**重复 setup**。删除/合并须等 lead-web 逐链批准后另开 T-0588 执行，本文件本身不是删除清单的执行许可。
+
+## 数字（`python3 wake/test-lines.py` 口径）
+
+- 基线：当前 origin/main **`51e59eb`**（test(e2e) round-2
+  #439），packages/client **7,651 行 / 209 个**（含 src/
+  3 个共置文件 342 行）；全仓 **26,059 行 / 434 个**。
+- 第一轮后 client 从 13,256 降到 7,651；本轮**无删除结论凑数**——下面每条映射都指向一个共同可观察失败（删除方失效时保留方同样红）。
+- 若 lead 批准下列全部映射，预计 **净减 1,270–1,765 行**（保守–上限），client
+  **→ 5,886–6,381 行**，全仓 **→ 24,294–24,789 行**。软目标 2 万不在本轮硬凑。
+- fixture 共享预计：**caps 构造器 21 处 →
+  1 个共享 helper 约省 140–160 行**；external-driver
+  6 文件的 caps/harness/proof/reply
+  fixture 去重再省 120–160 行（已含在上面区间，不重复计）。
+
+## 第 3 类五个子类逐行（11-10 审计强制）
+
+| 子类             | 本轮结论                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 路径穿越         | 留 `session-files.test.ts`「rejects malformed entries and workspace escapes」（唯一一条，删不了）。                                              |
+| 沙箱逃逸         | client 无此边界（无执行器）；执行语义在 Core/e2e-live 侧，**不冒充同层覆盖**。                                                                   |
+| 鉴权和权限       | 留 `coding.test.ts` 未知权限 fail-closed、`btw/steer` 无方法拒绝、各方法 feature 门控代表（见映射表 C2）。                                       |
+| 密钥/令牌脱敏    | 留 `usage`（token 只走 header）、`research`（回显 secret 脱敏）、`onboarding`（secret-free 配置）、external-driver 的 proof 族代表（见 C1/C5）。 |
+| 外部输入大小上限 | 留 `operations` 的 256KiB 原始页上限、4096B 游标、`workspace-browse` 500 条页、`workspace` 257 profile 上限、`projection-inputs` u64。           |
+
+## 身份/profile/scope 与失败/迟到/重连/ambiguous write 逐项核对
+
+- **身份/profile/scope**：`external-driver-receipt` 的 master
+  base 对齐、`peer-control` 的 foreign-master 拒绝、`operations` 的页级 foreign
+  base、`peers` 的双归属、`skills`
+  的 profile 绑定——各自不同不变量，**全部保留**。
+- **失败/迟到**：`client.test.ts`
+  的迟到回调 it.each×4（open/close/error/message）是同一性质「替换 socket 的迟到回调不得影响新连接」的四个事件变体——见映射 C6；`external-driver-refusal.test.ts`
+  的 gap2 中途关闭是**同一性质的 driver 专属路径**（拒绝类型不同：ExternalDriverProtocolError
+  vs 通用断开），保留但标注为同族。
+- **ambiguous write**：`client.test.ts`「cold-decoded
+  mutation 立即派发且不在替代 socket 重放」+ T-0555 技能安装「never
+  force-overwrites and checks exact mutation receipts」+ e2e「an unconfirmed
+  install is re-read from the server」三层各自守不同层，**都留**。
+- **重连**：`client.test.ts` 重连/替换族保留代表即可（C6）。
+
+## 新增协议覆盖核对（第一轮清单之后合入的）
+
+| 协议                                 | 现状                                                                                                  | 结论                                                                 |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| OAuth（MCP sign-in）                 | `inventory.test.ts` 4 条（start 解析去 token_storage、只开 https、精确 payload、拒不可开/未提供方法） | **全留**：含 token 脱敏与 javascript:/data: 注入两个安全点，无重复。 |
+| 技能安装（reviewed install，T-0555） | `skills.test.ts` 3 条（显式 null+白名单、profile 门控绑定、精确回执+不 force）                        | **全留**：供应链身份边界，与 e2e 三层互补。                          |
+| 记忆版本（CAS/回执）                 | `memory.test.ts`「receipts 必须点名条目+版本」                                                        | **全留**：edit/delete 版本不匹配拒绝是独有失败语义。                 |
+| session/hydrate                      | `hydrate.test.ts` 4 条 + `client.test.ts` 2 条                                                        | 见映射 C7（hydrate 正例在 client.test.ts 重复一次）。                |
+| 技能 action/后台 job                 | `skill-actions.test.ts` 3 条                                                                          | 全留（双 feature 族门控独有）。                                      |
+
+## 删除/合并映射表（每项给共同可观察失败；无共同失败的不列）
+
+### C1 — external-driver「proof 不出现在公开视图/序列化」五处同语义
+
+| 候选删除项（文件 › 测试）                                                                                                                                                  | 映射到的保留测试                                                                                                                             | 共同可观察失败                                                               | 预计省行 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------- |
+| `external-driver-lease-control.test.ts` › the acquire capability exposes no enumerable proof and errors never echo it 的**前半**（acquire 后再验 JSON/keys/values 三断言） | `external-driver-control.test.ts` › the decoded acquire capability is serialization-safe: no proof in JSON/debug                             | acquire 能力对象的 proof 出现在 JSON/debug/keys/values 时两边同红            | ~25      |
+| `external-driver-lease-control.test.ts` › 同条的**后半**（control_token: 12345 畸形拒绝 + `expectLeaseRejected` helper）                                                   | **保留，不删**：这是 acquire 畸形回执类型的唯一守卫（`expectDecodeRejected` 族在 control 文件只测 peerDispatch 身份，不测 acquire 字段类型） | 无共同失败 → 不在删除集合                                                    | 0        |
+| `external-driver-control.test.ts` › control carries the accepted receipt facts and never the proof 的 proof 断言部分（保留线协议断言）                                     | 同上 + `external-driver.test.ts` › keeps proof/hash/secret fields out of the parsed public view                                              | 同一「proof 不回显」性质；control 文件只留 wire 字段断言                     | ~10      |
+| `external-driver-operations.test.ts` › exposes no proof/prompt/answer anywhere in a parsed view                                                                            | `external-driver.test.ts` › keeps proof/hash/secret fields out（同 parseSessionDriverGetResult 投影白名单族）                                | 同一投影白名单遗漏即同红；operations 页视图与 binding 视图共享 decode 白名单 | ~10      |
+
+> 注意：C1 是**同性质跨文件重复**的代表，只删重复的那一处，保留每族的 wire 形状正例。预计小计
+> **~45 行**。
+
+### C2 — 能力门控「无 feature/无 method 离线零帧」八处同语义
+
+| 候选删除/合并项                                                                                                                                               | 保留                                                                                                                                                                                                     | 共同可观察失败                                                                                         | 预计省行 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
+| `external-driver-control.test.ts` › control methods gate… it.each×7（driverAcquire/Renew/Release/peerDispatch/peerControl/wakeClaim/wakeAck 各一条，7×~8 行） | 合并为单条「every control method fails closed when the feature is missing」循环断言；保留 `external-driver.test.ts` › fails closed before any wire traffic when %s is missing（method/feature 两维代表） | 同一 `requireExternalDriverControlCapability` 门控：缺 feature 时任何方法未抛 CapabilityError 即全族红 | ~45      |
+| `external-driver-peer-control.test.ts` › refuses when the feature is not advertised（leaf context 手搭一份）                                                  | C2 合并后的门控族（leaf 与主工厂共用同一 gate）                                                                                                                                                          | 同上；leaf 单独再测不增加新失败                                                                        | ~25      |
+| `src/external-driver-refusal.test.ts` › gap3 throws for an unadvertised method and sends ZERO frames                                                          | 同上族                                                                                                                                                                                                   | 同一 `requireExternalDriverControlCapability` 直接调用                                                 | ~12      |
+
+> 小计
+> **~80 行**。method-missing 与 feature-missing 两个维度保留；8 个方法各测一遍属同守卫参数变体（TEST-DIET 规则 15）。
+
+### C3 — 「调用方对象发送后变更不可重定向」三处同性质
+
+| 候选删除/合并项                                                                                                                                                                                                                               | 保留                                                                                                                                             | 共同可观察失败                                                                                          | 预计省行        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | --------------- |
+| `external-driver-lease-control.test.ts` › post-send mutation of caller args cannot retarget wire or decode（仅此条；同文件「accepts an external release」「rejects a FOREIGN next」**保留**——release 模式形状与 foreign-next 围栏是独有守卫） | `external-driver-peer-control.test.ts` › dispatch: a reply matching the MUTATED foreign operation/model is refused（同性质代表，含 decode 围栏） | 同一「capture-before-await」性质：在 await 后重读可变 args 则两边同红；lease 的 `next` 变体只是参数不同 | ~45             |
+| `external-driver.test.ts` › mutating the caller options object mid-request cannot retarget params or fences                                                                                                                                   | 同上族；或保留本条（driverGet options 是独立入口）而删 peer-control 的重复——**由 lead 二选一，不双留**                                           | 同上                                                                                                    | ~35（若删这条） |
+
+> 小计
+> **~45–80 行**（取一种方案）。这是 11-08 审计点名的「失败/迟到路径」类，**保留至少一条**。
+
+### C4 — Rust UUID 形状 parity 三处重复
+
+| 候选删除/合并项                                                                                     | 保留                                                                                                                                                                                        | 共同可观察失败                                                           | 预计省行 |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------- |
+| `external-driver-control.test.ts` › dispatch decodes the accepted turn-id form（it.each×6，~30 行） | `protocol-id.test.ts` 全矩阵（53 例，uuid 1.20 try_parse 逐字节 parity，已含全部 6 形状）+ `external-driver-receipt.test.ts` › requires a real protocol UUID TurnId for first AND duplicate | 同一 `isProtocolUuid` 谓词：非规范形状被误收/误拒时 protocol-id 矩阵先红 | ~30      |
+| `external-driver-receipt.test.ts` › requires a real protocol UUID TurnId（保留，仅标注）            | protocol-id 矩阵                                                                                                                                                                            | 保留因为它还覆盖 duplicate 路径的 UUID 强制，不止形状                    | 0        |
+
+> 小计 **~30 行**。
+
+### C5 — 「拒绝响应不反显服务器原文/secret」四处同语义
+
+| 候选删除/合并项                                                                                                                             | 保留                                                                                                                                                                                      | 共同可观察失败                                               | 预计省行                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| `external-driver-control.test.ts` › a rejected control RPC never echoes the raw server payload or proof（~36 行）                           | `src/external-driver-refusal.test.ts` › gap1 keeps a NON-allowlisted kind…scrubbed failure + `external-driver.test.ts` › throws constant diagnostics without echoing an untrusted payload | 同一 scrub 边界：raw server text 泄漏进 Error.message 时同红 | ~36                                                             |
+| `external-driver-control.test.ts` › decoders reject malformed native identity…dispatch rejects an adopted session that contradicts its slug | `external-driver-peer-control.test.ts` › refuses a valid-SHAPE foreign-master receipt + `external-driver-receipt.test.ts` › rejects a same-profile DIFFERENT master base                  | 同一「原生身份不一致即拒绝」围栏（slug/base 不一致）         | ~25（`expectDecodeRejected` helper 随唯一调用方删除，另省 ~25） |
+
+> 小计 **~85 行**。
+
+### C6 — client.test.ts「替换 socket 迟到回调」it.each×4 与取消连接两例
+
+| 候选删除/合并项                                                                                      | 保留                                                                                                                                | 共同可观察失败                                                       | 预计省行 |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | -------- |
+| it.each(["open","close","error","message"]) 四条（~70 行）                                           | 合并为一条循环断言（同一 pending、四类迟到事件各触发一次、断言新 socket 正常）；保留「rejects a cancelled connection…」代表取消路径 | 同一「迟到回调按代次隔离」性质：任何一类迟到事件未被隔离则合并测试红 | ~50      |
+| `client.test.ts` › does not publish connected when a cancelled socket opens ahead of its replacement | 合并进上一条（open 变体已覆盖「旧 open 不得发布 connected」）                                                                       | 同上                                                                 | ~22      |
+
+> 小计 **~70 行**。
+
+### C7 — session/hydrate 正例与编码/offset 变体
+
+| 候选删除/合并项                                                                                                       | 保留                                                                                                                       | 共同可观察失败                                                                                                                              | 预计省行 |
+| --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `client.test.ts` › validates session/hydrate before returning it（~28 行，正例 cursor 断言）                          | `hydrate.test.ts` › parses authoritative messages and injects session scope into replay envelopes（更完整的 hydrate 正例） | 同一 `parseSessionHydrateResult` 正例；client.test.ts 只多「经 client 派发」一句，该派发性质已由「dispatches session open immediately」覆盖 | ~28      |
+| `session-file-read.test.ts` › accepts a valid base64 chunk + rejects wrong encoding and invalid offsets（2 条 44 行） | 合并为一条（正例+两个边界同方法）                                                                                          | 同一 `session/files/read` 解码                                                                                                              | ~15      |
+
+> 小计 **~43 行**。
+
+### C8 — autonomy 三族 scoped list 与 rc12 null 形状的 setup 重复（不删测试，只去重 setup）
+
+| 项                                                                                                                                                  | 处理                                                                                                               | 共同可观察失败（不变）             | 预计省行 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | -------- |
+| `autonomy.test.ts` › scopes a %s list（it.each×3：loop/monitor/agent 各搭 rows/list/key/idKey 三元组，~100 行） + base-key matching + envelope echo | 三族共用同一 `sessionControlsTarget`/echo 守卫，rows 构造提为按族参数的 helper；测试保留为一条 it.each，不断言减少 | scope 过滤/echo 校验被移除时同红   | ~55      |
+| `autonomy.test.ts` › rc12 null 形状（LOOP/MONITOR/AGENT_WITH_NULLS 三个大 fixture ~115 行，只各取 2–3 字段断言）                                    | fixture 只保留被断言的可空字段（其余字段由 goal/agent 正例覆盖），不断言减少                                       | rc12 null-as-absent 解码回退时同红 | ~60      |
+| `autonomy-controls.test.ts` › rejects opposite control transitions（与 autonomy.test.ts 的 control 结果解码同族）                                   | 保留（interrupt/close 相反迁移是独有失败），仅共享 GOAL/AGENT fixture                                              | —                                  | ~10      |
+
+> 小计 **~125 行**（fixture 去重，不删任何断言）。
+
+### C9 — 重复 setup 统一（跨文件，纯 fixture 共享）
+
+| 项                                                                                                                                                           | 预计省行 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| `caps()`/`capabilities()` 构造器 21 处 → `tests/fixtures/caps.ts` 一个（含 protocol/schema 字段两变体参数化）                                                | ~140–160 |
+| external-driver 6 文件的 `PROOF`/`FENCE`/`BINDING_WIRE`/`ACQUIRE_REPLY`/`DISPATCH_REPLY`/`CONTROL_REPLY` 重复定义 → `tests/fixtures/external-driver.ts` 共享 | ~120–160 |
+| `client.test.ts` 与 `src/external-driver-refusal.test.ts` 的 `createSocket()` 重复 → 共享 fake-socket helper                                                 | ~12      |
+
+> 小计 **~270–330 行**。全部为格式化后真实行数估算，不压行。
+
+## 明确**不删**的（查过但无真实冗余）
+
+- `external-driver-wake-control.test.ts` 4 条：payload XOR
+  continuation_ref、有界类型化失败、克隆冻结、`__proto__`
+  原型污染——每条独立失败语义，无重复。
+- `external-driver-operations.test.ts`
+  的 256KiB 原始序列化上限（含调参构造，~30 行）：是大小上限子类唯一代表，**留**。
+- `inventory.test.ts` 16 条：OAuth
+  4 条 + 管理 payload/scope/allowlist 各守不同面，无同语义重复；`uses method capabilities when Core #2912 omits the feature`
+  是 ⑤ 设计例外，留。
+- `skills`/`skill-actions`/`memory`/`research`/`usage`/`media`/`workspace`/`workspace-browse`/`session-files`/`peers`/`history`/`supervision`/`coding`/`context`/`interaction`/`projection*`/`protocol-id`/`rpc`/`url`/`execution-environment`/`cron`/`turn-state`/`server-methods`/`btw`/`steer`：逐条对过，无同语义重复；这些是 7,651 行里的「每类一两个代表」本体。
+- 单测可合并的只在本层合并；**e2e/Rust 侧的同链测试不拿来充当本层无意义的证据**（例如 reviewed
+  install 在 e2e 有端到端，但 client 的回执逐字段校验仍是本层独有）。
+
+## 给 lead 的审批点
+
+1. C1–C7 每条是否认可「共同可观察失败」成立（认可才允许在 T-0588 删/合并）。
+2. C3 的两选一方案（保留 lease 版还是 driverGet options 版）请指定。
+3. C8/C9 是纯 fixture 去重，不删断言，可随 T-0588 一并做或单独小 PR。
+4. 批准后预计 client 5,886–6,381 行；**未批准前不开 T-0588**。
