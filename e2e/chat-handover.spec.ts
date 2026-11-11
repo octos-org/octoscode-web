@@ -3,6 +3,7 @@ import {
   COMPOSER_PLACEHOLDER,
   connectAndStartWorkspace,
   FIXTURE_ORIGIN,
+  openSessionId,
 } from "./fixture-session";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
@@ -127,9 +128,7 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     await connectAndStartWorkspace(page, `${CWD}handover-resume`);
     await sendPrompt(page, "hand back and send once");
     await expect(composer(page)).toHaveValue("hand back and send once");
-    const master = (
-      JSON.parse(new URL(page.url()).searchParams.get("s")!) as string[]
-    )[2]!;
+    const master = await openSessionId(page);
     expect(
       (
         await request.post(
