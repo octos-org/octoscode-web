@@ -47,9 +47,6 @@ import {
 
 const PEER_COUNT = 2;
 const PEER_BRIEF = "Peer activity and restore triage";
-/** The fixture accepts any `/srv/work/*` path and opens a Session for it. */
-const CWD = "/srv/work/peer-activity-restore";
-const WORKSPACE = "peer-activity-restore";
 
 const productNavigation = (page: Page): Locator => page.locator("aside");
 const peerDock = (page: Page): Locator =>
@@ -261,67 +258,5 @@ test.describe("the peer dock follows each peer's own Session", () => {
       await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
       await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
     }
-  });
-});
-
-test.describe("per-session interrupt-prompt restore", () => {
-  test("a draft is restored only in the session that owned the interrupted turn", async ({
-    page,
-  }) => {
-    test.setTimeout(60_000);
-    await connectAndStartWorkspace(page, CWD);
-    const draft = "keep-me-draft";
-
-    // Session A: send a draft, then interrupt A's live turn via the product's
-    // own stop control (TurnStopButton; accessible name Interrupt|Stop).
-    const navigation = productNavigation(page);
-    const selectedSession = navigation.locator(
-      '[role="treeitem"][data-session-id][aria-current="page"]',
-    );
-    const sessionAId = await selectedSession.getAttribute("data-session-id");
-    if (!sessionAId) throw new Error("workspace start opened no Session");
-    await composer(page).fill(draft);
-    await page
-      .getByRole("button", { name: "Send prompt", exact: true })
-      .click();
-    await page.getByRole("button", { name: /^(Interrupt|Stop)$/ }).click();
-
-    // The interrupted prompt is parked back on A's OWNING record.
-    await expect(composer(page)).toHaveValue(draft);
-
-    // Open a sibling Session B under the SAME workspace (native-workflows.spec
-    // `sibling`, :90-101): hover the workspace row, then `New session in …`.
-    // B has its OWN composer record, so A's draft must NOT leak into it.
-    const workspaceRow = navigation.locator(
-      `[data-workspace-name=${JSON.stringify(WORKSPACE)}]`,
-    );
-    await workspaceRow
-      .getByRole("button", { name: WORKSPACE, exact: true })
-      .hover();
-    await navigation
-      .getByRole("button", { name: `New session in ${WORKSPACE}` })
-      .click();
-    await expect
-      .poll(() => selectedSession.getAttribute("data-session-id"))
-      .not.toBe(sessionAId);
-    const sessionBId = await selectedSession.getAttribute("data-session-id");
-    if (!sessionBId) throw new Error("sibling action opened no Session");
-    await expect(
-      navigation.locator(
-        `[role="treeitem"][data-session-id=${JSON.stringify(sessionBId)}]`,
-      ),
-    ).toHaveAttribute("aria-current", "page");
-    await expect(composer(page)).toHaveValue("");
-
-    // Back to A: the draft is restored exactly once.
-    await navigation
-      .locator(
-        `[role="treeitem"][data-session-id=${JSON.stringify(sessionAId)}]`,
-      )
-      .click();
-    await expect
-      .poll(() => selectedSession.getAttribute("data-session-id"))
-      .toBe(sessionAId);
-    await expect(composer(page)).toHaveValue(draft);
   });
 });

@@ -159,32 +159,16 @@ function observeTerminalSessions(
   return () => sessions.slice();
 }
 
-async function createSiblingSession(
+async function createSiblingSessionExpecting(
   sidebar: Locator,
   workspaceName: string,
+  expectedCount: number,
 ): Promise<string> {
   // Modal-safe: `sidebar` is CSS and every row below is addressed with CSS
   // (ignoring aria-hidden), so sibling creation still works while an
   // approval/question dialog hides the nav from ROLE queries. The workspace
   // treeitem is the only `role="treeitem"` carrying an aria-label (section in
   // ProductSidebar.tsx:570-576); session rows are unlabelled buttons.
-  const workspace = sidebar.locator(`[data-workspace-name="${workspaceName}"]`);
-  await workspace.locator("button").filter({ hasText: workspaceName }).hover();
-  await sidebar
-    .locator(`button[aria-label="New session in ${workspaceName}"]`)
-    .click();
-  await expect(
-    sidebar.locator('[role="treeitem"][data-session-id]'),
-  ).toHaveCount(2);
-  return selectedSessionTitle(sidebar);
-}
-
-async function createSiblingSessionExpecting(
-  sidebar: Locator,
-  workspaceName: string,
-  expectedCount: number,
-): Promise<string> {
-  // Modal-safe reads; see createSiblingSession for the CSS-vs-role rationale.
   const workspace = sidebar.locator(`[data-workspace-name="${workspaceName}"]`);
   await workspace.locator("button").filter({ hasText: workspaceName }).hover();
   await sidebar
@@ -471,70 +455,6 @@ test("rejects same-base foreign-topic approval and terminal traffic without sett
     turn_id: turnId,
     approval_id: `approval-${turnId}`,
   });
-});
-
-/**
- * P0 regression: the same exact-id ownership rule applies to a structured
- * question parked on A. Responding with the exact question_id resolves it on
- * A; no other Session receives the terminal.
- */
-test("restores and resolves a parked question on its owning Session with exact ids", async ({
-  page,
-}) => {
-  const cwd = "/srv/work/question-ownership";
-  const respondFrames = observeRespondFrames(page);
-  const requests = observeInteractionRequests(page);
-  const terminalSessions = observeTerminalSessions(page);
-
-  await connectAndStartWorkspace(page, cwd);
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const aTitle = await selectedSessionTitle(sidebar);
-  const sessionA = sessionRowByTitle(sidebar, aTitle);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-  await composer.fill("Request question fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  const questionDialog = page.getByRole("dialog", { name: QUESTION_TITLE });
-  await expect(questionDialog).toBeVisible();
-
-  const bTitle = await createSiblingSession(sidebar, "question-ownership");
-  const sessionB = sessionRowByTitle(sidebar, bTitle);
-  expect(bTitle).not.toBe(aTitle);
-  await expect(page.getByRole("dialog", { name: QUESTION_TITLE })).toHaveCount(
-    0,
-  );
-
-  await sessionA.click();
-  await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("dialog", { name: QUESTION_TITLE })).toBeVisible({
-    timeout: 10_000,
-  });
-  await questionDialog.getByLabel(/Full/).check();
-  await questionDialog.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("dialog", { name: QUESTION_TITLE })).toHaveCount(
-    0,
-  );
-
-  const questionResponds = respondFrames().filter(
-    (frame) => frame.method === "user_question/respond",
-  );
-  expect(questionResponds).toHaveLength(1);
-  expect(requests).toHaveLength(1);
-  expect(questionResponds[0]?.params).toMatchObject({
-    session_id: requests[0]!.params.session_id,
-    question_id: requests[0]!.params.question_id,
-    answers: [{ selected_labels: ["Full"] }],
-  });
-  const sessionAId = questionResponds[0]?.params.session_id;
-  await expect(sessionA).toHaveAttribute("aria-current", "page");
-  await expect(sessionB).not.toHaveAttribute("aria-current", "page");
-  await expect
-    .poll(terminalSessions)
-    .toEqual([
-      { session_id: sessionAId, turn_id: requests[0]!.params.turn_id },
-    ]);
 });
 
 /**

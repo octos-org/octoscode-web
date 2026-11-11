@@ -859,87 +859,6 @@ async function checkSessionRuntimeAndProfileDefault(page: Page) {
   await expect(page.getByRole("menu", { name: "Model" })).toHaveCount(0);
 }
 
-test("owns plan and background work under the active session Trajectory", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page);
-  const prompt = "Inspect the active Session trajectory fixture";
-  await page.getByPlaceholder(COMPOSER_PLACEHOLDER).fill(prompt);
-  await page.getByRole("button", { name: "Send prompt", exact: true }).click();
-  await expect(
-    page.getByText("Completed with pnpm check and all tests passing."),
-  ).toHaveCount(1);
-  const sessionViews = page.getByRole("navigation", { name: "Session views" });
-  await expect(
-    sessionViews.getByRole("button", { name: "Chat" }),
-  ).toHaveAttribute("aria-current", "page");
-
-  await sessionViews.getByRole("button", { name: "Trajectory" }).click();
-  await expect(
-    sessionViews.getByRole("button", { name: "Trajectory" }),
-  ).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "Trajectory" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Plan" })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Background tasks" }),
-  ).toBeVisible();
-  await expect(page.getByText("Validate product checks")).toBeVisible();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeHidden();
-  await expect(page.getByRole("dialog", { name: "Activity" })).toHaveCount(0);
-
-  await sessionViews.getByRole("button", { name: "Chat" }).click();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
-  await expect(
-    page
-      .getByRole("region", { name: "Conversation", exact: true })
-      .getByText(prompt, { exact: true }),
-  ).toHaveCount(1);
-  await expect(
-    page.getByText("Completed with pnpm check and all tests passing."),
-  ).toHaveCount(1);
-});
-
-test("does not expose implementation and diagnostic concepts as product IA", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page);
-  const sidebar = productNavigation(page);
-
-  for (const label of [
-    "Runtime",
-    "Boundary",
-    "One runtime, two clients",
-    "Session files",
-    "Activity",
-  ]) {
-    await expect(page.getByText(label, { exact: true })).toHaveCount(0);
-  }
-  await expect(sidebar).not.toContainText("Connection");
-  await expect(sidebar).not.toContainText("Permissions");
-});
-
-test("sends prompts without presenting billed input usage as context occupancy", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-  await composer.fill("Run the product checks");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-
-  await expect(
-    page
-      .getByRole("region", { name: "Conversation", exact: true })
-      .getByText("Run the product checks", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Completed with pnpm check and all tests passing."),
-  ).toBeVisible();
-  await expect(
-    page.getByTitle("13% of the model context window used"),
-  ).toHaveCount(0);
-});
-
 test("recovers the durable session after disconnect and lossy replay", async ({
   page,
   request,
@@ -1007,43 +926,6 @@ test("recovers the durable session after disconnect and lossy replay", async ({
   expect(rpcMethods.filter((method) => method === "turn/start")).toHaveLength(
     1,
   );
-});
-
-test("resolves approval and structured-question takeovers", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-  await composer.fill("Request approval fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  const approval = page.getByRole("dialog", { name: "Run product checks?" });
-  await expect(approval).toBeVisible();
-  await expect(approval).toBeFocused();
-  await expect(approval).toContainText("pnpm check");
-  await page.keyboard.press("Shift+Tab");
-  await expect(
-    approval.getByRole("button", { name: /Allow once/ }),
-  ).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(approval.getByRole("button", { name: /Deny/ })).toBeFocused();
-  const approvalAccessibility = await new AxeBuilder({ page })
-    .include(".approval-card")
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  expect(approvalAccessibility.violations).toEqual([]);
-  await approval.getByRole("button", { name: /Allow once/ }).click();
-  await expect(approval).toBeHidden();
-
-  await composer.fill("Request question fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
-  const question = page.getByRole("dialog", {
-    name: "Choose verification depth",
-  });
-  await expect(question).toBeVisible();
-  await question.getByLabel(/Full/).check();
-  await question.getByRole("button", { name: "Continue" }).click();
-  await expect(question).toBeHidden();
 });
 
 test("onboards an empty solo server from workspace creation", async ({

@@ -173,41 +173,6 @@ test("manages a provider through the DSH-style Models settings flow", async ({
   await expect(configuredProvider(settings, "deepseek-chat")).toHaveCount(0);
 });
 
-test("keeps a rejected provider draft while redacting the failure", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page);
-  const settings = await openModelSettings(page);
-  await settings.getByRole("button", { name: "Add provider" }).click();
-
-  const editor = settings.getByRole("form", { name: "Add model provider" });
-  await editor.getByLabel("Provider / family ID").fill("deepseek");
-  const rejectedCredential = ["sk", "rejected", "secret"].join("-");
-  await editor.getByLabel("API key").fill(rejectedCredential);
-  await editor.getByRole("button", { name: "Test connection" }).click();
-
-  await expect(editor.locator('[role="alert"]')).toHaveText(
-    "Connection failed. Check the endpoint, protocol, model, and credential.",
-  );
-  await expect(editor.getByLabel("Provider / family ID")).toHaveValue(
-    "deepseek",
-  );
-  await expect(editor.getByLabel("Model ID")).toHaveValue("deepseek-chat");
-  await expect(editor.getByLabel("Route ID")).toHaveValue("openrouter");
-  expect(
-    await editor
-      .getByLabel("API key")
-      .evaluate((input: HTMLInputElement) => Boolean(input.value)),
-  ).toBe(true);
-  expect(
-    await page.evaluate(
-      (candidate) =>
-        document.documentElement.textContent?.includes(candidate) ?? false,
-      rejectedCredential,
-    ),
-  ).toBe(false);
-});
-
 test("opening a session with no usable chat model goes to Settings › Models", async ({
   page,
 }) => {

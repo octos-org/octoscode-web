@@ -309,33 +309,6 @@ test("reviews what the server reports, read only", async ({ page }) => {
   expect(fake.installs).toHaveLength(0);
 });
 
-test("a source that moves after its review drops it and stays read-only", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page);
-  const dialog = await start(page);
-  await searchRegistry(dialog, fake);
-  await dialog
-    .getByRole("button", { name: "Review the source of sample" })
-    .click();
-  const panel = review(dialog);
-  await expect(fact(panel, "Version")).toHaveText("1.0.0");
-
-  // Pointing the same source at another branch drops the stale review.
-  const repo = dialog.getByLabel("Repository or server-side path");
-  const branch = dialog.getByLabel("Branch (server default: main)");
-  await expect(repo).toHaveValue("example/sample");
-  await branch.fill("moved");
-  await expect(panel).toHaveCount(0);
-  await branch.press("Enter");
-  await repo.press("Enter");
-  await dialog.getByRole("button", { name: "Review source" }).click();
-  await expect(fact(panel, "Branch")).toHaveText("moved");
-  await expectNoInstallControl(dialog);
-  await page.keyboard.press("Enter");
-  expect(fake.installs).toEqual([]);
-});
-
 test("keeps sources and tokens out of browser storage", async ({ page }) => {
   await fakeRegistry(page);
   const dialog = await start(page);

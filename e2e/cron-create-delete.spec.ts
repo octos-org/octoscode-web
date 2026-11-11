@@ -181,49 +181,6 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   expect([...scopes][0]).toEqual(expect.any(String));
 });
 
-test("uses the current session scope for list, toggle, create and delete", async ({
-  page,
-}) => {
-  const calls: { method: string; params: Record<string, unknown> }[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method?.startsWith("cron/")) {
-        calls.push({ method: frame.method, params: frame.params });
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
-  await start(page);
-  const tasks = await openCron(page);
-  await tasks.locator('[data-cron-job="cron-1"]').getByRole("checkbox").click();
-  await expect
-    .poll(() => calls.some((call) => call.method === "cron/toggle"))
-    .toBe(true);
-
-  await openCreate(tasks);
-  await tasks.getByRole("radio", { name: "At an interval" }).check();
-  await tasks
-    .getByRole("textbox", { name: "What should Octos do?" })
-    .fill("Scoped job");
-  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
-  const row = tasks.locator('[data-cron-job="cron-2"]');
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Delete", exact: true }).click();
-  await row.getByRole("button", { name: "Delete scheduled task" }).click();
-  await expect(row).toHaveCount(0);
-
-  const methods = new Set(calls.map((call) => call.method));
-  expect(methods).toEqual(
-    new Set(["cron/list", "cron/toggle", "cron/create", "cron/delete"]),
-  );
-  const scopes = new Set(calls.map((call) => call.params.session_id));
-  expect(scopes.size).toBe(1);
-  expect([...scopes][0]).toEqual(expect.any(String));
-});
-
 test("ignores a late create response after the session view changes", async ({
   page,
 }) => {

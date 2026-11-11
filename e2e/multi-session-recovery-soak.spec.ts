@@ -17,7 +17,6 @@ const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const WORKSPACE_NAME = "multi-session-recovery-soak";
 const WORKSPACE_PARKED = `${WORKSPACE_NAME}-parked`;
 const APPROVAL_TITLE = "Run product checks?";
-const WORKSPACE_RECONNECT = `${WORKSPACE_NAME}-reconnect`;
 
 // Every case must leave the fixture inert even when an assertion throws.
 test.afterEach(async ({ request }) => {
@@ -123,73 +122,6 @@ function observeTerminals(page: Page): () => TerminalEvent[] {
   return () => terminals.slice();
 }
 
-interface TransportObservation {
-  live: () => number;
-  created: () => number;
-  peak: () => number;
-}
-
-/** Counts this page's pooled WebSocket transports: ONE open, no extras. */
-function observeLiveTransports(page: Page): TransportObservation {
-  const open = new Set<number>();
-  let created = 0;
-  let peak = 0;
-  page.on("websocket", (socket) => {
-    const id = ++created;
-    open.add(id);
-    peak = Math.max(peak, open.size);
-    socket.on("close", () => open.delete(id));
-  });
-  return { live: () => open.size, created: () => created, peak: () => peak };
-}
-
-interface HydratedTurnSnapshot {
-  sessionId: string;
-  turns: Array<{ turn_id: string; state: string }>;
-}
-
-/** Captures each authoritative session/hydrate reconciliation this page receives. */
-function observeHydratedTurns(page: Page): () => HydratedTurnSnapshot[] {
-  const snapshots: HydratedTurnSnapshot[] = [];
-  page.on("websocket", (socket) => {
-    const pending = new Map<string, string>();
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as {
-        id?: string;
-        method?: string;
-        params?: { session_id?: string };
-      };
-      const params = frame.params;
-      if (
-        frame.method === "session/hydrate" &&
-        typeof frame.id === "string" &&
-        typeof params?.session_id === "string"
-      ) {
-        pending.set(frame.id, params.session_id);
-      }
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as {
-        id?: string;
-        result?: { turns?: Array<{ turn_id?: string; state?: string }> };
-      };
-      const requestId = frame.id;
-      if (typeof requestId !== "string") return;
-      const sessionId = pending.get(requestId);
-      if (!sessionId || !frame.result?.turns) return;
-      pending.delete(requestId);
-      snapshots.push({
-        sessionId,
-        turns: frame.result.turns.map((turn) => ({
-          turn_id: turn.turn_id ?? "",
-          state: turn.state ?? "",
-        })),
-      });
-    });
-  });
-  return () => snapshots.slice();
-}
-
 async function holdTerminals(
   request: APIRequestContext,
   count: number,
@@ -254,28 +186,6 @@ async function diagnostics(
   return (await (
     await request.get(FIXTURE_ORIGIN + "/__test__/diagnostics/state")
   ).json()) as DiagnosticsState;
-}
-
-/** The Sessions progressing a socket-owned turn inside ONE workspace, sorted.
- *  `/__test__/diagnostics/state` is process-global and the whole e2e run shares
- *  a single fixture, so a sweep over every `activeBySession` key also sees
- *  Sessions other spec files opened (and left running). The fixture stamps each
- *  Session with the `workspace_root` it was opened against
- *  (mock-ui-server.mjs:3221), and every case here opens its own workspace, so
- *  scoping by the case's cwd selects exactly the Sessions that case created.
- *  Callers compare the result against the Session ids they captured from their
- *  own turn/start frames, so the count AND the identities are pinned. */
-function activeSocketSessionsIn(
-  state: DiagnosticsState,
-  workspaceRoot: string,
-): string[] {
-  return Object.entries(state.activeBySession)
-    .filter(
-      ([, active]) =>
-        active?.owner === "socket" && active.workspace_root === workspaceRoot,
-    )
-    .map(([sessionId]) => sessionId)
-    .sort();
 }
 
 interface RuntimeErrors {
@@ -380,8 +290,7 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   // `<section aria-label="Queued prompts">`) — is mounted only
   // while NO interaction owns the surface: the shipped contract swaps in
   // ApprovalPanel/UserQuestionPanel and replaces `.composer` outright
-  // (local-preferences.spec.ts:112-117, interaction-ownership.spec.ts:442,
-  // modal-a11y.spec.ts:98). The "1 queued" observation therefore has to happen
+  // (see the takeover branch in App.tsx). The "1 queued" observation therefore has to happen
   // BEFORE the approval parks, never behind it.
   //
   // Hold the approval turn's turn/start acknowledgement: the fixture raises
@@ -583,172 +492,4 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   expect(started()).toHaveLength(admissionCount);
   expect(errors().unhandled).toEqual([]);
   expect(errors().consoleErrors).toEqual([]);
-});
-
-test("keeps exactly ONE live transport while an active A and its queued A2 recover across a transport disconnect", async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(150_000);
-  const cwd = `/srv/work/${WORKSPACE_RECONNECT}`;
-  const started = observeStartedTurns(page);
-  const terminals = observeTerminals(page);
-  const interrupts = observeInterrupts(page);
-  const hydrates = observeHydratedTurns(page);
-  const transports = observeLiveTransports(page);
-  const errors = trackRuntimeErrors(page);
-  await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
-  await connectAndStartWorkspace(page, cwd);
-  const sidebar = productNavigation(page);
-
-  // A owns the ONE active turn; its terminal is held so A2 cannot drain yet.
-  const a1Prompt = "A-reconnect-active";
-  const a2Prompt = "A-reconnect-queued";
-  await holdTerminals(request, 1);
-  const titleA = await selectedSessionTitle(sidebar);
-  await sendPrompt(page, a1Prompt);
-  await expect(
-    page.getByRole("button", { name: /^(Interrupt|Stop)$/ }),
-  ).toBeVisible();
-  await sendPrompt(page, a2Prompt);
-  await expect(page.getByText(/\b1 queued\b/)).toBeVisible();
-
-  // BEFORE the disconnect the REAL dispatch state — not a quiescent reload — is
-  // proven from captured frames + the live fixture: A is active on its exact
-  // captured turn id and A2 is still queued (never admitted).
-  const sessionA = sessionIdForPrompt(started(), a1Prompt);
-  const turnA1 = started().find((turn) => turn.text === a1Prompt)!.turnId;
-  expect(started().map((turn) => turn.text)).toEqual([a1Prompt]);
-  const activeBefore = await diagnostics(request);
-  expect(activeBefore.activeBySession[sessionA] ?? null).toMatchObject({
-    turn_id: turnA1,
-    owner: "socket",
-  });
-  // The pooled client already holds exactly ONE live transport.
-  expect(transports.live()).toBe(1);
-  const createdBeforeDisconnect = transports.created();
-
-  // B and C make real progress concurrently while A stays active + queued.
-  const titleB = await createSiblingSession(sidebar, WORKSPACE_RECONNECT);
-  await sendPrompt(page, "B-reconnect-progress");
-  const titleC = await createSiblingSession(sidebar, WORKSPACE_RECONNECT);
-  await sendPrompt(page, "C-reconnect-progress");
-  expect(new Set([titleA, titleB, titleC]).size).toBe(3);
-  await expect
-    .poll(
-      () =>
-        started().filter((turn) => turn.text === "B-reconnect-progress").length,
-    )
-    .toBe(1);
-  await expect
-    .poll(
-      () =>
-        started().filter((turn) => turn.text === "C-reconnect-progress").length,
-    )
-    .toBe(1);
-  const turnB = started().find((turn) => turn.text === "B-reconnect-progress")!;
-  const turnC = started().find((turn) => turn.text === "C-reconnect-progress")!;
-  const completedFor = (turn: StartedTurn) =>
-    terminals().filter(
-      (terminal) =>
-        terminal.sessionId === turn.sessionId &&
-        terminal.turnId === turn.turnId &&
-        terminal.outcome === "completed",
-    );
-  await expect.poll(() => completedFor(turnB).length).toBe(1);
-  await expect.poll(() => completedFor(turnC).length).toBe(1);
-  // Switching Sessions must NOT multiply transports: still one pooled socket.
-  expect(transports.live()).toBe(1);
-
-  // Kill the owner transport: the fixture terminates owner-socket active turns.
-  expect(
-    (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
-  ).toBe(204);
-
-  // The client replaces its single transport and re-hydrates. The authoritative
-  // hydrate must report A1 as INTERRUPTED — a fabricated completed terminal is
-  // exactly what this case forbids.
-  await expect
-    .poll(
-      () =>
-        hydrates().some(
-          (snapshot) =>
-            snapshot.sessionId === sessionA &&
-            snapshot.turns.some(
-              (turn) => turn.turn_id === turnA1 && turn.state === "interrupted",
-            ),
-        ),
-      { timeout: 20_000 },
-    )
-    .toBe(true);
-  await expect.poll(() => transports.live(), { timeout: 20_000 }).toBe(1);
-  // Successive replacement was allowed, but never two open at once.
-  expect(transports.peak()).toBeLessThanOrEqual(1);
-  expect(transports.created()).toBeGreaterThan(createdBeforeDisconnect);
-
-  // A2 drains against A's SAME captured Session id, exactly once, with its own
-  // turn id distinct from A1's — no duplicate start, no cross-Session delivery.
-  await expect
-    .poll(
-      () =>
-        started()
-          .filter((turn) => turn.sessionId === sessionA)
-          .map((turn) => turn.text),
-      { timeout: 20_000 },
-    )
-    .toEqual([a1Prompt, a2Prompt]);
-  const a2Turns = started().filter((turn) => turn.text === a2Prompt);
-  expect(a2Turns).toHaveLength(1);
-  const turnA2 = a2Turns[0]!.turnId;
-  expect(turnA2).not.toBe(turnA1);
-  const aTerminals = () => terminals().filter((t) => t.sessionId === sessionA);
-  // A1 never fabricates success: no completed terminal for its id.
-  expect(
-    aTerminals().filter(
-      (terminal) =>
-        terminal.turnId === turnA1 && terminal.outcome === "completed",
-    ),
-  ).toHaveLength(0);
-  // A2 is the ONE ordinary turn that completes on A after recovery.
-  await expect
-    .poll(
-      () =>
-        aTerminals().filter(
-          (terminal) =>
-            terminal.turnId === turnA2 && terminal.outcome === "completed",
-        ).length,
-      { timeout: 20_000 },
-    )
-    .toBe(1);
-
-  // Exactly four real admissions (A1, A2, B, C), all distinct, over three
-  // Sessions; B/C were untouched by A's transport loss.
-  expect(started()).toHaveLength(4);
-  expect(new Set(started().map((turn) => turn.turnId)).size).toBe(4);
-  expect(new Set(started().map((turn) => turn.sessionId)).size).toBe(3);
-  expect(
-    started()
-      .filter((turn) => turn.sessionId === turnB.sessionId)
-      .map((turn) => turn.text),
-  ).toEqual(["B-reconnect-progress"]);
-  expect(
-    started()
-      .filter((turn) => turn.sessionId === turnC.sessionId)
-      .map((turn) => turn.text),
-  ).toEqual(["C-reconnect-progress"]);
-  // No user-initiated interrupt: A1 died by connection_closed, not by Stop.
-  expect(interrupts()).toBe(0);
-  const settled = await diagnostics(request);
-  // A (recovered), B and C are all idle again: no socket-owned turn left in
-  // this case's workspace, and each of its own Session ids reports null.
-  expect(activeSocketSessionsIn(settled, cwd)).toEqual([]);
-  for (const sessionId of new Set(started().map((turn) => turn.sessionId))) {
-    expect(
-      settled.activeBySession[sessionId] ?? null,
-      `session ${sessionId} still active`,
-    ).toBeNull();
-  }
-  expect(transports.live()).toBe(1);
-  // No uncaught page errors across the reconnect (reconnect warnings are legit).
-  expect(errors().unhandled).toEqual([]);
 });

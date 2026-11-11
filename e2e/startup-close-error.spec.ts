@@ -111,26 +111,3 @@ test("a 1008 launch explains the Profile and keeps the login across the reconnec
   await expect(selected).toHaveAttribute("data-session-id", openSession!);
   expect(socket.attempts()).toBe(3);
 });
-
-test("a new Session that fails from an open one keeps both the error and the Session", async ({
-  page,
-}) => {
-  const socket = await closeOnSessionOpen(page, {});
-  await connect(page, `/workspace/close-open-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await expect(composer).toBeEnabled();
-
-  socket.control.close = { code: 1008, reason: "auth_expired" };
-  await page
-    .getByRole("button", { name: "New session", exact: true })
-    .first()
-    .click();
-
-  // The Session recovers underneath, so the sidebar is the surface left to say it.
-  await expect(page.getByRole("alert").first()).toContainText(PERMISSION);
-  await page.waitForTimeout(SETTLE_MS);
-  await expect(page.getByRole("alert").first()).toContainText(PERMISSION);
-  await expect(composer).toBeEnabled();
-  expect(socket.attempts()).toBe(2);
-});

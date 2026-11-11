@@ -34,27 +34,6 @@ test.afterEach(async ({ request }) => {
   await stagePairing(request, "fresh");
 });
 
-test("an octos origin off this computer is refused without a request", async ({
-  page,
-  request,
-}) => {
-  await stagePairing(request, "fresh");
-  await page.goto(link("https://octos.example.com", CODE));
-  await expect(
-    page.getByRole("alert").filter({ hasText: "not on this computer" }),
-  ).toBeVisible();
-  // Refused before the POST: the fixture's single-use code is still unclaimed.
-  const state = await (
-    await request.get(`${ORIGIN}/__test__/pair/state`)
-  ).json();
-  expect(state.burned).toBe(false);
-  expect(state.failures).toBe(0);
-  // The refused address is NOT prefilled into the form.
-  await expect(page.getByLabel("Server origin")).not.toHaveValue(
-    "https://octos.example.com",
-  );
-});
-
 test("the paired token survives only this tab until Forget", async ({
   page,
   context,

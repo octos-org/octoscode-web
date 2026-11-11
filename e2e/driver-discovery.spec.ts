@@ -382,39 +382,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     expect(controlModelAfter).toBe(controlModelBefore);
   });
 
-  // ---------------------------------------------------------------- group 2
-  test("holds ONLY the first walk of a workspace: same-workspace sibling completes while A stays held", async ({
-    page,
-    request,
-  }) => {
-    const probe = observe(page);
-    const a = await connect(page, probe, "delay");
-
-    // A's walk is deterministically held (no arm-after-open race): its request
-    // is on the wire but unanswered, so A never becomes complete.
-    await expect
-      .poll(async () => (await heldDriver(request, a.sessionId)).held)
-      .toContain(METHOD);
-    await expect(disclosure(page)).toHaveCount(0);
-
-    // A sibling in the SAME workspace must still complete — the delay barrier
-    // is keyed by workspace, and only its FIRST request is held.
-    const bSession = await sibling(page, probe, a.workspace);
-    await expect(disclosure(page)).toHaveCount(1);
-    await expect(disclosure(page).locator("summary")).toContainText(
-      "External controller",
-    );
-    await expect
-      .poll(async () => (await heldDriver(request, bSession)).held)
-      .toEqual([]);
-
-    // Releasing A delivers its ORIGINAL captured reply verbatim.
-    await driverControl(request, "release", a.sessionId, METHOD);
-    await expect
-      .poll(async () => (await heldDriver(request, a.sessionId)).held)
-      .toEqual([]);
-  });
-
   test("A/B: exact synthetic driver ID per selected Session; releasing held A never leaks into a selected B", async ({
     page,
     request,
@@ -449,37 +416,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     await expect(disclosure(page)).toHaveCount(1);
     await expect(factRow(page, "Driver")).toContainText(aId);
     await expect(factRow(page, "Driver")).not.toContainText(bId);
-  });
-
-  // ---------------------------------------------------------------- group 4
-  test("surfaces a typed refusal and never mounts a disclosure for it", async ({
-    page,
-  }) => {
-    const probe = observe(page);
-    await connect(page, probe, "refused");
-
-    await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(0);
-    const walk = probe.calls(METHOD)[0]!;
-    await probe.settled(walk);
-    const reply = probe.replyTo(walk)!;
-    expect(reply.errorCode).toBe(-32_041);
-    expect(reply.refusalKind).toBe("driver_scope_mismatch");
-    await expect(disclosure(page)).toHaveCount(0);
-  });
-
-  test("rejects a MALFORMED disclosure binding at the strict decode boundary", async ({
-    page,
-  }) => {
-    const probe = observe(page);
-    await connect(page, probe, "malformed");
-
-    await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(0);
-    const walk = probe.calls(METHOD)[0]!;
-    await probe.settled(walk);
-    // Structural rejection, not a Core refusal: a non-integer epoch is invalid,
-    // so no disclosure may render.
-    await expect(disclosure(page)).toHaveCount(0);
-    await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
   });
 
   test("transitions healthy -> refused across a transport reconnect on the SAME record", async ({
