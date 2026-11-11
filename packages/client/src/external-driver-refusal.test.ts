@@ -12,6 +12,7 @@ import {
 import type { ExternalDriverControlContext } from "./external-driver.ts";
 import { OctosUiClient, OctosUiProtocolError } from "./client.ts";
 import type { UiProtocolCapabilities } from "./types.ts";
+import { makeCaps } from "./caps.test-fixture.ts";
 
 /**
  * 2203 unit coverage for the three 2047-disclosed client gaps, exercised
@@ -34,17 +35,7 @@ const TOPIC = "peer-abc";
 const CANARY = "CANARY-2203-raw-server-detail";
 
 function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos/ui-protocol",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 1,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: features,
-  };
+  return makeCaps({ family: "driver", methods, features });
 }
 
 type DriverRequest = (method: string, params: unknown) => Promise<unknown>;

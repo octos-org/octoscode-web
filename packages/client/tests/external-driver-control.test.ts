@@ -7,6 +7,13 @@ import {
   createExternalDriverCommands,
 } from "../src/external-driver.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
+import { makeCaps } from "./fixtures/caps.ts";
+import {
+  ACQUIRE_REPLY,
+  BINDING_WIRE,
+  FENCE as SHARED_FENCE,
+  PROOF,
+} from "./fixtures/external-driver-wire.ts";
 
 /**
  * 1907 RED: the requested Web external-control surface (driverAcquire,
@@ -33,17 +40,7 @@ interface ExternalDriverControlSurface {
 }
 
 function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos/ui-protocol",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 1,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: features,
-  };
+  return makeCaps({ family: "driver", methods, features });
 }
 
 /**
@@ -204,15 +201,7 @@ const NEVER_BOUND_INTERNAL = {
   recovery: "none",
 };
 
-/** Synthetic proof — a fixed, obviously-not-real fixture string. Never a real
- * control token, and never persisted anywhere. */
-const PROOF = "proof-synthetic-fixture";
-
-const FENCE: ControlFenceArgs = {
-  driverId: "driver-b",
-  epoch: 8,
-  controlToken: PROOF,
-};
+const FENCE: ControlFenceArgs = { ...SHARED_FENCE };
 
 const ACQUIRE_ARGS: DriverAcquireArgs = {
   driverId: "driver-b",
@@ -323,18 +312,19 @@ const CONTROL_ARGS_BY_METHOD: Record<
 };
 
 describe("control methods gate on external_driver_v1 before any wire send", () => {
-  for (const name of CONTROL_METHODS) {
-    it(`${name} fails closed when the feature is missing`, async () => {
+  // One guard for the whole family (T-0588 C2): the shared
+  // requireExternalDriverControlCapability gate is per-method; every control
+  // method must fail closed with zero wire traffic when the feature is
+  // missing. Per-method variants (T-0587 audit) collapsed into this loop.
+  it("every control method fails closed when the feature is missing", async () => {
+    for (const name of CONTROL_METHODS) {
       const { calls, control } = harness(caps(CONTROL_METHODS_ADVERTISED, []));
       await expect(
         invoke(control, name, CONTROL_ARGS_BY_METHOD[name]),
       ).rejects.toBeInstanceOf(ExternalDriverCapabilityError);
       expect(calls).toEqual([]);
-    });
-  }
-
-  // `peer/control` is NOT in EXTERNAL_DRIVER_METHODS, so it needs its own
-  // explicit negatives rather than riding on Object.values(...).
+    }
+  });
 });
 
 /** Wire-side method names. `peer/control` is deliberately NOT in the current
@@ -382,29 +372,8 @@ async function expectDecodeRejected(
   expect(message).not.toContain("sha256:");
 }
 
-const BINDING_WIRE = {
-  driver_id: "driver-b",
-  epoch: 8,
-  revision: 16,
-  lease_expires_at_ms: 1_700_000_000_000,
-  accepted_work: ["op-dispatch-1"],
-};
-
-/**
- * RAW WIRE reply: `rpc.request` returns untouched JSON, so the acquire fixture
- * is the actual Rust `SessionDriverAcquireResult` — a plain enumerable
- * `control_token` string. NO functions belong in wire JSON and NO capability
- * helper is defined here. The closure-backed capability is a PUBLIC decoded
- * result concern, exercised below by invoking the factory against this raw
- * fixture. This direct raw `control_token` is the ONE deliberate wire
- * exception; every ordinary public view/error/storage path stays redacted.
- */
-const ACQUIRE_REPLY = {
-  control_token: PROOF,
-  binding: BINDING_WIRE,
-  pending_work: [],
-  recovery: "none",
-};
+// ACQUIRE_REPLY / BINDING_WIRE / PROOF: see ./fixtures/external-driver-wire.ts
+// (the wire contract is pinned once for the control + lease files together).
 
 const RENEW_REPLY = { lease_expires_at_ms: 1_700_000_300_000 };
 
@@ -679,35 +648,6 @@ describe("decoders reject malformed native identity (no silent fallback)", () =>
   // funnels through that same parser, so no separate wire-level dupe here.
 });
 
-describe("receipt turn identifiers cover every Rust Uuid::parse_str form", () => {
-  // uuid-1.20.0/src/parser.rs 147-164: hex digits are case-INsensitive, but the
-  // `urn:uuid:` PREFIX is NOT. `isProtocolUuid` (protocol-id.ts) currently accepts
-  // only the canonical hyphenated form, so the non-canonical POSITIVES below are
-  // the INTENDED RED for the future command decoder — never a product GREEN claim.
-  const acceptedForms = [
-    "67e55044-10b1-426f-9247-bb680e5fe0c8", // canonical hyphenated
-    "67E55044-10B1-426F-9247-BB680E5FE0C8", // uppercase HEX
-    "67e5504410b1426f9247bb680e5fe0c8", // simple32
-    "{67e55044-10b1-426f-9247-bb680e5fe0c8}", // braced hyphenated
-    "urn:uuid:67e55044-10b1-426f-9247-bb680e5fe0c8", // lowercase urn:uuid: prefix
-    "00000000-0000-0000-0000-000000000000", // nil
-  ] as const;
-
-  for (const form of acceptedForms) {
-    it(`dispatch decodes the accepted turn-id form ${form}`, async () => {
-      const { control } = harness(FULL_CONTROL_CAPS, undefined, () =>
-        structuredClone({ ...DISPATCH_REPLY, adopted_turn_id: form }),
-      );
-      const result = (await invoke(
-        control,
-        "peerDispatch",
-        DISPATCH_ARGS,
-      )) as PeerDispatchView;
-      expect(result.adoptedTurnId).toBe(form);
-    });
-  }
-});
-
 describe("no implicit acquisition, fallback or proof leakage", () => {
   it("driverGet stays read-only: it never acquires and carries no proof", async () => {
     const { calls, commands } = harness(FULL_CONTROL_CAPS);
@@ -761,43 +701,6 @@ describe("no implicit acquisition, fallback or proof leakage", () => {
     // fall back to. Behaviour (offline refusal + zero RPC) is the proof — a
     // bare `globalThis.localStorage === undefined` proves nothing on its own.
     expect(calls).toEqual([]);
-  });
-
-  it("a rejected control RPC never echoes the raw server payload or proof", async () => {
-    const rejectedCalls: Array<{ method: string; params: unknown }> = [];
-    const secret = "PRIVATE-server-detail-and-token";
-    const controller = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          rejectedCalls.push({ method, params });
-          throw new Error(secret);
-        },
-      },
-      "dev:local:tui#peer-abc",
-      FULL_CONTROL_CAPS,
-      { profileId: "dev", topic: "peer-abc" },
-    );
-    const control = controller as unknown as ExternalDriverControlSurface;
-    // Existence is asserted OUTSIDE the catch: a missing method must FAIL here,
-    // not be silently swallowed and misread as a rejected RPC.
-    const dispatch = requireMethod(control, "peerDispatch");
-    let error: unknown;
-    let settled = false;
-    try {
-      await dispatch(DISPATCH_ARGS);
-      settled = true;
-    } catch (caught) {
-      error = caught;
-    }
-    // The RPC WAS sent exactly once and the outcome was a bounded TYPED
-    // rejection — never a success, never raw server text.
-    expect(rejectedCalls).toHaveLength(1);
-    expect(rejectedCalls[0]?.method).toBe(WIRE_METHOD.peerDispatch);
-    expect(settled).toBe(false);
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-    const message = (error as Error).message;
-    expect(message).not.toContain(secret);
-    expect(message).not.toContain(PROOF);
   });
 });
 

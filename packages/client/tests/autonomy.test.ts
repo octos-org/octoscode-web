@@ -379,71 +379,33 @@ describe("autonomy notifications", () => {
 
 describe("rc12 wire shapes: json! emits explicit null for absent Option fields", () => {
   // Mirrors autonomy_loop_json / autonomy_monitor_json / autonomy_agent_json
-  // (agent_orchestrator.rs): Option::None serializes as null,
-  // the key is present. Decoders must treat null as absent for exactly these
-  // audited fields and stay strict for required ones.
+  // (agent_orchestrator.rs): Option::None serializes as null, the key is
+  // present. Only the audited NULLABLE fields are exercised per family — the
+  // required fields are covered by the plain record fixtures above — so the
+  // fixture carries just those nulls plus the minimal required keys.
   const LOOP_WITH_NULLS = {
-    loop_id: "loop_01",
-    session_id: "s1",
-    profile_id: "dev",
-    prompt: "Check the deploy",
+    ...LOOP_RECORD,
     mode: "self_paced",
     interval_seconds: null,
-    status: "active",
     next_run_at_ms: null,
     last_run_at_ms: null,
-    expires_at_ms: 1_700_086_400_000,
-    created_at_ms: 1_700_000_000_000,
-    updated_at_ms: 1_700_000_000_000,
   };
 
   const MONITOR_WITH_NULLS = {
-    monitor_id: "monitor_01",
-    session_id: "s1",
-    profile_id: "dev",
-    name: "watch-build",
-    argv: ["./scripts/watch.sh"],
-    filter_regex: null,
+    ...MONITOR_RECORD,
     mode: "stream",
+    filter_regex: null,
     interval_seconds: null,
-    batch_ms: 500,
-    max_events_per_hour: 60,
-    persistent: true,
-    status: "active",
     pause_reason: null,
     goal_id: null,
     last_fired_at_ms: null,
-    fires_used: 0,
     expires_at_ms: null,
-    created_at_ms: 1_700_000_000_000,
-    updated_at_ms: 1_700_000_000_000,
   };
 
   const AGENT_WITH_NULLS = {
-    agent_id: "agent_01",
-    parent_agent_id: null,
-    session_id: "s1",
-    task_id: null,
-    path: "/repo/src/app.ts",
-    role: "implementer",
-    nickname: "impl-1",
-    title: "impl-1",
-    backend_kind: "builtin",
-    status: "running",
-    last_task: null,
-    summary: null,
-    output_tail: null,
-    cwd: null,
-    profile_id: "dev",
-    artifact_count: 0,
-    artifacts: [],
-    created_at_ms: 1_700_000_000_000,
-    updated_at_ms: 1_700_000_000_000,
+    ...AGENT_RECORD_FOR_NULLS,
   };
 
-  // Per-field null handling is exercised through one representative
-  // nullable field per family; the full audited null-field set lives in
-  // the parsers and in Core's autonomy_*_json serializers.
   it("accepts list/control/fire results carrying nulls", () => {
     const listed = parseMonitorListResult({
       session_id: "s1",
@@ -452,7 +414,9 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
     });
     expect(listed?.monitors).toHaveLength(1);
     expect(listed?.monitors[0]?.filter_regex).toBeUndefined();
-    expect(listed?.monitors[0]?.persistent).toBe(true);
+    // persistent is a required boolean field on this wire row (not one of
+    // the audited nullables), so the spread keeps MONITOR_RECORD's value.
+    expect(listed?.monitors[0]?.persistent).toBe(MONITOR_RECORD.persistent);
 
     const controlled = parseMonitorControlResult({
       session_id: "s1",
@@ -493,6 +457,29 @@ describe("rc12 wire shapes: json! emits explicit null for absent Option fields",
   });
 });
 
+/** Minimal agent row for the rc12 null-family test: only the fields the
+ * assertions touch, nulls included, required keys present. */
+const AGENT_RECORD_FOR_NULLS = {
+  agent_id: "agent_01",
+  parent_agent_id: null,
+  session_id: "s1",
+  task_id: null,
+  path: "/repo/src/app.ts",
+  role: "implementer",
+  nickname: "impl-1",
+  title: "impl-1",
+  backend_kind: "builtin",
+  status: "running",
+  last_task: null,
+  summary: null,
+  output_tail: null,
+  cwd: null,
+  profile_id: "dev",
+  artifact_count: 0,
+  artifacts: [],
+  created_at_ms: 1_700_000_000_000,
+  updated_at_ms: 1_700_000_000_000,
+};
 describe("scoped list ownership (session_controls_target mirror)", () => {
   it("base-key matching mirrors Core: topic scope sees its base session", () => {
     expect(sessionControlsTarget("telegram:1#research", "telegram:1")).toBe(

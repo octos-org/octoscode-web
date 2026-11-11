@@ -505,8 +505,9 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | `external-driver-control.test.ts` › control carries the accepted receipt facts and never the proof 的 proof 断言部分（保留线协议断言）                                     | 同上 + `external-driver.test.ts` › keeps proof/hash/secret fields out of the parsed public view                                              | 同一「proof 不回显」性质；control 文件只留 wire 字段断言                     | ~10      |
 | `external-driver-operations.test.ts` › exposes no proof/prompt/answer anywhere in a parsed view                                                                            | `external-driver.test.ts` › keeps proof/hash/secret fields out（同 parseSessionDriverGetResult 投影白名单族）                                | 同一投影白名单遗漏即同红；operations 页视图与 binding 视图共享 decode 白名单 | ~10      |
 
-> 注意：C1 是**同性质跨文件重复**的代表，只删重复的那一处，保留每族的 wire 形状正例。预计小计
-> **~45 行**。
+> 注意：C1 经 lead 收窄为只删 lease 前半的 proof 序列化重复（~25 行）与 control
+> proof 断言合并（~10 行）；页级视图负例、acquire 畸形类型守卫保留。小计
+> **~35 行**。
 
 ### C2 — 能力门控「无 feature/无 method 离线零帧」八处同语义
 
@@ -521,13 +522,17 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### C3 — 「调用方对象发送后变更不可重定向」三处同性质
 
-| 候选删除/合并项                                                                                                                                                                                                                               | 保留                                                                                                                                             | 共同可观察失败                                                                                          | 预计省行        |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | --------------- |
-| `external-driver-lease-control.test.ts` › post-send mutation of caller args cannot retarget wire or decode（仅此条；同文件「accepts an external release」「rejects a FOREIGN next」**保留**——release 模式形状与 foreign-next 围栏是独有守卫） | `external-driver-peer-control.test.ts` › dispatch: a reply matching the MUTATED foreign operation/model is refused（同性质代表，含 decode 围栏） | 同一「capture-before-await」性质：在 await 后重读可变 args 则两边同红；lease 的 `next` 变体只是参数不同 | ~45             |
-| `external-driver.test.ts` › mutating the caller options object mid-request cannot retarget params or fences                                                                                                                                   | 同上族；或保留本条（driverGet options 是独立入口）而删 peer-control 的重复——**由 lead 二选一，不双留**                                           | 同上                                                                                                    | ~35（若删这条） |
+lead 批复（11-11）：保留 `external-driver.test.ts` › mutating the caller options
+object mid-request cannot retarget params or fences（driverGet options 版）与
+`external-driver-peer-control.test.ts` › dispatch: a reply matching the MUTATED
+foreign operation/model is refused（decode 围栏）；删 lease 重复变体。
+
+| 候选删除项                                                                                                 | 映射到的保留测试                                                                                                                | 共同可观察失败                                                                                                                  | 预计省行 |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `external-driver-lease-control.test.ts` › post-send mutation of caller args cannot retarget wire or decode | `external-driver.test.ts` › mutating the caller options object… + `external-driver-peer-control.test.ts` › dispatch decode 围栏 | 同一「capture-before-await」性质：await 后重读可变 args 即同红；lease 的 release 形状与 foreign-next 围栏仍由该文件其余两例独守 | ~45      |
 
 > 小计
-> **~45–80 行**（取一种方案）。这是 11-08 审计点名的「失败/迟到路径」类，**保留至少一条**。
+> **~45 行**（lead 已选方案）。这是 11-08 审计点名的「失败/迟到路径」类，保留的两条继续守该性质。
 
 ### C4 — Rust UUID 形状 parity 三处重复
 
@@ -540,12 +545,13 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### C5 — 「拒绝响应不反显服务器原文/secret」四处同语义
 
-| 候选删除/合并项                                                                                                                             | 保留                                                                                                                                                                                      | 共同可观察失败                                               | 预计省行                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| `external-driver-control.test.ts` › a rejected control RPC never echoes the raw server payload or proof（~36 行）                           | `src/external-driver-refusal.test.ts` › gap1 keeps a NON-allowlisted kind…scrubbed failure + `external-driver.test.ts` › throws constant diagnostics without echoing an untrusted payload | 同一 scrub 边界：raw server text 泄漏进 Error.message 时同红 | ~36                                                             |
-| `external-driver-control.test.ts` › decoders reject malformed native identity…dispatch rejects an adopted session that contradicts its slug | `external-driver-peer-control.test.ts` › refuses a valid-SHAPE foreign-master receipt + `external-driver-receipt.test.ts` › rejects a same-profile DIFFERENT master base                  | 同一「原生身份不一致即拒绝」围栏（slug/base 不一致）         | ~25（`expectDecodeRejected` helper 随唯一调用方删除，另省 ~25） |
+| 候选删除/合并项                                                                                                                             | 保留                                                                                                                                                                                      | 共同可观察失败                                               | 预计省行 |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------- |
+| `external-driver-control.test.ts` › a rejected control RPC never echoes the raw server payload or proof（~36 行）                           | `src/external-driver-refusal.test.ts` › gap1 keeps a NON-allowlisted kind…scrubbed failure + `external-driver.test.ts` › throws constant diagnostics without echoing an untrusted payload | 同一 scrub 边界：raw server text 泄漏进 Error.message 时同红 | ~36      |
+| `external-driver-control.test.ts` › decoders reject malformed native identity…dispatch rejects an adopted session that contradicts its slug | **不删**（lead 11-11：「同 base 错 slug」必须保留/并入，不能只剩「同 slug 错 base」；这是出厂解码的直接畸形拒绝，另两条守的是 valid-shape 围栏）                                          | —                                                            | 0        |
 
-> 小计 **~85 行**。
+> C5 经 lead 收窄为只删 scrub 重复（~36 行）。原生身份围栏保留。小计
+> **~36 行**。
 
 ### C6 — client.test.ts「替换 socket 迟到回调」it.each×4 与取消连接两例
 
@@ -558,12 +564,13 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### C7 — session/hydrate 正例与编码/offset 变体
 
-| 候选删除/合并项                                                                                                       | 保留                                                                                                                       | 共同可观察失败                                                                                                                              | 预计省行 |
-| --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `client.test.ts` › validates session/hydrate before returning it（~28 行，正例 cursor 断言）                          | `hydrate.test.ts` › parses authoritative messages and injects session scope into replay envelopes（更完整的 hydrate 正例） | 同一 `parseSessionHydrateResult` 正例；client.test.ts 只多「经 client 派发」一句，该派发性质已由「dispatches session open immediately」覆盖 | ~28      |
-| `session-file-read.test.ts` › accepts a valid base64 chunk + rejects wrong encoding and invalid offsets（2 条 44 行） | 合并为一条（正例+两个边界同方法）                                                                                          | 同一 `session/files/read` 解码                                                                                                              | ~15      |
+| 候选删除/合并项                                                                                                       | 保留                                                                                                                       | 共同可观察失败                 | 预计省行 |
+| --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------- |
+| `client.test.ts` › validates session/hydrate before returning it                                                      | **不删**（lead 11-11：session/hydrate 经 client 的实际 RPC 派发必须保留/迁移，不得由 session/open 派发或 parser 正例替代） | —                              | 0        |
+| `session-file-read.test.ts` › accepts a valid base64 chunk + rejects wrong encoding and invalid offsets（2 条 44 行） | 合并为一条（正例+两个边界同方法）                                                                                          | 同一 `session/files/read` 解码 | ~15      |
 
-> 小计 **~43 行**。
+> C7 经 lead 收窄为只合并 `session-file-read`
+> 的正负例（~15 行）；hydrate 派发保留。小计 **~15 行**。
 
 ### C8 — autonomy 三族 scoped list 与 rc12 null 形状的 setup 重复（不删测试，只去重 setup）
 
@@ -598,6 +605,14 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 - `skills`/`skill-actions`/`memory`/`research`/`usage`/`media`/`workspace`/`workspace-browse`/`session-files`/`peers`/`history`/`supervision`/`coding`/`context`/`interaction`/`projection*`/`protocol-id`/`rpc`/`url`/`execution-environment`/`cron`/`turn-state`/`server-methods`/`btw`/`steer`：逐条对过，无同语义重复；这些是 7,651 行里的「每类一两个代表」本体。
 - 单测可合并的只在本层合并；**e2e/Rust 侧的同链测试不拿来充当本层无意义的证据**（例如 reviewed
   install 在 e2e 有端到端，但 client 的回执逐字段校验仍是本层独有）。
+
+## lead 审批记录（11-11）
+
+C2/C4/C6/C8/C9 **批准**。C1 仅批 lease 前半 + control
+proof 断言；页级投影负例保留。C3 指定：保留 driverGet options 版 + peer-control
+decode 围栏，删 lease post-send。C5
+scrub 重复可删，「同 base 错 slug」原生身份围栏保留。C7 只批 files/read 合并，hydrate
+RPC 派发保留。行数随保留项上调、不凑 2 万。
 
 ## 给 lead 的审批点
 

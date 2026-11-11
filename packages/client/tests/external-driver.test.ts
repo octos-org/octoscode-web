@@ -12,22 +12,13 @@ import {
   parseSessionDriverGetResult,
 } from "../src/external-driver.ts";
 import { OctosUiProtocolError } from "../src/client.ts";
+import { makeCaps } from "./fixtures/caps.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
 const METHOD = EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_GET;
 
 function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos/ui-protocol",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 1,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: features,
-  };
+  return makeCaps({ family: "driver", methods, features });
 }
 
 const FULL_CAPS = caps([METHOD], [EXTERNAL_DRIVER_V1_FEATURE]);
