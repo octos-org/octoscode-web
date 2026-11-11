@@ -118,9 +118,13 @@ describe("OctosUiClient", () => {
     }
   });
 
-  it.each(["open", "close", "error", "message"] as const)(
-    "ignores a replaced socket's late %s callback on the same client",
-    async (event) => {
+  // One guard for the family (T-0588 C6): a replaced socket's late callback
+  // of ANY kind must never reach the live client — not as an error, not as
+  // a notification, not as a resolution. Each event variant below replays
+  // the same reconnect and asserts the same isolation, then the live socket
+  // still resolves the pending request.
+  it("ignores every late callback of a replaced socket", async () => {
+    for (const event of ["open", "close", "error", "message"] as const) {
       const oldSocket = createSocket();
       const socket = createSocket();
       const sockets = [oldSocket, socket];
@@ -187,8 +191,35 @@ describe("OctosUiClient", () => {
       } as MessageEvent);
       await expect(outcome).resolves.toEqual({ value: { current: true } });
       client.disconnect();
-    },
-  );
+    }
+  });
+
+  // A cancelled socket opening ahead of its replacement must not publish
+  // connected — the same late-callback isolation as above, asserted on the
+  // open event with the connect promise still pending (C6 fold).
+  it("does not publish connected when a cancelled socket opens ahead of its replacement", async () => {
+    const oldSocket = createSocket();
+    const socket = createSocket();
+    const sockets = [oldSocket, socket];
+    const client = new OctosUiClient({
+      endpoint: "http://127.0.0.1:50080",
+      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+    });
+    const first = client.connect();
+    const rejected = expect(first).rejects.toThrow("connection replaced");
+    client.disconnect();
+    const second = client.connect();
+
+    oldSocket.onopen?.({} as Event);
+
+    await rejected;
+    expect(client.status).toBe("connecting");
+    socket.readyState = 1;
+    socket.onopen?.({} as Event);
+    await second;
+    expect(client.status).toBe("connected");
+    client.disconnect();
+  });
 
   it("rejects a cancelled connection without poisoning its replacement when the old socket closes", async () => {
     const oldSocket = createSocket();

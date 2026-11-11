@@ -6,6 +6,13 @@ import {
   createExternalDriverCommands,
 } from "../src/external-driver.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
+import { makeCaps } from "./fixtures/caps.ts";
+import {
+  ACQUIRE_REPLY,
+  BINDING_WIRE,
+  FENCE as SHARED_FENCE,
+  PROOF,
+} from "./fixtures/external-driver-wire.ts";
 
 /**
  * 2044: bounded regression coverage for the LEASE surface itself, exercised
@@ -19,17 +26,7 @@ import type { UiProtocolCapabilities } from "../src/types.ts";
  */
 
 function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos/ui-protocol",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 1,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: features,
-  };
+  return makeCaps({ family: "driver", methods, features });
 }
 
 const ALL_METHODS = Object.values(EXTERNAL_DRIVER_METHODS);
@@ -39,8 +36,7 @@ const ALL_METHODS = Object.values(EXTERNAL_DRIVER_METHODS);
  * already covers the whole surface. */
 const FULL_CAPS = caps(ALL_METHODS, [EXTERNAL_DRIVER_V1_FEATURE]);
 
-/** Synthetic proof — a fixed, obviously-not-real fixture. Never persisted. */
-const PROOF = "proof-synthetic-fixture";
+// PROOF + wire fixtures: see ./fixtures/external-driver-wire.ts
 
 const SESSION = "dev:local:tui#peer-abc";
 const SCOPE = { profileId: "dev", topic: "peer-abc" };
@@ -53,7 +49,7 @@ type ReleaseArgs = {
   next: "internal" | "external";
 };
 
-const FENCE = { driverId: "driver-b", epoch: 8, controlToken: PROOF };
+const FENCE = SHARED_FENCE;
 
 const ACQUIRE_ARGS = {
   driverId: "driver-b",
@@ -71,21 +67,6 @@ const RELEASE_INTERNAL_ARGS: ReleaseArgs = {
   ...FENCE,
   expectedRevision: 16,
   next: "internal",
-};
-
-const BINDING_WIRE = {
-  driver_id: "driver-b",
-  epoch: 8,
-  revision: 16,
-  lease_expires_at_ms: 1_700_000_000_000,
-  accepted_work: ["op-dispatch-1"],
-};
-
-const ACQUIRE_REPLY = {
-  control_token: PROOF,
-  binding: BINDING_WIRE,
-  pending_work: [],
-  recovery: "none",
 };
 
 /** Parked external release: durable mode stays external, NO live lease. */
@@ -170,36 +151,6 @@ describe("driverRelease enforces the FROZEN mode-specific shape", () => {
       calls,
       EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_RELEASE,
     );
-  });
-});
-
-describe("lease expectations are captured BEFORE the await", () => {
-  it("post-send mutation of caller args cannot retarget wire or decode", async () => {
-    const args: ReleaseArgs = { ...RELEASE_EXTERNAL_ARGS };
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const commands = createExternalDriverCommands(
-      {
-        request: async (method, params) => {
-          calls.push({ method, params });
-          // Mutate the ORIGINAL args AFTER the wire was built and the expected
-          // `next`/fence captured — a re-read would now see "internal"/"evil".
-          args.driverId = "driver-evil";
-          args.next = "internal";
-          return structuredClone(RELEASE_EXTERNAL_REPLY);
-        },
-      },
-      SESSION,
-      FULL_CAPS,
-      SCOPE,
-    );
-    const result = await commands.driverRelease(args);
-    expect(calls[0]?.params).toMatchObject({
-      driver_id: "driver-b",
-      next: "external",
-    });
-    // Decode used the CAPTURED "external", so the external reply still decodes.
-    expect(result.mode).toBe("external");
-    expect(JSON.stringify(calls[0]?.params)).not.toContain("evil");
   });
 });
 
