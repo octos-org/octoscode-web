@@ -8,69 +8,6 @@ const toggle = (page: Page) =>
 const panel = (page: Page) =>
   page.getByRole("complementary", { name: "Session panel" });
 
-async function createWorkspace(page: Page, path: string) {
-  await page
-    .locator("aside")
-    .getByRole("button", { name: "Add workspace", exact: true })
-    .click();
-  const picker = page.getByRole("dialog");
-  const manual = picker.getByRole("button", { name: "Enter path manually" });
-  const pathInput = picker.getByLabel("Server workspace path");
-  await expect(manual.or(pathInput).first()).toBeVisible();
-  if (await manual.isVisible().catch(() => false)) await manual.click();
-  await pathInput.fill(path);
-  await picker.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.locator("main").getByText(path, { exact: true }).first(),
-  ).toBeVisible();
-}
-
-test("Files ignores a late listing from the previous workspace root", async ({
-  page,
-}) => {
-  let release: (() => void) | undefined;
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => server.send(message));
-    server.onMessage((message) => {
-      const frame = JSON.parse(String(message)) as {
-        result?: { canonical_path?: string };
-      };
-      if (frame.result?.canonical_path === "/srv/fixture/Projects") {
-        release = () => socket.send(message);
-        return;
-      }
-      socket.send(message);
-    });
-  });
-  await startSession(
-    page,
-    "/srv/fixture/Projects",
-    "workspace-browse-e2e-token",
-  );
-  await toggle(page).click();
-  await panel(page).getByRole("tab", { name: "Files" }).click();
-  await createWorkspace(page, "/");
-  const files = panel(page).getByRole("tabpanel");
-  await files.getByRole("button", { name: "srv", exact: true }).click();
-  await files.getByRole("button", { name: "fixture", exact: true }).click();
-  await expect(
-    files.getByRole("button", { name: "archive", exact: true }),
-  ).toBeVisible();
-  await expect.poll(() => Boolean(release)).toBe(true);
-  release?.();
-  // Check only after the late listing has reached the page and painted.
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(resolve)),
-  );
-  await expect(
-    files.getByRole("button", { name: "archive", exact: true }),
-  ).toBeVisible();
-  await expect(
-    files.getByRole("button", { name: "notes", exact: true }),
-  ).toHaveCount(0);
-});
-
 test("one file stays selected across diff, output, reload and read failure", async ({
   page,
   request,

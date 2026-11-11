@@ -149,55 +149,10 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   const scopes = new Set(calls.map((call) => call.params.session_id));
   expect(scopes.size).toBe(1);
   expect([...scopes][0]).toEqual(expect.any(String));
-});
-
-test("ignores a late create response after the session view changes", async ({
-  page,
-}) => {
-  let release: (() => void) | undefined;
-  let lateReplyDelivered = false;
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    let createId: unknown = null;
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "cron/create") {
-        createId = frame.id;
-        release = () => server.send(message);
-        return;
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      socket.send(message);
-      if (JSON.parse(String(message)).id === createId) {
-        lateReplyDelivered = true;
-      }
-    });
-  });
-  await startSession(page, `/workspace/cron-create-${Date.now()}`);
-  const tasks = await openCron(page);
-  await openCreate(tasks);
-  await tasks.getByRole("radio", { name: "Once" }).check();
-  await tasks.getByLabel("Run at").fill("2027-01-02T03:04");
-  await tasks
-    .getByRole("textbox", { name: "What should Octos do?" })
-    .fill("Late job");
-  await tasks.getByRole("button", { name: "Create scheduled task" }).click();
-  await expect.poll(() => Boolean(release)).toBe(true);
+  // Scheduled tasks belongs to the open Session, so a new Session closes it: a
+  // late cron reply never has another Session's list to land in (T-0586).
   await page.getByRole("button", { name: "New session", exact: true }).click();
-  const next = await openCron(page);
-  await openCreate(next);
-  release?.();
-  // Check only after the late reply has reached the page and painted.
-  await expect.poll(() => lateReplyDelivered).toBe(true);
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(resolve)),
-  );
-  await expect(next.locator('[data-cron-job="cron-2"]')).toHaveCount(0);
-  await expect(
-    next.getByRole("button", { name: "Create scheduled task" }),
-  ).toBeEnabled();
+  await expect(tasks).toHaveCount(0);
 });
 
 test("shows how each run really went and opens the run it points at", async ({
