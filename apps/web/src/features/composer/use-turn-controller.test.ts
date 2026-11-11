@@ -12,6 +12,7 @@ import {
   type TurnControllerDependencies,
 } from "./use-turn-controller.ts";
 import { PromptTurnQueue } from "./turn-queue.ts";
+import { deferred } from "../session/session-record-test-fixture.ts";
 
 // The REAL queue-backed controller over a recording client: what is sent, in
 // what order, and who owns the live turn. Each case is a race that shipped or
@@ -251,29 +252,5 @@ function fakeClient(options?: {
           committed_seqs: [],
         })),
     ),
-  };
-}
-
-function deferred<Value>(): {
-  promise: Promise<Value>;
-  resolve(value: Value): void;
-  reject(reason: unknown): void;
-} {
-  let resolve: ((value: Value) => void) | undefined;
-  let reject: ((reason: unknown) => void) | undefined;
-  const promise = new Promise<Value>((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
-  });
-  return {
-    promise,
-    resolve(value) {
-      if (!resolve) throw new Error("Deferred promise is not initialized");
-      resolve(value);
-    },
-    reject(reason) {
-      if (!reject) throw new Error("Deferred promise is not initialized");
-      reject(reason);
-    },
   };
 }

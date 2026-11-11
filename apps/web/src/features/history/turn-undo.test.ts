@@ -13,14 +13,10 @@ import {
 import type { StorageLike } from "../connection/preferences.ts";
 import type { HistoryBinding } from "./history-binding.ts";
 import { resetTurnUndoControllers, turnUndoController } from "./turn-undo.ts";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 
-const caps = (methods: string[]): UiProtocolCapabilities => ({
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: methods,
-  supported_notifications: [],
-  supported_features: [],
-});
+const caps = (methods: string[]): UiProtocolCapabilities =>
+  appuiCaps({ methods });
 const FULL = caps([
   CORE_UI_METHODS.SESSION_HYDRATE,
   APPUI_SNAPSHOT_METHODS.LIST,

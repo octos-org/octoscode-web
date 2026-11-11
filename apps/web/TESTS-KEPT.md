@@ -253,6 +253,13 @@ async authority），不是 manager 集成面，**不合并到 manager fixture**
 - `model-settings`、`connector-oauth`、`driver-discovery`、`supervision/model`、`tab-session-lock-core`、`session-composer-drafts`、`session-draft-cache`、`background-turn-manager`、`timeline/model`、`autonomy/model`、`session-identity`、`seat-holder`、`intent`、`draft-estimate`、`strip-rank-4510`、`no-model-setup-gate`：逐条对过，无同语义重复。
 - **真实复制/焦点/移动布局/失败恢复**：`session-composer-drafts`（草稿跨会话隔离）、`panel-selection`（文件身份）、`FatalErrorBoundary`（崩溃脱敏）等，按任务要求不得误删。
 
+## lead 审批记录（11-11）
+
+通过并附执行边界（lead-web）：B1/B2 可合并，**每条原断言/每个负例及逐项变异必须保留**——不能只留合并后的最终状态。B3
+**不得按恢复重复删除**（runtime 未守 projection 的
+`protocol/replay_lossy`、`phase:"lossy"`、`dropped_count`，sequence
+gap 也是另一触发）；只允许同文件 setup 合并且这些断言逐项仍在并变异抓红。S1–S4 纯 fixture 去重批准；S5/S6 不提前抽象正确。净减可低于预估，不凑 2 万。
+
 ## 给 lead 的审批点
 
 1. B1/B2/B3 的行为合并是否认可「共同可观察失败」成立。

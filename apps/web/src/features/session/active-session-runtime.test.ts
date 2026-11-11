@@ -13,6 +13,8 @@ import {
 } from "@octos-org/octoscode-client";
 import type { CandidateSessionSnapshot } from "./candidate-session.ts";
 import type { SessionConnectionInput } from "./connection-lifecycle.ts";
+import { deferred } from "./session-record-test-fixture.ts";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 import {
   ActiveSessionRuntime,
   type ActiveSessionRuntimeEvent,
@@ -320,35 +322,7 @@ function scopedNotification(
 }
 
 function capabilities(): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos-ui/v1alpha1",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 2,
-    supported_methods: [],
-    supported_notifications: [],
-    supported_features: [],
-  };
-}
-
-function deferred<Value>(): {
-  promise: Promise<Value>;
-  resolve(value: Value): void;
-  reject(reason: unknown): void;
-} {
-  let resolve!: (value: Value) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<Value>((complete, fail) => {
-    resolve = complete;
-    reject = fail;
-  });
-  return {
-    promise,
-    resolve,
-    reject,
-  };
+  return appuiCaps({});
 }
 
 async function flushMicrotasks(): Promise<void> {

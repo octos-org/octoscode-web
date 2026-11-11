@@ -14,11 +14,10 @@ import {
   type HistoryCommands,
 } from "./history-binding.ts";
 import { HistoryCoordinator } from "./history-coordinator.ts";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 
-const caps: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [
+const caps: UiProtocolCapabilities = appuiCaps({
+  methods: [
     CORE_UI_METHODS.SESSION_OPEN,
     CORE_UI_METHODS.SESSION_HYDRATE,
     CORE_UI_METHODS.SESSION_ROLLBACK,
@@ -27,9 +26,7 @@ const caps: UiProtocolCapabilities = {
     APPUI_SNAPSHOT_METHODS.LIST,
     APPUI_SNAPSHOT_METHODS.RESTORE,
   ],
-  supported_notifications: [],
-  supported_features: [],
-};
+});
 const A = "coding:local:A";
 function thread(
   sessionId: string,
