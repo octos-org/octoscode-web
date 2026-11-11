@@ -42,7 +42,8 @@ export async function connectAndStartWorkspace(
 
 /**
  * Connect with `token` and start a Session by typing `cwd` into the workspace
- * path, Enter for each step. Resolves once the composer accepts input.
+ * path (past the folder browser, for tokens that advertise it), Enter for each
+ * step. Resolves once the composer accepts input.
  */
 export async function startSession(
   page: Page,
@@ -53,6 +54,10 @@ export async function startSession(
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
+  const manual = page.getByRole("button", { name: "Enter path manually" });
+  const path = page.getByLabel("Server workspace path");
+  await expect(manual.or(path).first()).toBeVisible();
+  if (await manual.isVisible()) await manual.click();
   await page.getByLabel("Server workspace path").fill(cwd);
   await page.getByLabel("Server workspace path").press("Enter");
   await expect(
@@ -68,4 +73,38 @@ export async function startSession(
 export function runFolder(name: string): string {
   const { retry, repeatEachIndex } = test.info();
   return `/srv/work/${name}-run${repeatEachIndex}-${retry}`;
+}
+
+/** The open Session's id, read from the `?s=` reference in the address. */
+export async function openSessionId(page: Page): Promise<string> {
+  let reference: string | null = null;
+  await expect
+    .poll(() => (reference = new URL(page.url()).searchParams.get("s")))
+    .not.toBeNull();
+  return (JSON.parse(reference!) as string[])[2]!;
+}
+
+/**
+ * Deliver `name` to the Session the way Core's send_file does and open its
+ * preview. `body` is the file; without one the fixture writes a sample.
+ */
+export async function previewDelivery(
+  page: Page,
+  sessionId: string,
+  name: string,
+  body?: Buffer,
+) {
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=${encodeURIComponent(name)}&valid=1`,
+    body ? { data: body } : {},
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator(`[data-attachment="${name}"]`);
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = item
+    .locator(".artifact-preview, [data-artifact-kind]")
+    .last();
+  await expect(preview).toBeVisible();
+  return { item, preview };
 }

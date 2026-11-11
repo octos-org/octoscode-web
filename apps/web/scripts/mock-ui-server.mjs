@@ -2376,19 +2376,25 @@ const http = createServer(async (request, response) => {
     // for a large file sent from the workspace).
     const corrupt = url.searchParams.get("corrupt") === "1";
     const overReaderLimit = url.searchParams.get("oversized") === "1";
+    // T-0568: a request body is the file itself (the scanned-PDF fixtures).
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const posted = Buffer.concat(chunks);
     const deliveredFile = {
       type: artifactMime(name),
-      bytes: corrupt
-        ? Buffer.from(
-            name.endsWith(".pdf")
-              ? "%PDF-1.7\nnot a pdf body\n%%EOF\n"
-              : "damaged bytes, not an image\n",
-          )
-        : validPreview
-          ? await previewFixture(name)
-          : name.endsWith(".png")
-            ? FIXTURE_PNG
-            : Buffer.from(`fixture ${name}`),
+      bytes: posted.length
+        ? posted
+        : corrupt
+          ? Buffer.from(
+              name.endsWith(".pdf")
+                ? "%PDF-1.7\nnot a pdf body\n%%EOF\n"
+                : "damaged bytes, not an image\n",
+            )
+          : validPreview
+            ? await previewFixture(name)
+            : name.endsWith(".png")
+              ? FIXTURE_PNG
+              : Buffer.from(`fixture ${name}`),
       overReaderLimit,
     };
     deliveredFiles.set(deliveredFileKey(sessionId, path), deliveredFile);

@@ -95,3 +95,68 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+
+.recognition {
+  display: grid;
+  max-width: 75ch;
+  gap: var(--dsw-space-2);
+  padding-top: var(--dsw-space-2);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.recognition p {
+  margin: 0;
+}
+
+.recognitionControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dsw-space-2);
+}
+
+.recognitionControls label {
+  display: flex;
+  align-items: center;
+  gap: var(--dsw-space-2);
+}
+
+.recognitionControls select,
+.recognitionControls button {
+  min-height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.recognitionControls select {
+  background: var(--dsw-alias-bg-base);
+}
+
+.recognitionControls button {
+  padding: 0 var(--dsw-space-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.recognitionControls button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.recognitionControls progress {
+  width: min(240px, 100%);
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.warn {
+  color: var(--dsw-alias-state-warn-text);
+}
+
+.failure {
+  color: var(--dsw-alias-state-error-text);
+}
+
+.note {
+  color: var(--dsw-alias-label-tertiary);
+}

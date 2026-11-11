@@ -1,27 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(
-  page: Page,
-  workspace: string,
-  token = "tab-scoped-e2e-token",
-) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  const manual = page.getByRole("button", { name: "Enter path manually" });
-  const pathInput = page.getByLabel("Server workspace path");
-  await expect(manual.or(pathInput).first()).toBeVisible();
-  if (await manual.isVisible().catch(() => false)) await manual.click();
-  await pathInput.fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 async function send(page: Page, text: string) {
   const composer = page.getByRole("textbox", { name: "Message Octos" });
@@ -69,7 +48,11 @@ test("Files ignores a late listing from the previous workspace root", async ({
       socket.send(message);
     });
   });
-  await start(page, "/srv/fixture/Projects", "workspace-browse-e2e-token");
+  await startSession(
+    page,
+    "/srv/fixture/Projects",
+    "workspace-browse-e2e-token",
+  );
   await toggle(page).click();
   await panel(page).getByRole("tab", { name: "Files" }).click();
   await createWorkspace(page, "/");
@@ -145,7 +128,7 @@ test("one file stays selected across diff, output, reload and read failure", asy
       socket.send(JSON.stringify(frame));
     });
   });
-  await start(page, `/workspace/panel-linked-${Date.now()}`);
+  await startSession(page, `/workspace/panel-linked-${Date.now()}`);
   await send(page, "Write the linked report");
   await expect(toggle(page)).toHaveAccessibleName("Session panel, 1 changed");
   const id = JSON.parse(
@@ -236,7 +219,7 @@ test("Files browses the real workspace tree and previews any file in it", async 
 }) => {
   // T-0417: the server lists the workspace (dirs AND files); the panel
   // browses folders, pages, and opens a plain workspace file for preview.
-  await start(page, `/workspace/file-tree-${Date.now()}`);
+  await startSession(page, `/workspace/file-tree-${Date.now()}`);
   await toggle(page).click();
   await panel(page).getByRole("tab", { name: "Files" }).click();
   const files = panel(page).getByRole("tabpanel");

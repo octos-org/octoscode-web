@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import {
+  connectAndStartWorkspace,
+  FIXTURE_ORIGIN,
+  openSessionId,
+} from "./fixture-session";
 
 async function openConversation(page: Page, cwd: string): Promise<string> {
   await connectAndStartWorkspace(page, cwd);
@@ -9,11 +13,7 @@ async function openConversation(page: Page, cwd: string): Promise<string> {
   await expect(
     page.locator(".markdown-body").getByText("Raw HTML stays inert:"),
   ).toBeVisible();
-  let reference: string | null = null;
-  await expect
-    .poll(() => (reference = new URL(page.url()).searchParams.get("s")))
-    .not.toBeNull();
-  return (JSON.parse(reference!) as string[])[2]!;
+  return openSessionId(page);
 }
 
 test("shows files the agent delivers, previews images, downloads them, and keeps them on reload", async ({

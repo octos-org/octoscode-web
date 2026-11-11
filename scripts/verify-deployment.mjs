@@ -137,6 +137,56 @@ for (const block of locationBlocks) {
   }
 }
 
+// T-0568: WebAssembly may compile only in the OCR worker's directory. Every
+// other policy (documents, assets, the pdf.js worker) keeps script-src 'self'.
+const policies = [
+  ...effectiveNginx.matchAll(/add_header Content-Security-Policy "([^"]+)"/g),
+].map((match) => match[1]);
+const ocrLocation = locationBlocks.find((block) =>
+  /^location\s+\^~\s+\/assets\/ocr-\s*\{/.test(block),
+);
+assert(ocrLocation, "nginx needs the OCR worker location /assets/ocr-");
+const pagePolicy = policies[0];
+assert(
+  ocrLocation.includes(
+    `"${pagePolicy.replace("script-src 'self';", "script-src 'self' 'wasm-unsafe-eval';")}"`,
+  ),
+  "the OCR location's policy must be the page policy plus 'wasm-unsafe-eval'",
+);
+assert(
+  policies.filter((policy) => policy.includes("wasm-unsafe-eval")).length ===
+    1 && !policies.some((policy) => policy.includes("'unsafe-eval'")),
+  "only the OCR location may allow WebAssembly, and no policy may allow eval",
+);
+assert(
+  /gzip_types[^;]*application\/wasm;/.test(effectiveNginx),
+  "nginx must compress the OCR engine's WebAssembly",
+);
+const staticDirectories = (await readdir(resolve(dist, "assets"))).filter(
+  (name) => /^(?:ocr|pdfjs)-[0-9a-f]{8}$/.test(name),
+);
+for (const [group, files] of Object.entries({
+  pdfjs: ["jbig2_nowasm_fallback.js", "openjpeg_nowasm_fallback.js"],
+  ocr: [
+    "worker.min.js",
+    "probe.js",
+    "tesseract-core-simd-lstm.js",
+    "tesseract-core-simd-lstm.wasm",
+    "eng.traineddata.gz",
+    "chi_sim.traineddata.gz",
+  ],
+})) {
+  const directory = staticDirectories.find((name) =>
+    name.startsWith(`${group}-`),
+  );
+  assert(directory, `built assets are missing the ${group} directory`);
+  for (const file of files)
+    assert(
+      (await stat(resolve(dist, "assets", directory, file))).size > 0,
+      `built ${group} asset ${file} is missing`,
+    );
+}
+
 assert(manifest.schema_version === 2, "build manifest schema is invalid");
 assert(
   manifest.supported_octos_contract?.protocol === "octos-ui/v1alpha1",

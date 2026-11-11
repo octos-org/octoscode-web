@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import { errorMessage } from "../../shared/errors.ts";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { PdfOcr, type OcrResult } from "./pdf-ocr.ts";
+import { PdfTextRecognition } from "./PdfTextRecognition.tsx";
 import styles from "./PdfPreview.module.css";
+import { staticAssetDirectory } from "./static-assets.ts";
 
 const MAX_CANVAS_PIXELS = 4_000_000;
 const MAX_CANVAS_EDGE = 2_048;
@@ -18,8 +21,16 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
   const [pageText, setPageText] = useState("");
   const [textOpen, setTextOpen] = useState(false);
   const [textLoading, setTextLoading] = useState(false);
+  // The page whose text layer was last read; recognition is offered only there.
+  const [textPage, setTextPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(true);
+  // One recognizer and its in-memory results per open file.
+  const ocr = useMemo(
+    () => ({ engine: new PdfOcr(), results: new Map<string, OcrResult>() }),
+    [blob],
+  );
+  useEffect(() => () => ocr.engine.dispose(), [ocr]);
 
   useEffect(() => {
     let current = true;
@@ -39,6 +50,9 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
           data: new Uint8Array(buffer),
           worker,
           useWasm: false,
+          // Decoders for CCITT, JBIG2 and JPEG 2000 scans; without them those
+          // images are skipped and the page renders blank (T-0567).
+          wasmUrl: staticAssetDirectory("pdfjs"),
           disableFontFace: true,
           maxImageSize: 16_777_216,
         });
@@ -145,6 +159,7 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
                 .join(" ")
                 .slice(0, MAX_PAGE_TEXT_CHARACTERS),
             );
+            setTextPage(pageNumber);
             setTextLoading(false);
             page.cleanup();
           },
@@ -168,6 +183,46 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
       current = false;
     };
   }, [document, pageNumber, textOpen]);
+
+  const renderForRecognition = useCallback(
+    async (signal: AbortSignal) => {
+      if (!document) throw new Error("No document is open");
+      const page = await document.getPage(pageNumber);
+      const canvas = globalThis.document.createElement("canvas");
+      try {
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({
+          scale: Math.min(
+            MAX_CANVAS_EDGE / base.width,
+            MAX_CANVAS_EDGE / base.height,
+            Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height)),
+          ),
+        });
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) throw new Error("Canvas is unavailable");
+        const task = page.render({ canvas, canvasContext: context, viewport });
+        const stop = () => task.cancel();
+        signal.addEventListener("abort", stop, { once: true });
+        await task.promise.finally(() =>
+          signal.removeEventListener("abort", stop),
+        );
+        return await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob(
+            (image) =>
+              image ? resolve(image) : reject(new Error("Canvas is empty")),
+            "image/png",
+          ),
+        );
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+        page.cleanup();
+      }
+    },
+    [document, pageNumber],
+  );
 
   return (
     <div className={styles.pdf} aria-busy={rendering}>
@@ -244,6 +299,14 @@ export function PdfPreview({ blob, name }: { blob: Blob; name: string }) {
                   "This page has no text layer. It may be a scanned image, which can't be selected or searched here.",
                 )}
           </pre>
+          {textOpen && !textLoading && !pageText && textPage === pageNumber ? (
+            <PdfTextRecognition
+              pageNumber={pageNumber}
+              renderPage={renderForRecognition}
+              ocr={ocr.engine}
+              results={ocr.results}
+            />
+          ) : null}
         </details>
       ) : null}
     </div>

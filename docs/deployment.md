@@ -79,6 +79,16 @@ classes. Remote transcript images are blocked, so `img-src` does not grant
 arbitrary HTTPS origins. CI runs both the semantic deployment verifier (against
 comment-stripped configuration) and `nginx -t`.
 
+Scanned PDFs are read locally in the browser on request: Tesseract.js runs in a
+worker from `assets/ocr-<hash>/`, whose WebAssembly needs `'wasm-unsafe-eval'`.
+The reference grants it only in `location ^~ /assets/ocr-`. A dedicated worker
+runs under its own script's policy, so pages and every other asset keep
+`script-src 'self'`. Custom ingress must carry that location over; without it
+the app reports that text recognition is unavailable on this server. The
+reference also compresses `application/wasm`. pdf.js's decoders for
+black-and-white (CCITT, JBIG2) and JPEG 2000 scans are plain JavaScript in
+`assets/pdfjs-<hash>/` and need no policy change.
+
 Authenticated file transfer retains Core's blob REST routes. Uploads use a
 Bearer header and confirmed Profile header; downloads also bind the confirmed
 Session. Tokens are never added to blob URL queries. The reference proxy keeps

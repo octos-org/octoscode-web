@@ -1,31 +1,17 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 // Cross-tab session lock (#56): two tabs in the SAME browser context share
 // the Web Locks origin, so a second tab opening the same session must see
 // the lock banner, sending stays gated, Take-over steals the lock, and the
 // first tab is told it lost the session — both directions.
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const BANNER_TEXT =
   "This session is open in another tab. Sending is disabled here until you take over.";
-
-async function start(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByLabel("Server workspace path").fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
 
 test("a second tab sees the lock, takes over, and the first tab sees the loss", async ({
   page,
 }) => {
-  await start(page, "/workspace/tab-lock");
+  await startSession(page, "/workspace/tab-lock");
 
   // Tab A: copy the confirmed session link from Settings → General.
   await page
@@ -56,7 +42,7 @@ test("a second tab sees the lock, takes over, and the first tab sees the loss", 
   // offers the conversation.
   const tabB = await page.context().newPage();
   await tabB.goto(link!);
-  await tabB.getByLabel("Server origin").fill(ORIGIN);
+  await tabB.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await tabB
     .getByLabel("Auth token", { exact: true })
     .fill("tab-scoped-e2e-token");
