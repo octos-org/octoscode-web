@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { type TurnMedia } from "@octos-org/octoscode-client/media";
+import {
+  MAX_UPLOAD_BYTES,
+  type TurnMedia,
+} from "@octos-org/octoscode-client/media";
 import {
   AttachmentDraftStore,
+  MAX_IMAGE_BYTES,
   type AttachmentScope,
   type AttachmentUploadCommands,
 } from "./attachment-drafts.ts";
@@ -107,5 +111,24 @@ describe("per-Session attachment drafts", () => {
       "synthetic-secret",
     );
     expect(JSON.stringify(store.getSnapshot())).not.toContain("private-path");
+  });
+
+  it("refuses files over the upload size caps before they become drafts", () => {
+    const { store } = fixture();
+    const sized = (name: string, type: string, bytes: number) =>
+      new File([new Uint8Array(bytes)], name, { type });
+    expect(
+      store.selectFiles([
+        sized("photo.png", "image/png", MAX_IMAGE_BYTES + 1),
+        sized("report.pdf", "application/pdf", MAX_UPLOAD_BYTES + 1),
+        sized("edge.png", "image/png", MAX_IMAGE_BYTES),
+      ]),
+    ).toEqual([
+      { name: "photo.png", reason: "too-large" },
+      { name: "report.pdf", reason: "too-large" },
+    ]);
+    expect(store.getSnapshot().entries.map((entry) => entry.name)).toEqual([
+      "edge.png",
+    ]);
   });
 });
