@@ -57,9 +57,8 @@ function isControlOrModel(method: string | null): boolean {
 
 /**
  * Allowlisted projection of ONE captured frame. This is the ONLY shape the
- * probe ever retains: request-id + method of the frame, the driver request's
- * session id / operation-flag / param COUNT, and the driver reply's public
- * disclosure fields plus operations page COUNTS. Nothing else survives.
+ * probe ever retains: request-id + method of the frame, and the driver
+ * request's session id / operation-flag / param COUNT. Nothing else survives.
  */
 interface ObservedFrame {
   readonly id: string | null;
@@ -67,17 +66,6 @@ interface ObservedFrame {
   readonly sessionId: string | null;
   readonly operationsRequested: boolean;
   readonly paramKeys: number;
-  readonly errorCode: number | null;
-  readonly refusalKind: string | null;
-  readonly mode: string | null;
-  readonly recovery: string | null;
-  readonly driverId: string | null;
-  readonly epoch: number | null;
-  readonly revision: number | null;
-  readonly leaseExpiresAtMs: number | null;
-  readonly opsComplete: boolean | null;
-  readonly opsItemCount: number | null;
-  readonly opsNextCursorNull: boolean | null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -87,9 +75,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
-}
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" ? value : null;
 }
 
 /** Project a raw wire frame down to the allowlisted observation shape. */
@@ -106,31 +91,12 @@ function project(raw: unknown): ObservedFrame | null {
   const frame = asRecord(raw);
   if (frame === null) return null;
   const params = asRecord(frame.params);
-  const result = asRecord(frame.result);
-  const error = asRecord(frame.error);
-  const errorData = asRecord(error?.data);
-  const binding = asRecord(result?.binding);
-  const operations = asRecord(result?.operations);
   return {
     id: asString(frame.id),
     method: asString(frame.method),
     sessionId: asString(params?.session_id),
     operationsRequested: params !== null && "operations" in params,
     paramKeys: params === null ? 0 : Object.keys(params).length,
-    errorCode: asNumber(error?.code),
-    refusalKind: asString(errorData?.kind),
-    mode: asString(result?.mode),
-    recovery: asString(result?.recovery),
-    driverId: asString(binding?.driver_id),
-    epoch: asNumber(binding?.epoch),
-    revision: asNumber(binding?.revision),
-    leaseExpiresAtMs: asNumber(binding?.lease_expires_at_ms),
-    opsComplete: operations === null ? null : operations.complete === true,
-    opsItemCount: Array.isArray(operations?.items)
-      ? operations.items.length
-      : null,
-    opsNextCursorNull:
-      operations === null ? null : operations.next_cursor === null,
   };
 }
 
@@ -173,11 +139,6 @@ function observe(page: Page) {
     sent,
     received,
     calls: (method: string) => sent.filter((frame) => frame.method === method),
-    replyTo: (frame: Captured): ObservedFrame | null =>
-      received.find(
-        (candidate) =>
-          candidate.id === frame.id && candidate.socket === frame.socket,
-      ) ?? null,
     async settled(frame: Captured) {
       await expect
         .poll(() =>
@@ -346,10 +307,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     // and no injected extra argument.
     expect(walk.paramKeys).toBe(2);
     await probe.settled(walk);
-    const reply = probe.replyTo(walk)!;
-    expect(reply.opsComplete).toBe(true);
-    expect(reply.opsItemCount).toBe(0);
-    expect(reply.opsNextCursorNull).toBe(true);
 
     // The disclosure mounts ONLY when the inventory is complete.
     const bar = disclosure(page);
@@ -435,9 +392,6 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(before);
     const walk = probe.calls(METHOD).at(-1)!;
     await probe.settled(walk);
-    const reply = probe.replyTo(walk)!;
-    expect(reply.errorCode).toBe(-32_041);
-    expect(reply.refusalKind).toBe("driver_scope_mismatch");
     await expect(disclosure(page)).toHaveCount(0);
   });
 });

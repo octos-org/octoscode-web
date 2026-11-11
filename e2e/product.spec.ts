@@ -1011,48 +1011,12 @@ test("preserves Octoscode keyless-provider onboarding semantics", async ({
 
 test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await connectAndStartWorkspace(page);
 
-  const timestamp = productNavigation(page)
-    .locator('[class*="sessionTime"]')
-    .first();
-  const samplePresentation = () =>
-    timestamp.evaluate((element) => {
-      const ancestors = [];
-      for (
-        let node: Element | null = element;
-        node;
-        node = node.parentElement
-      ) {
-        const style = getComputedStyle(node);
-        ancestors.push({
-          tag: node.tagName,
-          className: node.className,
-          color: style.color,
-          backgroundColor: style.backgroundColor,
-          opacity: style.opacity,
-          animationName: style.animationName,
-          animationDuration: style.animationDuration,
-        });
-      }
-      return {
-        ancestors,
-        animations: document.getAnimations().map((animation) => ({
-          playState: animation.playState,
-          currentTime: animation.currentTime,
-          timing: animation.effect?.getComputedTiming(),
-        })),
-      };
-    });
-  const before = await samplePresentation();
-  // Preserve the original immediate audit as diagnostic evidence, separately
-  // from the steady-frame assertion. A finite row entrance changes composited
-  // text opacity; it is not the final semantic foreground color.
-  const entering = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
+  // Audit the steady frame: a finite row entrance changes composited text
+  // opacity; it is not the final semantic foreground color.
   await productNavigation(page).evaluate(async (navigation) => {
     const finite = navigation
       .getAnimations({ subtree: true })
@@ -1064,37 +1028,32 @@ test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
       finite.map((animation) => animation.finished.catch(() => {})),
     );
   });
+  const timestamp = productNavigation(page)
+    .locator('[class*="sessionTime"]')
+    .first();
   await expect
-    .poll(async () =>
-      (await samplePresentation()).ancestors.every(
-        (node) => Number(node.opacity) === 1,
-      ),
+    .poll(() =>
+      timestamp.evaluate((element) => {
+        for (
+          let node: Element | null = element;
+          node;
+          node = node.parentElement
+        )
+          if (Number(getComputedStyle(node).opacity) !== 1) return false;
+        return true;
+      }),
     )
     .toBe(true);
-  const after = await samplePresentation();
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
-  await testInfo.attach("dark-shell-steady-frame-contrast", {
-    contentType: "application/json",
-    body: JSON.stringify(
-      {
-        before,
-        enteringViolations: entering.violations,
-        after,
-        steadyViolations: results.violations,
-      },
-      null,
-      2,
-    ),
-  });
   // axe's label-content-name-mismatch walks the whole subtree of an
   // aria-labelled element, so a workspace TREE CONTAINER (role=treeitem with
   // aria-expanded) is flagged even though its accessible name is exactly the
   // workspace's own visible row text and the nested session rows are
   // interactive elements with accessible names of their own. Container tree
   // items are scoped out here, documented; every other violation must be
-  // empty. Full output stays in the attachment above.
+  // empty.
   const containerTreeLabelMismatch = (violation: {
     id: string;
     nodes: { html: string }[];

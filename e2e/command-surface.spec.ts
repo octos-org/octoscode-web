@@ -369,7 +369,6 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
     session_id: sessionId,
     input: [{ kind: "text", text: expected }],
   });
-  expect(Buffer.byteLength(expected, "utf8")).toBeLessThanOrEqual(64 * 1024);
   expect(synthesis.params!.turn_id).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   );

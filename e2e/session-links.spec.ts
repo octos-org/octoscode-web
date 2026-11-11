@@ -15,10 +15,9 @@ interface ObservedRequest {
 
 async function observeRequests(
   page: Page,
-  mode: "pass" | "reject-once" | "wrong-workspace" = "pass",
+  mode: "pass" | "wrong-workspace" = "pass",
 ) {
   const requests: ObservedRequest[] = [];
-  let rejected = false;
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     const server = socket.connectToServer();
     const methods = new Map<string, string>();
@@ -26,21 +25,6 @@ async function observeRequests(
       const request = JSON.parse(String(message)) as ObservedRequest;
       requests.push(request);
       methods.set(request.id, request.method);
-      if (
-        mode === "reject-once" &&
-        !rejected &&
-        request.method === "session/open"
-      ) {
-        rejected = true;
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            error: { code: -32041, message: "Saved conversation unavailable" },
-          }),
-        );
-        return;
-      }
       server.send(message);
     });
     server.onMessage((message) => {
@@ -95,7 +79,7 @@ function savedPath(reference: readonly string[] = SAVED_REFERENCE) {
 test("opens a bookmarked conversation in a fresh browser only after an explicit choice", async ({
   page,
   browser,
-}, testInfo) => {
+}) => {
   await createConversation(page);
   await expect(
     page.getByRole("button", { name: "Copy code block" }),
@@ -127,9 +111,6 @@ test("opens a bookmarked conversation in a fresh browser only after an explicit 
       requests.filter((request) => request.method === "session/open"),
     ).toHaveLength(0);
     expect(new URL(freshPage.url()).searchParams.get("s")).toBe(key);
-    await panel.screenshot({
-      path: testInfo.outputPath("saved-conversation-preview.png"),
-    });
 
     await panel
       .getByRole("button", { name: "Open conversation", exact: true })

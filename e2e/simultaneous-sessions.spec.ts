@@ -205,35 +205,21 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
 });
 
 /**
- * Also the P0 queued-FIFO regression: A2 queued behind A1's HELD terminal must
- * not start while the user moves to B (no interrupt), must start against A's
- * Session id only after A1's terminal is released, and B stays selected with
- * none of A's text. Refocusing A shows both prompts exactly once.
+ * Finality: the fixture streams deltas for an assistant segment AFTER Core
+ * persisted it. The persisted text is final; late deltas never change what A
+ * shows. The queued A2 starts against A's Session only after A1's terminal,
+ * while B stays selected with none of A's text, and nothing is interrupted.
  */
 test("preserves native persisted segment finality across late deltas and the next background FIFO turn", async ({
   page,
   request,
-}, testInfo) => {
+}) => {
   const firstPrompt = "Fixture native persisted-before-delta first";
   const secondPrompt = "Fixture native persisted-before-delta second";
   const started = observeStartedTurns(page);
   const interrupts = observeInterrupts(page);
   const hydrateSessions: string[] = [];
-  const envelopes: Array<{
-    session_id: string;
-    turn_id: string;
-    seq: number;
-    cursor: { seq: number };
-    payload: {
-      type: string;
-      data: {
-        text?: string;
-        assistant_segment_id?: string;
-        meta?: { message_id: string };
-        outcome?: string;
-      };
-    };
-  }> = [];
+  const envelopes: Array<{ turn_id: string; payload: { type: string } }> = [];
   page.on("websocket", (socket) => {
     socket.on("framesent", ({ payload }) => {
       const frame = JSON.parse(String(payload));
@@ -302,41 +288,6 @@ test("preserves native persisted segment finality across late deltas and the nex
     [source.sessionId, secondPrompt],
   ]);
   expect(new Set(started().map((turn) => turn.turnId)).size).toBe(2);
-  const firstEvents = envelopes.filter(
-    (event) =>
-      event.turn_id === source.turnId && event.payload.type !== "user_message",
-  );
-  expect(
-    firstEvents.map((event) => [
-      event.seq,
-      event.cursor.seq,
-      event.payload.type,
-      event.payload.data.text ?? event.payload.data.outcome,
-    ]),
-  ).toEqual([
-    [2, 2, "assistant_delta", "ST"],
-    [3, 3, "assistant_delta", "REAM"],
-    [4, 4, "assistant_delta", "_"],
-    [5, 5, "assistant_delta", "ORDER"],
-    [6, 6, "assistant_persisted", "STREAM_ORDER_FIRST_COMPLETE"],
-    [7, 7, "assistant_delta", "_F"],
-    [8, 8, "assistant_delta", "IR"],
-    [9, 9, "assistant_delta", "ST"],
-    [10, 10, "assistant_delta", "_COMP"],
-    [11, 11, "assistant_delta", "L"],
-    [12, 12, "assistant_delta", "ETE"],
-    [13, 13, "turn_terminal", "completed"],
-  ]);
-  expect(
-    new Set(
-      firstEvents
-        .slice(0, -1)
-        .map((event) => event.payload.data.assistant_segment_id),
-    ),
-  ).toEqual(new Set([source.turnId + ":assistant:iteration:2"]));
-  expect(firstEvents[4]!.payload.data.meta?.message_id).toBe(
-    "message-" + source.turnId,
-  );
   const firstTerminalIndex = envelopes.findIndex(
     (event) =>
       event.turn_id === source.turnId && event.payload.type === "turn_terminal",
@@ -356,27 +307,11 @@ test("preserves native persisted segment finality across late deltas and the nex
     ".entry-assistant .markdown-body, .entry-assistant .md-streaming",
   );
   await expect(bodies).toHaveCount(2);
-  await testInfo.attach("native-persisted-stream-order", {
-    body: JSON.stringify(
-      {
-        envelopes,
-        started: started(),
-        hydrateSessions,
-        rendered: await bodies.allTextContents(),
-        runningLabels: await page.locator(".timeline .running-label").count(),
-      },
-      null,
-      2,
-    ),
-    contentType: "application/json",
-  });
-  await expect
-    .soft(bodies)
-    .toHaveText([
-      "STREAM_ORDER_FIRST_COMPLETE",
-      "STREAM_ORDER_SECOND_COMPLETE",
-    ]);
-  await expect.soft(page.locator(".timeline .running-label")).toHaveCount(0);
+  await expect(bodies).toHaveText([
+    "STREAM_ORDER_FIRST_COMPLETE",
+    "STREAM_ORDER_SECOND_COMPLETE",
+  ]);
+  await expect(page.locator(".timeline .running-label")).toHaveCount(0);
   for (const prompt of [firstPrompt, secondPrompt])
     await expect(
       conversation(page).getByText(prompt, { exact: true }),

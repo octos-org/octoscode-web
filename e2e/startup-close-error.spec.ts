@@ -1,4 +1,4 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // T-0177: a launch whose socket closes used to show its error for half a
 // second, until the automatic reconnect erased it. Each case holds the error
@@ -8,42 +8,17 @@ const PERMISSION =
   "This account can't open the Profile for this folder. Choose another folder, or ask the server admin for access and try again.";
 const SETTLE_MS = 6_000;
 
-type CloseOnOpen = {
-  close: { code: number; reason: string } | null;
-  refuseReconnect: boolean;
-  /** Replies with an RPC error instead, as a server that lost the Session. */
-  rejectOpen: boolean;
-};
-
-async function closeOnSessionOpen(page: Page, options: Partial<CloseOnOpen>) {
-  const control: CloseOnOpen = {
+/** Closes the socket at the next `session/open` once `control.close` is set. */
+async function closeOnSessionOpen(page: Page) {
+  const control: { close: { code: number; reason: string } | null } = {
     close: null,
-    refuseReconnect: false,
-    rejectOpen: false,
-    ...options,
   };
-  const sockets: WebSocketRoute[] = [];
   let attempts = 0;
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     attempts += 1;
-    if (control.refuseReconnect && attempts > 1) {
-      socket.close({ code: 1013, reason: "refused by test" });
-      return;
-    }
-    sockets.push(socket);
     const server = socket.connectToServer();
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
-      if (request.method === "session/open" && control.rejectOpen) {
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            error: { code: -32603, message: "session store unavailable" },
-          }),
-        );
-        return;
-      }
       if (request.method === "session/open" && control.close) {
         const close = control.close;
         control.close = null;
@@ -53,7 +28,7 @@ async function closeOnSessionOpen(page: Page, options: Partial<CloseOnOpen>) {
       server.send(message);
     });
   });
-  return { control, sockets, attempts: () => attempts };
+  return { control, attempts: () => attempts };
 }
 
 async function connect(page: Page, workspace: string) {
@@ -70,9 +45,8 @@ test("a 1008 launch explains the Profile and keeps the login across the reconnec
   page,
 }) => {
   const workspace = `/workspace/close-1008-${Date.now()}`;
-  const socket = await closeOnSessionOpen(page, {
-    close: { code: 1008, reason: "auth_expired" },
-  });
+  const socket = await closeOnSessionOpen(page);
+  socket.control.close = { code: 1008, reason: "auth_expired" };
   await connect(page, workspace);
   const start = page.getByRole("button", { name: "Start session" });
   await start.click();

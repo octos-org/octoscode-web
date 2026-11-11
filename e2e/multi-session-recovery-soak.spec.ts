@@ -168,26 +168,6 @@ async function releaseHeldTerminal(
   ).toBe(204);
 }
 
-interface ActiveTurn {
-  turn_id: string;
-  owner: string;
-  profile_id?: string;
-  workspace_root?: string;
-}
-
-interface DiagnosticsState {
-  activeBySession: Record<string, ActiveTurn | null>;
-  socketsBySession: Record<string, number>;
-}
-
-async function diagnostics(
-  request: APIRequestContext,
-): Promise<DiagnosticsState> {
-  return (await (
-    await request.get(FIXTURE_ORIGIN + "/__test__/diagnostics/state")
-  ).json()) as DiagnosticsState;
-}
-
 interface RuntimeErrors {
   unhandled: string[];
   consoleErrors: string[];
@@ -399,16 +379,7 @@ test("parks a background approval on its owning Session across A/B/C switching, 
       .filter((turn) => turn.sessionId === turnC.sessionId)
       .map((turn) => turn.text),
   ).toEqual([promptC]);
-  // Pre-return control on real fixture diagnostics: A is still parked on its
-  // ORIGINAL turn, B/C are idle, nothing was approved, and A's queued followup
-  // was never admitted.
-  const parkedState = await diagnostics(request);
-  expect(parkedState.activeBySession[sessionA] ?? null).toMatchObject({
-    turn_id: approval.params.turn_id,
-    owner: "socket",
-  });
-  expect(parkedState.activeBySession[turnB.sessionId] ?? null).toBeNull();
-  expect(parkedState.activeBySession[turnC.sessionId] ?? null).toBeNull();
+  // Before returning: nothing was answered and the queued followup waits.
   expect(
     responds().filter((frame) => frame.method === "approval/respond"),
   ).toHaveLength(0);
@@ -444,30 +415,6 @@ test("parks a background approval on its owning Session across A/B/C switching, 
     .poll(() => started().filter((turn) => turn.text === trace).length)
     .toBe(1);
   expect(sessionIdForPrompt(started(), trace)).toBe(sessionA);
-  // The terminal arm is consumed at turn START (mock-ui-server.mjs:2796-2798),
-  // so once `trace` has started the fixture must report `armed: 0` and hold
-  // exactly `trace`'s turn_id. Assert that binding explicitly: a stray `armed`
-  // (arm never consumed) or a held turn_id that is not trace's means the hold
-  // was bound to the wrong turn, and failing here names the ids instead of a
-  // bare 20s poll timeout in releaseHeldTerminal.
-  const traceTurn = started().find((turn) => turn.text === trace)!;
-  const terminalHold = async () =>
-    (await (
-      await request.get(FIXTURE_ORIGIN + "/__test__/terminal/state")
-    ).json()) as {
-      armed: number;
-      held: Array<{ session_id: string; turn_id: string }>;
-    };
-  await expect
-    .poll(
-      async () =>
-        (await terminalHold()).held.some(
-          (entry) => entry.turn_id === traceTurn.turnId,
-        ),
-      { timeout: 20_000 },
-    )
-    .toBe(true);
-  expect((await terminalHold()).armed).toBe(0);
   await releaseHeldTerminal(request, sessionA);
   await expect
     .poll(

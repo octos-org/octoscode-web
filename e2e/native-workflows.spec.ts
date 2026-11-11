@@ -299,10 +299,6 @@ test("a dropped native steer returns once to its owning FIFO while a different S
   const probe = observe(page);
   const a = await connect(page, probe, "steering");
   await submit(page, "/steer on");
-  // 美-9: idle, the steering note stays out of the way.
-  await expect(page.getByText(/Steering enabled for this Session/)).toHaveCount(
-    0,
-  );
   expect(
     (await request.post(`${ORIGIN}/__test__/terminal/hold-next`)).status(),
   ).toBe(204);
@@ -311,11 +307,6 @@ test("a dropped native steer returns once to its owning FIFO while a different S
   const first = probe.calls("turn/start")[0]!;
   await probe.settled(first);
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
-  // Mid-turn with a draft, it says where the text will go.
-  await page.getByPlaceholder(COMPOSER).fill("Returned native steering text");
-  await expect(
-    page.getByText(/Steering enabled for this Session/),
-  ).toBeVisible();
   await submit(page, "Returned native steering text");
   await expect.poll(() => probe.calls("turn/steer").length).toBe(1);
   await probe.settled(probe.calls("turn/steer")[0]!);

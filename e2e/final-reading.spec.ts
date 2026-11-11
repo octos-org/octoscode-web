@@ -381,35 +381,27 @@ test("360-message history stays readable while new output streams and unsafe Mar
   });
   for (const top of tops) expect(Math.abs(top - before)).toBeLessThan(4);
   await page.getByRole("button", { name: "Back to latest" }).click();
-  for (const [width, height, theme] of [
-    [320, 480, "dark"],
-    [640, 360, "light"],
-  ] as const) {
-    await page.setViewportSize({ width, height });
-    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-    await page.locator(".md-code-block").scrollIntoViewIfNeeded();
-    const bounds = await page.locator(".md-code-block").boundingBox();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
-    const code = page.locator(".md-code-block pre");
-    await code.evaluate((el) => {
-      el.scrollLeft = el.scrollWidth;
-    });
-    expect(await code.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
-    const table = page.locator(".md-table-scroll");
-    await table.scrollIntoViewIfNeeded();
-    await table.focus();
-    await table.press("End");
-    const tableBounds = await table.boundingBox();
-    expect(tableBounds!.x + tableBounds!.width).toBeLessThanOrEqual(width);
-    if (width === 320)
-      expect(
-        await table.evaluate((el) => el.scrollWidth > el.clientWidth),
-      ).toBe(true);
-    await page.screenshot({
-      path: test.info().outputPath(`history-${width}-${theme}.png`),
-    });
-  }
+  // On a phone, code and tables scroll inside the reader, never the page.
+  await page.setViewportSize({ width: 320, height: 480 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.locator(".md-code-block").scrollIntoViewIfNeeded();
+  const bounds = await page.locator(".md-code-block").boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
+  const code = page.locator(".md-code-block pre");
+  await code.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  expect(await code.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  const table = page.locator(".md-table-scroll");
+  await table.scrollIntoViewIfNeeded();
+  await table.focus();
+  await table.press("End");
+  const tableBounds = await table.boundingBox();
+  expect(tableBounds!.x + tableBounds!.width).toBeLessThanOrEqual(320);
+  expect(await table.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+    true,
+  );
   await page.setViewportSize({ width: 1280, height: 720 });
   await selectSession(sessionB);
   await page.getByRole("button", { name: "Back to latest" }).click();

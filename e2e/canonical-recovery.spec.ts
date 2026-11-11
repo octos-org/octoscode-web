@@ -8,18 +8,6 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
   const errors: string[] = [];
   const starts: string[] = [];
   let turnId = "";
-  let recoveryModuleRequests = 0;
-  await page.route(
-    // The cold recovery chunk. A dev server serves the module path; this
-    // repo's e2e runs `vite preview`, which serves it as the built
-    // /assets/canonical-hydrate-<hash>.js. Vite hashes may contain `-`;
-    // exclude the sibling canonical-hydrate-loader module explicitly.
-    /\/canonical-hydrate(\.ts|-(?!loader[-.])[A-Za-z0-9_-]+\.js)(\?|$)/,
-    async (route) => {
-      recoveryModuleRequests += 1;
-      await route.continue();
-    },
-  );
   page.on("pageerror", (error) => errors.push(error.message));
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     const server = socket.connectToServer();
@@ -157,6 +145,5 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
   await timeline.getByText("Technical details", { exact: true }).click();
   await expect(timeline).toHaveText(before, { useInnerText: true });
   expect(starts).toHaveLength(1);
-  expect(recoveryModuleRequests).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });

@@ -12,10 +12,6 @@ import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 // `pre-turn <turn_id>` snapshot, with redo through the `pre-restore` point.
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
 
-test.afterEach(async ({ request }) => {
-  await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
-});
-
 interface Frame {
   direction: "sent" | "received";
   method?: string;

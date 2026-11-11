@@ -1,49 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-
-async function start(page: Page, workspace: string, stable = false) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
+async function openConnectors(page: Page) {
   await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/srv/work/${workspace}${stable ? "" : `-${Date.now()}`}`);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
-}
-
-async function openConnectors(page: Page, chinese = false) {
-  const navigation = page.locator("aside");
-  const settingsButton = navigation.getByRole("button", {
-    name: chinese ? "设置" : "Settings",
-    exact: true,
-  });
-  if (!(await settingsButton.isVisible())) {
-    await page
-      .getByRole("button", {
-        name: chinese
-          ? "打开会话列表"
-          : /^(Open session list|Open navigation)$/,
-        exact: !chinese,
-      })
-      .click();
-  }
-  await settingsButton.click();
-  const settings = page.getByRole("dialog", {
-    name: chinese ? "设置" : "Settings",
-  });
+    .locator("aside")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
   await settings
-    .getByRole("button", {
-      name: chinese ? "连接器" : "Connectors",
-      exact: true,
-    })
+    .getByRole("button", { name: "Connectors", exact: true })
     .click();
   return settings;
 }
@@ -55,7 +21,7 @@ function connector(settings: ReturnType<Page["getByRole"]>, id: string) {
 test("manages HTTP connectors and keeps existing stdio controls", async ({
   page,
 }) => {
-  await start(page, "connector-management");
+  await startSession(page, `/srv/work/connector-management-${Date.now()}`);
   const settings = await openConnectors(page);
   const legacy = connector(settings, "legacy");
   const docs = connector(settings, "docs");
@@ -107,7 +73,7 @@ test("manages HTTP connectors and keeps existing stdio controls", async ({
 test("adds a stdio connector from the server's allowlist, never a command", async ({
   page,
 }) => {
-  await start(page, "connector-management");
+  await startSession(page, `/srv/work/connector-management-${Date.now()}`);
   const settings = await openConnectors(page);
   await expect(
     settings.getByText(
@@ -171,7 +137,7 @@ test("a delayed refresh blocks mutations and always releases busy state", async 
       socket.send(message);
     });
   });
-  await start(page, "connector-management");
+  await startSession(page, `/srv/work/connector-management-${Date.now()}`);
   const settings = await openConnectors(page);
   await settings.getByRole("button", { name: "Refresh" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
@@ -193,5 +159,5 @@ test("a delayed refresh blocks mutations and always releases busy state", async 
 });
 
 test.afterEach(async ({ request }) => {
-  await request.post(`${origin}/__test__/connectors/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/connectors/reset`);
 });

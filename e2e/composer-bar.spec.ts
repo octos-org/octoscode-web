@@ -1,65 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session.ts";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { observeSent } from "./turn-observers";
 
 const start = (page: Page, cwd: string) => startSession(page, cwd);
 
 const settings = (page: Page) =>
   page.getByRole("group", { name: "Message settings" });
-
-/** The fixture has no skills methods; advertise and answer them locally. */
-async function offerSkills(page: Page) {
-  const turnStarts: string[] = [];
-  const advertise = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(advertise);
-    if (value === null || typeof value !== "object") return value;
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        key,
-        key === "supported_methods" && Array.isArray(entry)
-          ? [...new Set([...entry, "profile/skills/list"])]
-          : advertise(entry),
-      ]),
-    );
-  };
-  await page.routeWebSocket(
-    (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
-    (route) => {
-      const server = route.connectToServer();
-      server.onMessage((message) =>
-        route.send(JSON.stringify(advertise(JSON.parse(String(message))))),
-      );
-      route.onMessage((message) => {
-        const request = JSON.parse(String(message));
-        if (request.method === "turn/start") turnStarts.push(request.id);
-        if (request.method !== "profile/skills/list") {
-          server.send(message);
-          return;
-        }
-        route.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-              profile_id: request.params.profile_id,
-              count: 1,
-              skills: [
-                {
-                  name: "office-docx",
-                  version: "1.0.0",
-                  tool_count: 3,
-                  source_repo: null,
-                },
-              ],
-            },
-          }),
-        );
-      });
-    },
-  );
-  return turnStarts;
-}
 
 test("another folder starts a new session that keeps the unsent text", async ({
   page,
@@ -113,7 +59,7 @@ test("sending waits for uploads, then carries the files and shows them on the me
       ],
     });
   });
-  const turnStarts = await offerSkills(page);
+  const turnStarts = observeSent(page, "turn/start");
   await start(page, "/workspace/composer-send-files");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
 
@@ -141,7 +87,7 @@ test("sending waits for uploads, then carries the files and shows them on the me
   await expect(page.locator(".composer")).toContainText(
     "Some files aren't uploaded yet.",
   );
-  expect(turnStarts).toEqual([]);
+  expect(turnStarts()).toEqual([]);
   await expect(composer).toHaveValue("Clean this up");
 
   finishUpload();
@@ -152,7 +98,7 @@ test("sending waits for uploads, then carries the files and shows them on the me
     "Some files aren't uploaded yet.",
   );
   await composer.press("Enter");
-  await expect.poll(() => turnStarts.length).toBe(1);
+  await expect.poll(() => turnStarts().length).toBe(1);
   await expect(attached(page)).toHaveCount(0);
   const message = page.locator("article").filter({ hasText: "Clean this up" });
   await expect(message).toContainText("sales.csv");

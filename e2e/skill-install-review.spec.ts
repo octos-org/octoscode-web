@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 /**
  * T-0420/T-0555: a skill source is reviewed against what the server reports.
@@ -9,7 +10,6 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * answered here with the shapes Core returns, and every install frame is
  * counted.
  */
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const SEARCH = "profile/skills/registry/search";
 const INSTALL = "profile/skills/install";
 const INSTALL_REVIEWED = "profile/skills/install_reviewed";
@@ -51,7 +51,6 @@ const BARE = {
 
 interface Fake {
   packages: Record<string, unknown>[];
-  searchFails: string | null;
   searches: number;
   /** Every install request the page sends, answered or not. */
   installs: Record<string, unknown>[];
@@ -84,7 +83,6 @@ async function fakeRegistry(page: Page, options: { reviewed?: boolean } = {}) {
     : [SEARCH, INSTALL, LIST];
   const fake: Fake = {
     packages: options.reviewed ? [REVIEWED, BARE] : [SAMPLE, BARE],
-    searchFails: null,
     searches: 0,
     installs: [],
     installFails: null,
@@ -129,20 +127,11 @@ async function fakeRegistry(page: Page, options: { reviewed?: boolean } = {}) {
           });
         } else if (method === SEARCH) {
           fake.searches += 1;
-          if (fake.searchFails)
-            route.send(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id,
-                error: { code: -32603, message: fake.searchFails },
-              }),
-            );
-          else
-            reply({
-              profile_id,
-              packages: fake.packages,
-              ...(options.reviewed ? { server_platform: "linux-x86_64" } : {}),
-            });
+          reply({
+            profile_id,
+            packages: fake.packages,
+            ...(options.reviewed ? { server_platform: "linux-x86_64" } : {}),
+          });
         } else if (method === INSTALL_REVIEWED) {
           fake.installs.push(params);
           if (fake.installFails === "hang") {
@@ -203,34 +192,12 @@ async function fakeRegistry(page: Page, options: { reviewed?: boolean } = {}) {
   return fake;
 }
 
-async function start(page: Page, display?: "zh") {
-  if (display === "zh")
-    await page.addInitScript(() =>
-      localStorage.setItem(
-        "octoscode.web.display.v1",
-        JSON.stringify({
-          version: 1,
-          theme: "terminal",
-          language: "zh",
-          vimMode: false,
-        }),
-      ),
-    );
-  await page.goto("/");
-  await page.locator("#connection-origin").fill(FIXTURE_ORIGIN);
-  const token = page.getByLabel(/^(Auth token|访问令牌)$/);
-  await token.fill("tab-scoped-e2e-token");
-  await token.press("Enter");
-  const path = page.getByLabel(/^(Server workspace path|服务器工作区路径)$/);
-  await path.fill(`/workspace/skill-review-${Date.now()}`);
-  await path.press("Enter");
-  const composer = page.getByRole("textbox", {
-    name: /^(Message Octos|给 Octos 发消息)$/,
-  });
-  await expect(composer).toBeEnabled();
+async function start(page: Page) {
+  await startSession(page, `/workspace/skill-review-${Date.now()}`);
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("/skills");
   await composer.press("Enter");
-  return page.getByRole("dialog", { name: /^(Profile skills|配置档案技能)$/ });
+  return page.getByRole("dialog", { name: "Profile skills" });
 }
 
 async function searchRegistry(dialog: Locator, fake: Fake) {

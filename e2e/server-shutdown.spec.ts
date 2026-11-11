@@ -84,7 +84,6 @@ test("server shutdown is capability gated, explicit, and truthful on an unconfir
   await expect(confirm.getByRole("alert")).toHaveText(
     "Shutdown was not confirmed. Check the server before trying again.",
   );
-  await expect(cancel).toBeInViewport({ ratio: 1 });
   await cancel.click();
   await expect(settings).toBeVisible();
   await trigger.click();

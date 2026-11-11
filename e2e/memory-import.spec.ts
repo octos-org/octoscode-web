@@ -134,62 +134,29 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   );
 });
 
-/** Passes every frame through, except what `fault` takes over. */
-async function faultProxy(
-  page: Page,
-  fault: (
-    frame: { id?: string; method?: string },
-    call: number,
-  ) =>
-    | { reply: unknown }
-    | { dropReplyAndClose: true }
-    | { replaceResult: unknown }
-    | null,
-) {
+/**
+ * Passes every frame through, except that the reply to the `drop`-th
+ * `memory/ingest` never arrives: the socket closes after Core committed it.
+ */
+async function dropIngestReply(page: Page, drop: number) {
   const sent: Frame[] = [];
-  const held = new Map<string, "close" | { result: unknown }>();
+  const held = new Set<string>();
   await page.routeWebSocket(
     (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
     (route) => {
       const server = route.connectToServer();
       route.onMessage((message) => {
         const frame = JSON.parse(String(message));
-        if (frame.method === "memory/ingest") sent.push(frame);
-        const plan =
-          frame.method === "memory/ingest" ? fault(frame, sent.length) : null;
-        if (plan && "reply" in plan) {
-          route.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              ...(plan.reply as object),
-            }),
-          );
-          return;
+        if (frame.method === "memory/ingest") {
+          sent.push(frame);
+          if (sent.length === drop) held.add(frame.id);
         }
-        if (plan && "dropReplyAndClose" in plan) held.set(frame.id, "close");
-        if (plan && "replaceResult" in plan)
-          held.set(frame.id, { result: plan.replaceResult });
         server.send(message);
       });
       server.onMessage((message) => {
         const frame = JSON.parse(String(message));
-        const plan = frame.id !== undefined ? held.get(frame.id) : undefined;
-        if (plan === "close") {
-          // Core has committed; the reply never arrives.
-          held.delete(frame.id);
+        if (frame.id !== undefined && held.delete(frame.id)) {
           void route.close();
-          return;
-        }
-        if (plan) {
-          held.delete(frame.id);
-          route.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              result: plan.result,
-            }),
-          );
           return;
         }
         route.send(message);
@@ -203,9 +170,7 @@ test("a reply lost after the server wrote the batch is not sure, is read back, a
   page,
 }) => {
   const mark = `lost${Date.now()}`;
-  const sent = await faultProxy(page, (_frame, call) =>
-    call === 2 ? { dropReplyAndClose: true } : null,
-  );
+  const sent = await dropIngestReply(page, 2);
   const { settings } = await start(page);
   await search(settings, mark);
   await expect(settings.getByText("No matching memories.")).toBeVisible();

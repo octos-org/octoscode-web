@@ -89,16 +89,7 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
       const held = writes[index]!;
       const { method, params } = held.request;
       const profile_id = params.profile_id;
-      if (method === "profile/skills/install") {
-        installed = true;
-        reply(held, {
-          profile_id,
-          ok: true,
-          installed: ["sample"],
-          skipped: [],
-          deps_installed: [],
-        });
-      } else if (method === "profile/skills/remove") {
+      if (method === "profile/skills/remove") {
         installed = false;
         reply(held, { profile_id, ok: true, removed: params.name });
       } else {

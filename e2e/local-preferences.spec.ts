@@ -5,6 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import { observeSent } from "./turn-observers";
 
 const storageKey = "octoscode.web.display.v1";
 const token = "tab-scoped-e2e-token";
@@ -21,47 +22,6 @@ const row = (page: Page, sessionId: string) =>
   page.locator(
     `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
   );
-type Frame = {
-  id?: string;
-  method?: string;
-  params?: {
-    session_id?: string;
-    turn_id?: string;
-    approval_id?: string;
-    question_id?: string;
-    input?: { kind: string; text?: string }[];
-    reasoning_effort?: string;
-    media?: unknown[];
-  };
-  result?: unknown;
-  error?: unknown;
-};
-function observe(page: Page) {
-  const sent: Frame[] = [],
-    received: Frame[] = [],
-    pending = new Set<string>();
-  let sockets = 0;
-  page.on("websocket", (socket) => {
-    const id = ++sockets;
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      if (frame.method) sent.push(frame);
-      if (frame.id !== undefined) pending.add(`${id}:${frame.id}`);
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      received.push(frame);
-      if (frame.id !== undefined) pending.delete(`${id}:${frame.id}`);
-    });
-  });
-  return {
-    sent,
-    received,
-    pending,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-    sockets: () => sockets,
-  };
-}
 async function title(page: Page) {
   const sessionId = await page
     .locator('[role="treeitem"][data-session-id][aria-current="page"]')
@@ -155,7 +115,8 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
   page,
   request,
 }) => {
-  const wire = observe(page),
+  const starts = observeSent(page, "turn/start"),
+    interrupts = observeSent(page, "turn/interrupt"),
     workspace = "local-preferences-vim-interrupt";
   await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   await command(page, "/vimmode");
@@ -163,27 +124,27 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
   await hold(request);
   try {
     await command(page, "Vim interrupt A");
-    const aStart = wire.calls("turn/start")[0]!.params!;
-    await held(request, aStart.session_id!);
+    const aStart = starts()[0]!;
+    await held(request, String(aStart.session_id));
     await sibling(page, workspace);
     await hold(request);
     await command(page, "Vim interrupt B must remain active");
-    const bStart = wire.calls("turn/start")[1]!.params!;
-    await held(request, bStart.session_id!);
+    const bStart = starts()[1]!;
+    await held(request, String(bStart.session_id));
     await row(page, a).click();
     await input(page).focus();
     if ((await input(page).getAttribute("data-vim-mode")) === "insert")
       await input(page).press("Escape");
-    expect(wire.calls("turn/interrupt")).toHaveLength(0);
+    expect(interrupts()).toHaveLength(0);
     await input(page).press("Escape");
-    await expect.poll(() => wire.calls("turn/interrupt").length).toBe(1);
-    expect(wire.calls("turn/interrupt")[0]!.params).toMatchObject({
+    await expect.poll(() => interrupts().length).toBe(1);
+    expect(interrupts()[0]).toMatchObject({
       session_id: aStart.session_id,
       turn_id: aStart.turn_id,
     });
-    await held(request, bStart.session_id!);
-    expect(wire.calls("turn/start")).toHaveLength(2);
-    await release(request, bStart.session_id!);
+    await held(request, String(bStart.session_id));
+    expect(starts()).toHaveLength(2);
+    await release(request, String(bStart.session_id));
   } finally {
     await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
   }
@@ -192,7 +153,7 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
 test("only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials", async ({
   page,
 }) => {
-  const wire = observe(page);
+  const starts = observeSent(page, "turn/start");
   await connectAndStartWorkspace(page, "/srv/work/local-preferences-save");
   const before = await storage(page);
   await command(page, "/theme");
@@ -223,7 +184,7 @@ test("only explicit save persists display preferences; reload restores preferenc
   await input(page).fill("PRIVATE_COMPOSER_DRAFT");
   expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
   expect(JSON.stringify(await storage(page))).not.toContain(token);
-  expect(wire.calls("turn/start")).toHaveLength(0);
+  expect(starts()).toHaveLength(0);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh");
   await expect(page.locator("html")).toHaveAttribute(
@@ -253,5 +214,5 @@ test("only explicit save persists display preferences; reload restores preferenc
     language: "en",
     vimMode: true,
   });
-  expect(wire.calls("turn/start")).toHaveLength(0);
+  expect(starts()).toHaveLength(0);
 });

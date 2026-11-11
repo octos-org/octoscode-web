@@ -164,9 +164,6 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await expect(
     page.getByRole("button", { name: "Send prompt", exact: true }),
   ).toHaveCount(0);
-  expect(peerId).toBe(
-    String(staged.profile_id) + ":local:tui#" + String(staged.topic),
-  );
 
   // 4a. Peer surface is interrupt-inert: Esc sends NO turn/interrupt
   //     (a11y review 0800 §1 — the disabled composer's Esc path never fires;

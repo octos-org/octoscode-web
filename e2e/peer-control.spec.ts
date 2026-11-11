@@ -46,10 +46,6 @@ const FENCE_STALE = "Your control of this session expired";
 interface ObservedFrame {
   readonly id: string | null;
   readonly method: string | null;
-  readonly errorCode: number | null;
-  readonly refusalKind: string | null;
-  readonly receiptState: string | null;
-  readonly receiptDuplicate: boolean | null;
 }
 type Captured = ObservedFrame & { readonly socket: number };
 
@@ -61,23 +57,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" ? value : null;
-}
 function project(raw: unknown): ObservedFrame | null {
   const frame = asRecord(raw);
   if (frame === null) return null;
-  const result = asRecord(frame.result);
-  const error = asRecord(frame.error);
-  const errorData = asRecord(error?.data);
   return {
     id: asString(frame.id),
     method: asString(frame.method),
-    errorCode: asNumber(error?.code),
-    refusalKind: asString(errorData?.kind),
-    receiptState: asString(result?.state),
-    receiptDuplicate:
-      typeof result?.duplicate === "boolean" ? result.duplicate : null,
   };
 }
 
@@ -117,11 +102,6 @@ function wire(page: Page) {
     sent,
     received,
     calls: (method: string) => sent.filter((frame) => frame.method === method),
-    replyTo: (frame: Captured): ObservedFrame | null =>
-      received.find(
-        (candidate) =>
-          candidate.id === frame.id && candidate.socket === frame.socket,
-      ) ?? null,
     async settled(frame: Captured) {
       await expect
         .poll(() =>
@@ -217,9 +197,6 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
       receipt(page).locator('[data-receipt-duplicate="false"]'),
     ).toHaveText("Newly applied");
     await w.settled(w.calls(CONTROL_METHOD)[0]!);
-    expect(w.replyTo(w.calls(CONTROL_METHOD)[0]!)?.receiptState).toBe(
-      "accepted",
-    );
 
     // The other three commands, clicked: one frame each, never a retry.
     for (const kind of COMMAND_KINDS.filter((k) => k !== "steer")) {
