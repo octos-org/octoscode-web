@@ -106,3 +106,156 @@ apps/web 单元测试的唯一保留清单（2026-11-07 起的测试瘦身做法
 | `preferences/zh-coverage.test.ts` › routes visible text through t()                                                   | 5   | 可见文字都经过 `t()`                                                                                                  | 同上                                                                                     |
 
 路径都相对 `apps/web/src/features/`，`app/` 开头的相对 `apps/web/src/`。
+
+---
+
+# 第二轮复审附录（T-0590，2026-11-11）
+
+**本附录只审计、映射，不删测试、不改产品。**
+第一轮保留清单（上方，60 个测试）全部有效；本轮找**同一交互/状态/失败语义在多处各测一遍**的真实重复与**重复 setup**。删除/合并须等 lead-web 逐链批准后另开 T-0591 执行。没有真实冗余的链明确不删，不凑 2 万。
+
+## 数字（`python3 wake/test-lines.py` 口径）
+
+- 基线：当前 origin/main **`11d65e6`**（T-0588 合入后），apps/web **4,259 行 /
+  70 个**（42 文件 4,217 行 src 计数 + 夹具差异，以脚本口径为准），全仓
+  **25,900 行 / 431 个**。
+- 实测 vitest 42 文件 /
+  **78 断言**（`pnpm vitest run --root apps/web --reporter=json`，全绿）。与清单「60 个测试」的差：turn-collision
+  it.each×9 计 1、request-authority 3 组 4 断言、attachment-drafts 文件行。
+- 若 lead 批准下列全部映射，预计 **净减 470–640 行**，apps/web **→
+  3,619–3,789 行**，全仓 **→ 25,260–25,430 行**。软目标 2 万不硬凑。
+- 其中**纯 fixture/setup 去重**（不断言减少）约
+  **300–380 行**，**行为删除/合并**约 **170–260 行**。
+
+## 第 3 类五个子类逐行
+
+| 子类             | 现状与结论                                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 路径穿越         | 留 `side-panel/panel-selection.test.ts`（工作区相对路径精确拼接）、`media/attachment-drafts.test.ts`（任意路径回执拒绝）。                                                                     |
+| 沙箱逃逸         | apps/web 无执行器；`markdown/MarkdownBody.test.tsx` 的原始 HTML 惰性 + 绝对链接白名单是浏览器侧的注入边界（等价类），留。                                                                      |
+| 鉴权和权限       | 留 `connection/pairing.test.ts`（非回环拒绝）、`connection/preferences.test.ts`（令牌只存本标签页）、`session/session-interaction-ledger.test.ts`（审批按连接代次）。                          |
+| 密钥/令牌脱敏    | 留 `remembered-token`（旧 localStorage 清理）、`model-settings`（provider 回显脱敏）、`FatalErrorBoundary`（诊断脱敏）、`PeerControlPanel`（控制令牌不出屏）、`remote-handoff`（接力丢凭据）。 |
+| 外部输入大小上限 | 留 `pairing`（2048/65 截断）、`active-session-runtime`（4097 恢复事件上限）、`driver-discovery`（页/行/时间预算）、`session-draft-cache`（容量上限）、`attachment-drafts`（上传大小上限）。    |
+
+## 身份/profile/token、能力门控、权限默认/精确匹配
+
+- 身份：`session-identity`（profile 路由 id）、`session-interaction-ledger`（代次）、`history-coordinator`（checkpoint 身份）——各守不同面，全留。
+- 能力门控：`install-review`（reviewed_install.v1）、`driver-discovery`（inventory 链）、`turn-collision`（typed
+  kind）——全留。
+- 权限默认/精确匹配：`session-record-concurrency`
+  的外来决定不串、跨会话 FIFO 隔离、`durable-session`
+  的跨会话/跨 topic 拒绝——全留。
+
+## 跨功能与失败/迟到/恢复/ambiguous write 逐项
+
+- **ambiguous
+  write**：`history-coordinator`（回滚不明不重放）、`turn-undo`（恢复不明不冒领）、`use-turn-controller`（start 超时算未知）、`peer-manager`（启动不明不换新 UUID）、`install-review`（安装不明重读服务器）。**五层不同对象，全留**。
+- **迟到/代次**：`request-authority`（4 断言）、`background-turn-manager`（旧终态不改新回合）、`timeline/model`（持久化答案不被 delta 改写）、`autonomy/model`（pre-clear 迟到更新）。
+- **恢复**：`active-session-runtime`（lossy→hydrate→投递）、`durable-session`（gap→recover）、`canonical-hydrate`（重建不乱序不重复）、`session-record-integration`（loss 冻结）。
+- **权限代次**：`session-interaction-ledger`（重连后旧决定不发）。
+
+## 新增链覆盖核对（第一轮之后合入的）
+
+| 链                                  | 现状                                             | 结论                                                    |
+| ----------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| 技能安装（T-0555 reviewed install） | `skills/install-review.test.ts` 3 断言           | 全留：决策矩阵+回执一致性+typed kind，与 e2e 三层互补。 |
+| OAuth 连接器                        | `connectors/connector-oauth.test.ts`             | 全留：state/来源校验独有。                              |
+| 记忆                                | apps/web 无独立记忆单测（在 packages/client 侧） | 不补、不冒充。                                          |
+| 权限代次（T-0529 恢复）             | `async/request-authority.test.ts`                | 见映射 B1（组内可折叠）。                               |
+| session 容量（T-0529 恢复）         | `session-record-capacity.test.ts`                | 全留：15 记录×3 回合真容量。                            |
+| 旧令牌清理（T-0529 恢复）           | `connection/remembered-token.test.ts`            | 全留。                                                  |
+| PWA/OCR                             | apps/web 无相关单测（e2e 侧）                    | 无对象，不列删除。                                      |
+
+## 行为删除/合并映射（每条给共同可观察失败）
+
+### B1 — `async/request-authority.test.ts` 组内同性质折叠
+
+| 候选                                                                                                                                                                                                                                                                             | 保留                                                              | 共同可观察失败                                                                            | 预计省行 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| `requires both the latest generation and its client/session scope` + `lets a stale scope clean up only when no newer request owns the flag` + `does not let an older finally clear a newer request` + `invalidates every completion owned by a reset projection`（4 断言 47 行） | 合并为 1 条「stale scope / older finally / reset 全失效」串行断言 | 同一「只有最新代次且同 client/session 的应答才能落地」性质；isCurrent/finish 谓词回退即红 | ~20      |
+
+### B2 — `composer/turn-collision.test.ts` it.each×9 的负例变体
+
+| 候选                                                                                             | 保留                                                                  | 共同可观察失败                                                          | 预计省行 |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------- |
+| 负例 7 条（prose 无契约、非 UUID、另一 kind、另一 code、transport error、no error、bare string） | 保留 2 条正例（typed data 名占主、typed 胜重述）+ 合并负例为 1 条循环 | 同一「只从 typed turn_in_progress+UUID 认定占用」谓词：误认任一负例即红 | ~25      |
+
+### B3 — `session/durable-session.test.ts` 与 `active-session-runtime.test.ts` 的重叠面
+
+| 候选                                                                     | 保留                                                                                                                                | 共同可观察失败                                                                         | 预计省行                                                                                            |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `durable-session` › turns replay_lossy into an explicit recovery request | `active-session-runtime` › rehydrates after lossy replay before delivering further notifications（上层运行时同样从 lossy 触发恢复） | 同一「replay_lossy → recover」性质：projection 层 9 行正例已足，运行时层守的是投递顺序 | ~12（projection 侧单例折叠进「fails closed on a per-thread sequence gap」文件级合并，不删整个文件） |
+| `durable-session` › rejects cross-session and cross-topic contamination  | **保留**（projection 是唯一一层做 topic 过滤断言的）                                                                                | —                                                                                      | 0                                                                                                   |
+
+### B4 — `history/history-coordinator.test.ts` 与 `review/native-review.test.ts` 共享大 harness（行为不变，fixture 合并见 S2）
+
+两文件的 `harness()` 有 ~80 行几乎相同的 `OctosUiClient`
+spy 装配（status/subscribe/listConfigCapabilities/openSession/hydrateSession/startTurn/SessionRecordManager 构造）。这是 S2 的 fixture 去重对象，**不是行为删除**；两个 describe 的断言各守「撤销前挡回合」与「review 共用 FIFO」不同链，全留。
+
+### B5 — `session/session-record-integration.test.ts` 与 `session-record-concurrency.test.ts` 的「FIFO 按序推进」重叠
+
+| 候选                                                                                                                              | 保留                                                                                                                               | 共同可观察失败 | 预计省行      |
+| --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------- |
+| `integration` › freezes all records on loss, ignores old RPC rejection, and resumes A2 only after ready then A3 after A2 terminal | **保留**：断线冻结+旧 RPC 拒绝忽略是 concurrency 文件没有的失败路径；FIFO 推进虽与 concurrency 部分同义，但 loss/recovery 语义独立 | —              | 0（查过不删） |
+
+## 纯 fixture/setup 去重映射（不断言减少）
+
+### S1 — `deferred()` 助手三处副本
+
+`composer/use-turn-controller.test.ts`（23 行）与
+`session/active-session-runtime.test.ts`（18 行）各自实现 deferred；`session/session-record-test-fixture.ts`
+已导出
+`deferred`（9 行）。前两文件改从 fixture 导入，删本地副本。**预计省 ~35 行**，断言不变。
+
+### S2 — `history-coordinator` 与 `native-review` 的 client spy 装配（~80 行重复）
+
+把共同的 `OctosUiClient` spy + `SessionRecordManager` 构造提为
+`history-test-fixture.ts` 的
+`recordClientHarness({ capabilities })`，两文件只保留各自的 history/review RPC
+mock。**预计省 ~80 行**，断言不变。
+
+### S3 — `UiProtocolCapabilities` 字面量 6 处副本
+
+`control/PeerControlPanel`、`history-coordinator`、`turn-undo`、`peer-manager`、`native-review`、`active-session-runtime`
+各自写同一份 caps 字面量（每份 8–12 行）。提为
+`apps/web/src/features/test-fixtures/caps.ts` 的
+`appuiCaps({methods,features})`。**预计省 ~50 行**。
+
+### S4 — `active-session-runtime.test.ts` 三例的 authenticate+adopt 前奏（~3×20 行）
+
+三例都重复 `runtime.authenticate(connection)` + `adoptCandidate`
+前奏（每例 ~20 行）。提为
+`adoptConnected(runtime, connection, sessionConfig, candidate)`
+助手。**预计省 ~35 行**，三例各自的事件断言不变。
+
+### S5 — `use-turn-controller.test.ts` 的 `renderController` 与 `fakeClient`（~120 行）与 `turn-queue` 真实装配
+
+`renderController` 的依赖装配在 `session-record-test-fixture.ts`
+的 PooledClient/manager 里已有同构实现；但本文件测的是**控制器独立面**（queue-backed
+async authority），不是 manager 集成面，**不合并到 manager fixture**——只把
+`deferred` 共享（已计入 S1）。**本项不删**，仅标注。
+
+### S6 — `zh-coverage.test.ts` 的 AST walk 与 sources()（~60 行）与 `vite` 自带工具
+
+`sources()`/`walk()`/`literalText()` 是通用 AST 工具，与测试语义无关。可提为共享
+`test-fixtures/ast.ts`
+供未来其他文案门禁复用，但当前只此一处使用，**不提前抽象**（TEST-DIET「不虚构复用」）。**本项不删**。
+
+## 明确**不删**的（查过但无真实冗余）
+
+- `session-record-capacity.test.ts`（15 记录×3 回合真容量）、`session-record-concurrency.test.ts`（真审批阻塞×三记录）——第一轮 T-0529 验收退回后重建的跨功能链，各守独立失败。
+- `turn-undo.test.ts`
+  3 断言：不明恢复、失败重试复用 pre-restore 点、非 pre-restore 复用判不明——T-0532 真实 Core 复现的三种恢复路径。
+- `install-review.test.ts` 3 断言：决策矩阵、回执一致性、typed
+  kind——供应链边界，变异证明在 T-0555 已跑。
+- `zh-coverage.test.ts`
+  3 断言：文案门禁，纯文案类按 guide 可讨论但它是**防回退**而非装饰，留。
+- `model-settings`、`connector-oauth`、`driver-discovery`、`supervision/model`、`tab-session-lock-core`、`session-composer-drafts`、`session-draft-cache`、`background-turn-manager`、`timeline/model`、`autonomy/model`、`session-identity`、`seat-holder`、`intent`、`draft-estimate`、`strip-rank-4510`、`no-model-setup-gate`：逐条对过，无同语义重复。
+- **真实复制/焦点/移动布局/失败恢复**：`session-composer-drafts`（草稿跨会话隔离）、`panel-selection`（文件身份）、`FatalErrorBoundary`（崩溃脱敏）等，按任务要求不得误删。
+
+## 给 lead 的审批点
+
+1. B1/B2/B3 的行为合并是否认可「共同可观察失败」成立。
+2. S1–S4 的 fixture 去重（不断言减少）是否可随 T-0591 一并执行。
+3. S5/S6 标注的「不提前抽象」是否符合 TEST-DIET 的简化原则。
+4. 批准后预计 apps/web 3,619–3,789 行；**未批准不开 T-0591**。
