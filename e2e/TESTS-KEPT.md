@@ -464,13 +464,16 @@ styling）。
 | recovers an unacknowledged A1 behind B and drains A2 then A3 without replaying A1                | ④   | 未确认 A1 恢复 + FIFO 顺序排空不重演（drain 变体删）   |
 | preserves native persisted segment finality across late deltas and the next background FIFO turn | ④   | 迟到 delta 与后台 FIFO 下原生段 finality（数据完整性） |
 
-### skill-install-review.spec.ts（留 3/9）
+### skill-install-review.spec.ts（留 6/9）
 
-| 测试                                                            | 类  | 守的链路                                 |
-| --------------------------------------------------------------- | --- | ---------------------------------------- |
-| reviews what the server reports, read only                      | ①   | 技能安装评审主流程（只读）               |
-| a source that moves after its review never gets an install sent | ③   | 评审后来源变了，绝不发送安装（先查后用） |
-| keeps sources and tokens out of browser storage                 | ③   | 来源和令牌不进浏览器存储                 |
+| 测试                                                             | 类  | 守的链路                                                                                         |
+| ---------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------ |
+| reviews what the server reports, read only                       | ①   | 技能安装评审主流程（旧 Core 只读，无安装入口）                                                   |
+| a source that moves after its review never gets an install sent  | ③   | 评审后来源变了，绝不发送安装（先查后用）                                                         |
+| keeps sources and tokens out of browser storage                  | ③   | 来源和令牌不进浏览器存储                                                                         |
+| installs exactly the reviewed object and re-reads the server     | ①   | 审查→确认→安装主链：请求携带审查锁定的 commit+digest，回执逐字段匹配，状态从服务器重读（T-0555） |
+| a changed registry refuses the install and nothing else happens  | ③   | 审查后注册表变了，Core 类型化拒绝，安装不执行、状态如实（供应链换包）                            |
+| an unconfirmed install is re-read from the server, never claimed | ④   | 安装结果不明（应答超时）不重试不冒领，状态从服务器重读（ambiguous write）                        |
 
 ### startup-close-error.spec.ts（留 2/6）
 

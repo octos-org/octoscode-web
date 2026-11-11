@@ -1513,23 +1513,72 @@ const catalog: Readonly<Record<string, string>> = {
   "Could not confirm the server change. It may have been applied; refresh the Profile before reviewing another attempt.":
     "没能确认服务器上的更改，它可能已经生效。请刷新配置档案后再试。",
   "Source review": "来源审查",
+  "This server can install exactly this reviewed commit and its signed artifact, and will refuse if the registry or the download no longer matches.":
+    "这台服务器可以安装的就是这个审查过的 commit 及其签名产物，注册表或下载内容一旦不一致就会拒绝。",
+  "The install runs no build or setup steps of its own: the server publishes the reviewed source tree plus the signed artifact, and shared dependencies are not installed.":
+    "安装本身不运行任何构建或安装脚本：服务器只发布审查过的源码树和签名产物，共享依赖不会一并安装。",
+  "Installing isn't offered: this server has no review-bound install, so it couldn't promise to install the commit reviewed below.":
+    "这里不提供安装：这台服务器没有与审查绑定的安装能力，无法保证装上的就是下面审查的 commit。",
+  "Installing isn't offered: the registry has no single reviewed entry for this source, so there is no immutable object to install.":
+    "这里不提供安装：注册表没有这个来源的唯一已审查条目，没有可安装的不可变对象。",
+  "Installing isn't offered: the registry entry does not report the reviewed commit, so the install could not be held to this review.":
+    "这里不提供安装：注册表条目没有报告审查过的 commit，安装无法锁定到这次审查。",
+  "Installing isn't offered: the registry entry does not report when the commit was reviewed.":
+    "这里不提供安装：注册表条目没有报告该 commit 的审查时间。",
+  "Installing isn't offered: the server did not report its host platform, so the artifact for it cannot be identified.":
+    "这里不提供安装：服务器没有报告宿主平台，无法确定该平台的产物。",
+  "Installing isn't offered: the registry has no binary artifact for this server's platform.":
+    "这里不提供安装：注册表没有这台服务器平台的二进制产物。",
+  "Installing isn't offered: the platform artifact is missing its checksum or signature.":
+    "这里不提供安装：该平台的产物缺少校验值或签名。",
+  "Reviewed commit": "审查的 commit",
+  "Reviewed at": "审查时间",
+  "Install this reviewed object": "安装这个审查过的对象",
+  "Confirm reviewed install": "确认安装审查过的对象",
+  "The server installs exactly commit": "服务器安装的正是 commit",
+  "with signed artifact": "及其签名产物",
+  "and refuses if the registry or download no longer matches.":
+    "，注册表或下载内容不一致时拒绝。",
+  "Confirm install": "确认安装",
+  "Installed {name} at the reviewed commit {commit}.":
+    "已按审查的 commit {commit} 安装 {name}。",
+  "The server reported an installed object that does not match this review; the refreshed state is shown and nothing was retried.":
+    "服务器报告的安装对象与这次审查不一致；已显示刷新后的状态，没有重试。",
+  "The server did not confirm this install; it may have been applied. The refreshed state is shown and nothing was retried.":
+    "服务器没有确认这次安装，它可能已经生效。已显示刷新后的状态，没有重试。",
+  "The registry changed since this review, so nothing was installed. Review the source again before installing. {detail}":
+    "审查之后注册表变了，什么都没有安装。请重新审查来源再安装。{detail}",
+  "The artifact failed its signature or checksum verification, so nothing was installed. {detail}":
+    "产物未通过签名或校验值验证，什么都没有安装。{detail}",
+  "The reviewed source or artifact could not be fetched, so nothing was installed. {detail}":
+    "无法获取审查过的来源或产物，什么都没有安装。{detail}",
+  "The registry has no artifact for this server's platform. {detail}":
+    "注册表没有这台服务器平台的产物。{detail}",
+  "This reviewed object is already installed. {detail}":
+    "这个审查过的对象已经安装。{detail}",
+  "This package's layout isn't supported by the review-bound installer. {detail}":
+    "该包的结构不受与审查绑定的安装器支持。{detail}",
+  "The reviewed tree contains links or special files the installer refuses. {detail}":
+    "审查过的目录树包含安装器拒绝的链接或特殊文件。{detail}",
+  "The install could not be published, so the previous state is unchanged. {detail}":
+    "安装无法发布，原有状态保持不变。{detail}",
+  "The install was rolled back after the server failed to rebuild the profile runtime. {detail}":
+    "服务器重建配置档案运行时失败，安装已回滚。{detail}",
   "Review skill sources": "审查技能来源",
   "Look up a source": "查一个来源",
   "Review source": "审查来源",
   "Review the source of {name}": "审查 {name} 的来源",
   "Couldn't read the server's skill registry.": "读不到服务器的技能注册表。",
-  "Installing isn't offered here. The server can't yet tie an install to the exact version or commit reviewed below: the branch can change between this review and the server's clone, so a confirmation here couldn't promise what would be installed.":
-    "这里不提供安装。服务器还不能把安装锁定到下面审查的确切版本或 commit：从审查到服务器拉取代码之间，分支可能已经变了，在这里确认也保证不了装上的是什么。",
-  "Installing here needs the server to accept an immutable commit or version, refuse anything else, and report what it installed.":
-    "要在这里安装，需要服务器接受不可变的 commit 或版本、拒绝其他内容，并返回实际装了什么。",
+  "Installing here needs the server to offer a review-bound install pinned to an immutable commit and checksum, refuse anything else, and report what it installed.":
+    "要在这里安装，需要服务器提供与审查绑定的安装：锁定不可变的 commit 和校验值、拒绝其他内容，并返回实际装了什么。",
   "The server's registry has no single entry for this source, so most of what follows is unknown.":
     "服务器的注册表里没有这个来源的唯一条目，下面大多是未知。",
   "This server doesn't offer a skill registry, so most of what follows is unknown.":
     "这台服务器不提供技能注册表，下面大多是未知。",
   "This is a path on the server. No registry entry describes it, so most of what follows is unknown.":
     "这是服务器上的路径，注册表里没有它的条目，下面大多是未知。",
-  "Remote one-click install is unavailable while supply-chain safeguards are being reviewed.":
-    "供应链安全审查完成前，暂不支持远程一键安装。",
+  "Install is only offered when the server can prove it installs exactly the reviewed commit and checksum; everything else is reviewed read-only.":
+    "只有当服务器能证明安装的确就是审查过的 commit 和校验值时才提供安装，其余来源一律只读审查。",
   "Description not reported by the server.": "服务器未提供说明。",
   "Source not reported": "服务器未提供来源",
   Actions: "操作",

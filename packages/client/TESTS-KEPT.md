@@ -298,11 +298,11 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/skills.test.ts（留 3/4）
 
-| 测试                                                                   | 类  | 守的性质                  |
-| ---------------------------------------------------------------------- | --- | ------------------------- |
-| accepts real explicit-null fields and whitelists projected metadata    | ④/③ | rc 显式 null + 投影白名单 |
-| gates before dispatch and binds every read and mutation to the profile | ③   | 每次读写绑定 profile      |
-| never force-overwrites and checks exact mutation receipts              | ⑤   | 不强制覆盖的设计          |
+| 测试                                                                   | 类  | 守的性质                                                                |
+| ---------------------------------------------------------------------- | --- | ----------------------------------------------------------------------- |
+| accepts real explicit-null fields and whitelists projected metadata    | ④/③ | rc 显式 null + 投影白名单                                               |
+| gates before dispatch and binds every read and mutation to the profile | ③   | 每次读写绑定 profile                                                    |
+| never force-overwrites and checks exact mutation receipts              | ⑤/③ | 不强制覆盖的设计；reviewed 安装的请求与回执携带审查锁定的 commit/digest |
 
 ### tests/supervision.test.ts（留 2/4）
 

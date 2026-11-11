@@ -199,7 +199,7 @@ export function SkillsSettingsContent({
       </header>
       <p className={styles.notice}>
         {t(
-          "Remote one-click install is unavailable while supply-chain safeguards are being reviewed.",
+          "Install is only offered when the server can prove it installs exactly the reviewed commit and checksum; everything else is reviewed read-only.",
         )}{" "}
         <a
           href="https://github.com/octos-org/octos/issues/2321"
@@ -237,6 +237,17 @@ export function SkillsSettingsContent({
                 {skill.sourceRepo ?? t("Source not reported")} ·{" "}
                 {skill.toolCount} {t("tools")}
               </p>
+              {skill.sourceCommit ? (
+                <p>
+                  {t("Reviewed commit")} <code>{skill.sourceCommit}</code>
+                  {skill.artifactSha256 ? (
+                    <>
+                      {" · "}
+                      <code>{skill.artifactSha256}</code>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
             </article>
           ))}
         </div>
