@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /** Shared by the multi-session specs: what the page itself sent. */
 export interface StartedTurn {
@@ -80,4 +80,78 @@ export function observeTransports(page: Page) {
     socket.on("close", () => open.delete(id));
   });
   return { live: () => open.size, created: () => created, peak: () => peak };
+}
+
+/** One JSON-RPC frame, tagged with the socket it used: ids restart per socket. */
+export interface WireFrame {
+  socket: number;
+  id?: string | number;
+  method?: string;
+  params?: Record<string, any>;
+  result?: unknown;
+  error?: { code?: number; message?: string; data?: unknown };
+}
+
+/** Every JSON-RPC frame the page sends and receives. */
+export function observeFrames(page: Page) {
+  const sent: WireFrame[] = [];
+  const received: WireFrame[] = [];
+  let sockets = 0;
+  page.on("websocket", (socket) => {
+    const ordinal = sockets++;
+    const take =
+      (into: WireFrame[]) =>
+      ({ payload }: { payload: string | Buffer }) => {
+        try {
+          into.push({ ...JSON.parse(String(payload)), socket: ordinal });
+        } catch {
+          // Not JSON-RPC.
+        }
+      };
+    socket.on("framesent", take(sent));
+    socket.on("framereceived", take(received));
+  });
+  const replyTo = (frame: WireFrame) =>
+    received.find(
+      (candidate) =>
+        candidate.id === frame.id &&
+        candidate.socket === frame.socket &&
+        candidate.method === undefined,
+    );
+  return {
+    sent,
+    received,
+    /** What the page sent as `method`, in order. */
+    calls: (method: string) => sent.filter((frame) => frame.method === method),
+    /** Notifications the page received as `method`, in order. */
+    events: (method: string) =>
+      received.filter((frame) => frame.method === method),
+    replyTo,
+    /** Waits until the server has answered `frame`. */
+    async settled(frame: WireFrame) {
+      await expect.poll(() => replyTo(frame) !== undefined).toBe(true);
+    },
+  };
+}
+
+/**
+ * Uncaught page errors and console errors. A fixture without pairing answers
+ * the silent `/pair/info` probe with 404, which the browser still logs; that
+ * one is not a defect.
+ */
+export function trackRuntimeErrors(page: Page) {
+  const unhandled: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on("pageerror", (error) => unhandled.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    const text = message.text();
+    if (message.location().url.endsWith("/pair/info") && text.includes("404"))
+      return;
+    consoleErrors.push(text);
+  });
+  return () => ({
+    unhandled: unhandled.slice(),
+    consoleErrors: consoleErrors.slice(),
+  });
 }
