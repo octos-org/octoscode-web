@@ -6,6 +6,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { observeSent } from "./turn-observers";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const DEFAULT_WORKSPACE = "/workspace/octoscode-web";
@@ -595,7 +596,10 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
 test("moves drafts only after a profile-choice Session transition commits", async ({
   page,
 }) => {
+  const opens = observeSent(page, "session/open");
   await connectAndStartWorkspace(page);
+  // Connect never asks for a profile id; the launch decision supplies it.
+  await expect(page.getByLabel("Profile id")).toHaveCount(0);
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await composer.fill("keep this draft in the original Session");
 
@@ -625,6 +629,17 @@ test("moves drafts only after a profile-choice Session transition commits", asyn
     .click();
   await expect(composer).toBeVisible();
   await expect(composer).toHaveValue("");
+  // The new Session opens in the requested folder, bound to the chosen
+  // profile before `session/open` is sent.
+  await expect(
+    page.getByRole("button", { name: /^Folder \/srv\/work\/cross\./ }),
+  ).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        opens().find((params) => params.profile_id === "review")?.session_id,
+    )
+    .toMatch(/^review:api:web-/);
 });
 
 test("restores the origin, tab credential, session, and workspace after refresh", async ({

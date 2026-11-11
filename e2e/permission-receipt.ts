@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 
+export type PermissionSetResult = SetReply["result"];
+
 interface SetReply {
   id?: string;
   result: {

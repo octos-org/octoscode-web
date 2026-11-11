@@ -290,6 +290,20 @@ test("reviews what the server reports, read only", async ({ page }) => {
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
     .analyze();
   expect(results.violations).toEqual([]);
+
+  // Pointing the same source at another branch drops the stale review; the
+  // new review is still read-only, even from the keyboard.
+  const repo = dialog.getByLabel("Repository or server-side path");
+  const branch = dialog.getByLabel("Branch (server default: main)");
+  await expect(repo).toHaveValue("example/sample");
+  await branch.fill("moved");
+  await expect(panel).toHaveCount(0);
+  await branch.press("Enter");
+  await repo.press("Enter");
+  await dialog.getByRole("button", { name: "Review source" }).click();
+  await expect(fact(panel, "Branch")).toHaveText("moved");
+  await expectNoInstallControl(dialog);
+  await page.keyboard.press("Enter");
   await panel.getByRole("button", { name: "Close review" }).click();
   await expect(panel).toHaveCount(0);
   expect(fake.installs).toHaveLength(0);

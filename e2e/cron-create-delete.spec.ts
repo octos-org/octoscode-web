@@ -63,17 +63,25 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     schedule: Record<string, unknown>;
     mode: string;
   }> = [];
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
   await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
     const server = socket.connectToServer();
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.method === "cron/create") created.push(frame.params);
+      if (frame.method?.startsWith("cron/")) {
+        calls.push({ method: frame.method, params: frame.params });
+      }
       server.send(message);
     });
     server.onMessage((message) => socket.send(message));
   });
   await start(page);
   const tasks = await openCron(page);
+  await tasks.locator('[data-cron-job="cron-1"]').getByRole("checkbox").click();
+  await expect
+    .poll(() => calls.some((call) => call.method === "cron/toggle"))
+    .toBe(true);
   await openCreate(tasks);
 
   await tasks.getByRole("radio", { name: "Once" }).check();
@@ -151,12 +159,6 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     { kind: "Cron", expr: "0 30 18 * * WED" },
     { kind: "Cron", expr: "0 0 9 1 * *" },
   ]);
-  expect(
-    created.every(
-      (params) =>
-        typeof params.session_id === "string" && params.session_id.length > 0,
-    ),
-  ).toBe(true);
   expect(created.every((params) => params.mode === "agent")).toBe(true);
 
   expect(
@@ -170,6 +172,13 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
   await century.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect(century).toHaveCount(0);
   await expect(tasks.locator('[data-cron-job="cron-4"]')).toBeVisible();
+  // List, toggle, create and delete all name the current session's scope.
+  expect(new Set(calls.map((call) => call.method))).toEqual(
+    new Set(["cron/list", "cron/toggle", "cron/create", "cron/delete"]),
+  );
+  const scopes = new Set(calls.map((call) => call.params.session_id));
+  expect(scopes.size).toBe(1);
+  expect([...scopes][0]).toEqual(expect.any(String));
 });
 
 test("uses the current session scope for list, toggle, create and delete", async ({

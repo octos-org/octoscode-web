@@ -88,6 +88,14 @@ test("manages a provider through the DSH-style Models settings flow", async ({
 
   const apiKey = editor.getByLabel("API key");
   await expect(apiKey).toHaveAttribute("type", "password");
+  // A rejected key reports fixed copy and keeps the whole draft.
+  await apiKey.fill(["sk", "rejected", "secret"].join("-"));
+  await editor.getByRole("button", { name: "Test connection" }).click();
+  await expect(editor.locator('[role="alert"]')).toHaveText(
+    "Connection failed. Check the endpoint, protocol, model, and credential.",
+  );
+  await expect(editor.getByLabel("Model ID")).toHaveValue("deepseek-chat");
+  await expect(apiKey).not.toHaveValue("");
   const ephemeralCredential = `e2e-${crypto.randomUUID()}`;
   await apiKey.fill(ephemeralCredential);
 

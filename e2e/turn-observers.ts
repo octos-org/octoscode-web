@@ -49,3 +49,35 @@ export function observeInterrupts(page: Page): () => number {
   });
   return () => interrupts;
 }
+
+/** The params of every `method` request the page sent, in order. */
+export function observeSent(
+  page: Page,
+  method: string,
+): () => Record<string, unknown>[] {
+  const sent: Record<string, unknown>[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const frame = String(payload);
+      if (!frame.includes(`"method":"${method}"`)) return;
+      sent.push(
+        (JSON.parse(frame) as { params: Record<string, unknown> }).params,
+      );
+    });
+  });
+  return () => sent.slice();
+}
+
+/** Counts this page's WebSocket transports: open now, ever created, most open at once. */
+export function observeTransports(page: Page) {
+  const open = new Set<number>();
+  let created = 0;
+  let peak = 0;
+  page.on("websocket", (socket) => {
+    const id = ++created;
+    open.add(id);
+    peak = Math.max(peak, open.size);
+    socket.on("close", () => open.delete(id));
+  });
+  return { live: () => open.size, created: () => created, peak: () => peak };
+}

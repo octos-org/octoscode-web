@@ -90,11 +90,26 @@ test("a 1008 launch explains the Profile and keeps the login across the reconnec
 
   // The token survived: the same button retries, and success clears the error.
   await start.click();
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeEnabled();
+  const composer = page.getByRole("textbox", { name: "Message Octos" });
+  await expect(composer).toBeEnabled();
   await expect(alert).toHaveCount(0);
   expect(socket.attempts()).toBe(2);
+
+  // A new Session failing the same way from inside the open one keeps both
+  // the error and the open Session; the sidebar is the surface left to say it.
+  const selected = page.locator('[role="treeitem"][aria-current="page"]');
+  const openSession = await selected.getAttribute("data-session-id");
+  socket.control.close = { code: 1008, reason: "auth_expired" };
+  await page
+    .getByRole("button", { name: "New session", exact: true })
+    .first()
+    .click();
+  await expect(alert.first()).toContainText(PERMISSION);
+  await page.waitForTimeout(SETTLE_MS);
+  await expect(alert.first()).toContainText(PERMISSION);
+  await expect(composer).toBeEnabled();
+  await expect(selected).toHaveAttribute("data-session-id", openSession!);
+  expect(socket.attempts()).toBe(3);
 });
 
 test("a new Session that fails from an open one keeps both the error and the Session", async ({

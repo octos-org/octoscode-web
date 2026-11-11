@@ -1,6 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session.ts";
-import { observeStartedTurns, observeInterrupts } from "./turn-observers";
+import {
+  observeStartedTurns,
+  observeInterrupts,
+  observeTransports,
+} from "./turn-observers";
 
 const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
@@ -199,6 +203,7 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   const cwd = "/srv/work/busy-loss-fifo";
   const started = observeStartedTurns(page);
   const interrupts = observeInterrupts(page);
+  const transports = observeTransports(page);
   const recoveredSnapshots: Array<{
     sessionId: string;
     startsAtHydrate: number;
@@ -273,12 +278,18 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   // Future A2/A3 stay server-active until their individual terminals release.
   await holdNextTerminal(request);
   await holdNextTerminal(request);
+  // Two Sessions share ONE pooled transport.
+  expect(transports.live()).toBe(1);
+  const createdBeforeDisconnect = transports.created();
   expect(
     (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
   ).toBe(204);
   await expect
     .poll(() => started().map((turn) => turn.text), { timeout: 20_000 })
     .toEqual(["A1-busy-loss", "A2-busy-loss"]);
+  // The transport was replaced, never two open at once.
+  expect(transports.created()).toBeGreaterThan(createdBeforeDisconnect);
+  expect(transports.peak()).toBeLessThanOrEqual(1);
   await expect(b).toHaveAttribute("aria-current", "page");
   await expect(conversation(page).getByText(/A[123]-busy-loss/)).toHaveCount(0);
   expect(

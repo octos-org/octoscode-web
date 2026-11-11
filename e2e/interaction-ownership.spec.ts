@@ -538,17 +538,15 @@ test("restores and resolves a parked question on its owning Session with exact i
 });
 
 /**
- * Browser-UNEXECUTED coverage for concurrent, cross-Session question
- * ownership: three Sessions each park a structured question at the SAME
- * time. Every question stays bound to its own Session; answering out of
- * order (B, then A, then C) resolves exactly one question per Session with
- * the exact native session_id, question_id and original turn_id, every ACK
- * is correlated to its own respond request id and echoes that question, and
- * each Session receives exactly one *completed* terminal for its own
- * original turn. Switching alone never answers, cancels, or interrupts
- * anything. This is switch plus concurrent question ownership ONLY; it makes
- * no reconnect-survival claim, and its expected result is unverified until a
- * real browser run.
+ * Concurrent, cross-Session question ownership: three Sessions each park a
+ * structured question at the SAME time. Every question stays bound to its own
+ * Session and is restored when the user returns to it; answering out of order
+ * (B, then A, then C) resolves exactly one question per Session with the exact
+ * native session_id, question_id, original turn_id and the picked option,
+ * every ACK is correlated to its own respond request id and echoes that
+ * question, and each Session receives exactly one *completed* terminal for
+ * its own original turn. Switching alone never answers, cancels, or
+ * interrupts anything. It makes no reconnect-survival claim.
  */
 test("keeps three concurrent parked questions bound to their Sessions and resolves them out of order", async ({
   page,
@@ -628,6 +626,12 @@ test("keeps three concurrent parked questions bound to their Sessions and resolv
       .sent()
       .find((entry) => entry.questionId === expected.questionId)!;
     expect(request.sessionId).toBe(expected.sessionId);
+    // The answer carries the option the user picked.
+    expect(
+      respondFrames().find(
+        (frame) => frame.params.question_id === expected.questionId,
+      )?.params.answers,
+    ).toEqual([{ selected_labels: ["Full"] }]);
     // The JSON-RPC response to THAT request id must echo the same question.
     await expect.poll(() => rpc.responses().has(request.id)).toBe(true);
     const ack = rpc.responses().get(request.id)!;

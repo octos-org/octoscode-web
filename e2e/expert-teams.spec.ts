@@ -161,6 +161,22 @@ test("a failed member is named, a working member survives a refresh and is stopp
     String(frame.params?.session_id).endsWith("-2"),
   )!;
 
+  // A dropped transport keeps the member this tab started working: the page
+  // reopens its sessions on its own and stops nothing by itself.
+  const opens = sent.filter((frame) => frame.method === "session/open").length;
+  expect(
+    (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
+  ).toBe(204);
+  await expect
+    .poll(() => sent.filter((frame) => frame.method === "session/open").length)
+    .toBeGreaterThan(opens);
+  // The reconnect returns the page to the conversation; come back.
+  await openExperts(page);
+  await expect(
+    team.locator('[data-expert-member$="-2"] [data-expert-state="working"]'),
+  ).toBeVisible();
+  expect(interrupts(sent)).toHaveLength(0);
+
   await page.reload();
   await expect(page.getByText(CWD, { exact: true }).first()).toBeVisible({
     timeout: 30_000,

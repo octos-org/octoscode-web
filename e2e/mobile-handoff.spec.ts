@@ -1,4 +1,6 @@
+import { createServer } from "node:http";
 import { expect, test, type Page } from "@playwright/test";
+import { observeSent } from "./turn-observers";
 
 const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const TOKEN = "workspace-browse-e2e-token";
@@ -63,6 +65,7 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
     isMobile: true,
     hasTouch: true,
   });
+  const decisions = observeSent(phone, "approval/respond");
   await phone.goto(link);
   // This fixture hosts web and Core on different ports. Cross-origin links
   // cannot choose the credential destination; the user enters it manually.
@@ -78,10 +81,23 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
     .getByRole("region", { name: /^Waiting for you/ })
     .getByRole("button", { name: /Run product checks/ })
     .tap();
-  await phone
-    .getByRole("dialog", { name: "Run product checks?" })
-    .getByRole("button", { name: /Allow once/ })
-    .tap();
+  // From the phone this one request can be allowed, never the whole session.
+  const phoneApproval = phone.getByRole("dialog", {
+    name: "Run product checks?",
+  });
+  await expect(phoneApproval).toContainText(
+    "From the phone you can allow this one request.",
+  );
+  await expect(
+    phoneApproval.getByRole("button", { name: /Allow for this session/ }),
+  ).toHaveCount(0);
+  await phoneApproval.getByRole("button", { name: /Allow once/ }).tap();
+  await expect.poll(decisions).toEqual([
+    expect.objectContaining({
+      decision: "approve",
+      approval_scope: "request",
+    }),
+  ]);
   await handoff.getByRole("button", { name: "Close", exact: true }).click();
   await expect(approval).toHaveCount(0);
   await expect(desktop.getByText("Turn complete").first()).toBeVisible();
@@ -91,34 +107,74 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
   ).toContainText(folder);
 });
 
-test("a handoff never auto-connects with this tab's saved credential", async ({
+test("a forged handoff never auto-connects, imports nothing, and cannot choose where a pasted token is sent", async ({
   page,
+  baseURL,
 }) => {
-  await connect(page);
-  await expect(
-    page.getByRole("heading", { name: "Remote control" }),
-  ).toBeVisible();
-  const url = new URL(page.url());
-  url.hash = new URLSearchParams({
-    handoff: JSON.stringify({
-      endpoint: "http://127.0.0.1:59999",
-      folders: ["/srv/private"],
-    }),
-  }).toString();
-  const sockets: string[] = [];
-  page.on("websocket", (ws) => sockets.push(new URL(ws.url()).origin));
-  await page.goto("about:blank");
-  await page.goto(url.href);
-  await expect(page.getByLabel("Server origin")).toHaveValue(url.origin);
-  await expect(page.getByRole("alert")).toContainText("not filled in");
-  await expect(page.getByLabel("Auth token", { exact: true })).toHaveValue("");
-  expect(sockets).toEqual([]);
-  // An operator selecting a different server must not import its paths there.
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("different server");
-  await expect(
-    page.getByRole("region", { name: "Watched folders" }),
-  ).not.toContainText("/srv/private");
+  // A real loopback receiver, not a route that suppresses credential traffic.
+  let receivedToken = false;
+  const receiver = createServer((_request, response) => {
+    response.writeHead(404).end();
+  });
+  receiver.on("upgrade", (request, socket) => {
+    receivedToken ||=
+      new URL(request.url!, "http://receiver.test").searchParams.get(
+        "token",
+      ) === TOKEN;
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) =>
+    receiver.listen(0, "127.0.0.1", resolve),
+  );
+  const address = receiver.address();
+  if (!address || typeof address === "string")
+    throw new Error("No receiver port");
+  try {
+    await connect(page);
+    await expect(
+      page.getByRole("heading", { name: "Remote control" }),
+    ).toBeVisible();
+    const url = new URL(page.url());
+    url.hash = new URLSearchParams({
+      handoff: JSON.stringify({
+        endpoint: `http://127.0.0.1:${address.port}`,
+        folders: ["/srv/private"],
+      }),
+    }).toString();
+    const sockets: string[] = [];
+    page.on("websocket", (ws) => sockets.push(new URL(ws.url()).origin));
+    await page.goto("about:blank");
+    await page.goto(url.href);
+    // Soft, so a regression still reaches the check of where the token went.
+    await expect.soft(page.getByLabel("Server origin")).toHaveValue(url.origin);
+    await expect.soft(page.getByRole("alert")).toContainText("not filled in");
+    await expect(page.getByLabel("Auth token", { exact: true })).toHaveValue(
+      "",
+    );
+    expect(sockets).toEqual([]);
+
+    // A token pasted now goes to the origin on screen, not the link's server.
+    await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
+    const opening = page.waitForEvent("websocket");
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    const socket = await opening;
+    // The receiver has processed the upgrade before the browser sees it close.
+    await expect.poll(() => socket.isClosed()).toBe(true);
+    expect(receivedToken).toBe(false);
+    expect(new URL(socket.url()).host).toBe(new URL(baseURL!).host);
+
+    // An operator selecting a different server must not import its paths there.
+    await page.getByLabel("Server origin").fill(ORIGIN);
+    await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("different server");
+    await expect(
+      page.getByRole("region", { name: "Watched folders" }),
+    ).not.toContainText("/srv/private");
+  } finally {
+    receiver.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      receiver.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });
