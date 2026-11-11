@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   APPUI_SKILL_METHODS,
+  SKILLS_REVIEWED_INSTALL_FEATURE,
+  supportsFeature,
   supportsMethod,
   type OctosUiClient,
   type UiProtocolCapabilities,
@@ -14,9 +16,13 @@ import styles from "./SkillsDialog.module.css";
 import { useUiText } from "../preferences/ui-text.tsx";
 import {
   readInstallReview,
+  receiptMatchesPlan,
+  reviewInstallDecision,
+  reviewedInstallErrorKind,
   skillErrorText,
   type InstallReview,
   type InstallSource,
+  type ReviewedInstallPlan,
 } from "./install-review.ts";
 import {
   InstallReviewFailure,
@@ -27,8 +33,9 @@ type Commands = Awaited<ReturnType<OctosUiClient["skillCommands"]>>;
 
 /**
  * Profile mutations are explicit, scoped and never presented as browser
- * installs. Removal is the only one: Core can't hold an install to what a
- * review showed, so sources are reviewed read-only.
+ * installs. Install is offered only for a review the server can bind to an
+ * immutable commit + artifact digest (UPCR-2026-R48CB467B); every other
+ * source is reviewed read-only.
  */
 export function SkillsDialog({
   client,
@@ -53,6 +60,9 @@ export function SkillsDialog({
   const [branch, setBranch] = useState("");
   const [removal, setRemoval] = useState<string | null>(null);
   const [review, setReview] = useState<InstallReview | null>(null);
+  const [installPlan, setInstallPlan] = useState<ReviewedInstallPlan | null>(
+    null,
+  );
   const [reviewFailure, setReviewFailure] = useState<{
     source: InstallSource;
     detail: string;
@@ -66,12 +76,73 @@ export function SkillsDialog({
   const mutationBlocked = useRef(profileBusy);
   mutationBlocked.current = profileBusy;
   const available = (method: string) => supportsMethod(capabilities, method);
+  /** The reviewed-install METHOD is strict opt-in behind this feature. */
+  const reviewedInstallNegotiated = supportsFeature(
+    capabilities,
+    SKILLS_REVIEWED_INSTALL_FEATURE,
+  );
+
+  /** The server's own words for a typed reviewed-install refusal. */
+  function installErrorText(cause: unknown): string {
+    const detail = skillErrorText(cause);
+    switch (reviewedInstallErrorKind(cause)) {
+      case "reviewed_install_registry_mismatch":
+        return t(
+          "The registry changed since this review, so nothing was installed. Review the source again before installing. {detail}",
+          { detail },
+        );
+      case "reviewed_install_verification_failed":
+        return t(
+          "The artifact failed its signature or checksum verification, so nothing was installed. {detail}",
+          { detail },
+        );
+      case "reviewed_install_fetch_failed":
+        return t(
+          "The reviewed source or artifact could not be fetched, so nothing was installed. {detail}",
+          { detail },
+        );
+      case "reviewed_install_platform_unavailable":
+        return t(
+          "The registry has no artifact for this server's platform. {detail}",
+          { detail },
+        );
+      case "reviewed_install_already_installed":
+        return t("This reviewed object is already installed. {detail}", {
+          detail,
+        });
+      case "reviewed_install_unsupported_layout":
+        return t(
+          "This package's layout isn't supported by the review-bound installer. {detail}",
+          { detail },
+        );
+      case "reviewed_install_unsafe_tree":
+        return t(
+          "The reviewed tree contains links or special files the installer refuses. {detail}",
+          { detail },
+        );
+      case "reviewed_install_publish_failed":
+        return t(
+          "The install could not be published, so the previous state is unchanged. {detail}",
+          { detail },
+        );
+      case "reviewed_install_rebuild_failed":
+        return t(
+          "The install was rolled back after the server failed to rebuild the profile runtime. {detail}",
+          { detail },
+        );
+      default:
+        return detail;
+    }
+  }
 
   async function run(
     work: (commands: Commands, current: () => boolean) => Promise<void>,
     mutation = false,
   ) {
     if (requestPending.current || (mutation && mutationBlocked.current)) return;
+    // A transient reconnect can render this dialog with no profile yet; a
+    // request sent then would fail with a misleading "profile required" text.
+    if (!profileId.trim()) return;
     requestPending.current = true;
     const ticket = authority.current;
     const current = () => ticket === authority.current;
@@ -162,9 +233,69 @@ export function SkillsDialog({
     }, true);
   }
 
+  function confirmInstall() {
+    const plan = installPlan;
+    if (!plan) return;
+    void run(async (commands, current) => {
+      setInstallPlan(null);
+      try {
+        const receipt = await commands.installReviewed({
+          package: plan.package,
+          repo: plan.repo,
+          sourceCommit: plan.sourceCommit,
+          reviewedAt: plan.reviewedAt,
+          platform: plan.platform,
+          ...(plan.artifact ? { artifact: plan.artifact } : {}),
+        });
+        if (!current()) return;
+        if (!receiptMatchesPlan(plan, receipt)) {
+          // A confirmed install of a DIFFERENT object is a failure, not a win.
+          setError(
+            t(
+              "The server reported an installed object that does not match this review; the refreshed state is shown and nothing was retried.",
+            ),
+          );
+          closeReview();
+        } else {
+          setNotice(
+            t("Installed {name} at the reviewed commit {commit}.", {
+              name: receipt.installed.join(", ") || plan.package,
+              commit: receipt.sourceCommit.slice(0, 12),
+            }),
+          );
+          closeReview();
+        }
+      } catch (cause) {
+        if (!current()) return;
+        const kind = reviewedInstallErrorKind(cause);
+        if (kind) {
+          setError(installErrorText(cause));
+        } else {
+          // Unknown outcome (timeout, dropped socket): never claim either way.
+          setError(
+            t(
+              "The server did not confirm this install; it may have been applied. The refreshed state is shown and nothing was retried.",
+            ),
+          );
+        }
+        closeReview();
+      }
+      // State comes from the server, not from the button: re-read either way.
+      // A dropped socket makes this best-effort; the reconnect refresh covers it.
+      setPackages(null);
+      try {
+        const result = await commands.list();
+        if (current()) setInstalled(result);
+      } catch {
+        // The connection-level refresh will repopulate the list.
+      }
+    }, true);
+  }
+
   const closeReview = () => {
     setReview(null);
     setReviewFailure(null);
+    setInstallPlan(null);
   };
 
   return (
@@ -218,6 +349,17 @@ export function SkillsDialog({
                 {t("tools")}
               </p>
               {skill.sourceRepo ? <p>{skill.sourceRepo}</p> : null}
+              {skill.sourceCommit ? (
+                <p>
+                  {t("Reviewed commit")} <code>{skill.sourceCommit}</code>
+                  {skill.artifactSha256 ? (
+                    <>
+                      {" · "}
+                      <code>{skill.artifactSha256}</code>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               {available(APPUI_SKILL_METHODS.REMOVE) ? (
                 <button
                   type="button"
@@ -240,7 +382,7 @@ export function SkillsDialog({
               event.preventDefault();
               void run(async (commands, current) => {
                 const result = await commands.search(query);
-                if (current()) setPackages(result);
+                if (current()) setPackages(result.packages);
               });
             }}
           >
@@ -340,7 +482,22 @@ export function SkillsDialog({
         </section>
       ) : null}
       {review ? (
-        <InstallReviewPanel review={review} onClose={closeReview} />
+        <InstallReviewPanel
+          review={review}
+          decision={reviewInstallDecision(review, {
+            methodOffered: available(APPUI_SKILL_METHODS.INSTALL_REVIEWED),
+            featureNegotiated: reviewedInstallNegotiated,
+          })}
+          busy={busy || profileBusy}
+          onInstall={() => {
+            const decision = reviewInstallDecision(review, {
+              methodOffered: available(APPUI_SKILL_METHODS.INSTALL_REVIEWED),
+              featureNegotiated: reviewedInstallNegotiated,
+            });
+            if (decision.ok) setInstallPlan(decision.plan);
+          }}
+          onClose={closeReview}
+        />
       ) : null}
       {reviewFailure ? (
         <InstallReviewFailure
@@ -349,6 +506,47 @@ export function SkillsDialog({
           onRetry={() => openReview(reviewFailure.source)}
           onClose={closeReview}
         />
+      ) : null}
+      {installPlan ? (
+        <section
+          className={styles.confirmation}
+          aria-label={t("Confirm skill change")}
+        >
+          <h3>{t("Confirm reviewed install")}</h3>
+          <p>{installPlan.package}</p>
+          <p>
+            {t("The server installs exactly commit")}{" "}
+            <code>{installPlan.sourceCommit}</code>
+            {installPlan.artifact ? (
+              <>
+                {" "}
+                {t("with signed artifact")}{" "}
+                <code>{installPlan.artifact.sha256}</code>
+              </>
+            ) : null}
+            {" " +
+              t("and refuses if the registry or download no longer matches.")}
+          </p>
+          <p>
+            {t("Applies to Profile") + " "}
+            {profileId}
+            {" " + t("and rebuilds its server skill runtime.")}
+          </p>
+          <button
+            type="button"
+            disabled={busy || profileBusy}
+            onClick={confirmInstall}
+          >
+            {t("Confirm install")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setInstallPlan(null)}
+          >
+            {t("Cancel skill change")}
+          </button>
+        </section>
       ) : null}
       {removal ? (
         <section

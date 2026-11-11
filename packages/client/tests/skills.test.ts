@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSkillCommands,
   parseInstalledSkills,
-  parseSkillPackages,
+  parseSkillRegistry,
 } from "../src/skills.ts";
 import { APPUI_SKILL_METHODS } from "../src/skill-methods.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
@@ -12,6 +12,7 @@ const capabilities: UiProtocolCapabilities = {
   capabilities_schema_version: 2,
   supported_methods: Object.values(APPUI_SKILL_METHODS),
   supported_notifications: [],
+  supported_features: ["profile.skills.reviewed_install.v1"],
 };
 const skill = {
   name: "sample",
@@ -45,13 +46,30 @@ describe("profile skill contracts", () => {
       "p1",
     );
     expect(parsed).toEqual([
-      { name: "sample", version: null, toolCount: 0, sourceRepo: null },
+      {
+        name: "sample",
+        version: null,
+        toolCount: 0,
+        sourceRepo: null,
+        sourceCommit: null,
+        reviewedAt: null,
+        artifactSha256: null,
+      },
     ]);
     expect(JSON.stringify(parsed)).not.toContain("never-export");
+    const registry = parseSkillRegistry(
+      { profile_id: "p1", server_platform: "linux-x86_64", packages: [pkg] },
+      "p1",
+    );
+    expect(registry?.packages[0]?.installedSkills).toEqual([]);
+    expect(registry?.serverPlatform).toBe("linux-x86_64");
+    expect(registry?.packages[0]?.binaries).toEqual({});
     expect(
-      parseSkillPackages({ profile_id: "p1", packages: [pkg] }, "p1")?.[0]
-        ?.installedSkills,
-    ).toEqual([]);
+      parseSkillRegistry(
+        { profile_id: "p1", server_platform: 7, packages: [] },
+        "p1",
+      ),
+    ).toBeNull();
   });
   it("gates before dispatch and binds every read and mutation to the profile", async () => {
     const request = vi.fn(async () => ({}));
@@ -60,7 +78,15 @@ describe("profile skill contracts", () => {
       supported_methods: [],
     });
     await expect(none.list()).rejects.toThrow("not advertised");
-    await expect(none.install("org/sample")).rejects.toThrow("not advertised");
+    await expect(
+      none.installReviewed({
+        package: "sample",
+        repo: "org/sample",
+        sourceCommit: "a".repeat(40),
+        reviewedAt: "2026-11-11T00:00:00Z",
+        platform: "linux-x86_64",
+      }),
+    ).rejects.toThrow("not advertised");
     await expect(none.remove("sample")).rejects.toThrow("not advertised");
     expect(request).not.toHaveBeenCalled();
     request.mockResolvedValueOnce({ profile_id: "p2", count: 0, skills: [] });
@@ -76,21 +102,35 @@ describe("profile skill contracts", () => {
       profile_id: "p1",
       ok: true,
       installed: ["sample"],
-      skipped: [],
-      deps_installed: [],
+      package: "sample",
+      repo: "org/sample",
+      source_commit: "a".repeat(40),
+      reviewed_at: "2026-11-11T00:00:00Z",
+      platform: "linux-x86_64",
+      artifact_sha256: null,
+      artifact_bytes: null,
     }));
     const commands = createSkillCommands({ request }, "p1", capabilities);
-    await expect(
-      commands.install(" org/sample ", " stable "),
-    ).resolves.toMatchObject({ installed: ["sample"] });
-    expect(request).toHaveBeenLastCalledWith(APPUI_SKILL_METHODS.INSTALL, {
-      profile_id: "p1",
+    const receipt = await commands.installReviewed({
+      package: "sample",
       repo: "org/sample",
-      branch: "stable",
-      force: false,
+      sourceCommit: "a".repeat(40),
+      reviewedAt: "2026-11-11T00:00:00Z",
+      platform: "linux-x86_64",
     });
-    await expect(commands.install(" ")).rejects.toThrow("required");
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(receipt.sourceCommit).toBe("a".repeat(40));
+    expect(request).toHaveBeenLastCalledWith(
+      APPUI_SKILL_METHODS.INSTALL_REVIEWED,
+      {
+        profile_id: "p1",
+        package: "sample",
+        repo: "org/sample",
+        source_commit: "a".repeat(40),
+        reviewed_at: "2026-11-11T00:00:00Z",
+        platform: "linux-x86_64",
+        force: false,
+      },
+    );
     const remove = vi.fn(async () => ({
       profile_id: "p1",
       ok: true,
