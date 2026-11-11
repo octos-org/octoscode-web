@@ -69,3 +69,37 @@ export function runFolder(name: string): string {
   const { retry, repeatEachIndex } = test.info();
   return `/srv/work/${name}-run${repeatEachIndex}-${retry}`;
 }
+
+/** The open Session's id, read from the `?s=` reference in the address. */
+export async function openSessionId(page: Page): Promise<string> {
+  let reference: string | null = null;
+  await expect
+    .poll(() => (reference = new URL(page.url()).searchParams.get("s")))
+    .not.toBeNull();
+  return (JSON.parse(reference!) as string[])[2]!;
+}
+
+/**
+ * Deliver `name` to the Session the way Core's send_file does and open its
+ * preview. `body` is the file; without one the fixture writes a sample.
+ */
+export async function previewDelivery(
+  page: Page,
+  sessionId: string,
+  name: string,
+  body?: Buffer,
+) {
+  const response = await page.request.post(
+    `${FIXTURE_ORIGIN}/__test__/deliver-file?session_id=${encodeURIComponent(sessionId)}&name=${encodeURIComponent(name)}&valid=1`,
+    body ? { data: body } : {},
+  );
+  expect(response.ok()).toBe(true);
+  const item = page.locator(`[data-attachment="${name}"]`);
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = item
+    .locator(".artifact-preview, [data-artifact-kind]")
+    .last();
+  await expect(preview).toBeVisible();
+  return { item, preview };
+}

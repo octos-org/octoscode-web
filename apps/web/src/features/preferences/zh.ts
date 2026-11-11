@@ -2034,6 +2034,28 @@ const catalog: Readonly<Record<string, string>> = {
   "The PDF couldn't be rendered. Download it to open it in another app.":
     "无法渲染 PDF，请下载后使用其他应用打开。",
   "Page text": "页面文字",
+  "Loading the text recognizer…": "正在加载文字识别…",
+  "Recognizing page {page}… {percent}%": "正在识别第 {page} 页… {percent}%",
+  "Text recognition progress": "文字识别进度",
+  "Low confidence ({confidence}%). Check this text against the page.":
+    "置信度低（{confidence}%），请对照页面核对这段文字。",
+  "Text recognized on page {page} in this browser ({confidence}% confidence). It may contain errors.":
+    "已在本浏览器中识别第 {page} 页的文字（置信度 {confidence}%），可能有误。",
+  "No reliable text was recognized on page {page} ({confidence}% confidence). If the page is in another language, choose it and try again.":
+    "第 {page} 页没有识别出可靠的文字（置信度 {confidence}%）。如果页面是其他语言，请选择该语言后重试。",
+  "Text recognition isn't available on this server.":
+    "此服务器不支持本地文字识别。",
+  "Text recognition took too long and was stopped.":
+    "文字识别耗时过长，已停止。",
+  "Text recognition failed.": "文字识别失败。",
+  "Text recognition was cancelled.": "已取消文字识别。",
+  English: "英文",
+  "Chinese and English": "中文和英文",
+  "Recognize text on page {page}": "识别第 {page} 页的文字",
+  "Runs in this browser; the file isn't uploaded. The first run downloads up to 6 MB.":
+    "在本浏览器中识别，文件不会上传。首次使用需下载约 6 MB。",
+  "Runs in this browser; the file isn't uploaded. The first run downloads up to 8 MB.":
+    "在本浏览器中识别，文件不会上传。首次使用需下载约 8 MB。",
   "Document preview of {name}": "{name} 的文档预览",
   "This document couldn't be previewed. Download it to open it in another app.":
     "无法预览此文档，请下载后使用其他应用打开。",

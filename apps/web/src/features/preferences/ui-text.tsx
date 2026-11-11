@@ -37,6 +37,7 @@ export function createUiText(
 }
 
 const UiTextContext = createContext<UiText>(createUiText());
+const UiLanguageContext = createContext<UiLanguage>("en");
 let chineseCatalog: Promise<UiCatalog> | undefined;
 
 /** Every zh table merged, as the app loads it; exported for the coverage test. */
@@ -116,11 +117,18 @@ export function UiTextProvider({
     [language, catalog, loadedCatalog],
   );
   return (
-    <UiTextContext.Provider value={text}>{children}</UiTextContext.Provider>
+    <UiLanguageContext.Provider value={language}>
+      <UiTextContext.Provider value={text}>{children}</UiTextContext.Provider>
+    </UiLanguageContext.Provider>
   );
 }
 
 /** English source text also works outside a provider, including existing feature tests. */
 export function useUiText(): UiText {
   return useContext(UiTextContext);
+}
+
+/** For choices that follow the reader's language, such as the OCR language. */
+export function useUiLanguage(): UiLanguage {
+  return useContext(UiLanguageContext);
 }

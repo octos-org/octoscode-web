@@ -4,3 +4,5 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # tesseract.js only runs an opencollective banner; the OCR assets need no build step.
+  tesseract.js: false
