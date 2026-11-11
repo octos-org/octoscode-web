@@ -1,18 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
-
-async function openConnectors(page: Page) {
-  await page
-    .locator("aside")
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings
-    .getByRole("button", { name: "Connectors", exact: true })
-    .click();
-  return settings;
-}
+import { openSettings } from "./sessions";
 
 function connector(settings: ReturnType<Page["getByRole"]>, id: string) {
   return settings.locator(`[data-connector-id="${id}"]`);
@@ -22,7 +11,7 @@ test("manages HTTP connectors and keeps existing stdio controls", async ({
   page,
 }) => {
   await startSession(page, `/srv/work/connector-management-${Date.now()}`);
-  const settings = await openConnectors(page);
+  const settings = await openSettings(page, "Connectors");
   const legacy = connector(settings, "legacy");
   const docs = connector(settings, "docs");
   await expect(legacy).toContainText("Legacy HTTP");
@@ -74,7 +63,7 @@ test("adds a stdio connector from the server's allowlist, never a command", asyn
   page,
 }) => {
   await startSession(page, `/srv/work/connector-management-${Date.now()}`);
-  const settings = await openConnectors(page);
+  const settings = await openSettings(page, "Connectors");
   await expect(
     settings.getByText(
       "Add HTTP connectors, or stdio connectors from the server's allowlist.",
@@ -109,7 +98,7 @@ test("adds a stdio connector from the server's allowlist, never a command", asyn
   await expect(created).toContainText("connected");
 });
 
-test("a delayed refresh blocks mutations and always releases busy state", async ({
+test("a delayed refresh blocks mutations and releases busy state when it lands", async ({
   page,
 }) => {
   let listCalls = 0;
@@ -138,7 +127,7 @@ test("a delayed refresh blocks mutations and always releases busy state", async 
     });
   });
   await startSession(page, `/srv/work/connector-management-${Date.now()}`);
-  const settings = await openConnectors(page);
+  const settings = await openSettings(page, "Connectors");
   await settings.getByRole("button", { name: "Refresh" }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
   await expect(

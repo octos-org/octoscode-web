@@ -1,13 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  holdTerminals,
+  releaseTerminal,
+  terminalHeld,
+} from "./fixture-controls";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import {
+  composer,
+  newSessionIn,
+  productNavigation,
+  selectedSessionId,
+  sessionRow,
+} from "./sessions";
+import { observeFrames } from "./turn-observers";
 
-const composer = (page: Page) =>
-  page.getByPlaceholder("Ask Octos to change, explain, or review code…");
-const sidebar = (page: Page) => page.locator("aside");
-const selectedRow = (page: Page) =>
-  sidebar(page).locator(
-    '[role="treeitem"][data-session-id][aria-current="page"]',
-  );
 const historyDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Resume historical conversation" });
 /**
@@ -24,49 +30,18 @@ const reasoningEntries = (page: Page) =>
   });
 /** The reasoning entry's own disclosure control (the collapsed default). */
 const reasoningFold = (page: Page) => reasoningEntries(page).locator("summary");
-type Rpc = {
-  id: string;
-  method: string;
-  params: {
-    session_id?: string;
-    input?: { kind: string; text?: string }[];
-    reasoning_effort?: string;
-  };
-};
-function observe(page: Page) {
-  const requests: Rpc[] = [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Rpc;
-      if (frame.method) requests.push(frame);
-    }),
-  );
-  return (method: string) =>
-    requests.filter((request) => request.method === method);
-}
 async function send(page: Page, text: string) {
   await composer(page).fill(text);
   await page.getByRole("button", { name: "Send prompt" }).click();
 }
 async function newSession(page: Page, name: string) {
-  await sidebar(page)
-    .locator(`[data-workspace-name=${JSON.stringify(name)}]`)
-    .getByRole("button", { name, exact: true })
-    .hover();
-  await sidebar(page)
-    .getByRole("button", { name: `New session in ${name}` })
-    .click();
+  const sessionId = await newSessionIn(productNavigation(page), name);
   await expect(composer(page)).toBeEnabled();
-}
-async function title(page: Page) {
-  const sessionId = await selectedRow(page).getAttribute("data-session-id");
-  if (!sessionId) throw new Error("Expected a selected Session id");
   return sessionId;
 }
+const title = (page: Page) => selectedSessionId(productNavigation(page));
 const row = (page: Page, sessionId: string) =>
-  sidebar(page).locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
-  );
+  sessionRow(productNavigation(page), sessionId);
 const control = (name: string, sessionId: string, method?: string) =>
   `${FIXTURE_ORIGIN}/__test__/native/${name}?${new URLSearchParams({ session_id: sessionId, ...(method ? { method } : {}) })}`;
 
@@ -74,9 +49,9 @@ test("resume lists unverified candidates, refuses bare IDs, and requires confirm
   page,
   request,
 }) => {
-  const rpc = observe(page);
+  const rpc = observeFrames(page).calls;
   await connectAndStartWorkspace(page, "/srv/work/native-workflows-resume");
-  const owner = rpc("session/open").at(-1)!.params.session_id!;
+  const owner = rpc("session/open").at(-1)!.params!.session_id;
   const seed = await request.post(control("seed-history", owner));
   expect(seed.status()).toBe(200);
   const { sessions } = (await seed.json()) as {
@@ -116,16 +91,18 @@ test("resume lists unverified candidates, refuses bare IDs, and requires confirm
   expect(
     rpc("session/open")
       .slice(opens)
-      .map((call) => call.params.session_id),
+      .map((call) => call.params!.session_id),
   ).toEqual([target.id]);
   expect(
     rpc("session/hydrate")
       .slice(hydrates)
-      .map((call) => call.params.session_id),
+      .map((call) => call.params!.session_id),
   ).toEqual([target.id]);
   expect(rpc("turn/start")).toHaveLength(0);
   await expect(
-    sidebar(page).getByText("Unscoped native history (not resumable)"),
+    productNavigation(page).getByText(
+      "Unscoped native history (not resumable)",
+    ),
   ).toHaveCount(0);
 });
 
@@ -133,10 +110,11 @@ test("canceling a held historical open cannot install a late transcript or steal
   page,
   request,
 }) => {
-  const rpc = observe(page);
+  const frames = observeFrames(page);
+  const rpc = frames.calls;
   const workspace = "native-workflows-resume-cancel";
   await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
-  const owner = rpc("session/open").at(-1)!.params.session_id!;
+  const owner = rpc("session/open").at(-1)!.params!.session_id;
   const original = await title(page);
   const seed = await request.post(control("seed-history", owner));
   expect(seed.status()).toBe(200);
@@ -172,8 +150,7 @@ test("canceling a held historical open cannot install a late transcript or steal
       )
       .toContain("session/hydrate");
     await dialog.getByRole("button", { name: "Close history picker" }).click();
-    await newSession(page, workspace);
-    const next = await title(page);
+    const next = await newSession(page, workspace);
     expect(next).not.toBe(original);
     await composer(page).fill("Preserve B draft after late history");
     expect(
@@ -187,6 +164,17 @@ test("canceling a held historical open cannot install a late transcript or steal
           (await (await request.get(control("state", target.id))).json()).held,
       )
       .toEqual([]);
+    // The late transcript reached the page; before any click of ours, the
+    // new Session is still selected with its draft.
+    await frames.settled(
+      rpc("session/hydrate").find(
+        (frame) => frame.params?.session_id === target.id,
+      )!,
+    );
+    await expect(row(page, next)).toHaveAttribute("aria-current", "page");
+    await expect(composer(page)).toHaveValue(
+      "Preserve B draft after late history",
+    );
     for (let index = 0; index < 3; index += 1) {
       await row(page, original).click();
       await row(page, next).click();
@@ -208,10 +196,10 @@ test("resuming an already retained busy historical Session never reopens or rese
   page,
   request,
 }) => {
-  const rpc = observe(page);
+  const rpc = observeFrames(page).calls;
   const workspace = "native-workflows-resume-busy";
   await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
-  const owner = rpc("session/open").at(-1)!.params.session_id!;
+  const owner = rpc("session/open").at(-1)!.params!.session_id;
   const seed = await request.post(control("seed-history", owner));
   expect(seed.status()).toBe(200);
   const { sessions } = (await seed.json()) as {
@@ -237,37 +225,20 @@ test("resuming an already retained busy historical Session never reopens or rese
     await expect(dialog).toHaveCount(0);
   };
   await resumeTarget();
-  expect(
-    (
-      await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`)
-    ).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   try {
     await send(page, "Historical A must remain busy across resume");
-    await expect
-      .poll(async () => {
-        const state = (await (
-          await request.get(`${FIXTURE_ORIGIN}/__test__/terminal/state`)
-        ).json()) as { held: { session_id: string }[] };
-        return state.held.map((entry) => entry.session_id);
-      })
-      .toContain(target.id);
+    await terminalHeld(request, target.id);
     await newSession(page, workspace);
     const opens = rpc("session/open").length;
     await resumeTarget();
     expect(rpc("session/open")).toHaveLength(opens);
     expect(rpc("turn/start")).toHaveLength(1);
-    expect(rpc("turn/start")[0]!.params.session_id).toBe(target.id);
+    expect(rpc("turn/start")[0]!.params!.session_id).toBe(target.id);
     await expect(
       page.getByRole("button", { name: "Stop", exact: true }),
     ).toBeVisible();
-    expect(
-      (
-        await request.post(
-          `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(target.id)}`,
-        )
-      ).status(),
-    ).toBe(204);
+    await releaseTerminal(request, target.id);
     await expect(
       page.getByRole("button", { name: "Stop", exact: true }),
     ).toHaveCount(0);
@@ -289,7 +260,7 @@ test("resuming an already retained busy historical Session never reopens or rese
 test("reasoning visibility is retained per Session and does not change captured model effort", async ({
   page,
 }) => {
-  const rpc = observe(page);
+  const rpc = observeFrames(page).calls;
   const workspace = "native-workflows-reasoning";
   await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   const a = await title(page);
@@ -302,8 +273,7 @@ test("reasoning visibility is retained per Session and does not change captured 
     })
     .uncheck();
   await dialog.getByRole("button", { name: "Close thinking effort" }).click();
-  await newSession(page, workspace);
-  const b = await title(page);
+  const b = await newSession(page, workspace);
   await send(page, "/thinking");
   dialog = page.getByRole("dialog", { name: "Thinking effort" });
   await expect(
@@ -326,7 +296,7 @@ test("reasoning visibility is retained per Session and does not change captured 
   expect(rpc("turn/start")).toHaveLength(0);
   await send(page, "Verify native reasoning effort A");
   await expect.poll(() => rpc("turn/start").length).toBe(1);
-  expect(rpc("turn/start")[0]!.params.reasoning_effort).toBe("high");
+  expect(rpc("turn/start")[0]!.params!.reasoning_effort).toBe("high");
   await expect(
     page.getByText("Completed with pnpm check and all tests passing."),
   ).toBeVisible();

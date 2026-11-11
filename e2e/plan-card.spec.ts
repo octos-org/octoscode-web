@@ -1,10 +1,7 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Locator,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { holdTerminals, releaseTerminal } from "./fixture-controls";
+import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
+import { sendPrompt } from "./sessions";
 
 /**
  * plan.todos.v1 — the agent's live checklist above the composer.
@@ -15,21 +12,8 @@ import {
  * authoring turn's terminal, and the feature-absent case with no card at all.
  */
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const PLAN_TOKEN = "plan-fixture-e2e-token";
 const PROMPT = "Plan fixture";
-
-async function start(page: Page, token: string, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill(workspace);
-  await page.getByLabel("Server workspace path").press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
-}
 
 function card(page: Page): Locator {
   return page.locator('[data-plan-card="true"]');
@@ -39,42 +23,17 @@ function rows(page: Page): Locator {
   return card(page).locator("li");
 }
 
-async function send(page: Page, text: string) {
-  const input = page.getByRole("textbox", { name: "Message Octos" });
-  await input.fill(text);
-  await input.press("Enter");
-}
-
-/** Park this turn's terminal so the plan stays up while the spec reads it. */
-async function holdTerminal(request: APIRequestContext) {
-  expect(
-    (
-      await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`)
-    ).status(),
-  ).toBe(204);
-}
-
-async function releaseTerminal(request: APIRequestContext) {
-  const state = (await (
-    await request.get(`${FIXTURE_ORIGIN}/__test__/terminal/state`)
-  ).json()) as { held: { session_id: string }[] };
-  const owner = state.held[0]!.session_id;
-  expect(
-    (
-      await request.post(
-        `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(owner)}`,
-      )
-    ).status(),
-  ).toBe(204);
-}
-
 test("shows the plan, replaces it wholesale, and clears it when the turn ends", async ({
   page,
   request,
 }) => {
-  await start(page, PLAN_TOKEN, "/workspace/plan-card");
-  await holdTerminal(request);
-  await send(page, PROMPT);
+  await startSession(page, "/workspace/plan-card", PLAN_TOKEN);
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeVisible();
+  // Park this turn's terminal so the plan stays up while the spec reads it.
+  await holdTerminals(request);
+  await sendPrompt(page, PROMPT);
 
   // The first plan arrives with the turn.
   await expect(card(page)).toBeVisible();
@@ -102,6 +61,6 @@ test("shows the plan, replaces it wholesale, and clears it when the turn ends", 
   await expect(card(page)).toContainText("1 of 3 done");
 
   // The authoring turn's terminal drops the checklist; nothing lingers.
-  await releaseTerminal(request);
+  await releaseTerminal(request, await openSessionId(page));
   await expect(card(page)).toHaveCount(0);
 });

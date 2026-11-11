@@ -5,14 +5,13 @@ import {
   previewDelivery,
   startSession,
 } from "./fixture-session";
+import { sendPrompt } from "./sessions";
 
 test("keeps a structured write artifact and its preview after reload", async ({
   page,
 }) => {
   await startSession(page, `/workspace/artifact-preview-${Date.now()}`);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await composer.fill("Write an artifact fixture");
-  await composer.press("Enter");
+  await sendPrompt(page, "Write an artifact fixture");
   const item = page.locator('[data-attachment="report.md"]');
   await expect(item).toBeVisible();
   await page.reload();

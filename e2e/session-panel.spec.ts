@@ -1,12 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
-
-async function send(page: Page, text: string) {
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await composer.fill(text);
-  await composer.press("Enter");
-}
+import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
+import { sendPrompt } from "./sessions";
 
 const toggle = (page: Page) =>
   page.getByRole("button", { name: /^Session panel/ });
@@ -64,6 +59,10 @@ test("Files ignores a late listing from the previous workspace root", async ({
   ).toBeVisible();
   await expect.poll(() => Boolean(release)).toBe(true);
   release?.();
+  // Check only after the late listing has reached the page and painted.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(resolve)),
+  );
   await expect(
     files.getByRole("button", { name: "archive", exact: true }),
   ).toBeVisible();
@@ -129,11 +128,9 @@ test("one file stays selected across diff, output, reload and read failure", asy
     });
   });
   await startSession(page, `/workspace/panel-linked-${Date.now()}`);
-  await send(page, "Write the linked report");
+  await sendPrompt(page, "Write the linked report");
   await expect(toggle(page)).toHaveAccessibleName("Session panel, 1 changed");
-  const id = JSON.parse(
-    new URL(page.url()).searchParams.get("s")!,
-  )[2] as string;
+  const id = await openSessionId(page);
   expect(
     (
       await request.post(

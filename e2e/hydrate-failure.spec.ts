@@ -1,6 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-
-const fixture = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
 
 async function controlledHydrates(page: Page) {
   const sockets: WebSocketRoute[] = [];
@@ -47,23 +46,11 @@ async function controlledHydrates(page: Page) {
   return { sockets, opens, hydrates, control };
 }
 
-async function start(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const path = page.getByLabel("Server workspace path");
-  await path.fill(workspace);
-  await path.press("Enter");
-}
-
 test("a failed reconnect hydrate retains the current Session, Changes and draft", async ({
   page,
 }) => {
   const probe = await controlledHydrates(page);
-  await start(page, "/workspace/diff-review");
+  await startSession(page, "/workspace/diff-review");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
   await composer.fill("Review syntax fixture");
@@ -137,10 +124,8 @@ test("a cold hydrate failure stays honest and Start retries without a phantom re
   const probe = await controlledHydrates(page);
   probe.control.failures = 1;
   await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   const path = page.getByLabel("Server workspace path");
   await path.fill("/workspace/diff-review");

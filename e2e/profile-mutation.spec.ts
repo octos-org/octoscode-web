@@ -1,7 +1,7 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import { composer } from "./sessions";
 
-const COMPOSER = "Ask Octos to change, explain, or review code…";
 const METHODS = [
   "profile/skills/list",
   "profile/skills/install",
@@ -118,8 +118,8 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
 }
 
 async function command(page: Page, name: string) {
-  await page.getByPlaceholder(COMPOSER).fill(`/${name}`);
-  await page.getByPlaceholder(COMPOSER).press("Enter");
+  await composer(page).fill(`/${name}`);
+  await composer(page).press("Enter");
 }
 
 test("skill removal holds the profile lock through deferred replies and deduplicates confirmation; reviewing a source writes nothing", async ({
@@ -164,7 +164,7 @@ test("skill removal holds the profile lock through deferred replies and deduplic
   await expect(
     dialog.getByRole("button", { name: "Close skills" }),
   ).toBeDisabled();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeDisabled();
+  await expect(composer(page)).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();
   expect(rpc.writes).toHaveLength(1);
@@ -176,7 +176,7 @@ test("skill removal holds the profile lock through deferred replies and deduplic
     dialog.getByRole("button", { name: "Close skills" }),
   ).toBeEnabled();
   await dialog.getByRole("button", { name: "Close skills" }).click();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
+  await expect(composer(page)).toBeEnabled();
   expect(rpc.turnStarts).toHaveLength(0);
   expect(rpc.writes.map((write) => write.request.method)).not.toContain(
     "profile/skills/install",
@@ -221,7 +221,7 @@ test("a failed credential write clears its input, consumes confirmation and requ
   await expect(
     dialog.getByRole("button", { name: "Close research lanes" }),
   ).toBeDisabled();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeDisabled();
+  await expect(composer(page)).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();
   rpc.fail(
@@ -264,6 +264,6 @@ test("a failed credential write clears its input, consumes confirmation and requ
   await expect(dialog.getByText(/A serve restart is required/)).toBeVisible();
   await expect(dialog.getByText(/No restart was performed/)).toBeVisible();
   await dialog.getByRole("button", { name: "Close research lanes" }).click();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
+  await expect(composer(page)).toBeEnabled();
   expect(rpc.turnStarts).toHaveLength(0);
 });

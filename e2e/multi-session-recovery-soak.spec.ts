@@ -1,19 +1,21 @@
+import { expect, test } from "@playwright/test";
+import { holdTerminals, releaseTerminal } from "./fixture-controls";
+import { FIXTURE_ORIGIN, connectAndStartWorkspace } from "./fixture-session.ts";
 import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Locator,
-  type Page,
-} from "@playwright/test";
-import { connectAndStartWorkspace } from "./fixture-session.ts";
+  newSessionIn,
+  productNavigation,
+  selectSession,
+  selectedSessionId,
+  sendPrompt,
+} from "./sessions";
 import {
+  observeFrames,
   observeStartedTurns,
   observeInterrupts,
+  trackRuntimeErrors,
   type StartedTurn,
 } from "./turn-observers";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const WORKSPACE_NAME = "multi-session-recovery-soak";
 const WORKSPACE_PARKED = `${WORKSPACE_NAME}-parked`;
 const APPROVAL_TITLE = "Run product checks?";
@@ -24,177 +26,6 @@ test.afterEach(async ({ request }) => {
   await request.post(FIXTURE_ORIGIN + "/__test__/turn-start/reset");
   await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
 });
-
-function productNavigation(page: Page): Locator {
-  return page.locator("aside");
-}
-
-function sessionRowById(sidebar: Locator, sessionId: string): Locator {
-  return sidebar.locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
-  );
-}
-
-async function selectedSessionTitle(sidebar: Locator): Promise<string> {
-  const sessionId = await sidebar
-    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .getAttribute("data-session-id");
-  if (!sessionId) throw new Error("Expected a selected Session id");
-  return sessionId;
-}
-
-interface SentFrame {
-  method: string;
-  params: Record<string, unknown>;
-}
-
-/** Capture the exact approval/question ids the fixture asks this page to own. */
-function observeInteractionRequests(page: Page): () => SentFrame[] {
-  const requests: SentFrame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as SentFrame;
-      if (
-        frame.method === "approval/requested" ||
-        frame.method === "user_question/requested"
-      ) {
-        requests.push({ method: frame.method, params: frame.params ?? {} });
-      }
-    });
-  });
-  return () => requests.slice();
-}
-
-/** Capture every approval/respond and user_question/respond frame sent. */
-function observeRespondFrames(page: Page): () => SentFrame[] {
-  const frames: SentFrame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const raw = String(payload);
-      if (
-        !raw.includes('"method":"approval/respond"') &&
-        !raw.includes('"method":"user_question/respond"')
-      ) {
-        return;
-      }
-      const frame = JSON.parse(raw) as SentFrame;
-      frames.push({ method: frame.method, params: frame.params ?? {} });
-    });
-  });
-  return () => frames.slice();
-}
-
-interface TerminalEvent {
-  sessionId: string;
-  turnId: string;
-  seq: number;
-  cursorSeq: number;
-  outcome: string;
-}
-
-/** Records every canonical terminal envelope fanned to this page's socket. */
-function observeTerminals(page: Page): () => TerminalEvent[] {
-  const terminals: TerminalEvent[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as {
-        method?: string;
-        params?: {
-          session_id?: string;
-          turn_id?: string;
-          seq?: number;
-          cursor?: { seq?: number };
-          payload?: { type?: string; data?: { outcome?: string } };
-        };
-      };
-      if (frame.method !== "projection/envelope") return;
-      const params = frame.params;
-      if (params?.payload?.type !== "turn_terminal") return;
-      terminals.push({
-        sessionId: params.session_id ?? "",
-        turnId: params.turn_id ?? "",
-        seq: params.seq ?? 0,
-        cursorSeq: params.cursor?.seq ?? 0,
-        outcome: params.payload.data?.outcome ?? "",
-      });
-    });
-  });
-  return () => terminals.slice();
-}
-
-async function holdTerminals(
-  request: APIRequestContext,
-  count: number,
-): Promise<void> {
-  for (let index = 0; index < count; index += 1) {
-    expect(
-      (
-        await request.post(FIXTURE_ORIGIN + "/__test__/terminal/hold-next")
-      ).status(),
-    ).toBe(204);
-  }
-}
-
-async function heldSessions(
-  request: APIRequestContext,
-): Promise<Array<{ session_id: string; turn_id: string }>> {
-  const state = (await (
-    await request.get(FIXTURE_ORIGIN + "/__test__/terminal/state")
-  ).json()) as {
-    held: Array<{ session_id: string; turn_id: string }>;
-  };
-  return state.held;
-}
-
-async function releaseHeldTerminal(
-  request: APIRequestContext,
-  sessionId: string,
-): Promise<void> {
-  await expect
-    .poll(
-      async () =>
-        (await heldSessions(request)).some(
-          (held) => held.session_id === sessionId,
-        ),
-      { timeout: 20_000 },
-    )
-    .toBe(true);
-  expect(
-    (
-      await request.post(
-        `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(sessionId)}`,
-      )
-    ).status(),
-  ).toBe(204);
-}
-
-interface RuntimeErrors {
-  unhandled: string[];
-  consoleErrors: string[];
-}
-
-/** Track uncaught page errors and console errors for one case. */
-function trackRuntimeErrors(page: Page): () => RuntimeErrors {
-  const unhandled: string[] = [];
-  const consoleErrors: string[] = [];
-  page.on("pageerror", (error) => unhandled.push(error.message));
-  page.on("console", (message) => {
-    // §Discovery probes the last origin this browser saw for /pair/info, and a
-    // fixture that does not implement pairing answers 404. The contract calls a
-    // failed probe silent, and the app treats it as "pairing not supported" —
-    // but the BROWSER still logs the response, which is not a defect in the
-    // code under soak. Every other console error still fails the run.
-    if (message.type() !== "error") return;
-    const text = message.text();
-    if (message.location().url.endsWith("/pair/info") && text.includes("404"))
-      return;
-    consoleErrors.push(text);
-  });
-  return () => ({
-    unhandled: unhandled.slice(),
-    consoleErrors: consoleErrors.slice(),
-  });
-}
 
 /** The Session id that admitted the ONE turn whose prompt text is `text`. */
 function sessionIdForPrompt(started: StartedTurn[], text: string): string {
@@ -207,47 +38,6 @@ function sessionIdForPrompt(started: StartedTurn[], text: string): string {
   return matched[0]!.sessionId;
 }
 
-async function createSiblingSession(
-  sidebar: Locator,
-  workspaceName: string,
-): Promise<string> {
-  const workspace = sidebar.locator(
-    `[data-workspace-name=${JSON.stringify(workspaceName)}]`,
-  );
-  // Creating a sibling selects it, but selection only moves a beat AFTER the
-  // click. Capture the current selection first, then wait until it changes, so
-  // we never read the previous Session's id as if it were the new sibling's.
-  const previous = await selectedSessionTitle(sidebar);
-  await workspace
-    .getByRole("button", { name: workspaceName, exact: true })
-    .hover();
-  await sidebar
-    .getByRole("button", { name: `New session in ${workspaceName}` })
-    .click();
-  // No fixed sleeps: poll the selected row until it is a DIFFERENT Session.
-  await expect
-    .poll(async () => selectedSessionTitle(sidebar).catch(() => previous), {
-      timeout: 15_000,
-    })
-    .not.toBe(previous);
-  return selectedSessionTitle(sidebar);
-}
-
-async function selectSession(
-  sidebar: Locator,
-  sessionId: string,
-): Promise<void> {
-  const row = sessionRowById(sidebar, sessionId);
-  await row.click();
-  await expect(row).toHaveAttribute("aria-current", "page");
-}
-
-async function sendPrompt(page: Page, text: string): Promise<void> {
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill(text);
-  await page.getByRole("button", { name: /^(Send|Queue) prompt$/ }).click();
-}
-
 test("parks a background approval on its owning Session across A/B/C switching, drains its queued followup, and survives an observer reconnect", async ({
   page,
   request,
@@ -255,17 +45,19 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   test.setTimeout(120_000);
   const cwd = `/srv/work/${WORKSPACE_PARKED}`;
   const started = observeStartedTurns(page);
-  const terminals = observeTerminals(page);
+  const frames = observeFrames(page);
+  const terminals = () =>
+    frames
+      .events("projection/envelope")
+      .filter((frame) => frame.params?.payload?.type === "turn_terminal");
   const interrupts = observeInterrupts(page);
-  const requests = observeInteractionRequests(page);
-  const responds = observeRespondFrames(page);
   const errors = trackRuntimeErrors(page);
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
   const trace = "A-after-parked-approval";
 
-  const titleA = await selectedSessionTitle(sidebar);
+  const titleA = await selectedSessionId(sidebar);
   // The composer — and the "N queued" strip it renders (v0.10.0's QueuedPrompts,
   // `<section aria-label="Queued prompts">`) — is mounted only
   // while NO interaction owns the surface: the shipped contract swaps in
@@ -307,17 +99,15 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   ).toBe(204);
   const dialog = page.getByRole("dialog", { name: APPROVAL_TITLE });
   await expect(dialog).toBeVisible();
-  const approval = requests().find(
-    (frame) => frame.method === "approval/requested",
-  )!;
-  const sessionA = String(approval.params.session_id);
+  const approval = frames.events("approval/requested")[0]!;
+  const sessionA = String(approval.params!.session_id);
 
-  const titleB = await createSiblingSession(sidebar, WORKSPACE_PARKED);
+  const titleB = await newSessionIn(sidebar, WORKSPACE_PARKED);
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
   await expect(page.getByText(/\b1 queued\b/)).toHaveCount(0);
-  const titleC = await createSiblingSession(sidebar, WORKSPACE_PARKED);
+  const titleC = await newSessionIn(sidebar, WORKSPACE_PARKED);
   expect(new Set([titleA, titleB, titleC]).size).toBe(3);
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
@@ -358,16 +148,16 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   const completedTerminals = (turn: StartedTurn) =>
     terminals().filter(
       (terminal) =>
-        terminal.sessionId === turn.sessionId &&
-        terminal.turnId === turn.turnId &&
-        terminal.outcome === "completed",
+        terminal.params!.session_id === turn.sessionId &&
+        terminal.params!.turn_id === turn.turnId &&
+        terminal.params!.payload.data?.outcome === "completed",
     );
   await expect.poll(() => completedTerminals(turnB).length).toBe(1);
   await expect.poll(() => completedTerminals(turnC).length).toBe(1);
   // No output leaks either way: A authored no terminal yet, and each B/C
   // Session admitted ONLY its own prompt.
   expect(
-    terminals().filter((terminal) => terminal.sessionId === sessionA),
+    terminals().filter((terminal) => terminal.params!.session_id === sessionA),
   ).toHaveLength(0);
   expect(
     started()
@@ -380,15 +170,9 @@ test("parks a background approval on its owning Session across A/B/C switching, 
       .map((turn) => turn.text),
   ).toEqual([promptC]);
   // Before returning: nothing was answered and the queued followup waits.
-  expect(
-    responds().filter((frame) => frame.method === "approval/respond"),
-  ).toHaveLength(0);
-  expect(
-    responds().filter((frame) => frame.method === "user_question/respond"),
-  ).toHaveLength(0);
-  expect(
-    requests().filter((frame) => frame.method === "approval/requested"),
-  ).toHaveLength(1);
+  expect(frames.calls("approval/respond")).toHaveLength(0);
+  expect(frames.calls("user_question/respond")).toHaveLength(0);
+  expect(frames.events("approval/requested")).toHaveLength(1);
   expect(started().map((turn) => turn.text)).not.toContain(trace);
 
   // Returning to A restores the parked interaction: the panel replaces the
@@ -402,26 +186,25 @@ test("parks a background approval on its owning Session across A/B/C switching, 
   await expect(page.getByRole("dialog", { name: APPROVAL_TITLE })).toHaveCount(
     0,
   );
-  const respond = responds().filter(
-    (frame) => frame.method === "approval/respond",
-  );
+  const respond = frames.calls("approval/respond");
   expect(respond).toHaveLength(1);
   expect(respond[0]!.params).toMatchObject({
     session_id: sessionA,
-    approval_id: approval.params.approval_id,
+    approval_id: approval.params!.approval_id,
   });
 
   await expect
     .poll(() => started().filter((turn) => turn.text === trace).length)
     .toBe(1);
   expect(sessionIdForPrompt(started(), trace)).toBe(sessionA);
-  await releaseHeldTerminal(request, sessionA);
+  await releaseTerminal(request, sessionA);
   await expect
     .poll(
       () =>
         terminals().filter(
           (terminal) =>
-            terminal.sessionId === sessionA && terminal.outcome === "completed",
+            terminal.params!.session_id === sessionA &&
+            terminal.params!.payload.data?.outcome === "completed",
         ).length,
     )
     .toBe(2);

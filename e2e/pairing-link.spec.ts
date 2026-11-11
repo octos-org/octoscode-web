@@ -4,13 +4,13 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { FIXTURE_ORIGIN } from "./fixture-session";
+import { openSettings } from "./sessions";
 
 /**
  * WEB-PAIRING-CONTRACT-5100 §Client — opening the web client from the link the
  * server prints. The resulting credential stays within this browser tab.
  */
-const FIXTURE_PORT = process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080";
-const ORIGIN = `http://127.0.0.1:${FIXTURE_PORT}`;
 const CODE = "R7K2QPX9";
 
 function link(origin: string, code: string): string {
@@ -22,7 +22,7 @@ async function stagePairing(
   mode: "fresh" | "burned" | "expired" | "locked" | "unsupported",
 ): Promise<void> {
   const response = await request.post(
-    `${ORIGIN}/__test__/pair/reset?mode=${mode}`,
+    `${FIXTURE_ORIGIN}/__test__/pair/reset?mode=${mode}`,
   );
   expect(response.status()).toBe(204);
 }
@@ -40,7 +40,7 @@ test("the paired token survives only this tab until Forget", async ({
   request,
 }) => {
   await stagePairing(request, "fresh");
-  await page.goto(link(ORIGIN, CODE));
+  await page.goto(link(FIXTURE_ORIGIN, CODE));
   await expect(workspaceGate(page)).toBeVisible();
 
   // Same tab: a reload does not ask again.
@@ -56,12 +56,8 @@ test("the paired token survives only this tab until Forget", async ({
   await second.close();
 
   // Forget removes the tab-scoped credential.
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  await page
-    .getByRole("dialog", { name: "Settings", exact: true })
+  const settings = await openSettings(page);
+  await settings
     .getByRole("button", { name: "Forget server", exact: true })
     .click();
   await expect(

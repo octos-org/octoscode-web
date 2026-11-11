@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
 
 // T-0177: a launch whose socket closes used to show its error for half a
 // second, until the automatic reconnect erased it. Each case holds the error
 // for six seconds, longer than any reconnect here takes.
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const PERMISSION =
   "This account can't open the Profile for this folder. Choose another folder, or ask the server admin for access and try again.";
 const SETTLE_MS = 6_000;
@@ -34,9 +34,7 @@ async function closeOnSessionOpen(page: Page) {
 async function connect(page: Page, workspace: string) {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
   await page.getByLabel("Server workspace path").fill(workspace);
 }

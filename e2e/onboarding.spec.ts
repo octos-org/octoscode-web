@@ -1,14 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
+import {
+  COMPOSER_PLACEHOLDER,
+  FIXTURE_ORIGIN,
+  FIXTURE_TOKEN,
+} from "./fixture-session";
 
 async function connectWithKeyboard(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
   await expect(
     page.getByRole("region", { name: "Add workspace" }),
@@ -68,7 +68,7 @@ test("explains missing authentication while preserving password privacy and IME 
     page.getByRole("complementary", { name: "Product navigation" }),
   ).toHaveCount(0);
 
-  await token.fill("tab-scoped-e2e-token");
+  await token.fill(FIXTURE_TOKEN);
   await expect(token).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Show token" }).click();
   await expect(token).toHaveAttribute("type", "text");

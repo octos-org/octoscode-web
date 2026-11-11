@@ -1,24 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 test.beforeEach(async ({ request }) => {
-  await request.post(`${ORIGIN}/__test__/cron/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/cron/reset`);
 });
-
-async function start(page: Page) {
-  await page.goto("/");
-  await page.locator("#connection-origin").fill(ORIGIN);
-  await page.locator("#connection-token").fill("tab-scoped-e2e-token");
-  await page.locator('form[class*="card"] button[type="submit"]').click();
-  const path = page.getByLabel(/Server workspace path|服务器工作区路径/);
-  await path.fill(`/workspace/cron-create-${Date.now()}`);
-  await path.press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: /Message Octos|消息/ }),
-  ).toBeEnabled();
-}
 
 async function openCron(page: Page) {
   return openCronWith(page, /Queue check|No scheduled tasks yet|暂无定时任务/);
@@ -76,7 +62,7 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     });
     server.onMessage((message) => socket.send(message));
   });
-  await start(page);
+  await startSession(page, `/workspace/cron-create-${Date.now()}`);
   const tasks = await openCron(page);
   await tasks.locator('[data-cron-job="cron-1"]').getByRole("checkbox").click();
   await expect
@@ -169,19 +155,27 @@ test("ignores a late create response after the session view changes", async ({
   page,
 }) => {
   let release: (() => void) | undefined;
+  let lateReplyDelivered = false;
   await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
     const server = socket.connectToServer();
+    let createId: unknown = null;
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.method === "cron/create") {
+        createId = frame.id;
         release = () => server.send(message);
         return;
       }
       server.send(message);
     });
-    server.onMessage((message) => socket.send(message));
+    server.onMessage((message) => {
+      socket.send(message);
+      if (JSON.parse(String(message)).id === createId) {
+        lateReplyDelivered = true;
+      }
+    });
   });
-  await start(page);
+  await startSession(page, `/workspace/cron-create-${Date.now()}`);
   const tasks = await openCron(page);
   await openCreate(tasks);
   await tasks.getByRole("radio", { name: "Once" }).check();
@@ -195,6 +189,11 @@ test("ignores a late create response after the session view changes", async ({
   const next = await openCron(page);
   await openCreate(next);
   release?.();
+  // Check only after the late reply has reached the page and painted.
+  await expect.poll(() => lateReplyDelivered).toBe(true);
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(resolve)),
+  );
   await expect(next.locator('[data-cron-job="cron-2"]')).toHaveCount(0);
   await expect(
     next.getByRole("button", { name: "Create scheduled task" }),
@@ -307,7 +306,7 @@ test("shows how each run really went and opens the run it points at", async ({
       socket.send(JSON.stringify(frame));
     });
   });
-  await start(page);
+  await startSession(page, `/workspace/cron-create-${Date.now()}`);
   const tasks = await openCronWith(page, /^Weekly report$/);
 
   const ok = tasks.locator('[data-cron-job="job-ok"]');

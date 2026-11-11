@@ -1,28 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  connectAndStartWorkspace,
+  FIXTURE_ORIGIN,
+  FIXTURE_TOKEN,
+} from "./fixture-session";
+import { openSettings } from "./sessions";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const AUTH_TOKEN = "tab-scoped-e2e-token";
 const WORKSPACE = "/workspace/model-management-e2e";
 
-async function connectAndStartWorkspace(page: Page): Promise<void> {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(AUTH_TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-
-  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await addWorkspace.getByLabel("Server workspace path").fill(WORKSPACE);
-  await addWorkspace.getByRole("button", { name: "Start session" }).click();
-  await expect(page.getByText(WORKSPACE, { exact: true })).toBeVisible();
-}
-
 async function openModelSettings(page: Page): Promise<Locator> {
-  const productNavigation = page.locator("aside");
-  await productNavigation.getByRole("button", { name: "Settings" }).click();
-
-  const settings = page.getByRole("dialog", { name: "Settings" });
+  const settings = await openSettings(page, "Models");
   await expect(settings).toBeVisible();
-  await settings.getByRole("button", { name: "Models", exact: true }).click();
   await expect(settings.getByRole("tabpanel")).toHaveAttribute(
     "data-settings-section",
     "models",
@@ -62,7 +50,7 @@ async function secretLeakState(
 test("manages a provider through the DSH-style Models settings flow", async ({
   page,
 }) => {
-  await connectAndStartWorkspace(page);
+  await connectAndStartWorkspace(page, WORKSPACE);
   const settings = await openModelSettings(page);
 
   const primary = configuredProvider(settings, "glm-5.3-flash");
@@ -202,7 +190,7 @@ test("opening a session with no usable chat model goes to Settings › Models", 
   const workspace = `${WORKSPACE}-no-model-${repeatEachIndex}-${retry}`;
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(AUTH_TOKEN);
+  await page.getByLabel("Auth token").fill(FIXTURE_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await expect(addWorkspace).toBeVisible();

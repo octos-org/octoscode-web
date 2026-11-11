@@ -1,15 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
 
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const composer = (page: Page) =>
   page.getByRole("textbox", { name: "Message Octos" });
 
 async function connect(page: Page) {
   await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await page.getByLabel("Auth token", { exact: true }).press("Enter");
   await expect(page.getByLabel("Server workspace path")).toBeVisible();
 }

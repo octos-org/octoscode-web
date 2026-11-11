@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-
-const origin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
+import { openSettings } from "./sessions";
 
 test("server shutdown is capability gated, explicit, and truthful on an unconfirmed result", async ({
   page,
@@ -34,18 +34,9 @@ test("server shutdown is capability gated, explicit, and truthful on an unconfir
       socket.send(JSON.stringify(frame));
     });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(origin);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/server-shutdown");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/server-shutdown");
   await expect(page.getByLabel("Message Octos")).toBeVisible();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettings(page);
   await expect(
     page.getByRole("button", { name: "Stop server", exact: true }),
   ).toHaveCount(0);
@@ -57,8 +48,7 @@ test("server shutdown is capability gated, explicit, and truthful on an unconfir
   await page
     .getByRole("button", { name: "Open sessions", exact: true })
     .click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "Settings", exact: true });
+  const settings = await openSettings(page);
   await settings
     .getByRole("button", { name: "Stop server", exact: true })
     .click();

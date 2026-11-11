@@ -2,15 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session.ts";
 import { observeSent } from "./turn-observers";
 
-const start = (page: Page, cwd: string) => startSession(page, cwd);
-
 const settings = (page: Page) =>
   page.getByRole("group", { name: "Message settings" });
 
 test("another folder starts a new session that keeps the unsent text", async ({
   page,
 }) => {
-  await start(page, "/workspace/composer-first");
+  await startSession(page, "/workspace/composer-first");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
 
   // Cancelling the picker drops the carry.
@@ -60,7 +58,7 @@ test("sending waits for uploads, then carries the files and shows them on the me
     });
   });
   const turnStarts = observeSent(page, "turn/start");
-  await start(page, "/workspace/composer-send-files");
+  await startSession(page, "/workspace/composer-send-files");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
 
   const chooser = page.waitForEvent("filechooser");

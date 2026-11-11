@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { FIXTURE_ORIGIN } from "./fixture-session";
 
 test("rejects invalid auth before the product shell is ever mounted", async ({
   page,

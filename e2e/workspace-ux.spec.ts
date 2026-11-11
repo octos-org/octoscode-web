@@ -1,17 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
 
 async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill("/workspace/ux-review");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/ux-review");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeVisible();
   // Upstream's fixture handed every freshly opened Session a canned demo

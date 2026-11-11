@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { disconnect } from "./fixture-controls";
+import { startSession } from "./fixture-session";
+import { productNavigation, sessionRow } from "./sessions";
 
 test("continues past an unknown turn without replaying it or losing the queue and new draft", async ({
   page,
@@ -70,16 +71,7 @@ test("continues past an unknown turn without replaying it or losing the queue an
     });
     server.onMessage((message) => socket.send(message));
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/runtime-recovery");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/runtime-recovery");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeVisible();
   await composer.fill(
@@ -92,7 +84,7 @@ test("continues past an unknown turn without replaying it or losing the queue an
   await composer.fill("Send this queued message once");
   await composer.press("Enter");
   await expect(composer).toHaveValue("");
-  await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
+  await disconnect(request);
   const check = page.getByRole("button", { name: "Check status", exact: true });
   await expect(check).toBeVisible({ timeout: 15_000 });
   // Core can keep emitting canonical tool activity after foreground terminal.
@@ -165,11 +157,7 @@ test("continues past an unknown turn without replaying it or losing the queue an
   expect(opens[2]).not.toBe(sessionId);
   expect(starts).toHaveLength(2);
   await expect(composer).toHaveValue("");
-  await page
-    .locator(
-      `[role="treeitem"][data-session-id=${JSON.stringify(originalSession)}]`,
-    )
-    .click();
+  await sessionRow(productNavigation(page), originalSession).click();
   await expect(composer).toHaveValue(
     "Keep this draft while the status is unknown",
   );

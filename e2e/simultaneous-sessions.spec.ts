@@ -1,13 +1,20 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { connectAndStartWorkspace } from "./fixture-session.ts";
+import { disconnect, holdTerminals, releaseTerminal } from "./fixture-controls";
+import { FIXTURE_ORIGIN, connectAndStartWorkspace } from "./fixture-session.ts";
 import {
+  newSessionIn,
+  productNavigation,
+  selectedSessionId,
+  sendPrompt,
+  sessionRow,
+} from "./sessions";
+import {
+  observeFrames,
   observeStartedTurns,
   observeInterrupts,
   observeTransports,
 } from "./turn-observers";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
 
 test.afterEach(async ({ request }) => {
@@ -15,55 +22,8 @@ test.afterEach(async ({ request }) => {
   await request.post(FIXTURE_ORIGIN + "/__test__/turn-start/reset");
 });
 
-function productNavigation(page: Page): Locator {
-  return page.locator("aside");
-}
-
 function conversation(page: Page): Locator {
   return page.getByRole("region", { name: "Conversation", exact: true });
-}
-
-function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
-  );
-}
-
-async function selectedSessionTitle(sidebar: Locator): Promise<string> {
-  const title = await sidebar
-    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .getAttribute("data-session-id");
-  if (!title) throw new Error("Expected a selected Session title");
-  return title;
-}
-
-async function holdNextTerminal(
-  request: import("@playwright/test").APIRequestContext,
-): Promise<void> {
-  const response = await request.post(
-    `${FIXTURE_ORIGIN}/__test__/terminal/hold-next`,
-  );
-  expect(response.status()).toBe(204);
-}
-
-async function releaseHeldTerminal(
-  request: import("@playwright/test").APIRequestContext,
-  sessionId: string,
-): Promise<void> {
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(FIXTURE_ORIGIN + "/__test__/terminal/state")
-      ).json()) as {
-        held: Array<{ session_id: string }>;
-      };
-      return state.held.some((held) => held.session_id === sessionId);
-    })
-    .toBe(true);
-  const response = await request.post(
-    `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(sessionId)}`,
-  );
-  expect(response.status()).toBe(204);
 }
 
 test("recovers an unacknowledged A1 behind B and drains A2 then A3 without replaying A1", async ({
@@ -110,33 +70,19 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   await request.post(FIXTURE_ORIGIN + "/__test__/turn-start/reset");
   await connectAndStartWorkspace(page, cwd);
   const sidebar = productNavigation(page);
-  const aTitle = await selectedSessionTitle(sidebar);
-  const a = sessionRowByTitle(sidebar, aTitle);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
+  const a = sessionRow(sidebar, await selectedSessionId(sidebar));
   await request.post(FIXTURE_ORIGIN + "/__test__/turn-start/hold-next");
-  await holdNextTerminal(request);
-  await composer.fill("A1-busy-loss");
-  await page.getByRole("button", { name: "Send prompt", exact: true }).click();
+  await holdTerminals(request);
+  await sendPrompt(page, "A1-busy-loss");
   await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
-  for (const prompt of ["A2-busy-loss", "A3-busy-loss"]) {
-    await composer.fill(prompt);
-    await page
-      .getByRole("button", { name: "Queue prompt", exact: true })
-      .click();
-  }
+  for (const prompt of ["A2-busy-loss", "A3-busy-loss"])
+    await sendPrompt(page, prompt);
   await expect(page.getByText(/2 queued/)).toBeVisible();
-  await sidebar
-    .locator('[data-workspace-name="busy-loss-fifo"]')
-    .getByRole("button", { name: "busy-loss-fifo", exact: true })
-    .hover();
-  await sidebar
-    .getByRole("button", { name: "New session in busy-loss-fifo" })
-    .click();
+  const b = sessionRow(sidebar, await newSessionIn(sidebar, "busy-loss-fifo"));
   await expect(
     sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
-  const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));
   await expect(b).toHaveAttribute("aria-current", "page");
   expect(
     (
@@ -146,14 +92,11 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
   const first = started()[0]!;
   expect(first.text).toBe("A1-busy-loss");
   // Future A2/A3 stay server-active until their individual terminals release.
-  await holdNextTerminal(request);
-  await holdNextTerminal(request);
+  await holdTerminals(request, 2);
   // Two Sessions share ONE pooled transport.
   expect(transports.live()).toBe(1);
   const createdBeforeDisconnect = transports.created();
-  expect(
-    (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
-  ).toBe(204);
+  await disconnect(request);
   await expect
     .poll(() => started().map((turn) => turn.text), { timeout: 20_000 })
     .toEqual(["A1-busy-loss", "A2-busy-loss"]);
@@ -184,7 +127,7 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
     },
   ]);
   expect(started()[1]!.sessionId).toBe(first.sessionId);
-  await releaseHeldTerminal(request, first.sessionId);
+  await releaseTerminal(request, first.sessionId);
   await expect
     .poll(() => started().map((turn) => turn.text))
     .toEqual(["A1-busy-loss", "A2-busy-loss", "A3-busy-loss"]);
@@ -192,7 +135,7 @@ test("recovers an unacknowledged A1 behind B and drains A2 then A3 without repla
     true,
   );
   expect(new Set(started().map((turn) => turn.turnId)).size).toBe(3);
-  await releaseHeldTerminal(request, first.sessionId);
+  await releaseTerminal(request, first.sessionId);
   await a.click();
   for (const prompt of ["A1-busy-loss", "A2-busy-loss", "A3-busy-loss"]) {
     await expect(
@@ -218,19 +161,9 @@ test("preserves native persisted segment finality across late deltas and the nex
   const secondPrompt = "Fixture native persisted-before-delta second";
   const started = observeStartedTurns(page);
   const interrupts = observeInterrupts(page);
-  const hydrateSessions: string[] = [];
-  const envelopes: Array<{ turn_id: string; payload: { type: string } }> = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload));
-      if (frame.method === "session/hydrate")
-        hydrateSessions.push(frame.params.session_id);
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload));
-      if (frame.method === "projection/envelope") envelopes.push(frame.params);
-    });
-  });
+  const frames = observeFrames(page);
+  const envelopes = () =>
+    frames.events("projection/envelope").map((frame) => frame.params!);
   await connectAndStartWorkspace(
     page,
     "/srv/work/native-persisted-stream-order",
@@ -239,41 +172,30 @@ test("preserves native persisted segment finality across late deltas and the nex
   await expect(
     sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(1);
-  const aTitle = await selectedSessionTitle(sidebar);
-  const a = sessionRowByTitle(sidebar, aTitle);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await holdNextTerminal(request);
-  await composer.fill(firstPrompt);
-  await page.getByRole("button", { name: "Send prompt", exact: true }).click();
+  const a = sessionRow(sidebar, await selectedSessionId(sidebar));
+  await holdTerminals(request);
+  await sendPrompt(page, firstPrompt);
   await expect(
     page.getByRole("button", { name: "Stop", exact: true }),
   ).toBeVisible();
-  await composer.fill(secondPrompt);
-  await page.getByRole("button", { name: "Queue prompt", exact: true }).click();
+  await sendPrompt(page, secondPrompt);
   await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
-  await sidebar
-    .locator('[data-workspace-name="native-persisted-stream-order"]')
-    .getByRole("button", { name: "native-persisted-stream-order", exact: true })
-    .hover();
-  await sidebar
-    .getByRole("button", {
-      name: "New session in native-persisted-stream-order",
-      exact: true,
-    })
-    .click();
+  const b = sessionRow(
+    sidebar,
+    await newSessionIn(sidebar, "native-persisted-stream-order"),
+  );
   await expect(
     sidebar.locator('[role="treeitem"][data-session-id]'),
   ).toHaveCount(2);
   await expect(a).not.toHaveAttribute("aria-current", "page");
-  const b = sessionRowByTitle(sidebar, await selectedSessionTitle(sidebar));
   expect(started()).toHaveLength(1);
   const source = started()[0]!;
-  await releaseHeldTerminal(request, source.sessionId);
+  await releaseTerminal(request, source.sessionId);
   await expect.poll(() => started().length).toBe(2);
   await expect
     .poll(
       () =>
-        envelopes.filter((event) => event.payload.type === "turn_terminal")
+        envelopes().filter((event) => event.payload.type === "turn_terminal")
           .length,
     )
     .toBe(2);
@@ -288,11 +210,11 @@ test("preserves native persisted segment finality across late deltas and the nex
     [source.sessionId, secondPrompt],
   ]);
   expect(new Set(started().map((turn) => turn.turnId)).size).toBe(2);
-  const firstTerminalIndex = envelopes.findIndex(
+  const firstTerminalIndex = envelopes().findIndex(
     (event) =>
       event.turn_id === source.turnId && event.payload.type === "turn_terminal",
   );
-  const secondStartIndex = envelopes.findIndex(
+  const secondStartIndex = envelopes().findIndex(
     (event) =>
       event.turn_id === started()[1]!.turnId &&
       event.payload.type === "user_message",
@@ -301,7 +223,10 @@ test("preserves native persisted segment finality across late deltas and the nex
   await a.click();
   await expect(a).toHaveAttribute("aria-current", "page");
   expect(
-    hydrateSessions.filter((sessionId) => sessionId === source.sessionId),
+    frames
+      .calls("session/hydrate")
+      .map((frame) => frame.params?.session_id)
+      .filter((sessionId) => sessionId === source.sessionId),
   ).toEqual([source.sessionId]);
   const bodies = page.locator(
     ".entry-assistant .markdown-body, .entry-assistant .md-streaming",

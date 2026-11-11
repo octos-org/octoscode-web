@@ -1,19 +1,19 @@
 import { createServer } from "node:http";
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN } from "./fixture-session";
 import { observeSent } from "./turn-observers";
 
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const TOKEN = "workspace-browse-e2e-token";
 
 async function connect(page: Page, path = "/?view=remote") {
   await page.goto(path);
-  await page.getByLabel("Server origin").fill(ORIGIN);
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 }
 
 test.afterEach(async ({ request }) => {
-  await request.post(`${ORIGIN}/__test__/session-list/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
 });
 
 test("desktop handoff lets a fresh phone approve work without entering folders", async ({
@@ -22,7 +22,7 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
 }) => {
   const folder = "/srv/fixture/Projects/octoscode-web";
   await request.post(
-    `${ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(folder)}`,
+    `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(folder)}`,
   );
   const desktop = await browser.newPage();
   await connect(desktop, "/");
@@ -73,7 +73,7 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
     new URL(link).origin,
   );
   await expect(phone.getByRole("alert")).toContainText("not filled in");
-  await phone.getByLabel("Server origin").fill(ORIGIN);
+  await phone.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await expect(phone.getByLabel("Auth token", { exact: true })).toHaveValue("");
   await phone.getByLabel("Auth token", { exact: true }).fill(TOKEN);
   await phone.getByRole("button", { name: "Connect", exact: true }).tap();
@@ -164,7 +164,7 @@ test("a forged handoff never auto-connects, imports nothing, and cannot choose w
     expect(new URL(socket.url()).host).toBe(new URL(baseURL!).host);
 
     // An operator selecting a different server must not import its paths there.
-    await page.getByLabel("Server origin").fill(ORIGIN);
+    await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
     await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
     await page.getByRole("button", { name: "Connect", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("different server");

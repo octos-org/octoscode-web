@@ -1,30 +1,15 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import { observeFrames } from "./turn-observers";
 
 const CWD = "/srv/work/native-workflows-fleet";
-
-interface SentFrame {
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-function observe(page: Page): SentFrame[] {
-  const sent: SentFrame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as SentFrame;
-      if (frame.method) sent.push(frame);
-    });
-  });
-  return sent;
-}
 
 test("native Fleet uses prepare/open/start, gather, steer and interrupt", async ({
   page,
   request,
 }) => {
   test.setTimeout(120_000);
-  const sent = observe(page);
+  const wire = observeFrames(page);
   await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
   await connectAndStartWorkspace(page, CWD);
@@ -44,23 +29,23 @@ test("native Fleet uses prepare/open/start, gather, steer and interrupt", async 
   const rows = fleet.locator("[data-fleet-row]");
   await expect(rows).toHaveCount(1, { timeout: 30_000 });
   await expect(rows.first()).toHaveAttribute("data-fleet-status", "Working");
-  expect(sent.some((frame) => frame.method === "peer/prepare")).toBe(true);
-  expect(sent.some((frame) => frame.method === "session/open")).toBe(true);
-  expect(sent.some((frame) => frame.method === "turn/start")).toBe(true);
-  expect(sent.some((frame) => frame.method === "peer/dispatch")).toBe(false);
+  expect(wire.calls("peer/prepare")).not.toHaveLength(0);
+  expect(wire.calls("session/open")).not.toHaveLength(0);
+  expect(wire.calls("turn/start")).not.toHaveLength(0);
+  expect(wire.calls("peer/dispatch")).toHaveLength(0);
   await expect(
     fleet.locator('[data-fleet-advanced-summary="true"]'),
   ).toHaveCount(0);
 
   await fleet.locator('[data-fleet-action="gather"]').press("Enter");
   await expect(fleet.getByText("Gather queued in this Session")).toBeVisible();
-  expect(sent.some((frame) => frame.method === "peer/gather")).toBe(true);
+  expect(wire.calls("peer/gather")).not.toHaveLength(0);
   expect(
-    sent.some(
-      (frame) =>
-        frame.method === "turn/start" &&
+    wire
+      .calls("turn/start")
+      .some((frame) =>
         JSON.stringify(frame.params).includes("Peer results gathered"),
-    ),
+      ),
   ).toBe(true);
 
   const slug = (await rows.first().getAttribute("data-fleet-row"))!;
@@ -70,14 +55,12 @@ test("native Fleet uses prepare/open/start, gather, steer and interrupt", async 
   await fleet
     .locator(`[data-fleet-row="${slug}"] [data-fleet-action="steer"]`)
     .press("Enter");
-  await expect
-    .poll(() => sent.some((frame) => frame.method === "turn/steer"))
-    .toBe(true);
+  await expect.poll(() => wire.calls("turn/steer").length).toBeGreaterThan(0);
 
   await fleet
     .locator(`[data-fleet-row="${slug}"] [data-fleet-action="stop"]`)
     .press("Enter");
   await expect
-    .poll(() => sent.some((frame) => frame.method === "turn/interrupt"))
-    .toBe(true);
+    .poll(() => wire.calls("turn/interrupt").length)
+    .toBeGreaterThan(0);
 });

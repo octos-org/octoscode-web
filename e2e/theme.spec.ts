@@ -1,13 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { openSettings } from "./sessions";
 
 async function connect(page: Page) {
   await page.goto("/");
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Settings", exact: true }),
@@ -15,8 +13,7 @@ async function connect(page: Page) {
 }
 
 async function chooseTheme(page: Page, name: "Auto" | "Light" | "Dark") {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "Settings", exact: true });
+  const settings = await openSettings(page);
   await settings.getByRole("radio", { name, exact: true }).check();
   await settings.getByRole("button", { name: /Close/ }).click();
 }

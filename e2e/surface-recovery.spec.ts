@@ -1,25 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startSession } from "./fixture-session";
+import {
+  composer as composerInput,
+  newSessionIn,
+  openSettings,
+  productNavigation,
+  selectedSessionId,
+  selectSession,
+} from "./sessions";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const modelManagementModule =
   /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
 
 async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/surface-recovery");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/surface-recovery");
   await expect(composerInput(page)).toBeVisible();
-}
-
-function composerInput(page: Page) {
-  return page.getByRole("textbox", { name: "Message Octos" });
 }
 
 function settingsTrigger(page: Page) {
@@ -73,8 +68,7 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   await composer.press("Enter");
   await composer.fill("Keep this unsent draft");
   const previouslyClosed = closed;
-  await settingsTrigger(page).click();
-  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await openSettings(page, "Models");
   const error = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(error).toBeVisible();
   await expect(
@@ -108,8 +102,7 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
     );
     await route.fulfill({ response, body });
   });
-  await settingsTrigger(page).click();
-  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await openSettings(page, "Models");
   await expect(error).toContainText("Octoscode was updated on the server");
   await expect(error).not.toContainText("Reload the page to try again.");
 });
@@ -142,16 +135,13 @@ test("a late clipboard command result does not enter a different conversation", 
     .poll(() => page.evaluate(() => typeof Reflect.get(window, "finishCopy")))
     .toBe("function");
   const previousUrl = page.url();
-  const workspace = page.getByRole("button", {
-    name: "surface-recovery",
-    exact: true,
-  });
-  await workspace.hover();
-  await page
-    .getByRole("button", { name: "New session in surface-recovery" })
-    .click();
-  await expect(page).not.toHaveURL(previousUrl);
+  const navigation = productNavigation(page);
+  const asking = await selectedSessionId(navigation);
+  await newSessionIn(navigation, "surface-recovery");
   await page.evaluate(() => Reflect.get(window, "finishCopy")());
   await expect(page.getByText("Copied", { exact: true })).toHaveCount(0);
   await expect(page).not.toHaveURL(previousUrl);
+  // It lands in the conversation that asked for it.
+  await selectSession(navigation, asking);
+  await expect(page.getByText("Copied", { exact: true })).toBeVisible();
 });

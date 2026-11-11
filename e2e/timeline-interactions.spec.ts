@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
+import { COMPOSER_PLACEHOLDER, startSession } from "./fixture-session";
 
 test("keeps activity and reader-controlled disclosures correct across ten streamed turns", async ({
   page,
@@ -46,14 +44,7 @@ test("keeps activity and reader-controlled disclosures correct across ten stream
     });
   });
 
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/timeline-interactions");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/timeline-interactions");
   const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
   await expect(composer).toBeVisible();
 

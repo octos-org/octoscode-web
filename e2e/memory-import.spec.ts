@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN } from "./fixture-session.ts";
 import { openMemory, startMemorySession } from "./memory-settings.ts";
+import { observeSent } from "./turn-observers";
 
 /**
  * T-0425: a memory file is previewed in full and written through the
@@ -12,13 +13,7 @@ const TOKEN = "memory-e2e-token";
 type Frame = { method?: string; params?: { records?: { id: string }[] } };
 
 async function start(page: Page) {
-  const ingests: Frame[] = [];
-  page.on("websocket", (ws) =>
-    ws.on("framesent", (frame) => {
-      const sent = JSON.parse(String(frame.payload)) as Frame;
-      if (sent.method === "memory/ingest") ingests.push(sent);
-    }),
-  );
+  const ingests = observeSent(page, "memory/ingest");
   await startMemorySession(page, TOKEN, "memory-import");
   return { settings: await openMemory(page), ingests };
 }
@@ -80,12 +75,12 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   await expect(panel.getByRole("listitem").first()).toContainText(
     `doc:octoscode-web:${mark}-1`,
   );
-  expect(ingests).toHaveLength(0);
+  expect(ingests()).toHaveLength(0);
 
   // Cancelling writes nothing either.
   await panel.getByRole("button", { name: "Cancel import" }).click();
   await expect(panel).toHaveCount(0);
-  expect(ingests).toHaveLength(0);
+  expect(ingests()).toHaveLength(0);
 
   await choose(
     settings,
@@ -107,8 +102,8 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   await expect(
     settings.getByRole("status").filter({ hasText: "Imported" }),
   ).toHaveText("Imported 2 records: 2 new · 0 updated · 0 unchanged.");
-  expect(ingests).toHaveLength(1);
-  const sentRecords = ingests[0]!.params!.records as Record<string, unknown>[];
+  expect(ingests()).toHaveLength(1);
+  const sentRecords = ingests()[0]!.records as Record<string, unknown>[];
   expect(sentRecords.map(({ fingerprint, ...rest }) => rest)).toEqual([
     record(mark, 1, {
       body: `${mark} <img src=x onerror="window.__ran=true"> 京都 ✈️`,

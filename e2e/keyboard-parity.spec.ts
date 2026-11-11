@@ -1,10 +1,11 @@
+import { expect, test, type Page } from "@playwright/test";
 import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+  holdTerminals,
+  releaseTerminal,
+  terminalHeld,
+} from "./fixture-controls";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import { observeFrames } from "./turn-observers";
 
 /**
  * Keyboard-parity e2e — parity targets cited from the native TUI keymap
@@ -23,42 +24,20 @@ import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
  * which hides it from ROLE queries — the class 0520 hardened elsewhere.
  */
 
-const origin = FIXTURE_ORIGIN;
 const PALETTE_ID = "composer-command-palette";
 
 const composer = (page: Page) => page.locator(".composer textarea");
 const palette = (page: Page) => page.locator(".command-palette");
 
-type Frame = {
-  id?: string;
-  method?: string;
-  params?: { session_id?: string; turn_id?: string };
-  result?: unknown;
-};
-function wire(page: Page) {
-  const sent: Frame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      if (frame.method) sent.push(frame);
-    });
-  });
-  return {
-    sent,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-  };
-}
-
-/** Keyboard-only connect: fill fields, activate every control with Enter. */
 test.afterEach(async ({ request }) => {
-  await request.post(`${origin}/__test__/terminal/reset`);
-  await request.post(`${origin}/__test__/turn-start/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
 });
 
 test("opens, navigates, and executes the command palette by keyboard only", async ({
   page,
 }) => {
-  const w = wire(page);
+  const w = observeFrames(page);
   await connectAndStartWorkspace(page, "/srv/work/keyboard-palette");
   const input = composer(page);
   await input.focus(); // programmatic focus, no mouse
@@ -123,7 +102,7 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   page,
   request,
 }) => {
-  const w = wire(page);
+  const w = observeFrames(page);
   await connectAndStartWorkspace(page, "/srv/work/keyboard-esc");
   const input = composer(page);
   await input.focus();
@@ -135,13 +114,11 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
 
   // Hold a live turn first: with none, an Esc that leaked past the palette
   // would have nothing to interrupt, so the palette check could not fail.
-  expect(
-    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   await input.fill("Escape interrupt parity");
   await input.press("Enter");
-  const owner = w.calls("turn/start").at(-1)!.params!.session_id!;
-  await heldTurn(request, owner);
+  const owner: string = w.calls("turn/start").at(-1)!.params!.session_id;
+  await terminalHeld(request, owner);
 
   // Esc dismisses the palette and must NOT interrupt (TUI: Esc on the slash
   // popup closes the menu — event_loop.rs:2631-2649).
@@ -162,26 +139,5 @@ test("Esc closes the palette inertly and interrupts only a live turn", async ({
   expect(w.calls("turn/interrupt")[0]!.params).toMatchObject({
     session_id: owner,
   });
-  await release(request, owner);
+  await releaseTerminal(request, owner);
 });
-
-async function heldTurn(request: APIRequestContext, owner: string) {
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(`${origin}/__test__/terminal/state`)
-      ).json()) as { held: { session_id: string }[] };
-      return state.held.map((item) => item.session_id);
-    })
-    .toContain(owner);
-}
-
-async function release(request: APIRequestContext, owner: string) {
-  expect(
-    (
-      await request.post(
-        `${origin}/__test__/terminal/release?session_id=${encodeURIComponent(owner)}`,
-      )
-    ).status(),
-  ).toBe(204);
-}

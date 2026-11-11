@@ -1,18 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const fixture = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
+import {
+  openSettings,
+  productNavigation,
+  selectedSessionId,
+  selectSession,
+} from "./sessions";
 
 async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/final-reading");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/final-reading");
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
@@ -204,16 +200,8 @@ test("360-message history stays readable while new output streams and unsafe Mar
   });
   await start(page);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
-  const selectedTitle = page.locator(
-    '[role="treeitem"][data-session-id][aria-current="page"]',
-  );
-  const sessionA = (await selectedTitle.getAttribute("data-session-id"))!;
-  const selectSession = async (title: string) => {
-    await page
-      .locator(`[role="treeitem"][data-session-id=${JSON.stringify(title)}]`)
-      .click();
-    await expect(selectedTitle).toHaveAttribute("data-session-id", title);
-  };
+  const navigation = productNavigation(page);
+  const sessionA = await selectedSessionId(navigation);
   const region = page.getByRole("region", {
     name: "Conversation",
     exact: true,
@@ -266,7 +254,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
     .click();
   // Reused hydrate entry IDs must not borrow A's expansion or reading position.
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
-  const sessionB = (await selectedTitle.getAttribute("data-session-id"))!;
+  const sessionB = await selectedSessionId(navigation);
   await page.getByRole("button", { name: "Show 100 earlier messages" }).click();
   await expect(page.locator(".timeline-entry")).toHaveCount(140);
   const readingB = page.locator(".timeline-entry").nth(40);
@@ -284,14 +272,14 @@ test("360-message history stays readable while new output streams and unsafe Mar
     })
     .toBe(true);
   for (let index = 0; index < 3; index++) {
-    await selectSession(sessionA);
+    await selectSession(navigation, sessionA);
     await expect(page.locator(".timeline-entry")).toHaveCount(360);
     await expect
       .poll(async () =>
         Math.abs((await readingA.boundingBox())!.y - readingATop),
       )
       .toBeLessThan(4);
-    await selectSession(sessionB);
+    await selectSession(navigation, sessionB);
     await expect(page.locator(".timeline-entry")).toHaveCount(140);
     await expect
       .poll(async () =>
@@ -299,7 +287,7 @@ test("360-message history stays readable while new output streams and unsafe Mar
       )
       .toBeLessThan(4);
   }
-  await selectSession(sessionA);
+  await selectSession(navigation, sessionA);
   await page.getByRole("button", { name: "Back to latest" }).click();
   await expect(
     page.getByRole("heading", { name: "Final history entry" }),
@@ -339,13 +327,13 @@ test("360-message history stays readable while new output streams and unsafe Mar
     })
     .toBe(true);
   const tableTop = (await page.locator(".md-table-scroll").boundingBox())!.y;
-  await selectSession(sessionB);
+  await selectSession(navigation, sessionB);
   await expect
     .poll(async () => Math.abs((await readingB.boundingBox())!.y - readingBTop))
     .toBeLessThan(4);
   for (let index = 0; index < 25; index++)
     emit!("assistant_delta", { text: `Stream chunk ${index}. ` });
-  await selectSession(sessionA);
+  await selectSession(navigation, sessionA);
   await expect(
     page.getByText("Stream chunk 24.", { exact: false }),
   ).toBeAttached();
@@ -403,17 +391,17 @@ test("360-message history stays readable while new output streams and unsafe Mar
     true,
   );
   await page.setViewportSize({ width: 1280, height: 720 });
-  await selectSession(sessionB);
+  await selectSession(navigation, sessionB);
   await page.getByRole("button", { name: "Back to latest" }).click();
   const previousEmit = emit;
   await composer.fill("Keep following while this Session is in the background");
   await composer.press("Enter");
   await expect.poll(() => emit !== previousEmit).toBe(true);
-  await selectSession(sessionA);
+  await selectSession(navigation, sessionA);
   for (let index = 0; index < 25; index++)
     emit!("assistant_delta", { text: `Background paragraph ${index}.\n\n` });
   emit!("turn_terminal", { outcome: "completed" });
-  await selectSession(sessionB);
+  await selectSession(navigation, sessionB);
   await expect(
     page.getByText("Background paragraph 24.", { exact: true }),
   ).toBeInViewport();
@@ -427,16 +415,15 @@ test("360-message history stays readable while new output streams and unsafe Mar
   ).toBeHidden();
 
   // Reading memory ends with the authenticated scope, even for the same IDs.
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page
-    .getByRole("dialog", { name: "Settings", exact: true })
+  const settings = await openSettings(page);
+  await settings
     .getByRole("button", { name: "Disconnect", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await selectSession(sessionA);
+  await selectSession(navigation, sessionA);
   await expect(page.locator(".timeline-entry")).toHaveCount(40);
   await expect(
     page.getByRole("button", { name: "Show 100 earlier messages" }),

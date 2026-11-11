@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session";
+import {
+  newSessionIn,
+  openSettings,
+  selectSession,
+  sendPrompt,
+} from "./sessions";
 
 const WORKSPACE = "/workspace/attention-check";
 const FINISHED = "Completed with pnpm check and all tests passing.";
@@ -61,11 +67,7 @@ async function instrument(
 }
 
 async function settings(page: Page) {
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  const dialog = await openSettings(page);
   await expect(
     dialog.getByRole("button", { name: /desktop notifications/ }),
   ).toBeVisible();
@@ -92,11 +94,6 @@ async function hidden(page: Page, value: boolean) {
   }, value);
 }
 
-async function send(page: Page, prompt = "Stream a reply fixture") {
-  await page.getByRole("textbox", { name: "Message Octos" }).fill(prompt);
-  await page.getByRole("button", { name: "Send prompt", exact: true }).click();
-}
-
 let pageErrors: string[] = [];
 test.beforeEach(({ page }) => {
   pageErrors = [];
@@ -121,7 +118,7 @@ test("denied desktop permission keeps tab counts working and Disconnect clears a
   ).toHaveAttribute("aria-pressed", "false");
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await hidden(page, true);
-  await send(page);
+  await sendPrompt(page, "Stream a reply fixture");
   await expect(page.getByText(FINISHED, { exact: true })).toBeVisible();
   await expect(page).toHaveTitle(`(1) ${originalTitle}`);
   expect(await page.evaluate(() => window.__attentionProbe.notices)).toEqual(
@@ -156,20 +153,11 @@ test("a background Session completing while another is selected signals and ackn
     .getAttribute("data-session-id");
   if (!originalSessionTitle)
     throw new Error("Expected a confirmed Session title");
-  await send(page, "Continue this turn while I open another Session");
+  await sendPrompt(page, "Continue this turn while I open another Session");
   await expect(
     page.getByRole("button", { name: "Stop", exact: true }),
   ).toBeVisible();
-  await navigation
-    .locator('[data-workspace-name="attention-check"]')
-    .getByRole("button", { name: "attention-check", exact: true })
-    .hover();
-  await navigation
-    .getByRole("button", {
-      name: "New session in attention-check",
-      exact: true,
-    })
-    .click();
+  await newSessionIn(navigation, "attention-check");
   await expect(sessions).toHaveCount(2);
   await expect(
     navigation.locator('[title="Completed in background"]'),
@@ -178,11 +166,7 @@ test("a background Session completing while another is selected signals and ackn
   expect(
     await page.evaluate(() => window.__attentionProbe.notices),
   ).toHaveLength(1);
-  const original = navigation.locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(originalSessionTitle)}]`,
-  );
-  await original.click();
-  await expect(original).toHaveAttribute("aria-current", "page");
+  await selectSession(navigation, originalSessionTitle);
   await expect(page).toHaveTitle(originalTitle);
   expect(
     await page.evaluate(() => window.__attentionProbe.notices[0]?.closed),

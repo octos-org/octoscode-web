@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const fixtureOrigin = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
 
 test("refresh shows the interrupted turn with complete canonical replay", async ({
   page,
@@ -99,16 +98,7 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
       socket.send(JSON.stringify(response));
     });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixtureOrigin);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/canonical-recovery");
-  await page.getByRole("button", { name: "Start session" }).click();
+  await startSession(page, "/workspace/canonical-recovery");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Investigate this interrupted turn");
   await composer.press("Enter");

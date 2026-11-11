@@ -4,6 +4,7 @@ import {
   connectAndStartWorkspace,
   runFolder,
 } from "./fixture-session.ts";
+import { productNavigation } from "./sessions";
 
 /**
  * e2e — the FLEET VIEW (product navigation "Fleet"; WEB-UX-DESIGN-4000 §4.3,
@@ -68,7 +69,6 @@ const RAW_DISPATCH_COPY = "driver operation refused: peer/dispatch";
 // ---------------------------------------------------------------------------
 // Locators — attribute CSS only where class names are CSS-module hashed.
 // ---------------------------------------------------------------------------
-const productNavigation = (page: Page): Locator => page.locator("aside");
 /** The sidebar's Fleet footer entry (ProductSidebar.tsx:780). */
 const fleetEntry = (page: Page): Locator =>
   productNavigation(page).locator('[data-fleet-nav="entry"]');
@@ -162,11 +162,6 @@ function wire(page: Page) {
   };
 }
 
-/**
- * Connect AND start a `peer-control-*` workspace — the shared helper. The
- * composer does not exist until a Session is open ("Choose a workspace"
- * region), so Add workspace -> Add & Start must run first.
- */
 /** Open Fleet through the sidebar entry (§3: Sessions · Fleet · Settings). */
 async function openFleet(page: Page): Promise<void> {
   await expect(fleetEntry(page)).toBeVisible();

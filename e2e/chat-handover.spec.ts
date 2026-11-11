@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
-  COMPOSER_PLACEHOLDER,
   connectAndStartWorkspace,
   FIXTURE_ORIGIN,
   openSessionId,
 } from "./fixture-session";
+import { composer, sendPrompt } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
 // The handover workspace starts idle with a parked external binding, so a
@@ -13,49 +14,8 @@ const CWD = "/srv/work/peer-control-";
 const RELEASE_METHOD = "session/driver/release";
 const START_METHOD = "turn/start";
 
-const composer = (page: Page) => page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 const strip = (page: Page) =>
   page.getByRole("button", { name: /Session settings/ });
-
-interface SentFrame {
-  readonly method: string | null;
-  readonly releaseNext: string | null;
-  readonly prompt: string | null;
-  readonly media: unknown;
-  readonly reasoning: string | undefined;
-}
-function wire(page: Page) {
-  const sent: SentFrame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      try {
-        const frame = JSON.parse(String(payload)) as {
-          method?: string;
-          params?: {
-            next?: string;
-            input?: Array<{ text?: string }>;
-            media?: unknown;
-            reasoning_effort?: string;
-          };
-        };
-        if (frame.method)
-          sent.push({
-            method: frame.method,
-            releaseNext: frame.params?.next ?? null,
-            prompt: frame.params?.input?.[0]?.text ?? null,
-            media: frame.params?.media,
-            reasoning: frame.params?.reasoning_effort,
-          });
-      } catch {
-        // Non-JSON frames are not this surface's; ignore.
-      }
-    });
-  });
-  return {
-    sent,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-  };
-}
 
 /** Open the pane's Advanced section (the seat's only product home, §4.2). */
 async function openAdvanced(page: Page) {
@@ -69,13 +29,6 @@ async function openAdvanced(page: Page) {
     await advanced.locator(":scope > summary").click();
   }
   return pane;
-}
-
-async function sendPrompt(page: Page, text: string) {
-  await composer(page).fill(text);
-  await page
-    .getByRole("button", { name: /^(Send|Queue) prompt$/, exact: false })
-    .click();
 }
 
 function attached(page: Page) {
@@ -124,7 +77,7 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     page,
     request,
   }) => {
-    const w = wire(page);
+    const w = observeFrames(page);
     await connectAndStartWorkspace(page, `${CWD}handover-resume`);
     await sendPrompt(page, "hand back and send once");
     await expect(composer(page)).toHaveValue("hand back and send once");
@@ -169,8 +122,10 @@ test.describe("§5.2 composer handover (external-held session)", () => {
       RELEASE_METHOD,
       START_METHOD,
     ]);
-    expect(w.calls(RELEASE_METHOD)[0]?.releaseNext).toBe("internal");
-    expect(w.calls(START_METHOD)[0]?.prompt).toBe("hand back and send once");
+    expect(w.calls(RELEASE_METHOD)[0]?.params?.next).toBe("internal");
+    expect(w.calls(START_METHOD)[0]?.params?.input[0].text).toBe(
+      "hand back and send once",
+    );
     await expect(composer(page)).toHaveValue("");
 
     // Acquiring our own seat is a separate path: the next ordinary send must
@@ -196,12 +151,14 @@ test.describe("§5.2 composer handover (external-held session)", () => {
             frame.method ?? "",
           ),
         )
-        .map((frame) => [frame.method, frame.releaseNext]),
+        .map((frame) => [frame.method, frame.params?.next ?? null]),
     ).toEqual([
       [RELEASE_METHOD, "internal"],
       [START_METHOD, null],
     ]);
-    expect(w.calls(START_METHOD)[1]?.prompt).toBe("send from my seat");
+    expect(w.calls(START_METHOD)[1]?.params?.input[0].text).toBe(
+      "send from my seat",
+    );
     await expect(composer(page)).toHaveValue("");
   });
 });

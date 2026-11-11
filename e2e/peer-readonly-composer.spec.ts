@@ -1,13 +1,12 @@
+import { expect, test, type Page } from "@playwright/test";
 import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
-import {
-  FIXTURE_ORIGIN as origin,
-  connectAndStartWorkspace,
-} from "./fixture-session.ts";
+  holdTerminals,
+  releaseTerminal,
+  terminalHeld,
+} from "./fixture-controls";
+import { FIXTURE_ORIGIN, connectAndStartWorkspace } from "./fixture-session.ts";
+import { productNavigation, sessionRow } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 /**
  * Focused peer session shows the read-only composer (audit row 7, brief 0915).
@@ -42,55 +41,19 @@ import {
 const composer = (page: Page) => page.locator(".composer textarea");
 const hint = (page: Page) =>
   page.locator('[role="status"][class*="peerReadonly"]');
-// CSS (not role) — survives routing that hides ancestors from the a11y tree.
-const productNavigation = (page: Page) =>
-  page.locator('aside[aria-label="Product navigation"]');
 const sessionRows = (page: Page) =>
   productNavigation(page).locator('[role="treeitem"][data-session-id]');
 
-type Frame = { method?: string; params?: Record<string, unknown> };
-function wire(page: Page) {
-  const sent: Frame[] = [];
-  const received: Frame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      if (frame.method) sent.push(frame);
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      if (frame.method) received.push(frame);
-    });
-  });
-  return {
-    sent,
-    received,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-  };
-}
-
-/** Keyboard-only connect: fill fields, activate every control with Enter. */
-async function heldTurn(request: APIRequestContext, owner: string) {
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(`${origin}/__test__/terminal/state`)
-      ).json()) as { held: { session_id: string }[] };
-      return state.held.map((item) => item.session_id);
-    })
-    .toContain(owner);
-}
-
 test.afterEach(async ({ request }) => {
-  await request.post(`${origin}/__test__/terminal/reset`);
-  await request.post(`${origin}/__test__/peers/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/peers/reset`);
 });
 
 test("focused peer shows the read-only composer and Esc never leaks", async ({
   page,
   request,
 }) => {
-  const w = wire(page);
+  const w = observeFrames(page);
   await connectAndStartWorkspace(page, "/srv/work/peer-readonly-composer");
   const masterId = String(w.calls("session/open")[0]!.params!.session_id!);
   const masterTitle = await sessionRows(page)
@@ -115,9 +78,7 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
     .getByRole("spinbutton", { name: "Peers", exact: true })
     .fill("1");
   // Hold the peer's kickoff turn so it is still live at step 4a.
-  expect(
-    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   await dialog
     .getByRole("button", { name: "Start peers", exact: true })
     .press("Enter");
@@ -128,11 +89,8 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   await expect
     .poll(
       () =>
-        new Set(
-          w.received
-            .filter((f) => f.method === "peer/staged")
-            .map((f) => String(f.params?.slug)),
-        ).size,
+        new Set(w.events("peer/staged").map((f) => String(f.params?.slug)))
+          .size,
     )
     .toBe(1);
   await dialog
@@ -140,7 +98,7 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
     .press("Enter");
   await expect(dialog).toHaveCount(0);
 
-  const staged = w.received.find((f) => f.method === "peer/staged")!.params!;
+  const staged = w.events("peer/staged")[0]!.params!;
   const slug = String(staged.slug);
   const peerId = `${String(staged.profile_id)}:local:tui#${String(staged.topic)}`;
   // A peer is not an ordinary Session row. The dock exposes its real slug and
@@ -170,14 +128,12 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
   //      interrupt authority stays master-side, TUI app/render.rs:1699-1708).
   //     The peer's kickoff turn is held at the server, so a leaked Esc would
   //     have a live turn to interrupt.
-  await heldTurn(request, peerId);
+  await terminalHeld(request, peerId);
   await page.keyboard.press("Escape");
   expect(w.calls("turn/interrupt")).toHaveLength(0);
 
   // 5. The status action returns to the actual owner master and restores input.
-  const master = productNavigation(page).locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(masterTitle)}]`,
-  );
+  const master = sessionRow(productNavigation(page), masterTitle!);
   await hint(page)
     .getByRole("button", { name: "Return to master", exact: true })
     .click();
@@ -188,25 +144,17 @@ test("focused peer shows the read-only composer and Esc never leaks", async ({
 
   // 4b. Esc DOES reach the interrupt path when a turn is live and the master
   //     authority surface holds focus (the path is intact, not global-struck).
-  expect(
-    (await request.post(`${origin}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   await composer(page).fill("Live master turn for Esc");
   await page
     .getByRole("button", { name: "Send prompt", exact: true })
     .press("Enter");
-  await heldTurn(request, masterId);
+  await terminalHeld(request, masterId);
   await composer(page).focus();
   await page.keyboard.press("Escape");
   await expect.poll(() => w.calls("turn/interrupt").length).toBe(1);
   expect(w.calls("turn/interrupt")[0]!.params).toMatchObject({
     session_id: masterId,
   });
-  expect(
-    (
-      await request.post(
-        `${origin}/__test__/terminal/release?session_id=${encodeURIComponent(masterId)}`,
-      )
-    ).status(),
-  ).toBe(204);
+  await releaseTerminal(request, masterId);
 });

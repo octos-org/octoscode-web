@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session.ts";
-
-const start = (page: Page) => startSession(page, "/workspace/mobile-settings");
+import { openSettings } from "./sessions";
 
 async function insideViewport(page: Page, locator: Locator) {
   const box = await locator.boundingBox();
@@ -27,16 +26,12 @@ async function wheelToBottom(page: Page, panel: Locator) {
 test("Settings remain operable at 320×480", async ({ page, context }) => {
   await page.setViewportSize({ width: 320, height: 480 });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await start(page);
+  await startSession(page, "/workspace/mobile-settings");
   const navigationTrigger = page.getByRole("button", {
     name: "Open sessions",
   });
   await navigationTrigger.click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const settings = page.getByRole("dialog", {
-    name: "Settings",
-    exact: true,
-  });
+  const settings = await openSettings(page);
   await expect(settings).toBeVisible();
   const content = settings.getByRole("tabpanel");
   const close = settings.getByRole("button", { name: "Close settings" });

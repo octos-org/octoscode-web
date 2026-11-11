@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { holdTerminals } from "./fixture-controls";
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 test.afterEach(async ({ request }) => {
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
@@ -31,16 +31,7 @@ test("stopping a turn returns its prompt and files, and sending again needs no u
     const id = Buffer.from(`${profile}/sales`).toString("base64url");
     await route.fulfill({ json: [`up/${id}/sales.csv`] });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page
-    .getByLabel("Server workspace path")
-    .fill(`/workspace/stop-attachments-${Date.now()}`);
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, `/workspace/stop-attachments-${Date.now()}`);
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeEnabled();
 
@@ -51,7 +42,7 @@ test("stopping a turn returns its prompt and files, and sending again needs no u
     buffer: Buffer.from("region,sales\nnorth,870\n"),
   });
   await expect(attached.locator('li[data-status="ready"]')).toHaveCount(1);
-  await request.post(FIXTURE_ORIGIN + "/__test__/terminal/hold-next");
+  await holdTerminals(request);
   await composer.fill("Summarize this file");
   await composer.press("Enter");
   await expect(composer).toHaveValue("");

@@ -25,9 +25,12 @@ test("⌘F opens the search bar over an open session and matches transcript text
   await page.getByRole("textbox", { name: "Message Octos" }).click();
   await page.keyboard.press("Control+f");
   await expect(page.getByPlaceholder("Search conversation")).toBeVisible();
-  await page.getByPlaceholder("Search conversation").fill("Durable");
-  // The heading is a live text node near the top — count must be ≥ 1.
-  await expect(
-    page.locator("[role='search'] [class*='count']"),
-  ).not.toContainText("0");
+  const search = page.getByPlaceholder("Search conversation");
+  const count = page.locator("[role='search'] [class*='count']");
+  await search.fill("Durable");
+  // The heading is a live text node: the first of at least one match.
+  await expect(count).toHaveText(/^1\/[1-9]\d*$/);
+  // Text that is not in the transcript matches nothing.
+  await search.fill("no-such-transcript-text");
+  await expect(count).toHaveText("0");
 });

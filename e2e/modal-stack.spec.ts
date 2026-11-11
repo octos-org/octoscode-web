@@ -1,7 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { startSession } from "./fixture-session.ts";
-
-const start = (page: Page) => startSession(page, "/workspace/modal-stack");
 
 test("review above an approval owns Tab and Escape at 320px", async ({
   page,
@@ -27,7 +25,7 @@ test("review above an approval owns Tab and Escape at 320px", async ({
       }
     });
   });
-  await start(page);
+  await startSession(page, "/workspace/modal-stack");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Request approval fixture");
   await composer.press("Enter");
