@@ -1,36 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import { openSettings } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 async function openConnectors(page: Page) {
-  await page
-    .locator("aside")
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings
-    .getByRole("button", { name: "Connectors", exact: true })
-    .click();
+  const settings = await openSettings(page, "Connectors");
   await expect(
     settings.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeEnabled();
   return settings;
-}
-
-/** Every frame the page sends, so a test can say what reached the server. */
-function sentFrames(page: Page) {
-  const frames: Array<{ method?: string; params?: Record<string, unknown> }> =
-    [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", (frame) => {
-      try {
-        frames.push(JSON.parse(String(frame.payload)));
-      } catch {
-        // Not JSON-RPC.
-      }
-    }),
-  );
-  return frames;
 }
 
 async function storedValues(page: Page) {
@@ -48,7 +27,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 test("signs a connector in through the provider and back", async ({ page }) => {
-  const frames = sentFrames(page);
+  const wire = observeFrames(page);
   await connectAndStartWorkspace(
     page,
     `/srv/work/connector-management-oauth-${Date.now()}`,
@@ -102,15 +81,13 @@ test("signs a connector in through the provider and back", async ({ page }) => {
     issues.getByRole("button", { name: "Revoke sign-in" }),
   ).toBeVisible();
 
-  const start = frames.find((frame) => frame.method === "mcp/oauth/start");
+  const start = wire.calls("mcp/oauth/start")[0];
   expect(start?.params).toEqual({
     session_id: expect.any(String),
     connector_id: "issues",
     redirect_uri: `${new URL(page.url()).origin}/oauth/mcp/callback`,
   });
-  const complete = frames.find(
-    (frame) => frame.method === "mcp/oauth/complete",
-  );
+  const complete = wire.calls("mcp/oauth/complete")[0];
   expect(String(complete?.params?.callback_url)).toContain("code=ok-");
   // Neither the page nor the sign-in window kept the code.
   expect(await storedValues(page)).not.toContain("ok-");
@@ -173,7 +150,7 @@ test("a sign-in returning after the page was refreshed is turned away", async ({
   ).toBeEnabled();
 });
 
-test("a restart-pending sign-in survives refreshes until the server confirms connected", async ({
+test("a restart-pending sign-in keeps its restart note across refreshes", async ({
   page,
 }) => {
   // T-0430: on a restart-mode server the OLD connection keeps reporting its
@@ -194,9 +171,8 @@ test("a restart-pending sign-in survives refreshes until the server confirms con
     "Signed in. Takes effect after the server restarts.",
   );
 
-  // The stale connection still reads failed; the note stays, no flip back to
-  // "Authorization required", and once the server reports connected the note
-  // settles to a plain signed-in.
+  // The stale connection still reads failed; the note stays, with no flip
+  // back to "Authorization required".
   await settings.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(issues).toContainText(
     "Signed in. Takes effect after the server restarts.",

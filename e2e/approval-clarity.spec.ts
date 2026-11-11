@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session";
-import { holdPermissionReceipt } from "./permission-receipt";
+import {
+  holdPermissionReceipt,
+  type PermissionSetResult,
+} from "./permission-receipt";
 
 async function prepareReadOnly(page: Page, network = "Network blocked") {
   await connectAndStartWorkspace(
@@ -109,34 +112,36 @@ test("a late permission retry never starts in or clears another Session", async 
   expect(receipt.starts()).toBe(before);
 });
 
-test("permission retry refuses a response that broadens network access", async ({
-  page,
-}) => {
-  const receipt = await holdPermissionReceipt(page);
-  const { retry } = await prepareDeniedWrite(page);
-  receipt.arm();
-  await retry.click();
-  await expect.poll(receipt.isHeld).toBe(true);
-  const before = receipt.starts();
-  receipt.release((result) => (result.current!.network = "allow"));
-  await expect(
-    page.getByText("The server did not apply workspace write permission."),
-  ).toBeVisible();
-  expect(receipt.starts()).toBe(before);
-});
-
-test("permission retry requires an applied workspace-write response", async ({
-  page,
-}) => {
-  const receipt = await holdPermissionReceipt(page);
-  const { retry } = await prepareDeniedWrite(page);
-  receipt.arm();
-  await retry.click();
-  await expect.poll(receipt.isHeld).toBe(true);
-  const before = receipt.starts();
-  receipt.release((result) => (result.applied = false));
-  await expect(
-    page.getByText("The server did not apply workspace write permission."),
-  ).toBeVisible();
-  expect(receipt.starts()).toBe(before);
-});
+// A permission retry redoes the request only on an applied workspace-write
+// receipt for the network the user chose; any other answer is reported and
+// starts nothing (T-0530).
+for (const [answer, edit] of [
+  [
+    "broadens network access",
+    (result) => {
+      result.current!.network = "allow";
+    },
+  ],
+  [
+    "is not applied",
+    (result) => {
+      result.applied = false;
+    },
+  ],
+] satisfies [string, (result: PermissionSetResult) => void][]) {
+  test(`permission retry refuses a response that ${answer}`, async ({
+    page,
+  }) => {
+    const receipt = await holdPermissionReceipt(page);
+    const { retry } = await prepareDeniedWrite(page);
+    receipt.arm();
+    await retry.click();
+    await expect.poll(receipt.isHeld).toBe(true);
+    const before = receipt.starts();
+    receipt.release(edit);
+    await expect(
+      page.getByText("The server did not apply workspace write permission."),
+    ).toBeVisible();
+    expect(receipt.starts()).toBe(before);
+  });
+}

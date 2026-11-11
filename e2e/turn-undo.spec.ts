@@ -6,38 +6,18 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
-import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import {
+  connectAndStartWorkspace,
+  FIXTURE_ORIGIN,
+  FIXTURE_TOKEN,
+} from "./fixture-session";
+import { composer } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 // T-0433: "Undo this turn" in the latest turn's summary, wired to Core's
 // `pre-turn <turn_id>` snapshot, with redo through the `pre-restore` point.
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
 
-test.afterEach(async ({ request }) => {
-  await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
-});
-
-interface Frame {
-  direction: "sent" | "received";
-  method?: string;
-  params?: Record<string, unknown>;
-}
-function observeRpc(page: Page) {
-  const frames: Frame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) =>
-      frames.push({ ...JSON.parse(String(payload)), direction: "sent" }),
-    );
-  });
-  return {
-    requests: (method: string) =>
-      frames.filter(
-        (frame) => frame.direction === "sent" && frame.method === method,
-      ),
-  };
-}
-
-const composer = (page: Page) =>
-  page.getByRole("textbox", { name: "Message Octos" });
 const timeline = (page: Page) =>
   page.getByRole("log", { name: "Conversation timeline" });
 const summary = (page: Page) =>
@@ -80,14 +60,14 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   page,
   request,
 }) => {
-  const protocol = observeRpc(page);
+  const protocol = observeFrames(page);
   await connectAndStartWorkspace(page, "/srv/work/turn-undo-walk");
   const prompt = "Change the app and then let me undo it";
   await runTurn(page, prompt);
   const sessionId = String(
-    protocol.requests("session/open")[0]!.params!.session_id,
+    protocol.calls("session/open")[0]!.params!.session_id,
   );
-  const turnId = String(protocol.requests("turn/start")[0]!.params!.turn_id);
+  const turnId = String(protocol.calls("turn/start")[0]!.params!.turn_id);
   const preTurn = (await snapshots(request, sessionId)).snapshots.find(
     (snapshot) => snapshot.turn_id === turnId,
   )!;
@@ -106,7 +86,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   const shown = await group.innerText();
   for (const id of [sessionId, turnId, preTurn.id])
     expect(shown).not.toContain(id);
-  expect(protocol.requests("snapshot/restore")).toHaveLength(0);
+  expect(protocol.calls("snapshot/restore")).toHaveLength(0);
   expect(
     (
       await new AxeBuilder({ page })
@@ -116,7 +96,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     ).violations,
   ).toEqual([]);
 
-  const hydratesBefore = protocol.requests("session/hydrate").length;
+  const hydratesBefore = protocol.calls("session/hydrate").length;
   await group.getByRole("button", { name: "Undo file changes" }).dblclick();
   await expect(
     summary(page).getByText(
@@ -124,12 +104,12 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     ),
   ).toBeVisible();
   expect(
-    protocol.requests("snapshot/restore").map((frame) => frame.params),
+    protocol.calls("snapshot/restore").map((frame) => frame.params),
   ).toEqual([{ session_id: sessionId, snapshot_id: preTurn.id }]);
-  expect(protocol.requests("session/hydrate").length).toBeGreaterThan(
+  expect(protocol.calls("session/hydrate").length).toBeGreaterThan(
     hydratesBefore,
   );
-  expect(protocol.requests("session/rollback")).toHaveLength(0);
+  expect(protocol.calls("session/rollback")).toHaveLength(0);
   await expect(timeline(page).getByText(prompt, { exact: true })).toHaveCount(
     1,
   );
@@ -155,7 +135,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     summary(page).getByText("Done. This turn's file changes are back."),
   ).toBeVisible();
   expect(
-    protocol.requests("snapshot/restore").map((frame) => frame.params),
+    protocol.calls("snapshot/restore").map((frame) => frame.params),
   ).toEqual([
     { session_id: sessionId, snapshot_id: preTurn.id },
     { session_id: sessionId, snapshot_id: preRestore.id },
@@ -169,7 +149,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   await expect(
     summary(page).getByRole("button", { name: "Redo this turn" }),
   ).toHaveCount(0);
-  expect(protocol.requests("snapshot/restore")).toHaveLength(2);
+  expect(protocol.calls("snapshot/restore")).toHaveLength(2);
 
   // A redo Core refuses is reported in Core's own words and never retried.
   const undo = await confirm(summary(page), "undo");
@@ -191,7 +171,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     "Core said: restore failed: restore refused: files were edited after the snapshot was taken",
   );
   await page.waitForTimeout(500);
-  expect(protocol.requests("snapshot/restore")).toHaveLength(4);
+  expect(protocol.calls("snapshot/restore")).toHaveLength(4);
 
   // A later turn closes the way back: the undone turn offers no redo, and
   // the new turn has its own undo.
@@ -209,24 +189,22 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   await expect(
     summaries.last().getByRole("button", { name: "Undo this turn" }),
   ).toBeVisible();
-  expect(protocol.requests("snapshot/restore")).toHaveLength(4);
+  expect(protocol.calls("snapshot/restore")).toHaveLength(4);
 });
 
 test("another tab's undo leaves this tab's stale entry unsent and unsure", async ({
   page,
   browser,
 }) => {
-  const protocol = observeRpc(page);
+  const protocol = observeFrames(page);
   await connectAndStartWorkspace(page, "/srv/work/turn-undo-tabs");
   await runTurn(page, "Change a file seen from two tabs");
   // The second tab opens the same Session from its link.
   const other = await (await browser.newContext()).newPage();
-  const otherProtocol = observeRpc(other);
+  const otherProtocol = observeFrames(other);
   await other.goto(page.url());
   await other.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await other
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await other.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await other.getByLabel("Auth token", { exact: true }).press("Enter");
   await other.getByRole("button", { name: "Open conversation" }).click();
   await expect(other.getByText(COMPLETION_TEXT)).toHaveCount(1);
@@ -261,7 +239,7 @@ test("another tab's undo leaves this tab's stale entry unsent and unsure", async
   await expect(
     summary(other).getByRole("button", { name: /this turn/ }),
   ).toHaveCount(0);
-  expect(otherProtocol.requests("snapshot/restore")).toHaveLength(0);
+  expect(otherProtocol.calls("snapshot/restore")).toHaveLength(0);
 
   // The tab that undid it can still bring it back.
   await (
@@ -272,6 +250,6 @@ test("another tab's undo leaves this tab's stale entry unsent and unsure", async
   await expect(
     summary(page).getByText("Done. This turn's file changes are back."),
   ).toBeVisible();
-  expect(protocol.requests("snapshot/restore")).toHaveLength(2);
+  expect(protocol.calls("snapshot/restore")).toHaveLength(2);
   await other.context().close();
 });

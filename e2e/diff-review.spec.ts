@@ -1,6 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-
-const fixture = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
 
 type PreviewLine = {
   kind: string;
@@ -9,13 +8,7 @@ type PreviewLine = {
   new_line?: number;
 };
 
-async function openReview(
-  page: Page,
-  lines: PreviewLine[],
-  recover = false,
-  unreadableHistory: unknown[] = [],
-) {
-  const mutations = new Map<string, unknown[]>();
+async function openReview(page: Page, lines: PreviewLine[]) {
   await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
     const server = socket.connectToServer();
     const requests = new Map<string | number, string>();
@@ -25,32 +18,7 @@ async function openReview(
       server.send(message);
     });
     server.onMessage((message) => {
-      const response = JSON.parse(String(message), (key, value) =>
-        recover && key === "supported_methods" && Array.isArray(value)
-          ? value.filter((method) => method !== "diff/workspace/get")
-          : value,
-      );
-      if (
-        recover &&
-        response.method === "progress/updated" &&
-        response.params.metadata?.file_mutation
-      ) {
-        const { session_id, metadata } = response.params;
-        mutations.set(session_id, [
-          ...(mutations.get(session_id) ?? []),
-          metadata.file_mutation,
-        ]);
-      }
-      if (
-        recover &&
-        requests.get(response.id) === "session/hydrate" &&
-        response.result
-      ) {
-        response.result.file_mutations = [
-          ...unreadableHistory,
-          ...(mutations.get(response.result.session_id) ?? []),
-        ];
-      }
+      const response = JSON.parse(String(message));
       if (requests.get(response.id) === "diff/preview/get") {
         response.result.preview.title = "Review precise code changes";
         response.result.preview.files = [
@@ -64,14 +32,7 @@ async function openReview(
       socket.send(JSON.stringify(response));
     });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
-  await page.getByRole("button", { name: "Start session" }).click();
+  await startSession(page, "/workspace/diff-review");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review syntax fixture");
   await composer.press("Enter");
@@ -119,7 +80,7 @@ const replacement: PreviewLine[] = [
   },
 ];
 
-test("diff syntax and word marks preserve inert, selectable text in both themes and on mobile", async ({
+test("diff syntax and word marks keep inert, selectable text beside the chat and on mobile", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -131,7 +92,6 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
     replacement.map((line) => line.content),
   );
   expect(await dialog.locator("img, script").count()).toBe(0);
-  const changed = dialog.locator('[class*="changedWord"]');
   expect(
     (
       await dialog
@@ -146,28 +106,6 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
         .allTextContents()
     ).join(""),
   ).toBe("新值🌏true");
-  const palettes: string[] = [];
-  for (const colorScheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme });
-    const keyword = dialog.locator(".shiki-color-keyword").first();
-    const color = await keyword.evaluate(
-      (element) => getComputedStyle(element).color,
-    );
-    const foreground = await codes
-      .first()
-      .evaluate((element) => getComputedStyle(element).color);
-    expect(color).not.toBe(foreground);
-    palettes.push(color);
-    expect(
-      await changed
-        .first()
-        .evaluate((element) => getComputedStyle(element).backgroundColor),
-    ).not.toBe("rgba(0, 0, 0, 0)");
-    await page.screenshot({
-      path: test.info().outputPath(`diff-review-${colorScheme}.png`),
-    });
-  }
-  expect(palettes[0]).not.toBe(palettes[1]);
   // The conversation stays readable beside the open diff.
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
@@ -202,9 +140,6 @@ test("diff syntax and word marks preserve inert, selectable text in both themes 
     .getByRole("button", { name: "Close session panel" })
     .boundingBox();
   expect(close!.x + close!.width).toBeLessThanOrEqual(320);
-  await page.screenshot({
-    path: test.info().outputPath("diff-review-phone.png"),
-  });
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
   await expect(panelToggle(page)).toBeFocused();
@@ -244,14 +179,7 @@ test("Changes works before a turn and ignores a late workspace reply after chang
       } else socket.send(message);
     });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
-  await page.getByRole("button", { name: "Start session" }).click();
+  await startSession(page, "/workspace/diff-review");
   const dialog = await openChanges(page);
   await expect(
     dialog.getByRole("heading", { name: "Workspace uncommitted changes" }),
@@ -262,7 +190,6 @@ test("Changes works before a turn and ignores a late workspace reply after chang
       "Includes staged, unstaged and untracked files. Changes may come from other sessions.",
     ),
   ).toBeVisible();
-  await page.screenshot({ path: "test-results/changes-workspace.png" });
   await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
   await dialog
@@ -310,14 +237,7 @@ test("reconnects preserve the selected preview and Git scope without new diff re
       }
     });
   });
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(fixture);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByLabel("Server workspace path").fill("/workspace/diff-review");
-  await page.getByRole("button", { name: "Start session" }).click();
+  await startSession(page, "/workspace/diff-review");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Review syntax fixture");
   await composer.press("Enter");

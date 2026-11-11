@@ -1,5 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { composer } from "./sessions";
 
 /**
  * WEB-WORKSPACE-BROWSER-CONTRACT-5000 — browsing the SERVER's folders from the
@@ -7,10 +9,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * token, so the same file covers the feature-absent path with another token.
  */
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const BROWSE_TOKEN = "workspace-browse-e2e-token";
-const PLAIN_TOKEN = "tab-scoped-e2e-token";
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 
 async function connect(page: Page, token: string): Promise<Locator> {
   await page.goto("/");
@@ -92,7 +91,7 @@ test("browses the server's folders, drills in and out, and reports what the serv
 test("shows no Browse affordance at all when the server does not advertise the feature", async ({
   page,
 }) => {
-  const form = await connect(page, PLAIN_TOKEN);
+  const form = await connect(page, FIXTURE_TOKEN);
   await expect(form.getByLabel("Server workspace path")).toBeVisible();
   await expect(
     form.getByRole("button", { name: "Browse server folders" }),
@@ -104,5 +103,5 @@ test("shows no Browse affordance at all when the server does not advertise the f
   // The typed-path form still works exactly as it did before the feature.
   await form.getByLabel("Server workspace path").fill("/workspace/no-browse");
   await form.getByRole("button", { name: "Start session" }).click();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
+  await expect(composer(page)).toBeEnabled();
 });

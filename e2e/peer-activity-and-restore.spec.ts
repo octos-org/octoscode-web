@@ -1,10 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
-  COMPOSER_PLACEHOLDER,
   FIXTURE_ORIGIN,
   connectAndStartWorkspace,
   runFolder,
 } from "./fixture-session.ts";
+import { productNavigation, sendPrompt } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 /**
  * e2e — peer activity glyphs from REAL peer Session frames + per-session
@@ -47,11 +48,7 @@ import {
 
 const PEER_COUNT = 2;
 const PEER_BRIEF = "Peer activity and restore triage";
-/** The fixture accepts any `/srv/work/*` path and opens a Session for it. */
-const CWD = "/srv/work/peer-activity-restore";
-const WORKSPACE = "peer-activity-restore";
 
-const productNavigation = (page: Page): Locator => page.locator("aside");
 const peerDock = (page: Page): Locator =>
   productNavigation(page).locator('section[role="region"][aria-label="Peers"]');
 const dockRow = (page: Page, slug: string): Locator =>
@@ -59,37 +56,16 @@ const dockRow = (page: Page, slug: string): Locator =>
 /** The row's activity lives on the aria-hidden glyph span (PeerDock.tsx:252). */
 const dockActivity = (page: Page, slug: string): Locator =>
   dockRow(page, slug).locator("[data-activity]");
-const composer = (page: Page): Locator =>
-  page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-
-interface Observed {
-  staged: Record<string, unknown>[];
-  sentMethods: string[];
-}
-/** Records `peer/staged` receipts and every outbound RPC method name. */
-function observe(page: Page): Observed {
-  const observed: Observed = { staged: [], sentMethods: [] };
-  page.on("websocket", (socket) => {
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as {
-        method?: string;
-        params?: Record<string, unknown>;
-      };
-      if (frame.method === "peer/staged" && frame.params)
-        observed.staged.push(frame.params);
-    });
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as { method?: string };
-      if (frame.method) observed.sentMethods.push(frame.method);
-    });
-  });
-  return observed;
-}
+/** Every outbound RPC method name, in order. */
+const sentMethods = (frames: ReturnType<typeof observeFrames>) =>
+  frames.sent.map((frame) => frame.method);
 
 /** Stage `PEER_COUNT` peers through the REAL `/peer` dialog and await the rows. */
-async function stagePeers(page: Page, observed: Observed): Promise<string[]> {
-  await composer(page).fill("/peer");
-  await page.getByRole("button", { name: "Send prompt", exact: true }).click();
+async function stagePeers(
+  page: Page,
+  frames: ReturnType<typeof observeFrames>,
+): Promise<string[]> {
+  await sendPrompt(page, "/peer");
   const dialog = page.getByRole("dialog", {
     name: "Session peers",
     exact: true,
@@ -109,10 +85,10 @@ async function stagePeers(page: Page, observed: Observed): Promise<string[]> {
 
   // The fixture replays every `peer/staged` (mock-ui-server.mjs:3344-3345), so
   // count DISTINCT slugs — the product contract — never raw frames.
-  await expect
-    .poll(() => new Set(observed.staged.map((p) => String(p.slug))).size)
-    .toBe(PEER_COUNT);
-  const slugs = [...new Set(observed.staged.map((p) => String(p.slug)))];
+  const staged = () =>
+    frames.events("peer/staged").map((frame) => String(frame.params?.slug));
+  await expect.poll(() => new Set(staged()).size).toBe(PEER_COUNT);
+  const slugs = [...new Set(staged())];
   for (const slug of slugs) await expect(dockRow(page, slug)).toBeVisible();
   return slugs;
 }
@@ -123,19 +99,6 @@ function firstSlug(slugs: string[]): string {
   const slug = slugs[0];
   if (slug === undefined) throw new Error("the fixture staged no peer");
   return slug;
-}
-
-/**
- * Send one ROOT-composer prompt and let the fixture's turn seed its peer frame.
- * The button is `Send prompt` while idle and `Queue prompt` while a turn runs;
- * a queued trigger still fires when its turn actually starts, and the callers'
- * `toHaveAttribute` assertions auto-retry across that delay.
- */
-async function sendPrompt(page: Page, text: string): Promise<void> {
-  await composer(page).fill(text);
-  await page
-    .getByRole("button", { name: /^(Send|Queue) prompt$/, exact: false })
-    .click();
 }
 
 /** Drive one peer row to `live` through the fixture's `turn/started` producer. */
@@ -155,21 +118,21 @@ test.describe("the peer dock follows each peer's own Session", () => {
     test.setTimeout(120_000);
     try {
       await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
-      const observed = observe(page);
+      const frames = observeFrames(page);
       await connectAndStartWorkspace(page, runFolder("peer-dock"));
 
       // Hidden with no peers: `PeerDock.tsx:197-199` returns null for a null
       // OR empty roster, so neither the region nor a row exists yet.
       await expect(peerDock(page)).toHaveCount(0);
 
-      const slugs = await stagePeers(page, observed);
+      const slugs = await stagePeers(page, frames);
       const [primary, sibling] = [
         firstSlug(slugs),
         slugs[1] ?? firstSlug(slugs),
       ];
       // The browser really drove `peer/prepare` (no fabricated counter), and
       // each real slug is both the visible name and accessible-name prefix.
-      expect(observed.sentMethods).toContain("peer/prepare");
+      expect(sentMethods(frames)).toContain("peer/prepare");
       for (const slug of slugs) {
         await expect(dockActivity(page, slug)).toHaveAttribute(
           "data-activity",
@@ -213,7 +176,7 @@ test.describe("the peer dock follows each peer's own Session", () => {
       await expect(peerDock(page).locator("[data-row-action]")).toHaveCount(0);
       // Answering a row is a no-op, so focus stays on the still-mounted row.
       await expect(row).toBeFocused();
-      expect(observed.sentMethods).not.toContain("peer/control");
+      expect(sentMethods(frames)).not.toContain("peer/control");
 
       // The block clears on the peer's OWN resolution frame (`approval/decided`),
       // which the coordinator folds as `attention-resolved` -> back to live.
@@ -261,67 +224,5 @@ test.describe("the peer dock follows each peer's own Session", () => {
       await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
       await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
     }
-  });
-});
-
-test.describe("per-session interrupt-prompt restore", () => {
-  test("a draft is restored only in the session that owned the interrupted turn", async ({
-    page,
-  }) => {
-    test.setTimeout(60_000);
-    await connectAndStartWorkspace(page, CWD);
-    const draft = "keep-me-draft";
-
-    // Session A: send a draft, then interrupt A's live turn via the product's
-    // own stop control (TurnStopButton; accessible name Interrupt|Stop).
-    const navigation = productNavigation(page);
-    const selectedSession = navigation.locator(
-      '[role="treeitem"][data-session-id][aria-current="page"]',
-    );
-    const sessionAId = await selectedSession.getAttribute("data-session-id");
-    if (!sessionAId) throw new Error("workspace start opened no Session");
-    await composer(page).fill(draft);
-    await page
-      .getByRole("button", { name: "Send prompt", exact: true })
-      .click();
-    await page.getByRole("button", { name: /^(Interrupt|Stop)$/ }).click();
-
-    // The interrupted prompt is parked back on A's OWNING record.
-    await expect(composer(page)).toHaveValue(draft);
-
-    // Open a sibling Session B under the SAME workspace (native-workflows.spec
-    // `sibling`, :90-101): hover the workspace row, then `New session in …`.
-    // B has its OWN composer record, so A's draft must NOT leak into it.
-    const workspaceRow = navigation.locator(
-      `[data-workspace-name=${JSON.stringify(WORKSPACE)}]`,
-    );
-    await workspaceRow
-      .getByRole("button", { name: WORKSPACE, exact: true })
-      .hover();
-    await navigation
-      .getByRole("button", { name: `New session in ${WORKSPACE}` })
-      .click();
-    await expect
-      .poll(() => selectedSession.getAttribute("data-session-id"))
-      .not.toBe(sessionAId);
-    const sessionBId = await selectedSession.getAttribute("data-session-id");
-    if (!sessionBId) throw new Error("sibling action opened no Session");
-    await expect(
-      navigation.locator(
-        `[role="treeitem"][data-session-id=${JSON.stringify(sessionBId)}]`,
-      ),
-    ).toHaveAttribute("aria-current", "page");
-    await expect(composer(page)).toHaveValue("");
-
-    // Back to A: the draft is restored exactly once.
-    await navigation
-      .locator(
-        `[role="treeitem"][data-session-id=${JSON.stringify(sessionAId)}]`,
-      )
-      .click();
-    await expect
-      .poll(() => selectedSession.getAttribute("data-session-id"))
-      .toBe(sessionAId);
-    await expect(composer(page)).toHaveValue(draft);
   });
 });

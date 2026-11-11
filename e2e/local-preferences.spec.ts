@@ -1,13 +1,23 @@
+import { expect, test, type Page } from "@playwright/test";
 import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
-import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+  holdTerminals,
+  releaseTerminal,
+  terminalHeld,
+} from "./fixture-controls";
+import {
+  connectAndStartWorkspace,
+  FIXTURE_ORIGIN,
+  FIXTURE_TOKEN,
+} from "./fixture-session";
+import {
+  newSessionIn,
+  productNavigation,
+  selectSession,
+  selectedSessionId,
+} from "./sessions";
+import { observeSent } from "./turn-observers";
 
 const storageKey = "octoscode.web.display.v1";
-const token = "tab-scoped-e2e-token";
 const input = (page: Page) => page.locator(".composer textarea");
 const preferences = (page: Page) =>
   // Chromium's native AX name is checked below. Playwright's synthetic name
@@ -17,70 +27,6 @@ const preferences = (page: Page) =>
       name: /^(Browser preferences|浏览器偏好设置)$/,
     }),
   });
-const row = (page: Page, sessionId: string) =>
-  page.locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(sessionId)}]`,
-  );
-type Frame = {
-  id?: string;
-  method?: string;
-  params?: {
-    session_id?: string;
-    turn_id?: string;
-    approval_id?: string;
-    question_id?: string;
-    input?: { kind: string; text?: string }[];
-    reasoning_effort?: string;
-    media?: unknown[];
-  };
-  result?: unknown;
-  error?: unknown;
-};
-function observe(page: Page) {
-  const sent: Frame[] = [],
-    received: Frame[] = [],
-    pending = new Set<string>();
-  let sockets = 0;
-  page.on("websocket", (socket) => {
-    const id = ++sockets;
-    socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      if (frame.method) sent.push(frame);
-      if (frame.id !== undefined) pending.add(`${id}:${frame.id}`);
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as Frame;
-      received.push(frame);
-      if (frame.id !== undefined) pending.delete(`${id}:${frame.id}`);
-    });
-  });
-  return {
-    sent,
-    received,
-    pending,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-    sockets: () => sockets,
-  };
-}
-async function title(page: Page) {
-  const sessionId = await page
-    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .getAttribute("data-session-id");
-  if (!sessionId) throw new Error("Expected a selected Session id");
-  return sessionId;
-}
-async function sibling(page: Page, workspace: string) {
-  const navigation = page.locator("aside");
-  await navigation
-    // The stable workspace id is the contract, not its accessible name.
-    .locator(`[data-workspace-name=${JSON.stringify(workspace)}]`)
-    .locator('button[class*="workspaceToggle"]')
-    .hover();
-  await navigation
-    .locator(`button[aria-label="New session in ${workspace}"]`)
-    .click();
-  await expect(input(page)).toBeEnabled();
-}
 async function command(page: Page, text: string) {
   await input(page).fill(text);
   await page.locator(".send-button").click();
@@ -121,32 +67,6 @@ async function closePreferences(page: Page) {
     .click();
   await expect(preferences(page)).toHaveCount(0);
 }
-async function hold(request: APIRequestContext) {
-  expect(
-    (
-      await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/hold-next`)
-    ).status(),
-  ).toBe(204);
-}
-async function held(request: APIRequestContext, owner: string) {
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(`${FIXTURE_ORIGIN}/__test__/terminal/state`)
-      ).json()) as { held: { session_id: string }[] };
-      return state.held.map((item) => item.session_id);
-    })
-    .toContain(owner);
-}
-async function release(request: APIRequestContext, owner: string) {
-  expect(
-    (
-      await request.post(
-        `${FIXTURE_ORIGIN}/__test__/terminal/release?session_id=${encodeURIComponent(owner)}`,
-      )
-    ).status(),
-  ).toBe(204);
-}
 async function storage(page: Page) {
   return page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
 }
@@ -155,35 +75,37 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
   page,
   request,
 }) => {
-  const wire = observe(page),
+  const starts = observeSent(page, "turn/start"),
+    interrupts = observeSent(page, "turn/interrupt"),
     workspace = "local-preferences-vim-interrupt";
   await connectAndStartWorkspace(page, `/srv/work/${workspace}`);
   await command(page, "/vimmode");
-  const a = await title(page);
-  await hold(request);
+  const a = await selectedSessionId(productNavigation(page));
+  await holdTerminals(request);
   try {
     await command(page, "Vim interrupt A");
-    const aStart = wire.calls("turn/start")[0]!.params!;
-    await held(request, aStart.session_id!);
-    await sibling(page, workspace);
-    await hold(request);
+    const aStart = starts()[0]!;
+    await terminalHeld(request, String(aStart.session_id));
+    await newSessionIn(productNavigation(page), workspace);
+    await expect(input(page)).toBeEnabled();
+    await holdTerminals(request);
     await command(page, "Vim interrupt B must remain active");
-    const bStart = wire.calls("turn/start")[1]!.params!;
-    await held(request, bStart.session_id!);
-    await row(page, a).click();
+    const bStart = starts()[1]!;
+    await terminalHeld(request, String(bStart.session_id));
+    await selectSession(productNavigation(page), a);
     await input(page).focus();
     if ((await input(page).getAttribute("data-vim-mode")) === "insert")
       await input(page).press("Escape");
-    expect(wire.calls("turn/interrupt")).toHaveLength(0);
+    expect(interrupts()).toHaveLength(0);
     await input(page).press("Escape");
-    await expect.poll(() => wire.calls("turn/interrupt").length).toBe(1);
-    expect(wire.calls("turn/interrupt")[0]!.params).toMatchObject({
+    await expect.poll(() => interrupts().length).toBe(1);
+    expect(interrupts()[0]).toMatchObject({
       session_id: aStart.session_id,
       turn_id: aStart.turn_id,
     });
-    await held(request, bStart.session_id!);
-    expect(wire.calls("turn/start")).toHaveLength(2);
-    await release(request, bStart.session_id!);
+    await terminalHeld(request, String(bStart.session_id));
+    expect(starts()).toHaveLength(2);
+    await releaseTerminal(request, String(bStart.session_id));
   } finally {
     await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
   }
@@ -192,7 +114,7 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
 test("only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials", async ({
   page,
 }) => {
-  const wire = observe(page);
+  const starts = observeSent(page, "turn/start");
   await connectAndStartWorkspace(page, "/srv/work/local-preferences-save");
   const before = await storage(page);
   await command(page, "/theme");
@@ -222,8 +144,8 @@ test("only explicit save persists display preferences; reload restores preferenc
   ).toEqual(before);
   await input(page).fill("PRIVATE_COMPOSER_DRAFT");
   expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
-  expect(JSON.stringify(await storage(page))).not.toContain(token);
-  expect(wire.calls("turn/start")).toHaveLength(0);
+  expect(JSON.stringify(await storage(page))).not.toContain(FIXTURE_TOKEN);
+  expect(starts()).toHaveLength(0);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh");
   await expect(page.locator("html")).toHaveAttribute(
@@ -234,7 +156,7 @@ test("only explicit save persists display preferences; reload restores preferenc
   // Draft recovery is separate from the explicitly saved display preferences.
   await expect(input(page)).toHaveValue("PRIVATE_COMPOSER_DRAFT");
   expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
-  expect(JSON.stringify(await storage(page))).not.toContain(token);
+  expect(JSON.stringify(await storage(page))).not.toContain(FIXTURE_TOKEN);
   await input(page).fill("");
   await expect(input(page)).toHaveAttribute("data-vim-mode", "insert");
   await command(page, "/theme");
@@ -253,5 +175,5 @@ test("only explicit save persists display preferences; reload restores preferenc
     language: "en",
     vimMode: true,
   });
-  expect(wire.calls("turn/start")).toHaveLength(0);
+  expect(starts()).toHaveLength(0);
 });

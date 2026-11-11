@@ -1,17 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
+import { startSession } from "./fixture-session";
 
 async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
-  await page.getByLabel("Server workspace path").fill("/workspace/ux-review");
-  await page.getByLabel("Server workspace path").press("Enter");
+  await startSession(page, "/workspace/ux-review");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await expect(composer).toBeVisible();
   // Upstream's fixture handed every freshly opened Session a canned demo
@@ -192,61 +184,4 @@ test("keeps the mobile composer on screen and makes navigation an accessible dra
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     320,
   );
-});
-
-test("follows arriving content but leaves a reader in history until they jump to latest", async ({
-  page,
-}) => {
-  const turns = await holdTurns(page);
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await start(page);
-  const input = page.getByRole("textbox", { name: "Message Octos" });
-  await input.fill("show a long response");
-  await input.press("Enter");
-  await expect.poll(() => turns.sent.length).toBe(1);
-  const prose = Array.from(
-    { length: 35 },
-    (_, i) =>
-      `Paragraph ${i}: A detailed explanation of the repository and how its parts fit together.`,
-  ).join("\n\n");
-  turns.emit("assistant_delta", {
-    assistant_segment_id: "answer",
-    text: prose,
-  });
-  const region = page.getByRole("region", {
-    name: "Conversation",
-    exact: true,
-  });
-  const distance = () =>
-    region.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
-  await expect.poll(distance).toBeLessThan(48);
-  await region.hover();
-  await page.mouse.wheel(0, -650);
-  await expect(
-    page.getByRole("button", { name: "Back to latest" }),
-  ).toBeVisible();
-  const before = await region.evaluate((el) => el.scrollTop);
-  turns.emit("assistant_delta", {
-    assistant_segment_id: "answer",
-    text: "\n\nOne more paragraph arrives while you are reading.",
-  });
-  // Wait for the paragraph to render, then hold the reader still across the
-  // next ten frames (the ResizeObserver pass and anything deferred after it).
-  await expect(
-    page.getByText("One more paragraph arrives while you are reading.", {
-      exact: true,
-    }),
-  ).toBeAttached();
-  const tops = await region.evaluate(async (el) => {
-    const out: number[] = [];
-    for (let i = 0; i < 10; i++) {
-      await new Promise(requestAnimationFrame);
-      out.push(el.scrollTop);
-    }
-    return out;
-  });
-  for (const top of tops) expect(Math.abs(top - before)).toBeLessThan(10);
-  await page.getByRole("button", { name: "Back to latest" }).click();
-  await expect.poll(distance).toBeLessThan(48);
-  turns.emit("turn_terminal", { outcome: "completed" });
 });

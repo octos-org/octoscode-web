@@ -1,20 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
-
-function invocations(page: Page) {
-  const frames: Array<{ method?: string; params?: Record<string, unknown> }> =
-    [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", (frame) => {
-      try {
-        frames.push(JSON.parse(String(frame.payload)));
-      } catch {
-        // Not JSON-RPC.
-      }
-    }),
-  );
-  return frames;
-}
+import { observeFrames } from "./turn-observers";
 
 const progress = (page: Page, sessionId: string, status = "succeeded") =>
   page.request.post(
@@ -24,7 +10,7 @@ const progress = (page: Page, sessionId: string, status = "succeeded") =>
 test("runs a skill action from the composer, retries a failed job into a new job, and tracks the jobs across a refresh", async ({
   page,
 }) => {
-  const frames = invocations(page);
+  const wire = observeFrames(page);
   await startSession(page, `/workspace/composer-skill-actions-${Date.now()}`);
   const sessionId = await openSessionId(page);
   const chip = page.locator("[data-skill-actions]");
@@ -42,12 +28,8 @@ test("runs a skill action from the composer, retries a failed job into a new job
   await expect(
     menu.locator("[data-skill-job] [data-job-status='queued']"),
   ).toBeVisible();
-  expect(
-    frames.filter((frame) => frame.method === "skill/action/invoke"),
-  ).toHaveLength(1);
-  expect(frames.filter((frame) => frame.method === "turn/start")).toHaveLength(
-    0,
-  );
+  expect(wire.calls("skill/action/invoke")).toHaveLength(1);
+  expect(wire.calls("turn/start")).toHaveLength(0);
 
   // Progress arrives live.
   await progress(page, sessionId, "running");
@@ -69,12 +51,8 @@ test("runs a skill action from the composer, retries a failed job into a new job
   ).toBeVisible();
   await menu.getByText("Result details").click();
   await expect(menu.getByText("protocol action fixture")).toBeVisible();
-  expect(
-    frames.filter((frame) => frame.method === "skill/action/invoke"),
-  ).toHaveLength(2);
-  expect(frames.filter((frame) => frame.method === "turn/start")).toHaveLength(
-    0,
-  );
+  expect(wire.calls("skill/action/invoke")).toHaveLength(2);
+  expect(wire.calls("turn/start")).toHaveLength(0);
 
   // A refresh shows the SAME server jobs; nothing is invoked again.
   await page.reload();
@@ -90,7 +68,5 @@ test("runs a skill action from the composer, retries a failed job into a new job
   await expect(
     again.locator("[data-skill-job] [data-job-status='succeeded']"),
   ).toBeVisible();
-  expect(
-    frames.filter((frame) => frame.method === "skill/action/invoke"),
-  ).toHaveLength(2);
+  expect(wire.calls("skill/action/invoke")).toHaveLength(2);
 });

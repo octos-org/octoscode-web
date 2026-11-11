@@ -1,9 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const FIXTURE_ORIGIN = `http://127.0.0.1:${
-  process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"
-}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { composer, sendPrompt } from "./sessions";
 
 // Frame budget for the streaming phase: a long animation frame over this is
 // a jank signal worth failing on. Generous enough to avoid runner noise.
@@ -17,7 +14,7 @@ async function connectAndStart(page: Page): Promise<void> {
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
   await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
+  await page.getByLabel("Auth token").fill(FIXTURE_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   const add = page.getByRole("region", { name: "Add workspace" });
   await expect(add).toBeVisible();
@@ -26,7 +23,7 @@ async function connectAndStart(page: Page): Promise<void> {
     .fill("/workspace/octoscode-web");
   await add.getByRole("button", { name: "Start session" }).click();
   await expect(add).toBeHidden();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
+  await expect(composer(page)).toBeVisible();
 }
 
 test("streaming turn stays under the long-frame budget", async ({ page }) => {
@@ -48,9 +45,7 @@ test("streaming turn stays under the long-frame budget", async ({ page }) => {
     observer.observe({ type: "long-animation-frame", buffered: false });
   });
 
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await composer.fill("Stream a reply fixture");
-  await page.getByRole("button", { name: "Send prompt" }).click();
+  await sendPrompt(page, "Stream a reply fixture");
   await expect(page.getByText("Completed with")).toBeVisible({
     timeout: 20_000,
   });

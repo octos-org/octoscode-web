@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session";
+import { sessionRow } from "./sessions";
 
 test("a new session gets the saved permission default once, under its own id, and a refused one is reported on that session", async ({
   page,
@@ -117,9 +118,7 @@ test("a new session gets the saved permission default once, under its own id, an
   ).toBeVisible();
   await closePane();
   await expect(composer).toHaveValue("Only once the default applies");
-  await sidebar
-    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(createdRow)}]`)
-    .click();
+  await sessionRow(sidebar, createdRow).click();
   // The other session shows its default and is not blocked.
   await expect.poll(opened).toBe(created);
   await expect(blocked).toHaveCount(0);
@@ -131,9 +130,7 @@ test("a new session gets the saved permission default once, under its own id, an
   await closePane();
 
   refuse = false;
-  await sidebar
-    .locator(`[role="treeitem"][data-session-id=${JSON.stringify(refusedRow)}]`)
-    .click();
+  await sessionRow(sidebar, refusedRow).click();
   await expect.poll(opened).toBe(refused);
   await blocked
     .getByRole("button", { name: "Retry permission default" })

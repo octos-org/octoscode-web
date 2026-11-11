@@ -5,13 +5,13 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 
 /**
  * T-0392: the usage page reads Core #1376's ledger over its REST routes. The
  * fixture aggregates runs the way Core's UsageAnalytics::from_events does
  * (shapes captured from Core 6fc12da3 in packages/client/tests/fixtures).
  */
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const DAY = 86_400_000;
 const PRICED = "usage-priced-model";
 const UNPRICED = "usage-local-model";
@@ -57,23 +57,23 @@ async function seed(
   workspace: string,
   runs: readonly object[],
 ) {
-  await request.post(`${ORIGIN}/__test__/usage/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/usage/reset`);
   await request.post(
-    `${ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(workspace)}`,
+    `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(workspace)}`,
   );
-  const response = await request.post(`${ORIGIN}/__test__/usage/seed`, {
+  const response = await request.post(`${FIXTURE_ORIGIN}/__test__/usage/seed`, {
     data: { workspace, profile: "_main", sessions: TITLES, runs },
   });
   return ((await response.json()) as { sessionIds: string[] }).sessionIds;
 }
 
 async function mode(request: APIRequestContext, query: string) {
-  await request.post(`${ORIGIN}/__test__/usage/mode?${query}`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/usage/mode?${query}`);
 }
 
 async function reads(request: APIRequestContext) {
   return (await (
-    await request.get(`${ORIGIN}/__test__/usage/reads`)
+    await request.get(`${FIXTURE_ORIGIN}/__test__/usage/reads`)
   ).json()) as {
     path: string;
     sessionId: string | null;
@@ -84,16 +84,7 @@ async function reads(request: APIRequestContext) {
 }
 
 async function openUsage(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.locator("#connection-origin").fill(ORIGIN);
-  await page.locator("#connection-token").fill("tab-scoped-e2e-token");
-  await page.locator('form[class*="card"] button[type="submit"]').click();
-  const path = page.getByLabel(/Server workspace path/);
-  await path.fill(workspace);
-  await path.press("Enter");
-  await expect(
-    page.getByRole("textbox", { name: /Message Octos/ }),
-  ).toBeEnabled();
+  await startSession(page, workspace);
   const entry = page.locator('aside [data-usage-nav="entry"]');
   if (!(await entry.isVisible()))
     await page.getByRole("button", { name: /Open sessions/ }).click();
@@ -110,7 +101,7 @@ const figure = (usage: ReturnType<Page["locator"]>, label: string) =>
     .locator("dd");
 
 test.afterEach(async ({ request }) => {
-  await request.post(`${ORIGIN}/__test__/usage/reset`);
+  await request.post(`${FIXTURE_ORIGIN}/__test__/usage/reset`);
 });
 
 test("shows the server's totals by model, date and session, and switches without mixing results", async ({

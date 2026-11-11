@@ -4,12 +4,11 @@ import {
   FIXTURE_ORIGIN,
   openSessionId,
 } from "./fixture-session";
+import { sendPrompt } from "./sessions";
 
 async function openConversation(page: Page, cwd: string): Promise<string> {
   await connectAndStartWorkspace(page, cwd);
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await composer.fill("Show the Markdown transcript surface");
-  await composer.press("Enter");
+  await sendPrompt(page, "Show the Markdown transcript surface");
   await expect(
     page.locator(".markdown-body").getByText("Raw HTML stays inert:"),
   ).toBeVisible();

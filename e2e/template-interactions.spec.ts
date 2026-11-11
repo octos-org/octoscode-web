@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session";
 import { holdPermissionReceipt } from "./permission-receipt";
+import { observeSent } from "./turn-observers";
 
 async function useTemplate(page: Page, name: string) {
   await page
@@ -12,12 +13,7 @@ async function useTemplate(page: Page, name: string) {
 test("a write template blocks read-only sending and offers one-click write access", async ({
   page,
 }) => {
-  let starts = 0;
-  page.on("websocket", (socket) =>
-    socket.on("framesent", ({ payload }) => {
-      if (String(payload).includes('"method":"turn/start"')) starts += 1;
-    }),
-  );
+  const starts = observeSent(page, "turn/start");
   await connectAndStartWorkspace(page, "/workspace/template-write-send-gate");
   await useTemplate(page, "Fix a bug");
   await page.getByRole("button", { name: /^Permission:/ }).click();
@@ -34,7 +30,7 @@ test("a write template blocks read-only sending and offers one-click write acces
       .getByRole("alert")
       .filter({ hasText: "This template needs write permission" }),
   ).toBeVisible();
-  expect(starts).toBe(0);
+  expect(starts()).toHaveLength(0);
   await page
     .getByRole("button", { name: "Switch to workspace write", exact: true })
     .click();
@@ -45,7 +41,7 @@ test("a write template blocks read-only sending and offers one-click write acces
   await expect(
     page.getByRole("region", { name: "What can Octos help with?" }),
   ).toHaveCount(0);
-  expect(starts).toBe(1);
+  expect(starts()).toHaveLength(1);
 });
 
 test("a read-only template waits for the permission receipt before sending", async ({

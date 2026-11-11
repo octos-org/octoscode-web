@@ -1,10 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
-  COMPOSER_PLACEHOLDER,
   FIXTURE_ORIGIN,
   connectAndStartWorkspace,
   runFolder,
 } from "./fixture-session.ts";
+import { composer, productNavigation, sendPrompt } from "./sessions";
+import { observeFrames } from "./turn-observers";
 
 /**
  * A native peer keeps its identity across a full page reload (T-0082, dogfood
@@ -20,29 +21,19 @@ import {
  */
 const PEER_BRIEF = "Reply OK without reading or writing any files.";
 
-const composer = (page: Page): Locator =>
-  page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-const navigation = (page: Page): Locator => page.locator("aside");
 const peerDock = (page: Page): Locator =>
-  navigation(page).locator('section[role="region"][aria-label="Peers"]');
+  productNavigation(page).locator('section[role="region"][aria-label="Peers"]');
 const dockRow = (page: Page, slug: string): Locator =>
   peerDock(page).locator(`button[data-peer-slug="${slug}"]`);
 const dockActivity = (page: Page, slug: string): Locator =>
   dockRow(page, slug).locator("[data-activity]");
 const sessionRow = (page: Page, sessionId: string): Locator =>
-  navigation(page).locator(
+  productNavigation(page).locator(
     `[role="treeitem"][data-session-id*=${JSON.stringify(sessionId)}]`,
   );
 const selectedSession = (page: Page): Locator =>
-  navigation(page).locator('[role="treeitem"][aria-current="page"]');
+  productNavigation(page).locator('[role="treeitem"][aria-current="page"]');
 const strip = (page: Page): Locator => page.getByTestId("session-status-strip");
-
-async function sendPrompt(page: Page, text: string): Promise<void> {
-  await composer(page).fill(text);
-  await page
-    .getByRole("button", { name: /^(Send|Queue) prompt$/, exact: false })
-    .click();
-}
 
 test("a finished peer keeps its place, read-only view and way back after a reload", async ({
   page,
@@ -50,20 +41,12 @@ test("a finished peer keeps its place, read-only view and way back after a reloa
 }) => {
   test.setTimeout(120_000);
   const cwd = runFolder("peer-reload");
-  const staged: string[] = [];
-  page.on("websocket", (socket) =>
-    socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload)) as {
-        method?: string;
-        params?: { slug?: unknown };
-      };
-      if (
-        frame.method === "peer/staged" &&
-        typeof frame.params?.slug === "string"
-      )
-        staged.push(frame.params.slug);
-    }),
-  );
+  const frames = observeFrames(page);
+  const staged = (): string[] =>
+    frames
+      .events("peer/staged")
+      .map((frame) => frame.params?.slug)
+      .filter((slug) => typeof slug === "string");
   try {
     await request.post(`${FIXTURE_ORIGIN}/__test__/peers/reset`);
     // List this workspace's Sessions the way Core does: scoped to the folder.
@@ -91,8 +74,8 @@ test("a finished peer keeps its place, read-only view and way back after a reloa
     await dialog
       .getByRole("button", { name: "Close peers", exact: true })
       .click();
-    await expect.poll(() => new Set(staged).size).toBe(1);
-    const slug = staged[0]!;
+    await expect.poll(() => new Set(staged()).size).toBe(1);
+    const slug = staged()[0]!;
     await expect(dockRow(page, slug)).toBeVisible();
 
     // Its turn runs, then lands: while it runs it counts, once done it does not.

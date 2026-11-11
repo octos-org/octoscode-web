@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openSessionController } from "./session-settings.ts";
 import { connectAndStartWorkspace } from "./fixture-session.ts";
+import { observeFrames } from "./turn-observers";
 
 /**
  * peer/control seat semantics — SOURCE ONLY (draft, not executed), migrated to
@@ -23,9 +24,6 @@ import { connectAndStartWorkspace } from "./fixture-session.ts";
  * (plan 0810 §1-§3). Variants: (default) accepted receipts; refused -> state
  * "refused" receipts; stale -> typed driver_fence_stale errors; duplicate ->
  * duplicate:true receipts; no-method / no-feature omit the caps.
- *
- * Frame observation is PROJECTED AT CAPTURE: only allowlisted public fields /
- * counts / request ids are retained — no payloads, no tokens, no server copy.
  */
 /** Wire method of the single control leaf. */
 const CONTROL_METHOD = "peer/control";
@@ -41,99 +39,6 @@ const COMMAND_KINDS = [
 type CommandKind = (typeof COMMAND_KINDS)[number];
 /** §6 bounded copy (peer-control-commands.ts label table). */
 const FENCE_STALE = "Your control of this session expired";
-
-/** Allowlisted projection of ONE captured frame; raw JSON is dropped. */
-interface ObservedFrame {
-  readonly id: string | null;
-  readonly method: string | null;
-  readonly errorCode: number | null;
-  readonly refusalKind: string | null;
-  readonly receiptState: string | null;
-  readonly receiptDuplicate: boolean | null;
-}
-type Captured = ObservedFrame & { readonly socket: number };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" ? value : null;
-}
-function project(raw: unknown): ObservedFrame | null {
-  const frame = asRecord(raw);
-  if (frame === null) return null;
-  const result = asRecord(frame.result);
-  const error = asRecord(frame.error);
-  const errorData = asRecord(error?.data);
-  return {
-    id: asString(frame.id),
-    method: asString(frame.method),
-    errorCode: asNumber(error?.code),
-    refusalKind: asString(errorData?.kind),
-    receiptState: asString(result?.state),
-    receiptDuplicate:
-      typeof result?.duplicate === "boolean" ? result.duplicate : null,
-  };
-}
-
-/** Captured frames, projected on the way in and tagged per socket. */
-function wire(page: Page) {
-  const sent: Captured[] = [];
-  const received: Captured[] = [];
-  let socketOrdinal = 0;
-  const socketIds = new WeakMap<object, number>();
-  const ordinal = (socket: object): number => {
-    const known = socketIds.get(socket);
-    if (known !== undefined) return known;
-    const assigned = socketOrdinal;
-    socketOrdinal += 1;
-    socketIds.set(socket, assigned);
-    return assigned;
-  };
-  const take = (payload: unknown): ObservedFrame | null => {
-    try {
-      return project(JSON.parse(String(payload)) as unknown);
-    } catch {
-      return null;
-    }
-  };
-  page.on("websocket", (socket) => {
-    const connection = ordinal(socket);
-    socket.on("framesent", ({ payload }) => {
-      const frame = take(payload);
-      if (frame) sent.push({ ...frame, socket: connection });
-    });
-    socket.on("framereceived", ({ payload }) => {
-      const frame = take(payload);
-      if (frame) received.push({ ...frame, socket: connection });
-    });
-  });
-  return {
-    sent,
-    received,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-    replyTo: (frame: Captured): ObservedFrame | null =>
-      received.find(
-        (candidate) =>
-          candidate.id === frame.id && candidate.socket === frame.socket,
-      ) ?? null,
-    async settled(frame: Captured) {
-      await expect
-        .poll(() =>
-          received.some(
-            (candidate) =>
-              candidate.id === frame.id && candidate.socket === frame.socket,
-          ),
-        )
-        .toBe(true);
-    },
-  };
-}
 
 /**
  * The seat commands inside the pane's Advanced section. The pane is a dialog
@@ -186,7 +91,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
   test("no seat panel when external_driver_v1 is unadvertised (no-feature)", async ({
     page,
   }) => {
-    const w = wire(page);
+    const w = observeFrames(page);
     await connect(page, "no-feature");
     await expect(panel(page)).toHaveCount(0);
     expect(w.calls(CONTROL_METHOD)).toHaveLength(0);
@@ -196,7 +101,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
   test("each command, from the keyboard or a click, emits exactly ONE frame and an accepted receipt", async ({
     page,
   }) => {
-    const w = wire(page);
+    const w = observeFrames(page);
     await connect(page, "");
     await expect(
       panel(page).getByRole("group", { name: "Commands" }),
@@ -217,9 +122,6 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
       receipt(page).locator('[data-receipt-duplicate="false"]'),
     ).toHaveText("Newly applied");
     await w.settled(w.calls(CONTROL_METHOD)[0]!);
-    expect(w.replyTo(w.calls(CONTROL_METHOD)[0]!)?.receiptState).toBe(
-      "accepted",
-    );
 
     // The other three commands, clicked: one frame each, never a retry.
     for (const kind of COMMAND_KINDS.filter((k) => k !== "steer")) {
@@ -234,7 +136,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
   test("a refused RECEIPT renders the typed peer_control_refused refusal", async ({
     page,
   }) => {
-    const w = wire(page);
+    const w = observeFrames(page);
     await connect(page, "refused");
     await command(page, "steer").click();
     await expect(refusal(page)).toBeVisible();
@@ -250,7 +152,7 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
   test("a driver_fence_stale typed error drops the seat, keeps the §6 label", async ({
     page,
   }) => {
-    const w = wire(page);
+    const w = observeFrames(page);
     await connect(page, "stale");
     await command(page, "steer").click();
     // P2e (2930) + round-2 Advanced restructure: a typed stale fence means

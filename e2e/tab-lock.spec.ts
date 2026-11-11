@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
+import { openSettings } from "./sessions";
+import { observeSent } from "./turn-observers";
 
 // Cross-tab session lock (#56): two tabs in the SAME browser context share
 // the Web Locks origin, so a second tab opening the same session must see
@@ -14,12 +16,7 @@ test("a second tab sees the lock, takes over, and the first tab sees the loss", 
   await startSession(page, "/workspace/tab-lock");
 
   // Tab A: copy the confirmed session link from Settings → General.
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings" })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings.getByRole("button", { name: "General" }).click();
+  const settings = await openSettings(page, "General");
   await settings
     .getByRole("button", { name: "Copy conversation link" })
     .click();
@@ -41,11 +38,10 @@ test("a second tab sees the lock, takes over, and the first tab sees the loss", 
   // the link alone cannot authenticate — connect first, then the saved link
   // offers the conversation.
   const tabB = await page.context().newPage();
+  const tabBStarts = observeSent(tabB, "turn/start");
   await tabB.goto(link!);
   await tabB.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await tabB
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
+  await tabB.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
   await tabB.getByRole("button", { name: "Connect", exact: true }).click();
   await tabB.getByRole("button", { name: "Open conversation" }).click();
   await expect(
@@ -54,6 +50,13 @@ test("a second tab sees the lock, takes over, and the first tab sees the loss", 
   await expect(
     tabB.getByRole("status").filter({ hasText: BANNER_TEXT }),
   ).toBeVisible();
+  // While locked, sending from tab B starts nothing and keeps the text.
+  const lockedComposer = tabB.getByRole("textbox", { name: "Message Octos" });
+  await lockedComposer.fill("Locked tab must not send");
+  await lockedComposer.press("Enter");
+  await expect(lockedComposer).toHaveValue("Locked tab must not send");
+  expect(tabBStarts()).toHaveLength(0);
+  await lockedComposer.fill("");
 
   // The banner's Take-over steals the lock; tab A must be told it lost.
   await tabB.getByRole("button", { name: "Take over here" }).click();

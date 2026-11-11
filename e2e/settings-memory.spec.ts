@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN } from "./fixture-session.ts";
 import { openMemory, startMemorySession } from "./memory-settings.ts";
+import { observeSent } from "./turn-observers";
 
 const start = (page: Page, token = "memory-e2e-token") =>
   startMemorySession(page, token, "settings-memory");
@@ -9,16 +10,7 @@ const start = (page: Page, token = "memory-e2e-token") =>
 test("ingest → search → detail survives a page refresh, and failures stay honest", async ({
   page,
 }) => {
-  const ingestCalls: string[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message)) as { method?: string };
-      if (frame.method === "memory/ingest") ingestCalls.push(frame.method);
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
+  const ingestCalls = observeSent(page, "memory/ingest");
   await start(page);
   const settings = await openMemory(page);
 
@@ -58,7 +50,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
     settings.getByText("1 inserted · 0 updated · 0 unchanged"),
   ).toBeVisible();
   await expect(settings.getByText("refresh-kept body")).toBeVisible();
-  expect(ingestCalls).toHaveLength(1);
+  expect(ingestCalls()).toHaveLength(1);
 
   // A failed ingest says so and keeps the form.
   await settings.getByLabel("Title").fill("Will fail");
@@ -114,10 +106,7 @@ test("fails closed when authenticated memory ownership differs from the Session 
 test("long-term entries edit and delete on the server, and a failed change keeps the text", async ({
   page,
 }) => {
-  const sent: { method?: string; params?: Record<string, unknown> }[] = [];
-  page.on("websocket", (ws) =>
-    ws.on("framesent", (frame) => sent.push(JSON.parse(String(frame.payload)))),
-  );
+  const edits = observeSent(page, "memory/edit");
   const control = (path: string) =>
     page.request.post(`${FIXTURE_ORIGIN}/__test__/memory/${path}`);
   await control("entries/reset");
@@ -142,7 +131,7 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await expect(entry("green tea").locator("p")).toHaveText(
     "- prefers green tea (updated: 2026-11-10)",
   );
-  const edit = sent.find((frame) => frame.method === "memory/edit")!.params!;
+  const edit = edits()[0]!;
   expect(edit).toMatchObject({
     entry_id: "^maaaaaa",
     version: createHash("sha256")

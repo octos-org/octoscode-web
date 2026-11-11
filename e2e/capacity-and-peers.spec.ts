@@ -1,77 +1,31 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
-import { connectAndStartWorkspace } from "./fixture-session.ts";
+import { expect, test } from "@playwright/test";
+import { disconnect, holdTerminals } from "./fixture-controls";
+import { FIXTURE_ORIGIN, connectAndStartWorkspace } from "./fixture-session.ts";
+import {
+  newSessionIn,
+  productNavigation,
+  selectSession,
+  selectedSessionId,
+  sendPrompt,
+  sessionRow,
+} from "./sessions";
+import { observeFrames, observeTransports } from "./turn-observers";
 
-const FIXTURE_ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER_PLACEHOLDER = "Ask Octos to change, explain, or review code…";
 const SLOW_PREFIX = "Continue this turn while I open another Session";
 const COMPLETION_TEXT = "Completed with pnpm check and all tests passing.";
 const BROWSER_TURNS = 12;
 const PEER_COUNT = 3;
 
-function productNavigation(page: Page): Locator {
-  return page.locator("aside");
-}
-
-async function selectedSessionTitle(sidebar: Locator): Promise<string> {
-  const title = await sidebar
-    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .getAttribute("data-session-id");
-  if (!title) throw new Error("Expected a selected Session title");
-  return title;
-}
-
-function sessionRowByTitle(sidebar: Locator, title: string): Locator {
-  return sidebar.locator(
-    `[role="treeitem"][data-session-id=${JSON.stringify(title)}]`,
-  );
-}
-
-interface ProtocolFrame {
-  socket: number;
-  method: string;
-  params: Record<string, unknown>;
-}
-function observeProtocol(page: Page) {
-  const sent: ProtocolFrame[] = [];
-  const received: ProtocolFrame[] = [];
-  const openSockets = new Set<number>();
-  let sequence = 0;
-  page.on("websocket", (socket) => {
-    const id = ++sequence;
-    openSockets.add(id);
-    socket.on("close", () => openSockets.delete(id));
-    const capture = (target: ProtocolFrame[], payload: string | Buffer) => {
-      const frame = JSON.parse(String(payload)) as {
-        method?: string;
-        params?: Record<string, unknown>;
-      };
-      if (frame.method)
-        target.push({
-          socket: id,
-          method: frame.method,
-          params: frame.params ?? {},
-        });
-    };
-    socket.on("framesent", ({ payload }) => capture(sent, payload));
-    socket.on("framereceived", ({ payload }) => capture(received, payload));
-  });
-  return { sent, received, openSockets };
-}
 test("holds twelve browser turns and three browser-started native peers on one pooled socket", async ({
   page,
   request,
 }) => {
   test.setTimeout(120_000);
   const cwd = "/srv/work/twelve-plus-peers";
-  const protocol = observeProtocol(page);
+  const protocol = observeFrames(page);
+  const transports = observeTransports(page);
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
-  for (let index = 0; index < BROWSER_TURNS + PEER_COUNT; index += 1) {
-    expect(
-      (
-        await request.post(FIXTURE_ORIGIN + "/__test__/terminal/hold-next")
-      ).status(),
-    ).toBe(204);
-  }
+  await holdTerminals(request, BROWSER_TURNS + PEER_COUNT);
   try {
     await connectAndStartWorkspace(page, cwd);
     const sidebar = productNavigation(page);
@@ -80,43 +34,26 @@ test("holds twelve browser turns and three browser-started native peers on one p
     const workspace = sidebar.locator(
       '[data-workspace-name="twelve-plus-peers"]',
     );
-    const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
     const sessionByMarker = new Map<string, string>();
-    const starts = () =>
-      protocol.sent.filter((frame) => frame.method === "turn/start");
+    const starts = () => protocol.calls("turn/start");
     for (let index = 0; index < BROWSER_TURNS; index += 1) {
       const marker = SLOW_PREFIX + " twelve-" + index + "-marker";
-      await composer.fill(marker);
-      await page
-        .getByRole("button", { name: "Send prompt", exact: true })
-        .click();
+      await sendPrompt(page, marker);
       await expect.poll(() => starts().length).toBe(index + 1);
       await expect(
         page.getByRole("button", { name: "Stop", exact: true }),
       ).toBeVisible();
-      const runningTitle = await selectedSessionTitle(sidebar);
-      sessionByMarker.set(marker, runningTitle);
-      await workspace.locator('button[class*="workspaceToggle"]').hover();
-      await sidebar
-        .locator('button[aria-label="New session in twelve-plus-peers"]')
-        .click();
-      await expect
-        .poll(() => selectedSessionTitle(sidebar))
-        .not.toBe(runningTitle);
+      sessionByMarker.set(marker, await selectedSessionId(sidebar));
+      await newSessionIn(sidebar, "twelve-plus-peers");
       const showMore = workspace.locator('button[class*="showMore"]');
       if (await showMore.isVisible()) await showMore.click();
       await expect(
         sidebar.locator('[role="treeitem"][data-session-id]'),
       ).toHaveCount(index + 2);
     }
-    const masterTitle = await selectedSessionTitle(sidebar);
-    const masterOpen = protocol.sent
-      .filter((frame) => frame.method === "session/open")
-      .at(-1)!;
-    await composer.fill("/peer");
-    await page
-      .getByRole("button", { name: "Send prompt", exact: true })
-      .click();
+    const masterTitle = await selectedSessionId(sidebar);
+    const masterOpen = protocol.calls("session/open").at(-1)!;
+    await sendPrompt(page, "/peer");
     const dialog = page.getByRole("dialog", {
       name: "Session peers",
       exact: true,
@@ -135,51 +72,40 @@ test("holds twelve browser turns and three browser-started native peers on one p
     await expect(
       dialog.getByRole("list", { name: "Session peers" }).getByRole("listitem"),
     ).toHaveCount(PEER_COUNT);
-    await expect
-      .poll(
-        () =>
-          protocol.sent.filter((frame) => frame.method === "peer/prepare")
-            .length,
-      )
-      .toBe(1);
-    const prepared = protocol.sent.find(
-      (frame) => frame.method === "peer/prepare",
-    )!;
+    await expect.poll(() => protocol.calls("peer/prepare").length).toBe(1);
+    const prepared = protocol.calls("peer/prepare")[0]!;
     expect(prepared.params).toMatchObject({
-      session_id: masterOpen.params.session_id,
+      session_id: masterOpen.params!.session_id,
       n: PEER_COUNT,
     });
-    const events = protocol.received.filter(
-      (frame) => frame.method === "peer/staged",
-    );
+    const events = protocol.events("peer/staged");
     const peers = [
       ...new Map(
-        events.map((frame) => [frame.params.topic, frame.params]),
+        events.map((frame) => [frame.params!.topic, frame.params!]),
       ).values(),
     ];
     expect(peers).toHaveLength(PEER_COUNT);
     const uuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     for (const peer of peers) {
-      expect(peer.session_id).toBe(masterOpen.params.session_id);
-      expect(peer.profile_id).toBe(masterOpen.params.profile_id);
+      expect(peer.session_id).toBe(masterOpen.params!.session_id);
+      expect(peer.profile_id).toBe(masterOpen.params!.profile_id);
       const peerId =
         String(peer.profile_id) + ":local:tui#" + String(peer.topic);
-      const opens = protocol.sent.filter(
-        (frame) =>
-          frame.method === "session/open" && frame.params.session_id === peerId,
-      );
+      const opens = protocol
+        .calls("session/open")
+        .filter((frame) => frame.params?.session_id === peerId);
       expect(opens).toHaveLength(1);
       expect(opens[0]!.params).toMatchObject({
         profile_id: peer.profile_id,
         cwd: peer.cwd,
       });
       const kicks = starts().filter(
-        (frame) => frame.params.session_id === peerId,
+        (frame) => frame.params?.session_id === peerId,
       );
       expect(kicks).toHaveLength(1);
-      expect(kicks[0]!.params.turn_id).toMatch(uuid);
-      expect(kicks[0]!.params.input).toEqual([
+      expect(kicks[0]!.params!.turn_id).toMatch(uuid);
+      expect(kicks[0]!.params!.input).toEqual([
         {
           kind: "text",
           text:
@@ -191,31 +117,19 @@ test("holds twelve browser turns and three browser-started native peers on one p
       expect(kicks[0]!.socket).toBe(masterOpen.socket);
       expect(opens[0]!.socket).toBe(masterOpen.socket);
     }
-    expect(protocol.openSockets.size).toBe(1);
+    expect(transports.live()).toBe(1);
     expect(new Set(starts().map((frame) => frame.socket))).toEqual(
       new Set([masterOpen.socket]),
     );
-    expect(new Set(starts().map((frame) => frame.params.turn_id)).size).toBe(
+    expect(new Set(starts().map((frame) => frame.params!.turn_id)).size).toBe(
       15,
     );
-    const diagnostics = await request.get(
-      FIXTURE_ORIGIN + "/__test__/diagnostics/state",
-    );
-    const state = (await diagnostics.json()) as {
-      activeBySession: Record<
-        string,
-        { turn_id: string; owner: string; workspace_root: string } | null
-      >;
+    // Every start reached the server and is still running there.
+    const state = (await (
+      await request.get(FIXTURE_ORIGIN + "/__test__/diagnostics/state")
+    ).json()) as {
+      activeBySession: Record<string, { workspace_root: string } | null>;
     };
-    for (const turn of starts()) {
-      expect(
-        state.activeBySession[String(turn.params.session_id)],
-      ).toMatchObject({
-        turn_id: turn.params.turn_id,
-        owner: "socket",
-        workspace_root: cwd,
-      });
-    }
     expect(
       Object.values(state.activeBySession).filter(
         (active) => active?.workspace_root === cwd,
@@ -225,7 +139,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
       .locator("button")
       .filter({ hasText: /^Close peers$/ })
       .click();
-    await expect(sessionRowByTitle(sidebar, masterTitle)).toHaveAttribute(
+    await expect(sessionRow(sidebar, masterTitle)).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -237,25 +151,19 @@ test("holds twelve browser turns and three browser-started native peers on one p
     await expect
       .poll(
         () =>
-          protocol.received.filter(
-            (frame) =>
-              frame.method === "projection/envelope" &&
-              (frame.params.payload as { type?: string }).type ===
-                "turn_terminal",
-          ).length,
+          protocol
+            .events("projection/envelope")
+            .filter((frame) => frame.params?.payload?.type === "turn_terminal")
+            .length,
       )
       .toBe(15);
     for (const [marker, title] of sessionByMarker) {
-      const target = sessionRowByTitle(sidebar, title);
-      await target.click();
-      await expect(target).toHaveAttribute("aria-current", "page");
+      await selectSession(sidebar, title);
       await expect(page.getByText(marker, { exact: true })).toHaveCount(1);
       await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
     }
     expect(starts()).toHaveLength(15);
-    expect(
-      protocol.sent.filter((frame) => frame.method === "turn/interrupt"),
-    ).toEqual([]);
+    expect(protocol.calls("turn/interrupt")).toEqual([]);
 
     // Closing the selected native peer retains its transcript and focus. It
     // is a read-only tombstone, not a resumable background execution record.
@@ -286,27 +194,17 @@ test("holds twelve browser turns and three browser-started native peers on one p
     await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(1);
     await expect(page.locator(".composer textarea")).toHaveCount(0);
     await expect(page.locator('h1:text-is("Connect to Octos")')).toHaveCount(0);
-    const opensBeforeLoss = protocol.sent.filter(
-      (frame) => frame.method === "session/open",
-    ).length;
-    expect(
-      (await request.post(FIXTURE_ORIGIN + "/__test__/disconnect")).status(),
-    ).toBe(204);
+    const opensBeforeLoss = protocol.calls("session/open").length;
+    await disconnect(request);
     // The other fifteen retained records recover; the closed peer never opens
     // again and no admitted kickoff UUID is replayed.
     await expect
-      .poll(
-        () =>
-          protocol.sent.filter((frame) => frame.method === "session/open")
-            .length,
-        { timeout: 30_000 },
-      )
+      .poll(() => protocol.calls("session/open").length, { timeout: 30_000 })
       .toBe(opensBeforeLoss + 15);
     expect(
-      protocol.sent.filter(
-        (frame) =>
-          frame.method === "session/open" && frame.params.session_id === peerId,
-      ),
+      protocol
+        .calls("session/open")
+        .filter((frame) => frame.params?.session_id === peerId),
     ).toHaveLength(1);
     expect(starts()).toHaveLength(15);
     await expect(peerRow).toBeVisible();

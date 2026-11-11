@@ -1,22 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
+import { openSettings } from "./sessions";
 
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
 const TAB_KEY = "octoscode-web.tab-connection.v3";
 const DRAFT_PREFIX = "octoscode-web.draft.v1:";
 
 async function start(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page
-    .getByLabel("Auth token", { exact: true })
-    .fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByLabel("Server workspace path")
-    .fill("/workspace/storage-check");
-  await page
-    .getByRole("button", { name: "Start session", exact: true })
-    .click();
+  await startSession(page, "/workspace/storage-check");
   await expect(
     page.getByRole("textbox", { name: "Message Octos" }),
   ).toBeVisible();
@@ -30,9 +20,9 @@ async function warnsOnLeave(page: Page) {
   });
 }
 
-async function reopen(page: Page, url: string, token = "tab-scoped-e2e-token") {
+async function reopen(page: Page, url: string, token = FIXTURE_TOKEN) {
   await page.goto(url);
-  await page.getByLabel("Server origin").fill(ORIGIN);
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
   await page.getByLabel("Auth token", { exact: true }).fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page
@@ -47,14 +37,8 @@ async function connectionAction(
   page: Page,
   action: "Disconnect" | "Forget server",
 ) {
-  await page
-    .getByRole("complementary", { name: "Product navigation" })
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
-  await page
-    .getByRole("dialog", { name: "Settings", exact: true })
-    .getByRole("button", { name: action, exact: true })
-    .click();
+  const settings = await openSettings(page);
+  await settings.getByRole("button", { name: action, exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Connect to Octos" }),
   ).toBeVisible();
@@ -119,7 +103,7 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   ).toHaveValue("Same session, owner B");
   const durable = await retained.evaluate(() => JSON.stringify(localStorage));
   for (const token of [
-    "tab-scoped-e2e-token",
+    FIXTURE_TOKEN,
     "remember-this-tab-token",
     "forget-me-token",
   ]) {
@@ -129,7 +113,7 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   expect(durable).not.toContain("owner A");
 });
 
-test("a 51st unsent draft evicts the oldest, stays saved, and never blocks navigation", async ({
+test("a 51st unsent draft evicts one older draft, stays saved, and never blocks navigation", async ({
   page,
 }) => {
   await start(page);
@@ -156,7 +140,7 @@ test("a 51st unsent draft evicts the oldest, stays saved, and never blocks navig
         );
       }
     },
-    { prefix: DRAFT_PREFIX, origin: ORIGIN },
+    { prefix: DRAFT_PREFIX, origin: FIXTURE_ORIGIN },
   );
   await page.reload();
   const input = page.getByRole("textbox", { name: "Message Octos" });

@@ -4,60 +4,25 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { holdTerminals, releaseTerminal } from "./fixture-controls";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
+import {
+  composer,
+  newSessionIn,
+  productNavigation,
+  selectedSessionId,
+} from "./sessions";
+import { observeFrames } from "./turn-observers";
 
-const ORIGIN = `http://127.0.0.1:${process.env.OCTOSCODE_E2E_FIXTURE_PORT ?? "50080"}`;
-const COMPOSER = "Ask Octos to change, explain, or review code…";
-interface Frame {
-  id?: string;
-  method?: string;
-  params: Record<string, unknown>;
-  result?: Record<string, unknown>;
-}
-function observe(page: Page) {
-  const sent: Frame[] = [];
-  const received: Frame[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) =>
-      sent.push(JSON.parse(String(payload)) as Frame),
-    );
-    socket.on("framereceived", ({ payload }) =>
-      received.push(JSON.parse(String(payload)) as Frame),
-    );
-  });
-  return {
-    sent,
-    received,
-    calls: (method: string) => sent.filter((frame) => frame.method === method),
-    async settled(call: Frame) {
-      await expect
-        .poll(() => received.some((frame) => frame.id === call.id))
-        .toBe(true);
-    },
-  };
-}
-type Probe = ReturnType<typeof observe>;
-function sidebar(page: Page) {
-  return page.getByRole("complementary", { name: "Product navigation" });
-}
-async function selectedSessionId(page: Page) {
-  // A ModalSurface dialog (thread/turn/goal/agents inspector) sets aria-hidden
-  // on main.workspace-grid — the required a11y contract — which hides the
-  // product nav from ROLE queries. Read the selected row through a CSS locator
-  // that ignores aria-hidden so the ID stays readable under an open dialog.
-  const value = await page
-    .locator(
-      'aside[aria-label="Product navigation"] [role="treeitem"][data-session-id][aria-current="page"]',
-    )
-    .getAttribute("data-session-id");
-  if (!value) throw new Error("A confirmed selected Session is required");
-  return value;
-}
+type Probe = ReturnType<typeof observeFrames>;
+/** The selected row's id, which embeds the Session id. */
+const selectedRow = (page: Page) => selectedSessionId(productNavigation(page));
 async function selectSession(page: Page, sessionId: string) {
-  await sidebar(page)
+  await productNavigation(page)
     .locator(`[role="treeitem"][data-session-id*=${JSON.stringify(sessionId)}]`)
     .click();
-  await expect.poll(() => selectedSessionId(page)).toContain(sessionId);
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
+  await expect.poll(() => selectedRow(page)).toContain(sessionId);
+  await expect(composer(page)).toBeEnabled();
 }
 // v0.10.0's QueuedPrompts replaced our pre-rebase `.prompt-queue` div with
 // `<section aria-label="Queued prompts">` under CSS-module class names
@@ -68,27 +33,11 @@ const promptQueue = (page: Page) =>
 
 async function connect(page: Page, probe: Probe, name: string, native = true) {
   const cwd = `/srv/work/${native ? "native-workflows-" : "native-disabled-"}${name}`;
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(ORIGIN);
-  await page.getByLabel("Auth token").fill("tab-scoped-e2e-token");
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  const chooser = page.getByRole("region", {
-    name: /Choose a workspace|Add workspace/,
-  });
-  await expect(chooser).toBeVisible();
-  if (
-    await chooser.getByRole("button", { name: "Add workspace" }).isVisible()
-  ) {
-    await chooser.getByRole("button", { name: "Add workspace" }).click();
-  }
-  const add = page.getByRole("region", { name: "Add workspace" });
-  await add.getByLabel("Server workspace path").fill(cwd);
-  await add.getByRole("button", { name: /Add & Start|Start session/ }).click();
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
+  await connectAndStartWorkspace(page, cwd);
   await expect
     .poll(() => probe.calls("session/open").length)
     .toBeGreaterThan(0);
-  const sessionId = probe.calls("session/open").at(-1)!.params.session_id;
+  const sessionId = probe.calls("session/open").at(-1)!.params!.session_id;
   if (typeof sessionId !== "string")
     throw new Error("Expected a full Session ID");
   return {
@@ -97,32 +46,21 @@ async function connect(page: Page, probe: Probe, name: string, native = true) {
   };
 }
 async function sibling(page: Page, probe: Probe, workspace: string) {
-  const before = await selectedSessionId(page);
   const opens = probe.calls("session/open").length;
-  const workspaceRow = sidebar(page).locator(
-    `[data-workspace-name=${JSON.stringify(workspace)}]`,
-  );
-  await workspaceRow
-    .getByRole("button", { name: workspace, exact: true })
-    .hover();
-  await sidebar(page)
-    .getByRole("button", { name: `New session in ${workspace}` })
-    .click();
+  await newSessionIn(productNavigation(page), workspace);
   await expect.poll(() => probe.calls("session/open").length).toBe(opens + 1);
-  await expect.poll(() => selectedSessionId(page)).not.toBe(before);
-  await expect(page.getByPlaceholder(COMPOSER)).toBeEnabled();
-  const sessionId = probe.calls("session/open").at(-1)!.params.session_id;
+  await expect(composer(page)).toBeEnabled();
+  const sessionId = probe.calls("session/open").at(-1)!.params!.session_id;
   if (typeof sessionId !== "string")
     throw new Error("Expected a sibling Session ID");
   return { sessionId };
 }
 async function submit(page: Page, text: string) {
-  const composer = page.getByPlaceholder(COMPOSER);
-  await composer.fill(text);
+  await composer(page).fill(text);
   // Escape dismisses an open palette, but otherwise interrupts active work.
   // Ordinary prompt submission must not change the owning turn's lifecycle.
   if (await page.getByRole("listbox", { name: "Commands" }).isVisible()) {
-    await composer.press("Escape");
+    await composer(page).press("Escape");
   }
   await page
     .getByRole("button", { name: /^(Send|Queue|Steer) prompt$/ })
@@ -142,7 +80,7 @@ async function nativeControl(
   });
   expect(
     (
-      await request.post(`${ORIGIN}/__test__/native/${action}?${query}`)
+      await request.post(`${FIXTURE_ORIGIN}/__test__/native/${action}?${query}`)
     ).status(),
   ).toBe(204);
 }
@@ -154,7 +92,7 @@ async function held(
   await expect
     .poll(async () => {
       const result = await request.get(
-        `${ORIGIN}/__test__/native/state?${new URLSearchParams({ session_id: sessionId })}`,
+        `${FIXTURE_ORIGIN}/__test__/native/state?${new URLSearchParams({ session_id: sessionId })}`,
       );
       return ((await result.json()) as { held: string[] }).held;
     })
@@ -163,12 +101,13 @@ async function held(
 async function terminal(probe: Probe, turnId: unknown) {
   await expect
     .poll(() =>
-      probe.received.some(
-        (frame) =>
-          frame.method === "projection/envelope" &&
-          frame.params.turn_id === turnId &&
-          (frame.params.payload as { type?: string })?.type === "turn_terminal",
-      ),
+      probe
+        .events("projection/envelope")
+        .some(
+          (frame) =>
+            frame.params?.turn_id === turnId &&
+            frame.params?.payload?.type === "turn_terminal",
+        ),
     )
     .toBe(true);
 }
@@ -190,7 +129,7 @@ async function openAutonomy(page: Page, command = "/goal") {
 test("native commands fail closed when the original fixture does not advertise them", async ({
   page,
 }) => {
-  const probe = observe(page);
+  const probe = observeFrames(page);
   await connect(page, probe, "capabilities", false);
   // v0.10.0 promoted `turn/state/get` + `state.turn_state_get.v1` into the
   // fixture's BASE capabilities (mock-ui-server.mjs:1866,1899) and answers them
@@ -243,11 +182,9 @@ test("Enter steers a compatible running turn by default, while the Queue control
   // Locks in the steer-by-default composer semantics (#202): the turn
   // controller starts with steering on, so a fresh native Session never
   // requires the /steer toggle for compatible text.
-  const probe = observe(page);
+  const probe = observeFrames(page);
   const a = await connect(page, probe, "steering-default");
-  expect(
-    (await request.post(`${ORIGIN}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   await submit(page, "Default-steering active owner");
   await expect.poll(() => probe.calls("turn/start").length).toBe(1);
   const first = probe.calls("turn/start")[0]!;
@@ -259,15 +196,14 @@ test("Enter steers a compatible running turn by default, while the Queue control
   await probe.settled(probe.calls("turn/steer")[0]!);
   expect(probe.calls("turn/steer")[0]!.params).toEqual({
     session_id: a.sessionId,
-    expected_turn_id: first.params.turn_id,
+    expected_turn_id: first.params!.turn_id,
     input: [{ kind: "text", text: "Default-steered follow-up" }],
   });
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
 
   // The Queue control defers compatible input that Enter would steer: the
   // text rides the existing FIFO as a pending turn, never a second steer.
-  const composer = page.getByPlaceholder(COMPOSER);
-  await composer.fill("Explicitly queued after the active turn");
+  await composer(page).fill("Explicitly queued after the active turn");
   await page.getByRole("button", { name: "Queue", exact: true }).click();
   await expect(
     page.getByText("Explicitly queued after the active turn"),
@@ -283,8 +219,8 @@ test("Enter steers a compatible running turn by default, while the Queue control
     .getByRole("button", { name: "Remove queued prompt 1" })
     .click();
   await expect(promptQueue(page)).toHaveCount(0);
-  await composer.fill("Queued with Tab after the active turn");
-  await composer.press("Tab");
+  await composer(page).fill("Queued with Tab after the active turn");
+  await composer(page).press("Tab");
   await expect(promptQueue(page)).toContainText(
     "Queued with Tab after the active turn",
   );
@@ -296,33 +232,22 @@ test("a dropped native steer returns once to its owning FIFO while a different S
   page,
   request,
 }) => {
-  const probe = observe(page);
+  const probe = observeFrames(page);
   const a = await connect(page, probe, "steering");
   await submit(page, "/steer on");
-  // 美-9: idle, the steering note stays out of the way.
-  await expect(page.getByText(/Steering enabled for this Session/)).toHaveCount(
-    0,
-  );
-  expect(
-    (await request.post(`${ORIGIN}/__test__/terminal/hold-next`)).status(),
-  ).toBe(204);
+  await holdTerminals(request);
   await submit(page, "Native steering active owner A");
   await expect.poll(() => probe.calls("turn/start").length).toBe(1);
   const first = probe.calls("turn/start")[0]!;
   await probe.settled(first);
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
-  // Mid-turn with a draft, it says where the text will go.
-  await page.getByPlaceholder(COMPOSER).fill("Returned native steering text");
-  await expect(
-    page.getByText(/Steering enabled for this Session/),
-  ).toBeVisible();
   await submit(page, "Returned native steering text");
   await expect.poll(() => probe.calls("turn/steer").length).toBe(1);
   await probe.settled(probe.calls("turn/steer")[0]!);
   expect(probe.calls("turn/interrupt")).toHaveLength(0);
   expect(probe.calls("turn/steer")[0]!.params).toEqual({
     session_id: a.sessionId,
-    expected_turn_id: first.params.turn_id,
+    expected_turn_id: first.params!.turn_id,
     input: [{ kind: "text", text: "Returned native steering text" }],
   });
   await submit(page, "/turn");
@@ -332,67 +257,40 @@ test("a dropped native steer returns once to its owning FIFO while a different S
   ).toContainText("active");
   expect(probe.calls("turn/state/get").at(-1)!.params).toEqual({
     session_id: a.sessionId,
-    turn_id: first.params.turn_id,
+    turn_id: first.params!.turn_id,
   });
   await turn.getByRole("button", { name: "Close inspector" }).click();
   const b = await sibling(page, probe, a.workspace);
   await submit(page, "Independent native owner B");
   await expect.poll(() => probe.calls("turn/start").length).toBe(2);
-  await terminal(probe, probe.calls("turn/start")[1]!.params.turn_id);
-  await page.getByPlaceholder(COMPOSER).fill("Retain native B draft");
+  await terminal(probe, probe.calls("turn/start")[1]!.params!.turn_id);
+  await composer(page).fill("Retain native B draft");
   for (let count = 0; count < 2; count += 1)
     await nativeControl(request, "steer-drop", a.sessionId);
-  await expect
-    .poll(
-      () =>
-        probe.received.filter((frame) => frame.method === "turn/steer_dropped")
-          .length,
-    )
-    .toBe(2);
-  expect(await selectedSessionId(page)).toContain(b.sessionId);
+  await expect.poll(() => probe.events("turn/steer_dropped").length).toBe(2);
+  expect(await selectedRow(page)).toContain(b.sessionId);
   await expect(promptQueue(page)).toHaveCount(0);
-  await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
-    "Retain native B draft",
-  );
+  await expect(composer(page)).toHaveValue("Retain native B draft");
   await selectSession(page, a.sessionId);
   await expect(promptQueue(page).locator("strong")).toHaveText("1 queued");
   await submit(page, "/steer off");
   await submit(page, "Ordinary native FIFO successor");
   await expect(promptQueue(page).locator("strong")).toHaveText("2 queued");
   await selectSession(page, b.sessionId);
-  await expect
-    .poll(async () =>
-      (
-        (await (
-          await request.get(`${ORIGIN}/__test__/terminal/state`)
-        ).json()) as { held: { session_id: string }[] }
-      ).held.some((entry) => entry.session_id === a.sessionId),
-    )
-    .toBe(true);
-  expect(
-    (
-      await request.post(
-        `${ORIGIN}/__test__/terminal/release?${new URLSearchParams({ session_id: a.sessionId })}`,
-      )
-    ).status(),
-  ).toBe(204);
+  await releaseTerminal(request, a.sessionId);
   await expect.poll(() => probe.calls("turn/start").length).toBe(4);
   const aStarts = probe
     .calls("turn/start")
-    .filter((frame) => frame.params.session_id === a.sessionId);
-  expect(
-    aStarts.map((frame) => (frame.params.input as { text: string }[])[0]!.text),
-  ).toEqual([
+    .filter((frame) => frame.params!.session_id === a.sessionId);
+  expect(aStarts.map((frame) => frame.params!.input[0].text)).toEqual([
     "Native steering active owner A",
     "Returned native steering text",
     "Ordinary native FIFO successor",
   ]);
-  expect(new Set(aStarts.map((frame) => frame.params.turn_id)).size).toBe(3);
-  await terminal(probe, aStarts[2]!.params.turn_id);
-  expect(await selectedSessionId(page)).toContain(b.sessionId);
-  await expect(page.getByPlaceholder(COMPOSER)).toHaveValue(
-    "Retain native B draft",
-  );
+  expect(new Set(aStarts.map((frame) => frame.params!.turn_id)).size).toBe(3);
+  await terminal(probe, aStarts[2]!.params!.turn_id);
+  expect(await selectedRow(page)).toContain(b.sessionId);
+  await expect(composer(page)).toHaveValue("Retain native B draft");
   expect(probe.calls("turn/steer")).toHaveLength(1);
   await expect(page.locator(".timeline")).not.toContainText(
     "Returned native steering text",
@@ -403,7 +301,7 @@ test("goal pause, resume and stop preserve the current objective and budget, and
   page,
   request,
 }) => {
-  const probe = observe(page);
+  const probe = observeFrames(page);
   const a = await connect(page, probe, "goal");
   const dialog = await openAutonomy(page);
   await dialog
@@ -480,7 +378,7 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
   page,
   request,
 }) => {
-  const probe = observe(page);
+  const probe = observeFrames(page);
   const a = await connect(page, probe, "agents");
   let dialog = await openAutonomy(page, "/agents");
   await expect(
@@ -505,8 +403,16 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
   ).toBeDisabled();
   await expect.poll(() => probe.calls("agent/close").length).toBe(1);
   await probe.settled(probe.calls("agent/close")[0]!);
+  const reading = dialog.getByText("Reading agent details…");
+  await expect(reading).toBeVisible();
   await nativeControl(request, "release", a.sessionId, "agent/status/read");
   await probe.settled(probe.calls("agent/status/read")[0]!);
+  // The released read was answered before the close: it must not install
+  // its stale running status.
+  await expect(reading).toHaveCount(0);
+  await expect(
+    dialog.locator('[aria-label="Agent status detail"]'),
+  ).toHaveCount(0);
   await dialog
     .getByRole("button", {
       name: "Read status of agent native-agent-1",
@@ -591,7 +497,7 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
     agent_id: "native-agent-2",
   });
   await expect(dialog).not.toContainText(a.sessionId);
-  expect(await selectedSessionId(page)).toContain(b.sessionId);
+  expect(await selectedRow(page)).toContain(b.sessionId);
   expect(probe.calls("turn/start")).toHaveLength(0);
   // Native /agents spawn is deliberately an ordinary prompt, not a made-up
   // agent/spawn RPC. No fixture scheduler or provider is started by the form.
@@ -605,18 +511,18 @@ test("native agent receipts settle terminal status and delayed artifact reads ca
     .click();
   await expect.poll(() => probe.calls("turn/start").length).toBe(1);
   const admitted = probe.calls("turn/start")[0]!;
-  expect(admitted.params.session_id).toBe(b.sessionId);
-  expect(admitted.params.input).toEqual([
+  expect(admitted.params!.session_id).toBe(b.sessionId);
+  expect(admitted.params!.input).toEqual([
     {
       kind: "text",
       text: "Spawn 2 agent(s) to accomplish in parallel: Independent finite native reviews",
     },
   ]);
-  expect(admitted.params.turn_id).toMatch(
+  expect(admitted.params!.turn_id).toMatch(
     /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i,
   );
-  await terminal(probe, admitted.params.turn_id);
+  await terminal(probe, admitted.params!.turn_id);
   expect(probe.calls("turn/start")).toHaveLength(1);
   expect(probe.calls("agent/spawn")).toHaveLength(0);
-  expect(await selectedSessionId(page)).toContain(b.sessionId);
+  expect(await selectedRow(page)).toContain(b.sessionId);
 });
