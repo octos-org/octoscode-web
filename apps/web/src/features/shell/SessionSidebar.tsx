@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import type { SessionOpened } from "@octos-org/octoscode-client";
+import type { SessionOpened, WorkMode } from "@octos-org/octoscode-client";
 import type { KnownSessionRef } from "../session/known-session-registry.ts";
 import {
   mergeWorkspaceSessionRows,
+  type WorkspaceCatalogSession,
   type WorkspaceSessionCatalogSnapshot,
 } from "../session/workspace-session-catalog.ts";
 import type { TimelineEntry } from "../timeline/model.ts";
@@ -53,6 +54,14 @@ interface SessionSidebarProps extends Omit<ProductSidebarProps, "workspaces"> {
   timeline: readonly TimelineEntry[];
   openingSessionId: string | null;
   sessionError?: string | null | undefined;
+  /**
+   * Chat / Code navigation (two-modes flag). Absent: one list, as before.
+   * Code lists every workspace but leaves chats out; Chat lists only chats.
+   */
+  workMode?: WorkMode | undefined;
+  /** The server's chat listing, each chat with its own workspace. */
+  chatSessions?: readonly WorkspaceCatalogSession[] | undefined;
+  chatCatalogError?: string | undefined;
 }
 
 /** Session rows are presentation of server-confirmed references in this tab. */
@@ -74,6 +83,9 @@ export function SessionSidebar({
   openingSessionId,
   sessionError,
   selectedSessionId,
+  workMode,
+  chatSessions,
+  chatCatalogError,
   ...sidebarProps
 }: SessionSidebarProps) {
   const t = useUiText();
@@ -138,10 +150,116 @@ export function SessionSidebar({
     const peerSessionIds = new Set(
       (peerRoster ?? []).map((peer) => peer.identity),
     );
+    const projectRow = (
+      workspaceRoot: string,
+      item: { sessionId: string; profileId: string; title: string },
+      updatedAt: number | undefined,
+    ): ProductSidebarSession => {
+      const productId = workspaceSessionKey(
+        workspaceRoot,
+        item.profileId,
+        item.sessionId,
+      );
+      const active = productId === selectedSessionId;
+      const background = backgroundBySession.get(productId);
+      const updatedLabel = formatRelativeTime(updatedAt);
+      return {
+        id: productId,
+        title: item.title,
+        opening: productId === openingSessionId,
+        ...(updatedLabel ? { updatedLabel } : {}),
+        ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
+        ...(active
+          ? activeStatus
+          : background
+            ? backgroundSessionStatus(background.state)
+            : {}),
+      };
+    };
+    const openedChat = opened?.work_mode === "chat";
+    if (workMode === "chat") {
+      const rows = new Map<
+        string,
+        {
+          sessionId: string;
+          profileId: string;
+          workspaceRoot: string;
+          title: string | null;
+          updatedAt: number;
+        }
+      >();
+      const remember = (row: {
+        sessionId: string;
+        profileId: string;
+        workspaceRoot: string;
+        title: string | null;
+        updatedAt: number;
+      }) => {
+        const key = `${row.profileId}\n${row.sessionId}`;
+        const previous = rows.get(key);
+        rows.set(key, {
+          ...row,
+          title: previous?.title ?? row.title,
+          updatedAt: Math.max(previous?.updatedAt ?? 0, row.updatedAt),
+        });
+      };
+      for (const row of chatSessions ?? [])
+        remember({
+          ...row,
+          title: row.title ?? row.lastPrompt,
+          updatedAt: row.updatedAt ?? 0,
+        });
+      for (const ref of knownSessions)
+        if (ref.workMode === "chat")
+          remember({ ...ref, title: null, updatedAt: ref.lastOpenedAt });
+      if (openedChat && opened.workspace_root)
+        remember({
+          sessionId: opened.session_id,
+          profileId: opened.active_profile_id ?? "",
+          workspaceRoot: opened.workspace_root,
+          title: null,
+          updatedAt: Date.now(),
+        });
+      const chats: ProductSidebarWorkspace = {
+        id: "chats",
+        label: t("Chats"),
+        expanded: true,
+        sessionCatalogStatus: chatCatalogError ? "error" : "loaded",
+        ...(chatCatalogError ? { sessionCatalogError: chatCatalogError } : {}),
+        sessions: [...rows.values()]
+          .filter((row) => !peerSessionIds.has(row.sessionId))
+          .sort((left, right) => right.updatedAt - left.updatedAt)
+          .map((row) => {
+            const selected =
+              workspaceSessionKey(
+                row.workspaceRoot,
+                row.profileId,
+                row.sessionId,
+              ) === selectedSessionId;
+            return projectRow(
+              row.workspaceRoot,
+              {
+                ...row,
+                title:
+                  row.title ??
+                  (selected ? activePromptTitle : null) ??
+                  t("New chat"),
+              },
+              row.updatedAt,
+            );
+          }),
+      };
+      return [chats];
+    }
+    // Code (or one list without the flag): chats this tab opened stay in Chat.
+    const codeSessions =
+      workMode === "code"
+        ? knownSessions.filter((ref) => ref.workMode !== "chat")
+        : knownSessions;
     const workspaces = knownSessionWorkspaces(
       recentWorkspaces,
-      knownSessions,
-      activeWorkspacePath,
+      codeSessions,
+      workMode === "code" && openedChat ? "" : activeWorkspacePath,
     );
     const projected: ProductSidebarWorkspace[] = workspaces.map((workspace) => {
       const isActiveWorkspace = workspace.path === activeWorkspacePath;
@@ -150,7 +268,7 @@ export function SessionSidebar({
       const listed = sessionCatalog?.get(workspace.path);
       const catalog = listed?.status === "unscoped" ? undefined : listed;
       const sourceSessions = mergeWorkspaceSessionRows(
-        knownSessions.filter((item) => item.workspaceRoot === workspace.path),
+        codeSessions.filter((item) => item.workspaceRoot === workspace.path),
         catalog?.sessions ?? [],
       )
         .map((item) => {
@@ -183,6 +301,7 @@ export function SessionSidebar({
       if (
         isActiveWorkspace &&
         opened &&
+        !(workMode === "code" && openedChat) &&
         !peerSessionIds.has(opened.session_id) &&
         !sourceSessions.some(
           (item) =>
@@ -212,29 +331,9 @@ export function SessionSidebar({
         ...(catalog?.status === "error" && catalog.error
           ? { sessionCatalogError: catalog.error }
           : {}),
-        sessions: sourceSessions.map((item): ProductSidebarSession => {
-          const productId = workspaceSessionKey(
-            workspace.path,
-            item.profileId,
-            item.sessionId,
-          );
-          const active = productId === selectedSessionId;
-          const background = backgroundBySession.get(productId);
-          const updatedLabel = formatRelativeTime(item.updatedAt);
-          const updatedAt = item.updatedAt;
-          return {
-            id: productId,
-            title: item.title,
-            opening: productId === openingSessionId,
-            ...(updatedLabel ? { updatedLabel } : {}),
-            ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
-            ...(active
-              ? activeStatus
-              : background
-                ? backgroundSessionStatus(background.state)
-                : {}),
-          };
-        }),
+        sessions: sourceSessions.map((item) =>
+          projectRow(workspace.path, item, item.updatedAt),
+        ),
       };
     });
     return projected;
@@ -257,6 +356,9 @@ export function SessionSidebar({
     peerRoster,
     peerDirectory,
     sessionError,
+    workMode,
+    chatSessions,
+    chatCatalogError,
     t,
   ]);
 

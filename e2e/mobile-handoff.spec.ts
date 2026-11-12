@@ -1,16 +1,9 @@
 import { createServer } from "node:http";
-import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN } from "./fixture-session";
+import { expect, test } from "@playwright/test";
+import { connect, FIXTURE_ORIGIN } from "./fixture-session";
 import { observeSent } from "./turn-observers";
 
 const TOKEN = "workspace-browse-e2e-token";
-
-async function connect(page: Page, path = "/?view=remote") {
-  await page.goto(path);
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-}
 
 test.afterEach(async ({ request }) => {
   await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);
@@ -25,7 +18,7 @@ test("desktop handoff lets a fresh phone approve work without entering folders",
     `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(folder)}`,
   );
   const desktop = await browser.newPage();
-  await connect(desktop, "/");
+  await connect(desktop, "/", TOKEN);
   await desktop.getByRole("button", { name: "Open folder Projects" }).click();
   await desktop
     .getByRole("button", { name: "Use folder octoscode-web" })
@@ -130,7 +123,7 @@ test("a forged handoff never auto-connects, imports nothing, and cannot choose w
   if (!address || typeof address === "string")
     throw new Error("No receiver port");
   try {
-    await connect(page);
+    await connect(page, "/?view=remote", TOKEN);
     await expect(
       page.getByRole("heading", { name: "Remote control" }),
     ).toBeVisible();

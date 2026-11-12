@@ -1,12 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { connect as connectForm } from "./fixture-session";
 import { openSettings } from "./sessions";
 
 async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await connectForm(page);
   await expect(
     page.getByRole("button", { name: "Settings", exact: true }),
   ).toBeVisible();

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session";
 import { sessionRow } from "./sessions";
+import { sendError } from "./wire";
 
 test("a new session gets the saved permission default once, under its own id, and a refused one is reported on that session", async ({
   page,
@@ -36,13 +37,10 @@ test("a new session gets the saved permission default once, under its own id, an
       if (frame.method === "permission/profile/set") {
         sets.push(frame.params);
         if (refuse) {
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              error: { code: -32603, message: "Permission profile is locked" },
-            }),
-          );
+          sendError(socket, frame.id, {
+            code: -32603,
+            message: "Permission profile is locked",
+          });
           return;
         }
       }

@@ -8,6 +8,7 @@ import {
   selectedSessionId,
   selectSession,
 } from "./sessions";
+import { sendResult } from "./wire";
 
 const modelManagementModule =
   /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
@@ -36,9 +37,7 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
       const frame = JSON.parse(String(message));
       if (frame.method === "turn/start") {
         starts.push(frame.params.turn_id);
-        socket.send(
-          JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: {} }),
-        );
+        sendResult(socket, frame.id, {});
         return;
       }
       if (frame.method === "turn/interrupt")

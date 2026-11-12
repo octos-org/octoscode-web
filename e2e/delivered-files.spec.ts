@@ -5,6 +5,7 @@ import {
   openSessionId,
 } from "./fixture-session";
 import { sendPrompt } from "./sessions";
+import { sendError } from "./wire";
 
 async function openConversation(page: Page, cwd: string): Promise<string> {
   await connectAndStartWorkspace(page, cwd);
@@ -77,17 +78,11 @@ test("shows files the agent delivers, previews images, downloads them, and keeps
       const frame = JSON.parse(String(message));
       if (frame.method === "session/files/read") {
         if (!frame.params.path.startsWith(".artifacts/delivered/")) {
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              error: {
-                code: -32004,
-                message: "workspace file was not found",
-                data: { kind: "workspace_file_not_found" },
-              },
-            }),
-          );
+          sendError(socket, frame.id, {
+            code: -32004,
+            message: "workspace file was not found",
+            data: { kind: "workspace_file_not_found" },
+          });
           return;
         }
         deliveredReads.push(frame.params.path);

@@ -780,6 +780,20 @@ unacknowledged A1…」加入 recovery-soak 的 `peak() <= 1`（+8）
 
 修剪（T-0570，不删测试）：无作用的 `afterEach`
 
+### two-modes.spec.ts（2 个，留 2；177 行，T-0597 新增）
+
+| 测试                                                                                         | 类  | 行  | 决定 | 守的链路 / 删除映射                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------- | --- | --- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat and Code keep their own lists and selections, across notifications, reloads and a phone | ①/② | 118 | 留   | 双模式 T-C 主链：切换只导航、不发 `*/set`；Chat/Code 列表互不混入（含 continue 入口）；每个模式回到自己的选中；后台 chat 完成的通知点回 Chat；刷新和手机打开同一链接都以服务端 `work_mode` 为准；手机抽屉切换后保持打开。变异（各自单独打）全红：不回到记住的选中、Code 不滤 chat、模式不取自服务端、通知不接、抽屉切换即关、chat 行未标记、continue 不分模式 |
+| Chat stays off, and says why, on a server without chat folders                               | ③   | 23  | 留   | 能力门控：flag 关时侧栏不变；flag 开但服务端没协商到两项能力时 Chat 禁用并给出原因，键盘也切不过去。变异（去掉原因、无视 flag）全红                                                                                                                                                                                                                           |
+
+T-0597 抵平（行为不变，只把重复的 setup 提成共享 helper，不计入行数口径）：`wire.ts`（`sendResult`
+/ `sendError` /
+`sendEnvelope`，替换 15 个 spec 里手写的 24 处 JSON-RPC 帧）、`attention-probe.ts`（attention 与 two-modes 共用的通知探针）、`fixture-session.ts`
+的 `connect` / `openLink`（9 个 spec 的「填 origin、令牌、Connect」和「再点 Open
+conversation」）、onboarding 改用
+`observeSent`。上面各 spec 的行数表未随之重算。
+
 ### unfinished-flows.spec.ts（1 个，留 1；170 行）
 
 | 测试                                                                                                                  | 类  | 行  | 决定 | 守的链路 / 删除映射                                                                                                                                                                                       |

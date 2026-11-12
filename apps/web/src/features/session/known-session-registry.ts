@@ -21,6 +21,8 @@ export interface KnownSessionRef {
   profileId: string;
   workspaceRoot: string;
   lastOpenedAt: number;
+  /** Set only for a chat (server `work_mode`); a Code session omits it. */
+  workMode?: "chat";
 }
 
 /**
@@ -42,7 +44,13 @@ export function knownSessionFromOpened(
   if (!sessionId || !profileId || !workspaceRoot || lastOpenedAt === null) {
     return null;
   }
-  return { sessionId, profileId, workspaceRoot, lastOpenedAt };
+  return {
+    sessionId,
+    profileId,
+    workspaceRoot,
+    lastOpenedAt,
+    ...(opened.work_mode === "chat" ? { workMode: "chat" as const } : {}),
+  };
 }
 
 /** Parse untrusted browser state without accepting a partially valid catalog. */
@@ -110,7 +118,13 @@ function parseKnownSession(value: unknown): KnownSessionRef | null {
   if (!sessionId || !profileId || !workspaceRoot || lastOpenedAt === null) {
     return null;
   }
-  return { sessionId, profileId, workspaceRoot, lastOpenedAt };
+  return {
+    sessionId,
+    profileId,
+    workspaceRoot,
+    lastOpenedAt,
+    ...(value.workMode === "chat" ? { workMode: "chat" as const } : {}),
+  };
 }
 
 function boundedText(value: unknown, limit: number): string | null {

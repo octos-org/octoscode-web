@@ -1,9 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import {
-  connectAndStartWorkspace,
-  FIXTURE_ORIGIN,
-  FIXTURE_TOKEN,
-} from "./fixture-session";
+import { connect, connectAndStartWorkspace } from "./fixture-session";
 import { openSettings } from "./sessions";
 
 const WORKSPACE = "/workspace/model-management-e2e";
@@ -188,10 +184,7 @@ test("opening a session with no usable chat model goes to Settings › Models", 
   });
   const { repeatEachIndex, retry } = test.info();
   const workspace = `${WORKSPACE}-no-model-${repeatEachIndex}-${retry}`;
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token").fill(FIXTURE_TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await connect(page);
   const addWorkspace = page.getByRole("region", { name: "Add workspace" });
   await expect(addWorkspace).toBeVisible();
   // Connected, no session yet: nothing has been asked, so nothing routes.

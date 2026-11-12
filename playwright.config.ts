@@ -23,6 +23,8 @@ const fixtureAuthTokens = [
   "memory-host-e2e-token",
   "remember-this-tab-token",
   "forget-me-token",
+  // Chat / Code: chat listing and per-chat folders for this token only.
+  "two-modes-e2e-token",
   fixtureProfileAuthToken,
 ];
 const e2eChannel = explicitBrowserChannel("OCTOSCODE_E2E_CHANNEL");

@@ -9,7 +9,7 @@ import {
 import {
   connectAndStartWorkspace,
   FIXTURE_ORIGIN,
-  FIXTURE_TOKEN,
+  openLink,
 } from "./fixture-session";
 import { composer } from "./sessions";
 import { observeFrames } from "./turn-observers";
@@ -202,11 +202,7 @@ test("another tab's undo leaves this tab's stale entry unsent and unsure", async
   // The second tab opens the same Session from its link.
   const other = await (await browser.newContext()).newPage();
   const otherProtocol = observeFrames(other);
-  await other.goto(page.url());
-  await other.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await other.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await other.getByLabel("Auth token", { exact: true }).press("Enter");
-  await other.getByRole("button", { name: "Open conversation" }).click();
+  await openLink(other, page.url());
   await expect(other.getByText(COMPLETION_TEXT)).toHaveCount(1);
   await expect(
     summary(other).getByRole("button", { name: "Undo this turn" }),

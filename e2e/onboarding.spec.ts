@@ -4,6 +4,7 @@ import {
   FIXTURE_ORIGIN,
   FIXTURE_TOKEN,
 } from "./fixture-session";
+import { observeSent } from "./turn-observers";
 
 async function connectWithKeyboard(page: Page): Promise<void> {
   await page.goto("/");
@@ -79,17 +80,11 @@ test("explains missing authentication while preserving password privacy and IME 
 test("authenticates without opening a Session, starts a first workspace with the keyboard, and focuses the useful field when adding another", async ({
   page,
 }) => {
-  const sessionOpens: string[] = [];
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      const frame = String(payload);
-      if (frame.includes('"method":"session/open"')) sessionOpens.push(frame);
-    });
-  });
+  const sessionOpens = observeSent(page, "session/open");
   await connectWithKeyboard(page);
   // Authentication alone opens no Session and shows no demo transcript; the
   // workspace path is the only identity the operator supplies.
-  expect(sessionOpens).toEqual([]);
+  expect(sessionOpens()).toEqual([]);
   await expect(
     page.getByText("Ship octoscode-web", { exact: true }),
   ).toHaveCount(0);

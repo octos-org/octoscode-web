@@ -6,6 +6,7 @@ import {
   selectedSessionId,
   selectSession,
 } from "./sessions";
+import { sendEnvelope, sendResult } from "./wire";
 
 async function start(page: Page) {
   await startSession(page, "/workspace/final-reading");
@@ -137,28 +138,15 @@ test("360-message history stays readable while new output streams and unsafe Mar
       const request = JSON.parse(String(message));
       requests.set(request.id, request.method);
       if (request.method === "turn/start") {
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: { accepted: true },
-          }),
-        );
+        sendResult(socket, request.id, { accepted: true });
         let seq = 0;
         emit = (type, data) =>
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              method: "projection/envelope",
-              params: {
-                session_id: request.params.session_id,
-                turn_id: request.params.turn_id,
-                thread_id: "reading-final",
-                seq: ++seq,
-                cursor: { stream: request.params.session_id, seq: 500 + seq },
-                payload: { type, data },
-              },
-            }),
+          sendEnvelope(
+            socket,
+            request.params,
+            { thread: "reading-final", seq: ++seq, cursor: 500 + seq },
+            type,
+            data,
           );
       } else server.send(message);
     });

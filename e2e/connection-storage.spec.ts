@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
+import {
+  FIXTURE_ORIGIN,
+  FIXTURE_TOKEN,
+  openLink,
+  startSession,
+} from "./fixture-session";
 import { openSettings } from "./sessions";
 
 const TAB_KEY = "octoscode-web.tab-connection.v3";
@@ -18,19 +23,6 @@ async function warnsOnLeave(page: Page) {
     window.dispatchEvent(event);
     return event.defaultPrevented;
   });
-}
-
-async function reopen(page: Page, url: string, token = FIXTURE_TOKEN) {
-  await page.goto(url);
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(token);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Open conversation", exact: true })
-    .click();
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible();
 }
 
 async function connectionAction(
@@ -65,12 +57,12 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   await second.close();
 
   const restored = await context.newPage();
-  await reopen(restored, firstUrl, "remember-this-tab-token");
+  await openLink(restored, firstUrl, "remember-this-tab-token");
   await expect(
     restored.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveValue("Updated first session, owner A");
   const otherOwner = await context.newPage();
-  await reopen(otherOwner, secondUrl, "forget-me-token");
+  await openLink(otherOwner, secondUrl, "forget-me-token");
   await expect(
     otherOwner.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveValue("");
@@ -80,7 +72,7 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   await expect.poll(() => warnsOnLeave(otherOwner)).toBe(false);
 
   const otherSession = await context.newPage();
-  await reopen(otherSession, secondUrl);
+  await openLink(otherSession, secondUrl);
   await expect(
     otherSession.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveValue("Second session, owner A");
@@ -92,12 +84,12 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   await otherSession.close();
   await otherOwner.close();
   const forgotten = await context.newPage();
-  await reopen(forgotten, firstUrl);
+  await openLink(forgotten, firstUrl);
   await expect(
     forgotten.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveValue("");
   const retained = await context.newPage();
-  await reopen(retained, secondUrl, "forget-me-token");
+  await openLink(retained, secondUrl, "forget-me-token");
   await expect(
     retained.getByRole("textbox", { name: "Message Octos" }),
   ).toHaveValue("Same session, owner B");

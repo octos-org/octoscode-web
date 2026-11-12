@@ -50,6 +50,9 @@ function parseSessionOpened(value: unknown): SessionOpened | null {
     ...(value.reasoning_effort === undefined
       ? {}
       : { reasoning_effort: value.reasoning_effort }),
+    ...(value.work_mode === "chat" || value.work_mode === "code"
+      ? { work_mode: value.work_mode }
+      : {}),
   };
 }
 

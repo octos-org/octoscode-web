@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { disconnect } from "./fixture-controls";
 import { startSession } from "./fixture-session";
 import { productNavigation, sessionRow } from "./sessions";
+import { sendEnvelope, sendResult } from "./wire";
 
 test("continues past an unknown turn without replaying it or losing the queue and new draft", async ({
   page,
@@ -25,9 +26,7 @@ test("continues past an unknown turn without replaying it or losing the queue an
           text: frame.params.input[0].text,
         });
         if (starts.length === 1) {
-          socket.send(
-            JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: {} }),
-          );
+          sendResult(socket, frame.id, {});
           return;
         }
       }
@@ -35,35 +34,19 @@ test("continues past an unknown turn without replaying it or losing the queue an
         interrupts.push(frame.params.session_id);
       if (frame.method === "turn/state/get") {
         emitBackgroundProgress = () =>
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              method: "projection/envelope",
-              params: {
-                session_id: frame.params.session_id,
-                turn_id: frame.params.turn_id,
-                thread_id: "background-tail",
-                seq: 1,
-                cursor: { stream: frame.params.session_id, seq: 1000 },
-                payload: {
-                  type: "tool_progress",
-                  data: {
-                    name: "run",
-                    tool_call_id: "background-cleanup",
-                    message: "Cleaning up background work",
-                  },
-                },
-              },
-            }),
+          sendEnvelope(
+            socket,
+            frame.params,
+            { thread: "background-tail", seq: 1, cursor: 1000 },
+            "tool_progress",
+            {
+              name: "run",
+              tool_call_id: "background-cleanup",
+              message: "Cleaning up background work",
+            },
           );
         finishLookup = () =>
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              result: { ...frame.params, state: "unknown" },
-            }),
-          );
+          sendResult(socket, frame.id, { ...frame.params, state: "unknown" });
         if (!holdLookup) finishLookup();
         return;
       }

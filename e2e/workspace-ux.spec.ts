@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session";
+import { sendEnvelope, sendResult } from "./wire";
 
 async function start(page: Page) {
   await startSession(page, "/workspace/ux-review");
@@ -31,28 +32,15 @@ async function holdTurns(page: Page) {
         return;
       }
       sent.push(request.params.turn_id);
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: { accepted: true },
-        }),
-      );
+      sendResult(socket, request.id, { accepted: true });
       let seq = 0;
       emit = (type, data) =>
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            method: "projection/envelope",
-            params: {
-              session_id: request.params.session_id,
-              turn_id: request.params.turn_id,
-              thread_id: "ux-review",
-              seq: ++seq,
-              cursor: { stream: request.params.session_id, seq: ++cursor },
-              payload: { type, data },
-            },
-          }),
+        sendEnvelope(
+          socket,
+          request.params,
+          { thread: "ux-review", seq: ++seq, cursor: ++cursor },
+          type,
+          data,
         );
     });
   });

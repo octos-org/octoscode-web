@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { startSession } from "./fixture-session";
 import { openSettings } from "./sessions";
+import { sendResult } from "./wire";
 
 test("server shutdown is capability gated, explicit, and truthful on an unconfirmed result", async ({
   page,
@@ -17,13 +18,7 @@ test("server shutdown is capability gated, explicit, and truthful on an unconfir
       }
       shutdowns++;
       // Exercise the browser contract without shutting down the shared fixture.
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: shutdowns === 1 ? {} : { stopping: true },
-        }),
-      );
+      sendResult(socket, request.id, shutdowns === 1 ? {} : { stopping: true });
     });
     server.onMessage((message) => {
       const frame = JSON.parse(String(message));
