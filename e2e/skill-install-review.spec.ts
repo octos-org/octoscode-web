@@ -1,7 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 import { sendError, sendResult } from "./wire";
+import { axeViolations } from "./axe";
 
 /**
  * T-0420/T-0555: a skill source is reviewed against what the server reports.
@@ -246,11 +246,13 @@ test("reviews what the server reports, read only", async ({ page }) => {
   await expect(panel).not.toContainText(/safe|verified|trusted/i);
   await expectNoInstallControl(dialog);
 
-  const results = await new AxeBuilder({ page })
-    .include('[role="dialog"]')
-    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
-    .analyze();
-  expect(results.violations).toEqual([]);
+  expect(
+    await axeViolations(page, '[role="dialog"]', [
+      "wcag2a",
+      "wcag2aa",
+      "wcag22aa",
+    ]),
+  ).toEqual([]);
 
   // Pointing the same source at another branch drops the stale review; the
   // new review is still read-only, even from the keyboard.

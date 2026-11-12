@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -13,6 +12,7 @@ import {
 } from "./fixture-session";
 import { composer } from "./sessions";
 import { observeFrames } from "./turn-observers";
+import { axeViolations } from "./axe";
 
 // T-0433: "Undo this turn" in the latest turn's summary, wired to Core's
 // `pre-turn <turn_id>` snapshot, with redo through the `pre-restore` point.
@@ -87,14 +87,7 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
   for (const id of [sessionId, turnId, preTurn.id])
     expect(shown).not.toContain(id);
   expect(protocol.calls("snapshot/restore")).toHaveLength(0);
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .include("main")
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze()
-    ).violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, "main", ["wcag2a", "wcag2aa"])).toEqual([]);
 
   const hydratesBefore = protocol.calls("session/hydrate").length;
   await group.getByRole("button", { name: "Undo file changes" }).dblclick();

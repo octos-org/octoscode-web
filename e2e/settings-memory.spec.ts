@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN } from "./fixture-session.ts";
 import { openMemory, startMemorySession } from "./memory-settings.ts";
-import { observeSent } from "./turn-observers";
+import { observeFrames, observeSent } from "./turn-observers";
 
 const start = (page: Page, token = "memory-e2e-token") =>
   startMemorySession(page, token, "settings-memory");
@@ -84,23 +84,16 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
 test("fails closed when authenticated memory ownership differs from the Session profile", async ({
   page,
 }) => {
-  const memoryCalls: string[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message)) as { method?: string };
-      if (frame.method?.startsWith("memory/")) memoryCalls.push(frame.method);
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
+  const frames = observeFrames(page);
   await start(page, "memory-host-e2e-token");
   const settings = await openMemory(page, false);
   await expect(
     settings.getByText(/memory ownership is not confirmed/i),
   ).toBeVisible();
   await expect(settings.getByLabel("Memory content")).toHaveCount(0);
-  expect(memoryCalls).toEqual([]);
+  expect(
+    frames.sent.filter((frame) => frame.method?.startsWith("memory/")),
+  ).toEqual([]);
 });
 
 test("long-term entries edit and delete on the server, and a failed change keeps the text", async ({

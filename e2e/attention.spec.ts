@@ -7,6 +7,7 @@ import {
   productNavigation,
   selectSession,
   sendPrompt,
+  stopButton,
 } from "./sessions";
 
 const WORKSPACE = "/workspace/attention-check";
@@ -91,9 +92,7 @@ test("a background Session completing while another is selected signals and ackn
   if (!originalSessionTitle)
     throw new Error("Expected a confirmed Session title");
   await sendPrompt(page, "Continue this turn while I open another Session");
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await newSessionIn(navigation, "attention-check");
   await expect(sessions).toHaveCount(2);
   await expect(

@@ -1,39 +1,29 @@
 import { expect, test } from "@playwright/test";
 import { COMPOSER_PLACEHOLDER, startSession } from "./fixture-session";
-import { sendEnvelope, sendResult } from "./wire";
+import { interceptRequests, sendEnvelope, sendResult } from "./wire";
 
 test("keeps activity and reader-controlled disclosures correct across ten streamed turns", async ({
   page,
 }) => {
   let emit: ((type: string, data: Record<string, unknown>) => void) | undefined;
   let cursor = 10;
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message)) as {
-        id: string | number;
-        method?: string;
-        params: { session_id: string; turn_id: string };
-      };
-      if (request.method !== "turn/start") {
-        server.send(message);
-        return;
-      }
-      sendResult(socket, request.id, { accepted: true });
-      let seq = 0;
-      emit = (type, data) =>
-        sendEnvelope(
-          socket,
-          request.params,
-          {
-            thread: `timeline-${request.params.turn_id}`,
-            seq: ++seq,
-            cursor: ++cursor,
-          },
-          type,
-          data,
-        );
-    });
+  await interceptRequests(page, (request, socket) => {
+    if (request.method !== "turn/start") return;
+    sendResult(socket, request.id, { accepted: true });
+    let seq = 0;
+    emit = (type, data) =>
+      sendEnvelope(
+        socket,
+        request.params,
+        {
+          thread: `timeline-${request.params.turn_id}`,
+          seq: ++seq,
+          cursor: ++cursor,
+        },
+        type,
+        data,
+      );
+    return true;
   });
 
   await startSession(page, "/workspace/timeline-interactions");

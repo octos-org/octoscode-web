@@ -471,6 +471,20 @@ export interface SessionListResult {
   work_mode?: "chat";
 }
 
+/** Provisional (two-modes T-B): see `CHAT_CREATE_METHOD`. */
+export interface ChatCreateParams {
+  session_id: string;
+  profile_id: string;
+}
+
+export interface ChatCreateResult {
+  session_id: string;
+  profile_id: string;
+  /** The folder the server made for this chat alone. */
+  workspace_root: string;
+  work_mode: "chat";
+}
+
 export interface SessionDeleteParams {
   session_id: string;
 }

@@ -3,7 +3,9 @@ import type { TimelineEntry } from "./entry-model.ts";
 /**
  * Once a turn has ended, its consecutive thinking and tool blocks read as one
  * "ran N steps" disclosure instead of a wall of cards. A live turn keeps every
- * block on its own so progress stays visible while it happens.
+ * block on its own so progress stays visible while it happens. A chat (`chat`)
+ * folds every run, live or single, into its Activity: the answer comes first
+ * and the one-line status below the transcript says what is happening.
  */
 export type TimelineRenderItem =
   | { type: "entry"; entry: TimelineEntry }
@@ -29,6 +31,7 @@ export function stepGroupId(first: TimelineEntry): string {
 export function timelineRenderItems(
   entries: readonly TimelineEntry[],
   ended: ReadonlySet<string>,
+  chat = false,
 ): TimelineRenderItem[] {
   const items: TimelineRenderItem[] = [];
   let run: TimelineEntry[] = [];
@@ -36,10 +39,11 @@ export function timelineRenderItems(
     if (!run.length) return;
     const turnId = run[0]!.turnId;
     const groupable =
-      run.length >= 2 &&
       turnId !== undefined &&
-      ended.has(turnId) &&
-      run.some((entry) => entry.kind === "tool");
+      (chat ||
+        (run.length >= 2 &&
+          ended.has(turnId) &&
+          run.some((entry) => entry.kind === "tool")));
     if (groupable) {
       items.push({
         type: "steps",

@@ -1,6 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
+import { axeViolations } from "./axe";
+import { observeFrames } from "./turn-observers";
 
 test.beforeEach(async ({ request }) => {
   await request.post(`${FIXTURE_ORIGIN}/__test__/cron/reset`);
@@ -44,29 +45,16 @@ async function useCron(tasks: Locator) {
 test("creates At, Every and Cron jobs, then deletes one after confirmation", async ({
   page,
 }) => {
-  const created: Array<{
-    session_id: string;
-    schedule: Record<string, unknown>;
-    mode: string;
-  }> = [];
-  const calls: { method: string; params: Record<string, unknown> }[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "cron/create") created.push(frame.params);
-      if (frame.method?.startsWith("cron/")) {
-        calls.push({ method: frame.method, params: frame.params });
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
+  const frames = observeFrames(page);
+  const calls = () =>
+    frames.sent.filter((frame) => frame.method?.startsWith("cron/"));
+  const created = () =>
+    frames.calls("cron/create").map((frame) => frame.params!);
   await startSession(page, `/workspace/cron-create-${Date.now()}`);
   const tasks = await openCron(page);
   await tasks.locator('[data-cron-job="cron-1"]').getByRole("checkbox").click();
   await expect
-    .poll(() => calls.some((call) => call.method === "cron/toggle"))
+    .poll(() => calls().some((call) => call.method === "cron/toggle"))
     .toBe(true);
   await openCreate(tasks);
 
@@ -126,27 +114,24 @@ test("creates At, Every and Cron jobs, then deletes one after confirmation", asy
     .fill("Cron check");
   await tasks.getByRole("button", { name: "Create scheduled task" }).click();
   await expect(tasks.locator('[data-cron-job="cron-5"]')).toBeVisible();
-  expect(created.map((params) => params.schedule)).toEqual([
-    { kind: "At", at_ms: created[0]!.schedule.at_ms },
+  expect(created().map((params) => params.schedule)).toEqual([
+    { kind: "At", at_ms: created()[0]!.schedule.at_ms },
     { kind: "Every", every_ms: 2_700_000 },
     { kind: "Cron", expr: "0 30 18 * * WED" },
     { kind: "Cron", expr: "0 0 9 1 * *" },
   ]);
-  expect(created.every((params) => params.mode === "agent")).toBe(true);
+  expect(created().every((params) => params.mode === "agent")).toBe(true);
 
-  expect(
-    (await new AxeBuilder({ page }).include("[data-scheduled-tasks]").analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, "[data-scheduled-tasks]")).toEqual([]);
   await once.getByRole("button", { name: "Delete", exact: true }).click();
   await once.getByRole("button", { name: "Delete scheduled task" }).click();
   await expect(once).toHaveCount(0);
   await expect(interval).toBeVisible();
   // List, toggle, create and delete all name the current session's scope.
-  expect(new Set(calls.map((call) => call.method))).toEqual(
+  expect(new Set(calls().map((call) => call.method))).toEqual(
     new Set(["cron/list", "cron/toggle", "cron/create", "cron/delete"]),
   );
-  const scopes = new Set(calls.map((call) => call.params.session_id));
+  const scopes = new Set(calls().map((call) => call.params?.session_id));
   expect(scopes.size).toBe(1);
   expect([...scopes][0]).toEqual(expect.any(String));
   // Scheduled tasks belongs to the open Session, so a new Session closes it: a

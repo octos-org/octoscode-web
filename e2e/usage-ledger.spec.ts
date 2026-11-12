@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -6,6 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
+import { axeViolations } from "./axe";
 
 /**
  * T-0392: the usage page reads Core #1376's ledger over its REST routes. The
@@ -199,8 +199,5 @@ test("shows the server's totals by model, date and session, and switches without
   expect(stored).not.toContain(PRICED);
   expect(stored).not.toContain("estimated_cost");
 
-  const axe = await new AxeBuilder({ page })
-    .include("[data-usage-ledger]")
-    .analyze();
-  expect(axe.violations).toEqual([]);
+  expect(await axeViolations(page, "[data-usage-ledger]")).toEqual([]);
 });

@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { disconnect } from "./fixture-controls";
 import { startSession } from "./fixture-session";
-import { productNavigation, sessionRow } from "./sessions";
-import { sendEnvelope, sendResult } from "./wire";
+import { productNavigation, sessionRow, stopButton } from "./sessions";
+import { interceptRequests, sendEnvelope, sendResult } from "./wire";
 
 test("continues past an unknown turn without replaying it or losing the queue and new draft", async ({
   page,
@@ -14,45 +14,39 @@ test("continues past an unknown turn without replaying it or losing the queue an
   let holdLookup = false;
   let finishLookup: (() => void) | undefined;
   let emitBackgroundProgress: (() => void) | undefined;
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "session/open") opens.push(frame.params.session_id);
-      if (frame.method === "turn/start") {
-        starts.push({
-          sessionId: frame.params.session_id,
-          turnId: frame.params.turn_id,
-          text: frame.params.input[0].text,
-        });
-        if (starts.length === 1) {
-          sendResult(socket, frame.id, {});
-          return;
-        }
+  await interceptRequests(page, (frame, socket) => {
+    if (frame.method === "session/open") opens.push(frame.params.session_id);
+    if (frame.method === "turn/start") {
+      starts.push({
+        sessionId: frame.params.session_id,
+        turnId: frame.params.turn_id,
+        text: frame.params.input[0].text,
+      });
+      if (starts.length === 1) {
+        sendResult(socket, frame.id, {});
+        return true;
       }
-      if (frame.method === "turn/interrupt")
-        interrupts.push(frame.params.session_id);
-      if (frame.method === "turn/state/get") {
-        emitBackgroundProgress = () =>
-          sendEnvelope(
-            socket,
-            frame.params,
-            { thread: "background-tail", seq: 1, cursor: 1000 },
-            "tool_progress",
-            {
-              name: "run",
-              tool_call_id: "background-cleanup",
-              message: "Cleaning up background work",
-            },
-          );
-        finishLookup = () =>
-          sendResult(socket, frame.id, { ...frame.params, state: "unknown" });
-        if (!holdLookup) finishLookup();
-        return;
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
+    }
+    if (frame.method === "turn/interrupt")
+      interrupts.push(frame.params.session_id);
+    if (frame.method === "turn/state/get") {
+      emitBackgroundProgress = () =>
+        sendEnvelope(
+          socket,
+          frame.params,
+          { thread: "background-tail", seq: 1, cursor: 1000 },
+          "tool_progress",
+          {
+            name: "run",
+            tool_call_id: "background-cleanup",
+            message: "Cleaning up background work",
+          },
+        );
+      finishLookup = () =>
+        sendResult(socket, frame.id, { ...frame.params, state: "unknown" });
+      if (!holdLookup) finishLookup();
+      return true;
+    }
   });
   await startSession(page, "/workspace/runtime-recovery");
   const composer = page.getByRole("textbox", { name: "Message Octos" });
@@ -61,9 +55,7 @@ test("continues past an unknown turn without replaying it or losing the queue an
     "A turn whose acknowledgement survives but ledger does not",
   );
   await composer.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await composer.fill("Send this queued message once");
   await composer.press("Enter");
   await expect(composer).toHaveValue("");

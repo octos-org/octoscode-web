@@ -11,6 +11,7 @@ import {
   productNavigation,
   selectedSessionId,
   sessionRow,
+  stopButton,
 } from "./sessions";
 import { observeFrames } from "./turn-observers";
 
@@ -235,13 +236,9 @@ test("resuming an already retained busy historical Session never reopens or rese
     expect(rpc("session/open")).toHaveLength(opens);
     expect(rpc("turn/start")).toHaveLength(1);
     expect(rpc("turn/start")[0]!.params!.session_id).toBe(target.id);
-    await expect(
-      page.getByRole("button", { name: "Stop", exact: true }),
-    ).toBeVisible();
+    await expect(stopButton(page)).toBeVisible();
     await releaseTerminal(request, target.id);
-    await expect(
-      page.getByRole("button", { name: "Stop", exact: true }),
-    ).toHaveCount(0);
+    await expect(stopButton(page)).toHaveCount(0);
     await expect(
       page.getByText("Historical A must remain busy across resume", {
         exact: true,

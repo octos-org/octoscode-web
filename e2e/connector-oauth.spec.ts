@@ -1,8 +1,8 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import { openSettings } from "./sessions";
 import { observeFrames } from "./turn-observers";
+import { axeViolations } from "./axe";
 
 async function openConnectors(page: Page) {
   const settings = await openSettings(page, "Connectors");
@@ -93,10 +93,7 @@ test("signs a connector in through the provider and back", async ({ page }) => {
   expect(await storedValues(page)).not.toContain("ok-");
   expect(page.url()).not.toContain("code=");
 
-  expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, '[role="dialog"]')).toEqual([]);
 
   // Revoke.
   await issues.getByRole("button", { name: "Revoke sign-in" }).click();

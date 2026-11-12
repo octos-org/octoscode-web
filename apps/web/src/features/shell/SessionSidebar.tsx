@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { sessionTitleFromPrompt } from "../session/session-title.ts";
 import type { SessionOpened, WorkMode } from "@octos-org/octoscode-client";
 import type { KnownSessionRef } from "../session/known-session-registry.ts";
 import {
@@ -407,14 +408,6 @@ function knownSessionWorkspaces(
     });
   }
   return [...projected.values()];
-}
-
-function sessionTitleFromPrompt(prompt: string): string {
-  const firstLine = prompt.trim().split(/\r?\n/, 1)[0]!.trim();
-  const characters = Array.from(firstLine);
-  return characters.length > 48
-    ? `${characters.slice(0, 48).join("").trimEnd()}…`
-    : firstLine;
 }
 
 function backgroundSessionStatus(

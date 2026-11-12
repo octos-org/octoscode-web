@@ -38,6 +38,8 @@ export interface SessionPanelProps {
   /** A count shown after a tab's name, when it has one. */
   counts: Partial<Record<SessionPanelTab, number>>;
   automationAvailable: boolean;
+  /** Only these tabs, in their usual order (a chat shows only Outputs). */
+  only?: readonly SessionPanelTab[] | undefined;
   onTabChange: (tab: SessionPanelTab) => void;
   onWidthChange: (width: number) => void;
   onClose: () => void;
@@ -56,7 +58,9 @@ export function SessionPanel(props: SessionPanelProps) {
   const tabRefs = useRef(new Map<SessionPanelTab, HTMLButtonElement>());
   const drag = useRef<{ x: number; width: number } | null>(null);
   const tabs = SESSION_PANEL_TABS.filter(
-    (tab) => tab !== "automation" || props.automationAvailable,
+    (tab) =>
+      (tab !== "automation" || props.automationAvailable) &&
+      (!props.only || props.only.includes(tab)),
   );
 
   const select = (tab: SessionPanelTab, focus = false) => {

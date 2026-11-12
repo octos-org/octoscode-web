@@ -12,6 +12,7 @@ export type {
 } from "./execution-environment.ts";
 export { OctosUiProtocolError } from "./protocol-error.ts";
 export {
+  CHAT_CREATE_METHOD,
   CHAT_WORKSPACE_UI_FEATURE,
   SESSION_WORK_MODE_UI_FEATURE,
 } from "./work-mode.ts";

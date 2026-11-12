@@ -14,7 +14,8 @@ import type { UiLanguage } from "../preferences/model.ts";
  * is not read from the server.
  */
 export type TaskTemplateCategory = "code" | "office" | "general";
-export type TaskTemplateAccess = "read" | "write";
+/** `draft`: the answer is written in the conversation; no file, no SET. */
+export type TaskTemplateAccess = "read" | "write" | "draft";
 
 export interface TaskTemplateCopy {
   title: string;
@@ -247,8 +248,88 @@ export const TASK_TEMPLATE_CATEGORIES: readonly TaskTemplateCategory[] = [
   "general",
 ];
 
+/**
+ * The Chat home's templates (two-modes proposal §3, behind the two-modes
+ * flag). A chat is read-only with no network, so each asks for a Markdown
+ * draft written here in the conversation from what the user pastes or
+ * uploads, and none promises a saved file. `access: "draft"` keeps the
+ * template flow from changing the chat's permission either way.
+ */
+export const CHAT_TEMPLATES: readonly TaskTemplate[] = [
+  {
+    id: "chat-weekly-report",
+    category: "general",
+    access: "draft",
+    copy: {
+      en: {
+        title: "Write a weekly report",
+        summary: "Turn pasted or uploaded notes and data into a report.",
+        prompt:
+          "Using [the notes or data I paste or upload, e.g. sales.csv], draft this week's report here in the chat as Markdown. Don't create files.\nInclude: highlights (3–5 points), a table of the key numbers, problems and risks, and next week's plan. Every number must match what I gave you; label any inference as such.",
+        example:
+          "Week 43 report\n• Revenue $184,300, +12.4% week over week\n• 37 new customers, 9 from online channels",
+      },
+      zh: {
+        title: "写周报",
+        summary: "把粘贴或上传的记录和数据整理成周报。",
+        prompt:
+          "根据【我粘贴或上传的记录或数据，例如 sales.csv】，直接在对话里用 Markdown 起草本周周报，不要创建文件。\n包括：本周概况（3–5 条要点）、关键数据表格、问题与风险、下周计划。所有数字都要和我给的材料对得上；推测要明确标出来。",
+        example:
+          "第 43 周周报\n• 销售额 ¥1,284,300，环比 +12.4%\n• 新客户 37 家，其中 9 家来自线上",
+      },
+    },
+  },
+  {
+    id: "chat-tidy-csv",
+    category: "general",
+    access: "draft",
+    copy: {
+      en: {
+        title: "Clean up a CSV",
+        summary: "Dedupe and fix formats in an uploaded CSV.",
+        prompt:
+          "Clean up [the CSV I upload, e.g. customers.csv]: remove duplicate rows, make dates and amounts consistent and sort by [column]. Show the cleaned rows here in the chat as a Markdown table or CSV block, then list what changed and which rows you were unsure about. Don't create files.",
+        example:
+          "Removed 23 duplicates · normalized 410 dates\n3 rows need a look",
+      },
+      zh: {
+        title: "整理 CSV",
+        summary: "把上传的 CSV 去重并统一格式。",
+        prompt:
+          "整理【我上传的 CSV，例如 客户名单.csv】：去掉重复行，统一日期和金额格式，按【排序依据】排序。把整理好的内容直接在对话里给出（Markdown 表格或 CSV 代码块），再说明改了什么、哪些行拿不准。不要创建文件。",
+        example: "去重 23 行 · 统一日期 410 处\n有 3 行拿不准，请确认",
+      },
+    },
+  },
+  {
+    id: "chat-slide-outline",
+    category: "general",
+    access: "draft",
+    copy: {
+      en: {
+        title: "Draft a slide outline",
+        summary: "Slide-by-slide titles, points and charts.",
+        prompt:
+          "Draft a slide outline on [topic, e.g. Q4 review] for [audience], about [number] slides, here in the chat as Markdown. For each slide give a title, at most three points and a suggested chart or image. Use material I paste or upload. Don't create files.",
+        example:
+          "1. Q4 review\n2. Bottom line: revenue +18%, margin flat\n3. Results by region (bar chart)",
+      },
+      zh: {
+        title: "写演示提纲",
+        summary: "逐页写标题、要点和建议的图表。",
+        prompt:
+          "为【主题，例如 第四季度复盘】写一份演示提纲，面向【听众】，大约【页数】页，直接在对话里用 Markdown 写。每页写：标题、不超过 3 条要点、建议配的图或表。参考我粘贴或上传的材料。不要创建文件。",
+        example:
+          "1. 第四季度复盘\n2. 一页结论：收入 +18%，利润率持平\n3. 分区表现（柱状图）",
+      },
+    },
+  },
+];
+
 export function findTaskTemplate(id: string): TaskTemplate | undefined {
-  return TASK_TEMPLATES.find((template) => template.id === id);
+  return [...TASK_TEMPLATES, ...CHAT_TEMPLATES].find(
+    (template) => template.id === id,
+  );
 }
 
 /** The first bracketed blank (`[…]` or `【…】`) the user should fill in. */

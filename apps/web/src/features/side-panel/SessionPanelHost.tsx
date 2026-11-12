@@ -32,6 +32,8 @@ export interface SessionPanelHostProps {
   onWidthChange: (width: number) => void;
   onClose: () => void;
   className?: string | undefined;
+  /** Only these tabs (a chat shows only Outputs). */
+  only?: readonly SessionPanelTab[] | undefined;
 
   workspaceRoot: string;
   selectedPath: string | null;
@@ -185,6 +187,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
       availableWidth={props.availableWidth}
       counts={{ changes: props.changes.length, outputs }}
       automationAvailable={props.automation !== null}
+      only={props.only}
       onTabChange={props.onTabChange}
       onWidthChange={props.onWidthChange}
       onClose={props.onClose}

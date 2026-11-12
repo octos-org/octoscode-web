@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -15,6 +14,7 @@ import {
 } from "./fixture-session";
 import { composer } from "./sessions";
 import { observeFrames, observeSent } from "./turn-observers";
+import { axeViolations } from "./axe";
 
 // The phone remote control (`?view=remote`): on a 390×844 touch screen in
 // Chinese, see what runs and what waits, approve or deny once, follow up and
@@ -375,10 +375,7 @@ test("a sandbox escalation can only be denied from the phone", async ({
   await expect(approval).toBeVisible();
   await expect(approval).toContainText("只能拒绝");
   await expect(approval.getByRole("button", { name: /允许/ })).toHaveCount(0);
-  expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, '[role="dialog"]')).toEqual([]);
 
   // Neither shortcut gets past the missing buttons.
   const deny = approval.getByRole("button", { name: /拒绝/ });

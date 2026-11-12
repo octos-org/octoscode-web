@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { connectAndStartWorkspace } from "./fixture-session";
+import { observeFrames } from "./turn-observers";
 import {
   holdPermissionReceipt,
   type PermissionSetResult,
@@ -47,21 +48,8 @@ async function prepareDeniedWrite(page: Page) {
 test("switching stops the running workaround, then redoes the request with write access", async ({
   page,
 }) => {
-  const sent: string[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const { method } = JSON.parse(String(message));
-      if (
-        method === "permission/profile/set" ||
-        method === "turn/interrupt" ||
-        method === "turn/start"
-      )
-        sent.push(method);
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
+  const frames = observeFrames(page);
+  const watched = ["permission/profile/set", "turn/interrupt", "turn/start"];
   const composer = await prepareReadOnly(page);
   await composer.fill("Fail a write and ask to work around it");
   await composer.press("Enter");
@@ -74,17 +62,19 @@ test("switching stops the running workaround, then redoes the request with write
   await expect(approval.getByRole("status")).toContainText(
     "This stops the current response",
   );
-  sent.length = 0;
+  const before = frames.sent.length;
   await retry.click();
   await expect(approval).toBeHidden();
   await expect(
     page.locator("details").filter({ hasText: "report.md written" }),
   ).toHaveCount(1);
-  expect(sent).toEqual([
-    "permission/profile/set",
-    "turn/interrupt",
-    "turn/start",
-  ]);
+  expect(
+    frames.sent
+      .slice(before)
+      .flatMap(({ method }) =>
+        method && watched.includes(method) ? method : [],
+      ),
+  ).toEqual(watched);
 });
 
 test("a late permission retry never starts in or clears another Session", async ({

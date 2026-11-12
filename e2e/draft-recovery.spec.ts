@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { startSession } from "./fixture-session";
 import { observeSent } from "./turn-observers";
+import { stopButton } from "./sessions";
 
 test("reload restores exact unsent text without dispatching it, and sent drafts stay cleared", async ({
   page,
@@ -19,9 +20,7 @@ test("reload restores exact unsent text without dispatching it, and sent drafts 
   await input.press("Enter");
   await expect.poll(() => starts().length).toBe(1);
   await expect(input).toHaveValue("");
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeHidden();
+  await expect(stopButton(page)).toBeHidden();
   await page.reload();
   await expect(input).toHaveValue("");
   expect(starts()).toHaveLength(1);

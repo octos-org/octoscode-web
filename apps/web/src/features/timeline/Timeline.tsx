@@ -56,8 +56,8 @@ interface TimelineProps {
   onToggleFold?: (id: string) => void;
   /** Explicit open/closed choice for blocks whose default is derived. */
   onSetFold?: (id: string, open: boolean) => void;
-  onExpandAll?: () => void;
-  onCollapseAll?: () => void;
+  onExpandAll?: (() => void) | undefined;
+  onCollapseAll?: (() => void) | undefined;
   /** Live turn activity; rendered at the transcript bottom while streaming. */
   activity?: TurnActivity | null;
   workspaceFileReadAvailable?: boolean;
@@ -68,6 +68,8 @@ interface TimelineProps {
   emptyState?: ReactNode;
   /** Undo / redo inside an ended turn's summary; `latest` is the transcript's last turn. */
   turnUndo?: ((turn: TurnUndoSlot) => ReactNode) | undefined;
+  /** A chat: every step folds into its turn's Activity (see step-groups). */
+  chat?: boolean | undefined;
 }
 
 export interface TurnUndoSlot {
@@ -91,6 +93,7 @@ export const Timeline = memo(function Timeline({
   workspaceFileReadAvailable = false,
   emptyState,
   turnUndo,
+  chat = false,
 }: TimelineProps) {
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
@@ -239,50 +242,55 @@ export const Timeline = memo(function Timeline({
           })}
         </button>
       ) : null}
-      {timelineRenderItems(visibleEntries.slice(startIndex), endedTurns).map(
-        (item) =>
-          item.type === "summary" ? (
-            <TurnSummary
-              key={item.entry.id}
-              turnId={item.turnId}
-              entries={visibleEntries}
-              undo={
-                turnUndo
-                  ? (turn) =>
-                      turnUndo({
-                        ...turn,
-                        latest: item.turnId === latestTurnId,
-                      })
-                  : undefined
-              }
-            />
-          ) : item.type === "steps" ? (
-            <StepGroup
-              key={item.id}
-              id={item.id}
-              entries={item.entries}
-              failedTurn={failedTurns.has(item.turnId)}
-              recovered={recovered}
-              folds={folds}
-              onToggleFold={toggleFold}
-              onSetFold={setFold}
-              workspaceFileReadAvailable={workspaceFileReadAvailable}
-            />
-          ) : (
-            <TimelineEntryView
-              key={item.entry.id}
-              entry={item.entry}
-              expanded={entryExpanded(folds, item.entry.id)}
-              onToggleFold={toggleFold}
-              onSetFold={setFold}
-              planOpen={folds?.[`plan:${item.entry.id}`]}
-              turnEnded={
-                item.entry.turnId === undefined ||
-                endedTurns.has(item.entry.turnId)
-              }
-              workspaceFileReadAvailable={workspaceFileReadAvailable}
-            />
-          ),
+      {timelineRenderItems(
+        visibleEntries.slice(startIndex),
+        endedTurns,
+        chat,
+      ).map((item) =>
+        item.type === "summary" ? (
+          <TurnSummary
+            key={item.entry.id}
+            turnId={item.turnId}
+            entries={visibleEntries}
+            quiet={chat}
+            undo={
+              turnUndo
+                ? (turn) =>
+                    turnUndo({
+                      ...turn,
+                      latest: item.turnId === latestTurnId,
+                    })
+                : undefined
+            }
+          />
+        ) : item.type === "steps" ? (
+          <StepGroup
+            key={item.id}
+            id={item.id}
+            entries={item.entries}
+            failedTurn={failedTurns.has(item.turnId)}
+            recovered={recovered}
+            folds={folds}
+            onToggleFold={toggleFold}
+            onSetFold={setFold}
+            workspaceFileReadAvailable={workspaceFileReadAvailable}
+            label={chat ? t("Activity") : undefined}
+          />
+        ) : (
+          <TimelineEntryView
+            key={item.entry.id}
+            entry={item.entry}
+            expanded={entryExpanded(folds, item.entry.id)}
+            onToggleFold={toggleFold}
+            onSetFold={setFold}
+            planOpen={folds?.[`plan:${item.entry.id}`]}
+            turnEnded={
+              item.entry.turnId === undefined ||
+              endedTurns.has(item.entry.turnId)
+            }
+            workspaceFileReadAvailable={workspaceFileReadAvailable}
+          />
+        ),
       )}
       <TurnActivityIndicator activity={activity} />
     </div>
@@ -530,6 +538,7 @@ function StepGroup({
   onToggleFold,
   onSetFold,
   workspaceFileReadAvailable,
+  label,
 }: {
   id: string;
   entries: readonly TimelineEntry[];
@@ -539,6 +548,8 @@ function StepGroup({
   onToggleFold: (id: string) => void;
   onSetFold: (id: string, open: boolean) => void;
   workspaceFileReadAvailable: boolean;
+  /** Replaces "Ran N steps" (a chat's Activity). */
+  label?: string | undefined;
 }) {
   const t = useUiText();
   const summary = summarizeSteps(entries, recovered);
@@ -567,7 +578,9 @@ function StepGroup({
             })}
       >
         <summary className={styles.stepGroupHeader}>
-          <strong>{t("Ran {count} steps", { count: summary.steps })}</strong>
+          <strong>
+            {label ?? t("Ran {count} steps", { count: summary.steps })}
+          </strong>
           {summary.seconds ? (
             <span className={styles.toolStatusLabel}>
               {t("{seconds} s", { seconds: summary.seconds })}

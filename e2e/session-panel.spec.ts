@@ -1,8 +1,8 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
 import { sendPrompt } from "./sessions";
 import { sendError } from "./wire";
+import { axeViolations } from "./axe";
 
 const toggle = (page: Page) =>
   page.getByRole("button", { name: /^Session panel/ });
@@ -114,13 +114,7 @@ test("one file stays selected across diff, output, reload and read failure", asy
   await expect(panel(page).locator("[data-artifact-kind]")).toContainText(
     "fixture summary.md",
   );
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .include('[aria-label="Selected file"]')
-        .analyze()
-    ).violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, '[aria-label="Selected file"]')).toEqual([]);
   readFails = true;
   await panel(page)
     .getByRole("button", { name: "Refresh", exact: true })

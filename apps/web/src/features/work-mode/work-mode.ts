@@ -6,6 +6,7 @@ import {
   type WorkMode,
 } from "@octos-org/octoscode-client/protocol";
 import type { UiLanguage } from "../preferences/model.ts";
+import type { SessionDefaults } from "../session-config/session-defaults.ts";
 
 /**
  * Chat / Code navigation stays off until Core can keep chats apart (two-modes
@@ -61,4 +62,15 @@ export const WORK_MODE_NAMES: Readonly<
 > = {
   en: { chat: "Chat", code: "Code" },
   zh: { chat: "对话", code: "编码" },
+};
+
+/**
+ * Every new chat starts read-only with no network (proposal §4.3). The web
+ * asks the server for it through the new-session permission gate, so the chat
+ * sends nothing until the server confirms it is in effect.
+ */
+export const CHAT_PERMISSION_DEFAULTS: SessionDefaults = {
+  permissionMode: "read_only",
+  network: "deny",
+  sandbox: { enabled: false, networkAccess: false, readAllowPaths: [] },
 };

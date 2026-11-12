@@ -6,13 +6,16 @@ import styles from "./ModeHome.module.css";
 
 interface ModeHomeProps {
   mode: WorkMode;
-  /** Chats the list shows; Chat's home only points at them for now. */
+  /** Chats the list shows. */
   chatCount: number;
   compact: boolean;
   sidebarOpen: boolean;
   onOpenSessions: () => void;
+  /** New session in Code, New chat in Chat. */
   newSessionAvailable: boolean;
   onNewSession: () => void;
+  /** Why starting one just failed. */
+  notice?: string | null | undefined;
   navigationTriggerClassName: string;
 }
 
@@ -28,6 +31,7 @@ export function ModeHome({
   onOpenSessions,
   newSessionAvailable,
   onNewSession,
+  notice,
   navigationTriggerClassName,
 }: ModeHomeProps) {
   const t = useUiText();
@@ -50,22 +54,23 @@ export function ModeHome({
       </header>
       <section className={styles.body} aria-labelledby="mode-home-title">
         <h1 id="mode-home-title">{title}</h1>
-        {mode === "chat" ? (
-          <p>
-            {chatCount > 0
-              ? t("Choose a chat from the list.")
-              : t("No chats yet.")}
-          </p>
-        ) : (
-          <>
-            <p>{t("Choose a session from the list, or start a new one.")}</p>
-            {newSessionAvailable ? (
-              <button type="button" onClick={onNewSession}>
-                {t("New session")}
-              </button>
-            ) : null}
-          </>
-        )}
+        <p>
+          {mode === "code"
+            ? t("Choose a session from the list, or start a new one.")
+            : !newSessionAvailable
+              ? chatCount > 0
+                ? t("Choose a chat from the list.")
+                : t("No chats yet.")
+              : chatCount > 0
+                ? t("Choose a chat from the list, or start a new one.")
+                : t("No chats yet. Start one to draft, summarize or plan.")}
+        </p>
+        {notice ? <p role="alert">{notice}</p> : null}
+        {newSessionAvailable ? (
+          <button type="button" onClick={onNewSession}>
+            {mode === "chat" ? t("New chat") : t("New session")}
+          </button>
+        ) : null}
       </section>
     </div>
   );
