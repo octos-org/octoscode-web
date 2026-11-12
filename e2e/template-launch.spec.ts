@@ -1,14 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { connect as connectForm } from "./fixture-session";
+import { sendError } from "./wire";
 
 const composer = (page: Page) =>
   page.getByRole("textbox", { name: "Message Octos" });
 
 async function connect(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
+  await connectForm(page);
   await expect(page.getByLabel("Server workspace path")).toBeVisible();
 }
 
@@ -25,16 +23,10 @@ test("a rejected template launch retries its session identity and preserves the 
       if (frame.method === "session/open") {
         opened.push(frame.params.session_id);
         if (opened.length === 1) {
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: frame.id,
-              error: {
-                code: -32603,
-                message: "Template launch refused for this test",
-              },
-            }),
-          );
+          sendError(socket, frame.id, {
+            code: -32603,
+            message: "Template launch refused for this test",
+          });
           return;
         }
       }

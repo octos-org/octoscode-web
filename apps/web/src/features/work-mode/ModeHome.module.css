@@ -1,0 +1,45 @@
+.pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.body {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--dsw-space-3);
+  padding: var(--dsw-space-5) var(--dsw-space-4);
+  text-align: center;
+}
+
+.body h1 {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.body p {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.body button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.body button:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}

@@ -249,6 +249,39 @@ const heldGatherReplies = new Map();
 // the untouched typed-path form (no Browse affordance at all) with every other.
 const workspaceBrowseAuthToken = "workspace-browse-e2e-token";
 const workspaceBrowseSockets = new WeakSet();
+// Chat / Code (two-modes proposal T-A/T-B, names provisional): a connection
+// with this token sees sessions carry `work_mode`, a chat listing, and chats
+// that each live in their own workspace. Every other token sees neither.
+const twoModesAuthToken = "two-modes-e2e-token";
+const twoModesSockets = new WeakSet();
+const TWO_MODES_FEATURES = [
+  "session.work_mode.v1",
+  "session.chat_workspace.v1",
+];
+const chatWorkspaceBySession = new Map();
+const chatSeededProfiles = new Set();
+/** Two chats for `profileId`, each in its own folder, seeded on first list. */
+function seedChats(profileId) {
+  if (chatSeededProfiles.has(profileId)) return;
+  chatSeededProfiles.add(profileId);
+  const now = Date.now();
+  for (const [slug, title, hoursAgo] of [
+    ["notes", "Weekly notes draft", 1],
+    ["outline", "Talk outline", 2],
+  ]) {
+    const sessionId = `${profileId}:api:web-chat-${slug}`;
+    const workspaceRoot = `/srv/chats/${profileId}/chat-${slug}`;
+    chatWorkspaceBySession.set(sessionId, workspaceRoot);
+    sessionsByWorkspace.set(workspaceRoot, [
+      {
+        id: sessionId,
+        message_count: 0,
+        title,
+        updated_at: new Date(now - hoursAgo * 3_600_000).toISOString(),
+      },
+    ]);
+  }
+}
 // plan.todos.v1 — the agent's live checklist. `plan/updated` replaces the plan
 // wholesale and its authoring turn's terminal clears it, so the plan fixture
 // streams a SEQUENCE of replacements across one deliberately slow turn. A
@@ -3202,6 +3235,19 @@ const baseCapabilities = {
 };
 
 function capabilitiesFor(socket, state) {
+  const capabilities = baseCapabilitiesFor(socket, state);
+  return twoModesSockets.has(socket)
+    ? {
+        ...capabilities,
+        supported_features: [
+          ...capabilities.supported_features,
+          ...TWO_MODES_FEATURES,
+        ],
+      }
+    : capabilities;
+}
+
+function baseCapabilitiesFor(socket, state) {
   const base = planAbsentSockets.has(socket)
     ? {
         ...baseCapabilities,
@@ -3736,6 +3782,9 @@ sockets.on("connection", (socket, request) => {
   const connectionAuthToken = authTokenFromUpgradeRequest(request);
   if (connectionAuthToken === workspaceBrowseAuthToken) {
     workspaceBrowseSockets.add(socket);
+  }
+  if (connectionAuthToken === twoModesAuthToken) {
+    twoModesSockets.add(socket);
   }
   if (connectionAuthToken === planFixtureAuthToken) {
     planFixtureSockets.add(socket);
@@ -4588,11 +4637,22 @@ sockets.on("connection", (socket, request) => {
       }
       const profileId = scope.profileId;
       const existingState = sessionStateBySessionId.get(sessionId);
+      const chatWorkspace = chatWorkspaceBySession.get(sessionId);
       const workspaceRoot =
         request.params?.cwd ??
+        chatWorkspace ??
         staged?.workspaceRoot ??
         existingState?.workspaceRoot ??
         defaultWorkspace;
+      if (chatWorkspace && workspaceRoot !== chatWorkspace) {
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          "A chat stays in its own workspace",
+        );
+        return;
+      }
       if (
         (existingState?.workspaceRoot &&
           existingState.workspaceRoot !== workspaceRoot) ||
@@ -4667,6 +4727,13 @@ sockets.on("connection", (socket, request) => {
             seq: state.log.seq,
           },
           capabilities: capabilitiesFor(socket, state),
+          ...(twoModesSockets.has(socket)
+            ? {
+                work_mode: chatWorkspaceBySession.has(sessionId)
+                  ? "chat"
+                  : "code",
+              }
+            : {}),
         },
       });
       for (const event of state.log.events) {
@@ -5681,6 +5748,33 @@ sockets.on("connection", (socket, request) => {
           healthy: true,
           replay_supported: true,
         },
+      });
+      return;
+    }
+    if (
+      request.method === "session/list" &&
+      request.params?.work_mode === "chat" &&
+      twoModesSockets.has(socket)
+    ) {
+      const profileId =
+        request.params.profile_id ??
+        openedProfileBySocket.get(socket) ??
+        defaultProfileId;
+      seedChats(profileId);
+      reply(socket, request.id, {
+        sessions: [...chatWorkspaceBySession]
+          .filter(([sessionId]) => sessionId.startsWith(`${profileId}:`))
+          .flatMap(([sessionId, workspaceRoot]) =>
+            (sessionsByWorkspace.get(workspaceRoot) ?? [])
+              .filter((session) => session.id === sessionId)
+              .map((session) => ({
+                ...session,
+                work_mode: "chat",
+                workspace_root: workspaceRoot,
+              })),
+          ),
+        work_mode: "chat",
+        profile_id: profileId,
       });
       return;
     }

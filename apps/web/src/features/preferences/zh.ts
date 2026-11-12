@@ -7,6 +7,16 @@
 import { FLEET_ZH_COPY } from "../fleet/fleet-copy.ts";
 
 const catalog: Readonly<Record<string, string>> = {
+  // Chat / Code navigation (two-modes flag).
+  "Work mode": "工作模式",
+  Chats: "对话",
+  "New chat": "新对话",
+  "Chat needs a server that gives every chat its own folder. This server does not yet.":
+    "对话需要服务器为每个对话单独分配文件夹，这台服务器还不支持。",
+  "Choose a chat from the list.": "从列表里选一个对话。",
+  "No chats yet.": "还没有对话。",
+  "Choose a session from the list, or start a new one.":
+    "从列表里选一个会话，或者新建一个。",
   "% of": "% /",
   "(+{value0} omitted)": "（另有 {value0} 项未显示）",
   "(attachment prompt)": "（附件请求）",

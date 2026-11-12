@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { COMPOSER_PLACEHOLDER, startSession } from "./fixture-session";
+import { sendEnvelope, sendResult } from "./wire";
 
 test("keeps activity and reader-controlled disclosures correct across ten streamed turns", async ({
   page,
@@ -12,34 +13,25 @@ test("keeps activity and reader-controlled disclosures correct across ten stream
       const request = JSON.parse(String(message)) as {
         id: string | number;
         method?: string;
-        params?: { session_id?: string; turn_id?: string };
+        params: { session_id: string; turn_id: string };
       };
       if (request.method !== "turn/start") {
         server.send(message);
         return;
       }
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: { accepted: true },
-        }),
-      );
+      sendResult(socket, request.id, { accepted: true });
       let seq = 0;
       emit = (type, data) =>
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            method: "projection/envelope",
-            params: {
-              session_id: request.params?.session_id,
-              turn_id: request.params?.turn_id,
-              thread_id: `timeline-${request.params?.turn_id}`,
-              seq: ++seq,
-              cursor: { stream: request.params?.session_id, seq: ++cursor },
-              payload: { type, data },
-            },
-          }),
+        sendEnvelope(
+          socket,
+          request.params,
+          {
+            thread: `timeline-${request.params.turn_id}`,
+            seq: ++seq,
+            cursor: ++cursor,
+          },
+          type,
+          data,
         );
     });
   });

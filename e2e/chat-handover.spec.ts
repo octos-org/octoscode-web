@@ -6,6 +6,7 @@ import {
 } from "./fixture-session";
 import { composer, sendPrompt } from "./sessions";
 import { observeFrames } from "./turn-observers";
+import { sendError } from "./wire";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
 // The handover workspace starts idle with a parked external binding, so a
@@ -173,20 +174,14 @@ test("a late collision cannot replace newer text or images, then restores the co
       const request = JSON.parse(String(message));
       if (request.method === START_METHOD && !refuse) {
         refuse = () =>
-          socket.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: request.id,
-              error: {
-                code: -32600,
-                message: "Session occupied",
-                data: {
-                  kind: "turn_in_progress",
-                  turn_id: "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa",
-                },
-              },
-            }),
-          );
+          sendError(socket, request.id, {
+            code: -32600,
+            message: "Session occupied",
+            data: {
+              kind: "turn_in_progress",
+              turn_id: "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa",
+            },
+          });
       } else server.send(message);
     });
     server.onMessage((message) => socket.send(message));

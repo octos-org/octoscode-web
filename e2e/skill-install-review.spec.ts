@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
+import { sendError, sendResult } from "./wire";
 
 /**
  * T-0420/T-0555: a skill source is reviewed against what the server reports.
@@ -116,8 +117,7 @@ async function fakeRegistry(page: Page, options: { reviewed?: boolean } = {}) {
       );
       route.onMessage((message) => {
         const { id, method, params } = JSON.parse(String(message));
-        const reply = (result: unknown) =>
-          route.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
+        const reply = (result: unknown) => sendResult(route, id, result);
         const profile_id = params?.profile_id;
         if (method === LIST) {
           reply({
@@ -138,17 +138,11 @@ async function fakeRegistry(page: Page, options: { reviewed?: boolean } = {}) {
             // Never reply: the client's request timeout makes the outcome
             // genuinely unknown while the socket stays healthy.
           } else if (fake.installFails) {
-            route.send(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id,
-                error: {
-                  code: -32602,
-                  message: `registry entry changed`,
-                  data: { kind: fake.installFails },
-                },
-              }),
-            );
+            sendError(route, id, {
+              code: -32602,
+              message: `registry entry changed`,
+              data: { kind: fake.installFails },
+            });
           } else {
             fake.listed = [
               {

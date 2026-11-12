@@ -83,7 +83,8 @@ export class DesktopNotifications {
     }
   }
 
-  show(state: AttentionState): void {
+  /** `onOpen` runs when the person clicks the notification, after focusing. */
+  show(state: AttentionState, onOpen?: () => void): void {
     if (!this.#settings.enabled) return;
     try {
       if (this.environment.permission() !== "granted") {
@@ -105,6 +106,7 @@ export class DesktopNotifications {
       this.#notice.onclick = () => {
         this.environment.focus();
         this.clear();
+        onOpen?.();
       };
     } catch {
       this.#save(

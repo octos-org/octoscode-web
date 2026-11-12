@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { startSession } from "./fixture-session";
+import { sendEnvelope, sendResult } from "./wire";
 
 test("refresh shows the interrupted turn with complete canonical replay", async ({
   page,
@@ -20,29 +21,13 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
       }
       turnId = request.params.turn_id;
       starts.push(turnId);
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: { accepted: true },
-        }),
-      );
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          method: "projection/envelope",
-          params: {
-            session_id: request.params.session_id,
-            thread_id: "recovery-thread",
-            turn_id: turnId,
-            seq: 1,
-            cursor: { stream: request.params.session_id, seq: 501 },
-            payload: {
-              type: "assistant_delta",
-              data: { text: "The first finding is preserved." },
-            },
-          },
-        }),
+      sendResult(socket, request.id, { accepted: true });
+      sendEnvelope(
+        socket,
+        request.params,
+        { thread: "recovery-thread", seq: 1, cursor: 501 },
+        "assistant_delta",
+        { text: "The first finding is preserved." },
       );
     });
     server.onMessage((message) => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
+import { connect as connectForm } from "./fixture-session";
 
 // T-0177: a launch whose socket closes used to show its error for half a
 // second, until the automatic reconnect erased it. Each case holds the error
@@ -32,10 +32,7 @@ async function closeOnSessionOpen(page: Page) {
 }
 
 async function connect(page: Page, workspace: string) {
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await page.getByLabel("Auth token", { exact: true }).press("Enter");
+  await connectForm(page);
   await page.getByLabel("Server workspace path").fill(workspace);
 }
 

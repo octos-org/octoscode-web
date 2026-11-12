@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
+import { openLink, startSession } from "./fixture-session";
 import { openSettings } from "./sessions";
 import { observeSent } from "./turn-observers";
 
@@ -39,14 +39,7 @@ test("a second tab sees the lock, takes over, and the first tab sees the loss", 
   // offers the conversation.
   const tabB = await page.context().newPage();
   const tabBStarts = observeSent(tabB, "turn/start");
-  await tabB.goto(link!);
-  await tabB.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await tabB.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await tabB.getByRole("button", { name: "Connect", exact: true }).click();
-  await tabB.getByRole("button", { name: "Open conversation" }).click();
-  await expect(
-    tabB.getByRole("textbox", { name: "Message Octos" }),
-  ).toBeVisible({ timeout: 15_000 });
+  await openLink(tabB, link!);
   await expect(
     tabB.getByRole("status").filter({ hasText: BANNER_TEXT }),
   ).toBeVisible();

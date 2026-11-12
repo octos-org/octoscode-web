@@ -408,6 +408,8 @@ export interface SessionListParams {
   /** Profile whose `<cwd>/.octos/<profile>` store to list; same scope rules
    *  as `session/open` (`profile_id`). */
   profile_id?: string;
+  /** Lists the profile's chats, each in its own workspace (provisional, T-B). */
+  work_mode?: "chat";
 }
 
 export interface ConfigCapabilitiesListResult {
@@ -444,6 +446,10 @@ export interface SessionListEntry {
    * never idle, so every reader must test for `true` rather than falsiness.
    */
   active_turn?: boolean;
+  /** Durable Chat / Code mode (provisional, T-A); absent reads as Code. */
+  work_mode?: "chat" | "code";
+  /** A chat's own workspace, given on chat listings (provisional, T-B). */
+  workspace_root?: string;
 }
 
 export interface SessionListResult {
@@ -458,6 +464,11 @@ export interface SessionListResult {
   workspace_root?: string;
   /** The profile whose project store was read; present with `workspace_root`. */
   profile_id?: string;
+  /**
+   * Present only when the server listed the profile's chats (provisional,
+   * T-B). Present with `profile_id`; without it the rows are not chats.
+   */
+  work_mode?: "chat";
 }
 
 export interface SessionDeleteParams {
@@ -526,6 +537,8 @@ export interface SessionOpened {
   workspace_root?: string;
   panes?: unknown;
   reasoning_effort?: string | null;
+  /** Durable Chat / Code mode (provisional, T-A); absent reads as Code. */
+  work_mode?: "chat" | "code";
 }
 
 export interface SessionOpenResult {

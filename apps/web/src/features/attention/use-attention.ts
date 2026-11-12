@@ -22,6 +22,8 @@ export interface AttentionInput {
   activeTurnId?: string | null;
   waitingTurnId?: string | null;
   timeline?: readonly TimelineEntry[];
+  /** Clicking a notification returns to its Session (Chat / Code flag). */
+  onOpenSession?: ((scope: BackgroundTurnSessionScope) => void) | undefined;
 }
 
 export function useAttention({
@@ -31,6 +33,7 @@ export function useAttention({
   activeTurnId = null,
   waitingTurnId = null,
   timeline = EMPTY_TIMELINE,
+  onOpenSession,
 }: AttentionInput) {
   const [desktop] = useState(
     () => new DesktopNotifications(desktopEnvironment()),
@@ -43,6 +46,9 @@ export function useAttention({
   const tracker = useRef(new AttentionTracker());
   const originalTitle = useRef<string | null>(null);
   const previousIdentity = useRef(identity);
+  // Read at click time, so a new callback never re-runs the notice tracking.
+  const openSession = useRef(onOpenSession);
+  openSession.current = onOpenSession;
 
   useEffect(() => {
     originalTitle.current = document.title;
@@ -84,7 +90,8 @@ export function useAttention({
       tracker.current.count,
     );
     if (tracker.current.count === 0) desktop.clear();
-    for (const notice of notices) desktop.show(notice.state);
+    for (const notice of notices)
+      desktop.show(notice.state, () => openSession.current?.(notice));
   }, [
     desktop,
     identity,

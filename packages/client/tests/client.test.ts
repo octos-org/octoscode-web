@@ -86,12 +86,7 @@ describe("OctosUiClient", () => {
     try {
       const oldSocket = createSocket();
       const socket = createSocket();
-      const sockets = [oldSocket, socket];
-      const client = new OctosUiClient({
-        endpoint: "http://127.0.0.1:50080",
-        connectTimeoutMs: 100,
-        webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-      });
+      const client = clientOver([oldSocket, socket], { connectTimeoutMs: 100 });
       const errors = vi.fn();
       client.subscribeErrors(errors);
       const first = expect(client.connect()).rejects.toThrow(
@@ -127,11 +122,7 @@ describe("OctosUiClient", () => {
     for (const event of ["open", "close", "error", "message"] as const) {
       const oldSocket = createSocket();
       const socket = createSocket();
-      const sockets = [oldSocket, socket];
-      const client = new OctosUiClient({
-        endpoint: "http://127.0.0.1:50080",
-        webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-      });
+      const client = clientOver([oldSocket, socket]);
       const errors = vi.fn();
       const notifications = vi.fn();
       client.subscribeErrors(errors);
@@ -200,11 +191,7 @@ describe("OctosUiClient", () => {
   it("does not publish connected when a cancelled socket opens ahead of its replacement", async () => {
     const oldSocket = createSocket();
     const socket = createSocket();
-    const sockets = [oldSocket, socket];
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-    });
+    const client = clientOver([oldSocket, socket]);
     const first = client.connect();
     const rejected = expect(first).rejects.toThrow("connection replaced");
     client.disconnect();
@@ -224,11 +211,7 @@ describe("OctosUiClient", () => {
   it("rejects a cancelled connection without poisoning its replacement when the old socket closes", async () => {
     const oldSocket = createSocket();
     const socket = createSocket();
-    const sockets = [oldSocket, socket];
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-    });
+    const client = clientOver([oldSocket, socket]);
     const first = client.connect();
     const rejected = expect(first).rejects.toThrow("connection closed");
     client.disconnect();
@@ -247,11 +230,7 @@ describe("OctosUiClient", () => {
   it("does not publish connected when a cancelled socket opens ahead of its replacement", async () => {
     const oldSocket = createSocket();
     const socket = createSocket();
-    const sockets = [oldSocket, socket];
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-    });
+    const client = clientOver([oldSocket, socket]);
     const first = client.connect();
     const rejected = expect(first).rejects.toThrow("connection replaced");
     client.disconnect();
@@ -624,11 +603,7 @@ describe("OctosUiClient", () => {
   it("dispatches a cold-decoded mutation immediately and never replays it onto a replacement socket", async () => {
     const oldSocket = createSocket();
     const newSocket = createSocket();
-    const sockets = [oldSocket, newSocket];
-    const client = new OctosUiClient({
-      endpoint: "http://127.0.0.1:50080",
-      webSocketFactory: () => sockets.shift() as unknown as WebSocket,
-    });
+    const client = clientOver([oldSocket, newSocket]);
     const connecting = client.connect();
     oldSocket.readyState = 1;
     oldSocket.onopen?.({} as Event);
@@ -911,7 +886,19 @@ function createSocket() {
   };
 }
 
-/** One socket opened immediately; multi-socket races build their own. */
+/** A client that takes its sockets from `sockets`, one per connect. */
+function clientOver(
+  sockets: ReturnType<typeof createSocket>[],
+  overrides: Partial<ConstructorParameters<typeof OctosUiClient>[0]> = {},
+) {
+  return new OctosUiClient({
+    endpoint: "http://127.0.0.1:50080",
+    webSocketFactory: () => sockets.shift() as unknown as WebSocket,
+    ...overrides,
+  });
+}
+
+/** One socket opened immediately; multi-socket races use `clientOver`. */
 async function connectClient(
   overrides: Partial<ConstructorParameters<typeof OctosUiClient>[0]> = {},
 ) {

@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, openSessionId, startSession } from "./fixture-session";
 import { sendPrompt } from "./sessions";
+import { sendError } from "./wire";
 
 const toggle = (page: Page) =>
   page.getByRole("button", { name: /^Session panel/ });
@@ -34,13 +35,10 @@ test("one file stays selected across diff, output, reload and read failure", asy
       if (frame.method === "diff/preview/get")
         previewReads.push(frame.params.preview_id);
       if (readFails && frame.method === "session/files/read") {
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: frame.id,
-            error: { code: -32004, message: "workspace file was not found" },
-          }),
-        );
+        sendError(socket, frame.id, {
+          code: -32004,
+          message: "workspace file was not found",
+        });
       } else server.send(message);
     });
     server.onMessage((message) => {

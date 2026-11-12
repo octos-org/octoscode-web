@@ -105,6 +105,17 @@ export interface ProductSidebarProps {
   /** Monotonic presentation intent from the /sessions command. */
   searchRequest?: number;
   sessionCreationAvailable?: boolean;
+  /**
+   * The Chat / Code switch, shown above the brand (two-modes flag). Absent:
+   * nothing changes.
+   */
+  modeSwitch?: ReactNode;
+  /**
+   * Chat lists its chats flat and has no folders: no New session or Add
+   * workspace here, and no grouping options (new chats come from the Chat
+   * home).
+   */
+  chatMode?: boolean;
   viewMode?: ProductSidebarViewMode | undefined;
   orderMode?: ProductSidebarOrderMode | undefined;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -198,7 +209,9 @@ export function ProductSidebar({
   fleetActive = false,
   fleetAvailable = true,
   searchRequest = 0,
-  sessionCreationAvailable = true,
+  sessionCreationAvailable: creationOffered = true,
+  modeSwitch = null,
+  chatMode = false,
   viewMode: controlledViewMode,
   orderMode: controlledOrderMode,
   onCollapsedChange,
@@ -223,6 +236,7 @@ export function ProductSidebar({
   peerDockCollapsed = false,
   onPeerDockToggle,
 }: ProductSidebarProps) {
+  const sessionCreationAvailable = creationOffered && !chatMode;
   const t = useUiText();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -783,6 +797,7 @@ export function ProductSidebar({
       className={`${styles.root} ${collapsed ? styles.collapsed : ""}`}
       aria-label={t("Product navigation")}
     >
+      {modeSwitch && !collapsed ? modeSwitch : null}
       <div className={styles.logoRow}>
         {!collapsed ? (
           sessionCreationAvailable ? (
@@ -875,7 +890,11 @@ export function ProductSidebar({
               <span
                 className={`${styles.sectionLabel} ${searchOpen ? styles.sectionLabelHidden : ""}`}
               >
-                {viewMode === "flat" ? t("Sessions") : t("Workspaces")}
+                {chatMode
+                  ? t("Chats")
+                  : viewMode === "flat"
+                    ? t("Sessions")
+                    : t("Workspaces")}
               </span>
               <div
                 className={`${styles.searchSlot} ${searchOpen ? styles.searchSlotExpanded : ""}`}
@@ -919,21 +938,23 @@ export function ProductSidebar({
               <div
                 className={`${styles.headerActions} ${searchOpen ? styles.headerActionsHidden : ""}`}
               >
-                <button
-                  ref={viewOptionsButton}
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={t("Session view options")}
-                  title={t("Session view options")}
-                  aria-haspopup="menu"
-                  aria-expanded={viewOptionsOpen}
-                  aria-controls={
-                    viewOptionsOpen ? viewOptionsMenuId : undefined
-                  }
-                  onClick={() => setViewOptionsOpen((open) => !open)}
-                >
-                  <ViewIcon />
-                </button>
+                {chatMode ? null : (
+                  <button
+                    ref={viewOptionsButton}
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t("Session view options")}
+                    title={t("Session view options")}
+                    aria-haspopup="menu"
+                    aria-expanded={viewOptionsOpen}
+                    aria-controls={
+                      viewOptionsOpen ? viewOptionsMenuId : undefined
+                    }
+                    onClick={() => setViewOptionsOpen((open) => !open)}
+                  >
+                    <ViewIcon />
+                  </button>
+                )}
                 {sessionCreationAvailable ? (
                   <button
                     type="button"
@@ -1223,7 +1244,9 @@ export function ProductSidebar({
                     onRetry={onRetry}
                   />
                 ) : (
-                  <p className={styles.emptyState}>{t("No sessions yet.")}</p>
+                  <p className={styles.emptyState}>
+                    {chatMode ? t("No chats yet.") : t("No sessions yet.")}
+                  </p>
                 )
               ) : null}
 

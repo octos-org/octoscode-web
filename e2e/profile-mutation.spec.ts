@@ -1,6 +1,7 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import { composer } from "./sessions";
+import { sendError, sendResult } from "./wire";
 
 const METHODS = [
   "profile/skills/list",
@@ -33,9 +34,7 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
     );
   }
   const reply = (held: HeldWrite, result: unknown) =>
-    held.route.send(
-      JSON.stringify({ jsonrpc: "2.0", id: held.request.id, result }),
-    );
+    sendResult(held.route, held.request.id, result);
   await page.routeWebSocket(
     (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
     (route) => {
@@ -52,13 +51,10 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
         const profile_id = request.params?.profile_id;
         if (request.method === "turn/start") {
           turnStarts.push(request);
-          route.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: request.id,
-              error: { code: -32603, message: "This test never runs turns" },
-            }),
-          );
+          sendError(route, request.id, {
+            code: -32603,
+            message: "This test never runs turns",
+          });
         } else if (request.method === "profile/skills/list") {
           const skills = installed
             ? [
@@ -106,13 +102,7 @@ async function interceptProfileWrites(page: Page, installedAtStart = false) {
     },
     fail(index: number, message: string) {
       const held = writes[index]!;
-      held.route.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: held.request.id,
-          error: { code: -32603, message },
-        }),
-      );
+      sendError(held.route, held.request.id, { code: -32603, message });
     },
   };
 }

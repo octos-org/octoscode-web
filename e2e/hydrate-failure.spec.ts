@@ -1,5 +1,6 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-import { FIXTURE_ORIGIN, FIXTURE_TOKEN, startSession } from "./fixture-session";
+import { connect, startSession } from "./fixture-session";
+import { sendError } from "./wire";
 
 async function controlledHydrates(page: Page) {
   const sockets: WebSocketRoute[] = [];
@@ -27,17 +28,11 @@ async function controlledHydrates(page: Page) {
         requests.get(String(response.id)) === "session/hydrate"
       ) {
         control.failures -= 1;
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: response.id,
-            error: {
-              code: -32603,
-              message: "response_bytes_limit",
-              data: { retryable: false },
-            },
-          }),
-        );
+        sendError(socket, response.id, {
+          code: -32603,
+          message: "response_bytes_limit",
+          data: { retryable: false },
+        });
         return;
       }
       socket.send(message);
@@ -123,10 +118,7 @@ test("a cold hydrate failure stays honest and Start retries without a phantom re
 }) => {
   const probe = await controlledHydrates(page);
   probe.control.failures = 1;
-  await page.goto("/");
-  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
-  await page.getByLabel("Auth token", { exact: true }).fill(FIXTURE_TOKEN);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await connect(page);
   const path = page.getByLabel("Server workspace path");
   await path.fill("/workspace/diff-review");
   const startButton = page.getByRole("button", { name: "Start session" });

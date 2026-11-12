@@ -73,6 +73,12 @@ export function parseSessionListResult(
   if (sessions.some((entry) => entry === null)) return null;
   // The scope attestation counts only when complete; half of one (or a
   // malformed one) attests nothing, so the listing reads as unscoped.
+  if (value.work_mode === "chat" && isNonEmptyString(value.profile_id))
+    return {
+      sessions: sessions as SessionListEntry[],
+      work_mode: "chat",
+      profile_id: value.profile_id,
+    };
   return isNonEmptyString(value.workspace_root) &&
     isNonEmptyString(value.profile_id)
     ? {
@@ -129,6 +135,13 @@ function parseSessionEntry(value: unknown): SessionListEntry | null {
     // omits it, and omission must stay distinguishable from "idle".
     ...(typeof value.active_turn === "boolean"
       ? { active_turn: value.active_turn }
+      : {}),
+    // An unknown mode is dropped: absent reads as Code (two-modes T-A).
+    ...(value.work_mode === "chat" || value.work_mode === "code"
+      ? { work_mode: value.work_mode }
+      : {}),
+    ...(isNonEmptyString(value.workspace_root)
+      ? { workspace_root: value.workspace_root }
       : {}),
   };
 }

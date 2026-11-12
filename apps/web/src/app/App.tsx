@@ -79,6 +79,7 @@ import {
   type PermissionProfileSelection,
   type PlanUpdated,
   type ProfileLlmModel,
+  type WorkMode,
 } from "@octos-org/octoscode-client/protocol";
 import {
   buildRowControlCommand,
@@ -260,6 +261,16 @@ import {
   type RecentWorkspace,
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
+import {
+  chatModeSupported,
+  rememberSelection,
+  twoModesFlagOn,
+  type ModeSelections,
+} from "../features/work-mode/work-mode.ts";
+import { useChatSessionCatalog } from "../features/work-mode/chat-session-catalog.ts";
+import { WorkModeSwitch } from "../features/work-mode/WorkModeSwitch.tsx";
+import { ModeHome } from "../features/work-mode/ModeHome.tsx";
+import type { BackgroundTurnSessionScope } from "../features/session/background-turn-manager.ts";
 import {
   TaskTemplateHome,
   type TemplateUseSource,
@@ -1339,6 +1350,31 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           ),
     [deletedSessionIds, sessionCatalog],
   );
+  // Chat / Code (two-modes flag, read once per page load). Chat needs the
+  // server's durable work mode and a workspace per chat; without them the
+  // switch shows Chat as unavailable and everything stays Code.
+  const [twoModes] = useState(twoModesFlagOn);
+  const chatAvailable = twoModes && chatModeSupported(session.capabilities);
+  const [workMode, setWorkMode] = useState<WorkMode>("code");
+  const [modeSelections, setModeSelections] = useState<ModeSelections>({
+    chat: null,
+    code: null,
+  });
+  const chatCatalog = useChatSessionCatalog({
+    client: protocol.client,
+    profileId: catalogProfileId,
+    enabled: chatAvailable,
+    refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
+      conversation.queue.active?.turnId ?? ""
+    }\n${catalogRefreshNonce}\n${workMode}`,
+  });
+  const chatSessions = useMemo(
+    () =>
+      chatCatalog.sessions.filter(
+        (row) => !deletedSessionIds.includes(row.sessionId),
+      ),
+    [chatCatalog.sessions, deletedSessionIds],
+  );
   // The usage page lists this profile's catalog rows, one per Session.
   const usageSessions = useMemo(() => {
     const rows = new Map<
@@ -1365,10 +1401,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return mergeConfirmedRetainedSessions(knownSessions, [
       ...workspaceProduct.backgroundTurns,
       ...catalogRefs,
+      // Tagged, so Code's list and "continue" leave them out.
+      ...chatSessions.map((row) => ({ ...row, workMode: "chat" as const })),
     ]).filter((ref) => !deletedSessionIds.includes(ref.sessionId));
   }, [
     knownSessions,
     visibleCatalog,
+    chatSessions,
     workspaceProduct.backgroundTurns,
     deletedSessionIds,
   ]);
@@ -1808,15 +1847,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     const opened = session.opened;
     const path = opened?.workspace_root?.trim();
     if (!session.connected || !opened || !path) return;
-    setRecentWorkspaces((current) =>
-      current.some((workspace) => workspace.path === path)
-        ? current
-        : rememberWorkspace(
-            browserStorage("sessionStorage"),
-            connection.endpoint,
-            path,
-          ),
-    );
+    // A chat's own folder is not a project workspace (two-modes flag).
+    if (!(twoModes && opened.work_mode === "chat"))
+      setRecentWorkspaces((current) =>
+        current.some((workspace) => workspace.path === path)
+          ? current
+          : rememberWorkspace(
+              browserStorage("sessionStorage"),
+              connection.endpoint,
+              path,
+            ),
+      );
     setKnownSessions(
       rememberKnownSession(
         browserStorage("sessionStorage"),
@@ -1829,6 +1870,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     connection.token,
     session.connected,
     session.opened,
+    twoModes,
   ]);
 
   // Alt+A "show approval" (reference-TUI keymap.rs:1). The interaction ledger
@@ -2616,6 +2658,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   activeSessionKeyRef.current = activeSessionKey;
   activeSessionClientRef.current = protocol.client;
   openedSessionIdRef.current = session.opened?.session_id;
+  // The open Session's own mode (server `work_mode`; absent reads as Code).
+  const openedMode: WorkMode =
+    chatAvailable && session.opened?.work_mode === "chat" ? "chat" : "code";
+  const mode: WorkMode | undefined = twoModes
+    ? chatAvailable
+      ? workMode
+      : "code"
+    : undefined;
+  // A different Session opening (a row, a link, a reload, a notification)
+  // brings its own mode; switching modes alone never reopens anything.
+  const modeSessionId = session.opened?.session_id;
+  useEffect(() => {
+    if (modeSessionId) setWorkMode(openedMode);
+  }, [modeSessionId, openedMode]);
+  useEffect(() => {
+    if (!modeSessionId || !activeSessionKey) return;
+    setModeSelections((current) =>
+      rememberSelection(current, openedMode, activeSessionKey),
+    );
+  }, [modeSessionId, openedMode, activeSessionKey]);
+  const chatKeys = useMemo(
+    () =>
+      new Set(
+        [
+          ...chatSessions,
+          ...knownSessions.filter((ref) => ref.workMode === "chat"),
+        ].map((ref) =>
+          workspaceSessionKey(ref.workspaceRoot, ref.profileId, ref.sessionId),
+        ),
+      ),
+    [chatSessions, knownSessions],
+  );
+  // A mode with no Session of its own on screen shows its home instead; the
+  // other mode's Session stays open behind it.
+  const modeHomeActive =
+    mode !== undefined &&
+    productRoute === null &&
+    remoteView !== "home" &&
+    (mode === "chat"
+      ? openedMode !== "chat"
+      : Boolean(session.opened) && openedMode === "chat");
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
@@ -2699,7 +2782,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     [conversation.timeline],
   );
   const panelColumn =
-    !compact && panelLayout.open && Boolean(session.opened) && !productRoute;
+    !compact &&
+    panelLayout.open &&
+    Boolean(session.opened) &&
+    !productRoute &&
+    !modeHomeActive;
   // The column's width lives in CSS (AppProduct.module.css); only the
   // remembered value is handed over, as a custom property on the grid.
   const workspaceMainRef = useRef<HTMLElement>(null);
@@ -3305,6 +3392,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     (typeof navigableSessions)[number] | undefined
   >((latest, ref) => {
     if (ref.lastOpenedAt <= 0) return latest;
+    // With Chat / Code on, only offer a Session of the mode on screen.
+    if (mode && (ref.workMode ?? "code") !== mode) return latest;
     if (
       workspaceSessionKey(ref.workspaceRoot, ref.profileId, ref.sessionId) ===
       activeSessionKey
@@ -3806,13 +3895,42 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       workspaces.findIndex((candidate) => candidate.path === workspace.path) ===
       index,
   );
+  const switchWorkMode = (next: WorkMode) => {
+    if (next === mode) return;
+    setWorkMode(next);
+    setProductRoute(null);
+    const target = modeSelections[next];
+    if (
+      target &&
+      navigableSessions.some(
+        (ref) =>
+          workspaceSessionKey(
+            ref.workspaceRoot,
+            ref.profileId,
+            ref.sessionId,
+          ) === target,
+      )
+    )
+      void moveToProductSession(target);
+  };
+  const openNotifiedSession = (scope: BackgroundTurnSessionScope) => {
+    const key = workspaceSessionKey(
+      scope.workspaceRoot,
+      scope.profileId,
+      scope.sessionId,
+    );
+    setWorkMode(chatKeys.has(key) ? "chat" : "code");
+    void moveToProductSession(key);
+  };
   const requestNewSession = (workspaceId?: string, forcePicker = false) => {
     if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
       return;
     if (compact) setSidebarCollapsed(true);
+    // With a chat open, its folder is not where a Code session belongs.
+    const pick = forcePicker || (mode === "code" && openedMode === "chat");
     const workspace = workspaceId
       ? sessionWorkspaces.find((candidate) => candidate.id === workspaceId)
-      : forcePicker
+      : pick
         ? null
         : sessionWorkspaces.length === 1
           ? sessionWorkspaces[0]
@@ -4435,6 +4553,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             }
             timeline={conversation.timeline}
             onSettingsChange={setAttentionSettings}
+            onOpenSession={twoModes ? openNotifiedSession : undefined}
           />
         </SurfaceBoundary>
       ) : null}
@@ -4543,8 +4662,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               sessionCreationAvailable={
                 codingCapabilities.sessionCreationAvailable
               }
-              viewMode={sidebarView}
-              orderMode={sidebarOrder}
+              viewMode={mode === "chat" ? "flat" : sidebarView}
+              orderMode={mode === "chat" ? "updated" : sidebarOrder}
+              workMode={mode}
+              chatSessions={chatSessions}
+              chatCatalogError={
+                chatCatalog.status === "error" ? chatCatalog.error : undefined
+              }
+              chatMode={mode === "chat"}
+              modeSwitch={
+                mode ? (
+                  <WorkModeSwitch
+                    mode={mode}
+                    chatAvailable={chatAvailable}
+                    onModeChange={switchWorkMode}
+                  />
+                ) : null
+              }
               onCollapsedChange={setSidebarCollapsed}
               searchRequest={sessionSearchRequest}
               onNewSession={requestNewSession}
@@ -4670,7 +4804,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         >
           <section
             className="conversation"
-            hidden={productRoute !== null || remoteView === "home"}
+            hidden={
+              productRoute !== null || remoteView === "home" || modeHomeActive
+            }
             {...(attachmentsAvailable
               ? {
                   onDragOver: (event: ReactDragEvent) => {
@@ -5876,6 +6012,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               )}
             </div>
           </section>
+          {modeHomeActive && mode ? (
+            <ModeHome
+              mode={mode}
+              chatCount={chatKeys.size}
+              compact={compact}
+              sidebarOpen={!sidebarCollapsed}
+              onOpenSessions={() => setSidebarCollapsed(false)}
+              newSessionAvailable={codingCapabilities.sessionCreationAvailable}
+              onNewSession={() => requestNewSession(undefined, true)}
+              navigationTriggerClassName={productStyles.navigationTrigger ?? ""}
+            />
+          ) : null}
           {remoteView === "home" && !productRoute ? (
             <div className="conversation remote-pane">
               <Suspense

@@ -40,6 +40,33 @@ export async function connectAndStartWorkspace(
   await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeEnabled();
 }
 
+/** Opens `url` and connects from the connect form with `token`. */
+export async function connect(
+  page: Page,
+  url = "/",
+  token = FIXTURE_TOKEN,
+): Promise<void> {
+  await page.goto(url);
+  await page.getByLabel("Server origin").fill(FIXTURE_ORIGIN);
+  await page.getByLabel("Auth token", { exact: true }).fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+}
+
+/** Opens a saved conversation link: connect, then Open conversation. */
+export async function openLink(
+  page: Page,
+  url: string,
+  token = FIXTURE_TOKEN,
+): Promise<void> {
+  await connect(page, url, token);
+  await page
+    .getByRole("button", { name: "Open conversation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Message Octos" }),
+  ).toBeVisible({ timeout: 15_000 });
+}
+
 /**
  * Connect with `token` and start a Session by typing `cwd` into the workspace
  * path (past the folder browser, for tokens that advertise it), Enter for each
