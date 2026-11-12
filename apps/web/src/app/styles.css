@@ -497,6 +497,11 @@ label > span {
   font-size: var(--dsw-font-size-micro);
 }
 
+/* A chat's header line is prose, not a path (two-modes T-D). */
+.workspace-title .chat-subtitle {
+  font-family: inherit;
+}
+
 .review-chip {
   height: 28px;
   border: 1px solid var(--dsw-alias-border-l2);

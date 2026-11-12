@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { startSession } from "./fixture-session";
 import { sendEnvelope, sendResult } from "./wire";
+import { stopButton } from "./sessions";
 
 test("refresh shows the interrupted turn with complete canonical replay", async ({
   page,
@@ -87,9 +88,7 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
   const composer = page.getByRole("textbox", { name: "Message Octos" });
   await composer.fill("Investigate this interrupted turn");
   await composer.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await expect(
     page.getByText("The first finding is preserved.", { exact: true }),
   ).toBeVisible();
@@ -99,9 +98,7 @@ test("refresh shows the interrupted turn with complete canonical replay", async 
   await expect(
     timeline.getByText("Turn stopped", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toHaveCount(0);
+  await expect(stopButton(page)).toHaveCount(0);
   await expect(composer).toBeEnabled();
   await expect(
     timeline.getByText("Investigate this interrupted turn", {

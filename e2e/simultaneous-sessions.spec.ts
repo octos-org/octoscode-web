@@ -7,6 +7,7 @@ import {
   selectedSessionId,
   sendPrompt,
   sessionRow,
+  stopButton,
 } from "./sessions";
 import {
   observeFrames,
@@ -175,9 +176,7 @@ test("preserves native persisted segment finality across late deltas and the nex
   const a = sessionRow(sidebar, await selectedSessionId(sidebar));
   await holdTerminals(request);
   await sendPrompt(page, firstPrompt);
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await sendPrompt(page, secondPrompt);
   await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
   const b = sessionRow(

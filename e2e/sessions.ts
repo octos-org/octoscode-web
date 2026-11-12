@@ -62,6 +62,10 @@ export async function newSessionIn(
   return selectedSessionId(navigation);
 }
 
+/** Stop for the running turn; present only while one runs. */
+export const stopButton = (page: Page): Locator =>
+  page.getByRole("button", { name: "Stop", exact: true });
+
 export const composer = (page: Page): Locator =>
   page.getByPlaceholder(COMPOSER_PLACEHOLDER);
 

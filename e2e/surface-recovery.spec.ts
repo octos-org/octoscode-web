@@ -7,8 +7,9 @@ import {
   productNavigation,
   selectedSessionId,
   selectSession,
+  stopButton,
 } from "./sessions";
-import { sendResult } from "./wire";
+import { interceptRequests, sendResult } from "./wire";
 
 const modelManagementModule =
   /\/(?:assets\/ModelManagementSettings-[^/]+\.js|src\/features\/product-settings\/ModelManagementSettings\.tsx)(?:\?.*)?$/;
@@ -31,20 +32,13 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   const starts: string[] = [];
   const interrupts: string[] = [];
   page.on("websocket", (socket) => socket.on("close", () => closed++));
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "turn/start") {
-        starts.push(frame.params.turn_id);
-        sendResult(socket, frame.id, {});
-        return;
-      }
-      if (frame.method === "turn/interrupt")
-        interrupts.push(frame.params.turn_id);
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
+  await interceptRequests(page, (frame, socket) => {
+    if (frame.method === "turn/interrupt")
+      interrupts.push(frame.params.turn_id);
+    if (frame.method !== "turn/start") return;
+    starts.push(frame.params.turn_id);
+    sendResult(socket, frame.id, {});
+    return true;
   });
   // Armed before navigation: the settings chunk is now idle-preloaded
   // (#131), so the failure must apply from the very first fetch onward,
@@ -60,9 +54,7 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   const composer = composerInput(page);
   await composer.fill("Keep this response active");
   await composer.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await composer.fill("Keep this queued message");
   await composer.press("Enter");
   await composer.fill("Keep this unsent draft");
@@ -89,7 +81,7 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   await expect(
     page.getByText("Keep this queued message", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await stopButton(page).click();
   await expect.poll(() => interrupts.length).toBe(1);
 
   // Once the server serves another build, the same failure says it was updated.
@@ -125,9 +117,7 @@ test("a late clipboard command result does not enter a different conversation", 
   await composer.fill("Write a short response for the clipboard");
   await composer.press("Enter");
   await expect(page.locator(".entry-assistant").last()).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toHaveCount(0);
+  await expect(stopButton(page)).toHaveCount(0);
   await composer.fill("/copy");
   await composer.press("Enter");
   await expect

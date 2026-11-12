@@ -15,6 +15,18 @@ const catalog: Readonly<Record<string, string>> = {
     "对话需要服务器为每个对话单独分配文件夹，这台服务器还不支持。",
   "Choose a chat from the list.": "从列表里选一个对话。",
   "No chats yet.": "还没有对话。",
+  "No chats yet. Start one to draft, summarize or plan.":
+    "还没有对话。新开一个，起草、总结或者做计划都行。",
+  "Choose a chat from the list, or start a new one.":
+    "从列表里选一个对话，或者新开一个。",
+  "Ask Octos anything…": "想问 Octos 什么都可以…",
+  "Could not open the new chat. Try again.": "新对话没能打开，请重试。",
+  "Could not start a new chat. Try again.": "没能新建对话，请重试。",
+  "Making this chat read-only with no network. Sending waits until the server confirms it.":
+    "正在把这个对话设为只读、禁止联网，服务器确认后才能发送。",
+  "The server hasn't confirmed that this chat is read-only with no network, so sending is blocked in this chat.":
+    "服务器还没确认这个对话是只读、禁止联网，所以这个对话暂时不能发送。",
+  "Shared model and memory · its own folder": "共用模型和记忆 · 独立文件夹",
   "Choose a session from the list, or start a new one.":
     "从列表里选一个会话，或者新建一个。",
   "% of": "% /",

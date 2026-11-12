@@ -3239,6 +3239,10 @@ function capabilitiesFor(socket, state) {
   return twoModesSockets.has(socket)
     ? {
         ...capabilities,
+        supported_methods: [
+          ...capabilities.supported_methods,
+          "session/chat/create",
+        ],
         supported_features: [
           ...capabilities.supported_features,
           ...TWO_MODES_FEATURES,
@@ -5751,6 +5755,45 @@ sockets.on("connection", (socket, request) => {
       });
       return;
     }
+    // A new chat gets its own folder, bound to the id the client chose. It
+    // starts with the fixture's ordinary permission (write, no network); the
+    // web narrows it to read-only itself and waits for the server to agree.
+    if (
+      request.method === "session/chat/create" &&
+      twoModesSockets.has(socket)
+    ) {
+      const sessionId = String(request.params?.session_id ?? "");
+      const profileId = String(request.params?.profile_id ?? "");
+      if (!profileId || !sessionId.startsWith(`${profileId}:api:web-`)) {
+        replyError(
+          socket,
+          request.id,
+          -32602,
+          "Choose a web id of this profile",
+        );
+        return;
+      }
+      const workspaceRoot =
+        chatWorkspaceBySession.get(sessionId) ??
+        `/srv/chats/${profileId}/${sessionId.slice(sessionId.lastIndexOf(":") + 1)}`;
+      if (!chatWorkspaceBySession.has(sessionId)) {
+        chatWorkspaceBySession.set(sessionId, workspaceRoot);
+        sessionsByWorkspace.set(workspaceRoot, [
+          {
+            id: sessionId,
+            message_count: 0,
+            updated_at: new Date().toISOString(),
+          },
+        ]);
+      }
+      reply(socket, request.id, {
+        session_id: sessionId,
+        profile_id: profileId,
+        workspace_root: workspaceRoot,
+        work_mode: "chat",
+      });
+      return;
+    }
     if (
       request.method === "session/list" &&
       request.params?.work_mode === "chat" &&
@@ -7096,6 +7139,13 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (
+    text.startsWith(CHAT_DRAFT_PROMPT) &&
+    chatWorkspaceBySession.has(sessionId)
+  ) {
+    streamChatDraft(socket, sessionId, turnId, nextCursor);
+    return null;
+  }
   const expertMember = stagedPeers.get(sessionId);
   if (expertMember?.brief.startsWith(EXPERT_TEAM_HEADER)) {
     streamExpertMember(socket, sessionId, turnId, expertMember, nextCursor);
@@ -7639,6 +7689,67 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     emitTail();
   }, completionDelayMs);
   return null;
+}
+
+// Two-modes T-D: a chat's answer is a long Markdown draft in the chat itself.
+// One read step, the draft streamed in pieces, then persisted whole so a
+// reload shows the same answer. Nothing is written to a file.
+const CHAT_DRAFT_PROMPT = "Chat draft fixture";
+const CHAT_DRAFT_PARTS = [
+  "# Week 43 report\n\n## Highlights\n\n",
+  "- Revenue $184,300, up 12.4% on last week\n- 37 new customers, 9 of them online\n- Support backlog down to 14 tickets\n\n",
+  "## Key numbers\n\n| Metric | This week | Last week |\n| --- | --- | --- |\n| Revenue | $184,300 | $163,980 |\n| New customers | 37 | 31 |\n| Open tickets | 14 | 22 |\n\n",
+  "## Problems and risks\n\n1. Two enterprise renewals slipped to next month.\n2. The mobile sign-up form still drops 8% of users.\n\n## Next week\n\n- Close both renewals\n- Ship the sign-up fix\n",
+];
+
+function streamChatDraft(socket, sessionId, turnId, nextCursor) {
+  let seq = 1;
+  const send = (type, data) =>
+    notify(socket, sessionId, turnId, turnId, ++seq, nextCursor(), type, data);
+  send("reasoning_delta", { text: "Reading the pasted notes first." });
+  send("tool_start", {
+    tool_call_id: `${turnId}-notes`,
+    name: "read_file",
+    arguments_preview: JSON.stringify({ path: "notes.md" }),
+  });
+  send("tool_end", {
+    tool_call_id: `${turnId}-notes`,
+    status: "complete",
+    output_preview: "42 lines",
+  });
+  CHAT_DRAFT_PARTS.forEach((part, index) =>
+    setTimeout(
+      () => {
+        if (socket.readyState !== WebSocket.OPEN || cancelledTurns.has(turnId))
+          return;
+        send("assistant_delta", {
+          text: part,
+          assistant_segment_id: "segment-1",
+        });
+        if (index < CHAT_DRAFT_PARTS.length - 1) return;
+        send("assistant_persisted", {
+          text: CHAT_DRAFT_PARTS.join(""),
+          assistant_segment_id: "segment-1",
+          meta: {
+            message_id: `message-${turnId}`,
+            persisted_at: new Date().toISOString(),
+          },
+        });
+        send("turn_terminal", {
+          outcome: "completed",
+          token_usage: { input_tokens: 40, output_tokens: 160 },
+        });
+        const state = sessionState(sessionId);
+        if (state.activeTurn?.turnId === turnId) {
+          state.completedTurns.push(
+            settledTurnRecord(state, turnId, turnId, "completed"),
+          );
+          state.activeTurn = null;
+        }
+      },
+      300 * (index + 1),
+    ),
+  );
 }
 
 /** Isolated reproduction of browser-stream-order.json from a real Core turn. */

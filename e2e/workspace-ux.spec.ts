@@ -1,7 +1,8 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session";
-import { sendEnvelope, sendResult } from "./wire";
+import { interceptRequests, sendEnvelope, sendResult } from "./wire";
+import { stopButton } from "./sessions";
+import { axeViolations } from "./axe";
 
 async function start(page: Page) {
   await startSession(page, "/workspace/ux-review");
@@ -23,26 +24,20 @@ async function holdTurns(page: Page) {
   const sent: string[] = [];
   let emit: ((type: string, data: Record<string, unknown>) => void) | undefined;
   let cursor = 100;
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      if (request.method !== "turn/start") {
-        server.send(message);
-        return;
-      }
-      sent.push(request.params.turn_id);
-      sendResult(socket, request.id, { accepted: true });
-      let seq = 0;
-      emit = (type, data) =>
-        sendEnvelope(
-          socket,
-          request.params,
-          { thread: "ux-review", seq: ++seq, cursor: ++cursor },
-          type,
-          data,
-        );
-    });
+  await interceptRequests(page, (request, socket) => {
+    if (request.method !== "turn/start") return;
+    sent.push(request.params.turn_id);
+    sendResult(socket, request.id, { accepted: true });
+    let seq = 0;
+    emit = (type, data) =>
+      sendEnvelope(
+        socket,
+        request.params,
+        { thread: "ux-review", seq: ++seq, cursor: ++cursor },
+        type,
+        data,
+      );
+    return true;
   });
   return {
     sent,
@@ -71,9 +66,7 @@ test("IME confirmation and multiline editing never send; queued messages can be 
   expect(turns.sent).toHaveLength(0);
   await input.press("Enter");
   await expect.poll(() => turns.sent.length).toBe(1);
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   await expect(page.getByRole("button", { name: "Queue prompt" })).toHaveCount(
     0,
   );
@@ -89,9 +82,7 @@ test("IME confirmation and multiline editing never send; queued messages can be 
   await queue.getByRole("button", { name: "Remove queued prompt 1" }).click();
   await expect(queue).toHaveCount(0);
   turns.emit("turn_terminal", { outcome: "completed" });
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toHaveCount(0);
+  await expect(stopButton(page)).toHaveCount(0);
   expect(turns.sent).toHaveLength(1);
 });
 
@@ -111,9 +102,7 @@ test("protects a running turn from closing the tab and removes the warning on co
   await dialog.dismiss();
   expect(page.isClosed()).toBe(false);
   turns.emit("turn_terminal", { outcome: "completed" });
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toHaveCount(0);
+  await expect(stopButton(page)).toHaveCount(0);
   expect(
     await page.evaluate(() => {
       const event = new Event("beforeunload", { cancelable: true });
@@ -150,10 +139,9 @@ test("keeps the mobile composer on screen and makes navigation an accessible dra
       await drawer.evaluate((el) => el.contains(document.activeElement)),
     ).toBe(true);
   }
-  const axe = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
-  expect(axe.violations).toEqual([]);
+  expect(await axeViolations(page, undefined, ["wcag2a", "wcag2aa"])).toEqual(
+    [],
+  );
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
   await expect(
@@ -161,10 +149,9 @@ test("keeps the mobile composer on screen and makes navigation an accessible dra
   ).toBeFocused();
   await expect(input).toHaveValue("preserve my mobile draft");
   await page.emulateMedia({ colorScheme: "dark" });
-  expect(
-    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, undefined, ["wcag2a", "wcag2aa"])).toEqual(
+    [],
+  );
   await page.screenshot({ path: test.info().outputPath("mobile-dark.png") });
   await page.setViewportSize({ width: 320, height: 480 });
   const compactBox = await input.boundingBox();

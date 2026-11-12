@@ -3,6 +3,7 @@ import { isNonEmptyString, isNonNegativeInteger } from "./wire-decoders.ts";
 import type {
   LaunchResolveResult,
   SessionDeleteResult,
+  ChatCreateResult,
   SessionFileInfo,
   SessionFilesListResult,
   SessionListEntry,
@@ -87,6 +88,22 @@ export function parseSessionListResult(
         profile_id: value.profile_id,
       }
     : { sessions: sessions as SessionListEntry[] };
+}
+
+/** Only the chat asked for, in a folder of its own, is a created chat. */
+export function parseChatCreateResult(value: unknown): ChatCreateResult | null {
+  return isRecord(value) &&
+    isNonEmptyString(value.session_id) &&
+    isNonEmptyString(value.profile_id) &&
+    isNonEmptyString(value.workspace_root) &&
+    value.work_mode === "chat"
+    ? {
+        session_id: value.session_id,
+        profile_id: value.profile_id,
+        workspace_root: value.workspace_root,
+        work_mode: "chat",
+      }
+    : null;
 }
 
 export function parseSessionDeleteResult(

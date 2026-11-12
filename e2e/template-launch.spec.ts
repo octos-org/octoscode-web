@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { connect as connectForm } from "./fixture-session";
-import { sendError } from "./wire";
+import { interceptRequests, sendError } from "./wire";
 
 const composer = (page: Page) =>
   page.getByRole("textbox", { name: "Message Octos" });
@@ -15,24 +15,16 @@ test("a rejected template launch retries its session identity and preserves the 
 }) => {
   const opened: string[] = [];
   const turns: string[] = [];
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "turn/start") turns.push(frame.params.turn_id);
-      if (frame.method === "session/open") {
-        opened.push(frame.params.session_id);
-        if (opened.length === 1) {
-          sendError(socket, frame.id, {
-            code: -32603,
-            message: "Template launch refused for this test",
-          });
-          return;
-        }
-      }
-      server.send(message);
+  await interceptRequests(page, (frame, socket) => {
+    if (frame.method === "turn/start") turns.push(frame.params.turn_id);
+    if (frame.method !== "session/open") return;
+    opened.push(frame.params.session_id);
+    if (opened.length > 1) return;
+    sendError(socket, frame.id, {
+      code: -32603,
+      message: "Template launch refused for this test",
     });
-    server.onMessage((message) => socket.send(message));
+    return true;
   });
   await connect(page);
   await page

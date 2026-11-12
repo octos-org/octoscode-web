@@ -11,3 +11,10 @@ export const SESSION_WORK_MODE_UI_FEATURE = "session.work_mode.v1";
 
 /** The server gives every chat its own workspace and lists chats (T-B). */
 export const CHAT_WORKSPACE_UI_FEATURE = "session.chat_workspace.v1";
+
+/**
+ * Creates a chat under a session id the client chose: the server makes the
+ * chat's own folder and binds the id to it (T-B). Opening it afterwards is an
+ * ordinary `session/open` with that folder.
+ */
+export const CHAT_CREATE_METHOD = "session/chat/create";

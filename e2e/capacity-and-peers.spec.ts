@@ -4,10 +4,11 @@ import { FIXTURE_ORIGIN, connectAndStartWorkspace } from "./fixture-session.ts";
 import {
   newSessionIn,
   productNavigation,
-  selectSession,
   selectedSessionId,
+  selectSession,
   sendPrompt,
   sessionRow,
+  stopButton,
 } from "./sessions";
 import { observeFrames, observeTransports } from "./turn-observers";
 
@@ -40,9 +41,7 @@ test("holds twelve browser turns and three browser-started native peers on one p
       const marker = SLOW_PREFIX + " twelve-" + index + "-marker";
       await sendPrompt(page, marker);
       await expect.poll(() => starts().length).toBe(index + 1);
-      await expect(
-        page.getByRole("button", { name: "Stop", exact: true }),
-      ).toBeVisible();
+      await expect(stopButton(page)).toBeVisible();
       sessionByMarker.set(marker, await selectedSessionId(sidebar));
       await newSessionIn(sidebar, "twelve-plus-peers");
       const showMore = workspace.locator('button[class*="showMore"]');

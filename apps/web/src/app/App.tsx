@@ -70,6 +70,7 @@ import {
   APPUI_INVENTORY_METHODS,
   APPUI_SERVER_METHODS,
   APPUI_SKILL_METHODS,
+  CHAT_CREATE_METHOD,
   CORE_UI_FEATURES,
   CORE_UI_METHODS,
   supportsFeature,
@@ -262,6 +263,7 @@ import {
 } from "../features/workspace/workspace-recents.ts";
 import productStyles from "./AppProduct.module.css";
 import {
+  CHAT_PERMISSION_DEFAULTS,
   chatModeSupported,
   rememberSelection,
   twoModesFlagOn,
@@ -269,6 +271,7 @@ import {
 } from "../features/work-mode/work-mode.ts";
 import { useChatSessionCatalog } from "../features/work-mode/chat-session-catalog.ts";
 import { WorkModeSwitch } from "../features/work-mode/WorkModeSwitch.tsx";
+import { sessionTitleFromPrompt } from "../features/session/session-title.ts";
 import { ModeHome } from "../features/work-mode/ModeHome.tsx";
 import type { BackgroundTurnSessionScope } from "../features/session/background-turn-manager.ts";
 import {
@@ -279,8 +282,10 @@ import {
   type TemplateNotice,
 } from "../features/templates/TaskTemplateHome.tsx";
 import {
+  CHAT_TEMPLATES,
   findTaskTemplate,
   firstTemplateBlank,
+  TASK_TEMPLATES,
   type TaskTemplate,
 } from "../features/templates/task-templates.ts";
 import {
@@ -516,6 +521,9 @@ const PlanCard = lazyNamed(
 );
 
 const COMMAND_PALETTE_ID = "composer-command-palette";
+
+/** A chat's panel (two-modes T-D): what the chat produced, nothing else. */
+const CHAT_PANEL_TABS: readonly SessionPanelTab[] = ["outputs"];
 
 export function App({ gate }: { gate: ConnectionGateApi }) {
   const preferences = usePreferences();
@@ -1360,6 +1368,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     chat: null,
     code: null,
   });
+  const [chatCreating, setChatCreating] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  // A chat's panel shows only Outputs and starts closed (T-D); the Code
+  // panel's remembered layout is left alone.
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const chatCatalog = useChatSessionCatalog({
     client: protocol.client,
     profileId: catalogProfileId,
@@ -2699,6 +2712,29 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     (mode === "chat"
       ? openedMode !== "chat"
       : Boolean(session.opened) && openedMode === "chat");
+  // A chat on screen reads as one (T-D): no folder, read-only with no
+  // network, steps folded into Activity, and a panel with only Outputs.
+  const chatOnScreen = mode === "chat" && openedMode === "chat";
+  const chatPrompt = conversation.timeline.find(
+    (entry) => entry.kind === "user" && entry.body.trim(),
+  )?.body;
+  // The sidebar's name for the same chat: the server's title, else its first
+  // prompt.
+  const chatTitle =
+    chatSessions.find((row) => row.sessionId === session.opened?.session_id)
+      ?.title ??
+    (chatPrompt ? sessionTitleFromPrompt(chatPrompt) : t("New chat"));
+  const newChatAvailable =
+    chatAvailable &&
+    codingCapabilities.sessionCreationAvailable &&
+    supportsMethod(session.capabilities, CHAT_CREATE_METHOD);
+  // Code's templates on a server with chats; office and general work is
+  // what Chat is for (proposal §3).
+  const templateCatalog = chatOnScreen
+    ? CHAT_TEMPLATES
+    : chatAvailable
+      ? TASK_TEMPLATES.filter((template) => template.category === "code")
+      : TASK_TEMPLATES;
   const openingSession = workspaceProduct.openingSession;
   const tabLock = useTabSessionLock(activeSessionKey);
 
@@ -2717,13 +2753,22 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   useEffect(() => {
     writePanelLayout(browserLocalStorage(), panelLayout);
   }, [panelLayout]);
-  const panelOpen = compact ? panelDrawerOpen : panelLayout.open;
+  const panelOpen = compact
+    ? panelDrawerOpen
+    : chatOnScreen
+      ? chatPanelOpen
+      : panelLayout.open;
   useEffect(() => {
     if (panelLayout.tab === "automation" && !autonomyAvailable) {
       setPanelLayout((current) => ({ ...current, tab: "overview" }));
     }
   }, [autonomyAvailable, panelLayout.tab]);
   const showPanel = (tab: SessionPanelTab, overlay = compact) => {
+    if (chatOnScreen) {
+      if (overlay) setPanelDrawerOpen(true);
+      else setChatPanelOpen(true);
+      return;
+    }
     setPanelLayout((current) => ({
       ...current,
       tab,
@@ -2732,7 +2777,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (overlay) setPanelDrawerOpen(true);
   };
   const closePanelColumn = () =>
-    setPanelLayout((current) => ({ ...current, open: false }));
+    chatOnScreen
+      ? setChatPanelOpen(false)
+      : setPanelLayout((current) => ({ ...current, open: false }));
   const closePanelDrawer = () => setPanelDrawerOpen(false);
   const openChangePreview = (previewId?: string | null, overlay = compact) => {
     showPanel("changes", overlay);
@@ -2783,7 +2830,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   );
   const panelColumn =
     !compact &&
-    panelLayout.open &&
+    panelOpen &&
     Boolean(session.opened) &&
     !productRoute &&
     !modeHomeActive;
@@ -2857,12 +2904,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       key={`${protocol.authorityKey}:${session.opened?.session_id ?? ""}`}
       presentation={presentation}
       className={productStyles.panelSlot}
-      tab={panelLayout.tab}
+      tab={chatOnScreen ? "outputs" : panelLayout.tab}
+      only={chatOnScreen ? CHAT_PANEL_TABS : undefined}
       width={panelLayout.width}
       availableWidth={() =>
         workspaceMainRef.current?.clientWidth ?? window.innerWidth
       }
-      onTabChange={(tab) => setPanelLayout((current) => ({ ...current, tab }))}
+      onTabChange={(tab) => {
+        if (!chatOnScreen) setPanelLayout((current) => ({ ...current, tab }));
+      }}
       onWidthChange={(width) =>
         setPanelLayout((current) => ({ ...current, width }))
       }
@@ -3922,7 +3972,61 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setWorkMode(chatKeys.has(key) ? "chat" : "code");
     void moveToProductSession(key);
   };
+  /**
+   * A new chat: the server makes its folder, then it opens like any Session,
+   * gated until the server confirms read-only with no network.
+   */
+  const createChat = async () => {
+    const client = protocol.client;
+    const profileId = catalogProfileId;
+    if (
+      !newChatAvailable ||
+      !client ||
+      !profileId ||
+      chatCreating ||
+      navigationBlocked
+    )
+      return;
+    const fail = (text: string) =>
+      chatOnScreen ? setCommandError(text) : setChatError(text);
+    setChatCreating(true);
+    setChatError(null);
+    const launchId = freshWebSessionId();
+    const sessionId = bindWebSessionIdToProfile(launchId, profileId);
+    try {
+      const created = await client.createChat({
+        session_id: sessionId,
+        profile_id: profileId,
+      });
+      if (created.session_id !== sessionId || created.profile_id !== profileId)
+        throw new Error("The server created another chat");
+      pendingPermissionDefaultRef.current = {
+        launchId,
+        defaults: CHAT_PERMISSION_DEFAULTS,
+      };
+      setWorkMode("chat");
+      setProductRoute(null);
+      const outcome = await workspaceProduct.openSession({
+        sessionId,
+        cwd: created.workspace_root,
+        profileId,
+        resolveLaunch: false,
+      });
+      if (outcome !== "opened") {
+        pendingPermissionDefaultRef.current = null;
+        fail(t("Could not open the new chat. Try again."));
+      } else if (compact) setSidebarCollapsed(true);
+    } catch {
+      fail(t("Could not start a new chat. Try again."));
+    } finally {
+      setChatCreating(false);
+    }
+  };
   const requestNewSession = (workspaceId?: string, forcePicker = false) => {
+    if (mode === "chat") {
+      void createChat();
+      return;
+    }
     if (!codingCapabilities.sessionCreationAvailable || navigationBlocked)
       return;
     if (compact) setSidebarCollapsed(true);
@@ -4094,8 +4198,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     currentPermission?.mode === "read_only"
       ? writeOption
       : undefined;
+  // A chat never offers write access after a refused write: that step is
+  // its own explicit choice (proposal §4.3, T-E).
   const readOnlyDenial =
     currentPermission?.mode === "read_only" &&
+    !chatOnScreen &&
     writeOption &&
     !readOnlyPeer &&
     !remote &&
@@ -4670,6 +4777,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 chatCatalog.status === "error" ? chatCatalog.error : undefined
               }
               chatMode={mode === "chat"}
+              onNewChat={newChatAvailable ? () => void createChat() : undefined}
               modeSwitch={
                 mode ? (
                   <WorkModeSwitch
@@ -4860,14 +4968,23 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   </button>
                 ) : null}
                 <div className={productStyles.titleGroup}>
-                  <div className="workspace-title">
-                    <span>
-                      {workspaceName(activeWorkspacePath || t("Workspace"))}
-                    </span>
-                    <small>
-                      {activeWorkspacePath || t("Choose a workspace")}
-                    </small>
-                  </div>
+                  {chatOnScreen ? (
+                    <div className="workspace-title">
+                      <span>{chatTitle}</span>
+                      <small className="chat-subtitle">
+                        {t("Shared model and memory · its own folder")}
+                      </small>
+                    </div>
+                  ) : (
+                    <div className="workspace-title">
+                      <span>
+                        {workspaceName(activeWorkspacePath || t("Workspace"))}
+                      </span>
+                      <small>
+                        {activeWorkspacePath || t("Choose a workspace")}
+                      </small>
+                    </div>
+                  )}
                   {!compact &&
                   session.opened?.active_profile_id &&
                   session.opened.workspace_root ? (
@@ -4883,6 +5000,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                 </div>
               </div>
               {session.opened &&
+              !chatOnScreen &&
               (work.supervision.planAvailable ||
                 work.supervision.taskListAvailable ||
                 work.supervision.statusAvailable) ? (
@@ -4920,14 +5038,16 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     }
                     type="button"
                     aria-label={
-                      safety.changes.length
-                        ? t("Session panel, {count} changed", {
-                            count: safety.changes.length,
-                          })
-                        : t("Session panel")
+                      chatOnScreen
+                        ? t("Outputs")
+                        : safety.changes.length
+                          ? t("Session panel, {count} changed", {
+                              count: safety.changes.length,
+                            })
+                          : t("Session panel")
                     }
                     aria-expanded={panelOpen}
-                    title={t("Session panel")}
+                    title={chatOnScreen ? t("Outputs") : t("Session panel")}
                     onClick={(event) => {
                       // Safari does not focus buttons on pointer activation.
                       // Give the drawer a stable focus target to restore.
@@ -4938,8 +5058,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     }}
                   >
                     <PanelRightIcon size={compact ? 20 : 16} />
-                    {compact ? null : t("Panel")}
-                    {safety.changes.length ? (
+                    {compact ? null : chatOnScreen ? t("Outputs") : t("Panel")}
+                    {!chatOnScreen && safety.changes.length ? (
                       <span
                         className={productStyles.panelBadge}
                         aria-hidden="true"
@@ -4976,7 +5096,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                       ? {
                           endpoint: connection.endpoint,
                           folders: [
-                            activeWorkspacePath,
+                            // A chat's own folder is no project to watch.
+                            ...(chatOnScreen ? [] : [activeWorkspacePath]),
                             ...recentWorkspaces.map((folder) => folder.path),
                             ...remoteFolders.map((folder) => folder.path),
                           ],
@@ -5103,6 +5224,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         notice={templateHomeNotice}
                         {...templateShortcuts}
                         onUse={chooseTemplate}
+                        catalog={templateCatalog}
                       />
                     ) : null}
                   </div>
@@ -5175,6 +5297,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         ) : null}
                         <Timeline
                           key={activeSessionKey ?? undefined}
+                          chat={chatOnScreen}
                           viewState={conversationViewState}
                           onSaveViewState={syncConversationFollow}
                           entries={
@@ -5200,28 +5323,36 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           onSetFold={(id, open) =>
                             setTimelineFolds(setFold(timelineFolds, id, open))
                           }
-                          onExpandAll={() =>
-                            setTimelineFolds(
-                              expandAll(timelineFolds, [
-                                ...conversation.timeline
-                                  .filter(
-                                    (entry) =>
-                                      entry.kind === "reasoning" ||
-                                      entry.kind === "tool",
+                          // A chat keeps its steps folded (T-D): no bar.
+                          onExpandAll={
+                            chatOnScreen
+                              ? undefined
+                              : () =>
+                                  setTimelineFolds(
+                                    expandAll(timelineFolds, [
+                                      ...conversation.timeline
+                                        .filter(
+                                          (entry) =>
+                                            entry.kind === "reasoning" ||
+                                            entry.kind === "tool",
+                                        )
+                                        .map((entry) => entry.id),
+                                      ...stepGroupIds(conversation.timeline),
+                                      ...conversation.timeline.flatMap(
+                                        (entry) =>
+                                          entry.kind === "assistant" &&
+                                          parseTextPlan(entry.body)
+                                            ? [`plan:${entry.id}`]
+                                            : [],
+                                      ),
+                                    ]),
                                   )
-                                  .map((entry) => entry.id),
-                                ...stepGroupIds(conversation.timeline),
-                                ...conversation.timeline.flatMap((entry) =>
-                                  entry.kind === "assistant" &&
-                                  parseTextPlan(entry.body)
-                                    ? [`plan:${entry.id}`]
-                                    : [],
-                                ),
-                              ]),
-                            )
                           }
-                          onCollapseAll={() =>
-                            setTimelineFolds(collapseAll(timelineFolds))
+                          onCollapseAll={
+                            chatOnScreen
+                              ? undefined
+                              : () =>
+                                  setTimelineFolds(collapseAll(timelineFolds))
                           }
                           emptyState={
                             conversation.timeline.length === 0 &&
@@ -5233,7 +5364,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 workspaceName={workspaceName(
                                   activeWorkspacePath,
                                 )}
-                                resume={resumeTarget}
+                                resume={chatOnScreen ? null : resumeTarget}
+                                chat={chatOnScreen}
+                                catalog={templateCatalog}
                                 notice={templateHomeNotice}
                                 writeAccess={
                                   templateWriteProfile
@@ -5532,9 +5665,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   {commandError ? <p role="alert">{commandError}</p> : null}
                   {permissionDefaultGate?.phase === "failed" ? (
                     <p className="field-note" role="alert">
-                      {t(
-                        "The server hasn't confirmed your new-session permission default, so sending is blocked in this session.",
-                      )}{" "}
+                      {chatOnScreen
+                        ? t(
+                            "The server hasn't confirmed that this chat is read-only with no network, so sending is blocked in this chat.",
+                          )
+                        : t(
+                            "The server hasn't confirmed your new-session permission default, so sending is blocked in this session.",
+                          )}{" "}
                       <button
                         type="button"
                         className="field-note-action"
@@ -5557,9 +5694,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     </p>
                   ) : permissionDefaultGate ? (
                     <p className="field-note" role="status">
-                      {t(
-                        "Applying your new-session permission default. Sending waits until the server confirms it.",
-                      )}
+                      {chatOnScreen
+                        ? t(
+                            "Making this chat read-only with no network. Sending waits until the server confirms it.",
+                          )
+                        : t(
+                            "Applying your new-session permission default. Sending waits until the server confirms it.",
+                          )}
                     </p>
                   ) : null}
                   {draftCapacityBlocked ? (
@@ -5771,7 +5912,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         placeholder={
                           (session.connected || session.opened) &&
                           codingCapabilities.turnStartAvailable
-                            ? t("Ask Octos to change, explain, or review code…")
+                            ? chatOnScreen
+                              ? t("Ask Octos anything…")
+                              : t(
+                                  "Ask Octos to change, explain, or review code…",
+                                )
                             : session.connected
                               ? t("This server cannot start coding turns")
                               : t("Connect a workspace to begin")
@@ -5803,16 +5948,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           }
                         >
                           <ComposerSettingsRow>
-                            <FolderChip
-                              name={workspaceName(activeWorkspacePath)}
-                              path={activeWorkspacePath}
-                              iconOnly={compact}
-                              disabled={
-                                navigationBlocked ||
-                                !codingCapabilities.sessionCreationAvailable
-                              }
-                              onChoose={chooseOtherFolder}
-                            />
+                            {chatOnScreen ? null : (
+                              <FolderChip
+                                name={workspaceName(activeWorkspacePath)}
+                                path={activeWorkspacePath}
+                                iconOnly={compact}
+                                disabled={
+                                  navigationBlocked ||
+                                  !codingCapabilities.sessionCreationAvailable
+                                }
+                                onChoose={chooseOtherFolder}
+                              />
+                            )}
                             <ModelChip
                               runtimeLabel={runtimeModelLabel}
                               pendingLabel={pendingProfileDefault}
@@ -5820,7 +5967,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               facts={chipModelFacts}
                             />
                             {permissionControl ? (
-                              <PermissionControl {...permissionControl} />
+                              <PermissionControl
+                                {...permissionControl}
+                                // A chat shows what the server enforces and
+                                // offers no wider access here (T-E adds it).
+                                {...(chatOnScreen ? { locked: true } : {})}
+                              />
                             ) : null}
                             {!compact && skillsCapabilities ? (
                               <SkillsChip
@@ -6019,8 +6171,17 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               compact={compact}
               sidebarOpen={!sidebarCollapsed}
               onOpenSessions={() => setSidebarCollapsed(false)}
-              newSessionAvailable={codingCapabilities.sessionCreationAvailable}
-              onNewSession={() => requestNewSession(undefined, true)}
+              newSessionAvailable={
+                mode === "chat"
+                  ? newChatAvailable && !chatCreating
+                  : codingCapabilities.sessionCreationAvailable
+              }
+              onNewSession={() =>
+                mode === "chat"
+                  ? void createChat()
+                  : requestNewSession(undefined, true)
+              }
+              notice={mode === "chat" ? chatError : null}
               navigationTriggerClassName={productStyles.navigationTrigger ?? ""}
             />
           ) : null}

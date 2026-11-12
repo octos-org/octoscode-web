@@ -1,7 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, startSession } from "./fixture-session";
 import { openSettings } from "./sessions";
+import { axeViolations } from "./axe";
 
 function connector(settings: ReturnType<Page["getByRole"]>, id: string) {
   return settings.locator(`[data-connector-id="${id}"]`);
@@ -53,10 +53,7 @@ test("manages HTTP connectors and keeps existing stdio controls", async ({
   await created.getByRole("button", { name: "Confirm delete" }).click();
   await expect(created).toHaveCount(0);
   await expect(settings.getByText(/oauth/i)).toHaveCount(0);
-  expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, '[role="dialog"]')).toEqual([]);
 });
 
 test("adds a stdio connector from the server's allowlist, never a command", async ({
@@ -87,10 +84,7 @@ test("adds a stdio connector from the server's allowlist, never a command", asyn
   await expect(
     add.getByText("Read-only access to the shared project folder"),
   ).toHaveCount(0);
-  expect(
-    (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
-      .violations,
-  ).toEqual([]);
+  expect(await axeViolations(page, '[role="dialog"]')).toEqual([]);
   await add.getByRole("button", { name: "Save connector" }).click();
   const created = connector(settings, "stdio-3");
   await expect(created).toContainText("Echo tools");

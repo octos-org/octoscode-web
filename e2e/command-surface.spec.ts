@@ -14,6 +14,7 @@ import {
   selectedSessionId,
   selectSession,
   sessionRow,
+  stopButton,
 } from "./sessions";
 import { observeFrames } from "./turn-observers";
 
@@ -208,9 +209,7 @@ test("queues a held gather synthesis only on busy A while B is selected and keep
   const activePrompt = "Keep A active while its gather result is in flight";
   await composer(page).fill(activePrompt);
   await page.getByRole("button", { name: "Send prompt", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
-  ).toBeVisible();
+  await expect(stopButton(page)).toBeVisible();
   expect(
     (
       await request.post(

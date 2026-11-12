@@ -36,6 +36,8 @@ import type {
   SessionOpenParams,
   SessionOpenResult,
   SessionDeleteParams,
+  ChatCreateParams,
+  ChatCreateResult,
   SessionDeleteResult,
   SessionTitleSetParams,
   SessionTitleSetResult,
@@ -64,6 +66,7 @@ import type {
   UiProtocolCapabilities,
 } from "./types.ts";
 import { buildUiProtocolUrl } from "./url.ts";
+import { CHAT_CREATE_METHOD } from "./work-mode.ts";
 import { APPUI_SERVER_METHODS } from "./server-methods.ts";
 import {
   APPUI_ONBOARDING_METHODS,
@@ -953,6 +956,13 @@ export class OctosUiClient {
       params,
       async (value) =>
         (await loadWorkspaceResults()).parseLaunchResolveResult(value),
+    );
+  }
+
+  /** Provisional two-modes chat creation; see `CHAT_CREATE_METHOD`. */
+  async createChat(params: ChatCreateParams): Promise<ChatCreateResult> {
+    return this.validatedRequest(CHAT_CREATE_METHOD, params, async (value) =>
+      (await loadWorkspaceResults()).parseChatCreateResult(value),
     );
   }
 

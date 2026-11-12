@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -20,6 +19,7 @@ import {
   sessionRow,
 } from "./sessions";
 import { observeSent } from "./turn-observers";
+import { axeViolations } from "./axe";
 
 const DEFAULT_WORKSPACE = "/workspace/octoscode-web";
 
@@ -843,11 +843,13 @@ test("onboards an empty solo server from workspace creation", async ({
   await expect(onboarding.getByLabel("Profile ID")).toBeHidden();
   await expect(onboarding.getByText("Route", { exact: true })).toHaveCount(0);
   await onboarding.getByRole("button", { name: "Continue" }).click();
-  const axeResults = await new AxeBuilder({ page })
-    .include('section[role="dialog"]')
-    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
-    .analyze();
-  expect(axeResults.violations).toEqual([]);
+  expect(
+    await axeViolations(page, 'section[role="dialog"]', [
+      "wcag2a",
+      "wcag2aa",
+      "wcag22aa",
+    ]),
+  ).toEqual([]);
 
   const apiKey = onboarding.getByLabel("API key");
   await apiKey.fill("sk-rejected-secret");
@@ -939,9 +941,12 @@ test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
       }),
     )
     .toBe(true);
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
+  const violations = await axeViolations(page, undefined, [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+  ]);
   // axe's label-content-name-mismatch walks the whole subtree of an
   // aria-labelled element, so a workspace TREE CONTAINER (role=treeitem with
   // aria-expanded) is flagged even though its accessible name is exactly the
@@ -957,16 +962,17 @@ test("keeps the DSH-aligned dark product shell WCAG A/AA clean", async ({
     violation.nodes.length > 0 &&
     violation.nodes.every((node) => node.html.includes("aria-expanded"));
   expect(
-    results.violations.filter(
-      (violation) => !containerTreeLabelMismatch(violation),
-    ),
+    violations.filter((violation) => !containerTreeLabelMismatch(violation)),
   ).toEqual([]);
 
   const settings = await openSettingsPastPicker(page);
-  const settingsResults = await new AxeBuilder({ page })
-    .include('[role="dialog"]')
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  expect(settingsResults.violations).toEqual([]);
+  expect(
+    await axeViolations(page, '[role="dialog"]', [
+      "wcag2a",
+      "wcag2aa",
+      "wcag21a",
+      "wcag21aa",
+    ]),
+  ).toEqual([]);
   await settings.getByRole("button", { name: "Close settings" }).click();
 });

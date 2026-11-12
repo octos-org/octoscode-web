@@ -1,7 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FIXTURE_ORIGIN, FIXTURE_TOKEN } from "./fixture-session";
 import { composer } from "./sessions";
+import { axeViolations } from "./axe";
 
 /**
  * WEB-WORKSPACE-BROWSER-CONTRACT-5000 — browsing the SERVER's folders from the
@@ -82,10 +82,9 @@ test("browses the server's folders, drills in and out, and reports what the serv
     page.getByRole("button", { name: "Go to the parent folder" }),
   ).toBeDisabled();
 
-  const results = await new AxeBuilder({ page })
-    .include('[data-workspace-browser="true"]')
-    .analyze();
-  expect(results.violations).toEqual([]);
+  expect(await axeViolations(page, '[data-workspace-browser="true"]')).toEqual(
+    [],
+  );
 });
 
 test("shows no Browse affordance at all when the server does not advertise the feature", async ({

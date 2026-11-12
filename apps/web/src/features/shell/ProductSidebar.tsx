@@ -112,10 +112,11 @@ export interface ProductSidebarProps {
   modeSwitch?: ReactNode;
   /**
    * Chat lists its chats flat and has no folders: no New session or Add
-   * workspace here, and no grouping options (new chats come from the Chat
-   * home).
+   * workspace here, and no grouping options; `onNewChat` adds New chat.
    */
   chatMode?: boolean;
+  /** Chat only: starts a new chat in its own folder (two-modes T-D). */
+  onNewChat?: (() => void) | undefined;
   viewMode?: ProductSidebarViewMode | undefined;
   orderMode?: ProductSidebarOrderMode | undefined;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -212,6 +213,7 @@ export function ProductSidebar({
   sessionCreationAvailable: creationOffered = true,
   modeSwitch = null,
   chatMode = false,
+  onNewChat,
   viewMode: controlledViewMode,
   orderMode: controlledOrderMode,
   onCollapsedChange,
@@ -857,6 +859,17 @@ export function ProductSidebar({
         >
           <OctopusLogo size={18} />
           {!collapsed ? <span>{t("New session")}</span> : null}
+        </button>
+      ) : chatMode && onNewChat ? (
+        <button
+          type="button"
+          className={styles.newSession}
+          aria-label={t("New chat")}
+          title={collapsed ? t("New chat") : undefined}
+          onClick={onNewChat}
+        >
+          <OctopusLogo size={18} />
+          {!collapsed ? <span>{t("New chat")}</span> : null}
         </button>
       ) : null}
 

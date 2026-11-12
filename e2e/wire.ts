@@ -1,4 +1,4 @@
-import type { WebSocketRoute } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 /** Either end of a routed WebSocket (`page.routeWebSocket`). */
 type Sender = Pick<WebSocketRoute, "send">;
@@ -43,4 +43,30 @@ export function sendEnvelope(
       },
     }),
   );
+}
+
+/** A request the page sent. */
+export interface WireRequest {
+  id: string | number;
+  method?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as sent
+  params: any;
+}
+
+/**
+ * Routes the page's protocol socket to the fixture through `onRequest`, which
+ * sees each request first, with the page end of the route to answer it on.
+ * Returning true keeps that request from the fixture.
+ */
+export function interceptRequests(
+  page: Page,
+  onRequest: (request: WireRequest, socket: WebSocketRoute) => boolean | void,
+): Promise<void> {
+  return page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      if (onRequest(JSON.parse(String(message)), socket) !== true)
+        server.send(message);
+    });
+  });
 }

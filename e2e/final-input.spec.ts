@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session.ts";
+import { observeSent } from "./turn-observers";
 
 const start = (page: Page) => startSession(page, "/workspace/final-input");
 
@@ -15,16 +16,7 @@ async function withinViewport(page: Page, control: Locator) {
 test("approval shortcuts ignore modified keys and IME composition", async ({
   page,
 }) => {
-  const decisions: unknown[] = [];
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      if (request.method === "approval/respond") decisions.push(request.params);
-      server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
-  });
+  const decisions = observeSent(page, "approval/respond");
   await start(page);
   const input = page.getByRole("textbox", { name: "Message Octos" });
   await input.fill("Request approval fixture");
@@ -33,7 +25,7 @@ test("approval shortcuts ignore modified keys and IME composition", async ({
   await expect(approval).toBeFocused();
   await page.keyboard.press("Control+y");
   await expect(approval).toBeVisible();
-  expect(decisions).toHaveLength(0);
+  expect(decisions()).toHaveLength(0);
   await page.keyboard.press("Alt+n");
   await page.keyboard.press("Meta+s");
   await approval.dispatchEvent("keydown", {
@@ -47,10 +39,10 @@ test("approval shortcuts ignore modified keys and IME composition", async ({
     keyCode: 229,
   });
   await expect(approval).toBeVisible();
-  expect(decisions).toHaveLength(0);
+  expect(decisions()).toHaveLength(0);
   await page.keyboard.press("y");
   await expect(approval).toBeHidden();
-  expect(decisions).toHaveLength(1);
+  expect(decisions()).toHaveLength(1);
 });
 
 test("long approval remains readable and actionable in a short phone viewport", async ({

@@ -4,9 +4,9 @@ import {
   FIXTURE_ORIGIN,
   openSessionId,
 } from "./fixture-session";
-import { composer, sendPrompt } from "./sessions";
+import { composer, sendPrompt, stopButton } from "./sessions";
 import { observeFrames } from "./turn-observers";
-import { sendError } from "./wire";
+import { interceptRequests, sendError } from "./wire";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
 // The handover workspace starts idle with a parked external binding, so a
@@ -131,9 +131,7 @@ test.describe("§5.2 composer handover (external-held session)", () => {
 
     // Acquiring our own seat is a separate path: the next ordinary send must
     // release that proof, without another acquire or an admission refusal.
-    await expect(
-      page.getByRole("button", { name: "Stop", exact: true }),
-    ).toHaveCount(0);
+    await expect(stopButton(page)).toHaveCount(0);
     await pane
       .getByRole("button", { name: "Acquire seat", exact: true })
       .click();
@@ -168,23 +166,18 @@ test("a late collision cannot replace newer text or images, then restores the co
   page,
 }, testInfo) => {
   let refuse: (() => void) | undefined;
-  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      if (request.method === START_METHOD && !refuse) {
-        refuse = () =>
-          sendError(socket, request.id, {
-            code: -32600,
-            message: "Session occupied",
-            data: {
-              kind: "turn_in_progress",
-              turn_id: "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa",
-            },
-          });
-      } else server.send(message);
-    });
-    server.onMessage((message) => socket.send(message));
+  await interceptRequests(page, (request, socket) => {
+    if (request.method !== START_METHOD || refuse) return;
+    refuse = () =>
+      sendError(socket, request.id, {
+        code: -32600,
+        message: "Session occupied",
+        data: {
+          kind: "turn_in_progress",
+          turn_id: "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa",
+        },
+      });
+    return true;
   });
   await connectAndStartWorkspace(page, "/srv/work/collision-draft");
   const upload = await uploadedDraft(page);

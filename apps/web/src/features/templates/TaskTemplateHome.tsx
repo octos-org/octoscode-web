@@ -14,6 +14,7 @@ import styles from "./TaskTemplateHome.module.css";
 interface HomeCopy {
   heading: string;
   sessionLead: string;
+  chatLead: string;
   chooserHeading: string;
   chooserLead: string;
   workspaceLead: string;
@@ -53,6 +54,8 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     heading: "What can Octos help with?",
     sessionLead:
       "Working in {workspace}. Start from a template, or describe the task below.",
+    chatLead:
+      "Start from a template, or ask anything below. Answers and drafts appear here in the chat.",
     chooserHeading: "Or start from a template",
     chooserLead:
       "Pick one, then choose a folder above. The request goes into the message box for you to edit.",
@@ -61,7 +64,11 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     workspacePending:
       "“{title}” is selected. Use it again to retry opening the same conversation.",
     categories: { code: "Code", office: "Office", general: "General" },
-    access: { read: "Reads only", write: "Edits files" },
+    access: {
+      read: "Reads only",
+      write: "Edits files",
+      draft: "Draft in chat",
+    },
     example: "Example result",
     use: "Use this",
     resume: "Continue where you left off",
@@ -96,12 +103,13 @@ const COPY: Record<UiLanguage, HomeCopy> = {
     heading: "想让 Octos 帮你做什么？",
     sessionLead:
       "在 {workspace} 里工作。挑一个模板改改，或者直接在下面写需求。",
+    chatLead: "挑一个模板，或者直接在下面提问。回答和草稿都写在对话里。",
     chooserHeading: "也可以先挑一个模板",
     chooserLead: "选好后在上面选文件夹，需求会填进输入框，改好再发送。",
     workspaceLead: "在 {workspace} 中新建会话。挑一个模板，编辑需求后再发送。",
     workspacePending: "已选「{title}」，再次使用会重试打开同一会话。",
     categories: { code: "编程", office: "办公", general: "通用" },
-    access: { read: "只读", write: "会改文件" },
+    access: { read: "只读", write: "会改文件", draft: "在对话里起草" },
     example: "示例结果",
     use: "做同款",
     resume: "继续上次的会话",
@@ -239,6 +247,8 @@ export interface TaskTemplateHomeProps {
   onUse: (template: TaskTemplate, by: TemplateUseSource) => void;
   /** The catalog to show; the shipped one unless a test passes another. */
   catalog?: readonly TaskTemplate[] | undefined;
+  /** A chat's home (two-modes): no folder in the lead, no search or scenes. */
+  chat?: boolean | undefined;
 }
 
 export type SceneFilter = TaskTemplateCategory | "all";
@@ -341,6 +351,7 @@ export function TaskTemplateHome({
   onToggleFavorite,
   onUse,
   catalog = TASK_TEMPLATES,
+  chat = false,
 }: TaskTemplateHomeProps) {
   const copy = COPY[language];
   const headingId = useId();
@@ -400,11 +411,13 @@ export function TaskTemplateHome({
       <header className={styles.intro}>
         <h2 id={headingId}>{session ? copy.heading : copy.chooserHeading}</h2>
         <p>
-          {session
-            ? fill(copy.sessionLead, { workspace: workspaceName ?? "" })
-            : variant === "workspace"
-              ? fill(copy.workspaceLead, { workspace: workspaceName ?? "" })
-              : copy.chooserLead}
+          {chat
+            ? copy.chatLead
+            : session
+              ? fill(copy.sessionLead, { workspace: workspaceName ?? "" })
+              : variant === "workspace"
+                ? fill(copy.workspaceLead, { workspace: workspaceName ?? "" })
+                : copy.chooserLead}
         </p>
       </header>
       {session && resume ? (
@@ -480,7 +493,7 @@ export function TaskTemplateHome({
           />
         ) : null,
       )}
-      {catalog.length > 0 ? (
+      {catalog.length > 0 && !chat ? (
         <div className={styles.browse}>
           <div className={styles.searchField}>
             <SearchIcon size={14} />
@@ -620,7 +633,7 @@ function AccessLabel({
 }) {
   return (
     <span className={styles.access} data-access={access}>
-      {access === "read" ? <EyeIcon size={13} /> : <PencilIcon size={13} />}
+      {access === "write" ? <PencilIcon size={13} /> : <EyeIcon size={13} />}
       {COPY[language].access[access]}
     </span>
   );
