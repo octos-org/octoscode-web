@@ -2,16 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   EXTERNAL_DRIVER_METHODS,
   EXTERNAL_DRIVER_V1_FEATURE,
-  ExternalDriverCapabilityError,
-  ExternalDriverRefusalError,
   ExternalDriverProtocolError,
   adoptedIdentityIsNativeShared,
   createExternalDriverCommands,
-  decodeExternalDriverCapabilities,
   masterWireBase,
   parseSessionDriverGetResult,
 } from "../src/external-driver.ts";
-import { OctosUiProtocolError } from "../src/client.ts";
+
 import { makeCaps } from "./fixtures/caps.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
@@ -22,19 +19,6 @@ function caps(methods: string[], features: string[]): UiProtocolCapabilities {
 }
 
 const FULL_CAPS = caps([METHOD], [EXTERNAL_DRIVER_V1_FEATURE]);
-
-const RETAINED_INTERNAL = {
-  mode: "internal",
-  binding: {
-    driver_id: "driver-a",
-    epoch: 7,
-    revision: 12,
-    lease_expires_at_ms: 0,
-    workspace_root: "/ws/root",
-    accepted_work: ["op-1", "op-2"],
-  },
-  recovery: "interrupted",
-};
 
 const LIVE_EXTERNAL = {
   mode: "external",
@@ -48,38 +32,7 @@ const LIVE_EXTERNAL = {
   recovery: "none",
 };
 
-describe("decodeExternalDriverCapabilities", () => {
-  it("requires BOTH the advertised method and external_driver_v1", () => {
-    expect(decodeExternalDriverCapabilities(FULL_CAPS).available).toBe(true);
-    const noMethod = decodeExternalDriverCapabilities(
-      caps([], [EXTERNAL_DRIVER_V1_FEATURE]),
-    );
-    expect(noMethod.available).toBe(false);
-    expect(noMethod.methodAdvertised).toBe(false);
-    expect(noMethod.featureAdvertised).toBe(true);
-    const noFeature = decodeExternalDriverCapabilities(caps([METHOD], []));
-    expect(noFeature.available).toBe(false);
-    expect(noFeature.methodAdvertised).toBe(true);
-    expect(noFeature.featureAdvertised).toBe(false);
-  });
-});
-
 describe("parseSessionDriverGetResult", () => {
-  it("maps a retained binding to the full canonical camelCase view", () => {
-    expect(parseSessionDriverGetResult(RETAINED_INTERNAL)).toEqual({
-      mode: "internal",
-      binding: {
-        driverId: "driver-a",
-        epoch: 7,
-        revision: 12,
-        leaseExpiresAtMs: 0,
-        workspaceRoot: "/ws/root",
-        acceptedWork: ["op-1", "op-2"],
-      },
-      recovery: "interrupted",
-    });
-  });
-
   // Design: Core's CAS metadata (a live lease) is not authority over the
   // session's declared driver mode — an internal-mode session with a live
   // lease is a contradictory server payload and must fail closed, not guess.
@@ -128,13 +81,6 @@ describe("parseSessionDriverGetResult", () => {
     expect(encoded).not.toContain("control_token");
     expect(encoded).not.toContain("payload_digest");
   });
-
-  it("detaches acceptedWork from the server payload", () => {
-    const payload = structuredClone(LIVE_EXTERNAL);
-    const parsed = parseSessionDriverGetResult(payload);
-    payload.binding.accepted_work.push("op-MUTATED");
-    expect(parsed?.binding?.acceptedWork).toEqual(["op-9"]);
-  });
 });
 
 describe("createExternalDriverCommands", () => {
@@ -156,20 +102,6 @@ describe("createExternalDriverCommands", () => {
     );
     return { calls, commands };
   }
-
-  it.each([
-    ["the method", caps([], [EXTERNAL_DRIVER_V1_FEATURE])],
-    ["the feature", caps([METHOD], [])],
-  ])(
-    "fails closed before any wire traffic when %s is missing",
-    async (_label, capabilities) => {
-      const { calls, commands } = harness(capabilities);
-      await expect(commands.driverGet()).rejects.toBeInstanceOf(
-        ExternalDriverCapabilityError,
-      );
-      expect(calls).toEqual([]);
-    },
-  );
 
   it("sends exactly the captured owning session/topic scope", async () => {
     const { calls, commands } = harness(FULL_CAPS);
@@ -326,90 +258,6 @@ describe("driverGet typed operations integration", () => {
       expect(view.operations.page.nextCursor).toBe("opaque-cursor-1");
       expect(view.operations.page.observedRevision).toBe("5");
     }
-  });
-
-  it("mutating the caller options object mid-request cannot retarget params or fences", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const rpc = {
-      request: async (method: string, params: unknown) => {
-        calls.push({ method, params });
-        await gate;
-        return structuredClone(PAGE_RESULT);
-      },
-    };
-    const commands = createExternalDriverCommands(
-      rpc,
-      "dev:local:tui#peer-abc",
-      FULL_CAPS,
-      { profileId: "dev", topic: "peer-abc" },
-    );
-    const opts = { operations: { limit: 25 } } as {
-      operations: { limit: number };
-    };
-    const pending = commands.driverGet(opts);
-    opts.operations.limit = 100;
-    release();
-    const view = await pending;
-    expect(calls[0]!.params).toEqual({
-      session_id: "dev:local:tui#peer-abc",
-      topic: "peer-abc",
-      operations: { limit: 25 },
-    });
-    expect(view.operations?.kind).toBe("page");
-  });
-});
-
-describe("driverGet typed RPC refusal boundary", () => {
-  const CAPS = caps([METHOD], [EXTERNAL_DRIVER_V1_FEATURE]);
-
-  function commandsWith(reject: () => never) {
-    return createExternalDriverCommands(
-      { request: async () => reject() },
-      "dev:local:tui#peer-abc",
-      CAPS,
-      { profileId: "dev", topic: "peer-abc" },
-    );
-  }
-
-  it("preserves an allowlisted kind from an ACTUAL OctosUiProtocolError", async () => {
-    const commands = commandsWith(() => {
-      throw new OctosUiProtocolError(32001, "server detail CANARY-secret-7", {
-        kind: "driver_operations_cursor_reset",
-      });
-    });
-    const error = await commands
-      .driverGet({ operations: {} })
-      .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ExternalDriverRefusalError);
-    expect((error as ExternalDriverRefusalError).refusalKind).toBe(
-      "driver_operations_cursor_reset",
-    );
-    // Scrubbed: message is the constant kind, never server payload.
-    expect((error as Error).message).not.toContain("CANARY");
-    expect((error as Error).message).not.toContain("server detail");
-  });
-
-  it("rejects a duck-typed fake .data.kind lookalike (stays generic, scrubbed)", async () => {
-    const commands = commandsWith(() => {
-      const fake = new Error("fake CANARY-2");
-      Object.assign(fake, {
-        name: "OctosUiProtocolError",
-        code: 32001,
-        data: { kind: "driver_operations_cursor_reset" },
-      });
-      throw fake;
-    });
-    const error = await commands
-      .driverGet({ operations: {} })
-      .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-    expect(error).not.toBeInstanceOf(ExternalDriverRefusalError);
-    expect((error as Error).message).not.toContain("CANARY");
-    expect((error as Error).message).not.toContain("cursor_reset");
   });
 });
 

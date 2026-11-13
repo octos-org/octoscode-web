@@ -227,89 +227,6 @@ describe("OctosUiClient", () => {
     client.disconnect();
   });
 
-  it("does not publish connected when a cancelled socket opens ahead of its replacement", async () => {
-    const oldSocket = createSocket();
-    const socket = createSocket();
-    const client = clientOver([oldSocket, socket]);
-    const first = client.connect();
-    const rejected = expect(first).rejects.toThrow("connection replaced");
-    client.disconnect();
-    const second = client.connect();
-
-    oldSocket.onopen?.({} as Event);
-
-    await rejected;
-    expect(client.status).toBe("connecting");
-    socket.readyState = 1;
-    socket.onopen?.({} as Event);
-    await second;
-    expect(client.status).toBe("connected");
-    client.disconnect();
-  });
-
-  it("emits canonical approval and user-question response methods", async () => {
-    const { socket, client } = await connectClient();
-
-    const approval = client.respondApproval({
-      session_id: "s1",
-      approval_id: "a1",
-      decision: "approve",
-      approval_scope: "session",
-    });
-    const question = client.respondUserQuestion({
-      session_id: "s1",
-      question_id: "q1",
-      answers: [{ selected_labels: ["Fast"] }],
-    });
-
-    const frames = socket.send.mock.calls.map(([frame]) =>
-      JSON.parse(String(frame)),
-    ) as Array<{ id: string; method: string; params: unknown }>;
-    expect(frames).toMatchObject([
-      {
-        method: "approval/respond",
-        params: {
-          session_id: "s1",
-          approval_id: "a1",
-          decision: "approve",
-          approval_scope: "session",
-        },
-      },
-      {
-        method: "user_question/respond",
-        params: {
-          session_id: "s1",
-          question_id: "q1",
-          answers: [{ selected_labels: ["Fast"] }],
-        },
-      },
-    ]);
-    socket.onmessage?.({
-      data: JSON.stringify({
-        jsonrpc: "2.0",
-        id: frames[0]?.id,
-        result: {
-          approval_id: "a1",
-          accepted: true,
-          status: "accepted",
-          runtime_resumed: true,
-        },
-      }),
-    } as MessageEvent);
-    socket.onmessage?.({
-      data: JSON.stringify({
-        jsonrpc: "2.0",
-        id: frames[1]?.id,
-        result: {
-          question_id: "q1",
-          accepted: true,
-          runtime_resumed: true,
-        },
-      }),
-    } as MessageEvent);
-    await expect(Promise.all([approval, question])).resolves.toHaveLength(2);
-  });
-
   it("rejects malformed typed results instead of leaking unchecked JSON", async () => {
     const { socket, client } = await connectClient();
 
@@ -569,35 +486,6 @@ describe("OctosUiClient", () => {
     expect(notifications).toHaveBeenCalledWith(notification);
     await expect(opened).resolves.toEqual(result);
     client.disconnect();
-  });
-
-  it("validates session/hydrate before returning it", async () => {
-    const { socket, client } = await connectClient();
-
-    const hydrate = client.hydrateSession({
-      session_id: "coding:local:main",
-      include: ["messages", "turns"],
-    });
-    const frame = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as {
-      id: string;
-      method: string;
-    };
-    expect(frame.method).toBe("session/hydrate");
-    socket.onmessage?.({
-      data: JSON.stringify({
-        jsonrpc: "2.0",
-        id: frame.id,
-        result: {
-          session_id: "coding:local:main",
-          cursor: { stream: "session", seq: 3 },
-          messages: [],
-        },
-      }),
-    } as MessageEvent);
-
-    await expect(hydrate).resolves.toMatchObject({
-      cursor: { stream: "session", seq: 3 },
-    });
   });
 
   it("dispatches a cold-decoded mutation immediately and never replays it onto a replacement socket", async () => {

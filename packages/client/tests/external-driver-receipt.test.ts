@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ExternalDriverProtocolError,
   checkDispatchRetryIdentity,
   parsePeerDispatchReceipt,
   type DispatchReceiptExpectation,
@@ -63,49 +62,6 @@ describe("parsePeerDispatchReceipt — master wire base alignment", () => {
         TUI_EXPECT,
       ),
     ).toBeNull();
-  });
-
-  it("accepts an ordinary channel/chat base exactly", () => {
-    const parsed = parsePeerDispatchReceipt(
-      receipt({ adopted_session_id: "dev:telegram:12345#peer-glm-worker-1" }),
-      expectation({ masterSessionId: "dev:telegram:12345" }),
-    );
-    expect(parsed).not.toBeNull();
-  });
-
-  it("rejects whitespace/control bytes in the master base (receipt)", () => {
-    expect(() =>
-      parsePeerDispatchReceipt(
-        receipt({ adopted_session_id: "api:bad\n#peer-glm-worker-1" }),
-        expectation({ masterSessionId: "api:bad\n" }),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(() =>
-      parsePeerDispatchReceipt(
-        receipt(),
-        expectation({ masterSessionId: "dev:local:bad\n" }),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-    expect(() =>
-      parsePeerDispatchReceipt(
-        receipt(),
-        expectation({ masterSessionId: "dev:local: bad" }),
-      ),
-    ).toThrow(ExternalDriverProtocolError);
-  });
-
-  it("requires the mandatory captured masterSessionId (missing/malformed)", () => {
-    const missing = { ...TUI_EXPECT };
-    delete (missing as { masterSessionId?: string }).masterSessionId;
-    expect(() => parsePeerDispatchReceipt(receipt(), missing)).toThrow(
-      ExternalDriverProtocolError,
-    );
-    expect(() =>
-      parsePeerDispatchReceipt(receipt(), {
-        ...TUI_EXPECT,
-        masterSessionId: "",
-      }),
-    ).toThrow(ExternalDriverProtocolError);
   });
 });
 

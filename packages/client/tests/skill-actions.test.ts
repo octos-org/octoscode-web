@@ -26,56 +26,11 @@ const job = {
   created_at: "2026-10-28T00:00:00Z",
   updated_at: "2026-10-28T00:00:00Z",
 };
-const action = {
-  id: "document.probe",
-  skill_id: "lifecycle-skill",
-  label: "Run document probe",
-  description: "Verify the document pipeline",
-  tags: ["documents"],
-  surfaces: ["settings"],
-  input_schema: { type: "object", properties: {} },
-  execution: "background",
-  available: true,
-};
 
 describe("skill action protocol", () => {
   it("opts into both action feature families", () => {
     expect(DEFAULT_UI_FEATURES).toContain(SKILL_ACTIONS_UI_FEATURE);
     expect(DEFAULT_UI_FEATURES).toContain(SKILL_ACTION_JOBS_UI_FEATURE);
-  });
-
-  it("lists trusted actions and returns background jobs", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({
-        profile_id: "coding",
-        session_id: "session-1",
-        count: 1,
-        actions: [action],
-      })
-      .mockResolvedValueOnce({
-        action_id: "document.probe",
-        ok: true,
-        execution: "background",
-        batch_id: "batch-1",
-        jobs: [job],
-      });
-    const commands = createSkillActionCommands(
-      { request },
-      "coding",
-      "session-1",
-      capabilities,
-    );
-    expect(await commands.list()).toHaveLength(1);
-    const invoked = await commands.invoke("lifecycle-skill/document.probe", {});
-    expect(invoked.execution).toBe("background");
-    expect(invoked.jobs[0]?.id).toBe("job-1");
-    expect(request).toHaveBeenLastCalledWith("skill/action/invoke", {
-      profile_id: "coding",
-      session_id: "session-1",
-      action_id: "lifecycle-skill/document.probe",
-      arguments: {},
-    });
   });
 
   it("fails closed on wrong scope and missing negotiated features", async () => {

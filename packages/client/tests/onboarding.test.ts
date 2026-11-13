@@ -1,43 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   parseLlmCatalogResult,
-  parseLlmInferenceOverrides,
   parseProfileLlmConfigResult,
 } from "@octos-org/octoscode-client/onboarding";
 
 describe("solo onboarding transport contract", () => {
-  it("preserves omission, null, zero, and closed rc11 inference hints", () => {
-    expect(parseLlmInferenceOverrides({})).toEqual({});
-    const overrides = {
-      temperature: 0,
-      top_p: 0,
-      context_window: 4294967295,
-      reasoning_effort: "none",
-      model_hints: {
-        uses_completion_tokens: false,
-        fixed_temperature: true,
-        lacks_vision: false,
-        merge_system_messages: false,
-        reasoning_style: "effort_and_thinking_toggle",
-      },
-    };
-    const parsed = parseLlmInferenceOverrides(overrides);
-    expect(parsed).toEqual(overrides);
-    overrides.model_hints.lacks_vision = true;
-    expect(parsed?.model_hints?.lacks_vision).toBe(false);
-    const inherited = {
-      temperature: null,
-      top_p: null,
-      context_window: null,
-      reasoning_effort: null,
-      model_hints: null,
-    };
-    expect(parseLlmInferenceOverrides(inherited)).toEqual(inherited);
-    expect(parseLlmInferenceOverrides({ model_hints: {} })).toEqual({
-      model_hints: {},
-    });
-  });
-
   it("projects the server-owned provider catalog into bounded arrays", () => {
     expect(
       parseLlmCatalogResult({

@@ -14,6 +14,97 @@
 
 规则补充：一个方法一个测试、逐字段/结构绑定不保留；同守卫的参数变体（it.each 展开、换形状、换方法）只留代表；真实跨系统链在 T-0503 可按链合并剩余保留项。
 
+## 第三轮（T-0601）
+
+目标：全仓测试降到 2 万行以内。e2e 第三轮（octoscode-web#448）之后全仓 21,930 行，本目录 7,479 行。本轮按 TEST-DIET「第 3、4、5 类每类只留最关键的一两个」，把同一守卫在不同方法上的重复只留代表。映射表 C1–C5 第二轮已经按这个思路并过一次，本轮继续往下并，每族留下的代表写在表里。另有两类按「同一帧已有保留的 e2e 断言」删：e2e 通过 mock 服务器断言了同一个请求帧的参数。
+
+**每族留下的代表：**
+
+- **能力门控、离线零帧（C2）**：`autonomy.test.ts`「requires both the method and
+  its gating feature」、`external-driver-refusal.test.ts`「throws for an
+  unadvertised method and sends ZERO frames」、`btw`/`steer` 无方法拒绝。
+- **proof 不出现在公开视图（C1/C5）**：`external-driver-lease-control.test.ts`「the
+  acquire capability exposes no enumerable proof and errors never echo
+  it」、`external-driver.test.ts`「keeps proof/hash/secret fields out of the
+  parsed public view」「throws constant diagnostics without echoing an untrusted
+  payload」、`external-driver-control.test.ts`「refuses a control call with NO
+  proof argument, offline」「driverGet stays read-only」。
+- **发送后改调用方对象不能重定向、冻结和脱离（C3）**：`external-driver-peer-control.test.ts`「dispatch:
+  a reply matching the MUTATED foreign operation/model is
+  refused」、`external-driver-wake-control.test.ts`「preserves an own JSON
+  "**proto**" key without prototype pollution」（克隆后冻结，并防原型污染）。
+- **外部 master/scope 栅栏**：`external-driver-receipt.test.ts`「rejects a
+  same-profile DIFFERENT master base
+  reply」、`external-driver-peer-control.test.ts`「REJECTS caller-injected
+  session_id/model/workspaceRoot OFFLINE」「refuses a FOREIGN lane…」。
+- **控制字节**：`external-driver.test.ts`「rejects C0/DEL control bytes at every
+  identity surface」。
+- **u64 精度**：`external-driver.test.ts`「rejects unsafe wire integers without
+  rounding u64」、`projection-inputs`。
+- **类型化拒绝的收窄**：`external-driver-refusal.test.ts`
+  的两条（真协议错误里非白名单 kind 被清洗；仿冒对象不认）。
+- **重试身份**：`external-driver-receipt.test.ts`「checkDispatchRetryIdentity
+  flags each changed immutable field」。
+- **显式 null 线形状**：`autonomy.test.ts`「accepts list/control/fire results
+  carrying nulls」、`inventory.test.ts`「rejects malformed nullable fields and
+  unsafe counts」。
+- **别的会话的通知被拒**：`autonomy.test.ts`「rejects a foreign owner or
+  conflicting envelope ID」、`peers.test.ts`「requires originating session AND
+  profile」。apps/web `durable-session.test.ts`「rejects cross-session and
+  cross-topic contamination」也守这条。
+
+### 本轮删除（41 条，其中 `cron.test.ts` 整删）
+
+| 文件                                 | 测试                                                                                        | 理由                                                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| client.test.ts                       | does not publish connected when a cancelled socket opens ahead of its replacement（第二份） | 与同文件第一份逐字相同（20 行完全重复）                                                                                                                                                               |
+| client.test.ts                       | emits canonical approval and user-question response methods                                 | e2e 断言了同一帧：interaction-ownership 断言 `user_question/respond` 的 `session_id`、`answers`（`selected_labels`）和回执，mobile-handoff、mobile-remote、final-input 断言 `approval/respond` 的决定 |
+| client.test.ts                       | validates session/hydrate before returning it                                               | hydrate 解码由 `hydrate.test.ts` 四条守（正例、畸形行、replay-loss、畸形/外部/重复/超前 replay）                                                                                                      |
+| cron.test.ts（整删）                 | creates At, Every and Cron jobs with exact session scope；fails closed without AUX          | e2e cron「creates At, Every and Cron jobs…」逐帧断言 list、toggle、create、delete 的 `session_id`（第二轮并入）。门控归 C2 代表                                                                       |
+| usage.test.ts                        | sends the token only as a header, with the exact routes and RFC 3339 range                  | e2e usage-ledger 断言令牌只走 bearer、不进 URL，以及路由和区间。同文件「classifies failures without projecting response bodies」（不反显响应体）留                                                    |
+| skill-actions.test.ts                | lists trusted actions and returns background jobs                                           | e2e composer-skill-actions 主链（运行动作、失败重试、刷新后跟踪）                                                                                                                                     |
+| inventory.test.ts                    | accepts actual nullable MCP fields from the rc11 reported inventory                         | 显式 null 族，代表见上                                                                                                                                                                                |
+| inventory.test.ts                    | projects the T-0056 management facts and nothing else from the allowlist                    | 白名单投影族：「projects MCP management fields without connector configuration」留                                                                                                                    |
+| inventory.test.ts                    | projects only status fields and rejects duplicate or wrong-scope rows                       | scope 校验由「gates each status method before sending and validates returned scope」守                                                                                                                |
+| onboarding.test.ts                   | preserves omission, null, zero, and closed rc11 inference hints                             | 显式 null 族                                                                                                                                                                                          |
+| skills.test.ts                       | accepts real explicit-null fields and whitelists projected metadata                         | 显式 null 族和白名单投影族                                                                                                                                                                            |
+| autonomy-controls.test.ts            | ordinary goal set explicitly activates as user and preserves only an explicit budget        | 「不默认预算」由 `autonomy.test.ts`「builds goal set params: trims, never defaults a budget, rejects invalid」守                                                                                      |
+| context.test.ts                      | rejects wrong-session and stale lifecycle notifications                                     | 别的会话的通知族，代表见上                                                                                                                                                                            |
+| external-driver-control.test.ts      | every control method fails closed when the feature is missing                               | C2                                                                                                                                                                                                    |
+| external-driver-control.test.ts      | the decoded acquire capability is serialization-safe: no proof in JSON/debug                | C1，lease-control 的 proof 一条留                                                                                                                                                                     |
+| external-driver-control.test.ts      | release sends the fence, expected_revision and explicit next mode                           | release 的形状由 lease-control 两条守（external 停泊、拒绝外部 next）                                                                                                                                 |
+| external-driver-control.test.ts      | re-invoking the SAME operation re-encodes identically and keeps the ORIGINAL receipt        | 重试身份由 receipt「checkDispatchRetryIdentity…」守                                                                                                                                                   |
+| external-driver-control.test.ts      | control carries the accepted receipt facts and never the proof                              | C1                                                                                                                                                                                                    |
+| external-driver-control.test.ts      | claim sends the fence and treats the cursor as opaque                                       | wake claim 由 wake-control 三条守                                                                                                                                                                     |
+| external-driver-control.test.ts      | control methods require an explicitly supplied proof argument                               | 同文件「refuses a control call with NO proof argument, offline」守同一条                                                                                                                              |
+| external-driver-control.test.ts      | keeps the constructing session/topic for every control method                               | C3。按捕获 scope 发送由 external-driver「sends exactly the captured owning session/topic scope」守                                                                                                    |
+| external-driver-peer-control.test.ts | refuses when the feature is not advertised                                                  | C2                                                                                                                                                                                                    |
+| external-driver-peer-control.test.ts | refuses a valid-SHAPE foreign-master receipt (same slug, other base)                        | 外部 master 栅栏，代表见上                                                                                                                                                                            |
+| external-driver-peer-control.test.ts | a bad control fence reports peer/control, never peer/dispatch, and no proof                 | C5                                                                                                                                                                                                    |
+| external-driver-operations.test.ts   | keeps observed_revision a string; rejects number/float/leading-zero/overflow                | u64 族                                                                                                                                                                                                |
+| external-driver-operations.test.ts   | freezes and detaches nested rows/acceptance/scoped_goal                                     | C3                                                                                                                                                                                                    |
+| external-driver-operations.test.ts   | exposes no proof/prompt/answer anywhere in a parsed view                                    | C1                                                                                                                                                                                                    |
+| external-driver-operations.test.ts   | DRIVER_OPERATIONS_LIMITS › pins Core wire constants                                         | 断言常量等于常量（结构绑定）。上限本身由同文件 256KiB 页上限和 4096 字节游标两条守                                                                                                                    |
+| external-driver-operations.test.ts   | rejects a valid-native row on a FOREIGN master base (page-level)                            | 外部 master 栅栏                                                                                                                                                                                      |
+| external-driver-receipt.test.ts      | accepts an ordinary channel/chat base exactly                                               | 正例变体：同文件「computes the worker session…」是正例                                                                                                                                                |
+| external-driver-receipt.test.ts      | rejects whitespace/control bytes in the master base (receipt)                               | 控制字节族                                                                                                                                                                                            |
+| external-driver-receipt.test.ts      | requires the mandatory captured masterSessionId (missing/malformed)                         | 外部 master 栅栏                                                                                                                                                                                      |
+| external-driver-wake-control.test.ts | freezes a CLONE and leaves the caller's raw payload unfrozen                                | C3，同 describe 的 `__proto__` 一条也是先克隆再冻结                                                                                                                                                   |
+| external-driver.test.ts              | requires BOTH the advertised method and external_driver_v1                                  | C2                                                                                                                                                                                                    |
+| external-driver.test.ts              | fails closed before any wire traffic when %s is missing                                     | C2                                                                                                                                                                                                    |
+| external-driver.test.ts              | maps a retained binding to the full canonical camelCase view                                | 逐字段映射（结构绑定）。保留的解码负例覆盖同一解析器                                                                                                                                                  |
+| external-driver.test.ts              | detaches acceptedWork from the server payload                                               | C3                                                                                                                                                                                                    |
+| external-driver.test.ts              | mutating the caller options object mid-request cannot retarget params or fences             | C3                                                                                                                                                                                                    |
+| external-driver.test.ts              | preserves an allowlisted kind from an ACTUAL OctosUiProtocolError                           | 与 refusal 文件的同名守卫重复（driverGet 与 control 共用同一个收窄函数）                                                                                                                              |
+| external-driver.test.ts              | rejects a duck-typed fake .data.kind lookalike (stays generic, scrubbed)                    | 同上                                                                                                                                                                                                  |
+
+**另外：** `external-driver-control.test.ts`
+开头那组测试内自定义的参数和视图类型，是实现之前写失败测试时留下的。现在改用
+`src/external-driver.ts` 导出的
+`DriverControlFence`、`DriverAcquireParams`、`DriverRenewParams`、`DriverAcquireView`、`PeerDispatchReceiptView`。只删重复的类型声明，断言不变。
+
+下面逐文件表里，本轮删的行在「守的性质」前加了「（第三轮删）」。
+
 ## 基线与预计
 
 - 基线（origin/main `7779b9f`，`python3 wake/test-lines.py`）：packages/client
@@ -26,12 +117,12 @@
 
 ### tests/autonomy-controls.test.ts（留 4/14）
 
-| 测试                                                                                  | 类  | 守的性质                    |
-| ------------------------------------------------------------------------------------- | --- | --------------------------- |
-| ordinary goal set explicitly activates as user and preserves only an explicit budget  | ⑤   | goal 不默认预算的设计       |
-| uses full captured request scope and validates actual native child ownership          | ③   | 原生子代理归属校验          |
-| never exposes unredacted nested artifact content or treats missing content as success | ③   | 嵌套产物内容脱敏/缺失不成功 |
-| rejects opposite control transitions, false ok and contradictory terminal flags       | ④   | 非法迁移 fail-closed        |
+| 测试                                                                                  | 类  | 守的性质                          |
+| ------------------------------------------------------------------------------------- | --- | --------------------------------- |
+| ordinary goal set explicitly activates as user and preserves only an explicit budget  | ⑤   | （第三轮删）goal 不默认预算的设计 |
+| uses full captured request scope and validates actual native child ownership          | ③   | 原生子代理归属校验                |
+| never exposes unredacted nested artifact content or treats missing content as success | ③   | 嵌套产物内容脱敏/缺失不成功       |
+| rejects opposite control transitions, false ok and contradictory terminal flags       | ④   | 非法迁移 fail-closed              |
 
 ### tests/autonomy.test.ts（留 12/26）
 
@@ -69,11 +160,11 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/context.test.ts（留 3/7）
 
-| 测试                                                             | 类  | 守的性质                     |
-| ---------------------------------------------------------------- | --- | ---------------------------- |
-| projects only bounded diagnostic labels and authoritative counts | ③   | 诊断投影有界                 |
-| rejects wrong-session and stale lifecycle notifications          | ③/④ | 跨会话/过期生命周期通知拒绝  |
-| permits a failed compaction to retry at the same generation      | ④   | 失败压缩同 generation 可重试 |
+| 测试                                                             | 类  | 守的性质                                |
+| ---------------------------------------------------------------- | --- | --------------------------------------- |
+| projects only bounded diagnostic labels and authoritative counts | ③   | 诊断投影有界                            |
+| rejects wrong-session and stale lifecycle notifications          | ③/④ | （第三轮删）跨会话/过期生命周期通知拒绝 |
+| permits a failed compaction to retry at the same generation      | ④   | 失败压缩同 generation 可重试            |
 
 ### tests/external-driver-control.test.ts（留 15/39）
 
@@ -81,19 +172,19 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | ------------------------------------------------------------------------------------ | --- | ---------------------------------------------------- |
 | ${name} fails closed when the feature is missing（it.each）                          | ③   | 门控离线 fail-closed                                 |
 | sends the captured scope, fence id, expected_revision and lease                      | ①   | driverAcquire 线协议                                 |
-| the decoded acquire capability is serialization-safe: no proof in JSON/debug         | ③   | proof 不进 JSON/调试视图                             |
-| release sends the fence, expected_revision and explicit next mode                    | ①   | driverRelease 线协议                                 |
+| the decoded acquire capability is serialization-safe: no proof in JSON/debug         | ③   | （第三轮删）proof 不进 JSON/调试视图                 |
+| release sends the fence, expected_revision and explicit next mode                    | ①   | （第三轮删）driverRelease 线协议                     |
 | dispatch sends the fence, operation id, exact model and target                       | ①   | peerDispatch 线协议                                  |
-| re-invoking the SAME operation re-encodes identically and keeps the ORIGINAL receipt | ④   | 重放幂等，原回执不可变                               |
-| control carries the accepted receipt facts and never the proof                       | ③   | control 回执无 proof                                 |
-| claim sends the fence and treats the cursor as opaque                                | ①   | wakeClaim 线协议+游标不透明                          |
+| re-invoking the SAME operation re-encodes identically and keeps the ORIGINAL receipt | ④   | （第三轮删）重放幂等，原回执不可变                   |
+| control carries the accepted receipt facts and never the proof                       | ③   | （第三轮删）control 回执无 proof                     |
+| claim sends the fence and treats the cursor as opaque                                | ①   | （第三轮删）wakeClaim 线协议+游标不透明              |
 | dispatch rejects an adopted session that contradicts its slug                        | ③   | 畸形原生身份拒绝（无静默回退族代表）                 |
 | dispatch decodes the accepted turn-id form ${form}（it.each）                        | ④   | 回执 turn id 覆盖 Rust UUID 全形状（control 变体删） |
 | driverGet stays read-only: it never acquires and carries no proof                    | ⑤   | 只读面绝不隐式获取                                   |
-| control methods require an explicitly supplied proof argument                        | ③   | proof 必须显式传                                     |
+| control methods require an explicitly supplied proof argument                        | ③   | （第三轮删）proof 必须显式传                         |
 | refuses a control call with NO proof argument, offline (zero wire traffic)           | ③   | 无 proof 零线流量拒绝                                |
 | a rejected control RPC never echoes the raw server payload or proof                  | ③   | 拒绝不反显服务器原文/proof                           |
-| keeps the constructing session/topic for every control method                        | ④   | 构造期 scope 冻结，不重解析                          |
+| keeps the constructing session/topic for every control method                        | ④   | （第三轮删）构造期 scope 冻结，不重解析              |
 
 ### tests/external-driver-lease-control.test.ts（留 4/12）
 
@@ -106,42 +197,42 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/external-driver-operations.test.ts（留 9/42）
 
-| 测试                                                                         | 类  | 守的性质                       |
-| ---------------------------------------------------------------------------- | --- | ------------------------------ |
-| clamps nothing: limit 0, 101, fractional, negative, or null is invalid       | ③/④ | limit 边界不钳制只拒绝         |
-| rejects empty or >4096-byte cursors                                          | ④   | 游标字节边界                   |
-| keeps observed_revision a string; rejects number/float/leading-zero/overflow | ④   | u64 revision 精度不丢          |
-| enforces complete iff next_cursor null (both directions)                     | ④   | 分页 complete iff 语义双向     |
-| bounds the page on EXACT RAW snake_case serialization (256KiB)               | ④   | 原始序列化字节上限             |
-| freezes and detaches nested rows/acceptance/scoped_goal                      | ④   | 嵌套视图 freeze/detach         |
-| exposes no proof/prompt/answer anywhere in a parsed view                     | ③   | 解析视图无 proof/prompt/answer |
-| pins Core wire constants                                                     | ⑤   | 与 Core 共享线常量锚定         |
-| rejects a valid-native row on a FOREIGN master base (page-level)             | ③   | 捕获 scope 页级围栏            |
+| 测试                                                                         | 类  | 守的性质                                   |
+| ---------------------------------------------------------------------------- | --- | ------------------------------------------ |
+| clamps nothing: limit 0, 101, fractional, negative, or null is invalid       | ③/④ | limit 边界不钳制只拒绝                     |
+| rejects empty or >4096-byte cursors                                          | ④   | 游标字节边界                               |
+| keeps observed_revision a string; rejects number/float/leading-zero/overflow | ④   | （第三轮删）u64 revision 精度不丢          |
+| enforces complete iff next_cursor null (both directions)                     | ④   | 分页 complete iff 语义双向                 |
+| bounds the page on EXACT RAW snake_case serialization (256KiB)               | ④   | 原始序列化字节上限                         |
+| freezes and detaches nested rows/acceptance/scoped_goal                      | ④   | （第三轮删）嵌套视图 freeze/detach         |
+| exposes no proof/prompt/answer anywhere in a parsed view                     | ③   | （第三轮删）解析视图无 proof/prompt/answer |
+| pins Core wire constants                                                     | ⑤   | （第三轮删）与 Core 共享线常量锚定         |
+| rejects a valid-native row on a FOREIGN master base (page-level)             | ③   | （第三轮删）捕获 scope 页级围栏            |
 
 ### tests/external-driver-peer-control.test.ts（留 8/26）
 
-| 测试                                                                         | 类  | 守的性质                           |
-| ---------------------------------------------------------------------------- | --- | ---------------------------------- |
-| refuses when the feature is not advertised                                   | ③   | 能力门控最先（离线零 RPC）         |
-| dispatch: a reply matching the MUTATED foreign operation/model is refused    | ④   | post-send 变更不可重定向解码围栏   |
-| refuses a valid-SHAPE foreign-master receipt (same slug, other base)         | ③   | 回执围栏到捕获 master/profile      |
-| rejects cross-variant command fields OFFLINE (zero RPC)                      | ③   | 跨变体命令字段离线拒绝             |
-| a bad control fence reports peer/control, never peer/dispatch, and no proof  | ③   | 围栏诊断点名真实方法且不泄漏       |
-| refuses a FOREIGN lane even when the resolved model LOOKS like the request   | ③   | 围栏请求的 lane 而非解析模型       |
-| REJECTS caller-injected session_id/model/workspaceRoot OFFLINE (zero frames) | ③   | 注入字段离线拒绝                   |
-| maps state:'refused' to ExternalDriverRefusalError('peer_control_refused')   | ④   | 类型化拒绝解码（非泛化 malformed） |
+| 测试                                                                         | 类  | 守的性质                                  |
+| ---------------------------------------------------------------------------- | --- | ----------------------------------------- |
+| refuses when the feature is not advertised                                   | ③   | （第三轮删）能力门控最先（离线零 RPC）    |
+| dispatch: a reply matching the MUTATED foreign operation/model is refused    | ④   | post-send 变更不可重定向解码围栏          |
+| refuses a valid-SHAPE foreign-master receipt (same slug, other base)         | ③   | （第三轮删）回执围栏到捕获 master/profile |
+| rejects cross-variant command fields OFFLINE (zero RPC)                      | ③   | 跨变体命令字段离线拒绝                    |
+| a bad control fence reports peer/control, never peer/dispatch, and no proof  | ③   | （第三轮删）围栏诊断点名真实方法且不泄漏  |
+| refuses a FOREIGN lane even when the resolved model LOOKS like the request   | ③   | 围栏请求的 lane 而非解析模型              |
+| REJECTS caller-injected session_id/model/workspaceRoot OFFLINE (zero frames) | ③   | 注入字段离线拒绝                          |
+| maps state:'refused' to ExternalDriverRefusalError('peer_control_refused')   | ④   | 类型化拒绝解码（非泛化 malformed）        |
 
 ### tests/external-driver-receipt.test.ts（留 7/28）
 
-| 测试                                                                | 类  | 守的性质                               |
-| ------------------------------------------------------------------- | --- | -------------------------------------- |
-| computes the worker session from captured master base + peer topic  | ①   | master base 对齐的核心推导             |
-| rejects a same-profile DIFFERENT master base reply                  | ③   | 同 profile 异 base 拒绝                |
-| accepts an ordinary channel/chat base exactly                       | ④   | 普通基形状接受（其余 base 形状变体删） |
-| rejects whitespace/control bytes in the master base (receipt)       | ③   | 控制字节拒绝                           |
-| requires the mandatory captured masterSessionId (missing/malformed) | ③   | masterSessionId 强制                   |
-| requires a real protocol UUID TurnId for first AND duplicate        | ④   | 首回执与重放都要真 UUID                |
-| flags each changed immutable field with a constant field name       | ④   | 重试不可变字段恒定命名诊断             |
+| 测试                                                                | 类  | 守的性质                                           |
+| ------------------------------------------------------------------- | --- | -------------------------------------------------- |
+| computes the worker session from captured master base + peer topic  | ①   | master base 对齐的核心推导                         |
+| rejects a same-profile DIFFERENT master base reply                  | ③   | 同 profile 异 base 拒绝                            |
+| accepts an ordinary channel/chat base exactly                       | ④   | （第三轮删）普通基形状接受（其余 base 形状变体删） |
+| rejects whitespace/control bytes in the master base (receipt)       | ③   | （第三轮删）控制字节拒绝                           |
+| requires the mandatory captured masterSessionId (missing/malformed) | ③   | （第三轮删）masterSessionId 强制                   |
+| requires a real protocol UUID TurnId for first AND duplicate        | ④   | 首回执与重放都要真 UUID                            |
+| flags each changed immutable field with a constant field name       | ④   | 重试不可变字段恒定命名诊断                         |
 
 ### tests/external-driver-wake-control.test.ts（留 4/5）
 
@@ -149,29 +240,29 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | -------------------------------------------------------------------------------- | --- | ---------------------------------------------------- |
 | accepts exactly one of payload / continuation_ref (absent or null)               | ③   | decidable-content 规则（present/absent/null 全组合） |
 | refuses ambiguous, empty, or unserializable content with a bounded typed failure | ④   | 环载荷等有界类型化失败                               |
-| freezes a CLONE and leaves the caller's raw payload unfrozen                     | ④   | 克隆冻结不冻调用方                                   |
+| freezes a CLONE and leaves the caller's raw payload unfrozen                     | ④   | （第三轮删）克隆冻结不冻调用方                       |
 | preserves an own JSON \"**proto**\" key without prototype pollution              | ③   | 原型污染防护                                         |
 
 ### tests/external-driver.test.ts（留 16/61）
 
-| 测试                                                                                                     | 类  | 守的性质                                         |
-| -------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------ |
-| requires BOTH the advertised method and external_driver_v1                                               | ③   | 双重门控                                         |
-| maps a retained binding to the full canonical camelCase view                                             | ①   | driverGet 解析正例（各 scope 正例 it.each 并存） |
-| rejects internal mode with a live lease (CAS metadata is not authority)                                  | ⑤   | CAS 元数据不是权威的设计                         |
-| rejects unsafe wire integers without rounding u64                                                        | ④   | u64 不安全整数拒绝                               |
-| keeps proof/hash/secret fields out of the parsed public view                                             | ③   | 解析公开视图无 proof/hash/secret                 |
-| detaches acceptedWork from the server payload                                                            | ④   | acceptedWork detach                              |
-| fails closed before any wire traffic when %s is missing（it.each）                                       | ③   | 零线流量 fail-closed                             |
-| sends exactly the captured owning session/topic scope                                                    | ③   | 捕获 scope 精确发送                              |
-| rejects an invalid topic scope BEFORE RPC instead of omitting it                                         | ③   | 非法 topic 上线前拒绝而非省略                    |
-| sends ONE typed RPC for a valid operations request; missing inventory is an explicit unsupported failure | ①   | 单次类型化 RPC + 显式 unsupported                |
-| throws constant diagnostics without echoing an untrusted payload                                         | ③   | canary 不回显不可信载荷                          |
-| valid first page passes validated operations in the SAME single RPC as binding                           | ④   | 首页与绑定同帧                                   |
-| mutating the caller options object mid-request cannot retarget params or fences                          | ④   | 请求中变更不可重定向                             |
-| preserves an allowlisted kind from an ACTUAL OctosUiProtocolError                                        | ④   | 白名单 kind 窄化正例                             |
-| rejects a duck-typed fake .data.kind lookalike (stays generic, scrubbed)                                 | ③   | 鸭子类型伪 kind 拒绝                             |
-| rejects C0/DEL control bytes at every identity surface                                                   | ③   | 控制字节边界                                     |
+| 测试                                                                                                     | 类  | 守的性质                                                     |
+| -------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------ |
+| requires BOTH the advertised method and external_driver_v1                                               | ③   | （第三轮删）双重门控                                         |
+| maps a retained binding to the full canonical camelCase view                                             | ①   | （第三轮删）driverGet 解析正例（各 scope 正例 it.each 并存） |
+| rejects internal mode with a live lease (CAS metadata is not authority)                                  | ⑤   | CAS 元数据不是权威的设计                                     |
+| rejects unsafe wire integers without rounding u64                                                        | ④   | u64 不安全整数拒绝                                           |
+| keeps proof/hash/secret fields out of the parsed public view                                             | ③   | 解析公开视图无 proof/hash/secret                             |
+| detaches acceptedWork from the server payload                                                            | ④   | （第三轮删）acceptedWork detach                              |
+| fails closed before any wire traffic when %s is missing（it.each）                                       | ③   | （第三轮删）零线流量 fail-closed                             |
+| sends exactly the captured owning session/topic scope                                                    | ③   | 捕获 scope 精确发送                                          |
+| rejects an invalid topic scope BEFORE RPC instead of omitting it                                         | ③   | 非法 topic 上线前拒绝而非省略                                |
+| sends ONE typed RPC for a valid operations request; missing inventory is an explicit unsupported failure | ①   | 单次类型化 RPC + 显式 unsupported                            |
+| throws constant diagnostics without echoing an untrusted payload                                         | ③   | canary 不回显不可信载荷                                      |
+| valid first page passes validated operations in the SAME single RPC as binding                           | ④   | 首页与绑定同帧                                               |
+| mutating the caller options object mid-request cannot retarget params or fences                          | ④   | （第三轮删）请求中变更不可重定向                             |
+| preserves an allowlisted kind from an ACTUAL OctosUiProtocolError                                        | ④   | （第三轮删）白名单 kind 窄化正例                             |
+| rejects a duck-typed fake .data.kind lookalike (stays generic, scrubbed)                                 | ③   | （第三轮删）鸭子类型伪 kind 拒绝                             |
+| rejects C0/DEL control bytes at every identity surface                                                   | ③   | 控制字节边界                                                 |
 
 ### tests/history.test.ts（留 3/5）
 
@@ -210,10 +301,10 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 | 测试                                                                      | 类  | 守的性质                                            |
 | ------------------------------------------------------------------------- | --- | --------------------------------------------------- |
-| accepts actual nullable MCP fields from the rc11 reported inventory       | ④   | rc11 可空字段                                       |
+| accepts actual nullable MCP fields from the rc11 reported inventory       | ④   | （第三轮删）rc11 可空字段                           |
 | projects MCP management fields without connector configuration            | ③   | 连接器配置/令牌不投影                               |
-| projects the T-0056 management facts and nothing else from the allowlist  | ③   | 管理事实白名单                                      |
-| projects only status fields and rejects duplicate or wrong-scope rows     | ③   | 只投影 status 字段 + 重复/错 scope 拒绝             |
+| projects the T-0056 management facts and nothing else from the allowlist  | ③   | （第三轮删）管理事实白名单                          |
+| projects only status fields and rejects duplicate or wrong-scope rows     | ③   | （第三轮删）只投影 status 字段 + 重复/错 scope 拒绝 |
 | rejects malformed nullable fields and unsafe counts                       | ④   | 畸形可空字段与 unsafe counts                        |
 | gates each status method before sending and validates returned scope      | ③   | 门控 + 返回 scope 校验（含错 scope connector 变体） |
 | sends exact connector management payloads without reading status          | ①   | 连接器管理 payload 精确                             |
@@ -237,13 +328,13 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/onboarding.test.ts（留 5/13）
 
-| 测试                                                            | 类  | 守的性质              |
-| --------------------------------------------------------------- | --- | --------------------- |
-| preserves omission, null, zero, and closed rc11 inference hints | ④   | rc11 推断提示全形状   |
-| projects the server-owned provider catalog into bounded arrays  | ④   | 目录投影有界          |
-| rejects a malformed endpoint instead of guessing its identity   | ③   | 畸形端点不猜身份      |
-| accepts a catalog-advertised keyless provider family            | ⑤   | keyless provider 语义 |
-| decodes the secret-free detailed profile configuration          | ③   | 详细配置无 secret     |
+| 测试                                                            | 类  | 守的性质                        |
+| --------------------------------------------------------------- | --- | ------------------------------- |
+| preserves omission, null, zero, and closed rc11 inference hints | ④   | （第三轮删）rc11 推断提示全形状 |
+| projects the server-owned provider catalog into bounded arrays  | ④   | 目录投影有界                    |
+| rejects a malformed endpoint instead of guessing its identity   | ③   | 畸形端点不猜身份                |
+| accepts a catalog-advertised keyless provider family            | ⑤   | keyless provider 语义           |
+| decodes the secret-free detailed profile configuration          | ③   | 详细配置无 secret               |
 
 ### tests/peers.test.ts（留 4/9）
 
@@ -300,7 +391,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 | 测试                                                                   | 类  | 守的性质                                                                |
 | ---------------------------------------------------------------------- | --- | ----------------------------------------------------------------------- |
-| accepts real explicit-null fields and whitelists projected metadata    | ④/③ | rc 显式 null + 投影白名单                                               |
+| accepts real explicit-null fields and whitelists projected metadata    | ④/③ | （第三轮删）rc 显式 null + 投影白名单                                   |
 | gates before dispatch and binds every read and mutation to the profile | ③   | 每次读写绑定 profile                                                    |
 | never force-overwrites and checks exact mutation receipts              | ⑤/③ | 不强制覆盖的设计；reviewed 安装的请求与回执携带审查锁定的 commit/digest |
 
@@ -374,7 +465,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | sends the exact native kind-tagged input with a captured full Session   | ①   | steering 线协议                   |
 | accepts the server-minted fallback UUID without inventing another start | ④   | 服务器铸造 fallback UUID 不再自起 |
 
-### tests/cron.test.ts（留 2/6）
+### tests/cron.test.ts（留 2/6；第三轮整删）
 
 | 测试                                                     | 类  | 守的性质                         |
 | -------------------------------------------------------- | --- | -------------------------------- |
@@ -414,18 +505,18 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### tests/skill-actions.test.ts（留 3/6）
 
-| 测试                                                        | 类  | 守的性质                         |
-| ----------------------------------------------------------- | --- | -------------------------------- |
-| opts into both action feature families                      | ③   | 双 action feature 族 opt-in 门控 |
-| lists trusted actions and returns background jobs           | ①   | 受信动作列表 + 后台任务回执      |
-| fails closed on wrong scope and missing negotiated features | ③   | 错 scope/缺 feature fail-closed  |
+| 测试                                                        | 类  | 守的性质                                |
+| ----------------------------------------------------------- | --- | --------------------------------------- |
+| opts into both action feature families                      | ③   | 双 action feature 族 opt-in 门控        |
+| lists trusted actions and returns background jobs           | ①   | （第三轮删）受信动作列表 + 后台任务回执 |
+| fails closed on wrong scope and missing negotiated features | ③   | 错 scope/缺 feature fail-closed         |
 
 ### tests/usage.test.ts（留 3/8）
 
 | 测试                                                                       | 类  | 守的性质                                 |
 | -------------------------------------------------------------------------- | --- | ---------------------------------------- |
 | parses what a real Core returns, keeping the server's own groupings        | ①/⑤ | #1376 真实 Core 回执解析，保留服务器分组 |
-| sends the token only as a header, with the exact routes and RFC 3339 range | ③   | 令牌只走 header + 精确路由               |
+| sends the token only as a header, with the exact routes and RFC 3339 range | ③   | （第三轮删）令牌只走 header + 精确路由   |
 | classifies failures without projecting response bodies                     | ③   | 失败分类不投影响应体                     |
 
 ## 执行备注（T-0503）
@@ -460,13 +551,13 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ## 第 3 类五个子类逐行（11-10 审计强制）
 
-| 子类             | 本轮结论                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 路径穿越         | 留 `session-files.test.ts`「rejects malformed entries and workspace escapes」（唯一一条，删不了）。                                              |
-| 沙箱逃逸         | client 无此边界（无执行器）；执行语义在 Core/e2e-live 侧，**不冒充同层覆盖**。                                                                   |
-| 鉴权和权限       | 留 `coding.test.ts` 未知权限 fail-closed、`btw/steer` 无方法拒绝、各方法 feature 门控代表（见映射表 C2）。                                       |
-| 密钥/令牌脱敏    | 留 `usage`（token 只走 header）、`research`（回显 secret 脱敏）、`onboarding`（secret-free 配置）、external-driver 的 proof 族代表（见 C1/C5）。 |
-| 外部输入大小上限 | 留 `operations` 的 256KiB 原始页上限、4096B 游标、`workspace-browse` 500 条页、`workspace` 257 profile 上限、`projection-inputs` u64。           |
+| 子类             | 本轮结论                                                                                                                                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 路径穿越         | 留 `session-files.test.ts`「rejects malformed entries and workspace escapes」（唯一一条，删不了）。                                                                                                                                                     |
+| 沙箱逃逸         | client 无此边界（无执行器）；执行语义在 Core/e2e-live 侧，**不冒充同层覆盖**。                                                                                                                                                                          |
+| 鉴权和权限       | 留 `coding.test.ts` 未知权限 fail-closed、`btw/steer` 无方法拒绝、各方法 feature 门控代表（见映射表 C2）。                                                                                                                                              |
+| 密钥/令牌脱敏    | 留 `usage`「classifies failures without projecting response bodies」（第三轮删了 token 只走 header 那条，同一断言在 e2e usage-ledger）、`research`（回显 secret 脱敏）、`onboarding`（secret-free 配置）、external-driver 的 proof 族代表（见 C1/C5）。 |
+| 外部输入大小上限 | 留 `operations` 的 256KiB 原始页上限、4096B 游标、`workspace-browse` 500 条页、`workspace` 257 profile 上限、`projection-inputs` u64。                                                                                                                  |
 
 ## 身份/profile/scope 与失败/迟到/重连/ambiguous write 逐项核对
 
@@ -498,12 +589,12 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 
 ### C1 — external-driver「proof 不出现在公开视图/序列化」五处同语义
 
-| 候选删除项（文件 › 测试）                                                                                                                                                  | 映射到的保留测试                                                                                                                             | 共同可观察失败                                                               | 预计省行 |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------- |
-| `external-driver-lease-control.test.ts` › the acquire capability exposes no enumerable proof and errors never echo it 的**前半**（acquire 后再验 JSON/keys/values 三断言） | `external-driver-control.test.ts` › the decoded acquire capability is serialization-safe: no proof in JSON/debug                             | acquire 能力对象的 proof 出现在 JSON/debug/keys/values 时两边同红            | ~25      |
-| `external-driver-lease-control.test.ts` › 同条的**后半**（control_token: 12345 畸形拒绝 + `expectLeaseRejected` helper）                                                   | **保留，不删**：这是 acquire 畸形回执类型的唯一守卫（`expectDecodeRejected` 族在 control 文件只测 peerDispatch 身份，不测 acquire 字段类型） | 无共同失败 → 不在删除集合                                                    | 0        |
-| `external-driver-control.test.ts` › control carries the accepted receipt facts and never the proof 的 proof 断言部分（保留线协议断言）                                     | 同上 + `external-driver.test.ts` › keeps proof/hash/secret fields out of the parsed public view                                              | 同一「proof 不回显」性质；control 文件只留 wire 字段断言                     | ~10      |
-| `external-driver-operations.test.ts` › exposes no proof/prompt/answer anywhere in a parsed view                                                                            | `external-driver.test.ts` › keeps proof/hash/secret fields out（同 parseSessionDriverGetResult 投影白名单族）                                | 同一投影白名单遗漏即同红；operations 页视图与 binding 视图共享 decode 白名单 | ~10      |
+| 候选删除项（文件 › 测试）                                                                                                                                                  | 映射到的保留测试                                                                                                                             | 共同可观察失败                                                                           | 预计省行 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------- |
+| `external-driver-lease-control.test.ts` › the acquire capability exposes no enumerable proof and errors never echo it 的**前半**（acquire 后再验 JSON/keys/values 三断言） | `external-driver-control.test.ts` › the decoded acquire capability is serialization-safe: no proof in JSON/debug                             | acquire 能力对象的 proof 出现在 JSON/debug/keys/values 时两边同红                        | ~25      |
+| `external-driver-lease-control.test.ts` › 同条的**后半**（control_token: 12345 畸形拒绝 + `expectLeaseRejected` helper）                                                   | **保留，不删**：这是 acquire 畸形回执类型的唯一守卫（`expectDecodeRejected` 族在 control 文件只测 peerDispatch 身份，不测 acquire 字段类型） | 无共同失败 → 不在删除集合                                                                | 0        |
+| `external-driver-control.test.ts` › control carries the accepted receipt facts and never the proof 的 proof 断言部分（保留线协议断言）                                     | 同上 + `external-driver.test.ts` › keeps proof/hash/secret fields out of the parsed public view                                              | （第三轮删）同一「proof 不回显」性质；control 文件只留 wire 字段断言                     | ~10      |
+| `external-driver-operations.test.ts` › exposes no proof/prompt/answer anywhere in a parsed view                                                                            | `external-driver.test.ts` › keeps proof/hash/secret fields out（同 parseSessionDriverGetResult 投影白名单族）                                | （第三轮删）同一投影白名单遗漏即同红；operations 页视图与 binding 视图共享 decode 白名单 | ~10      |
 
 > 注意：C1 经 lead 收窄为只删 lease 前半的 proof 序列化重复（~25 行）与 control
 > proof 断言合并（~10 行）；页级视图负例、acquire 畸形类型守卫保留。小计
@@ -514,7 +605,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | 候选删除/合并项                                                                                                                                               | 保留                                                                                                                                                                                                     | 共同可观察失败                                                                                         | 预计省行 |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
 | `external-driver-control.test.ts` › control methods gate… it.each×7（driverAcquire/Renew/Release/peerDispatch/peerControl/wakeClaim/wakeAck 各一条，7×~8 行） | 合并为单条「every control method fails closed when the feature is missing」循环断言；保留 `external-driver.test.ts` › fails closed before any wire traffic when %s is missing（method/feature 两维代表） | 同一 `requireExternalDriverControlCapability` 门控：缺 feature 时任何方法未抛 CapabilityError 即全族红 | ~45      |
-| `external-driver-peer-control.test.ts` › refuses when the feature is not advertised（leaf context 手搭一份）                                                  | C2 合并后的门控族（leaf 与主工厂共用同一 gate）                                                                                                                                                          | 同上；leaf 单独再测不增加新失败                                                                        | ~25      |
+| `external-driver-peer-control.test.ts` › refuses when the feature is not advertised（leaf context 手搭一份）                                                  | C2 合并后的门控族（leaf 与主工厂共用同一 gate）                                                                                                                                                          | （第三轮删）同上；leaf 单独再测不增加新失败                                                            | ~25      |
 | `src/external-driver-refusal.test.ts` › gap3 throws for an unadvertised method and sends ZERO frames                                                          | 同上族                                                                                                                                                                                                   | 同一 `requireExternalDriverControlCapability` 直接调用                                                 | ~12      |
 
 > 小计
@@ -566,7 +657,7 @@ foreign operation/model is refused（decode 围栏）；删 lease 重复变体�
 
 | 候选删除/合并项                                                                                                       | 保留                                                                                                                       | 共同可观察失败                 | 预计省行 |
 | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------- |
-| `client.test.ts` › validates session/hydrate before returning it                                                      | **不删**（lead 11-11：session/hydrate 经 client 的实际 RPC 派发必须保留/迁移，不得由 session/open 派发或 parser 正例替代） | —                              | 0        |
+| `client.test.ts` › validates session/hydrate before returning it                                                      | **不删**（lead 11-11：session/hydrate 经 client 的实际 RPC 派发必须保留/迁移，不得由 session/open 派发或 parser 正例替代） | （第三轮删）—                  | 0        |
 | `session-file-read.test.ts` › accepts a valid base64 chunk + rejects wrong encoding and invalid offsets（2 条 44 行） | 合并为一条（正例+两个边界同方法）                                                                                          | 同一 `session/files/read` 解码 | ~15      |
 
 > C7 经 lead 收窄为只合并 `session-file-read`

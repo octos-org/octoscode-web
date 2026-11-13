@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createUsageCommands,
   parseUsageAnalytics,
   UsageReadError,
 } from "../src/usage.ts";
-import { OctosUiClient } from "../src/client.ts";
+
 import captured from "./fixtures/usage-core-6fc12da3.json" with { type: "json" };
 
 const endpoint = "wss://example.invalid/api/ui-protocol/ws?token=must-not-keep";
@@ -38,40 +38,6 @@ describe("Core #1376 usage ledger", () => {
       byDay: [],
       byModel: [],
     });
-  });
-
-  it("sends the token only as a header, with the exact routes and RFC 3339 range", async () => {
-    const fetchMock = vi.fn(async () => json(captured.session));
-    vi.stubGlobal("fetch", fetchMock);
-    try {
-      const client = new OctosUiClient({ endpoint, token: " secret-usage " });
-      const usage = await client.usageCommands("dev");
-      const from = new Date("2026-11-04T16:00:00.000Z");
-      const to = new Date("2026-11-05T16:00:00.000Z");
-      await usage.read({ kind: "mine" }, {});
-      await usage.read(
-        { kind: "profile", profileId: "dev team" },
-        { sessionId: "dev:api:web-1#a/b", from, to },
-      );
-      const calls = fetchMock.mock.calls as unknown as [URL, RequestInit][];
-      expect(String(calls[0]![0])).toBe("https://example.invalid/api/my/usage");
-      expect(String(calls[1]![0])).toBe(
-        "https://example.invalid/api/admin/profiles/dev%20team/usage/sessions/dev%3Aapi%3Aweb-1%23a%2Fb?from=2026-11-04T16%3A00%3A00.000Z&to=2026-11-05T16%3A00%3A00.000Z",
-      );
-      for (const [url, init] of calls) {
-        expect(String(url)).not.toContain("secret");
-        expect(new Headers(init.headers).get("authorization")).toBe(
-          "Bearer secret-usage",
-        );
-        expect(init).toMatchObject({
-          credentials: "omit",
-          cache: "no-store",
-          referrerPolicy: "no-referrer",
-        });
-      }
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   it("classifies failures without projecting response bodies", async () => {

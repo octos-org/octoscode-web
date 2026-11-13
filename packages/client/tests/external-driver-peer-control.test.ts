@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ExternalDriverCapabilityError,
   ExternalDriverProtocolError,
   ExternalDriverRefusalError,
 } from "../src/external-driver.ts";
@@ -27,7 +26,6 @@ const PROFILE = "dev";
 /** Native worker session for slug `abc` = captured base + `#peer-abc`. */
 const WORKER = "dev:local:tui#peer-abc";
 /** Valid-shape session from a DIFFERENT master base, same slug. */
-const FOREIGN_WORKER = "other:local:tui#peer-abc";
 
 interface LooseCommands {
   peerDispatch(args: unknown): Promise<unknown>;
@@ -114,31 +112,6 @@ async function capture(promise: Promise<unknown>): Promise<unknown> {
   }
 }
 
-describe("capability gate stays first (offline, zero RPC)", () => {
-  it("refuses when the feature is not advertised", async () => {
-    const calls: unknown[] = [];
-    const context = {
-      rpc: {
-        request: async () => {
-          calls.push(1);
-          return {};
-        },
-      },
-      sessionId: MASTER,
-      profileId: PROFILE,
-      supportedMethods: new Set<string>(["peer/dispatch", "peer/control"]),
-      featureAdvertised: false,
-    } as unknown as ExternalDriverControlContext;
-    const commands = createExternalDriverPeerCommands(
-      context,
-    ) as unknown as LooseCommands;
-    await expect(commands.peerControl(CONTROL_PARAMS)).rejects.toBeInstanceOf(
-      ExternalDriverCapabilityError,
-    );
-    expect(calls).toEqual([]);
-  });
-});
-
 describe("post-send caller mutation cannot retarget the decode fence", () => {
   it("dispatch: a reply matching the MUTATED foreign operation/model is refused", async () => {
     const args: Record<string, unknown> = { ...DISPATCH_PARAMS };
@@ -154,19 +127,6 @@ describe("post-send caller mutation cannot retarget the decode fence", () => {
     await expect(commands.peerDispatch(args)).rejects.toBeInstanceOf(
       ExternalDriverProtocolError,
     );
-  });
-});
-
-describe("control receipt is fenced to the CAPTURED master/profile scope", () => {
-  it("refuses a valid-SHAPE foreign-master receipt (same slug, other base)", async () => {
-    const { calls, commands } = leafContext(() =>
-      structuredClone({ ...CONTROL_REPLY, target_session_id: FOREIGN_WORKER }),
-    );
-    await expect(commands.peerControl(CONTROL_PARAMS)).rejects.toBeInstanceOf(
-      ExternalDriverProtocolError,
-    );
-    // The RPC WAS sent; the rejection came from the decode fence.
-    expect(calls).toHaveLength(1);
   });
 });
 
@@ -195,26 +155,6 @@ describe("control command variants + cross-variant rejection", () => {
       ).rejects.toBeInstanceOf(ExternalDriverProtocolError);
       expect(calls).toEqual([]);
     }
-  });
-});
-
-describe("fence diagnostics name the ACTUAL method and leak nothing", () => {
-  // The diagnostic must name the leaf method the caller actually invoked —
-  // misnaming would send operators debugging the wrong RPC — and must never
-  // carry the proof material that the fence just rejected.
-  it("a bad control fence reports peer/control, never peer/dispatch, and no proof", async () => {
-    const { calls, commands } = leafContext(() =>
-      structuredClone(CONTROL_REPLY),
-    );
-    const error = await capture(
-      commands.peerControl({ ...CONTROL_PARAMS, controlToken: "" }),
-    );
-    expect(error).toBeInstanceOf(ExternalDriverProtocolError);
-    const message = (error as Error).message;
-    expect(message).toContain("peer/control");
-    expect(message).not.toContain("peer/dispatch");
-    expect(message).not.toContain(PROOF);
-    expect(calls).toEqual([]);
   });
 });
 
