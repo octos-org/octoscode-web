@@ -242,7 +242,7 @@ test("reviews what the server reports, read only", async ({ page }) => {
   await expect(panel).toContainText("Installing isn't offered");
   await expect(panel).toContainText("immutable commit and checksum");
   await expect(panel.getByRole("link", { name: "#2321" })).toBeVisible();
-  await expect(panel).toContainText("npm install, cargo build");
+  await expect(panel).toContainText("Nobody has inspected the source for you");
   await expect(panel).not.toContainText(/safe|verified|trusted/i);
   await expectNoInstallControl(dialog);
 
@@ -335,37 +335,27 @@ test("installs exactly the reviewed object and re-reads the server", async ({
   // The installed row shows what the server reports after the re-read.
   await expect(dialog.getByText(REVIEWED_COMMIT).first()).toBeVisible();
   await expect(panel).toHaveCount(0);
-});
 
-test("a changed registry refuses the install and nothing else happens", async ({
-  page,
-}) => {
-  const fake = await fakeRegistry(page, { reviewed: true });
-  const dialog = await start(page);
+  // A refused install names its package, keeps the server's words folded
+  // away, and replaces the earlier success instead of standing under it.
   await searchRegistry(dialog, fake);
   await dialog
     .getByRole("button", { name: "Review the source of reviewed" })
     .click();
-  await review(dialog)
+  await panel
     .getByRole("button", { name: "Install this reviewed object" })
     .click();
   fake.installFails = "reviewed_install_registry_mismatch";
-  await dialog
-    .getByRole("region", { name: "Confirm skill change" })
-    .getByRole("button", { name: "Confirm install" })
-    .click();
-
-  await expect(dialog.getByRole("alert")).toContainText(
-    "registry changed since this review",
+  await confirm.getByRole("button", { name: "Confirm install" }).click();
+  const alert = dialog.getByRole("alert");
+  await expect(alert).toContainText(
+    "reviewed wasn't installed: the registry changed since this review",
   );
-  // The review is stale: it is closed, and the list was re-read unchanged.
-  await expect(review(dialog)).toHaveCount(0);
-  await expect(dialog.getByText("Makes samples")).toHaveCount(0);
-  await expect(dialog.getByRole("status", { name: /installed/i })).toHaveCount(
-    0,
-  );
-  await expect.poll(() => fake.installs.length).toBe(1);
-  expect(fake.installs[0]).not.toHaveProperty("legacy");
+  await expect(alert.getByText("registry entry changed")).toBeHidden();
+  await expect(dialog.getByText(/at the reviewed commit/)).toHaveCount(0);
+  await expect(panel).toHaveCount(0);
+  expect(fake.installs).toHaveLength(2);
+  expect(fake.installs[1]).not.toHaveProperty("legacy");
 });
 
 test("an unconfirmed install is re-read from the server, never claimed", async ({

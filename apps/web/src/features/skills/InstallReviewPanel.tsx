@@ -125,7 +125,7 @@ export function InstallReviewPanel({
           </p>
           <p>
             {t(
-              "The install runs no build or setup steps of its own: the server publishes the reviewed source tree plus the signed artifact, and shared dependencies are not installed.",
+              "Installing runs nothing: the server publishes the reviewed source tree and the signed artifact, and installs no shared dependencies. Once installed, Octos can run this skill's code on the server whenever it uses the skill.",
             )}
           </p>
         </div>
@@ -144,7 +144,7 @@ export function InstallReviewPanel({
       )}
       <p>
         {t(
-          "Installing can run this source's code directly on the server: npm install, cargo build, downloaded binaries and the setup steps in its manifest. This list is only what the server reports. Nobody has inspected the source for you here.",
+          "This list is only what the server reports. Nobody has inspected the source for you here.",
         )}
       </p>
       {note ? <p>{note}</p> : null}
