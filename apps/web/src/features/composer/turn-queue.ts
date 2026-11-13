@@ -15,8 +15,11 @@ export interface PromptTurn {
    * is not connection-scoped — but we did not write the prompt, and the UI
    * must not present it as ours. A matching tab-local sent receipt restores
    * "local" presentation after reload, without granting transport ownership.
+   *
+   * "unknown" means this tab could not read its receipts, so it cannot tell
+   * whose turn this is and must not call it another client's either.
    */
-  origin?: "local" | "adopted";
+  origin?: "local" | "adopted" | "unknown";
   /**
    * The Session's reasoning selection captured AT ENQUEUE TIME. rc11 clears
    * the persisted value when a turn omits it, so every queued entry must

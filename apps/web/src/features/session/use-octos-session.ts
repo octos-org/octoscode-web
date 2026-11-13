@@ -1407,6 +1407,13 @@ export function useOctosSession(): OctosSessionRuntime {
   const currentSessionId = () =>
     selectedRecord()?.scope.sessionId ?? currentAuthority()?.sessionId ?? "";
   const currentCapabilities = () => currentAuthority()?.capabilities;
+  // Turn receipts live in the tab envelope, keyed by the credential this tab
+  // signed in with. A record's config never carries it (a record recovered
+  // after a transport reconnect has an empty token), so use the pool's.
+  const tabIdentity = (authorityEpoch: number) =>
+    authorityEpoch === authEpochRef.current
+      ? (activeRuntime.currentAuthority()?.config ?? null)
+      : null;
 
   // Lazily built once. The record manager owns every Session record; the pool
   // (useServerConnection's runtime) owns the one physical socket it shares.
@@ -1445,24 +1452,15 @@ export function useOctosSession(): OctosSessionRuntime {
       controllerDependencies: (scope, recordClient) => ({
         onTurnSent: (turnId) => {
           const record = recordManagerRef.current?.get(scope);
-          const authority = record?.runtime.currentAuthority();
+          const identity = tabIdentity(scope.authorityEpoch);
+          if (!record?.runtime.currentAuthority() || !identity) return;
           if (
-            !record ||
-            !authority ||
-            scope.authorityEpoch !== authEpochRef.current
-          )
-            return;
-          if (
-            !rememberTabTurn(
-              browserStorage("sessionStorage"),
-              authority.config,
-              {
-                sessionId: scope.sessionId,
-                profileId: scope.profileId,
-                cwd: scope.workspaceRoot,
-                turnId,
-              },
-            )
+            !rememberTabTurn(browserStorage("sessionStorage"), identity, {
+              sessionId: scope.sessionId,
+              profileId: scope.profileId,
+              cwd: scope.workspaceRoot,
+              turnId,
+            })
           ) {
             record.runtime.reportError(
               "This tab could not save the turn's origin. After a refresh, it may appear as another client's turn.",
@@ -1470,23 +1468,16 @@ export function useOctosSession(): OctosSessionRuntime {
           }
         },
         wasTurnSentHere: (turnId) => {
-          const authority = recordManagerRef.current
-            ?.get(scope)
-            ?.runtime.currentAuthority();
-          return Boolean(
-            authority &&
-            scope.authorityEpoch === authEpochRef.current &&
-            wasTurnSentFromTab(
-              browserStorage("sessionStorage"),
-              authority.config,
-              {
+          const identity = tabIdentity(scope.authorityEpoch);
+          return identity &&
+            recordManagerRef.current?.get(scope)?.runtime.currentAuthority()
+            ? wasTurnSentFromTab(browserStorage("sessionStorage"), identity, {
                 sessionId: scope.sessionId,
                 profileId: scope.profileId,
                 cwd: scope.workspaceRoot,
                 turnId,
-              },
-            ),
-          );
+              })
+            : null;
         },
         canSteer: () => {
           const capabilities = recordManagerRef.current

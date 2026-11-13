@@ -49,7 +49,8 @@ export interface TurnControllerDependencies {
   onDispatchState?: (event: TurnDispatchStateEvent) => void;
   /** Tab-local display provenance, independent of transport ownership. */
   onTurnSent?: (turnId: string) => void;
-  wasTurnSentHere?: (turnId: string) => boolean;
+  /** Null when this tab cannot read its receipts, so it cannot tell. */
+  wasTurnSentHere?: (turnId: string) => boolean | null;
   /**
    * Fires when a user-interrupted turn's prompt comes back, on THAT turn's own
    * terminal. `sessionId` is the turn's OWNING session (not necessarily the one
@@ -880,13 +881,14 @@ export function createQueueBackedTurnController(options: {
     return true;
   };
 
-  const observedTurn = (turnId: string): PromptTurn => ({
-    turnId,
-    text: "",
-    origin: dependenciesRef.current.wasTurnSentHere?.(turnId)
-      ? "local"
-      : "adopted",
-  });
+  const observedTurn = (turnId: string): PromptTurn => {
+    const sentHere = dependenciesRef.current.wasTurnSentHere?.(turnId);
+    return {
+      turnId,
+      text: "",
+      origin: sentHere ? "local" : sentHere === null ? "unknown" : "adopted",
+    };
+  };
 
   /**
    * A `turn/started` for a turn this app never queued means ANOTHER attached

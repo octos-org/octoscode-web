@@ -49,13 +49,8 @@ class FakeActiveClient {
   status: ConnectionStatus = "idle";
   disconnectCount = 0;
   readonly calls: string[] = [];
-  readonly openParams: SessionOpenParams[] = [];
   readonly hydrateParams: SessionHydrateParams[] = [];
-  readonly statusHistory: Array<(status: ConnectionStatus) => void> = [];
 
-  connectImplementation: () => Promise<void> = async () => undefined;
-  capabilitiesImplementation: () => Promise<ConfigCapabilitiesListResult> =
-    async () => ({ capabilities: serverCapabilities });
   openImplementation: (
     params: SessionOpenParams,
   ) => Promise<SessionOpenResult> = async () => ({ opened });
@@ -64,7 +59,6 @@ class FakeActiveClient {
   ) => Promise<SessionHydrateResult> = async () => hydrated;
 
   readonly #statusListeners = new Set<(status: ConnectionStatus) => void>();
-  readonly #errorListeners = new Set<(error: Error) => void>();
   readonly #notificationListeners = new Set<
     (notification: RpcNotification) => void
   >();
@@ -72,7 +66,6 @@ class FakeActiveClient {
   async connect(): Promise<void> {
     this.calls.push("connect");
     this.setStatus("connecting");
-    await this.connectImplementation();
     this.setStatus("connected");
   }
 
@@ -84,14 +77,12 @@ class FakeActiveClient {
 
   subscribeStatus(listener: (status: ConnectionStatus) => void): () => void {
     this.#statusListeners.add(listener);
-    this.statusHistory.push(listener);
     listener(this.status);
     return () => this.#statusListeners.delete(listener);
   }
 
-  subscribeErrors(listener: (error: Error) => void): () => void {
-    this.#errorListeners.add(listener);
-    return () => this.#errorListeners.delete(listener);
+  subscribeErrors(): () => void {
+    return () => undefined;
   }
 
   subscribeNotifications(
@@ -103,12 +94,11 @@ class FakeActiveClient {
 
   listConfigCapabilities(): Promise<ConfigCapabilitiesListResult> {
     this.calls.push("capabilities");
-    return this.capabilitiesImplementation();
+    return Promise.resolve({ capabilities: serverCapabilities });
   }
 
   openSession(params: SessionOpenParams): Promise<SessionOpenResult> {
     this.calls.push("open");
-    this.openParams.push(params);
     return this.openImplementation(params);
   }
 
@@ -126,10 +116,6 @@ class FakeActiveClient {
   emit(notification: RpcNotification): void {
     for (const listener of this.#notificationListeners) listener(notification);
   }
-
-  emitError(message: string): void {
-    for (const listener of this.#errorListeners) listener(new Error(message));
-  }
 }
 
 describe("ActiveSessionRuntime", () => {
@@ -138,7 +124,6 @@ describe("ActiveSessionRuntime", () => {
     try {
       const server = new FakeActiveClient();
       const candidate = new FakeActiveClient();
-      candidate.status = "connected";
       const reconnect = new FakeActiveClient();
       reconnect.openImplementation = async () => ({
         opened: { ...opened, session_id: "session-other" },
@@ -149,13 +134,7 @@ describe("ActiveSessionRuntime", () => {
         if (!client) throw new Error("unexpected client request");
         return client;
       });
-      const previous = await runtime.authenticate(connection);
-      if (!previous) throw new Error("missing authority");
-      runtime.adoptCandidate({
-        expected: previous,
-        config: sessionConfig,
-        candidate: candidateSnapshot(candidate),
-      });
+      await adoptConnected(runtime, candidate);
 
       candidate.setStatus("disconnected");
       await vi.advanceTimersByTimeAsync(500);
@@ -179,17 +158,10 @@ describe("ActiveSessionRuntime", () => {
   it("rehydrates after lossy replay before delivering further notifications", async () => {
     const server = new FakeActiveClient();
     const candidate = new FakeActiveClient();
-    candidate.status = "connected";
     const recoveryHydrate = deferred<SessionHydrateResult>();
     candidate.hydrateImplementation = () => recoveryHydrate.promise;
     const { runtime, events } = testRuntime(() => server);
-    const previous = await runtime.authenticate(connection);
-    if (!previous) throw new Error("missing authority");
-    runtime.adoptCandidate({
-      expected: previous,
-      config: sessionConfig,
-      candidate: candidateSnapshot(candidate),
-    });
+    await adoptConnected(runtime, candidate);
     events.length = 0;
 
     candidate.emit({
@@ -227,17 +199,10 @@ describe("ActiveSessionRuntime", () => {
     try {
       const server = new FakeActiveClient();
       const candidate = new FakeActiveClient();
-      candidate.status = "connected";
       const recoveryHydrate = deferred<SessionHydrateResult>();
       candidate.hydrateImplementation = () => recoveryHydrate.promise;
       const { runtime, events } = testRuntime(() => server);
-      const previous = await runtime.authenticate(connection);
-      if (!previous) throw new Error("missing authority");
-      runtime.adoptCandidate({
-        expected: previous,
-        config: sessionConfig,
-        candidate: candidateSnapshot(candidate),
-      });
+      await adoptConnected(runtime, candidate);
       events.length = 0;
 
       candidate.emit({
@@ -301,6 +266,21 @@ function testRuntime(
   const events: ActiveSessionRuntimeEvent<FakeActiveClient>[] = [];
   runtime.subscribeEvents((event) => events.push(event));
   return { runtime, events };
+}
+
+/** Signs in, then adopts `candidate` as the connected session-one. */
+async function adoptConnected(
+  runtime: ActiveSessionRuntime<FakeActiveClient>,
+  candidate: FakeActiveClient,
+): Promise<void> {
+  candidate.status = "connected";
+  const expected = await runtime.authenticate(connection);
+  if (!expected) throw new Error("missing authority");
+  runtime.adoptCandidate({
+    expected,
+    config: sessionConfig,
+    candidate: candidateSnapshot(candidate),
+  });
 }
 
 function candidateSnapshot(
