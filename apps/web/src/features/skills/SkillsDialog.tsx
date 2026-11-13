@@ -71,6 +71,8 @@ export function SkillsDialog({
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The server's own words behind `error`, shown only on request. */
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const authority = useRef(0);
   const requestPending = useRef(false);
   const mutationBlocked = useRef(profileBusy);
@@ -82,56 +84,53 @@ export function SkillsDialog({
     SKILLS_REVIEWED_INSTALL_FEATURE,
   );
 
-  /** The server's own words for a typed reviewed-install refusal. */
-  function installErrorText(cause: unknown): string {
-    const detail = skillErrorText(cause);
-    switch (reviewedInstallErrorKind(cause)) {
+  /** A typed reviewed-install refusal, naming the package it refused. */
+  function installErrorText(kind: string, name: string): string {
+    switch (kind) {
       case "reviewed_install_registry_mismatch":
         return t(
-          "The registry changed since this review, so nothing was installed. Review the source again before installing. {detail}",
-          { detail },
+          "{name} wasn't installed: the registry changed since this review. Review the source again before installing.",
+          { name },
         );
       case "reviewed_install_verification_failed":
         return t(
-          "The artifact failed its signature or checksum verification, so nothing was installed. {detail}",
-          { detail },
+          "{name} wasn't installed: its artifact failed the signature or checksum check.",
+          { name },
         );
       case "reviewed_install_fetch_failed":
         return t(
-          "The reviewed source or artifact could not be fetched, so nothing was installed. {detail}",
-          { detail },
+          "{name} wasn't installed: the reviewed source or artifact couldn't be fetched.",
+          { name },
         );
       case "reviewed_install_platform_unavailable":
         return t(
-          "The registry has no artifact for this server's platform. {detail}",
-          { detail },
+          "{name} wasn't installed: the registry has no artifact for this server's platform.",
+          { name },
         );
       case "reviewed_install_already_installed":
-        return t("This reviewed object is already installed. {detail}", {
-          detail,
-        });
+        return t("{name} is already installed from this review.", { name });
       case "reviewed_install_unsupported_layout":
         return t(
-          "This package's layout isn't supported by the review-bound installer. {detail}",
-          { detail },
+          "{name} wasn't installed: the review-bound installer doesn't support this package's layout.",
+          { name },
         );
       case "reviewed_install_unsafe_tree":
         return t(
-          "The reviewed tree contains links or special files the installer refuses. {detail}",
-          { detail },
+          "{name} wasn't installed: the reviewed tree contains links or special files the installer refuses.",
+          { name },
         );
       case "reviewed_install_publish_failed":
         return t(
-          "The install could not be published, so the previous state is unchanged. {detail}",
-          { detail },
+          "{name} wasn't installed: the server couldn't publish it, so the previous state is unchanged.",
+          { name },
         );
       case "reviewed_install_rebuild_failed":
         return t(
-          "The install was rolled back after the server failed to rebuild the profile runtime. {detail}",
-          { detail },
+          "{name} wasn't installed: the server couldn't rebuild the profile runtime, so it rolled the install back.",
+          { name },
         );
       default:
-        return detail;
+        return t("{name} wasn't installed.", { name });
     }
   }
 
@@ -147,7 +146,11 @@ export function SkillsDialog({
     const ticket = authority.current;
     const current = () => ticket === authority.current;
     setBusy(true);
+    // Each request's outcome replaces the last one's: an earlier install's
+    // success must not stand under a later refusal.
     setError(null);
+    setErrorDetail(null);
+    setNotice(null);
     let release: (() => void) | undefined;
     try {
       const commands = await client.skillCommands(profileId, capabilities);
@@ -269,7 +272,8 @@ export function SkillsDialog({
         if (!current()) return;
         const kind = reviewedInstallErrorKind(cause);
         if (kind) {
-          setError(installErrorText(cause));
+          setError(installErrorText(kind, plan.package));
+          setErrorDetail(skillErrorText(cause));
         } else {
           // Unknown outcome (timeout, dropped socket): never claim either way.
           setError(
@@ -322,7 +326,7 @@ export function SkillsDialog({
       </p>
       <p>
         {t(
-          "Skills are shared by this Profile, not installed in your browser. Installation may download executable tools and dependencies. Review and trust the source first.",
+          "Skills are shared by this Profile, not installed in your browser. An installed skill can run its code on the server, so review and trust the source first.",
         )}
       </p>
       {profileBusy ? (
@@ -333,7 +337,17 @@ export function SkillsDialog({
         </p>
       ) : null}
       {busy ? <p role="status">{t("Waiting for the server…")}</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <div role="alert">
+          <p>{error}</p>
+          {errorDetail ? (
+            <details>
+              <summary>{t("The server's message")}</summary>
+              <p>{errorDetail}</p>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
       {notice ? <p role="status">{notice}</p> : null}
       <section>
         <h3>{t("Installed skills")}</h3>
