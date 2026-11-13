@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -32,6 +33,7 @@ import { parseTextPlan, type TextPlan } from "./text-plan.ts";
 import { TurnActivityIndicator } from "./TurnActivityIndicator.tsx";
 import type { TurnActivity } from "./turn-activity.ts";
 import { AttachmentList } from "./AttachmentList.tsx";
+import { workspaceRelativeArtifactPath } from "./session-file-read.ts";
 import foldStyles from "./TimelineFolds.module.css";
 import type { ConversationViewState } from "./use-conversation-scroll.ts";
 
@@ -61,6 +63,8 @@ interface TimelineProps {
   /** Live turn activity; rendered at the transcript bottom while streaming. */
   activity?: TurnActivity | null;
   workspaceFileReadAvailable?: boolean;
+  /** The Session's workspace root, to tell a written file from a delivered one. */
+  workspaceRoot?: string;
   /**
    * Replaces the default empty state of a connected, empty Session. Pass it
    * only while the Session is empty so the memoized transcript stays stable.
@@ -91,6 +95,7 @@ export const Timeline = memo(function Timeline({
   onCollapseAll,
   activity = null,
   workspaceFileReadAvailable = false,
+  workspaceRoot = "",
   emptyState,
   turnUndo,
   chat = false,
@@ -98,15 +103,26 @@ export const Timeline = memo(function Timeline({
   const t = useUiText();
   // An assistant row with no text still renders when it delivers files (a
   // `send_file` without a caption).
-  const renderableEntries = entries.filter(
-    (entry) =>
-      entry.kind !== "assistant" ||
-      entry.body.trim() ||
-      Boolean(entry.media?.length),
+  const renderableEntries = useMemo(
+    () =>
+      entries.filter(
+        (entry) =>
+          entry.kind !== "assistant" ||
+          entry.body.trim() ||
+          Boolean(entry.media?.length),
+      ),
+    [entries],
   );
-  const visibleEntries = showThinking
-    ? renderableEntries
-    : renderableEntries.filter((entry) => entry.kind !== "reasoning");
+  const visibleEntries = useMemo(
+    () =>
+      withoutDeliveredStepFiles(
+        showThinking
+          ? renderableEntries
+          : renderableEntries.filter((entry) => entry.kind !== "reasoning"),
+        workspaceRoot,
+      ),
+    [renderableEntries, showThinking, workspaceRoot],
+  );
   const hasFoldable = visibleEntries.some(
     (entry) => entry.kind === "reasoning" || entry.kind === "tool",
   );
@@ -501,6 +517,44 @@ function ToolBlock(
       )}
     </>
   );
+}
+
+const stepsWithoutFile = new WeakMap<TimelineEntry, TimelineEntry>();
+
+/**
+ * A file a step wrote and its turn then sent with `send_file` is one file: it
+ * shows once, where it was sent, not also under the step that wrote it. The
+ * stripped copy is cached so the step's row keeps its memo identity.
+ */
+function withoutDeliveredStepFiles(
+  entries: readonly TimelineEntry[],
+  workspaceRoot: string,
+): readonly TimelineEntry[] {
+  // Outside the workspace there is nothing to compare: the key is "".
+  const key = (turnId: string, path: string) => {
+    const relative = workspaceRelativeArtifactPath(path, workspaceRoot);
+    return relative ? `${turnId}\0${relative}` : "";
+  };
+  const delivered = new Set(
+    entries.flatMap((entry) =>
+      entry.kind === "assistant" && entry.turnId
+        ? (entry.media ?? []).map((path) => key(entry.turnId!, path))
+        : [],
+    ),
+  );
+  delivered.delete("");
+  return entries.map((entry) => {
+    if (entry.kind !== "tool" || !entry.turnId || !entry.artifactPath)
+      return entry;
+    if (!delivered.has(key(entry.turnId, entry.artifactPath))) return entry;
+    let stripped = stepsWithoutFile.get(entry);
+    if (!stripped) {
+      const { artifactPath: _sent, ...rest } = entry;
+      stripped = rest;
+      stepsWithoutFile.set(entry, stripped);
+    }
+    return stripped;
+  });
 }
 
 /** The files a step wrote, still reachable when the step itself is folded. */

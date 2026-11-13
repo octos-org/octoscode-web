@@ -5312,6 +5312,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             session.capabilities,
                             CORE_UI_METHODS.SESSION_FILES_READ,
                           )}
+                          workspaceRoot={attachmentWorkspaceRoot}
                           turnUndo={
                             turnUndoAvailable ? renderTurnUndo : undefined
                           }
