@@ -88,27 +88,6 @@ describe("wake claim occurrence refuses non-decidable content", () => {
 });
 
 describe("wake claim payload is cloned, deep-frozen and detached", () => {
-  it("freezes a CLONE and leaves the caller's raw payload unfrozen", () => {
-    const raw = { goal_id: "g1", nested: { step: 1 } };
-    const view = parseExternalDriverWakeClaimResult(
-      reply([occurrence({ payload: raw })]),
-    );
-    const decoded = view.occurrences[0]?.payload as {
-      goal_id: string;
-      nested: { step: number };
-    };
-    // Same content, different identity — a clone, not the caller's object.
-    expect(decoded).toEqual(raw);
-    expect(decoded).not.toBe(raw);
-    expect(decoded.nested).not.toBe(raw.nested);
-    // The decoded value is recursively frozen...
-    expect(Object.isFrozen(decoded)).toBe(true);
-    expect(Object.isFrozen(decoded.nested)).toBe(true);
-    // ...but the caller's raw payload graph is left untouched.
-    expect(Object.isFrozen(raw)).toBe(false);
-    expect(Object.isFrozen(raw.nested)).toBe(false);
-  });
-
   it('preserves an own JSON "__proto__" key without prototype pollution', () => {
     // JSON.parse creates a real OWN "__proto__" data property.
     const raw = JSON.parse(

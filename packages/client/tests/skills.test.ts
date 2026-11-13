@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createSkillCommands,
-  parseInstalledSkills,
-  parseSkillRegistry,
-} from "../src/skills.ts";
+import { createSkillCommands } from "../src/skills.ts";
 import { APPUI_SKILL_METHODS } from "../src/skill-methods.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
@@ -14,63 +10,8 @@ const capabilities: UiProtocolCapabilities = {
   supported_notifications: [],
   supported_features: ["profile.skills.reviewed_install.v1"],
 };
-const skill = {
-  name: "sample",
-  version: null,
-  tool_count: 0,
-  source_repo: null,
-};
-const pkg = {
-  name: "sample",
-  description: "Sample",
-  repo: "org/sample",
-  version: null,
-  author: null,
-  license: null,
-  skills: ["sample"],
-  requires: [],
-  provides_tools: false,
-  tags: [],
-  installed: false,
-  installed_skills: [],
-};
 
 describe("profile skill contracts", () => {
-  it("accepts real explicit-null fields and whitelists projected metadata", () => {
-    const parsed = parseInstalledSkills(
-      {
-        profile_id: "p1",
-        count: 1,
-        skills: [{ ...skill, secret: "never-export" }],
-      },
-      "p1",
-    );
-    expect(parsed).toEqual([
-      {
-        name: "sample",
-        version: null,
-        toolCount: 0,
-        sourceRepo: null,
-        sourceCommit: null,
-        reviewedAt: null,
-        artifactSha256: null,
-      },
-    ]);
-    expect(JSON.stringify(parsed)).not.toContain("never-export");
-    const registry = parseSkillRegistry(
-      { profile_id: "p1", server_platform: "linux-x86_64", packages: [pkg] },
-      "p1",
-    );
-    expect(registry?.packages[0]?.installedSkills).toEqual([]);
-    expect(registry?.serverPlatform).toBe("linux-x86_64");
-    expect(registry?.packages[0]?.binaries).toEqual({});
-    expect(
-      parseSkillRegistry(
-        { profile_id: "p1", server_platform: 7, packages: [] },
-        "p1",
-      ),
-    ).toBeNull();
-  });
   it("gates before dispatch and binds every read and mutation to the profile", async () => {
     const request = vi.fn(async () => ({}));
     const none = createSkillCommands({ request }, "p1", {

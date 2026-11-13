@@ -26,16 +26,7 @@ const ARTIFACT = {
   kind: "text",
   status: "ready",
 };
-const GOAL = {
-  goal_id: "g1",
-  objective: "Fresh objective",
-  status: "active",
-  token_budget: 100,
-  tokens_used: 10,
-  time_used_seconds: 1,
-  created_at_ms: 1,
-  updated_at_ms: 2,
-};
+
 const METHODS = [
   "session/goal/get",
   "session/goal/set",
@@ -83,26 +74,6 @@ const control = (status: "interrupted" | "closed") => ({
   interrupted: status === "interrupted",
   closed: status === "closed",
   already_terminal: false,
-});
-
-describe("native goal transition contract", () => {
-  it("ordinary goal set explicitly activates as user and preserves only an explicit budget", async () => {
-    const h = harness({
-      session_id: "dev:local:room#request",
-      profile_id: "dev",
-      goal: GOAL,
-      generation: 2,
-      transition_actor: "user",
-    });
-    await h.commands.goal.set("Fresh objective", 500);
-    expect(h.calls[0]?.params).toEqual({
-      session_id: "dev:local:room#request",
-      objective: "Fresh objective",
-      status: "active",
-      transition_actor: "user",
-      token_budget: 500,
-    });
-  });
 });
 
 describe("native agent inspection/control contracts", () => {

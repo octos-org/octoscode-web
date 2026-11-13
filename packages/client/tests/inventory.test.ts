@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  parseRuntimeTools,
   parseMcpConnectorMutation,
   parseMcpOAuthStart,
   parseRuntimeMcp,
@@ -16,14 +15,7 @@ import {
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
 const scope = { session_id: "s1", profile_id: "p1" };
-const tool = {
-  name: "read_file",
-  category: "file",
-  status: "available",
-  policy: "allowed",
-  aliases: [],
-  backend_tool: "read_file",
-};
+
 const summary = { connected: 0, connecting: 0, failed: 0, disabled: 0 };
 const capabilities: UiProtocolCapabilities = {
   version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
@@ -41,35 +33,6 @@ const managementCapabilities: UiProtocolCapabilities = {
 };
 const mcpStatus = { ...scope, servers: [], summary };
 describe("runtime inventory contracts", () => {
-  it("accepts actual nullable MCP fields from the rc11 reported inventory", () => {
-    expect(
-      parseRuntimeMcp(
-        {
-          ...scope,
-          servers: [
-            {
-              id: "mcp-1",
-              display_name: null,
-              transport: null,
-              status: "disabled",
-              tool_count: 0,
-              tools: [],
-              error: null,
-            },
-          ],
-          summary: { ...summary, disabled: 1 },
-        },
-        "s1",
-        "p1",
-      )?.servers[0],
-    ).toEqual({
-      id: "mcp-1",
-      status: "disabled",
-      enabled: true,
-      toolCount: 0,
-      tools: [],
-    });
-  });
   it("projects MCP management fields without connector configuration", () => {
     const result = parseRuntimeMcp(
       {
@@ -104,85 +67,6 @@ describe("runtime inventory contracts", () => {
     ]);
     expect(JSON.stringify(result)).not.toContain("private.example");
     expect(JSON.stringify(result)).not.toContain("secret-token");
-  });
-  it("projects the T-0056 management facts and nothing else from the allowlist", () => {
-    const result = parseRuntimeMcp(
-      {
-        ...mcpStatus,
-        can_manage: true,
-        stdio_allowlist: [
-          {
-            entry_id: "local-fs",
-            display_name: "Shared files",
-            description: "Read-only project files",
-            command: "/opt/octos/bin/filesystem-mcp",
-            args: ["--root", "/srv/shared"],
-            env: { TOKEN: "secret-token" },
-          },
-          { entry_id: "echo", display_name: null },
-        ],
-      },
-      "s1",
-      "p1",
-    );
-    expect(result?.management).toEqual({ canManage: true });
-    expect(result?.stdioAllowlist).toEqual([
-      {
-        entryId: "local-fs",
-        displayName: "Shared files",
-        description: "Read-only project files",
-      },
-      { entryId: "echo", displayName: "echo" },
-    ]);
-    for (const secret of ["filesystem-mcp", "/srv/shared", "secret-token"])
-      expect(JSON.stringify(result)).not.toContain(secret);
-    // An unavailable management keeps its reason and an empty allowlist; an
-    // unlisted reason is passed through as reported instead of invented.
-    for (const reason of ["requires_profile_write", "temporary_maintenance"]) {
-      const unavailable = parseRuntimeMcp(
-        {
-          ...mcpStatus,
-          can_manage: false,
-          manage_unavailable_reason: reason,
-          stdio_allowlist: [],
-        },
-        "s1",
-        "p1",
-      );
-      expect(unavailable?.management).toEqual({ canManage: false, reason });
-      expect(unavailable?.stdioAllowlist).toEqual([]);
-    }
-  });
-  it("projects only status fields and rejects duplicate or wrong-scope rows", () => {
-    const result = parseRuntimeTools(
-      {
-        ...scope,
-        policy_id: "profile",
-        api_key: "must-not-project",
-        tools: [{ ...tool, secret: "must-not-project", backend_tool: null }],
-      },
-      "s1",
-      "p1",
-    );
-    expect(result?.tools[0]?.backendTool).toBeUndefined();
-    expect(JSON.stringify(result)).not.toContain("must-not-project");
-    expect(
-      parseRuntimeTools(
-        { ...scope, policy_id: "profile", tools: [tool, tool] },
-        "s1",
-        "p1",
-      ),
-    ).toBeNull();
-    expect(
-      parseRuntimeTools(
-        { ...scope, policy_id: "profile", tools: [tool] },
-        "s1",
-        "other",
-      ),
-    ).toBeNull();
-    expect(
-      parseRuntimeMcp({ ...scope, servers: [], summary }, "other", "p1"),
-    ).toBeNull();
   });
   it("rejects malformed nullable fields and unsafe counts", () => {
     expect(

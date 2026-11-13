@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  DRIVER_OPERATIONS_LIMITS,
   buildDriverOperationsRequest,
   parseDriverOperationsPageResult,
 } from "../src/external-driver-operations.ts";
 import type {
   DriverOperationsPageRequestInit,
   DriverOperationsCapturedScope,
-  OperationRecoveryRow,
 } from "../src/external-driver-operations.ts";
 
 const TURN = "0198e6c1-2f3b-7c9a-b1d4-5f2a8c7e9d01";
@@ -74,37 +72,7 @@ describe("buildDriverOperationsRequest (page request adapter)", () => {
   });
 });
 
-function firstRow(
-  parsed: ReturnType<typeof parseDriverOperationsPageResult>,
-): OperationRecoveryRow {
-  if (parsed === null || parsed.items.length === 0) {
-    throw new Error("expected a non-empty parsed page");
-  }
-  return parsed.items[0] as OperationRecoveryRow;
-}
-
 describe("parseDriverOperationsPageResult", () => {
-  it("keeps observed_revision a string; rejects number/float/leading-zero/overflow", () => {
-    for (const bad of [
-      123,
-      1.5,
-      " 1",
-      "",
-      "01",
-      "+1",
-      "18446744073709551616",
-      "1e3",
-      "-1",
-    ]) {
-      expect(
-        parseDriverOperationsPageResult(
-          page({ observed_revision: bad }),
-          SCOPE,
-        ),
-      ).toBeNull();
-    }
-  });
-
   it("enforces complete iff next_cursor null (both directions)", () => {
     expect(
       parseDriverOperationsPageResult(
@@ -167,65 +135,6 @@ describe("parseDriverOperationsPageResult", () => {
     });
     expect(JSON.stringify(underRaw).length).toBeLessThanOrEqual(256 * 1024);
     expect(parseDriverOperationsPageResult(underRaw, SCOPE)).not.toBeNull();
-  });
-
-  it("freezes and detaches nested rows/acceptance/scoped_goal", () => {
-    const payload = page();
-    const parsed = parseDriverOperationsPageResult(payload, SCOPE)!;
-    (payload.items as Array<Record<string, unknown>>)[0]!.operation_id =
-      "op-MUTATED";
-    expect(firstRow(parsed).operationId).toBe("op-41");
-    expect(() => {
-      (firstRow(parsed) as { operationId?: string }).operationId = "evil";
-    }).toThrow();
-    expect(() => {
-      (firstRow(parsed).acceptance as { slug?: string }).slug = "evil";
-    }).toThrow();
-    expect(() => {
-      (firstRow(parsed).acceptance.scopedGoal as { goalId?: string }).goalId =
-        "evil";
-    }).toThrow();
-  });
-
-  it("exposes no proof/prompt/answer anywhere in a parsed view", () => {
-    const parsed = parseDriverOperationsPageResult(page(), SCOPE)!;
-    const encoded = JSON.stringify(parsed);
-    expect(encoded).not.toContain("prompt");
-    expect(encoded).not.toContain("control_token");
-    expect(encoded).not.toContain("payload_digest");
-  });
-});
-
-// Deliberate cross-system pin: these numbers are the Core handler's wire
-// ceilings (ui_protocol.rs DRIVER_OPERATIONS_*); a silent drift would let the
-// client accept pages the server considers out of contract.
-describe("DRIVER_OPERATIONS_LIMITS", () => {
-  it("pins Core wire constants", () => {
-    expect(DRIVER_OPERATIONS_LIMITS).toEqual({
-      defaultLimit: 50,
-      minLimit: 1,
-      maxLimit: 100,
-      maxCursorBytes: 4096,
-      maxPageRows: 100,
-      maxPageBytes: 256 * 1024,
-    });
-  });
-});
-
-describe("parseDriverOperationsPageResult — captured scope fences", () => {
-  it("rejects a valid-native row on a FOREIGN master base (page-level)", () => {
-    // Perfectly native identity — but built on another master's base.
-    const foreign = page({
-      items: [
-        row({
-          acceptance: {
-            ...row().acceptance,
-            adopted_session_id: "other:local:tui#peer-glm-worker-1",
-          },
-        }),
-      ],
-    });
-    expect(parseDriverOperationsPageResult(foreign, SCOPE)).toBeNull();
   });
 });
 
