@@ -11,8 +11,11 @@ import {
 } from "./external-driver.ts";
 import type { ExternalDriverControlContext } from "./external-driver.ts";
 import { OctosUiClient, OctosUiProtocolError } from "./client.ts";
-import type { UiProtocolCapabilities } from "./types.ts";
-import { makeCaps } from "./caps.test-fixture.ts";
+import {
+  capture,
+  driverCaps as caps,
+} from "../tests/fixtures/external-driver-wire.ts";
+import { createSocket } from "../tests/fixtures/socket-client.ts";
 
 /**
  * 2203 unit coverage for the three 2047-disclosed client gaps, exercised
@@ -33,10 +36,6 @@ const MASTER = "dev:local:tui#peer-abc";
 const PROFILE = "dev";
 const TOPIC = "peer-abc";
 const CANARY = "CANARY-2203-raw-server-detail";
-
-function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return makeCaps({ family: "driver", methods, features });
-}
 
 type DriverRequest = (method: string, params: unknown) => Promise<unknown>;
 
@@ -63,15 +62,6 @@ function controlContext(
     featureAdvertised: overrides.featureAdvertised ?? true,
   };
   return { context, request };
-}
-
-async function capture(promise: Promise<unknown>): Promise<unknown> {
-  try {
-    await promise;
-    return null;
-  } catch (error) {
-    return error;
-  }
 }
 
 describe("gap 1 — requestExternalDriverControl typed-refusal narrowing", () => {
@@ -159,18 +149,6 @@ describe("gap 3 — capability gate is offline and exact", () => {
 });
 
 describe("gap 2 — close mid-flight through the real client transport", () => {
-  function createSocket() {
-    return {
-      readyState: 0,
-      onopen: null as ((event: Event) => void) | null,
-      onmessage: null as ((event: MessageEvent) => void) | null,
-      onerror: null as ((event: Event) => void) | null,
-      onclose: null as ((event: CloseEvent) => void) | null,
-      send: vi.fn(),
-      close: vi.fn(),
-    };
-  }
-
   const DRIVER_CAPS = caps([GET], [EXTERNAL_DRIVER_V1_FEATURE]);
 
   const HEALTHY_DRIVER_RESULT = {

@@ -13,16 +13,12 @@ import {
   MCP_CONNECTOR_METHODS,
 } from "../src/inventory-methods.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
+import { makeCaps } from "./fixtures/caps.ts";
 
 const scope = { session_id: "s1", profile_id: "p1" };
 
 const summary = { connected: 0, connecting: 0, failed: 0, disabled: 0 };
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [],
-  supported_notifications: [],
-};
+const capabilities = makeCaps();
 const managementCapabilities: UiProtocolCapabilities = {
   ...capabilities,
   supported_features: [MCP_CONNECTOR_MANAGE_V1],

@@ -4,13 +4,17 @@ import {
   CORE_UI_METHODS,
   OctosUiClient,
   isRecord,
-  type RpcNotification,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
 import { createHistoryCommands } from "@octos-org/octoscode-client/history";
 import { SessionRecordManager } from "../session/session-record-manager.ts";
 import { createNativeReviewBinding } from "./native-review.ts";
 import { appuiCaps } from "../../test-fixtures/caps.ts";
+import {
+  UNOBSERVED_RECORD_EVENTS,
+  connectedClient,
+  openRecord,
+} from "../../test-fixtures/connected-client.ts";
 
 const caps: UiProtocolCapabilities = appuiCaps({
   methods: [
@@ -25,38 +29,15 @@ async function flush() {
   for (let index = 0; index < 20; index += 1) await Promise.resolve();
 }
 function harness(capabilities = caps) {
-  const client = new OctosUiClient({ endpoint: "ws://server.test/ui" });
-  const notifications = new Set<(event: RpcNotification) => void>();
-  vi.spyOn(client, "status", "get").mockReturnValue("connected");
-  vi.spyOn(client, "subscribeStatus").mockImplementation((listener) => {
-    listener("connected");
-    return () => undefined;
-  });
-  vi.spyOn(client, "subscribeErrors").mockReturnValue(() => undefined);
-  vi.spyOn(client, "subscribeNotifications").mockImplementation((listener) => {
-    notifications.add(listener);
-    return () => {
-      notifications.delete(listener);
-    };
-  });
-  vi.spyOn(client, "listConfigCapabilities").mockResolvedValue({
+  const { client, notifications, start } = connectedClient(
     capabilities,
-  });
-  vi.spyOn(client, "openSession").mockImplementation(async (params) => ({
-    opened: {
-      session_id: params.session_id,
-      active_profile_id: "coding",
-      workspace_root: "/srv/project",
-      capabilities,
-    },
-  }));
-  vi.spyOn(client, "hydrateSession").mockImplementation(async (params) => ({
-    session_id: params.session_id,
-    cursor: { stream: params.session_id, seq: 1 },
-    turns: [],
-    messages: [],
-  }));
-  const start = vi.spyOn(client, "startTurn").mockResolvedValue({});
+    (sessionId) => ({
+      session_id: sessionId,
+      cursor: { stream: sessionId, seq: 1 },
+      turns: [],
+      messages: [],
+    }),
+  );
   const rpc = vi.fn(async (method: string, params: unknown) => {
     if (method !== CORE_UI_METHODS.REVIEW_START || !isRecord(params))
       throw new Error("Unexpected review RPC");
@@ -78,12 +59,7 @@ function harness(capabilities = caps) {
   manager = new SessionRecordManager({
     pooledClient: () => client,
     authorityEpoch: () => 1,
-    onSelectedEvent: () => undefined,
-    onSelectedSnapshot: () => undefined,
-    onBackgroundActivity: () => undefined,
-    cursorFor: () => undefined,
-    validateServerCapabilities: () => undefined,
-    validateSessionCapabilities: () => undefined,
+    ...UNOBSERVED_RECORD_EVENTS,
     controllerDependencies: (scope, recordClient) => ({
       client: recordClient,
       sessionId: () => scope.sessionId,
@@ -119,18 +95,7 @@ function harness(capabilities = caps) {
       },
     }),
   });
-  const open = (sessionId: string) =>
-    manager.openOnRecord(
-      {
-        endpoint: "ws://server.test/ui",
-        token: "",
-        sessionId,
-        profileId: "coding",
-        cwd: "/srv/project",
-      },
-      client,
-      new AbortController().signal,
-    );
+  const open = (sessionId: string) => openRecord(manager, client, sessionId);
   return { client, manager, factory, rpc, start, open, notifications };
 }
 

@@ -5,6 +5,13 @@ import {
 } from "../src/external-driver.ts";
 import type { ExternalDriverControlContext } from "../src/external-driver.ts";
 import { createExternalDriverPeerCommands } from "../src/external-driver-peer-control.ts";
+import {
+  DISPATCH_ARGS,
+  DISPATCH_REPLY,
+  FENCE,
+  TURN,
+  capture,
+} from "./fixtures/external-driver-wire.ts";
 
 /**
  * 2030 regression suite for the 2019 peer leaf. Five defects fixed:
@@ -18,8 +25,6 @@ import { createExternalDriverPeerCommands } from "../src/external-driver-peer-co
  * 63 original control tests stay UNCHANGED; this file is additive.
  */
 
-const PROOF = "proof-synthetic-fixture";
-const TURN = "3f1c9d2a-4b6e-4c1a-9f2d-7a5e8b0c1d2e";
 /** Captured master session; its wire base is `dev:local:tui`. */
 const MASTER = "dev:local:tui#peer-abc";
 const PROFILE = "dev";
@@ -32,20 +37,6 @@ interface LooseCommands {
   peerControl(args: unknown): Promise<unknown>;
 }
 
-const DISPATCH_REPLY = {
-  operation_id: "op-dispatch-1",
-  state: "accepted",
-  model: "deepseek-chat",
-  model_lane: "deepseek-chat",
-  workspace_root: "/ws/peer-abc",
-  adopted_turn_id: TURN,
-  adopted_session_id: WORKER,
-  slug: "abc",
-  duplicate: false,
-  accepted_at_ms: 1_700_000_000_000,
-  payload_digest: "sha256:deadbeef",
-};
-
 const CONTROL_REPLY = {
   operation_id: "op-control-1",
   state: "accepted",
@@ -56,15 +47,6 @@ const CONTROL_REPLY = {
   accepted_at_ms: 1_700_000_000_500,
   payload_digest: "sha256:cafef00d",
   duplicate: false,
-};
-
-const FENCE = { driverId: "driver-b", epoch: 8, controlToken: PROOF };
-
-const DISPATCH_PARAMS = {
-  ...FENCE,
-  operationId: "op-dispatch-1",
-  model: "deepseek-chat",
-  dispatch: { kind: "new_brief", brief: "do the thing" },
 };
 
 const CONTROL_PARAMS = {
@@ -103,18 +85,9 @@ function leafContext(
   };
 }
 
-async function capture(promise: Promise<unknown>): Promise<unknown> {
-  try {
-    await promise;
-    return null;
-  } catch (error) {
-    return error;
-  }
-}
-
 describe("post-send caller mutation cannot retarget the decode fence", () => {
   it("dispatch: a reply matching the MUTATED foreign operation/model is refused", async () => {
-    const args: Record<string, unknown> = { ...DISPATCH_PARAMS };
+    const args: Record<string, unknown> = { ...DISPATCH_ARGS };
     const { commands } = leafContext(() => {
       args.operationId = "op-foreign";
       args.model = "gpt-x";
@@ -175,7 +148,7 @@ describe("dispatch fences the requested LANE, not the resolved model", () => {
         model_lane: "some-foreign-lane",
       }),
     );
-    await expect(commands.peerDispatch(DISPATCH_PARAMS)).rejects.toBeInstanceOf(
+    await expect(commands.peerDispatch(DISPATCH_ARGS)).rejects.toBeInstanceOf(
       ExternalDriverProtocolError,
     );
     expect(calls).toHaveLength(1);

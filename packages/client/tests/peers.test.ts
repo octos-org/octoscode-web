@@ -7,20 +7,19 @@ import {
   PEER_METHODS,
   type PeerScope,
 } from "../src/peers.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
+import { makeCaps } from "./fixtures/caps.ts";
 
 const scope: PeerScope = {
   sessionId: "dev:local:tui",
   profileId: "dev",
   authority: {},
 };
-const caps: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [PEER_METHODS.PREPARE, PEER_METHODS.GATHER],
-  supported_notifications: [PEER_METHODS.STAGED, PEER_METHODS.CLOSED],
-  supported_features: [],
-};
+const caps = makeCaps({
+  methods: [PEER_METHODS.PREPARE, PEER_METHODS.GATHER],
+  notifications: [PEER_METHODS.STAGED, PEER_METHODS.CLOSED],
+  features: [],
+});
 const peer = {
   slug: "review",
   topic: "peer-review",

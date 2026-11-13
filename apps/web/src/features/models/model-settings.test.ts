@@ -10,6 +10,7 @@ import {
   type ModelSettingsDraft,
   type ModelSettingsState,
 } from "./model-settings.ts";
+import { appuiCaps } from "../../test-fixtures/caps.ts";
 
 const draft: ModelSettingsDraft = {
   familyId: " zai-coding ",
@@ -77,17 +78,8 @@ function controllerFor(
   });
 }
 
-function capabilities(...methods: string[]): UiProtocolCapabilities {
-  return {
-    version: { protocol: "octos.ui.v1", schema_version: 1, jsonrpc: "2.0" },
-    capabilities_schema_version: 1,
-    supported_methods: methods,
-    supported_notifications: [],
-  };
-}
-
 function allCapabilities(): UiProtocolCapabilities {
-  return capabilities(...Object.values(MODEL_SETTINGS_METHODS));
+  return appuiCaps({ methods: Object.values(MODEL_SETTINGS_METHODS) });
 }
 
 function fakeClient(

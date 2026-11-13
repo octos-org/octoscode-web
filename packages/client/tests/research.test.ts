@@ -6,14 +6,12 @@ import {
   type ResearchLane,
 } from "../src/research.ts";
 import { APPUI_RESEARCH_METHODS } from "../src/research-methods.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
 
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: Object.values(APPUI_RESEARCH_METHODS),
-  supported_notifications: [],
-};
+import { makeCaps } from "./fixtures/caps.ts";
+
+const capabilities = makeCaps({
+  methods: Object.values(APPUI_RESEARCH_METHODS),
+});
 const row = {
   key: "cheap",
   provider: "deepseek",

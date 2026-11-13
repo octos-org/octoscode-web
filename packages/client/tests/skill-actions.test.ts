@@ -6,15 +6,13 @@ import {
   SKILL_ACTION_JOBS_UI_FEATURE,
 } from "../src/skill-methods.ts";
 import { DEFAULT_UI_FEATURES } from "../src/client.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
 
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: Object.values(APPUI_SKILL_ACTION_METHODS),
-  supported_features: [SKILL_ACTIONS_UI_FEATURE, SKILL_ACTION_JOBS_UI_FEATURE],
-  supported_notifications: [],
-};
+import { makeCaps } from "./fixtures/caps.ts";
+
+const capabilities = makeCaps({
+  methods: Object.values(APPUI_SKILL_ACTION_METHODS),
+  features: [SKILL_ACTIONS_UI_FEATURE, SKILL_ACTION_JOBS_UI_FEATURE],
+});
 const job = {
   job_id: "job-1",
   batch_id: "batch-1",
