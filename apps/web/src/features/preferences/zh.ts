@@ -1821,13 +1821,31 @@ const catalog: Readonly<Record<string, string>> = {
   "Remember this": "记住这段",
   Summary: "摘要",
   "Memory content": "记忆内容",
-  "{inserted} inserted · {updated} updated · {unchanged} unchanged":
-    "新增 {inserted} · 更新 {updated} · 未变化 {unchanged}",
   "Request memory": "请求记忆",
-  "Memory request accepted: {status}": "记忆请求已接受：{status}",
   "Promote to Knowledge": "提升为知识",
-  "Promotion staged for {count} record(s); refresh is {refresh}.":
-    "已为 {count} 条记录安排提升，刷新状态：{refresh}。",
+  "Add to memory": "添加记忆",
+  "Saves the title, summary and content as a reference document. Find it with Search memories. It can't be edited or deleted here.":
+    "把标题、摘要和内容存成一份参考资料。用「搜索记忆」找它，这里不能编辑或删除。",
+  "Asks Octos to remember the memory content. It waits as a staging note until Octos files it into Long-term memory, where you can edit or delete it.":
+    "请 Octos 记住「记忆内容」里的话。它先是一条暂存笔记，Octos 整理后会放进「长期记忆」，在那里可以编辑和删除。",
+  "Hands Octos the documents saved here that have been opened at least twice. What's worth keeping goes into Long-term memory.":
+    "把在这里存过、并且至少打开过两次的参考资料交给 Octos 整理，值得留下的会放进「长期记忆」。",
+  "Saved “{title}” as a reference document. It's open in Detail; find it again with Search memories.":
+    "已把「{title}」存为参考资料，已在「详情」里打开。以后用「搜索记忆」找它。",
+  "Saved “{title}” as a reference document. Find it with Search memories.":
+    "已把「{title}」存为参考资料。用「搜索记忆」找它。",
+  "Octos didn't accept this request: {status}.":
+    "Octos 没有接受这个请求：{status}。",
+  "Octos will remember it. It's a staging note until Octos files it into Long-term memory, where you can edit or delete it.":
+    "Octos 会记住它。它先是一条暂存笔记，Octos 整理后会放进「长期记忆」，在那里可以编辑和删除。",
+  "Octos received it, but background filing is off on this server, so it stays a staging note for now.":
+    "Octos 收到了，但这台服务器关闭了后台整理，它会先一直是暂存笔记。",
+  "Nothing to hand over yet: only documents saved here that have been opened at least twice qualify.":
+    "暂时没有可整理的：只有在这里存过、并且至少打开过两次的参考资料才算。",
+  "Handed {count} document(s) to Octos. What's worth keeping will appear in Long-term memory.":
+    "已把 {count} 份参考资料交给 Octos 整理，值得留下的会出现在「长期记忆」里。",
+  "Handed {count} document(s) to Octos, but background filing is off on this server, so they stay staging notes for now.":
+    "已把 {count} 份参考资料交给 Octos，但这台服务器关闭了后台整理，它们会先一直是暂存笔记。",
   Detail: "详情",
   "Trust: {trust}": "信任级别：{trust}",
   "No record body was reported.": "服务器未提供记录正文。",

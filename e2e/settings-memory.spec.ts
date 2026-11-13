@@ -47,7 +47,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
       node.click();
     });
   await expect(
-    settings.getByText("1 inserted · 0 updated · 0 unchanged"),
+    settings.getByText(/^Saved “Refresh proof” .* It's open in Detail;/),
   ).toBeVisible();
   await expect(settings.getByText("refresh-kept body")).toBeVisible();
   expect(ingestCalls()).toHaveLength(1);
@@ -111,6 +111,17 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await expect(settings.getByText(/not available in the current/)).toHaveCount(
     0,
   );
+
+  // Requesting and promoting each say where the memory goes (F-005).
+  const request = settings.getByRole("button", { name: "Request memory" });
+  await expect(request).toHaveAccessibleDescription(/until Octos files it/);
+  await settings.getByLabel("Memory content").fill("prefers tea");
+  await request.click();
+  const requested = settings.getByText(/^Octos will remember it\. .*Long-term/);
+  await expect(requested).toBeVisible();
+  await settings.getByRole("button", { name: "Promote to Knowledge" }).click();
+  await expect(settings.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
+  await expect(requested).toHaveCount(0);
 
   // An edit sends the text verbatim against the version on screen; the list
   // then shows what the server stored, its own stamp included.

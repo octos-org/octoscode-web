@@ -190,6 +190,22 @@
   gap: var(--dsw-space-2);
 }
 
+.choices {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.choices dt {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}
+
+.choices dd {
+  margin: 0 0 var(--dsw-space-2);
+}
+
 .output {
   max-width: 100%;
   overflow: auto;
