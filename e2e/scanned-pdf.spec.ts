@@ -38,9 +38,6 @@ async function openScan(page: Page, sessionId: string, name: string) {
   return preview;
 }
 
-const ocrWorkers = (page: Page) =>
-  page.workers().filter((worker) => worker.url().includes("/assets/ocr-"));
-
 async function recognize(preview: Locator, language = "English") {
   await preview.getByLabel("Language").selectOption({ label: language });
   await preview
@@ -93,56 +90,4 @@ test("renders black-and-white and JPEG 2000 scans and reads them in the browser"
   expect(stored.caches).toEqual([]);
   expect(stored.databases).toEqual([]);
   expect(stored.text).not.toMatch(/Ningbo|宁波/);
-});
-
-test("says when the server can't run recognition, and cancelling or closing ends the worker", async ({
-  page,
-}) => {
-  await startSession(page, `/workspace/scanned-pdf-${Date.now()}`);
-  const preview = await openScan(
-    page,
-    await openSessionId(page),
-    "scan-en.pdf",
-  );
-
-  // A deployment whose OCR directory keeps the page policy.
-  await page.route("**/assets/ocr-*/*", async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      headers: {
-        ...response.headers(),
-        "content-security-policy": "script-src 'self'",
-      },
-    });
-  });
-  await recognize(preview);
-  await expect(
-    preview.getByRole("alert").filter({
-      hasText: "Text recognition isn't available on this server.",
-    }),
-  ).toBeVisible({ timeout: 15_000 });
-  await page.unrouteAll();
-
-  await preview.getByRole("button", { name: "Try again" }).click();
-  await preview.getByRole("button", { name: "Cancel" }).click();
-  await expect(
-    preview.getByText("Text recognition was cancelled."),
-  ).toBeVisible();
-  await expect.poll(() => ocrWorkers(page).length).toBe(0);
-
-  // Closing the page text mid-run stops it; nothing arrives afterwards.
-  await preview.getByRole("button", { name: "Try again" }).click();
-  await expect.poll(() => ocrWorkers(page).length).toBe(1);
-  await preview.getByText("Page text", { exact: true }).click();
-  await expect.poll(() => ocrWorkers(page).length).toBe(0);
-  await preview.getByText("Page text", { exact: true }).click();
-  await expect(
-    preview.getByRole("button", { name: "Recognize text on page 1" }),
-  ).toBeVisible();
-
-  await recognize(preview);
-  await expect(preview.locator("pre").last()).toContainText(
-    "The warehouse in Ningbo shipped 3,912 orders in October.",
-  );
 });

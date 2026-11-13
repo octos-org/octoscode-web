@@ -1,4 +1,4 @@
-# e2e 保留清单（第二轮，T-0569）
+# e2e 保留清单（第三轮 T-0601；第二轮 T-0569）
 
 本清单替换第一轮（T-0500/T-0530，#412）的版本，是 e2e 目录**唯一的保留清单**。本阶段只改这份文档，不删测试，也不改产品代码。lead-web
 11-11 已有条件批准（见「审批记录」），T-0570 按本清单和其中的执行顺序整批删除、合并和修剪。
@@ -12,6 +12,107 @@
 - **⑤ 有意设计**：改之前要二次思考的设计决定。
 
 第二轮的删除规则：不按文件名或标题相似度删。每一条删除或合并都写明由哪条保留测试覆盖，以及两者共同会红的可观察失败；写不出共同失败的，要么说明它为什么本来就测不到网页（如只测 mock），要么留下。
+
+## 第三轮（T-0601）
+
+目标：全仓测试降到 2 万行以内（`wake/lanes/TEST-DIET.md`，shu
+11-05）。第二轮之后全仓 25,728 行，其中 e2e
+13,063 行、149 个。第二轮的结论是「再删就要删守着不同链路的测试」。这一轮多用了一条依据，也是 TEST-DIET 原有的规矩：第 3、4、5 类是少数例外，「每类只留最关键的一两个/几个」。
+
+**本轮规则：**
+
+1. **同一机制已有单测守的，e2e 那份删掉。**
+   第 ④ 类里迟到应答、重连恢复、草稿合并、容量这些机制，大多同时在 apps/web 或 packages/client 有单测守着同一个守卫。e2e 复制一遍，要多花十倍行数，抓到的却是同一个回归。下表逐条写出对应的单测。
+2. **同一族只留代表。**
+   迟到应答族留 product 的 held-start 表（四种迟到帧）、interaction-ownership、connector-oauth 刷新后回跳、diff-review 的迟到工作区应答。刷新和重连恢复族留 product「recovers
+   the durable session after disconnect and lossy replay」、「restores the
+   origin, tab credential, session, and workspace after
+   refresh」，以及 runtime-recovery、hydrate-failure 冷启动、draft-recovery、tab-lock。手机布局留 workspace-ux「keeps
+   the mobile composer on screen…」和 modal-stack（320px）。
+3. **以下几样不删：**
+   - 每条用户主链（①）；
+   - 第 3 类五个子类的代表；
+   - 上一轮批复点名的断言：`session/open` 的 `profile_id`、`selected_labels`
+     负载、令牌实际去向、`applied:false`、剪贴板的两种负例；
+   - 双模式的四条。
+
+   删之前用脚本扫过被删测试里的凭据、令牌、路径、超限、脚本注入断言。扫出来的 product「onboards
+   an empty solo server…」（提供方拒绝的密钥不回显）和 onboarding「validates the
+   address…」（地址里带令牌被拦下、不开 socket）因此保留。
+
+上一轮批复点名的单连接
+`peak() <= 1`，原来在 simultaneous-sessions 的 A1 测试里。这条测试删了，断言移到 product「keeps
+a server-accepted turn and sibling records on the same pooled
+socket」：整条测试里同时打开的 socket 最多一个（+5 行）。
+
+**数字**（`python3 wake/test-lines.py` 口径，本地按工作区计）：
+
+|                          | 全仓       | e2e        | 测试个数（全仓 / e2e） |
+| ------------------------ | ---------- | ---------- | ---------------------- |
+| 本轮前（main `83220ec`） | 25,728     | 13,063     | 435 / 149              |
+| 本 PR 后                 | 见 PR 正文 | 见 PR 正文 | 见 PR 正文             |
+
+全仓降到 2 万以内还差的部分在 packages/client 和 apps/web 的下一个 PR 里做。
+
+### 本轮删除（46 条，其中 9 个文件整删）
+
+| spec                                | 测试                                                                                                                                     | 原类 | 理由：守同一机制的保留测试；或从此不再有 e2e 守的东西                                                                                                                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| approval-clarity                    | a late permission retry never starts in or clears another Session                                                                        | ④    | 迟到应答族，代表是 product 的 held-start 表。代次加 client/session scope 的守卫由 apps/web `async/request-authority.test.ts`「requires both the latest generation and its client/session scope」守                                                                       |
+| attention                           | denied desktop permission keeps tab counts working and Disconnect clears attention                                                       | ③    | 浏览器通知权限被拒时的降级，不属于第 3 类五个子类，是单系统分支。后台完成的提示留在同文件另一条。通知被拒这一分支从此没有 e2e                                                                                                                                            |
+| canonical-recovery（整删）          | refresh shows the interrupted turn with complete canonical replay                                                                        | ④    | 中断回合的重建由 apps/web `timeline/canonical-hydrate.test.ts`「restores an interrupted unpersisted prompt, partial answer, and error…」守。刷新后不重发由 runtime-recovery 和 product 断线恢复守                                                                        |
+| capacity-and-peers（整删）          | holds twelve browser turns and three browser-started native peers on one pooled socket                                                   | ④    | 容量由 apps/web `session-record-capacity.test.ts`（15 条记录 FIFO 隔离）守。单池 socket 由 product 单池一条守，现在加了 `peak() <= 1`                                                                                                                                    |
+| chat-handover                       | a late collision cannot replace newer text or images, then restores the complete draft                                                   | ④    | 合并规则由 apps/web `session-composer-drafts.test.ts`「keeps full returned drafts in order without replacing new images or another Session」守。被拒的 Resume chat 主链留在同文件第一条                                                                                  |
+| command-surface                     | keeps the rewind receipt and restores only the owning prompt draft after canonical refresh                                               | ④    | 刷新恢复族配额。撤销×刷新由 turn-undo 主链守（redo 熬过刷新）。`/rewind` 回执本身跨刷新从此没有 e2e                                                                                                                                                                      |
+| connection-storage                  | a 51st unsent draft evicts one older draft, stays saved, and never blocks navigation                                                     | ④    | 关闭标签页草稿的 localStorage 逐出，单系统容量细节；T-0570 已说明只能断言「逐出了一条」。草稿身份隔离留在同文件第一条                                                                                                                                                    |
+| connector-management                | a delayed refresh blocks mutations and releases busy state when it lands                                                                 | ④    | 单系统 busy 状态。连接器主流程和白名单两条留                                                                                                                                                                                                                             |
+| connector-oauth                     | a restart-pending sign-in keeps its restart note across refreshes                                                                        | ④    | 提示文案跨刷新，单系统。OAuth 往返、刷新后回跳被拒两条留                                                                                                                                                                                                                 |
+| diff-review                         | reconnects preserve the selected preview and Git scope without new diff reads                                                            | ④    | 重连恢复族，代表是 product 断线恢复。Changes 的迟到应答由同文件「Changes works before a turn…」守                                                                                                                                                                        |
+| driver-discovery                    | transitions healthy -> refused across a transport reconnect on the SAME record                                                           | ④    | 同一披露渲染换一种记录状态。健康披露（只读、不发控制帧）和 A/B 归属两条留                                                                                                                                                                                                |
+| expert-teams                        | a failed member is named, a working member survives a refresh and is stopped once, and the merge leaves both out                         | ④    | 恢复族配额。专家团主流程留。失败成员点名、只停一次从此没有 e2e                                                                                                                                                                                                           |
+| final-input                         | long approval remains readable and actionable in a short phone viewport                                                                  | ①    | 手机上的审批由 mobile-handoff「desktop handoff lets a fresh phone approve work…」守，手机布局由 workspace-ux 守                                                                                                                                                          |
+| hydrate-failure                     | a failed reconnect hydrate retains the current Session, Changes and draft                                                                | ④    | 重连恢复族。同文件冷启动失败一条留（大小上限子类的代表之一），product 断线恢复留                                                                                                                                                                                         |
+| keyboard-parity                     | Esc closes the palette inertly and interrupts only a live turn                                                                           | ②/③  | Esc 只中断选中属主由 local-preferences「bare Normal Escape interrupts only the selected owner…」守。「面板上的 Esc 不中断」这一半从此没有 e2e                                                                                                                            |
+| loaf（整删）                        | streaming turn stays under the long-frame budget                                                                                         | ④    | 对 mock 的帧时长预算，单系统，CI 机器上的帧时长本身不稳                                                                                                                                                                                                                  |
+| local-preferences                   | only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials          | ⑤/③  | 令牌不进浏览器存储由 pairing-link、skill-install-review「keeps sources and tokens out of browser storage」和 apps/web `connection/preferences.test.ts` 守。草稿刷新由 draft-recovery 守。剩下「显示偏好只在保存时落盘」是单系统                                          |
+| mobile-remote                       | a phone can deny, and never widens permissions                                                                                           | ③    | 手机不能扩大权限由同文件「a sandbox escalation can only be denied from the phone」守，手机审批由 mobile-handoff 守                                                                                                                                                       |
+| mobile-remote                       | a phone follow-up completes on the same session and survives a reload                                                                    | ④    | 普通回合加刷新，只是换成手机视口，与 product 刷新恢复同链                                                                                                                                                                                                                |
+| mobile-remote                       | an unreachable server reads as offline, and the overview recovers                                                                        | ④    | 单系统离线提示                                                                                                                                                                                                                                                           |
+| mobile-remote                       | a peer's question is answered from the phone's dock with the option picked                                                               | ②    | 回答负载（`selected_labels`）由 interaction-ownership「keeps three concurrent parked questions…」守，peer dock 由 peer-activity-and-restore 守。手机×peer 这个组合从此没有 e2e                                                                                           |
+| model-management                    | opening a session with no usable chat model goes to Settings › Models                                                                    | ②    | 同一路由门由 apps/web `app/no-model-setup-gate.test.ts`（⑤）守                                                                                                                                                                                                           |
+| multi-session-recovery-soak（整删） | parks a background approval on its owning Session across A/B/C switching, drains its queued followup, and survives an observer reconnect | ②/④  | apps/web `session-record-concurrency.test.ts` 两条：A 卡在真实审批时 B/C 只排空一次、切换选中不复位；重连后 canonical hydrate 恢复被卡住的审批，入队保持阻塞                                                                                                             |
+| native-workflows                    | a dropped native steer returns once to its owning FIFO while a different Session is selected                                             | ④    | 恢复族配额。Enter steer 主链留在同文件                                                                                                                                                                                                                                   |
+| native-workflows                    | goal pause, resume and stop preserve the current objective and budget, and newer notifications cancel stale transitions                  | ②    | goal 结果解析和不默认预算由 packages/client autonomy 测试守。迟到更新不复活由 apps/web `autonomy/model.test.ts`「drops a stale update…」守                                                                                                                               |
+| native-workflows                    | native agent receipts settle terminal status and delayed artifact reads cannot cross Session ownership                                   | ③    | 原生子代理归属和嵌套内容脱敏由 packages/client `autonomy-controls.test.ts` 的两条守：「uses full captured request scope and validates actual native child ownership」「never exposes unredacted nested artifact content…」。T-0570 补的 status revision 守卫从此没有测试 |
+| peer-control                        | a refused RECEIPT renders the typed peer_control_refused refusal                                                                         | ④    | 类型化拒绝的渲染由 peer-controller「a refused dispatch shows its bounded label…」守。座席各命令一帧、严格 opt-in 两条留                                                                                                                                                  |
+| peer-control                        | a driver_fence_stale typed error drops the seat, keeps the §6 label                                                                      | ④    | 同上                                                                                                                                                                                                                                                                     |
+| peer-reload（整删）                 | a finished peer keeps its place, read-only view and way back after a reload                                                              | ④    | 只读视图由 peer-readonly-composer 守，peer 行状态由 peer-activity-and-restore 守。刷新后保留位置从此没有 e2e                                                                                                                                                             |
+| product                             | keeps B selected when A's unacknowledged start is rejected                                                                               | ④    | 与同文件 held-start 表是同一守卫族（A 的 start 被扣住时 B 保持选中）                                                                                                                                                                                                     |
+| product                             | keeps authentication when a remembered Session can no longer open                                                                        | ④    | 恢复族配额。「刷新恢复 origin/凭据/会话/工作区四元组」一条留                                                                                                                                                                                                             |
+| product                             | reports a start acknowledgement timeout as unknown, then settles on release                                                              | ④    | apps/web `use-turn-controller.test.ts`「treats a start timeout as an unknown outcome instead of a rejection」                                                                                                                                                            |
+| profile-mutation                    | skill removal holds the profile lock through deferred replies and deduplicates confirmation; reviewing a source writes nothing           | ④    | 并发配额。凭据写失败一条（③）留                                                                                                                                                                                                                                          |
+| resume-and-reasoning                | resuming an already retained busy historical Session never reopens or resets its turn                                                    | ②    | 配额。恢复候选需确认一条（③）留                                                                                                                                                                                                                                          |
+| resume-and-reasoning                | reasoning visibility is retained per Session and does not change captured model effort                                                   | ②    | 单功能偏好                                                                                                                                                                                                                                                               |
+| resume-and-reasoning                | canceling a held historical open cannot install a late transcript or steal a new selection                                               | ④    | apps/web `async/request-authority.test.ts`。T-0570 已记录：App 还有一层守卫，单层变异时这条本来就是绿的                                                                                                                                                                  |
+| scanned-pdf                         | says when the server can't run recognition, and cancelling or closing ends the worker                                                    | ④/③  | OCR 主链、本地识别、不写缓存留在同文件第一条。取消后结束识别线程从此没有 e2e                                                                                                                                                                                             |
+| session-panel                       | one file stays selected across diff, output, reload and read failure                                                                     | ②    | 单面板的选中状态。Files 浏览并预览一条留                                                                                                                                                                                                                                 |
+| settings-mobile（整删）             | Settings remain operable at 320×480                                                                                                      | ①    | 手机布局代表是 workspace-ux 的手机输入框和 modal-stack（320px）                                                                                                                                                                                                          |
+| simultaneous-sessions（整删）       | recovers an unacknowledged A1 behind B and drains A2 then A3 without replaying A1                                                        | ④    | apps/web `session-record-integration.test.ts`「freezes all records on loss, ignores old RPC rejection, and resumes A2 only after ready then A3 after A2 terminal」。并入过来的 `peak() <= 1` 移到 product 单池 socket                                                    |
+| simultaneous-sessions（整删）       | preserves native persisted segment finality across late deltas and the next background FIFO turn                                         | ④    | apps/web `timeline/model.test.ts`「keeps the real Core persisted answer final when later-sequenced deltas arrive」                                                                                                                                                       |
+| surface-recovery                    | a late clipboard command result does not enter a different conversation                                                                  | ④    | 迟到应答族配额。失败 chunk 一条留                                                                                                                                                                                                                                        |
+| template-launch（整删）             | a rejected template launch retries its session identity and preserves the draft on reload                                                | ④    | 模板×权限两条留在 template-interactions。被拒启动用同一身份重试从此没有 e2e                                                                                                                                                                                              |
+| theme（整删）                       | blocked localStorage property keeps connection, session launch, and theme usable                                                         | ④    | 单系统：localStorage 被禁用时仍可用                                                                                                                                                                                                                                      |
+| timeline-interactions（整删）       | keeps activity and reader-controlled disclosures correct across ten streamed turns                                                       | ④    | 长流可读由 final-reading「360-message history…」守。十个回合的披露状态从此没有 e2e                                                                                                                                                                                       |
+| turn-undo                           | another tab's undo leaves this tab's stale entry unsent and unsure                                                                       | ④    | apps/web `history/turn-undo.test.ts`「an unanswered restore is unknown…」和 `history-coordinator.test.ts`「does not replay an ambiguous rollback…」                                                                                                                      |
+
+随之删掉、已没有使用者的测试设施：
+
+- `turn-observers.ts` 的
+  `observeStartedTurns`、`observeInterrupts`、`observeTransports`、`trackRuntimeErrors`；
+- mock 服务器（`apps/web/scripts/mock-ui-server.mjs`）的三个测试端点
+  `/__test__/reject-opened`、`/__test__/experts/interrupts`、`/__test__/diagnostics/state`，以及只给它们用的状态。
+
+下面逐条表里，本轮删的行「决定」改为「删（第三轮）」。
 
 ## 审批记录（lead-web，11-11）
 
@@ -72,47 +173,46 @@
 
 ## 第 3 类的五个子类
 
-| 子类             | e2e 里守它的测试                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 路径穿越         | 无                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 判定在 Core。网页只如实显示 Core 的结果：workspace-browse「browses the server's folders…」（服务器隐藏的项照实报告）、session-links「refuses a saved-link candidate with a different workspace…」（工作区不符的链接在请求历史前就拒）。网页侧解码由 packages/client 单测 `session-files.test.ts`「rejects malformed entries and workspace escapes instead of showing them」守                                                                                                                                                                                                                                                                                                                                                                       |
-| 沙箱逃逸         | artifact-preview「keeps HTML and SVG scripts and network access inert」、final-reading「360-message history…」（不安全 Markdown）、mobile-remote「a sandbox escalation can only be denied from the phone」、connector-management「adds a stdio connector from the server's allowlist, never a command」                                                                                                                                                                                                             | 预览和 Markdown 不执行脚本、不发网络请求；手机不能批准越出沙箱；stdio 连接器只能选白名单                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 鉴权和权限       | auth-identity「rejects invalid auth…」、approval-clarity 三条、product「offers whole permission presets…」、interaction-ownership「rejects same-base foreign-topic approval…」、session-links 两条、settings-memory「fails closed when authenticated memory ownership differs…」、template-interactions 两条、unfinished-flows、mobile-handoff 两条（含并入的 handoff-origin）                                                                                                                                      | auth-identity 第二、三条删或并入，理由见表：第二条只测 mock，第三条与 product 同链                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 密钥和令牌脱敏   | connection-storage「closed-tab drafts restore only for the authenticated principal…」、profile-mutation「a failed credential write…」、connector-oauth「signs a connector in…」、skill-install-review「keeps sources and tokens out of browser storage」、pairing-link「the paired token survives only this tab until Forget」、usage-ledger（令牌不进 URL）、onboarding「explains missing authentication while preserving password privacy…」、scanned-pdf「renders black-and-white…」（识别出的文字不进任何存储） | model-management 第二条删：mock 从不回显密钥，那条「脱敏」断言不会红                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 外部输入大小上限 | hydrate-failure「a cold hydrate failure stays honest…」（服务器的 `response_bytes_limit` 拒绝如实显示，重试不留幽灵会话）                                                                                                                                                                                                                                                                                                                                                                                           | 网页侧的上限在单测：packages/client `external-driver-operations.test.ts`「bounds the page on EXACT RAW snake_case serialization (256KiB)」、`projection-inputs.test.ts`「bounds numeric payload fields…」、`history.test.ts`「rejects invalid topic bytes and out-of-range u32 counts…」。**缺口两处**：一是预览的文件大小上限（`ArtifactPreview.tsx`「too large to preview here」），第一轮随 `artifact-preview-limits.spec.ts` 删了；二是上传的大小上限（`attachment-drafts.ts` 的 `MAX_UPLOAD_BYTES`/`MAX_IMAGE_BYTES`）。两处现在 e2e 和单测都没有。lead-web 11-11 定为必补，是 T-0570 的第一步：artifact-preview 第一条补一步，交付一个超限文件，断言不预览、仍可下载（约 +8 行）；`attachment-drafts.test.ts` 补一条上传上限单测（约 +10 行） |
+| 子类             | e2e 里守它的测试                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 路径穿越         | 无                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 判定在 Core，e2e 里没有喂 `../` 的测试。真喂穿越输入的在单测：packages/client `session-files.test.ts`「rejects malformed entries and workspace escapes instead of showing them」（喂 `../outside` 和 symlink 条目），apps/web `side-panel/panel-selection.test.ts`（只拼工作区相对路径）和 `media/attachment-drafts.test.ts`（任意路径的上传回执被拒）。e2e 里 session-links「refuses a saved-link candidate with a different workspace…」守工作区不符的链接在请求历史前就被拒 |
+| 沙箱逃逸         | artifact-preview「keeps HTML and SVG scripts and network access inert」、final-reading「360-message history…」（不安全 Markdown）、mobile-remote「a sandbox escalation can only be denied from the phone」、connector-management「adds a stdio connector from the server's allowlist, never a command」                                                                                                                                                                                                             | 预览和 Markdown 不执行脚本、不发网络请求；手机不能批准越出沙箱；stdio 连接器只能选白名单                                                                                                                                                                                                                                                                                                                                                                                       |
+| 鉴权和权限       | auth-identity「rejects invalid auth…」、approval-clarity 两条、product「offers whole permission presets…」、interaction-ownership「rejects same-base foreign-topic approval…」、session-links 两条、settings-memory「fails closed when authenticated memory ownership differs…」、template-interactions 两条、unfinished-flows、mobile-handoff 两条（含并入的 handoff-origin）                                                                                                                                      | auth-identity 第二、三条第二轮删或并入：第二条只测 mock，第三条与 product 同链。approval-clarity 的迟到重试第三轮删（迟到应答族）                                                                                                                                                                                                                                                                                                                                              |
+| 密钥和令牌脱敏   | connection-storage「closed-tab drafts restore only for the authenticated principal…」、profile-mutation「a failed credential write…」、connector-oauth「signs a connector in…」、skill-install-review「keeps sources and tokens out of browser storage」、pairing-link「the paired token survives only this tab until Forget」、usage-ledger（令牌不进 URL）、onboarding「explains missing authentication while preserving password privacy…」、scanned-pdf「renders black-and-white…」（识别出的文字不进任何存储） | model-management 第二条删：mock 从不回显密钥，那条「脱敏」断言不会红                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 外部输入大小上限 | artifact-preview「keeps a structured write artifact and its preview after reload」（交付一个超过 32 MiB 的文件：不预览、不读 `/api/files`、仍可下载，T-0570 补）、hydrate-failure「a cold hydrate failure stays honest…」（服务器的 `response_bytes_limit` 拒绝如实显示，重试不留幽灵会话）                                                                                                                                                                                                                         | 上传上限在 apps/web `attachment-drafts.test.ts`（喂 `MAX_IMAGE_BYTES + 1` 和 `MAX_UPLOAD_BYTES + 1`，T-0570 补）。其余网页侧上限在 packages/client 单测：`external-driver-operations.test.ts`「bounds the page on EXACT RAW snake_case serialization (256KiB)」、`projection-inputs.test.ts`「bounds numeric payload fields…」、`history.test.ts`「rejects invalid topic bytes and out-of-range u32 counts…」                                                                  |
 
 ## 逐问：两个功能交叉的链路
 
-| 交叉               | 守它的测试（全部保留）                                                                                                                                                                                     | 结论                                                                                                                                                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 模板×权限          | template-interactions「a write template blocks read-only sending…」「a read-only template waits for the permission receipt…」；template-launch「a rejected template launch retries its session identity…」 | 写模板在只读会话被拦并给一键提权；只读模板等权限回执再发。不缺                                                                                                                                                                      |
-| 撤销×后续          | turn-undo「undo puts the turn's files back…」（Core 拒绝的重做不重试，后续回合跑过后旧轮不再提供重做）、「another tab's undo…」；command-surface「keeps the rewind receipt…」                              | 不缺                                                                                                                                                                                                                                |
-| OAuth×刷新         | connector-oauth 三条                                                                                                                                                                                       | 第三条原标题说「直到服务器确认 connected」，但从没让服务器确认 connected；T-0570 改名为「a restart-pending sign-in keeps its restart note across refreshes」，与断言一致                                                            |
-| 记忆×版本冲突      | settings-memory「long-term entries edit and delete on the server…」                                                                                                                                        | 另一个写入者改过后保存被拒，显示服务器版本，草稿保留，再存成功；服务器没确认时草稿也保留。不缺                                                                                                                                      |
-| PWA×重连           | hydrate-failure「a failed reconnect hydrate retains…」、surface-recovery「a failed model-management chunk…」                                                                                               | 产品没有 service worker（`apps/web/src` 无 `serviceWorker`），没有离线缓存那一层。对应风险是「服务器换了构建 × 断线重连」：前者守重连 hydrate 失败不丢会话、Changes 和草稿，后者守新构建下懒加载分块失败不丢队列、草稿和 Stop。不缺 |
-| 预览×取消/敏感缓存 | scanned-pdf 两条、artifact-preview 两条、delivered-files                                                                                                                                                   | 取消或收起识别会结束线程，不冒迟到结果；识别文字和 PDF 内容不进 Cache Storage、IndexedDB、web storage；预览脚本惰性                                                                                                                 |
+| 交叉               | 守它的测试（全部保留）                                                                                                                                                                                     | 结论                                                                                                                                                                                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 模板×权限          | template-interactions「a write template blocks read-only sending…」「a read-only template waits for the permission receipt…」；template-launch「a rejected template launch retries its session identity…」 | 写模板在只读会话被拦并给一键提权；只读模板等权限回执再发。不缺                                                                                                                                                                                                    |
+| 撤销×后续          | turn-undo「undo puts the turn's files back…」（Core 拒绝的重做不重试，后续回合跑过后旧轮不再提供重做）                                                                                                     | 不缺。另一标签页撤销后本页过期条目的处理由 apps/web `history/turn-undo.test.ts` 守（第三轮删了 e2e 那条）                                                                                                                                                         |
+| OAuth×刷新         | connector-oauth 三条                                                                                                                                                                                       | 第三条原标题说「直到服务器确认 connected」，但从没让服务器确认 connected；T-0570 改名为「a restart-pending sign-in keeps its restart note across refreshes」，与断言一致                                                                                          |
+| 记忆×版本冲突      | settings-memory「long-term entries edit and delete on the server…」                                                                                                                                        | 另一个写入者改过后保存被拒，显示服务器版本，草稿保留，再存成功；服务器没确认时草稿也保留。不缺                                                                                                                                                                    |
+| PWA×重连           | product「recovers the durable session after disconnect and lossy replay」、surface-recovery「a failed model-management chunk…」                                                                            | 产品没有 service worker（`apps/web/src` 无 `serviceWorker`），没有离线缓存那一层。对应风险是「服务器换了构建 × 断线重连」：前者守断线和有损重放后会话完整、不重发，后者守新构建下懒加载分块失败不丢队列、草稿和 Stop。重连 hydrate 失败那条第三轮删（重连恢复族） |
+| 预览×取消/敏感缓存 | scanned-pdf 第一条、artifact-preview 两条、delivered-files                                                                                                                                                 | 识别文字和 PDF 内容不进 Cache Storage、IndexedDB、web storage；预览脚本惰性。取消或收起识别后结束线程那条第三轮删了，从此没有测试                                                                                                                                 |
 
 其余交叉（权限×运行中回合、队列×会话切换、中断×附件、peer×只读输入框、新会话×权限默认值等）见下表各行的「守的链路」。
 
 ## 逐问：失败和迟到路径
 
-| 路径                 | 守它的测试                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applied:false` 回执 | approval-clarity「permission retry requires an applied workspace-write response」：与「refuses a response that broadens…」合成一个表驱动测试，`applied:false` 仍是表中一行                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 跨代次、迟到应答     | approval-clarity「a late permission retry…」、product「keeps B selected when A's unacknowledged start is rejected」和 held-start 表、resume-and-reasoning「canceling a held historical open…」、simultaneous-sessions「recovers an unacknowledged A1…」、connector-oauth「a sign-in returning after the page was refreshed…」、driver-discovery A/B 和 reconnect 两条、native-workflows 第三至五条、chat-handover「a late collision…」、command-surface「queues a held gather synthesis…」、surface-recovery「a late clipboard command result…」、cron「creates At, Every and Cron jobs…」最后一步（换会话关掉定时任务页，T-0586）、diff-review「Changes works before a turn…」 |
-| 写入结果不明         | runtime-recovery、product「reports a start acknowledgement timeout as unknown…」、server-shutdown（`{}` 结果报未确认）、memory-import「a reply lost after the server wrote the batch…」、settings-memory「long-term entries edit and delete…」、turn-undo「another tab's undo…」、skill-install-review「an unconfirmed install is re-read from the server, never claimed」                                                                                                                                                                                                                                                                                                      |
-| 写入被拒             | turn-undo 第一条、chat-handover 第一条、peer-controller「a refused dispatch…」、peer-control 拒绝回执和 fence stale 两条、template-launch、mobile-remote「a phone starts a new session… keeps a refused first task as a draft」、profile-mutation「a failed credential write…」、unfinished-flows、skill-install-review「a changed registry refuses the install and nothing else happens」                                                                                                                                                                                                                                                                                      |
-| 旧令牌清理           | 旧 localStorage 令牌的清理在 apps/web 单测 `connection/remembered-token.test.ts`「removes saved tokens for every origin without changing preferences」（T-0529）；e2e 里是 connection-storage「closed-tab drafts…」（Forget 清掉该身份）和 pairing-link「the paired token survives only this tab until Forget」                                                                                                                                                                                                                                                                                                                                                                 |
+| 路径                 | 守它的测试                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied:false` 回执 | approval-clarity「permission retry requires an applied workspace-write response」：与「refuses a response that broadens…」合成一个表驱动测试，`applied:false` 仍是表中一行                                                                                                                                                                                                                                                                |
+| 跨代次、迟到应答     | product 的 held-start 表、connector-oauth「a sign-in returning after the page was refreshed…」、driver-discovery A/B、command-surface「queues a held gather synthesis…」、cron「creates At, Every and Cron jobs…」最后一步（换会话关掉定时任务页，T-0586）、diff-review「Changes works before a turn…」。第三轮删掉的同族测试，以及守同一守卫的单测，见「第三轮」表                                                                       |
+| 写入结果不明         | runtime-recovery、server-shutdown（`{}` 结果报未确认）、memory-import「a reply lost after the server wrote the batch…」、settings-memory「long-term entries edit and delete…」、skill-install-review「an unconfirmed install is re-read from the server, never claimed」。单测：apps/web `use-turn-controller.test.ts`「treats a start timeout as an unknown outcome…」、`history/turn-undo.test.ts`「an unanswered restore is unknown…」 |
+| 写入被拒             | turn-undo 第一条、chat-handover 第一条、peer-controller「a refused dispatch…」、mobile-remote「a phone starts a new session… keeps a refused first task as a draft」、profile-mutation「a failed credential write…」、unfinished-flows、skill-install-review「a changed registry refuses the install and nothing else happens」                                                                                                           |
+| 旧令牌清理           | 旧 localStorage 令牌的清理在 apps/web 单测 `connection/remembered-token.test.ts`「removes saved tokens for every origin without changing preferences」（T-0529）；e2e 里是 connection-storage「closed-tab drafts…」（Forget 清掉该身份）和 pairing-link「the paired token survives only this tab until Forget」                                                                                                                           |
 
 上表里 cron、diff-review、session-panel、surface-recovery 这四条迟到测试缺同步点或缺正向对照，可能空过。T-0570 做了变异核实：diff-review 本来就会红；surface-recovery 补了正向对照；cron 和 session-panel 补了同步点，但守卫从 UI 走不到，留给 lead 下一轮定（见「T-0570 执行结果」）。
 
-## PDF、手机、旧 Core 的负例（全部保留）
+## PDF、手机、旧 Core 的负例
 
-- **PDF**：scanned-pdf 两条（黑白和 JPEG
-  2000 扫描件、本地识别、服务器不支持、取消）。
-- **手机**：final-input「long approval remains readable and actionable in a
-  short phone viewport」、modal-stack（320px）、workspace-ux「keeps the mobile
-  composer on
-  screen…」、settings-mobile（320×480）、mobile-handoff 两条、mobile-remote 第三至七条。takeover-layout（B 档，已批）删后，手机上长审批的可读和可操作仍由 final-input 守。
+- **PDF**：scanned-pdf「renders black-and-white and JPEG 2000 scans and reads
+  them in the browser」（黑白和 JPEG
+  2000 扫描件、本地识别、不写缓存）。「服务器不支持、取消」那条第三轮删。
+- **手机**：modal-stack（320px）、workspace-ux「keeps the mobile composer on
+  screen…」、mobile-handoff 两条、mobile-remote 留下的两条（沙箱提权只能拒绝、手机在关注文件夹开新会话）。final-input 的手机短视口、settings-mobile（320×480）和 mobile-remote 另外四条第三轮删，理由见「第三轮」表。
 - **旧 Core**（不广播某能力时的退路）：workspace-browse「shows no Browse
   affordance…」、session-panel「Files ignores a late
   listing…」（旧 Core 的 Files 回退）、native-workflows「native commands fail
@@ -211,7 +311,7 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 | 测试                                                                              | 类  | 行  | 决定                | 守的链路 / 删除映射                                                                                                                                      |
 | --------------------------------------------------------------------------------- | --- | --- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | switching stops the running workaround, then redoes the request with write access | ②   | 42  | 留                  | 拒写后切到可写：先停掉正在跑的变通回合，再按原请求重做（权限×运行中回合）                                                                                |
-| a late permission retry never starts in or clears another Session                 | ④   | 24  | 留                  | 迟到的权限重试不在别的会话启动、也不清别的会话                                                                                                           |
+| a late permission retry never starts in or clears another Session                 | ④   | 24  | 删（第三轮）        | 迟到的权限重试不在别的会话启动、也不清别的会话                                                                                                           |
 | permission retry refuses a response that ${answer}                                | ③   | 15  | 留（T-0570 已合并） | 表驱动两行：`broadens network access`（应答扩大网络访问）和 `is not applied`（`applied:false`）。两种应答都报错、不重做回合；变异核实每行各自会红        |
 | permission retry requires an applied workspace-write response                     | ③   | 15  | 并入上一条(A)       | 与上一条打 App.tsx 同一个守卫（应答扩大网络或 `applied:false` → 报错、不重做回合），setup、报错文案和断言相同。合并后 `applied:false` 仍是表中一行，不丢 |
 
@@ -224,10 +324,10 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### attention.spec.ts（2 个，留 2；191 行 → A 后 190）
 
-| 测试                                                                                         | 类  | 行    | 决定 | 守的链路 / 删除映射                                |
-| -------------------------------------------------------------------------------------------- | --- | ----- | ---- | -------------------------------------------------- |
-| denied desktop permission keeps tab counts working and Disconnect clears attention           | ③   | 35+1  | 留   | 桌面通知权限被拒后的降级边界（角标不依赖通知权限） |
-| a background Session completing while another is selected signals and acknowledges on return | ②   | 48+12 | 留   | 跨会话注意力信号与确认（后台完成 → 选中会话提示）  |
+| 测试                                                                                         | 类  | 行    | 决定         | 守的链路 / 删除映射                                |
+| -------------------------------------------------------------------------------------------- | --- | ----- | ------------ | -------------------------------------------------- |
+| denied desktop permission keeps tab counts working and Disconnect clears attention           | ③   | 35+1  | 删（第三轮） | 桌面通知权限被拒后的降级边界（角标不依赖通知权限） |
+| a background Session completing while another is selected signals and acknowledges on return | ②   | 48+12 | 留           | 跨会话注意力信号与确认（后台完成 → 选中会话提示）  |
 
 ### auth-identity.spec.ts（3 个，留 1；233 行 → A 后 63）
 
@@ -239,34 +339,34 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### canonical-recovery.spec.ts（1 个，留 1；163 行）
 
-| 测试                                                              | 类  | 行    | 决定 | 守的链路 / 删除映射                                                      |
-| ----------------------------------------------------------------- | --- | ----- | ---- | ------------------------------------------------------------------------ |
-| refresh shows the interrupted turn with complete canonical replay | ④   | 158+1 | 留   | 刷新后中断回合按 canonical replay 呈现，不重演（legacy terminal 变体删） |
+| 测试                                                              | 类  | 行    | 决定         | 守的链路 / 删除映射                                                      |
+| ----------------------------------------------------------------- | --- | ----- | ------------ | ------------------------------------------------------------------------ |
+| refresh shows the interrupted turn with complete canonical replay | ④   | 158+1 | 删（第三轮） | 刷新后中断回合按 canonical replay 呈现，不重演（legacy terminal 变体删） |
 
 修剪（T-0570，不删测试）：`recoveryModuleRequests > 0`（依赖懒加载分块的实现细节）
 
 ### capacity-and-peers.spec.ts（1 个，留 1；319 行）
 
-| 测试                                                                                   | 类  | 行     | 决定 | 守的链路 / 删除映射                                 |
-| -------------------------------------------------------------------------------------- | --- | ------ | ---- | --------------------------------------------------- |
-| holds twelve browser turns and three browser-started native peers on one pooled socket | ④   | 259+47 | 留   | 单池 socket 上的容量不变量（12 回合 + 3 原生 peer） |
+| 测试                                                                                   | 类  | 行     | 决定         | 守的链路 / 删除映射                                 |
+| -------------------------------------------------------------------------------------- | --- | ------ | ------------ | --------------------------------------------------- |
+| holds twelve browser turns and three browser-started native peers on one pooled socket | ④   | 259+47 | 删（第三轮） | 单池 socket 上的容量不变量（12 回合 + 3 原生 peer） |
 
 修剪（T-0570，不删测试）：诊断块（201–223）只留「start 已到达」一句
 
 ### chat-handover.spec.ts（2 个，留 2；273 行）
 
-| 测试                                                                                                                                                         | 类  | 行    | 决定 | 守的链路 / 删除映射                                             |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----- | ---- | --------------------------------------------------------------- |
-| §5.2 composer handover (external-held session) › a refused Resume chat can be retried, and Resume chat and an owned seat release control before sending once | ②   | 84+46 | 留   | 被拒的 Resume chat 可重试，恢复后与自有座席一起一次性归还发送权 |
-| a late collision cannot replace newer text or images, then restores the complete draft                                                                       | ④   | 64+32 | 留   | 迟到的交接不能覆盖更新的草稿（竞态恢复）                        |
+| 测试                                                                                                                                                         | 类  | 行    | 决定         | 守的链路 / 删除映射                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----- | ------------ | --------------------------------------------------------------- |
+| §5.2 composer handover (external-held session) › a refused Resume chat can be retried, and Resume chat and an owned seat release control before sending once | ②   | 84+46 | 留           | 被拒的 Resume chat 可重试，恢复后与自有座席一起一次性归还发送权 |
+| a late collision cannot replace newer text or images, then restores the complete draft                                                                       | ④   | 64+32 | 删（第三轮） | 迟到的交接不能覆盖更新的草稿（竞态恢复）                        |
 
 ### command-surface.spec.ts（3 个，留 3；403 行）
 
-| 测试                                                                                                     | 类  | 行    | 决定 | 守的链路 / 删除映射                                         |
-| -------------------------------------------------------------------------------------------------------- | --- | ----- | ---- | ----------------------------------------------------------- |
-| fails closed for an unknown command and sends no model input                                             | ⑤/③ | 15+9  | 留   | 未知命令 fail-closed、永不进模型（仓库 AGENTS.md 架构规则） |
-| keeps the rewind receipt and restores only the owning prompt draft after canonical refresh               | ④   | 67+51 | 留   | 回执经 canonical 刷新保留 + 草稿归属恢复                    |
-| queues a held gather synthesis only on busy A while B is selected and keeps blackboard refresh read-only | ②   | 190+3 | 留   | gather 合成在忙碌会话排队、黑板刷新只读（跨功能）           |
+| 测试                                                                                                     | 类  | 行    | 决定         | 守的链路 / 删除映射                                         |
+| -------------------------------------------------------------------------------------------------------- | --- | ----- | ------------ | ----------------------------------------------------------- |
+| fails closed for an unknown command and sends no model input                                             | ⑤/③ | 15+9  | 留           | 未知命令 fail-closed、永不进模型（仓库 AGENTS.md 架构规则） |
+| keeps the rewind receipt and restores only the owning prompt draft after canonical refresh               | ④   | 67+51 | 删（第三轮） | 回执经 canonical 刷新保留 + 草稿归属恢复                    |
+| queues a held gather synthesis only on busy A while B is selected and keeps blackboard refresh read-only | ②   | 190+3 | 留           | gather 合成在忙碌会话排队、黑板刷新只读（跨功能）           |
 
 修剪（T-0570，不删测试）：第三条末尾的 64 KiB 断言量的是测试自己拼的字符串，删
 
@@ -288,29 +388,29 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### connection-storage.spec.ts（2 个，留 2；214 行）
 
-| 测试                                                                                            | 类  | 行    | 决定                | 守的链路 / 删除映射                                                                                                            |
-| ----------------------------------------------------------------------------------------------- | --- | ----- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| closed-tab drafts restore only for the authenticated principal and Forget clears that principal | ③   | 68+28 | 留                  | 草稿只归还给认证主体；Forget 清主体（身份隔离）                                                                                |
-| a 51st unsent draft evicts one older draft, stays saved, and never blocks navigation            | ④   | 82+1  | 留（T-0570 改标题） | 草稿容量逐出且不阻塞导航（数据完整性）。逐出哪一条取决于 localStorage 枚举顺序，e2e 只能断言「逐出了一条」，标题改为与断言一致 |
+| 测试                                                                                            | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                            |
+| ----------------------------------------------------------------------------------------------- | --- | ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| closed-tab drafts restore only for the authenticated principal and Forget clears that principal | ③   | 68+28 | 留           | 草稿只归还给认证主体；Forget 清主体（身份隔离）                                                                                |
+| a 51st unsent draft evicts one older draft, stays saved, and never blocks navigation            | ④   | 82+1  | 删（第三轮） | 草稿容量逐出且不阻塞导航（数据完整性）。逐出哪一条取决于 localStorage 枚举顺序，e2e 只能断言「逐出了一条」，标题改为与断言一致 |
 
 ### connector-management.spec.ts（3 个，留 3；198 行）
 
-| 测试                                                                     | 类  | 行  | 决定                | 守的链路 / 删除映射                                                                     |
-| ------------------------------------------------------------------------ | --- | --- | ------------------- | --------------------------------------------------------------------------------------- |
-| manages HTTP connectors and keeps existing stdio controls                | ①   | 51  | 留                  | 连接器管理主流程                                                                        |
-| adds a stdio connector from the server's allowlist, never a command      | ③   | 38  | 留                  | stdio 连接器只能从服务器白名单选，不能填命令                                            |
-| a delayed refresh blocks mutations and releases busy state when it lands | ④   | 48  | 留（T-0570 改标题） | 延迟的刷新期间禁止变更、应答到达后释放 busy。只测成功释放，标题去掉「always」与断言一致 |
+| 测试                                                                     | 类  | 行  | 决定         | 守的链路 / 删除映射                                                                     |
+| ------------------------------------------------------------------------ | --- | --- | ------------ | --------------------------------------------------------------------------------------- |
+| manages HTTP connectors and keeps existing stdio controls                | ①   | 51  | 留           | 连接器管理主流程                                                                        |
+| adds a stdio connector from the server's allowlist, never a command      | ③   | 38  | 留           | stdio 连接器只能从服务器白名单选，不能填命令                                            |
+| a delayed refresh blocks mutations and releases busy state when it lands | ④   | 48  | 删（第三轮） | 延迟的刷新期间禁止变更、应答到达后释放 busy。只测成功释放，标题去掉「always」与断言一致 |
 
 修剪（T-0570，不删测试）：`openConnectors` 的中文和窄屏分支、`start` 的 `stable`
 参数已无调用者（约 15 行）
 
 ### connector-oauth.spec.ts（3 个，留 3；210 行）
 
-| 测试                                                              | 类  | 行    | 决定                | 守的链路 / 删除映射                                                                                                                                                                                |
-| ----------------------------------------------------------------- | --- | ----- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| signs a connector in through the provider and back                | ①   | 88+23 | 留                  | 连接器 OAuth 登录往返主流程                                                                                                                                                                        |
-| a sign-in returning after the page was refreshed is turned away   | ③   | 36    | 留                  | 页面刷新后回来的登录回跳被拒（state 不跨刷新）                                                                                                                                                     |
-| a restart-pending sign-in keeps its restart note across refreshes | ④   | 34    | 留（T-0570 改标题） | 需重启的登录在刷新间保留「重启后生效」提示，不倒回「需要授权」（OAuth×刷新）。原标题说「直到服务器确认已连接」，但 fixture 没有能模拟重启后已连接的开关，测试从没测过这一步，所以改标题，不扩 mock |
+| 测试                                                              | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                                                                |
+| ----------------------------------------------------------------- | --- | ----- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| signs a connector in through the provider and back                | ①   | 88+23 | 留           | 连接器 OAuth 登录往返主流程                                                                                                                                                                        |
+| a sign-in returning after the page was refreshed is turned away   | ③   | 36    | 留           | 页面刷新后回来的登录回跳被拒（state 不跨刷新）                                                                                                                                                     |
+| a restart-pending sign-in keeps its restart note across refreshes | ④   | 34    | 删（第三轮） | 需重启的登录在刷新间保留「重启后生效」提示，不倒回「需要授权」（OAuth×刷新）。原标题说「直到服务器确认已连接」，但 fixture 没有能模拟重启后已连接的开关，测试从没测过这一步，所以改标题，不扩 mock |
 
 ### conversation-search.spec.ts（1 个，留 1；34 行）
 
@@ -337,11 +437,11 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### diff-review.spec.ts（3 个，留 3；367 行）
 
-| 测试                                                                                 | 类  | 行    | 决定 | 守的链路 / 删除映射                                                                                                            |
-| ------------------------------------------------------------------------------------ | --- | ----- | ---- | ------------------------------------------------------------------------------------------------------------------------------ |
-| diff syntax and word marks keep inert, selectable text beside the chat and on mobile | ③   | 91+96 | 留   | diff 渲染保持惰性可选（不安全内容不可执行）。T-0570 修剪了主题配色比较和截图，标题随之去掉「both themes」                      |
-| Changes works before a turn and ignores a late workspace reply after changing scope  | ②/④ | 70    | 留   | 无回合时 Changes 可用；切换范围后迟到的工作区应答被忽略。变异核实：去掉 `requestIsCurrent()` 检查 3 次都红，不是空过，测试不改 |
-| reconnects preserve the selected preview and Git scope without new diff reads        | ④   | 82    | 留   | 重连保留选中的预览和 Git 范围，不重复读 diff                                                                                   |
+| 测试                                                                                 | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                            |
+| ------------------------------------------------------------------------------------ | --- | ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| diff syntax and word marks keep inert, selectable text beside the chat and on mobile | ③   | 91+96 | 留           | diff 渲染保持惰性可选（不安全内容不可执行）。T-0570 修剪了主题配色比较和截图，标题随之去掉「both themes」                      |
+| Changes works before a turn and ignores a late workspace reply after changing scope  | ②/④ | 70    | 留           | 无回合时 Changes 可用；切换范围后迟到的工作区应答被忽略。变异核实：去掉 `requestIsCurrent()` 检查 3 次都红，不是空过，测试不改 |
+| reconnects preserve the selected preview and Git scope without new diff reads        | ④   | 82    | 删（第三轮） | 重连保留选中的预览和 Git 范围，不重复读 diff                                                                                   |
 
 修剪（T-0570，不删测试）：`openReview` 的 `recover`/`unreadableHistory`
 分支已无调用者（约 25 行）；第一条里的主题/外观断言（约 25 行），保留惰性和可选中两项
@@ -354,14 +454,14 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### driver-discovery.spec.ts（6 个，留 3；508 行 → A 后 449）
 
-| 测试                                                                                                                                                | 类  | 行    | 决定  | 守的链路 / 删除映射                                                                                                                                                                                        |
-| --------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ----- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| external driver discovery (synthetic fixture) › renders a healthy EXTERNAL disclosure from the real empty terminal operations page                  | ①   | 52+15 | 留    | 外部驱动发现：真实终端操作页 → 健康披露                                                                                                                                                                    |
-| external driver discovery (synthetic fixture) › holds ONLY the first walk of a workspace: same-workspace sibling completes while A stays held       | ④   | 31    | 删(A) | 被「A/B: exact synthetic driver ID…」包含：setup 相同，网页侧断言全在那条里。共同失败：同工作区的第二个会话重新走一遍，或释放 A 后 B 显示 A 的结果。多出来的只断言 mock 内部的 `heldDriver`                |
-| external driver discovery (synthetic fixture) › A/B: exact synthetic driver ID per selected Session; releasing held A never leaks into a selected B | ③   | 35+12 | 留    | 驱动 ID 归属选中会话，释放不跨会话泄漏                                                                                                                                                                     |
-| external driver discovery (synthetic fixture) › surfaces a typed refusal and never mounts a disclosure for it                                       | ③   | 14    | 删(A) | 被「transitions healthy -> refused across a transport reconnect…」包含。共同失败：refusal 被渲染成 disclosure。其余断言是 mock 回复里的 `errorCode`/`refusalKind`；refusal 的收窄在 packages/client 单测里 |
-| external driver discovery (synthetic fixture) › rejects a MALFORMED disclosure binding at the strict decode boundary                                | ④   | 14    | 删(A) | 同一解码规则已由 packages/client/tests/external-driver.test.ts「rejects unsafe wire integers without rounding u64」守。UI 后果（不挂 disclosure）与 reconnect 那条走同一个 gate                            |
-| external driver discovery (synthetic fixture) › transitions healthy -> refused across a transport reconnect on the SAME record                      | ④   | 22+5  | 留    | 同一条记录在传输重连上健康→拒绝的转换（healthy→malformed 变体删）                                                                                                                                          |
+| 测试                                                                                                                                                | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ----- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| external driver discovery (synthetic fixture) › renders a healthy EXTERNAL disclosure from the real empty terminal operations page                  | ①   | 52+15 | 留           | 外部驱动发现：真实终端操作页 → 健康披露                                                                                                                                                                    |
+| external driver discovery (synthetic fixture) › holds ONLY the first walk of a workspace: same-workspace sibling completes while A stays held       | ④   | 31    | 删(A)        | 被「A/B: exact synthetic driver ID…」包含：setup 相同，网页侧断言全在那条里。共同失败：同工作区的第二个会话重新走一遍，或释放 A 后 B 显示 A 的结果。多出来的只断言 mock 内部的 `heldDriver`                |
+| external driver discovery (synthetic fixture) › A/B: exact synthetic driver ID per selected Session; releasing held A never leaks into a selected B | ③   | 35+12 | 留           | 驱动 ID 归属选中会话，释放不跨会话泄漏                                                                                                                                                                     |
+| external driver discovery (synthetic fixture) › surfaces a typed refusal and never mounts a disclosure for it                                       | ③   | 14    | 删(A)        | 被「transitions healthy -> refused across a transport reconnect…」包含。共同失败：refusal 被渲染成 disclosure。其余断言是 mock 回复里的 `errorCode`/`refusalKind`；refusal 的收窄在 packages/client 单测里 |
+| external driver discovery (synthetic fixture) › rejects a MALFORMED disclosure binding at the strict decode boundary                                | ④   | 14    | 删(A)        | 同一解码规则已由 packages/client/tests/external-driver.test.ts「rejects unsafe wire integers without rounding u64」守。UI 后果（不挂 disclosure）与 reconnect 那条走同一个 gate                            |
+| external driver discovery (synthetic fixture) › transitions healthy -> refused across a transport reconnect on the SAME record                      | ④   | 22+5  | 删（第三轮） | 同一条记录在传输重连上健康→拒绝的转换（healthy→malformed 变体删）                                                                                                                                          |
 
 修剪（T-0570，不删测试）：保留测试里断言 mock 回复字段（`errorCode`/`refusalKind`/`heldDriver`）的部分；只看 UI 和发出的帧
 
@@ -370,15 +470,15 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 | 测试                                                                                                             | 类  | 行   | 决定         | 守的链路 / 删除映射                                                                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------------------- | --- | ---- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | starts a team, shows each member's progress and result, and merges them here                                     | ①   | 74+2 | 留           | 专家团主流程：启动、成员进度与结果、合并回本会话                                                                                                                                                             |
-| a failed member is named, a working member survives a refresh and is stopped once, and the merge leaves both out | ④   | 91   | 留（收并入） | 失败成员被点名，进行中的成员熬过刷新且只被停一次。T-0570 并入「a reconnect keeps a working member…」的断线一步                                                                                               |
+| a failed member is named, a working member survives a refresh and is stopped once, and the merge leaves both out | ④   | 91   | 删（第三轮） | 失败成员被点名，进行中的成员熬过刷新且只被停一次。T-0570 并入「a reconnect keeps a working member…」的断线一步                                                                                               |
 | a reconnect keeps a working member working, and sends no stop by itself                                          | ④   | 42   | 并入(A)      | 并入「a failed member is named, a working member survives a refresh…」：同一守卫（恢复后工作中的成员仍在工作，不自动发 stop），只是触发方式不同（刷新 vs 断线）。并入一步 `/__test__/disconnect`（约 +8 行） |
 
 ### final-input.spec.ts（2 个，留 2；99 行）
 
-| 测试                                                                    | 类  | 行   | 决定 | 守的链路 / 删除映射                          |
-| ----------------------------------------------------------------------- | --- | ---- | ---- | -------------------------------------------- |
-| approval shortcuts ignore modified keys and IME composition             | ③   | 40   | 留   | 审批快捷键忽略修饰键与 IME 组合（误触边界）  |
-| long approval remains readable and actionable in a short phone viewport | ①   | 43+8 | 留   | 手机短视口审批完整可读可操作（手机独有边界） |
+| 测试                                                                    | 类  | 行   | 决定         | 守的链路 / 删除映射                          |
+| ----------------------------------------------------------------------- | --- | ---- | ------------ | -------------------------------------------- |
+| approval shortcuts ignore modified keys and IME composition             | ③   | 40   | 留           | 审批快捷键忽略修饰键与 IME 组合（误触边界）  |
+| long approval remains readable and actionable in a short phone viewport | ①   | 43+8 | 删（第三轮） | 手机短视口审批完整可读可操作（手机独有边界） |
 
 ### final-reading.spec.ts（2 个，留 2；459 行）
 
@@ -397,10 +497,10 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### hydrate-failure.spec.ts（2 个，留 2；178 行）
 
-| 测试                                                                           | 类  | 行    | 决定 | 守的链路 / 删除映射                               |
-| ------------------------------------------------------------------------------ | --- | ----- | ---- | ------------------------------------------------- |
-| a failed reconnect hydrate retains the current Session, Changes and draft      | ④   | 71+11 | 留   | 重连后 hydrate 失败仍保留当前会话、Changes 和草稿 |
-| a cold hydrate failure stays honest and Start retries without a phantom record | ④   | 44    | 留   | 冷启动 hydrate 失败如实显示，重试不留幽灵记录     |
+| 测试                                                                           | 类  | 行    | 决定         | 守的链路 / 删除映射                               |
+| ------------------------------------------------------------------------------ | --- | ----- | ------------ | ------------------------------------------------- |
+| a failed reconnect hydrate retains the current Session, Changes and draft      | ④   | 71+11 | 删（第三轮） | 重连后 hydrate 失败仍保留当前会话、Changes 和草稿 |
+| a cold hydrate failure stays honest and Start retries without a phantom record | ④   | 44    | 留           | 冷启动 hydrate 失败如实显示，重试不留幽灵记录     |
 
 ### interaction-ownership.spec.ts（3 个，留 2；683 行 → A 后 625）
 
@@ -412,23 +512,23 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### keyboard-parity.spec.ts（2 个，留 2；188 行）
 
-| 测试                                                                | 类  | 行    | 决定 | 守的链路 / 删除映射                                   |
-| ------------------------------------------------------------------- | --- | ----- | ---- | ----------------------------------------------------- |
-| opens, navigates, and executes the command palette by keyboard only | ①   | 63+1  | 留   | 纯键盘打开/导航/执行命令面板（其余 Alt+X 为参数变体） |
-| Esc closes the palette inertly and interrupts only a live turn      | ②/③ | 45+20 | 留   | Esc 惰性关面板、只中断活动回合（Esc×中断危险边界）    |
+| 测试                                                                | 类  | 行    | 决定         | 守的链路 / 删除映射                                   |
+| ------------------------------------------------------------------- | --- | ----- | ------------ | ----------------------------------------------------- |
+| opens, navigates, and executes the command palette by keyboard only | ①   | 63+1  | 留           | 纯键盘打开/导航/执行命令面板（其余 Alt+X 为参数变体） |
+| Esc closes the palette inertly and interrupts only a live turn      | ②/③ | 45+20 | 删（第三轮） | Esc 惰性关面板、只中断活动回合（Esc×中断危险边界）    |
 
 ### loaf.spec.ts（1 个，留 1；78 行）
 
-| 测试                                             | 类  | 行    | 决定 | 守的链路 / 删除映射            |
-| ------------------------------------------------ | --- | ----- | ---- | ------------------------------ |
-| streaming turn stays under the long-frame budget | ④   | 46+22 | 留   | 流式回合长帧预算（性能完整性） |
+| 测试                                             | 类  | 行    | 决定         | 守的链路 / 删除映射            |
+| ------------------------------------------------ | --- | ----- | ------------ | ------------------------------ |
+| streaming turn stays under the long-frame budget | ④   | 46+22 | 删（第三轮） | 流式回合长帧预算（性能完整性） |
 
 ### local-preferences.spec.ts（2 个，留 2；258 行）
 
-| 测试                                                                                                                            | 类  | 行    | 决定 | 守的链路 / 删除映射                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------- | --- | ----- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| bare Normal Escape interrupts only the selected owner, while Vim changes preserve the other busy Session                        | ②   | 37+49 | 留   | Vim Escape 只中断选中属主、不扰另一忙碌会话（跨会话键盘隔离）                                                                                                                                    |
-| only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials | ⑤/③ | 66+13 | 留   | 显示偏好只在显式保存时落盘，刷新恢复偏好和独立的草稿，不存凭据（有意设计 + 凭据不落 localStorage）。其中令牌不落盘与 connection-storage 重叠、草稿刷新与 draft-recovery 重叠，这两段 T-0570 可删 |
+| 测试                                                                                                                            | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------- | --- | ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| bare Normal Escape interrupts only the selected owner, while Vim changes preserve the other busy Session                        | ②   | 37+49 | 留           | Vim Escape 只中断选中属主、不扰另一忙碌会话（跨会话键盘隔离）                                                                                                                                    |
+| only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials | ⑤/③ | 66+13 | 删（第三轮） | 显示偏好只在显式保存时落盘，刷新恢复偏好和独立的草稿，不存凭据（有意设计 + 凭据不落 localStorage）。其中令牌不落盘与 connection-storage 重叠、草稿刷新与 draft-recovery 重叠，这两段 T-0570 可删 |
 
 修剪（T-0570，不删测试）：`observe` 的 `received`/`pending`/`sockets`
 没人读（约 12 行）；第二条里与 connection-storage（令牌不落盘）、draft-recovery（草稿刷新）重叠的两段
@@ -452,15 +552,15 @@ T-0570 要把别的测试的断言并进来；留（T-0570 已加固 / 已调整
 
 ### mobile-remote.spec.ts（7 个，留 6；616 行 → A 后 548）
 
-| 测试                                                                                                              | 类  | 行    | 决定  | 守的链路 / 删除映射                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------------------------------------- | --- | ----- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the overview shows waiting work and allows it once                                                                | ①   | 63+5  | 删(A) | 与 mobile-handoff「desktop handoff lets a fresh phone approve work…」是同一条「手机批准桌面工作」链，那条还核回合完成。本条标题说「只允许一次」，实际没数帧。把「手机上没有会话级允许」和线上 decision 断言（约 8 行）并入 mobile-handoff 那条 |
-| a phone can deny, and never widens permissions                                                                    | ③   | 57    | 留    | 手机端能拒绝，且绝不扩大权限                                                                                                                                                                                                                   |
-| a phone follow-up completes on the same session and survives a reload                                             | ④   | 50    | 留    | 手机追问在同一会话完成并熬过刷新                                                                                                                                                                                                               |
-| a phone starts a new session in a watched folder, keeps a refused first task as a draft, and every screen sees it | ②   | 100   | 留    | 手机在关注文件夹开新会话，被拒的首个任务留作草稿，各屏都看得到                                                                                                                                                                                 |
-| an unreachable server reads as offline, and the overview recovers                                                 | ④   | 50    | 留    | 服务器不可达显示离线，恢复后总览自动恢复                                                                                                                                                                                                       |
-| a sandbox escalation can only be denied from the phone                                                            | ⑤   | 55    | 留    | 沙箱提权在手机上只能拒绝（有意设计）                                                                                                                                                                                                           |
-| a peer's question is answered from the phone's dock with the option picked                                        | ②   | 36+69 | 留    | 手机坞回答协作者的问题，发送所选项（手机×协作者）                                                                                                                                                                                              |
+| 测试                                                                                                              | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------- | --- | ----- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the overview shows waiting work and allows it once                                                                | ①   | 63+5  | 删(A)        | 与 mobile-handoff「desktop handoff lets a fresh phone approve work…」是同一条「手机批准桌面工作」链，那条还核回合完成。本条标题说「只允许一次」，实际没数帧。把「手机上没有会话级允许」和线上 decision 断言（约 8 行）并入 mobile-handoff 那条 |
+| a phone can deny, and never widens permissions                                                                    | ③   | 57    | 删（第三轮） | 手机端能拒绝，且绝不扩大权限                                                                                                                                                                                                                   |
+| a phone follow-up completes on the same session and survives a reload                                             | ④   | 50    | 删（第三轮） | 手机追问在同一会话完成并熬过刷新                                                                                                                                                                                                               |
+| a phone starts a new session in a watched folder, keeps a refused first task as a draft, and every screen sees it | ②   | 100   | 留           | 手机在关注文件夹开新会话，被拒的首个任务留作草稿，各屏都看得到                                                                                                                                                                                 |
+| an unreachable server reads as offline, and the overview recovers                                                 | ④   | 50    | 删（第三轮） | 服务器不可达显示离线，恢复后总览自动恢复                                                                                                                                                                                                       |
+| a sandbox escalation can only be denied from the phone                                                            | ⑤   | 55    | 留           | 沙箱提权在手机上只能拒绝（有意设计）                                                                                                                                                                                                           |
+| a peer's question is answered from the phone's dock with the option picked                                        | ②   | 36+69 | 删（第三轮） | 手机坞回答协作者的问题，发送所选项（手机×协作者）                                                                                                                                                                                              |
 
 修剪（T-0570，不删测试）：「a phone can deny…」的拒绝半段（拒绝路径已由「a
 sandbox escalation can only be denied…」覆盖，约 40 行），保留「不扩大权限」
@@ -483,7 +583,7 @@ sandbox escalation can only be denied…」覆盖，约 40 行），保留「不
 | --------------------------------------------------------------------- | --- | ------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | manages a provider through the DSH-style Models settings flow         | ①   | 105+27 | 留（收并入） | Models 设置主流程。T-0570 并入「keeps a rejected provider draft…」的固定报错文案和草稿保留                                                                                                                                                                                      |
 | keeps a rejected provider draft while redacting the failure           | ③/④ | 34     | 删(A)        | 「脱敏」断言不会红，因为 mock 从不回显密钥。真正的脱敏由 profile-mutation「a failed credential write…」守（服务器回显密钥，核 DOM 和存储），onboarding 的同一路径由 product「onboards an empty solo server…」守。固定报错文案和草稿保留并入 model-management 第一条（约 +8 行） |
-| opening a session with no usable chat model goes to Settings › Models | ②   | 45     | 留           | 打开没有可用模型的会话时进入 Settings › Models（会话×设置路由）                                                                                                                                                                                                                 |
+| opening a session with no usable chat model goes to Settings › Models | ②   | 45     | 删（第三轮） | 打开没有可用模型的会话时进入 Settings › Models（会话×设置路由）                                                                                                                                                                                                                 |
 
 ### multi-session-fence-soak.spec.ts（1 个，留 0；506 行 → A 后 0）
 
@@ -493,10 +593,10 @@ sandbox escalation can only be denied…」覆盖，约 40 行），保留「不
 
 ### multi-session-recovery-soak.spec.ts（2 个，留 1；755 行 → A 后 523）
 
-| 测试                                                                                                                                     | 类  | 行     | 决定  | 守的链路 / 删除映射                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --- | ------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| parks a background approval on its owning Session across A/B/C switching, drains its queued followup, and survives an observer reconnect | ②/④ | 226+78 | 留    | 后台审批挂起归属 + 观察者重连存活                                                                                                                                                                                     |
-| keeps exactly ONE live transport while an active A and its queued A2 recover across a transport disconnect                               | ④   | 167+65 | 删(A) | 与 simultaneous-sessions「recovers an unacknowledged A1 behind B…」是同一条链：断线后 hydrate 报 A1 中断，队列只排空一次，不重放 A1，选中不跳。本条独有的「任何时刻只有一个活连接」（`peak() <= 1`，约 8 行）移入那条 |
+| 测试                                                                                                                                     | 类  | 行     | 决定         | 守的链路 / 删除映射                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --- | ------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| parks a background approval on its owning Session across A/B/C switching, drains its queued followup, and survives an observer reconnect | ②/④ | 226+78 | 删（第三轮） | 后台审批挂起归属 + 观察者重连存活                                                                                                                                                                                     |
+| keeps exactly ONE live transport while an active A and its queued A2 recover across a transport disconnect                               | ④   | 167+65 | 删(A)        | 与 simultaneous-sessions「recovers an unacknowledged A1 behind B…」是同一条链：断线后 hydrate 报 A1 中断，队列只排空一次，不重放 A1，选中不跳。本条独有的「任何时刻只有一个活连接」（`peak() <= 1`，约 8 行）移入那条 |
 
 修剪（T-0570，不删测试）：删约 50 行只看 fixture 自身状态的断言（诊断快照 493–512、terminal-hold 自检 538–561）
 
@@ -508,13 +608,13 @@ sandbox escalation can only be denied…」覆盖，约 40 行），保留「不
 
 ### native-workflows.spec.ts（5 个，留 5；623 行）
 
-| 测试                                                                                                                    | 类  | 行    | 决定                | 守的链路 / 删除映射                                                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------------------- | --- | ----- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| native commands fail closed when the original fixture does not advertise them                                           | ③   | 48    | 留                  | 未广告的原生命令 fail-closed                                                                                                                                    |
-| Enter steers a compatible running turn by default, while the Queue control defers it                                    | ①/② | 55    | 留                  | Enter 默认 steering 的输入×回合跨功能链，Queue 控件让行（原两条已合为一条）                                                                                     |
-| a dropped native steer returns once to its owning FIFO while a different Session is selected                            | ④   | 106+7 | 留                  | 掉线 steer 一次性回归属主 FIFO（归属恢复）                                                                                                                      |
-| goal pause, resume and stop preserve the current objective and budget, and newer notifications cancel stale transitions | ②   | 76    | 留                  | goal 生命周期×通知：新通知取消过期转换                                                                                                                          |
-| native agent receipts settle terminal status and delayed artifact reads cannot cross Session ownership                  | ③   | 144   | 留（T-0570 已加固） | 原生 agent 回执了结终态，延迟的产物读取不能跨会话归属；嵌套未脱敏内容被脱敏。迟到的 status 读改在重新读取之前检查：不得装上关闭前的状态，去掉 revision 守卫会红 |
+| 测试                                                                                                                    | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------- | --- | ----- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| native commands fail closed when the original fixture does not advertise them                                           | ③   | 48    | 留           | 未广告的原生命令 fail-closed                                                                                                                                    |
+| Enter steers a compatible running turn by default, while the Queue control defers it                                    | ①/② | 55    | 留           | Enter 默认 steering 的输入×回合跨功能链，Queue 控件让行（原两条已合为一条）                                                                                     |
+| a dropped native steer returns once to its owning FIFO while a different Session is selected                            | ④   | 106+7 | 删（第三轮） | 掉线 steer 一次性回归属主 FIFO（归属恢复）                                                                                                                      |
+| goal pause, resume and stop preserve the current objective and budget, and newer notifications cancel stale transitions | ②   | 76    | 删（第三轮） | goal 生命周期×通知：新通知取消过期转换                                                                                                                          |
+| native agent receipts settle terminal status and delayed artifact reads cannot cross Session ownership                  | ③   | 144   | 删（第三轮） | 原生 agent 回执了结终态，延迟的产物读取不能跨会话归属；嵌套未脱敏内容被脱敏。迟到的 status 读改在重新读取之前检查：不得装上关闭前的状态，去掉 revision 守卫会红 |
 
 修剪（T-0570，不删测试）：「a dropped native steer…」的文案断言和 `/turn`
 检查器（约 15 行）
@@ -543,12 +643,12 @@ sandbox escalation can only be denied…」覆盖，约 40 行），保留「不
 
 ### peer-control.spec.ts（4 个，留 4；276 行）
 
-| 测试                                                                                                                                                         | 类  | 行   | 决定 | 守的链路 / 删除映射                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ---- | ---- | -------------------------------------------------------- |
-| peer/control seat semantics (pane Advanced, synthetic fixture) › no seat panel when external_driver_v1 is unadvertised (no-feature)                          | ⑤   | 8    | 留   | P2d 严格 opt-in：无 feature 无座席（no-method 变体删）   |
-| peer/control seat semantics (pane Advanced, synthetic fixture) › each command, from the keyboard or a click, emits exactly ONE frame and an accepted receipt | ①   | 36+9 | 留   | 座席各命令（键盘或点击）各发恰好一帧并收到 accepted 回执 |
-| peer/control seat semantics (pane Advanced, synthetic fixture) › a refused RECEIPT renders the typed peer_control_refused refusal                            | ④   | 15   | 留   | 类型化拒绝渲染（accepted/replay 参数变体删）             |
-| peer/control seat semantics (pane Advanced, synthetic fixture) › a driver_fence_stale typed error drops the seat, keeps the §6 label                         | ④   | 25+1 | 留   | 围栏过期丢座席留有限文案（keyboard-reachable 变体删）    |
+| 测试                                                                                                                                                         | 类  | 行   | 决定         | 守的链路 / 删除映射                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ---- | ------------ | -------------------------------------------------------- |
+| peer/control seat semantics (pane Advanced, synthetic fixture) › no seat panel when external_driver_v1 is unadvertised (no-feature)                          | ⑤   | 8    | 留           | P2d 严格 opt-in：无 feature 无座席（no-method 变体删）   |
+| peer/control seat semantics (pane Advanced, synthetic fixture) › each command, from the keyboard or a click, emits exactly ONE frame and an accepted receipt | ①   | 36+9 | 留           | 座席各命令（键盘或点击）各发恰好一帧并收到 accepted 回执 |
+| peer/control seat semantics (pane Advanced, synthetic fixture) › a refused RECEIPT renders the typed peer_control_refused refusal                            | ④   | 15   | 删（第三轮） | 类型化拒绝渲染（accepted/replay 参数变体删）             |
+| peer/control seat semantics (pane Advanced, synthetic fixture) › a driver_fence_stale typed error drops the seat, keeps the §6 label                         | ④   | 25+1 | 删（第三轮） | 围栏过期丢座席留有限文案（keyboard-reachable 变体删）    |
 
 修剪（T-0570，不删测试）：断言 mock `replyTo` 的部分
 
@@ -571,9 +671,9 @@ closes the palette…」相同）和同义反复的 `peerId`
 
 ### peer-reload.spec.ts（1 个，留 1；152 行）
 
-| 测试                                                                        | 类  | 行     | 决定 | 守的链路 / 删除映射                                  |
-| --------------------------------------------------------------------------- | --- | ------ | ---- | ---------------------------------------------------- |
-| a finished peer keeps its place, read-only view and way back after a reload | ④   | 105+23 | 留   | 刷新后已完成的协作者保留位置、只读视图和回主会话入口 |
+| 测试                                                                        | 类  | 行     | 决定         | 守的链路 / 删除映射                                  |
+| --------------------------------------------------------------------------- | --- | ------ | ------------ | ---------------------------------------------------- |
+| a finished peer keeps its place, read-only view and way back after a reload | ④   | 105+23 | 删（第三轮） | 刷新后已完成的协作者保留位置、只读视图和回主会话入口 |
 
 ### plan-card.spec.ts（1 个，留 1；108 行）
 
@@ -583,48 +683,48 @@ closes the palette…」相同）和同义反复的 `peerId`
 
 ### product.spec.ts（19 个，留 15；1222 行 → A 后 1186，A+B 后 1108）
 
-| 测试                                                                                       | 类  | 行     | 决定         | 守的链路 / 删除映射                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------ | --- | ------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| keeps authentication when a remembered Session can no longer open                          | ④   | 42     | 留           | 记忆会话打不开时认证不回退                                                                                                                                                                       |
-| keeps a server-accepted turn and sibling records on the same pooled socket                 | ④   | 78     | 留           | 已接受回合与兄弟记录共用单池 socket                                                                                                                                                              |
-| keeps B selected when A's unacknowledged start is rejected                                 | ④   | 70     | 留           | A 未确认启动被拒时 B 保持选中（held-start 竞态族代表）                                                                                                                                           |
-| reports a start acknowledgement timeout as unknown, then settles on release                | ④   | 33     | 留           | 启动确认超时先 unknown 后落定                                                                                                                                                                    |
-| recovers A's held start with ${scenario.name} while B stays selected and unopened          | ④   | 88     | 留           | A 的 start 被扣住时 B 保持选中且不被打开。表驱动 4 种恢复：普通回合、hydrate 出的审批、恢复中缓冲的审批请求、恢复中缓冲的审批结果，各跑一次。四行守的是不同的迟到帧，整张表保留                  |
-| does not project ambiguous legacy Session rows into a Workspace                            | ④   | 18     | 留           | 歧义旧行不投影进工作区（数据完整性）                                                                                                                                                             |
-| lists a workspace's server-attested history in a fresh tab and opens a row it never opened | ①   | 39     | 留           | 新标签页列出服务器背书历史并打开未开过行                                                                                                                                                         |
-| moves drafts only after a profile-choice Session transition commits                        | ④   | 34     | 留（收并入） | profile 选择过渡提交后才移动草稿。T-0570 并入 auth-identity「binds a cross-profile launch…」的 `session/open` `profile_id` 断言                                                                  |
-| restores the origin, tab credential, session, and workspace after refresh                  | ④   | 26     | 留           | 刷新恢复 origin/凭据/会话/工作区四元组                                                                                                                                                           |
-| offers whole permission presets and confirms full access                                   | ③   | 58     | 留           | 权限整档预设 + 完全访问确认                                                                                                                                                                      |
-| separates the Session runtime from the Profile default model                               | ②   | 16+113 | 留           | 会话运行时与 profile 默认模型分离（跨功能）                                                                                                                                                      |
-| owns plan and background work under the active session Trajectory                          | ②   | 39     | 删(B，已批)  | 只核 Trajectory 的标题和视图切换，标题说的「归属」没测。计划卡由 plan-card 守，后台运行由 cron「shows how each run really went…」守                                                              |
-| does not expose implementation and diagnostic concepts as product IA                       | ⑤   | 18     | 删(B，已批)  | 只断言若干内部词不出现（负向文案），没有设计说明注释，属结构/文案绑定                                                                                                                            |
-| sends prompts without presenting billed input usage as context occupancy                   | ⑤   | 21     | 删(B，已批)  | 只断言一个 title 文案不出现；正向发送链到处都有                                                                                                                                                  |
-| recovers the durable session after disconnect and lossy replay                             | ④   | 68     | 留           | 断线 + 有损重放后的持久会话恢复                                                                                                                                                                  |
-| resolves approval and structured-question takeovers                                        | ②   | 36     | 删(A)        | 问题半被 interaction-ownership「keeps three concurrent parked questions…」包含；批准半由 final-input「approval shortcuts…」和 modal-stack 守。共同失败：接管卡片不出现，或回应不落地。本条不核帧 |
-| onboards an empty solo server from workspace creation                                      | ①   | 60     | 留           | 空 solo 服务器从建工作区起步（自动激活变体删）                                                                                                                                                   |
-| preserves Octoscode keyless-provider onboarding semantics                                  | ⑤   | 19     | 留           | 无 key provider 入门语义的设计例外                                                                                                                                                               |
-| keeps the DSH-aligned dark product shell WCAG A/AA clean                                   | ⑤   | 107    | 留           | axe 门禁：暗色产物壳 WCAG A/AA（keyboard/semantics 与 skip-link 变体删）                                                                                                                         |
+| 测试                                                                                       | 类  | 行     | 决定                           | 守的链路 / 删除映射                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------ | --- | ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| keeps authentication when a remembered Session can no longer open                          | ④   | 42     | 删（第三轮）                   | 记忆会话打不开时认证不回退                                                                                                                                                                       |
+| keeps a server-accepted turn and sibling records on the same pooled socket                 | ④   | 78     | 留（第三轮并入 `peak() <= 1`） | 已接受回合与兄弟记录共用单池 socket                                                                                                                                                              |
+| keeps B selected when A's unacknowledged start is rejected                                 | ④   | 70     | 删（第三轮）                   | A 未确认启动被拒时 B 保持选中（held-start 竞态族代表）                                                                                                                                           |
+| reports a start acknowledgement timeout as unknown, then settles on release                | ④   | 33     | 删（第三轮）                   | 启动确认超时先 unknown 后落定                                                                                                                                                                    |
+| recovers A's held start with ${scenario.name} while B stays selected and unopened          | ④   | 88     | 留                             | A 的 start 被扣住时 B 保持选中且不被打开。表驱动 4 种恢复：普通回合、hydrate 出的审批、恢复中缓冲的审批请求、恢复中缓冲的审批结果，各跑一次。四行守的是不同的迟到帧，整张表保留                  |
+| does not project ambiguous legacy Session rows into a Workspace                            | ④   | 18     | 留                             | 歧义旧行不投影进工作区（数据完整性）                                                                                                                                                             |
+| lists a workspace's server-attested history in a fresh tab and opens a row it never opened | ①   | 39     | 留                             | 新标签页列出服务器背书历史并打开未开过行                                                                                                                                                         |
+| moves drafts only after a profile-choice Session transition commits                        | ④   | 34     | 留（收并入）                   | profile 选择过渡提交后才移动草稿。T-0570 并入 auth-identity「binds a cross-profile launch…」的 `session/open` `profile_id` 断言                                                                  |
+| restores the origin, tab credential, session, and workspace after refresh                  | ④   | 26     | 留                             | 刷新恢复 origin/凭据/会话/工作区四元组                                                                                                                                                           |
+| offers whole permission presets and confirms full access                                   | ③   | 58     | 留                             | 权限整档预设 + 完全访问确认                                                                                                                                                                      |
+| separates the Session runtime from the Profile default model                               | ②   | 16+113 | 留                             | 会话运行时与 profile 默认模型分离（跨功能）                                                                                                                                                      |
+| owns plan and background work under the active session Trajectory                          | ②   | 39     | 删(B，已批)                    | 只核 Trajectory 的标题和视图切换，标题说的「归属」没测。计划卡由 plan-card 守，后台运行由 cron「shows how each run really went…」守                                                              |
+| does not expose implementation and diagnostic concepts as product IA                       | ⑤   | 18     | 删(B，已批)                    | 只断言若干内部词不出现（负向文案），没有设计说明注释，属结构/文案绑定                                                                                                                            |
+| sends prompts without presenting billed input usage as context occupancy                   | ⑤   | 21     | 删(B，已批)                    | 只断言一个 title 文案不出现；正向发送链到处都有                                                                                                                                                  |
+| recovers the durable session after disconnect and lossy replay                             | ④   | 68     | 留                             | 断线 + 有损重放后的持久会话恢复                                                                                                                                                                  |
+| resolves approval and structured-question takeovers                                        | ②   | 36     | 删(A)                          | 问题半被 interaction-ownership「keeps three concurrent parked questions…」包含；批准半由 final-input「approval shortcuts…」和 modal-stack 守。共同失败：接管卡片不出现，或回应不落地。本条不核帧 |
+| onboards an empty solo server from workspace creation                                      | ①   | 60     | 留                             | 空 solo 服务器从建工作区起步（自动激活变体删）                                                                                                                                                   |
+| preserves Octoscode keyless-provider onboarding semantics                                  | ⑤   | 19     | 留                             | 无 key provider 入门语义的设计例外                                                                                                                                                               |
+| keeps the DSH-aligned dark product shell WCAG A/AA clean                                   | ⑤   | 107    | 留                             | axe 门禁：暗色产物壳 WCAG A/AA（keyboard/semantics 与 skip-link 变体删）                                                                                                                         |
 
 修剪（T-0570，不删测试）：「keeps the DSH-aligned dark product
 shell…」里不断言的截图和诊断（约 55 行），保留 axe 检查
 
 ### profile-mutation.spec.ts（2 个，留 2；279 行）
 
-| 测试                                                                                                                           | 类  | 行  | 决定 | 守的链路 / 删除映射                                              |
-| ------------------------------------------------------------------------------------------------------------------------------ | --- | --- | ---- | ---------------------------------------------------------------- |
-| skill removal holds the profile lock through deferred replies and deduplicates confirmation; reviewing a source writes nothing | ④   | 60  | 留   | profile 锁贯穿延迟应答 + 确认去重，评审来源不写入（并发/完整性） |
-| a failed credential write clears its input, consumes confirmation and requires a fresh review                                  | ③   | 84  | 留   | 凭据写失败清输入、需重新评审（安全）                             |
+| 测试                                                                                                                           | 类  | 行  | 决定         | 守的链路 / 删除映射                                              |
+| ------------------------------------------------------------------------------------------------------------------------------ | --- | --- | ------------ | ---------------------------------------------------------------- |
+| skill removal holds the profile lock through deferred replies and deduplicates confirmation; reviewing a source writes nothing | ④   | 60  | 删（第三轮） | profile 锁贯穿延迟应答 + 确认去重，评审来源不写入（并发/完整性） |
+| a failed credential write clears its input, consumes confirmation and requires a fresh review                                  | ③   | 84  | 留           | 凭据写失败清输入、需重新评审（安全）                             |
 
 修剪（T-0570，不删测试）：`succeed()` 里 install 成功分支已无调用者（约 9 行）
 
 ### resume-and-reasoning.spec.ts（4 个，留 4；372 行）
 
-| 测试                                                                                                   | 类  | 行   | 决定                | 守的链路 / 删除映射                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------ | --- | ---- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| resume lists unverified candidates, refuses bare IDs, and requires confirmation plus canonical history | ③   | 58   | 留                  | 恢复未验证候选需确认 + canonical 历史（安全）                                                                                                                            |
-| canceling a held historical open cannot install a late transcript or steal a new selection             | ④   | 74   | 留（T-0570 已调整） | 取消被扣住的历史打开后，迟到的 transcript 不安装、不抢新的选中。选中和草稿检查移到迟到历史送到之后、测试自己点击之前；App 还有一层守卫，单层变异抢不走选中，新旧两版都绿 |
-| resuming an already retained busy historical Session never reopens or resets its turn                  | ②   | 81   | 留                  | 恢复已保留的忙碌历史会话不重开不复位                                                                                                                                     |
-| reasoning visibility is retained per Session and does not change captured model effort                 | ②   | 83+5 | 留                  | reasoning 可见性按会话保留、不改模型 effort 记录                                                                                                                         |
+| 测试                                                                                                   | 类  | 行   | 决定         | 守的链路 / 删除映射                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------ | --- | ---- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| resume lists unverified candidates, refuses bare IDs, and requires confirmation plus canonical history | ③   | 58   | 留           | 恢复未验证候选需确认 + canonical 历史（安全）                                                                                                                            |
+| canceling a held historical open cannot install a late transcript or steal a new selection             | ④   | 74   | 删（第三轮） | 取消被扣住的历史打开后，迟到的 transcript 不安装、不抢新的选中。选中和草稿检查移到迟到历史送到之后、测试自己点击之前；App 还有一层守卫，单层变异抢不走选中，新旧两版都绿 |
+| resuming an already retained busy historical Session never reopens or resets its turn                  | ②   | 81   | 删（第三轮） | 恢复已保留的忙碌历史会话不重开不复位                                                                                                                                     |
+| reasoning visibility is retained per Session and does not change captured model effort                 | ②   | 83+5 | 删（第三轮） | reasoning 可见性按会话保留、不改模型 effort 记录                                                                                                                         |
 
 ### runtime-recovery.spec.ts（1 个，留 1；178 行）
 
@@ -634,10 +734,10 @@ shell…」里不断言的截图和诊断（约 55 行），保留 axe 检查
 
 ### scanned-pdf.spec.ts（2 个，留 2；149 行）
 
-| 测试                                                                                  | 类  | 行   | 决定 | 守的链路 / 删除映射                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------- | --- | ---- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| renders black-and-white and JPEG 2000 scans and reads them in the browser             | ①/③ | 46   | 留   | 黑白（CCITT）和 JPEG 2000 扫描件不再空白（T-0567 的 G1）；本地 OCR 英文、中英文给出正确文字，照片页报「没有可靠文字」而不说无文本；只访问本站和 fixture，不写 Cache Storage/IndexedDB/web storage（PDF/OCR 内容不出浏览器） |
-| says when the server can't run recognition, and cancelling or closing ends the worker | ④/③ | 51+2 | 留   | OCR 目录保持页面 CSP 时如实报「此服务器不支持」并可重试；取消、收起「Page text」都结束识别线程，不冒出迟到结果（预览×取消；T-0568）                                                                                         |
+| 测试                                                                                  | 类  | 行   | 决定         | 守的链路 / 删除映射                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------- | --- | ---- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| renders black-and-white and JPEG 2000 scans and reads them in the browser             | ①/③ | 46   | 留           | 黑白（CCITT）和 JPEG 2000 扫描件不再空白（T-0567 的 G1）；本地 OCR 英文、中英文给出正确文字，照片页报「没有可靠文字」而不说无文本；只访问本站和 fixture，不写 Cache Storage/IndexedDB/web storage（PDF/OCR 内容不出浏览器） |
+| says when the server can't run recognition, and cancelling or closing ends the worker | ④/③ | 51+2 | 删（第三轮） | OCR 目录保持页面 CSP 时如实报「此服务器不支持」并可重试；取消、收起「Page text」都结束识别线程，不冒出迟到结果（预览×取消；T-0568）                                                                                         |
 
 ### server-shutdown.spec.ts（1 个，留 1；103 行）
 
@@ -662,7 +762,7 @@ shell…」里不断言的截图和诊断（约 55 行），保留 axe 检查
 | 测试                                                                 | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                                                                                                                                                                                                                            |
 | -------------------------------------------------------------------- | --- | ----- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Files ignores a late listing from the previous workspace root        | ④   | 41+16 | 删（T-0586） | 从 UI 走不到：Files 的根跟会话绑定（打开时 `workspace_root` 必须等于请求的目录，否则拒绝）；换会话时面板按会话 id 重挂；任何根变化都会在同一次渲染里换成「Loading folders…」，卸掉旧的 Files；这条测试自己的流程里，Add workspace 对话框一打开面板就不在了。去掉面板 key、tree probe 的根匹配、generation 守卫三者一起仍绿，没有可观察的单层回归，不补替代测试 |
-| one file stays selected across diff, output, reload and read failure | ②   | 141   | 留           | 同一个文件在 diff、输出、刷新和读失败之间保持选中                                                                                                                                                                                                                                                                                                              |
+| one file stays selected across diff, output, reload and read failure | ②   | 141   | 删（第三轮） | 同一个文件在 diff、输出、刷新和读失败之间保持选中                                                                                                                                                                                                                                                                                                              |
 | Files browses the real workspace tree and previews any file in it    | ①   | 52    | 留           | 侧栏浏览真实工作区树并预览任意文件                                                                                                                                                                                                                                                                                                                             |
 
 ### settings-memory.spec.ts（3 个，留 3；217 行）
@@ -675,17 +775,17 @@ shell…」里不断言的截图和诊断（约 55 行），保留 axe 检查
 
 ### settings-mobile.spec.ts（1 个，留 1；114 行）
 
-| 测试                                | 类  | 行    | 决定 | 守的链路 / 删除映射                      |
-| ----------------------------------- | --- | ----- | ---- | ---------------------------------------- |
-| Settings remain operable at 320×480 | ①   | 87+20 | 留   | 手机视口 Settings 可操作（手机独有边界） |
+| 测试                                | 类  | 行    | 决定         | 守的链路 / 删除映射                      |
+| ----------------------------------- | --- | ----- | ------------ | ---------------------------------------- |
+| Settings remain operable at 320×480 | ①   | 87+20 | 删（第三轮） | 手机视口 Settings 可操作（手机独有边界） |
 
 ### simultaneous-sessions.spec.ts（3 个，留 2；506 行 → A 后 384）
 
 | 测试                                                                                             | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                     |
 | ------------------------------------------------------------------------------------------------ | --- | ----- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | isolates independent turns across rapid Session switches                                         | ④   | 121+1 | 删(A)        | 被 capacity-and-peers 包含：同一组失败（会话间串文字、回到会话时重复 start、切换时发中断、后台完成标记），capacity 在 15 条记录上逐个核 |
-| recovers an unacknowledged A1 behind B and drains A2 then A3 without replaying A1                | ④   | 130   | 留（收并入） | 未确认 A1 恢复 + FIFO 顺序排空不重演（drain 变体删）。T-0570 并入 recovery-soak「keeps exactly ONE live transport…」的 `peak() <= 1`    |
-| preserves native persisted segment finality across late deltas and the next background FIFO turn | ④   | 174   | 留           | 迟到 delta 与后台 FIFO 下原生段 finality（数据完整性）                                                                                  |
+| recovers an unacknowledged A1 behind B and drains A2 then A3 without replaying A1                | ④   | 130   | 删（第三轮） | 未确认 A1 恢复 + FIFO 顺序排空不重演（drain 变体删）。T-0570 并入 recovery-soak「keeps exactly ONE live transport…」的 `peak() <= 1`    |
+| preserves native persisted segment finality across late deltas and the next background FIFO turn | ④   | 174   | 删（第三轮） | 迟到 delta 与后台 FIFO 下原生段 finality（数据完整性）                                                                                  |
 
 修剪（T-0570，不删测试）：删「preserves native persisted segment
 finality…」里 fixture 自己的信封序列块和
@@ -724,10 +824,10 @@ unacknowledged A1…」加入 recovery-soak 的 `peak() <= 1`（+8）
 
 ### surface-recovery.spec.ts（2 个，留 2；158 行）
 
-| 测试                                                                       | 类  | 行   | 决定                | 守的链路 / 删除映射                                                                                        |
-| -------------------------------------------------------------------------- | --- | ---- | ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| a failed model-management chunk preserves the owner, queue, draft and Stop | ④   | 85+7 | 留                  | 失败 chunk 不丢属主/队列/草稿/停止（import 取消/Escape/review 变体删）                                     |
-| a late clipboard command result does not enter a different conversation    | ④   | 41   | 留（T-0570 已加固） | 迟到的剪贴板命令结果不进入别的对话。补正向对照：回到发起的对话应看到「Copied」；复制完成不再报告的变异会红 |
+| 测试                                                                       | 类  | 行   | 决定         | 守的链路 / 删除映射                                                                                        |
+| -------------------------------------------------------------------------- | --- | ---- | ------------ | ---------------------------------------------------------------------------------------------------------- |
+| a failed model-management chunk preserves the owner, queue, draft and Stop | ④   | 85+7 | 留           | 失败 chunk 不丢属主/队列/草稿/停止（import 取消/Escape/review 变体删）                                     |
+| a late clipboard command result does not enter a different conversation    | ④   | 41   | 删（第三轮） | 迟到的剪贴板命令结果不进入别的对话。补正向对照：回到发起的对话应看到「Copied」；复制完成不再报告的变异会红 |
 
 修剪（T-0570，不删测试）：「a failed model-management chunk…」的 4 行文案断言
 
@@ -752,31 +852,31 @@ unacknowledged A1…」加入 recovery-soak 的 `peak() <= 1`（+8）
 
 ### template-launch.spec.ts（1 个，留 1；88 行）
 
-| 测试                                                                                      | 类  | 行    | 决定 | 守的链路 / 删除映射                              |
-| ----------------------------------------------------------------------------------------- | --- | ----- | ---- | ------------------------------------------------ |
-| a rejected template launch retries its session identity and preserves the draft on reload | ④   | 71+12 | 留   | 模板启动被拒后用同一会话身份重试，刷新后草稿仍在 |
+| 测试                                                                                      | 类  | 行    | 决定         | 守的链路 / 删除映射                              |
+| ----------------------------------------------------------------------------------------- | --- | ----- | ------------ | ------------------------------------------------ |
+| a rejected template launch retries its session identity and preserves the draft on reload | ④   | 71+12 | 删（第三轮） | 模板启动被拒后用同一会话身份重试，刷新后草稿仍在 |
 
 修剪（T-0570，不删测试）：第二次刷新段（草稿刷新不发送由 draft-recovery 守）
 
 ### theme.spec.ts（2 个，留 1；133 行 → A 后 133，A+B 后 83）
 
-| 测试                                                                             | 类  | 行    | 决定        | 守的链路 / 删除映射                                                                                                                                       |
-| -------------------------------------------------------------------------------- | --- | ----- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| theme choices preserve one palette across manual and system modes                | ⑤   | 33+17 | 删(B，已批) | 比较 CSS 自定义属性值（外观，AGENTS.md 不测）。偏好只在显式保存时落盘由 local-preferences「only explicit save…」守，存储被禁时主题仍可用由 theme 第二条守 |
-| blocked localStorage property keeps connection, session launch, and theme usable | ④   | 57    | 留          | localStorage 被禁用时连接、开会话和主题仍可用                                                                                                             |
+| 测试                                                                             | 类  | 行    | 决定         | 守的链路 / 删除映射                                                                                                                                       |
+| -------------------------------------------------------------------------------- | --- | ----- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| theme choices preserve one palette across manual and system modes                | ⑤   | 33+17 | 删(B，已批)  | 比较 CSS 自定义属性值（外观，AGENTS.md 不测）。偏好只在显式保存时落盘由 local-preferences「only explicit save…」守，存储被禁时主题仍可用由 theme 第二条守 |
+| blocked localStorage property keeps connection, session launch, and theme usable | ④   | 57    | 删（第三轮） | localStorage 被禁用时连接、开会话和主题仍可用                                                                                                             |
 
 ### timeline-interactions.spec.ts（1 个，留 1；154 行）
 
-| 测试                                                                               | 类  | 行    | 决定 | 守的链路 / 删除映射                                    |
-| ---------------------------------------------------------------------------------- | --- | ----- | ---- | ------------------------------------------------------ |
-| keeps activity and reader-controlled disclosures correct across ten streamed turns | ④   | 148+2 | 留   | 十个流式回合上活动披露与读者控制披露正确（长流完整性） |
+| 测试                                                                               | 类  | 行    | 决定         | 守的链路 / 删除映射                                    |
+| ---------------------------------------------------------------------------------- | --- | ----- | ------------ | ------------------------------------------------------ |
+| keeps activity and reader-controlled disclosures correct across ten streamed turns | ④   | 148+2 | 删（第三轮） | 十个流式回合上活动披露与读者控制披露正确（长流完整性） |
 
 ### turn-undo.spec.ts（2 个，留 2；278 行）
 
-| 测试                                                                                      | 类  | 行     | 决定 | 守的链路 / 删除映射                                                                                                                         |
-| ----------------------------------------------------------------------------------------- | --- | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| undo puts the turn's files back, keeps the conversation and draft, redo survives a reload | ①/② | 135+12 | 留   | 撤销恢复文件、保留对话和草稿，重做熬过刷新；Core 拒绝的重做以原话显示且不重试；后续回合跑过后旧轮不再提供重做（撤销×后续回合；T-0530 并入） |
-| another tab's undo leaves this tab's stale entry unsent and unsure                        | ④   | 63     | 留   | 另一标签页撤销后，本页过期的条目不发送、标为不确定                                                                                          |
+| 测试                                                                                      | 类  | 行     | 决定         | 守的链路 / 删除映射                                                                                                                         |
+| ----------------------------------------------------------------------------------------- | --- | ------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| undo puts the turn's files back, keeps the conversation and draft, redo survives a reload | ①/② | 135+12 | 留           | 撤销恢复文件、保留对话和草稿，重做熬过刷新；Core 拒绝的重做以原话显示且不重试；后续回合跑过后旧轮不再提供重做（撤销×后续回合；T-0530 并入） |
+| another tab's undo leaves this tab's stale entry unsent and unsure                        | ④   | 63     | 删（第三轮） | 另一标签页撤销后，本页过期的条目不发送、标为不确定                                                                                          |
 
 修剪（T-0570，不删测试）：无作用的 `afterEach`
 

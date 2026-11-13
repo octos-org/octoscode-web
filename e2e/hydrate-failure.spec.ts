@@ -1,5 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-import { connect, startSession } from "./fixture-session";
+import { connect } from "./fixture-session";
 import { sendError } from "./wire";
 
 async function controlledHydrates(page: Page) {
@@ -40,78 +40,6 @@ async function controlledHydrates(page: Page) {
   });
   return { sockets, opens, hydrates, control };
 }
-
-test("a failed reconnect hydrate retains the current Session, Changes and draft", async ({
-  page,
-}) => {
-  const probe = await controlledHydrates(page);
-  await startSession(page, "/workspace/diff-review");
-  const composer = page.getByRole("textbox", { name: "Message Octos" });
-  await expect(composer).toBeEnabled();
-  await composer.fill("Review syntax fixture");
-  await composer.press("Enter");
-  const panel = page.getByRole("button", {
-    name: "Session panel, 1 changed",
-  });
-  await expect(panel).toBeVisible();
-  const timeline = page.getByRole("log", { name: "Conversation timeline" });
-  const before = await timeline.innerText();
-  const original = await page
-    .locator('[role="treeitem"][data-session-id][aria-current="page"]')
-    .getAttribute("data-session-id");
-  expect(original).toBeTruthy();
-  await composer.fill("Keep this draft through hydrate failure");
-
-  probe.control.failures = 1;
-  probe.sockets.at(-1)?.close({ code: 1012, reason: "hydrate failure probe" });
-  await expect(page.getByText(/could not be recovered/).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  expect(await timeline.innerText()).toBe(before);
-  await expect(panel).toBeVisible();
-  await expect(composer).toBeVisible();
-  await expect(composer).toHaveValue("Keep this draft through hydrate failure");
-  await expect(
-    page.getByText("Choose a workspace", { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.locator(
-      `[role="treeitem"][data-session-id=${JSON.stringify(original)}][aria-current="page"]`,
-    ),
-  ).toBeVisible();
-
-  // A later healthy reconnect is a real retry of the same retained record.
-  probe.sockets.at(-1)?.close({ code: 1012, reason: "hydrate retry probe" });
-  await expect(page.getByText(/could not be recovered/)).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await expect(composer).toBeEnabled();
-  await expect(composer).toHaveValue("Keep this draft through hydrate failure");
-  await expect(panel).toBeVisible();
-  await expect(timeline).toContainText("Review syntax fixture");
-  await expect(timeline).toContainText(
-    "Completed with pnpm check and all tests passing.",
-  );
-  expect(probe.opens.length).toBeGreaterThan(1);
-  expect(new Set(probe.opens).size).toBe(1);
-
-  // While Octos cannot be reached, the Session stays on screen, read-only, as
-  // reconnecting; nothing can be sent until it is back, draft and all.
-  probe.control.unreachable = true;
-  probe.sockets.at(-1)?.close({ code: 1006 });
-  await expect(page.getByText("Reconnecting to Octos")).toBeVisible();
-  await expect(timeline).toContainText("Review syntax fixture");
-  await expect(page.getByText("Choose a workspace")).toHaveCount(0);
-  await expect(composer).toHaveCount(0);
-  probe.control.unreachable = false;
-  await expect(composer).toHaveValue(
-    "Keep this draft through hydrate failure",
-    {
-      timeout: 15_000,
-    },
-  );
-  await expect(page.getByText("Reconnecting to Octos")).toHaveCount(0);
-});
 
 test("a cold hydrate failure stays honest and Start retries without a phantom record", async ({
   page,

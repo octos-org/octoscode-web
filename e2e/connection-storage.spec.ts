@@ -1,14 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  FIXTURE_ORIGIN,
-  FIXTURE_TOKEN,
-  openLink,
-  startSession,
-} from "./fixture-session";
+import { FIXTURE_TOKEN, openLink, startSession } from "./fixture-session";
 import { openSettings } from "./sessions";
 
 const TAB_KEY = "octoscode-web.tab-connection.v3";
-const DRAFT_PREFIX = "octoscode-web.draft.v1:";
 
 async function start(page: Page) {
   await startSession(page, "/workspace/storage-check");
@@ -103,87 +97,4 @@ test("closed-tab drafts restore only for the authenticated principal and Forget 
   }
   expect(durable).not.toContain(TAB_KEY);
   expect(durable).not.toContain("owner A");
-});
-
-test("a 51st unsent draft evicts one older draft, stays saved, and never blocks navigation", async ({
-  page,
-}) => {
-  await start(page);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (key) => JSON.parse(sessionStorage.getItem(key)!).draftPrincipal,
-        TAB_KEY,
-      ),
-    )
-    .toBe("fixture-user");
-  await page.evaluate(
-    ({ prefix, origin }) => {
-      const scope = `${prefix}${JSON.stringify([origin, "fixture-user"])}:`;
-      for (let index = 0; index < 50; index++) {
-        const key = JSON.stringify([
-          `/workspace/saved-${index}`,
-          "_main",
-          `session-${index}`,
-        ]);
-        localStorage.setItem(
-          scope + key,
-          JSON.stringify(`Retained text ${index}`),
-        );
-      }
-    },
-    { prefix: DRAFT_PREFIX, origin: FIXTURE_ORIGIN },
-  );
-  await page.reload();
-  const input = page.getByRole("textbox", { name: "Message Octos" });
-  await expect(input).toBeVisible();
-  const draft = "The 51st draft stays here until I send, clear, or copy it";
-  await input.fill(draft);
-  const drafts = () =>
-    page.evaluate(
-      (prefix) =>
-        Object.entries(localStorage).filter(([key]) => key.startsWith(prefix)),
-      DRAFT_PREFIX,
-    );
-  // The 51st draft is persisted to localStorage...
-  await expect
-    .poll(async () =>
-      (await drafts()).some(([, value]) => JSON.parse(value) === draft),
-    )
-    .toBe(true);
-  // ...and exactly one pre-existing draft was evicted to make room. (Which
-  // one is the cache's oldest; localStorage enumeration order is opaque, so
-  // the e2e assertion is that exactly one of the 50 is gone.)
-  const retained = await drafts();
-  expect(retained).toHaveLength(50);
-  const texts = retained.map(([, value]) => JSON.parse(value) as string);
-  const evicted = Array.from(
-    { length: 50 },
-    (_, index) => `Retained text ${index}`,
-  ).filter((text) => !texts.includes(text));
-  expect(evicted).toHaveLength(1);
-  // A persisted draft shows no capacity warning and no beforeunload guard.
-  await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "already keeps 50 unsent drafts" }),
-  ).toHaveCount(0);
-  await expect.poll(() => warnsOnLeave(page)).toBe(false);
-  // Navigation is not blocked: the explicit folder picker opens...
-  await page
-    .getByRole("group", { name: "Message settings" })
-    .getByRole("button", { name: /^Folder / })
-    .click();
-  const chooser = page.getByRole("dialog", {
-    name: "Choose a workspace",
-    exact: true,
-  });
-  await expect(chooser).toBeVisible();
-  await chooser.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(input).toHaveValue(draft);
-  // ...and a full reload restores the 51st draft.
-  await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Message Octos" }),
-  ).toHaveValue(draft);
 });

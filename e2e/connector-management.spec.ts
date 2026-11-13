@@ -92,55 +92,6 @@ test("adds a stdio connector from the server's allowlist, never a command", asyn
   await expect(created).toContainText("connected");
 });
 
-test("a delayed refresh blocks mutations and releases busy state when it lands", async ({
-  page,
-}) => {
-  let listCalls = 0;
-  let release: (() => void) | undefined;
-  const heldListIds = new Set<string>();
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message)) as {
-        id?: string;
-        method?: string;
-      };
-      if (frame.method === "mcp/status/list") {
-        listCalls += 1;
-        if (listCalls === 2 && frame.id) heldListIds.add(frame.id);
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const frame = JSON.parse(String(message)) as { id?: string };
-      if (frame.id && heldListIds.has(frame.id)) {
-        release = () => socket.send(message);
-        return;
-      }
-      socket.send(message);
-    });
-  });
-  await startSession(page, `/srv/work/connector-management-${Date.now()}`);
-  const settings = await openSettings(page, "Connectors");
-  await settings.getByRole("button", { name: "Refresh" }).click();
-  await expect.poll(() => Boolean(release)).toBe(true);
-  await expect(
-    settings.getByRole("button", { name: "Add HTTP connector" }),
-  ).toBeDisabled();
-  await expect(
-    connector(settings, "docs").getByRole("button", { name: "Disable" }),
-  ).toBeDisabled();
-  release?.();
-  await expect(
-    settings.getByRole("button", { name: "Add HTTP connector" }),
-  ).toBeEnabled();
-  await expect(settings.getByRole("button", { name: "Refresh" })).toBeEnabled();
-  const docs = connector(settings, "docs");
-  await docs.getByRole("button", { name: "Disable" }).click();
-  await expect(docs.getByRole("button", { name: "Enable" })).toBeVisible();
-  expect(listCalls).toBe(3);
-});
-
 test.afterEach(async ({ request }) => {
   await request.post(`${FIXTURE_ORIGIN}/__test__/connectors/reset`);
 });

@@ -2,11 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { startSession } from "./fixture-session";
 import {
   composer as composerInput,
-  newSessionIn,
   openSettings,
-  productNavigation,
-  selectedSessionId,
-  selectSession,
   stopButton,
 } from "./sessions";
 import { interceptRequests, sendResult } from "./wire";
@@ -96,41 +92,4 @@ test("a failed model-management chunk preserves the owner, queue, draft and Stop
   await openSettings(page, "Models");
   await expect(error).toContainText("Octoscode was updated on the server");
   await expect(error).not.toContainText("Reload the page to try again.");
-});
-
-test("a late clipboard command result does not enter a different conversation", async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: () =>
-          new Promise<void>((resolve) => {
-            Object.assign(window, { finishCopy: resolve });
-          }),
-      },
-    });
-  });
-  await start(page);
-  const composer = composerInput(page);
-  await composer.fill("Write a short response for the clipboard");
-  await composer.press("Enter");
-  await expect(page.locator(".entry-assistant").last()).toBeVisible();
-  await expect(stopButton(page)).toHaveCount(0);
-  await composer.fill("/copy");
-  await composer.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => typeof Reflect.get(window, "finishCopy")))
-    .toBe("function");
-  const previousUrl = page.url();
-  const navigation = productNavigation(page);
-  const asking = await selectedSessionId(navigation);
-  await newSessionIn(navigation, "surface-recovery");
-  await page.evaluate(() => Reflect.get(window, "finishCopy")());
-  await expect(page.getByText("Copied", { exact: true })).toHaveCount(0);
-  await expect(page).not.toHaveURL(previousUrl);
-  // It lands in the conversation that asked for it.
-  await selectSession(navigation, asking);
-  await expect(page.getByText("Copied", { exact: true })).toBeVisible();
 });

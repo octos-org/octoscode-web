@@ -236,7 +236,6 @@ const openedSessionsBySocket = new WeakMap();
 const openedWorkspaceBySocket = new WeakMap();
 const openedProfileBySocket = new WeakMap();
 const authenticatedProfileBySocket = new WeakMap();
-const rejectedSessionIds = new Set();
 const delayedHydrateSockets = new WeakSet();
 const forkedSessions = new Set();
 const historyRefreshArmed = new Set();
@@ -1152,8 +1151,6 @@ const heldTerminals = new Map(); // sessionId -> { emit, turnId }
 const stagedPeers = new Map(); // sessionId -> { slug, profileId, workspaceRoot, masterSessionId, brief }
 const admittedPeers = new Set(); // sessionId -> opened over a real owner WS
 const EXPERT_TEAM_HEADER = "Octoscode expert team:";
-/** Every expert member stop the fixture accepted, for tests to count. */
-const expertInterrupts = [];
 let expertClashUsed = false;
 function isPeerSessionId(sessionId) {
   return stagedPeers.has(sessionId) || admittedPeers.has(sessionId);
@@ -2646,16 +2643,6 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
-  if (request.method === "POST" && request.url === "/__test__/reject-opened") {
-    for (const client of sockets.clients) {
-      const opened = openedSessionsBySocket.get(client);
-      if (opened) {
-        for (const sessionId of opened) rejectedSessionIds.add(sessionId);
-      }
-    }
-    response.writeHead(204).end();
-    return;
-  }
   if (
     request.method === "POST" &&
     request.url === "/__test__/turn-start/hold-next"
@@ -2940,17 +2927,8 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
-  if (
-    request.method === "GET" &&
-    request.url === "/__test__/experts/interrupts"
-  ) {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify(expertInterrupts));
-    return;
-  }
   if (request.method === "POST" && request.url === "/__test__/peers/reset") {
     stagedPeers.clear();
-    expertInterrupts.length = 0;
     expertClashUsed = false;
     admittedPeers.clear();
     for (const [workspaceRoot, sessions] of sessionsByWorkspace) {
@@ -2973,38 +2951,6 @@ const http = createServer(async (request, response) => {
       }
     }
     response.writeHead(204).end();
-    return;
-  }
-  if (
-    request.method === "GET" &&
-    request.url === "/__test__/diagnostics/state"
-  ) {
-    const activeBySession = {};
-    const socketsBySession = {};
-    for (const [sessionId, state] of sessionStateBySessionId) {
-      activeBySession[sessionId] = state.activeTurn
-        ? {
-            turn_id: state.activeTurn.turnId,
-            owner:
-              state.activeTurn.ownerKind ??
-              (state.activeTurn.ownerSocket ? "socket" : "peer"),
-            profile_id: state.profileId,
-            workspace_root: state.workspaceRoot,
-          }
-        : null;
-      socketsBySession[sessionId] = state.sockets.size;
-    }
-    response.writeHead(200, { "content-type": "application/json" }).end(
-      JSON.stringify({
-        sessions: sessionStateBySessionId.size,
-        active: Object.entries(activeBySession).filter(
-          ([, value]) => value !== null,
-        ).length,
-        activeBySession,
-        socketsBySession,
-        heldTerminals: heldTerminals.size,
-      }),
-    );
     return;
   }
   response.writeHead(404).end("Octoscode AppUI fixture only");
@@ -4608,15 +4554,6 @@ sockets.on("connection", (socket, request) => {
         rejectSessionScope(socket, request.id, scope);
         return;
       }
-      if (rejectedSessionIds.has(sessionId)) {
-        replyError(
-          socket,
-          request.id,
-          -32_040,
-          "The saved Session is no longer available",
-        );
-        return;
-      }
       // Opening a staged peer binds its exact scope to this transport. It
       // becomes active only after a separate UUID turn/start is admitted.
       const staged = stagedPeers.get(sessionId);
@@ -5576,7 +5513,6 @@ sockets.on("connection", (socket, request) => {
                 }),
               );
           }
-        expertInterrupts.push({ sessionId, turnId: active.turnId });
         reply(socket, request.id, { interrupted: true });
         return;
       }

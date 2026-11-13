@@ -6,7 +6,6 @@ import {
 } from "./fixture-session";
 import { composer, sendPrompt, stopButton } from "./sessions";
 import { observeFrames } from "./turn-observers";
-import { interceptRequests, sendError } from "./wire";
 
 // Contract fixture coverage: the current Core does not advertise external_driver_v1.
 // The handover workspace starts idle with a parked external binding, so a
@@ -30,41 +29,6 @@ async function openAdvanced(page: Page) {
     await advanced.locator(":scope > summary").click();
   }
   return pane;
-}
-
-function attached(page: Page) {
-  return page.getByRole("list", { name: "Attached files" });
-}
-
-async function chooseFile(page: Page, name: string, buffer: Buffer) {
-  await page.getByLabel("Choose files to attach").setInputFiles({
-    name,
-    mimeType: "image/png",
-    buffer,
-  });
-}
-
-async function uploadedDraft(page: Page) {
-  const handles: string[] = [];
-  const buffer = Buffer.from("fixture image bytes");
-  await page.route("**/api/upload", async (route) => {
-    const profile = route.request().headers()["x-profile-id"];
-    expect(profile).toBeTruthy();
-    const handle = `up/${Buffer.from(`${profile}/fixture-${handles.length}`).toString("base64url")}/original.png`;
-    handles.push(handle);
-    await route.fulfill({ json: [handle] });
-  });
-  await sendPrompt(page, "/thinking high");
-  await chooseFile(page, "original.png", buffer);
-  await expect(attached(page).locator('li[data-status="ready"]')).toContainText(
-    "original.png",
-  );
-  return {
-    uploads: () => handles.length,
-    media: () => [
-      { path: handles[0]!, mime: "image/png", size_bytes: buffer.length },
-    ],
-  };
 }
 
 test.describe("§5.2 composer handover (external-held session)", () => {
@@ -160,58 +124,4 @@ test.describe("§5.2 composer handover (external-held session)", () => {
     );
     await expect(composer(page)).toHaveValue("");
   });
-});
-
-test("a late collision cannot replace newer text or images, then restores the complete draft", async ({
-  page,
-}, testInfo) => {
-  let refuse: (() => void) | undefined;
-  await interceptRequests(page, (request, socket) => {
-    if (request.method !== START_METHOD || refuse) return;
-    refuse = () =>
-      sendError(socket, request.id, {
-        code: -32600,
-        message: "Session occupied",
-        data: {
-          kind: "turn_in_progress",
-          turn_id: "3f1a9c52-4d1b-4c2e-8f6a-0b7d21e9c4aa",
-        },
-      });
-    return true;
-  });
-  await connectAndStartWorkspace(page, "/srv/work/collision-draft");
-  const upload = await uploadedDraft(page);
-  await sendPrompt(page, "return this complete draft");
-  await expect.poll(() => Boolean(refuse)).toBe(true);
-  await expect(composer(page)).toHaveValue("");
-  await sendPrompt(page, "/thinking low");
-  await chooseFile(page, "new.png", Buffer.from("new selection"));
-  await composer(page).fill("newer text stays");
-  refuse!();
-  await expect(page.getByText("Session busy", { exact: true })).toBeVisible();
-  await expect(strip(page)).toContainText(
-    "Another client is working in this session",
-  );
-  await expect(composer(page)).toHaveValue("newer text stays");
-  await composer(page).fill("");
-  await expect(attached(page)).toContainText("new.png");
-  await expect(composer(page)).toHaveValue("");
-  await attached(page)
-    .getByRole("button", { name: "Remove new.png", exact: true })
-    .click();
-  await expect(attached(page).locator('li[data-status="ready"]')).toContainText(
-    "original.png",
-  );
-  await expect(composer(page)).toHaveValue("return this complete draft");
-  // The returned draft keeps its upload: only the new selection was sent.
-  expect(upload.uploads()).toBe(2);
-  await testInfo.attach("returned-media-draft", {
-    body: await page.screenshot({
-      path: testInfo.outputPath("returned-media-draft.png"),
-    }),
-    contentType: "image/png",
-  });
-  // Opening a local command does not send the returned prompt.
-  await sendPrompt(page, "/thinking");
-  await expect(page.getByLabel("Effort for new prompts")).toHaveValue("high");
 });

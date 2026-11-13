@@ -1,9 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  holdTerminals,
-  releaseTerminal,
-  terminalHeld,
-} from "./fixture-controls";
+
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import { observeFrames } from "./turn-observers";
 
@@ -96,48 +92,4 @@ test("opens, navigates, and executes the command palette by keyboard only", asyn
   ).toBeVisible();
   // A local command never starts a model turn.
   expect(w.calls("turn/start")).toHaveLength(0);
-});
-
-test("Esc closes the palette inertly and interrupts only a live turn", async ({
-  page,
-  request,
-}) => {
-  const w = observeFrames(page);
-  await connectAndStartWorkspace(page, "/srv/work/keyboard-esc");
-  const input = composer(page);
-  await input.focus();
-
-  // Bare Esc with no live turn is inert (TUI close/focus ladder never
-  // interrupts: event_loop.rs:2013-2038).
-  await input.press("Escape");
-  expect(w.calls("turn/interrupt")).toHaveLength(0);
-
-  // Hold a live turn first: with none, an Esc that leaked past the palette
-  // would have nothing to interrupt, so the palette check could not fail.
-  await holdTerminals(request);
-  await input.fill("Escape interrupt parity");
-  await input.press("Enter");
-  const owner: string = w.calls("turn/start").at(-1)!.params!.session_id;
-  await terminalHeld(request, owner);
-
-  // Esc dismisses the palette and must NOT interrupt (TUI: Esc on the slash
-  // popup closes the menu — event_loop.rs:2631-2649).
-  await input.press("/");
-  await expect(palette(page)).toBeVisible();
-  await input.press("Escape");
-  await expect(palette(page)).toHaveCount(0);
-  await expect(input).not.toHaveAttribute("aria-controls");
-  expect(w.calls("turn/interrupt")).toHaveLength(0);
-
-  // Only a bare Esc interrupts exactly that turn (TUI active_turn →
-  // interrupt_command, event_loop.rs:2013-2022; parity precedent
-  // local-preferences.spec.ts:589-615). The Web keeps the dismissed draft,
-  // so clear it first.
-  await input.fill("");
-  await input.press("Escape");
-  await expect.poll(() => w.calls("turn/interrupt").length).toBe(1);
-  expect(w.calls("turn/interrupt")[0]!.params).toMatchObject({
-    session_id: owner,
-  });
-  await releaseTerminal(request, owner);
 });
