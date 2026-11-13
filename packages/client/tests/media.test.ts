@@ -1,13 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { blobApiUrl, uploadedHandleForProfile } from "../src/media.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
 import { OctosUiClient } from "../src/client.ts";
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: ["turn/start", "session/files.list"],
-  supported_notifications: [],
-};
+import { makeCaps } from "./fixtures/caps.ts";
+const capabilities = makeCaps({
+  methods: ["turn/start", "session/files.list"],
+});
 const handle = (owner: string) =>
   "up/" + btoa(owner + "/unique_note.txt").replace(/=+$/, "") + "/note.txt";
 const options = {

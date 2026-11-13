@@ -10,7 +10,8 @@ import {
   WORKSPACE_LIST_REFUSAL_KINDS,
 } from "../src/index.ts";
 import { OctosUiProtocolError } from "../src/client.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
+import { makeCaps } from "./fixtures/caps.ts";
 
 /** WEB-WORKSPACE-BROWSER-CONTRACT-5000 — the client half of the contract. */
 
@@ -30,16 +31,13 @@ const LISTING = {
   hidden_skipped: 3,
 };
 
-const CAPABILITIES: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [
+const CAPABILITIES = makeCaps({
+  methods: [
     APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_LIST,
     APPUI_WORKSPACE_BROWSE_METHODS.WORKSPACE_CREATE,
   ],
-  supported_notifications: [],
-  supported_features: [APPUI_ONBOARDING_FEATURES.WORKSPACE_BROWSE_V1],
-};
+  features: [APPUI_ONBOARDING_FEATURES.WORKSPACE_BROWSE_V1],
+});
 
 describe("workspace_list result contract", () => {
   it("decodes the contract's example listing verbatim", () => {

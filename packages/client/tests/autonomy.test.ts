@@ -20,7 +20,8 @@ import {
   createAutonomyCommands,
   sessionControlsTarget,
 } from "../src/autonomy.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
+import { makeCaps } from "./fixtures/caps.ts";
 
 const GOAL_RECORD = {
   goal_id: "goal_01",
@@ -66,22 +67,8 @@ const MONITOR_RECORD = {
   updated_at_ms: 1_700_000_000_000,
 };
 
-function capabilities(
-  methods: string[],
-  features: string[] = [],
-): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos-ui/v1alpha1",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 2,
-    supported_methods: methods,
-    supported_notifications: [],
-    supported_features: features,
-  };
-}
+const capabilities = (methods: string[], features: string[] = []) =>
+  makeCaps({ methods, features });
 
 describe("autonomy capability gating", () => {
   it("requires both the method and its gating feature", () => {

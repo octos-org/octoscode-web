@@ -5,6 +5,7 @@ import {
   parseAgentControlResult,
 } from "../src/autonomy.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
+import { makeCaps } from "./fixtures/caps.ts";
 
 const AGENT = {
   agent_id: "a1",
@@ -40,17 +41,7 @@ function caps(
   methods = METHODS,
   features = ["coding.agent_control.v1", "coding.goal_runtime.v1"],
 ): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos-ui/v1alpha1",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 2,
-    supported_methods: methods,
-    supported_features: features,
-    supported_notifications: [],
-  };
+  return makeCaps({ methods, features });
 }
 function harness(result: unknown, capabilities = caps()) {
   const calls: Array<{ method: string; params: unknown }> = [];

@@ -13,12 +13,11 @@ import {
   APPUI_MEMORY_PROMOTE_METHOD,
   APPUI_MEMORY_REQUEST_METHOD,
 } from "../src/memory-methods.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
 
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: [
+import { makeCaps } from "./fixtures/caps.ts";
+
+const capabilities = makeCaps({
+  methods: [
     CORE_UI_METHODS.MEMORY_OVERVIEW,
     CORE_UI_METHODS.MEMORY_ENTITY,
     CORE_UI_METHODS.MEMORY_SEARCH,
@@ -28,9 +27,8 @@ const capabilities: UiProtocolCapabilities = {
     APPUI_MEMORY_PROMOTE_METHOD,
     ...Object.values(APPUI_MEMORY_ENTRY_METHODS),
   ],
-  supported_features: [CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1],
-  supported_notifications: [],
-};
+  features: [CORE_UI_FEATURES.AUXILIARY_REST_TO_WS_V1],
+});
 const record = {
   id: "doc:t0008:1",
   kind: "document",

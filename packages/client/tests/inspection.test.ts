@@ -8,22 +8,15 @@ import {
   CORE_UI_FEATURES as F,
   CORE_UI_METHODS as M,
 } from "../src/generated/core-contract.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
+import { makeCaps } from "./fixtures/caps.ts";
 const session = "coding:local:ordinary";
 const turn = "00000000-0000-4000-8000-000000000011";
-function caps(): UiProtocolCapabilities {
-  return {
-    version: {
-      protocol: "octos-ui/v1alpha1",
-      schema_version: 1,
-      jsonrpc: "2.0",
-    },
-    capabilities_schema_version: 2,
-    supported_methods: [M.THREAD_GRAPH_GET, M.TURN_STATE_GET],
-    supported_features: [F.THREAD_GRAPH_V1, F.TURN_STATE_GET_V1],
-    supported_notifications: [],
-  };
-}
+const caps = () =>
+  makeCaps({
+    methods: [M.THREAD_GRAPH_GET, M.TURN_STATE_GET],
+    features: [F.THREAD_GRAPH_V1, F.TURN_STATE_GET_V1],
+  });
 const state = () => ({ session_id: session, turn_id: turn, state: "unknown" });
 const context = () => ({
   session_id: session,

@@ -1,14 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBtwCommands } from "./btw.ts";
-import type { UiProtocolCapabilities } from "./types.ts";
+
+import { makeCaps } from "./caps.test-fixture.ts";
 
 const session = "dev:local:tui#peer-review";
-const caps: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: ["session/btw"],
-  supported_notifications: [],
-};
+const caps = makeCaps({ methods: ["session/btw"] });
 
 describe("native session/btw contract", () => {
   it("uses exactly the captured full Session and trimmed question, without a turn or profile override", async () => {

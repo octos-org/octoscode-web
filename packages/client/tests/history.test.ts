@@ -5,18 +5,11 @@ import {
   parseForkResult,
   parseReviewStartResult,
 } from "../src/history.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
+
+import { makeCaps } from "./fixtures/caps.ts";
 const turnId = "00000000-0000-4000-8000-000000000001";
-const capabilities = (
-  methods: string[],
-  features: string[] = [],
-): UiProtocolCapabilities => ({
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: methods,
-  supported_notifications: [],
-  supported_features: features,
-});
+const capabilities = (methods: string[], features: string[] = []) =>
+  makeCaps({ methods, features });
 describe("conversation and workspace history contracts", () => {
   it("rejects invalid topic bytes and out-of-range u32 counts before dispatch", async () => {
     const request = vi.fn();

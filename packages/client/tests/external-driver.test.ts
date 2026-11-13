@@ -9,14 +9,10 @@ import {
   parseSessionDriverGetResult,
 } from "../src/external-driver.ts";
 
-import { makeCaps } from "./fixtures/caps.ts";
+import { driverCaps as caps } from "./fixtures/external-driver-wire.ts";
 import type { UiProtocolCapabilities } from "../src/types.ts";
 
 const METHOD = EXTERNAL_DRIVER_METHODS.SESSION_DRIVER_GET;
-
-function caps(methods: string[], features: string[]): UiProtocolCapabilities {
-  return makeCaps({ family: "driver", methods, features });
-}
 
 const FULL_CAPS = caps([METHOD], [EXTERNAL_DRIVER_V1_FEATURE]);
 

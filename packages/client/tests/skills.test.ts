@@ -1,15 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSkillCommands } from "../src/skills.ts";
 import { APPUI_SKILL_METHODS } from "../src/skill-methods.ts";
-import type { UiProtocolCapabilities } from "../src/types.ts";
 
-const capabilities: UiProtocolCapabilities = {
-  version: { protocol: "octos-ui/v1alpha1", schema_version: 1, jsonrpc: "2.0" },
-  capabilities_schema_version: 2,
-  supported_methods: Object.values(APPUI_SKILL_METHODS),
-  supported_notifications: [],
-  supported_features: ["profile.skills.reviewed_install.v1"],
-};
+import { makeCaps } from "./fixtures/caps.ts";
+
+const capabilities = makeCaps({
+  methods: Object.values(APPUI_SKILL_METHODS),
+  features: ["profile.skills.reviewed_install.v1"],
+});
 
 describe("profile skill contracts", () => {
   it("gates before dispatch and binds every read and mutation to the profile", async () => {

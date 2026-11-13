@@ -103,6 +103,22 @@
 `src/external-driver.ts` 导出的
 `DriverControlFence`、`DriverAcquireParams`、`DriverRenewParams`、`DriverAcquireView`、`PeerDispatchReceiptView`。只删重复的类型声明，断言不变。
 
+**合并 setup（第三轮第三个 PR，不删测试）：**
+
+- `external-driver-lease-control.test.ts` 的三条（「accepts an external
+  release…」「rejects a FOREIGN next…」「the acquire capability exposes no
+  enumerable proof…」）并入 `external-driver-control.test.ts`，测试名不变。
+- 两个文件原来各有一套几乎相同的 harness：能力集、录调用的
+  `createExternalDriverCommands`
+  和「解码拒绝、有界且不反显 proof」断言。现在只留一套，放在
+  `tests/fixtures/external-driver-wire.ts`，peer-control、refusal、external-driver 三个文件也一起用。
+- control 文件里写失败测试阶段留下的 `requireMethod`/`invoke`
+  间接层和手写的线上方法名表去掉，直接调真实命令。
+- 假 socket 客户端从 `client.test.ts` 移到
+  `tests/fixtures/socket-client.ts`，`server-methods`、refusal 一起用。
+- 其余手写的能力集字面量统一用 `fixtures/caps.ts` 的 `makeCaps`。
+- 断言没有改动。
+
 下面逐文件表里，本轮删的行在「守的性质」前加了「（第三轮删）」。
 
 ## 基线与预计
@@ -186,7 +202,7 @@ echo、profile 模型管理 wire 契约。it.each「replaced socket late callbac
 | a rejected control RPC never echoes the raw server payload or proof                  | ③   | 拒绝不反显服务器原文/proof                           |
 | keeps the constructing session/topic for every control method                        | ④   | （第三轮删）构造期 scope 冻结，不重解析              |
 
-### tests/external-driver-lease-control.test.ts（留 4/12）
+### tests/external-driver-lease-control.test.ts（留 4/12；第三轮剩下的三条并入 external-driver-control.test.ts）
 
 | 测试                                                                        | 类  | 守的性质                   |
 | --------------------------------------------------------------------------- | --- | -------------------------- |

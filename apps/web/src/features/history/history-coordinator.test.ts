@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_UI_METHODS,
   OctosUiClient,
-  type RpcNotification,
   type SessionHydrateResult,
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client";
@@ -15,6 +14,11 @@ import {
 } from "./history-binding.ts";
 import { HistoryCoordinator } from "./history-coordinator.ts";
 import { appuiCaps } from "../../test-fixtures/caps.ts";
+import {
+  UNOBSERVED_RECORD_EVENTS,
+  connectedClient,
+  openRecord,
+} from "../../test-fixtures/connected-client.ts";
 
 const caps: UiProtocolCapabilities = appuiCaps({
   methods: [
@@ -50,42 +54,12 @@ function thread(
 
 /** Real client public-method spies; real record manager/runtime/controller/queue. */
 function harness(capabilities = caps) {
-  const client = new OctosUiClient({ endpoint: "ws://server.test/ui" });
-  const pool = { client, epoch: 1, allowStart: true };
   const histories = new Map<string, SessionHydrateResult>();
-  const notifications = new Set<(event: RpcNotification) => void>();
-  vi.spyOn(client, "status", "get").mockReturnValue("connected");
-  vi.spyOn(client, "subscribeStatus").mockImplementation((listener) => {
-    listener("connected");
-    return () => undefined;
-  });
-  vi.spyOn(client, "subscribeErrors").mockReturnValue(() => undefined);
-  vi.spyOn(client, "subscribeNotifications").mockImplementation((listener) => {
-    notifications.add(listener);
-    return () => {
-      notifications.delete(listener);
-    };
-  });
-  vi.spyOn(client, "listConfigCapabilities").mockResolvedValue({
+  const { client } = connectedClient(
     capabilities,
-  });
-  const openRpc = vi
-    .spyOn(client, "openSession")
-    .mockImplementation(async (params) => ({
-      opened: {
-        session_id: params.session_id,
-        active_profile_id: params.profile_id ?? "coding",
-        workspace_root: params.cwd ?? "/srv/project",
-        capabilities,
-      },
-    }));
-  const hydrateRpc = vi
-    .spyOn(client, "hydrateSession")
-    .mockImplementation(
-      async (params) =>
-        histories.get(params.session_id) ?? thread(params.session_id),
-    );
-  const startRpc = vi.spyOn(client, "startTurn").mockResolvedValue({});
+    (sessionId) => histories.get(sessionId) ?? thread(sessionId),
+  );
+  const pool = { client, epoch: 1, allowStart: true };
   const commandsBySession = new Map<string, HistoryCommands>();
   function commandsFor(sessionId: string) {
     let commands = commandsBySession.get(sessionId);
@@ -141,12 +115,7 @@ function harness(capabilities = caps) {
   manager = new SessionRecordManager({
     pooledClient: () => pool.client,
     authorityEpoch: () => pool.epoch,
-    onSelectedEvent: () => undefined,
-    onSelectedSnapshot: () => undefined,
-    onBackgroundActivity: () => undefined,
-    cursorFor: () => undefined,
-    validateServerCapabilities: () => undefined,
-    validateSessionCapabilities: () => undefined,
+    ...UNOBSERVED_RECORD_EVENTS,
     controllerDependencies: (scope, recordClient) => {
       const ready = () =>
         manager.get(scope)?.runtime.getSnapshot().phase === "ready";
@@ -163,35 +132,8 @@ function harness(capabilities = caps) {
       };
     },
   });
-  const open = (
-    sessionId: string,
-    profileId = "coding",
-    cwd = "/srv/project",
-  ) =>
-    manager.openOnRecord(
-      {
-        endpoint: "ws://server.test/ui",
-        token: "",
-        sessionId,
-        profileId,
-        cwd,
-      },
-      client,
-      new AbortController().signal,
-    );
-  return {
-    client,
-    pool,
-    histories,
-    notifications,
-    openRpc,
-    hydrateRpc,
-    startRpc,
-    factory,
-    commandsFor,
-    manager,
-    open,
-  };
+  const open = (sessionId: string) => openRecord(manager, client, sessionId);
+  return { pool, factory, commandsFor, manager, open };
 }
 
 describe("record-scoped history coordinator", () => {
