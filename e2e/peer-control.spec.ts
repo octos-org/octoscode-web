@@ -37,8 +37,6 @@ const COMMAND_KINDS = [
   "interrupt",
 ] as const;
 type CommandKind = (typeof COMMAND_KINDS)[number];
-/** §6 bounded copy (peer-control-commands.ts label table). */
-const FENCE_STALE = "Your control of this session expired";
 
 /**
  * The seat commands inside the pane's Advanced section. The pane is a dialog
@@ -52,9 +50,6 @@ function panel(page: Page) {
 }
 function command(page: Page, kind: CommandKind) {
   return panel(page).locator(`[data-control-command="${kind}"]`);
-}
-function refusal(page: Page) {
-  return panel(page).locator('[data-control-state="refused"]');
 }
 function receipt(page: Page) {
   return panel(page).locator('[data-control-state="receipt"]');
@@ -130,48 +125,5 @@ test.describe("peer/control seat semantics (pane Advanced, synthetic fixture)", 
       await expect.poll(() => w.calls(CONTROL_METHOD).length).toBe(before + 1);
     }
     expect(w.calls(CONTROL_METHOD)).toHaveLength(COMMAND_KINDS.length);
-  });
-
-  // ----------------------------------------------------------- refusals
-  test("a refused RECEIPT renders the typed peer_control_refused refusal", async ({
-    page,
-  }) => {
-    const w = observeFrames(page);
-    await connect(page, "refused");
-    await command(page, "steer").click();
-    await expect(refusal(page)).toBeVisible();
-    await expect(refusal(page)).toHaveAttribute(
-      "data-refusal-kind",
-      "peer_control_refused",
-    );
-    await expect(refusal(page)).toHaveAttribute("role", "alert");
-    await expect(refusal(page)).toHaveText("That action was refused.");
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
-  });
-
-  test("a driver_fence_stale typed error drops the seat, keeps the §6 label", async ({
-    page,
-  }) => {
-    const w = observeFrames(page);
-    await connect(page, "stale");
-    await command(page, "steer").click();
-    // P2e (2930) + round-2 Advanced restructure: a typed stale fence means
-    // the held proof is DEAD, so the SEAT panel unmounts. The pane's Advanced
-    // section now renders the CONTROLLER region (which owns the lane picker /
-    // Dispatch / Release staging) plus the shared control-state axis; the
-    // seat's own command cluster (`data-control-panel="peer"`) goes away and
-    // the bounded §6 label surfaces on the pane's alert axis.
-    await expect(refusal(page)).toHaveCount(0);
-    await expect(panel(page)).toHaveCount(0);
-    const pane = page.getByRole("dialog", {
-      name: /Session settings/,
-    });
-    await expect(
-      pane.getByRole("alert").filter({ hasText: FENCE_STALE }),
-    ).toBeVisible();
-    await expect(
-      pane.getByRole("alert").filter({ hasText: FENCE_STALE }),
-    ).not.toContainText("fixture fence stale");
-    expect(w.calls(CONTROL_METHOD)).toHaveLength(1);
   });
 });

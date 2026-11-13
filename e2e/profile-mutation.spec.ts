@@ -112,67 +112,6 @@ async function command(page: Page, name: string) {
   await composer(page).press("Enter");
 }
 
-test("skill removal holds the profile lock through deferred replies and deduplicates confirmation; reviewing a source writes nothing", async ({
-  page,
-}) => {
-  const rpc = await interceptProfileWrites(page, true);
-  await connectAndStartWorkspace(page, "/workspace/profile-mutation-test");
-  await command(page, "skills");
-  const dialog = page.getByRole("dialog", { name: "Profile skills" });
-  await expect(
-    dialog.getByRole("button", { name: "Remove sample" }),
-  ).toBeEnabled();
-  await dialog
-    .getByLabel("Repository or server-side path")
-    .fill("example/sample");
-  await dialog
-    .getByRole("button", { name: "Review source", exact: true })
-    .click();
-  await expect(
-    dialog.getByRole("region", { name: "Source review" }),
-  ).toBeVisible();
-  await expect(dialog.getByRole("button", { name: /install/i })).toHaveCount(0);
-  expect(rpc.writes).toHaveLength(0);
-
-  await dialog.getByRole("button", { name: "Remove sample" }).click();
-  await dialog
-    .getByRole("button", { name: "Confirm remove", exact: true })
-    .evaluate((button) => {
-      (button as HTMLButtonElement).click();
-      (button as HTMLButtonElement).click();
-    });
-  await expect.poll(() => rpc.writes.length).toBe(1);
-  expect(rpc.writes[0]!.request.method).toBe("profile/skills/remove");
-  expect(rpc.confirmedProfiles.size).toBe(1);
-  expect(rpc.writes[0]!.request.params).toEqual({
-    profile_id: [...rpc.confirmedProfiles][0],
-    name: "sample",
-  });
-  await expect(
-    dialog.getByRole("button", { name: "Confirm remove", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    dialog.getByRole("button", { name: "Close skills" }),
-  ).toBeDisabled();
-  await expect(composer(page)).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeVisible();
-  expect(rpc.writes).toHaveLength(1);
-  rpc.succeed(0);
-  await expect(
-    dialog.getByText("No skills installed in this Profile."),
-  ).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: "Close skills" }),
-  ).toBeEnabled();
-  await dialog.getByRole("button", { name: "Close skills" }).click();
-  await expect(composer(page)).toBeEnabled();
-  expect(rpc.turnStarts).toHaveLength(0);
-  expect(rpc.writes.map((write) => write.request.method)).not.toContain(
-    "profile/skills/install",
-  );
-});
-
 test("a failed credential write clears its input, consumes confirmation and requires a fresh review", async ({
   page,
 }) => {

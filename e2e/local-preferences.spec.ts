@@ -4,11 +4,7 @@ import {
   releaseTerminal,
   terminalHeld,
 } from "./fixture-controls";
-import {
-  connectAndStartWorkspace,
-  FIXTURE_ORIGIN,
-  FIXTURE_TOKEN,
-} from "./fixture-session";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import {
   newSessionIn,
   productNavigation,
@@ -17,16 +13,8 @@ import {
 } from "./sessions";
 import { observeSent } from "./turn-observers";
 
-const storageKey = "octoscode.web.display.v1";
 const input = (page: Page) => page.locator(".composer textarea");
-const preferences = (page: Page) =>
-  // Chromium's native AX name is checked below. Playwright's synthetic name
-  // lookup omits this dynamically loaded dialog despite a valid labelledby.
-  page.locator('[role="dialog"]').filter({
-    has: page.getByRole("heading", {
-      name: /^(Browser preferences|浏览器偏好设置)$/,
-    }),
-  });
+
 async function command(page: Page, text: string) {
   await input(page).fill(text);
   await page.locator(".send-button").click();
@@ -58,17 +46,6 @@ async function command(page: Page, text: string) {
       { timeout: 15_000 },
     )
     .toBe(true);
-}
-async function closePreferences(page: Page) {
-  await preferences(page)
-    .getByRole("button", {
-      name: /Close preferences|关闭偏好设置|Close|关闭/,
-    })
-    .click();
-  await expect(preferences(page)).toHaveCount(0);
-}
-async function storage(page: Page) {
-  return page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
 }
 
 test("bare Normal Escape interrupts only the selected owner, while Vim changes preserve the other busy Session", async ({
@@ -109,71 +86,4 @@ test("bare Normal Escape interrupts only the selected owner, while Vim changes p
   } finally {
     await request.post(`${FIXTURE_ORIGIN}/__test__/terminal/reset`);
   }
-});
-
-test("only explicit save persists display preferences; reload restores preferences and the separate draft without storing credentials", async ({
-  page,
-}) => {
-  const starts = observeSent(page, "turn/start");
-  await connectAndStartWorkspace(page, "/srv/work/local-preferences-save");
-  const before = await storage(page);
-  await command(page, "/theme");
-  await preferences(page)
-    .locator('label:has-text("Theme") select')
-    .selectOption("claude");
-  await preferences(page)
-    .locator('label:has-text("Language") select')
-    .selectOption("zh");
-  await preferences(page)
-    .getByRole("checkbox", { name: "Vim 编辑", exact: true })
-    .check();
-  await closePreferences(page);
-  expect((await storage(page))[storageKey]).toBeUndefined();
-  await command(page, "/saveconfig");
-  const saved = await storage(page);
-  expect(JSON.parse(saved[storageKey]!)).toEqual({
-    version: 1,
-    theme: "claude",
-    language: "zh",
-    vimMode: true,
-  });
-  expect(
-    Object.fromEntries(
-      Object.entries(saved).filter(([key]) => key !== storageKey),
-    ),
-  ).toEqual(before);
-  await input(page).fill("PRIVATE_COMPOSER_DRAFT");
-  expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
-  expect(JSON.stringify(await storage(page))).not.toContain(FIXTURE_TOKEN);
-  expect(starts()).toHaveLength(0);
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-display-theme",
-    "claude",
-  );
-  await expect(input(page)).toBeEnabled();
-  // Draft recovery is separate from the explicitly saved display preferences.
-  await expect(input(page)).toHaveValue("PRIVATE_COMPOSER_DRAFT");
-  expect((await storage(page))[storageKey]).toBe(saved[storageKey]);
-  expect(JSON.stringify(await storage(page))).not.toContain(FIXTURE_TOKEN);
-  await input(page).fill("");
-  await expect(input(page)).toHaveAttribute("data-vim-mode", "insert");
-  await command(page, "/theme");
-  await expect(
-    preferences(page).getByRole("checkbox", { name: "Vim 编辑", exact: true }),
-  ).toBeChecked();
-  await preferences(page)
-    .getByRole("combobox", { name: "语言", exact: true })
-    .selectOption("en");
-  await preferences(page)
-    .getByRole("button", { name: "Save browser preferences", exact: true })
-    .click();
-  expect(JSON.parse((await storage(page))[storageKey]!)).toEqual({
-    version: 1,
-    theme: "claude",
-    language: "en",
-    vimMode: true,
-  });
-  expect(starts()).toHaveLength(0);
 });

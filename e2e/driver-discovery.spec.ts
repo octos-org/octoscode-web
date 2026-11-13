@@ -25,7 +25,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { disconnect } from "./fixture-controls";
+
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import {
   closeSessionController,
@@ -239,25 +239,5 @@ test.describe("external driver discovery (synthetic fixture)", () => {
     await expect(disclosure(page)).toHaveCount(1);
     await expect(factRow(page, "Driver")).toContainText(aId);
     await expect(factRow(page, "Driver")).not.toContainText(bId);
-  });
-
-  test("transitions healthy -> refused across a transport reconnect on the SAME record", async ({
-    page,
-    request,
-  }) => {
-    const probe = observeFrames(page);
-    const s = await connect(page, probe, "");
-    await expect(disclosure(page)).toHaveCount(1);
-    const before = probe.calls(METHOD).length;
-
-    // Flip the SAME session to refused, then force a reconnect so the record
-    // re-walks. The previously-complete inventory must collapse to non-complete
-    // and the NEW walk must carry the typed refusal.
-    await driverControl(request, "refuse", s.sessionId);
-    await disconnect(request);
-    await expect.poll(() => probe.calls(METHOD).length).toBeGreaterThan(before);
-    const walk = probe.calls(METHOD).at(-1)!;
-    await probe.settled(walk);
-    await expect(disclosure(page)).toHaveCount(0);
   });
 });

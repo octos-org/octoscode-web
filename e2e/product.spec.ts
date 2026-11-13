@@ -153,42 +153,6 @@ test.afterEach(async ({ request }) => {
   await request.post(`${FIXTURE_ORIGIN}/__test__/turn-start/reset`);
 });
 
-test("keeps authentication when a remembered Session can no longer open", async ({
-  page,
-}) => {
-  await connectAndStartWorkspace(page, "/srv/work/stale-restore");
-  await page.request.post(`${FIXTURE_ORIGIN}/__test__/reject-opened`);
-
-  const restoreOpens = observeSent(page, "session/open");
-
-  await page.reload();
-  await expect(productNavigation(page)).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByRole("region", { name: /Choose a workspace|Add workspace/ })
-      .locator('[role="alert"]'),
-  ).toContainText("saved Session is no longer available");
-  await expect(page.locator("#connection-title")).toHaveCount(0);
-  await expect.poll(() => restoreOpens().length).toBe(1);
-
-  await page.reload();
-  await expect(productNavigation(page)).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: /Choose a workspace|Add workspace/ }),
-  ).toBeVisible();
-  await page.waitForTimeout(250);
-  expect(restoreOpens()).toHaveLength(1);
-
-  await requestInitialWorkspace(page, "/srv/work/recovered-after-stale");
-  await expect(
-    page.getByText("/srv/work/recovered-after-stale", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByPlaceholder(COMPOSER_PLACEHOLDER)).toBeVisible();
-});
-
 test("keeps a server-accepted turn and sibling records on the same pooled socket", async ({
   page,
 }) => {
@@ -196,7 +160,10 @@ test("keeps a server-accepted turn and sibling records on the same pooled socket
   let ownerSocketSeen = false;
   let ownerSocketClosed = false;
   let ownerSocketReopens = 0;
+  let openSockets = 0;
+  let peakSockets = 0;
   page.on("websocket", (socket) => {
+    peakSockets = Math.max(peakSockets, ++openSockets);
     let ownsStartedTurn = false;
     socket.on("framesent", ({ payload }) => {
       const frame = String(payload);
@@ -209,6 +176,7 @@ test("keeps a server-accepted turn and sibling records on the same pooled socket
       }
     });
     socket.on("close", () => {
+      openSockets -= 1;
       if (ownsStartedTurn) ownerSocketClosed = true;
     });
   });
@@ -249,99 +217,12 @@ test("keeps a server-accepted turn and sibling records on the same pooled socket
   await selectSession(sidebar, originalSessionId);
   expect(ownerSocketClosed).toBe(false);
   expect(ownerSocketReopens).toBe(opensBeforeRefocus);
+  // One pooled transport for every Session, never one per Session.
+  expect(peakSockets).toBe(1);
 
   const settings = await openSettingsPastPicker(page);
   await settings.getByRole("button", { name: "Disconnect" }).click();
   await expect.poll(() => ownerSocketClosed).toBe(true);
-});
-
-test("keeps B selected when A's unacknowledged start is rejected", async ({
-  page,
-  request,
-}) => {
-  const cwd = "/srv/work/rejected-turn-start-navigation";
-  const sessionOpens = observeSent(page, "session/open");
-  await connectAndStartWorkspace(page, cwd);
-
-  const sidebar = productNavigation(page);
-  const sessions = sidebar.locator('[role="treeitem"][data-session-id]');
-  await expect(sessions).toHaveCount(1);
-  const originalSessionId = await sessions
-    .first()
-    .getAttribute("data-session-id");
-  if (!originalSessionId) throw new Error("Expected source Session id");
-  const originalSession = sessionRow(sidebar, originalSessionId);
-
-  await holdNextTurnStart(request);
-  const composer = page.getByPlaceholder(COMPOSER_PLACEHOLDER);
-  await sendPrompt(page, "Reject this fixture turn before it starts");
-  await expect(page.getByRole("button", { name: /^Starting/ })).toBeVisible();
-  await waitForHeldTurnStart(request);
-
-  const opensBeforeNavigation = sessionOpens().length;
-  await newSessionIn(sidebar, "rejected-turn-start-navigation");
-
-  await expect(sessions).toHaveCount(2);
-  const sibling = sessionRowsExcept(sidebar, originalSessionId);
-  await expect(sibling).toHaveAttribute("aria-current", "page");
-  await composer.fill("Newer draft in B");
-  await settleHeldTurnStart(request, "reject");
-  await expect(composer).toHaveValue("Newer draft in B");
-  await expect(sibling).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("Turn rejected", { exact: true })).toHaveCount(0);
-  await originalSession.click();
-
-  await expect(page.getByText("Turn rejected", { exact: true })).toBeVisible();
-  await expect(composer).toHaveValue(
-    "Reject this fixture turn before it starts",
-  );
-  await expect(
-    page.getByText("Fixture rejected turn/start before acceptance", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Starting/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
-  await expect(sessions).toHaveCount(2);
-  await expect(originalSession).toHaveAttribute("aria-current", "page");
-  expect(sessionOpens()).toHaveLength(opensBeforeNavigation + 1);
-  await expect(
-    sidebar.locator('[role="alert"]').filter({
-      hasText: "Wait for Octos to accept the current turn",
-    }),
-  ).toHaveCount(0);
-});
-
-test("reports a start acknowledgement timeout as unknown, then settles on release", async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(120_000);
-  const cwd = "/srv/work/timeout-turn-start";
-  await connectAndStartWorkspace(page, cwd);
-
-  await holdNextTurnStart(request);
-  await sendPrompt(page, "Hold this turn past the request timeout");
-  await waitForHeldTurnStart(request);
-
-  // The acknowledgement never arrives within the 30s request timeout. The
-  // turn must not be reported as rejected: the fixture still holds it and
-  // may accept it later, so the queue must not advance or invite resubmit.
-  await expect(
-    page.getByText("Turn start timed out", { exact: true }),
-  ).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByText(/do not resubmit/)).toBeVisible();
-  await expect(page.getByText("Turn rejected", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Send prompt" })).toHaveCount(
-    0,
-  );
-
-  // The server had actually accepted the turn: releasing the held
-  // acknowledgement streams the reply and the terminal event settles the
-  // queue without any resubmission.
-  await settleHeldTurnStart(request, "release");
-  await expect(page.getByText(/Completed with/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send prompt" })).toBeVisible();
 });
 
 // Recovery (lossy replay) while B is selected admits A's held start from

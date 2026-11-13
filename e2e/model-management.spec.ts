@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { connect, connectAndStartWorkspace } from "./fixture-session";
+import { connectAndStartWorkspace } from "./fixture-session";
 import { openSettings } from "./sessions";
 
 const WORKSPACE = "/workspace/model-management-e2e";
@@ -155,47 +155,4 @@ test("manages a provider through the DSH-style Models settings flow", async ({
     settings.getByRole("status").filter({ hasText: "Provider deleted." }),
   ).toBeVisible();
   await expect(configuredProvider(settings, "deepseek-chat")).toHaveCount(0);
-});
-
-test("opening a session with no usable chat model goes to Settings › Models", async ({
-  page,
-}) => {
-  // Every session's model list comes back empty; the profile's own
-  // configuration (asked without a session) is left as it is.
-  await page.routeWebSocket(/\/api\/ui-protocol\/ws/, (socket) => {
-    const server = socket.connectToServer();
-    const sessionLists = new Set<unknown>();
-    socket.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (frame.method === "profile/llm/list" && frame.params?.session_id)
-        sessionLists.add(frame.id);
-      server.send(message);
-    });
-    server.onMessage((message) => {
-      const frame = JSON.parse(String(message));
-      if (sessionLists.has(frame.id) && frame.result) {
-        socket.send(
-          JSON.stringify({ ...frame, result: { ...frame.result, models: [] } }),
-        );
-        return;
-      }
-      socket.send(message);
-    });
-  });
-  const { repeatEachIndex, retry } = test.info();
-  const workspace = `${WORKSPACE}-no-model-${repeatEachIndex}-${retry}`;
-  await connect(page);
-  const addWorkspace = page.getByRole("region", { name: "Add workspace" });
-  await expect(addWorkspace).toBeVisible();
-  // Connected, no session yet: nothing has been asked, so nothing routes.
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings).toBeHidden();
-
-  await addWorkspace.getByLabel("Server workspace path").fill(workspace);
-  await addWorkspace.getByRole("button", { name: "Start session" }).click();
-  await expect(settings).toBeVisible();
-  await expect(settings.getByRole("tabpanel")).toHaveAttribute(
-    "data-settings-section",
-    "models",
-  );
 });

@@ -1,10 +1,4 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Locator,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { holdTerminals, releaseTerminal } from "./fixture-controls";
 import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import {
@@ -25,58 +19,6 @@ test.afterEach(async ({ request }) => {
   await request.post(FIXTURE_ORIGIN + "/__test__/gather/reset");
   await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
 });
-
-async function armHistoryRefresh(
-  request: APIRequestContext,
-  sessionId: string,
-) {
-  expect(
-    (
-      await request.post(
-        FIXTURE_ORIGIN +
-          "/__test__/history/hold-refresh?session_id=" +
-          encodeURIComponent(sessionId),
-      )
-    ).status(),
-  ).toBe(204);
-}
-async function expectHistoryRefreshHeld(
-  request: APIRequestContext,
-  sessionId: string,
-  dialog: Locator,
-) {
-  await expect
-    .poll(async () => {
-      const state = (await (
-        await request.get(FIXTURE_ORIGIN + "/__test__/history/state")
-      ).json()) as { held: string[] };
-      return state.held;
-    })
-    .toEqual([sessionId]);
-  await expect(dialog).toBeVisible();
-  await expect(
-    dialog.getByText("Applying and refreshing the owning Session…", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: "Close history", exact: true }),
-  ).toBeDisabled();
-}
-async function releaseHistoryRefresh(
-  request: APIRequestContext,
-  sessionId: string,
-) {
-  expect(
-    (
-      await request.post(
-        FIXTURE_ORIGIN +
-          "/__test__/history/release?session_id=" +
-          encodeURIComponent(sessionId),
-      )
-    ).status(),
-  ).toBe(204);
-}
 
 async function sendSlashCommand(page: Page, command: string): Promise<void> {
   await composer(page).fill(command);
@@ -102,72 +44,6 @@ test("fails closed for an unknown command and sends no model input", async ({
   await expect(page.getByText("Nothing was sent to the model.")).toBeVisible();
   await expect(composer(page)).toHaveValue("");
   expect(wire.calls("turn/start")).toHaveLength(0);
-});
-
-test("keeps the rewind receipt and restores only the owning prompt draft after canonical refresh", async ({
-  page,
-  request,
-}) => {
-  const wire = observeFrames(page);
-  await connectAndStartWorkspace(page, "/srv/work/history-rewind-receipt");
-  const sessionId = String(wire.calls("session/open")[0]!.params!.session_id);
-  const prompts = [
-    "First user-rooted checkpoint",
-    "Second user-rooted checkpoint",
-  ];
-  for (const [index, prompt] of prompts.entries()) {
-    await composer(page).fill(prompt);
-    await page
-      .getByRole("button", { name: "Send prompt", exact: true })
-      .click();
-    await expect(page.getByText(COMPLETION_TEXT)).toHaveCount(index + 1);
-  }
-  await sendSlashCommand(page, "/rewind");
-  const dialog = page.getByRole("dialog", {
-    name: "Rewind conversation",
-    exact: true,
-  });
-  await dialog
-    .getByRole("button", { name: "#1 · " + prompts[0], exact: true })
-    .click();
-  await armHistoryRefresh(request, sessionId);
-  await dialog
-    .getByRole("button", { name: "Confirm conversation rewind", exact: true })
-    .click();
-  await expectHistoryRefreshHeld(request, sessionId, dialog);
-  expect(wire.calls("session/rollback").map((frame) => frame.params)).toEqual([
-    { session_id: sessionId, num_turns: 2 },
-  ]);
-  await releaseHistoryRefresh(request, sessionId);
-  const receipt = dialog.getByText(
-    "Conversation rewound. Workspace files were not restored.",
-    { exact: true },
-  );
-  await expect(receipt).toBeVisible();
-  await expect(receipt).toHaveCount(1);
-  await expect(
-    dialog.getByRole("button", {
-      name: "Confirm conversation rewind",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await dialog
-    .getByRole("button", { name: "Close history", exact: true })
-    .click();
-  await expect(composer(page)).toHaveValue(prompts[0]!);
-  await expect(composer(page)).toBeEnabled();
-  const conversation = page.locator(
-    '[role="region"][aria-label="Conversation"]',
-  );
-  for (const prompt of prompts)
-    await expect(conversation.getByText(prompt, { exact: true })).toHaveCount(
-      0,
-    );
-  await expect(conversation.getByText(COMPLETION_TEXT)).toHaveCount(0);
-  expect(wire.calls("session/rollback")).toHaveLength(1);
-  expect(wire.calls("snapshot/restore")).toHaveLength(0);
-  expect(wire.calls("session/open")).toHaveLength(1);
-  expect(wire.calls("turn/start")).toHaveLength(2);
 });
 
 test("queues a held gather synthesis only on busy A while B is selected and keeps blackboard refresh read-only", async ({

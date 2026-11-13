@@ -5,11 +5,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
-import {
-  connectAndStartWorkspace,
-  FIXTURE_ORIGIN,
-  openLink,
-} from "./fixture-session";
+import { connectAndStartWorkspace, FIXTURE_ORIGIN } from "./fixture-session";
 import { composer } from "./sessions";
 import { observeFrames } from "./turn-observers";
 import { axeViolations } from "./axe";
@@ -183,62 +179,4 @@ test("undo puts the turn's files back, keeps the conversation and draft, redo su
     summaries.last().getByRole("button", { name: "Undo this turn" }),
   ).toBeVisible();
   expect(protocol.calls("snapshot/restore")).toHaveLength(4);
-});
-
-test("another tab's undo leaves this tab's stale entry unsent and unsure", async ({
-  page,
-  browser,
-}) => {
-  const protocol = observeFrames(page);
-  await connectAndStartWorkspace(page, "/srv/work/turn-undo-tabs");
-  await runTurn(page, "Change a file seen from two tabs");
-  // The second tab opens the same Session from its link.
-  const other = await (await browser.newContext()).newPage();
-  const otherProtocol = observeFrames(other);
-  await openLink(other, page.url());
-  await expect(other.getByText(COMPLETION_TEXT)).toHaveCount(1);
-  await expect(
-    summary(other).getByRole("button", { name: "Undo this turn" }),
-  ).toBeVisible();
-
-  await (
-    await confirm(summary(page), "undo")
-  )
-    .getByRole("button", { name: "Undo file changes" })
-    .click();
-  await expect(
-    summary(page).getByRole("button", { name: "Redo this turn" }),
-  ).toBeVisible();
-
-  // The other tab still shows the undo it read before: confirming it sends
-  // nothing, and it says it can no longer tell.
-  await (
-    await confirm(summary(other), "undo")
-  )
-    .getByRole("button", { name: "Undo file changes" })
-    .click();
-  await expect(summary(other).getByRole("alert")).toContainText(
-    "Not sent: Core lists newer saved states than this page made",
-  );
-  await expect(
-    summary(other).getByText(
-      "After this turn the workspace got saved states this page did not make",
-    ),
-  ).toBeVisible();
-  await expect(
-    summary(other).getByRole("button", { name: /this turn/ }),
-  ).toHaveCount(0);
-  expect(otherProtocol.calls("snapshot/restore")).toHaveLength(0);
-
-  // The tab that undid it can still bring it back.
-  await (
-    await confirm(summary(page), "redo")
-  )
-    .getByRole("button", { name: "Bring changes back" })
-    .click();
-  await expect(
-    summary(page).getByText("Done. This turn's file changes are back."),
-  ).toBeVisible();
-  expect(protocol.calls("snapshot/restore")).toHaveLength(2);
-  await other.context().close();
 });

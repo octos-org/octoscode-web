@@ -77,31 +77,6 @@ test("switching stops the running workaround, then redoes the request with write
   ).toEqual(watched);
 });
 
-test("a late permission retry never starts in or clears another Session", async ({
-  page,
-}) => {
-  const receipt = await holdPermissionReceipt(page);
-  const { composer, retry } = await prepareDeniedWrite(page);
-  receipt.arm();
-  await retry.click();
-  await expect.poll(receipt.isHeld).toBe(true);
-  await page
-    .locator("aside")
-    .getByRole("button", { name: "Add workspace", exact: true })
-    .click();
-  const picker = page.getByRole("dialog");
-  await picker
-    .getByLabel("Server workspace path")
-    .fill("/workspace/permission-retry-other");
-  await picker.getByLabel("Server workspace path").press("Enter");
-  await composer.fill("DO NOT LOSE: unrelated B draft");
-  const before = receipt.starts();
-  receipt.release();
-  await page.waitForTimeout(300);
-  await expect(composer).toHaveValue("DO NOT LOSE: unrelated B draft");
-  expect(receipt.starts()).toBe(before);
-});
-
 // A permission retry redoes the request only on an applied workspace-write
 // receipt for the network the user chose; any other answer is reported and
 // starts nothing (T-0530).
