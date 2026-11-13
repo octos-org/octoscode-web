@@ -52,19 +52,16 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   const mark = `imp${Date.now()}`;
   const { settings, ingests } = await start(page);
   const storedBefore = await page.evaluate(() => Object.keys(localStorage));
-  await choose(
-    settings,
-    "notes.json",
+  const file = (extra = {}) =>
     JSON.stringify([
       record(mark, 1, {
         body: `${mark} <img src=x onerror="window.__ran=true"> 京都 ✈️`,
-        score: 3,
-        visits: 9,
-        trust: "trusted",
+        ...extra,
       }),
       record(mark, 2, { source: "mail", id: `doc:mail:${mark}-2` }),
-    ]),
-  );
+    ]);
+  const fields = { score: 3, visits: 9, trust: "trusted" };
+  await choose(settings, "notes.json", file(fields));
   const panel = preview(settings);
   await expect(panel).toContainText("notes.json");
   await expect(panel).toContainText("JSON record list");
@@ -82,16 +79,7 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   await expect(panel).toHaveCount(0);
   expect(ingests()).toHaveLength(0);
 
-  await choose(
-    settings,
-    "notes.json",
-    JSON.stringify([
-      record(mark, 1, {
-        body: `${mark} <img src=x onerror="window.__ran=true"> 京都 ✈️`,
-      }),
-      record(mark, 2, { source: "mail", id: `doc:mail:${mark}-2` }),
-    ]),
-  );
+  await choose(settings, "notes.json", file());
   // Two clicks, one import.
   await preview(settings)
     .getByRole("button", { name: "Import 2 records" })

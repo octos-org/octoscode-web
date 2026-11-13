@@ -115,7 +115,6 @@ export function MemorySettingsContent({
   const [title, setTitle] = useState("");
   const [abstract, setAbstract] = useState("");
   const [body, setBody] = useState("");
-  const [ingestResult, setIngestResult] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -237,14 +236,13 @@ export function MemorySettingsContent({
     setBusyAction("ingest");
     setError(null);
     setNotice(null);
-    setIngestResult(null);
     try {
       const id = `doc:octoscode-web:${randomUUID()}`;
       const commands = await client.memoryCommands(
         capabilities,
         memorySessionId,
       );
-      const result = await commands.ingest([
+      await commands.ingest([
         {
           id,
           kind: "document",
@@ -255,12 +253,17 @@ export function MemorySettingsContent({
           body: body.trim(),
         },
       ]);
-      setIngestResult(
-        t("{inserted} inserted · {updated} updated · {unchanged} unchanged", {
-          inserted: result.inserted,
-          updated: result.updated,
-          unchanged: result.unchanged,
-        }),
+      // Say where it went: Recall, found by search, not the editable list.
+      setNotice(
+        canLoad
+          ? t(
+              "Saved “{title}” as a reference document. It's open in Detail; find it again with Search memories.",
+              { title: title.trim() },
+            )
+          : t(
+              "Saved “{title}” as a reference document. Find it with Search memories.",
+              { title: title.trim() },
+            ),
       );
       if (canLoad) setRecord(await commands.load(id));
       else setRecord(null);
@@ -282,6 +285,7 @@ export function MemorySettingsContent({
     inflight.current = true;
     setBusyAction("request");
     setError(null);
+    setNotice(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -289,8 +293,19 @@ export function MemorySettingsContent({
       );
       const result = await commands.request(`web:${randomUUID()}`, body.trim());
       setNotice(
-        t("Memory request accepted: {status}", { status: result.status }),
+        result.status !== "accepted"
+          ? t("Octos didn't accept this request: {status}.", {
+              status: result.status,
+            })
+          : result.refreshEnabled
+            ? t(
+                "Octos will remember it. It's a staging note until Octos files it into Long-term memory, where you can edit or delete it.",
+              )
+            : t(
+                "Octos received it, but background filing is off on this server, so it stays a staging note for now.",
+              ),
       );
+      overviewAfterChange();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -305,6 +320,7 @@ export function MemorySettingsContent({
     inflight.current = true;
     setBusyAction("promote");
     setError(null);
+    setNotice(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -312,11 +328,21 @@ export function MemorySettingsContent({
       );
       const result = await commands.promote("octoscode-web");
       setNotice(
-        t("Promotion staged for {count} record(s); refresh is {refresh}.", {
-          count: result.count,
-          refresh: result.refreshEnabled ? t("enabled") : t("disabled"),
-        }),
+        !result.count
+          ? t(
+              "Nothing to hand over yet: only documents saved here that have been opened at least twice qualify.",
+            )
+          : result.refreshEnabled
+            ? t(
+                "Handed {count} document(s) to Octos. What's worth keeping will appear in Long-term memory.",
+                { count: result.count },
+              )
+            : t(
+                "Handed {count} document(s) to Octos, but background filing is off on this server, so they stay staging notes for now.",
+                { count: result.count },
+              ),
       );
+      overviewAfterChange();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -642,7 +668,6 @@ export function MemorySettingsContent({
         </p>
       ) : null}
       {notice ? <p role="status">{notice}</p> : null}
-      {ingestResult ? <p role="status">{ingestResult}</p> : null}
       <div className={styles.layout}>
         <div className={styles.main}>
           <section aria-labelledby="memory-overview-heading">
@@ -829,7 +854,7 @@ export function MemorySettingsContent({
           ) : null}
           {canIngest ? (
             <section aria-labelledby="memory-ingest-heading">
-              <h3 id="memory-ingest-heading">{t("Remember this")}</h3>
+              <h3 id="memory-ingest-heading">{t("Add to memory")}</h3>
               <div className={styles.form}>
                 <label htmlFor="memory-title">{t("Title")}</label>
                 <input
@@ -865,6 +890,7 @@ export function MemorySettingsContent({
                       busy || !title.trim() || !abstract.trim() || !body.trim()
                     }
                     onClick={() => void ingest()}
+                    aria-describedby="memory-remember-help"
                   >
                     {busyAction === "ingest"
                       ? t("Remembering…")
@@ -875,6 +901,7 @@ export function MemorySettingsContent({
                       type="button"
                       disabled={busy || !body.trim()}
                       onClick={() => void requestMemory()}
+                      aria-describedby="memory-request-help"
                     >
                       {t("Request memory")}
                     </button>
@@ -884,11 +911,42 @@ export function MemorySettingsContent({
                       type="button"
                       disabled={busy}
                       onClick={() => void promote()}
+                      aria-describedby="memory-promote-help"
                     >
                       {t("Promote to Knowledge")}
                     </button>
                   ) : null}
                 </div>
+                {/* Each action says where its memory goes and whether it
+                    can be changed later; they are three different stores. */}
+                <dl className={styles.choices}>
+                  <dt>{t("Remember this")}</dt>
+                  <dd id="memory-remember-help">
+                    {t(
+                      "Saves the title, summary and content as a reference document. Find it with Search memories. It can't be edited or deleted here.",
+                    )}
+                  </dd>
+                  {canRequest ? (
+                    <>
+                      <dt>{t("Request memory")}</dt>
+                      <dd id="memory-request-help">
+                        {t(
+                          "Asks Octos to remember the memory content. It waits as a staging note until Octos files it into Long-term memory, where you can edit or delete it.",
+                        )}
+                      </dd>
+                    </>
+                  ) : null}
+                  {canPromote ? (
+                    <>
+                      <dt>{t("Promote to Knowledge")}</dt>
+                      <dd id="memory-promote-help">
+                        {t(
+                          "Hands Octos the documents saved here that have been opened at least twice. What's worth keeping goes into Long-term memory.",
+                        )}
+                      </dd>
+                    </>
+                  ) : null}
+                </dl>
               </div>
             </section>
           ) : null}

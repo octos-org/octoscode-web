@@ -770,8 +770,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Skill changes are paused while known work is running in this Profile.":
     "此配置档案有已知任务运行时，技能变更已暂停。",
   "Skill registry": "技能注册表",
-  "Skills are shared by this Profile, not installed in your browser. Installation may download executable tools and dependencies. Review and trust the source first.":
-    "技能由此配置档案共享，不会安装到浏览器。安装可能下载可执行工具和依赖。请先审查并信任来源。",
+  "Skills are shared by this Profile, not installed in your browser. An installed skill can run its code on the server, so review and trust the source first.":
+    "技能由这个配置档案共享，不会装到浏览器里。装好的技能可以在服务器上运行它的代码，请先审查并信任来源。",
   "Source Session changed. Close and reopen this picker.":
     "来源会话已更改。请关闭并重新打开此选择器。",
   Start: "开始",
@@ -1510,8 +1510,8 @@ const catalog: Readonly<Record<string, string>> = {
   Skills: "技能",
   "Installed in server Profile {profileId}":
     "服务器配置文件 {profileId} 中安装的技能",
-  "Installing can run this source's code directly on the server: npm install, cargo build, downloaded binaries and the setup steps in its manifest. This list is only what the server reports. Nobody has inspected the source for you here.":
-    "安装时，服务器可能直接运行这个来源里的代码：npm install、cargo build、下载的预编译程序，以及 manifest 里的初始化步骤。这里只列服务器报告的内容，没有人替你检查过来源本身。",
+  "This list is only what the server reports. Nobody has inspected the source for you here.":
+    "这里只列服务器报告的内容，没有人替你检查过来源本身。",
   "Confirm remove": "确认移除",
   Source: "来源",
   Branch: "分支",
@@ -1537,8 +1537,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Source review": "来源审查",
   "This server can install exactly this reviewed commit and its signed artifact, and will refuse if the registry or the download no longer matches.":
     "这台服务器可以安装的就是这个审查过的 commit 及其签名产物，注册表或下载内容一旦不一致就会拒绝。",
-  "The install runs no build or setup steps of its own: the server publishes the reviewed source tree plus the signed artifact, and shared dependencies are not installed.":
-    "安装本身不运行任何构建或安装脚本：服务器只发布审查过的源码树和签名产物，共享依赖不会一并安装。",
+  "Installing runs nothing: the server publishes the reviewed source tree and the signed artifact, and installs no shared dependencies. Once installed, Octos can run this skill's code on the server whenever it uses the skill.":
+    "安装这一步不运行任何东西：服务器只发布审查过的源码树和签名产物，不安装共享依赖。装好以后，Octos 用到这个技能时，可以在服务器上运行它的代码。",
   "Installing isn't offered: this server has no review-bound install, so it couldn't promise to install the commit reviewed below.":
     "这里不提供安装：这台服务器没有与审查绑定的安装能力，无法保证装上的就是下面审查的 commit。",
   "Installing isn't offered: the registry has no single reviewed entry for this source, so there is no immutable object to install.":
@@ -1568,24 +1568,26 @@ const catalog: Readonly<Record<string, string>> = {
     "服务器报告的安装对象与这次审查不一致；已显示刷新后的状态，没有重试。",
   "The server did not confirm this install; it may have been applied. The refreshed state is shown and nothing was retried.":
     "服务器没有确认这次安装，它可能已经生效。已显示刷新后的状态，没有重试。",
-  "The registry changed since this review, so nothing was installed. Review the source again before installing. {detail}":
-    "审查之后注册表变了，什么都没有安装。请重新审查来源再安装。{detail}",
-  "The artifact failed its signature or checksum verification, so nothing was installed. {detail}":
-    "产物未通过签名或校验值验证，什么都没有安装。{detail}",
-  "The reviewed source or artifact could not be fetched, so nothing was installed. {detail}":
-    "无法获取审查过的来源或产物，什么都没有安装。{detail}",
-  "The registry has no artifact for this server's platform. {detail}":
-    "注册表没有这台服务器平台的产物。{detail}",
-  "This reviewed object is already installed. {detail}":
-    "这个审查过的对象已经安装。{detail}",
-  "This package's layout isn't supported by the review-bound installer. {detail}":
-    "该包的结构不受与审查绑定的安装器支持。{detail}",
-  "The reviewed tree contains links or special files the installer refuses. {detail}":
-    "审查过的目录树包含安装器拒绝的链接或特殊文件。{detail}",
-  "The install could not be published, so the previous state is unchanged. {detail}":
-    "安装无法发布，原有状态保持不变。{detail}",
-  "The install was rolled back after the server failed to rebuild the profile runtime. {detail}":
-    "服务器重建配置档案运行时失败，安装已回滚。{detail}",
+  "{name} wasn't installed: the registry changed since this review. Review the source again before installing.":
+    "没有安装 {name}：审查之后注册表变了。请重新审查来源再安装。",
+  "{name} wasn't installed: its artifact failed the signature or checksum check.":
+    "没有安装 {name}：产物没通过签名或校验值检查。",
+  "{name} wasn't installed: the reviewed source or artifact couldn't be fetched.":
+    "没有安装 {name}：无法获取审查过的来源或产物。",
+  "{name} wasn't installed: the registry has no artifact for this server's platform.":
+    "没有安装 {name}：注册表没有这台服务器平台的产物。",
+  "{name} is already installed from this review.":
+    "{name} 已经按这次审查装过了。",
+  "{name} wasn't installed: the review-bound installer doesn't support this package's layout.":
+    "没有安装 {name}：按审查安装不支持这个包的目录结构。",
+  "{name} wasn't installed: the reviewed tree contains links or special files the installer refuses.":
+    "没有安装 {name}：审查过的源码树里有安装程序拒绝的链接或特殊文件。",
+  "{name} wasn't installed: the server couldn't publish it, so the previous state is unchanged.":
+    "没有安装 {name}：服务器没能发布它，之前的状态没有变。",
+  "The server's message": "服务器原话",
+  "{name} wasn't installed.": "没有安装 {name}。",
+  "{name} wasn't installed: the server couldn't rebuild the profile runtime, so it rolled the install back.":
+    "没有安装 {name}：服务器没能重建配置档案的运行环境，已撤回这次安装。",
   "Review skill sources": "审查技能来源",
   "Look up a source": "查一个来源",
   "Review source": "审查来源",
@@ -1819,13 +1821,31 @@ const catalog: Readonly<Record<string, string>> = {
   "Remember this": "记住这段",
   Summary: "摘要",
   "Memory content": "记忆内容",
-  "{inserted} inserted · {updated} updated · {unchanged} unchanged":
-    "新增 {inserted} · 更新 {updated} · 未变化 {unchanged}",
   "Request memory": "请求记忆",
-  "Memory request accepted: {status}": "记忆请求已接受：{status}",
   "Promote to Knowledge": "提升为知识",
-  "Promotion staged for {count} record(s); refresh is {refresh}.":
-    "已为 {count} 条记录安排提升，刷新状态：{refresh}。",
+  "Add to memory": "添加记忆",
+  "Saves the title, summary and content as a reference document. Find it with Search memories. It can't be edited or deleted here.":
+    "把标题、摘要和内容存成一份参考资料。用「搜索记忆」找它，这里不能编辑或删除。",
+  "Asks Octos to remember the memory content. It waits as a staging note until Octos files it into Long-term memory, where you can edit or delete it.":
+    "请 Octos 记住「记忆内容」里的话。它先是一条暂存笔记，Octos 整理后会放进「长期记忆」，在那里可以编辑和删除。",
+  "Hands Octos the documents saved here that have been opened at least twice. What's worth keeping goes into Long-term memory.":
+    "把在这里存过、并且至少打开过两次的参考资料交给 Octos 整理，值得留下的会放进「长期记忆」。",
+  "Saved “{title}” as a reference document. It's open in Detail; find it again with Search memories.":
+    "已把「{title}」存为参考资料，已在「详情」里打开。以后用「搜索记忆」找它。",
+  "Saved “{title}” as a reference document. Find it with Search memories.":
+    "已把「{title}」存为参考资料。用「搜索记忆」找它。",
+  "Octos didn't accept this request: {status}.":
+    "Octos 没有接受这个请求：{status}。",
+  "Octos will remember it. It's a staging note until Octos files it into Long-term memory, where you can edit or delete it.":
+    "Octos 会记住它。它先是一条暂存笔记，Octos 整理后会放进「长期记忆」，在那里可以编辑和删除。",
+  "Octos received it, but background filing is off on this server, so it stays a staging note for now.":
+    "Octos 收到了，但这台服务器关闭了后台整理，它会先一直是暂存笔记。",
+  "Nothing to hand over yet: only documents saved here that have been opened at least twice qualify.":
+    "暂时没有可整理的：只有在这里存过、并且至少打开过两次的参考资料才算。",
+  "Handed {count} document(s) to Octos. What's worth keeping will appear in Long-term memory.":
+    "已把 {count} 份参考资料交给 Octos 整理，值得留下的会出现在「长期记忆」里。",
+  "Handed {count} document(s) to Octos, but background filing is off on this server, so they stay staging notes for now.":
+    "已把 {count} 份参考资料交给 Octos，但这台服务器关闭了后台整理，它们会先一直是暂存笔记。",
   Detail: "详情",
   "Trust: {trust}": "信任级别：{trust}",
   "No record body was reported.": "服务器未提供记录正文。",
