@@ -45,6 +45,11 @@ test("keeps a structured write artifact and its preview after reload", async ({
   const download = page.waitForEvent("download");
   await huge.getByRole("button", { name: "Download huge.csv" }).click();
   expect((await download).suggestedFilename()).toBe("huge.csv");
+
+  // A file the turn wrote and then sent shows once, where it was sent.
+  await sendPrompt(page, "Write and send an artifact fixture");
+  await expect(page.getByText("Weekly report")).toBeVisible();
+  await expect(page.locator('[data-attachment="weekly.md"]')).toHaveCount(1);
 });
 
 test("keeps HTML and SVG scripts and network access inert", async ({
@@ -63,10 +68,8 @@ test("keeps HTML and SVG scripts and network access inert", async ({
   await expect(
     htmlFrame.getByRole("heading", { name: "Safe HTML artifact" }),
   ).toBeVisible();
-  await expect(htmlFrame.locator("body")).not.toHaveAttribute(
-    "data-script-executed",
-    "yes",
-  );
+  // The fixtures' scripts mark the document if they ever run.
+  await expect(htmlFrame.locator("[data-script-executed]")).toHaveCount(0);
   await expect(
     htmlFrame.locator("body").locator("a, form, meta, link, base"),
   ).toHaveCount(0);
@@ -74,17 +77,11 @@ test("keeps HTML and SVG scripts and network access inert", async ({
   await expect(page).toHaveURL(/\?s=/);
 
   const svg = await previewDelivery(page, sessionId, "diagram.svg");
-  await expect(
-    svg.preview.frameLocator("iframe").getByText("Safe SVG artifact"),
-  ).toBeVisible();
-  await expect(
-    svg.preview.frameLocator("iframe").locator("svg"),
-  ).not.toHaveAttribute("data-script-executed", "yes");
-  await expect(svg.preview.frameLocator("iframe").locator("a")).toHaveCount(0);
-  await svg.preview
-    .frameLocator("iframe")
-    .getByText("Safe SVG artifact")
-    .click();
+  const svgFrame = svg.preview.frameLocator("iframe");
+  await expect(svgFrame.getByText("Safe SVG artifact")).toBeVisible();
+  await expect(svgFrame.locator("[data-script-executed]")).toHaveCount(0);
+  await expect(svgFrame.locator("a")).toHaveCount(0);
+  await svgFrame.getByText("Safe SVG artifact").click();
   await page.waitForTimeout(100);
   expect(leaks).toEqual([]);
 });

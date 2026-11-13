@@ -7272,6 +7272,60 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     }, 3_000);
     return null;
   }
+  // T-0613 (dogfood F-006): a step writes a file by its relative path, then
+  // the same turn sends it with `send_file` by its absolute path.
+  if (text === "Write and send an artifact fixture") {
+    const state = sessionState(sessionId);
+    const sent = `${state.workspaceRoot ?? "/workspace"}/weekly.md`;
+    deliveredFiles.set(deliveredFileKey(sessionId, sent), {
+      type: "text/markdown",
+      bytes: Buffer.from("# Weekly\n"),
+    });
+    notify(socket, sessionId, threadId, turnId, 2, nextCursor(), "tool_start", {
+      tool_call_id: "write-weekly",
+      name: "write_file",
+      write_path: "weekly.md",
+    });
+    notify(socket, sessionId, threadId, turnId, 3, nextCursor(), "tool_end", {
+      tool_call_id: "write-weekly",
+      status: "complete",
+      output_preview: "weekly.md written",
+    });
+    const segment = `${turnId}:assistant:delivery`;
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      4,
+      nextCursor(),
+      "assistant_persisted",
+      {
+        text: "Weekly report",
+        assistant_segment_id: segment,
+        meta: {
+          message_id: `delivery-${turnId}`,
+          persisted_at: new Date().toISOString(),
+          media: [sent],
+        },
+      },
+    );
+    notify(
+      socket,
+      sessionId,
+      threadId,
+      turnId,
+      5,
+      nextCursor(),
+      "turn_terminal",
+      { outcome: "completed" },
+    );
+    state.completedTurns.push(
+      settledTurnRecord(state, turnId, turnId, "completed"),
+    );
+    state.activeTurn = null;
+    return null;
+  }
   if (text === "Write an artifact fixture") {
     const content =
       "# Markdown artifact\n\n**Formatted safely** with [a link](https://example.com).\n";
