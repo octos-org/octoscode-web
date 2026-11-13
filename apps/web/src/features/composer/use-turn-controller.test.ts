@@ -129,20 +129,28 @@ describe("another attached client owns the session's turn", () => {
     };
   }
 
-  it("adopts another client's live turn only when this app holds nothing for that session", () => {
+  it("adopts a live turn this app holds nothing for, as another client's only when this tab's receipts say so", () => {
     // Adoption is display only: it never dispatches, never crosses sessions,
     // and never stomps a turn this app may still own. Only one turn can be
     // active server-side, so a foreign start over ours means our view is
     // stale; hydrate reconciles that with the full ownership rules.
-    const idle = renderController(fakeClient());
-    idle.controller.observeSteerDropped(turnStarted(OTHER_TURN, "session-b"));
-    expect(idle.controller.snapshot().active).toBeNull();
-    idle.controller.observeSteerDropped(turnStarted(OTHER_TURN));
-    expect(idle.controller.snapshot().active).toMatchObject({
-      turnId: OTHER_TURN,
-      origin: "adopted",
-    });
-    expect(idle.controller.snapshot().pending).toHaveLength(0);
+    for (const [sentHere, origin] of [
+      [false, "adopted"],
+      [true, "local"],
+      [null, "unknown"],
+    ] as const) {
+      const idle = renderController(fakeClient(), {
+        wasTurnSentHere: () => sentHere,
+      });
+      idle.controller.observeSteerDropped(turnStarted(OTHER_TURN, "session-b"));
+      expect(idle.controller.snapshot().active).toBeNull();
+      idle.controller.observeSteerDropped(turnStarted(OTHER_TURN));
+      expect(idle.controller.snapshot().active).toMatchObject({
+        turnId: OTHER_TURN,
+        origin,
+      });
+      expect(idle.controller.snapshot().pending).toHaveLength(0);
+    }
 
     const busy = renderController(fakeClient());
     busy.controller.enqueuePrompt("mine");

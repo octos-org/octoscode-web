@@ -670,38 +670,41 @@ test("recovers the durable session after disconnect and lossy replay", async ({
   const transcript = page.getByText(
     "Completed with pnpm check and all tests passing.",
   );
-  await expect(transcript).toHaveCount(1);
-  await expect(
-    page
-      .getByRole("region", { name: "Conversation", exact: true })
-      .getByText(prompt, { exact: true }),
-  ).toHaveCount(1);
+  const shownOnce = async () => {
+    await expect(transcript).toHaveCount(1);
+    await expect(
+      page
+        .getByRole("region", { name: "Conversation", exact: true })
+        .getByText(prompt, { exact: true }),
+    ).toHaveCount(1);
+    expect(starts()).toHaveLength(1);
+  };
+  await shownOnce();
 
   const opensBeforeDisconnect = opens().length;
   await request.post(`${FIXTURE_ORIGIN}/__test__/disconnect`);
   await expect
     .poll(() => opens().length, { timeout: 10_000 })
     .toBeGreaterThan(opensBeforeDisconnect);
-  await expect(transcript).toHaveCount(1);
-  await expect(
-    page
-      .getByRole("region", { name: "Conversation", exact: true })
-      .getByText(prompt, { exact: true }),
-  ).toHaveCount(1);
-  expect(starts()).toHaveLength(1);
+  await shownOnce();
 
   const hydratesBeforeLossy = hydrates().length;
   await request.post(`${FIXTURE_ORIGIN}/__test__/replay-lossy`);
   await expect
     .poll(() => hydrates().length, { timeout: 10_000 })
     .toBeGreaterThan(hydratesBeforeLossy);
-  await expect(transcript).toHaveCount(1);
-  await expect(
-    page
-      .getByRole("region", { name: "Conversation", exact: true })
-      .getByText(prompt, { exact: true }),
-  ).toHaveCount(1);
-  expect(starts()).toHaveLength(1);
+  await shownOnce();
+
+  // A turn sent after the reconnect is still recorded as this tab's, so a
+  // refresh does not present it as another client's (T-0612).
+  await sendPrompt(page, "Sent after the reconnect");
+  await expect.poll(() => starts().length).toBe(2);
+  const sent = await page.evaluate(() =>
+    JSON.parse(sessionStorage["octoscode-web.tab-connection.v3"]).sentTurns.map(
+      (turn: { turnId: string }) => turn.turnId,
+    ),
+  );
+  expect(sent).toContain(starts()[1]!.turn_id);
 });
 
 test("onboards an empty solo server from workspace creation", async ({

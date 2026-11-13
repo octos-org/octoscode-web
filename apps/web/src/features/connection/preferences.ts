@@ -178,19 +178,16 @@ function parseTabTurns(value: unknown): TabTurnReceipt[] {
   });
 }
 
+/** Null when this tab holds no readable receipts for `identity`: it cannot tell. */
 export function wasTurnSentFromTab(
   storage: StorageLike,
   identity: ConnectionIdentity,
   receipt: TabTurnReceipt,
-): boolean {
+): boolean | null {
   const current = readTabConnection(storage);
-  return Boolean(
-    current &&
-    matchesIdentity(current, identity) &&
-    current.sentTurns.some(
-      (entry) =>
-        sameTurnScope(entry, receipt) && entry.turnId === receipt.turnId,
-    ),
+  if (!current || !matchesIdentity(current, identity)) return null;
+  return current.sentTurns.some(
+    (entry) => sameTurnScope(entry, receipt) && entry.turnId === receipt.turnId,
   );
 }
 
@@ -208,7 +205,7 @@ export function rememberTabTurn(
     parsed,
   ].slice(-MAX_TAB_TURN_SCOPES);
   writeTabConnection(storage, { ...current, sentTurns });
-  return wasTurnSentFromTab(storage, identity, parsed);
+  return wasTurnSentFromTab(storage, identity, parsed) === true;
 }
 
 export function clearConnectionPreferences(
