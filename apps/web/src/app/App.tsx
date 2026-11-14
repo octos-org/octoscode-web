@@ -271,6 +271,7 @@ import {
 } from "../features/work-mode/work-mode.ts";
 import { useChatSessionCatalog } from "../features/work-mode/chat-session-catalog.ts";
 import { WorkModeSwitch } from "../features/work-mode/WorkModeSwitch.tsx";
+import { ChatFileOutputsControl } from "../features/work-mode/ChatFileOutputsControl.tsx";
 import { sessionTitleFromPrompt } from "../features/session/session-title.ts";
 import { ModeHome } from "../features/work-mode/ModeHome.tsx";
 import type { BackgroundTurnSessionScope } from "../features/session/background-turn-manager.ts";
@@ -2906,6 +2907,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       className={productStyles.panelSlot}
       tab={chatOnScreen ? "outputs" : panelLayout.tab}
       only={chatOnScreen ? CHAT_PANEL_TABS : undefined}
+      headerNote={chatFileOutputsControl}
       width={panelLayout.width}
       availableWidth={() =>
         workspaceMainRef.current?.clientWidth ?? window.innerWidth
@@ -4140,6 +4142,33 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         onRetry: () => void safety.refreshPermission(),
       }
     : null;
+  // T-E: a chat's file outputs. Only offered where the server lets this tab
+  // SET the open chat's permission (negotiated + editable + not the phone);
+  // everywhere else the chat keeps inline drafts and no control is shown.
+  const chatFileOutputsControl =
+    chatOnScreen &&
+    safety.permission.available &&
+    safety.permission.editable &&
+    !remote ? (
+      <ChatFileOutputsControl
+        permission={safety.permission}
+        error={safety.permission.error}
+        disabled={runtimeMutationBlocked}
+        onEnable={() =>
+          void safety.updatePermission({
+            mode: "workspace_write",
+            network: "deny",
+          })
+        }
+        onRevoke={() =>
+          void safety.updatePermission({
+            mode: "read_only",
+            network: "deny",
+          })
+        }
+        onRefresh={() => void safety.refreshPermission()}
+      />
+    ) : null;
   // Only what the server proves about each model; see model-facts.ts.
   const factLabelsFor = (model: ProfileLlmModel) =>
     modelFactSources
@@ -5828,6 +5857,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         />
                       </Suspense>
                     ) : null}
+                    {chatFileOutputsControl}
                     <SurfaceBoundary
                       key={activeSessionKey ?? undefined}
                       name="Message input"

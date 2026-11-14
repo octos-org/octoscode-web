@@ -235,7 +235,7 @@ test("a new chat is read-only with no network, drafts in the conversation and ke
   await expect(activity.getByText("Read file notes.md")).toBeVisible();
 
   // The panel holds only what the chat produced.
-  await page.getByRole("button", { name: "Outputs" }).click();
+  await page.getByRole("button", { name: "Outputs", exact: true }).click();
   await expect(page.getByRole("tab")).toHaveText([/Outputs/]);
   expect(await axeViolations(page, "main", WCAG_AA)).toEqual([]);
 
@@ -303,4 +303,169 @@ test("a chat sends nothing until the server confirms read-only, in either langua
   await expect(
     page.getByRole("button", { name: /读取 · 禁止联网/ }),
   ).toBeVisible();
+});
+
+test("file outputs turn on through the real SET, write into Outputs, and turn off again", async ({
+  page,
+}) => {
+  await turnFlagOn(page);
+  const frames = observeFrames(page);
+  await newChat(page);
+  const chatId = frames.calls("session/chat/create")[0]!.params!.session_id;
+
+  // Off by default: the draft is inline and nothing was written.
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+  await composer(page).fill("Chat draft fixture weekly report");
+  await composer(page).press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Outputs", exact: true }),
+  ).toBeEnabled();
+
+  await page
+    .getByRole("button", { name: "Allow file outputs" })
+    .first()
+    .click();
+  expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
+    session_id: chatId,
+    update: { mode: "workspace_write", network: "deny" },
+  });
+  await expect(page.getByText("File outputs on").first()).toBeVisible();
+
+  // The next message writes report.md into this chat's own folder.
+  await composer(page).fill("Chat draft fixture as a file");
+  await composer(page).press("Enter");
+  await page.getByRole("button", { name: "Outputs", exact: true }).click();
+  await page.getByRole("button", { name: "report.md New" }).click();
+  await expect(
+    page.getByText("Saved into this chat's own folder."),
+  ).toBeVisible();
+  expect(await axeViolations(page, "main", WCAG_AA)).toEqual([]);
+
+  // Turn off through the same entry: the server is asked, never full access.
+  await page
+    .getByRole("button", { name: "Turn off file outputs" })
+    .first()
+    .click();
+  expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
+    session_id: chatId,
+    update: { mode: "read_only", network: "deny" },
+  });
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+  expect(
+    frames
+      .calls("permission/profile/set")
+      .every((frame) => frame.params?.update?.network === "deny"),
+  ).toBe(true);
+});
+
+test("a failed set is reported, never retried, and re-read restores the server truth", async ({
+  page,
+}) => {
+  await turnFlagOn(page);
+  let failOnce = true;
+  let writeSets = 0;
+  // Count at the transport route: the page's WS-frame listener misses frames
+  // on sockets Playwright reroutes, so the boundary itself counts the writes.
+  await interceptRequests(page, (request, socket) => {
+    if (
+      request.method === "permission/profile/set" &&
+      request.params?.update?.mode === "workspace_write"
+    ) {
+      writeSets += 1;
+      if (failOnce) {
+        failOnce = false;
+        sendError(socket, request.id, {
+          code: -32603,
+          message: "set incomplete",
+        });
+        return true;
+      }
+    }
+  });
+  const frames = observeFrames(page);
+  await newChat(page);
+  await page
+    .getByRole("button", { name: "Allow file outputs" })
+    .first()
+    .click();
+  await expect(page.getByRole("alert")).toContainText("set incomplete");
+  // The failure was reported once; the page sent exactly one write, no retry.
+  expect(writeSets).toBe(1);
+  await page
+    .getByRole("button", { name: "Re-read the server's permission" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+  expect(frames.calls("permission/profile/list").length).toBeGreaterThan(0);
+});
+
+test("a chat keeps inline drafts only where the server cannot change permissions", async ({
+  page,
+}) => {
+  await page.routeWebSocket("**/api/ui-protocol/ws**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      for (const capabilities of [
+        frame.result?.capabilities,
+        frame.result?.opened?.capabilities,
+      ]) {
+        if (!capabilities?.supported_methods) continue;
+        capabilities.supported_methods = capabilities.supported_methods.filter(
+          (method: string) => !method.startsWith("permission/profile/"),
+        );
+      }
+      socket.send(JSON.stringify(frame));
+    });
+  });
+  await turnFlagOn(page);
+  await newChat(page);
+  // No file-write promise anywhere: the control simply does not exist.
+  await expect(page.getByText("Answers stay inline")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }),
+  ).toHaveCount(0);
+  await expect(composer(page)).toBeEnabled();
+  await page.getByRole("button", { name: "Outputs", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }),
+  ).toHaveCount(0);
+});
+
+test("two chats keep their own file-outputs state and files apart", async ({
+  page,
+}) => {
+  await turnFlagOn(page);
+  const frames = observeFrames(page);
+  await startSession(page, runFolder("two-modes-isolate"), TOKEN);
+  await modeButton(page, "Chat").click();
+
+  // Weekly notes draft: its server permission is write → on.
+  await chatRow(page, "Weekly notes draft").click();
+  await expect(page.getByText("File outputs on").first()).toBeVisible();
+  await page
+    .getByRole("button", { name: "Turn off file outputs" })
+    .first()
+    .click();
+  const notesId = frames.calls("session/open").at(-1)?.params?.session_id;
+  expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
+    session_id: notesId,
+    update: { mode: "read_only", network: "deny" },
+  });
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+
+  // Talk outline: untouched — its own server permission still says write.
+  await chatRow(page, "Talk outline").click();
+  await expect(page.getByText("File outputs on").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }),
+  ).toHaveCount(0);
 });
