@@ -7696,6 +7696,53 @@ function streamChatDraft(socket, sessionId, turnId, nextCursor) {
   let seq = 1;
   const send = (type, data) =>
     notify(socket, sessionId, turnId, turnId, ++seq, nextCursor(), type, data);
+  // T-E: with file outputs ON (server-read permission), a chat turn also
+  // writes the report into the chat's OWN folder; read-only chats only draft.
+  const chatWritesFile =
+    sessionState(sessionId).permission?.mode === "workspace_write";
+  if (chatWritesFile) {
+    const workspaceRoot =
+      sessionState(sessionId).workspaceRoot ??
+      openedWorkspaceBySocket.get(socket);
+    const content = "# Week 43 report\n\nSaved into this chat's own folder.\n";
+    deliveredFiles.set(
+      deliveredFileKey(sessionId, `${workspaceRoot}/report.md`),
+      {
+        type: "text/markdown",
+        bytes: Buffer.from(content),
+      },
+    );
+    send("tool_start", {
+      tool_call_id: `${turnId}-write`,
+      name: "write_file",
+      write_path: "report.md",
+      arguments_preview: JSON.stringify({ path: "report.md" }),
+    });
+    send("tool_end", {
+      tool_call_id: `${turnId}-write`,
+      status: "complete",
+      output_preview: "report.md saved",
+    });
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "progress/updated",
+        params: {
+          session_id: sessionId,
+          turn_id: turnId,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            kind: "file_mutation",
+            file_mutation: {
+              path: "report.md",
+              operation: "create",
+              preview_id: "00000000-0000-4000-8000-000000000620",
+            },
+          },
+        },
+      }),
+    );
+  }
   send("reasoning_delta", { text: "Reading the pasted notes first." });
   send("tool_start", {
     tool_call_id: `${turnId}-notes`,

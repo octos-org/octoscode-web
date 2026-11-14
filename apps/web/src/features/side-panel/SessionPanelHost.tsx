@@ -34,6 +34,8 @@ export interface SessionPanelHostProps {
   className?: string | undefined;
   /** Only these tabs (a chat shows only Outputs). */
   only?: readonly SessionPanelTab[] | undefined;
+  /** Chat's file-outputs permission entry (T-E), shown above Outputs. */
+  headerNote?: React.ReactNode | undefined;
 
   workspaceRoot: string;
   selectedPath: string | null;
@@ -294,6 +296,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
         />
       ) : (
         <OutputsTab
+          headerNote={props.headerNote}
           changes={props.changes}
           delivered={props.delivered}
           access={props.access}

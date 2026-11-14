@@ -1554,6 +1554,17 @@ const catalog: Readonly<Record<string, string>> = {
   "Installing isn't offered: the platform artifact is missing its checksum or signature.":
     "这里不提供安装：该平台的产物缺少校验值或签名。",
   "Reviewed commit": "审查的 commit",
+  "File outputs": "文件产出",
+  "Allow file outputs": "允许文件产出",
+  "Turn off file outputs": "关闭文件产出",
+  "File outputs on": "文件产出已开启",
+  "Answers stay inline in this chat. Allow file outputs to let Octos save files you ask for into this chat's own folder — the network stays off.":
+    "回答默认以内联形式留在本次对话里。允许文件产出后，Octos 才能把你要求的文件保存到本对话专属文件夹——网络仍然关闭。",
+  "New files this chat produces are saved in its own folder and listed in Outputs.":
+    "本次对话新产生的文件会保存到它自己的文件夹，并显示在产出列表里。",
+  "Re-read the server's permission": "重新读取服务器的权限",
+  "The server has not reported this chat's permission yet.":
+    "服务器还没有上报本次对话的权限。",
   "Reviewed at": "审查时间",
   "Install this reviewed object": "安装这个审查过的对象",
   "Confirm reviewed install": "确认安装审查过的对象",

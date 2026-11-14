@@ -24,6 +24,8 @@ export interface OutputsTabProps {
   onSelectPath: (path: string | null) => void;
   onOpenDelivered: (reference: string) => void;
   onOpenTask?: ((taskId: string) => void) | undefined;
+  /** Chat's file-outputs permission entry (T-E); absent in Code. */
+  headerNote?: React.ReactNode | undefined;
 }
 
 /**
@@ -125,6 +127,7 @@ export function OutputsTab(props: OutputsTabProps) {
 
   return (
     <div className={styles.stack}>
+      {props.headerNote}
       {written.length ? (
         <section className={styles.section} aria-labelledby="outputs-written">
           <div className={styles.sectionTitle}>
