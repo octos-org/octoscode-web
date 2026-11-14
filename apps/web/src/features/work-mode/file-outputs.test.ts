@@ -57,13 +57,9 @@ describe("chat file outputs state", () => {
 
   it("only ever sends workspace_write/read_only with the network denied", () => {
     // The two allowed updates pin network to deny: no widening exists here.
-    expect(FILE_OUTPUTS_ENABLE).toEqual({
-      mode: "workspace_write",
-      network: "deny",
-    });
-    expect(FILE_OUTPUTS_REVOKE).toEqual({
-      mode: "read_only",
-      network: "deny",
-    });
+    expect([FILE_OUTPUTS_ENABLE, FILE_OUTPUTS_REVOKE]).toEqual([
+      { mode: "workspace_write", network: "deny" },
+      { mode: "read_only", network: "deny" },
+    ]);
   });
 });

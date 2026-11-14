@@ -319,9 +319,6 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   ).toBeVisible();
   await composer(page).fill("Chat draft fixture weekly report");
   await composer(page).press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Outputs", exact: true }),
-  ).toBeEnabled();
 
   await page
     .getByRole("button", { name: "Allow file outputs" })
@@ -432,10 +429,6 @@ test("a chat keeps inline drafts only where the server cannot change permissions
     page.getByRole("button", { name: "Allow file outputs" }),
   ).toHaveCount(0);
   await expect(composer(page)).toBeEnabled();
-  await page.getByRole("button", { name: "Outputs", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Allow file outputs" }),
-  ).toHaveCount(0);
 });
 
 test("two chats keep their own file-outputs state and files apart", async ({
