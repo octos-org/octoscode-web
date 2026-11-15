@@ -364,9 +364,11 @@ test("a failed set is reported, never retried, and re-read restores the server t
   await turnFlagOn(page);
   let failOnce = true;
   let writeSets = 0;
+  let permissionReads = 0;
   // Count at the transport route: the page's WS-frame listener misses frames
   // on sockets Playwright reroutes, so the boundary itself counts the writes.
   await interceptRequests(page, (request, socket) => {
+    if (request.method === "permission/profile/list") permissionReads += 1;
     if (
       request.method === "permission/profile/set" &&
       request.params?.update?.mode === "workspace_write"
@@ -391,12 +393,15 @@ test("a failed set is reported, never retried, and re-read restores the server t
   await expect(page.getByRole("alert")).toContainText("set incomplete");
   // The failure was reported once; the page sent exactly one write, no retry.
   expect(writeSets).toBe(1);
+  // Re-read must really ask the server again and clear the failure: before
+  // the click the button state was already off, so the alert clearing and a
+  // NEW permission read are the observable proof.
+  const readsBefore = permissionReads;
   await page
     .getByRole("button", { name: "Re-read the server's permission" })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Allow file outputs" }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(permissionReads).toBeGreaterThan(readsBefore);
 });
 
 test("a chat keeps inline drafts only where the server cannot change permissions", async ({
