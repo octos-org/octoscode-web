@@ -313,8 +313,7 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   await newChat(page);
   const chatId = frames.calls("session/chat/create")[0]!.params!.session_id;
 
-  // Off by default (the read-only draft chain is the T-D test's): the
-  // explicit choice is the only way files can be written.
+  // Off by default (the read-only draft chain is the T-D test's).
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }).first(),
   ).toBeVisible();
@@ -364,8 +363,7 @@ test("a failed set is reported, never retried, and re-read restores the server t
   let failOnce = true;
   let writeSets = 0;
   let permissionReads = 0;
-  // Count at the transport route: the page's WS-frame listener misses frames
-  // on sockets Playwright reroutes, so the boundary itself counts the writes.
+  // Count at the transport route (page-side WS listeners miss rerouted frames).
   await interceptRequests(page, (request, socket) => {
     if (request.method === "permission/profile/list") permissionReads += 1;
     if (
@@ -461,7 +459,7 @@ test("two chats keep their own file-outputs state and files apart", async ({
   await expect(page.getByText("File outputs on").first()).toBeVisible();
 
   // F-04: on a phone's own primary session the control is finger-sized
-  // (`@media (pointer: coarse)`); a remote phone never renders it at all.
+  // (coarse-pointer media query); a remote phone never renders it.
   const phone = await (
     await browser.newContext({
       viewport: { width: 390, height: 844 },

@@ -6,7 +6,6 @@ import {
   loadConnectionPreferences,
   saveConnectionPreferences,
   setAutoConnect,
-  type StorageLike,
 } from "./preferences.ts";
 
 const defaults: ConnectionDraft = {
