@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectionDraft } from "./ConnectionPanel.tsx";
+import { MemoryStorage } from "../../test-fixtures/memory-storage.ts";
 import {
   loadAutoConnect,
   loadConnectionPreferences,
   saveConnectionPreferences,
   setAutoConnect,
-  type StorageLike,
 } from "./preferences.ts";
 
 const defaults: ConnectionDraft = {
@@ -63,19 +63,3 @@ describe("connection preferences", () => {
     );
   });
 });
-
-class MemoryStorage implements StorageLike {
-  readonly values = new Map<string, string>();
-
-  getItem(key: string): string | null {
-    return this.values.get(key) ?? null;
-  }
-
-  setItem(key: string, value: string): void {
-    this.values.set(key, value);
-  }
-
-  removeItem(key: string): void {
-    this.values.delete(key);
-  }
-}

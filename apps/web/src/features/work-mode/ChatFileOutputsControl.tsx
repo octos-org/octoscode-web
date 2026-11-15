@@ -45,7 +45,12 @@ export function ChatFileOutputsControl({
       {error ? (
         <p role="alert">
           {error}{" "}
-          <button type="button" disabled={busy} onClick={onRefresh}>
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={onRefresh}
+          >
             {t("Re-read the server's permission")}
           </button>
         </p>
@@ -55,7 +60,12 @@ export function ChatFileOutputsControl({
           {t(
             "Answers stay inline in this chat. Allow file outputs to let Octos save files you ask for into this chat's own folder — the network stays off.",
           )}{" "}
-          <button type="button" disabled={disabled || busy} onClick={onEnable}>
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={disabled || busy}
+            onClick={onEnable}
+          >
             {t("Allow file outputs")}
           </button>
         </p>
@@ -67,7 +77,12 @@ export function ChatFileOutputsControl({
           {t(
             "New files this chat produces are saved in its own folder and listed in Outputs.",
           )}{" "}
-          <button type="button" disabled={disabled || busy} onClick={onRevoke}>
+          <button
+            type="button"
+            className="button"
+            disabled={disabled || busy}
+            onClick={onRevoke}
+          >
             {t("Turn off file outputs")}
           </button>
         </p>
@@ -78,7 +93,12 @@ export function ChatFileOutputsControl({
       {state === "unknown" ? (
         <p>
           {t("The server has not reported this chat's permission yet.")}{" "}
-          <button type="button" disabled={busy} onClick={onRefresh}>
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={onRefresh}
+          >
             {t("Re-read the server's permission")}
           </button>
         </p>

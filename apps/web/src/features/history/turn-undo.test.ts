@@ -14,6 +14,7 @@ import type { StorageLike } from "../connection/preferences.ts";
 import type { HistoryBinding } from "./history-binding.ts";
 import { resetTurnUndoControllers, turnUndoController } from "./turn-undo.ts";
 import { appuiCaps } from "../../test-fixtures/caps.ts";
+import { MemoryStorage } from "../../test-fixtures/memory-storage.ts";
 
 const caps = (methods: string[]): UiProtocolCapabilities =>
   appuiCaps({ methods });
@@ -47,12 +48,7 @@ const listing = (
 });
 
 function memoryStorage(): StorageLike {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => void values.set(key, value),
-    removeItem: (key) => void values.delete(key),
-  };
+  return new MemoryStorage();
 }
 
 function fake({
