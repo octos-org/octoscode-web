@@ -427,6 +427,7 @@ test("a chat keeps inline drafts only where the server cannot change permissions
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }),
   ).toHaveCount(0);
+  await expect(composer(page)).toBeEnabled();
 });
 
 test("two chats keep their own file-outputs state and files apart", async ({
@@ -458,8 +459,7 @@ test("two chats keep their own file-outputs state and files apart", async ({
   await chatRow(page, "Talk outline").click();
   await expect(page.getByText("File outputs on").first()).toBeVisible();
 
-  // F-04: on a phone's own primary session the control is finger-sized
-  // (coarse-pointer media query); a remote phone never renders it.
+  // F-04: finger-sized on a phone's own primary session (coarse-pointer).
   const phone = await (
     await browser.newContext({
       viewport: { width: 390, height: 844 },
