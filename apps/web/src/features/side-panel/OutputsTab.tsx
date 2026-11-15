@@ -4,6 +4,7 @@ import { useUiText } from "../preferences/ui-text.tsx";
 import type { SupervisedTask } from "../supervision/model.ts";
 import type { AttachmentAccess } from "../timeline/attachment-access.ts";
 import { attachmentName, isWorkspaceUpload } from "../timeline/attachments.ts";
+import { outputFileKey } from "../timeline/session-file-read.ts";
 import { SentFilePreview } from "./SentFilePreview.tsx";
 import type { SessionFileChange } from "./session-changes.ts";
 import type { resolvePanelFile } from "./panel-selection.ts";
@@ -14,6 +15,8 @@ export interface OutputsTabProps {
   changes: readonly SessionFileChange[];
   /** Files Octos sent with its replies: server paths or upload handles. */
   delivered: readonly string[];
+  /** Lets a sent file be matched with the same file written here. */
+  workspaceRoot?: string | undefined;
   /** Null when this server cannot serve Session files. */
   access: AttachmentAccess | null;
   tasks: readonly SupervisedTask[];
@@ -39,6 +42,10 @@ export function OutputsTab(props: OutputsTabProps) {
 
   const written = props.changes.filter(
     (change) => change.operation !== "delete",
+  );
+  const root = props.workspaceRoot ?? "";
+  const writtenHere = new Set(
+    written.map((change) => outputFileKey(change.path, root)),
   );
   const taskOutputs = props.tasks.filter((task) => task.outputFiles.length);
 
@@ -184,7 +191,11 @@ export function OutputsTab(props: OutputsTabProps) {
                   <FileIcon />
                   <span className={styles.rowText}>
                     <strong>{attachmentName(reference)}</strong>
-                    <small>{folderOf(reference)}</small>
+                    <small>
+                      {writtenHere.has(outputFileKey(reference, root))
+                        ? t("Also written in this folder")
+                        : folderOf(reference)}
+                    </small>
                   </span>
                 </button>
               </li>

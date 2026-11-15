@@ -3,6 +3,7 @@ import {
   FIXTURE_ORIGIN,
   openSessionId,
   previewDelivery,
+  sessionPanelToggle,
   startSession,
 } from "./fixture-session";
 import { sendPrompt } from "./sessions";
@@ -20,7 +21,6 @@ test("keeps a structured write artifact and its preview after reload", async ({
   const preview = item
     .locator(".artifact-preview, [data-artifact-kind]")
     .last();
-  await expect(preview).toBeVisible();
   await expect(preview.getByText("Markdown artifact")).toBeVisible();
   await expect(preview.getByText("Formatted safely")).toBeVisible();
 
@@ -46,10 +46,17 @@ test("keeps a structured write artifact and its preview after reload", async ({
   await huge.getByRole("button", { name: "Download huge.csv" }).click();
   expect((await download).suggestedFilename()).toBe("huge.csv");
 
-  // A file the turn wrote and then sent shows once, where it was sent.
+  // A file the turn wrote and then sent shows once, where it was sent, and
+  // counts once in the summary and the panel, which keeps both sources.
   await sendPrompt(page, "Write and send an artifact fixture");
-  await expect(page.getByText("Weekly report")).toBeVisible();
+  const outputs = page.getByText("Output files: weekly.md", { exact: true });
+  await expect(outputs).toBeVisible();
   await expect(page.locator('[data-attachment="weekly.md"]')).toHaveCount(1);
+  await sessionPanelToggle(page).click();
+  const tab = page.getByRole("tab", { name: /^Outputs/ });
+  await tab.click();
+  await expect(tab).toHaveAccessibleName(/^Outputs\s*,\s*3$/);
+  await expect(page.getByText("Also written in this folder")).toBeVisible();
 });
 
 test("keeps HTML and SVG scripts and network access inert", async ({

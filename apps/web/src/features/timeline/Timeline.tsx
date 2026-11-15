@@ -269,6 +269,7 @@ export const Timeline = memo(function Timeline({
             turnId={item.turnId}
             entries={visibleEntries}
             quiet={chat}
+            workspaceRoot={workspaceRoot}
             undo={
               turnUndo
                 ? (turn) =>

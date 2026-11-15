@@ -14,6 +14,7 @@ export function TurnSummary({
   entries,
   undo,
   quiet = false,
+  workspaceRoot = "",
 }: {
   turnId: string;
   entries: readonly TimelineEntry[];
@@ -22,11 +23,13 @@ export function TurnSummary({
     ((turn: { turnId: string; changed: boolean }) => ReactNode) | undefined;
   /** A chat: a completed turn needs no card; one that failed or stopped does. */
   quiet?: boolean | undefined;
+  /** Lets a file named by relative and absolute path count once. */
+  workspaceRoot?: string | undefined;
 }) {
   const t = useUiText();
   const terminal = entries.find((entry) => entry.id === `terminal:${turnId}`);
   if (!terminal) return null;
-  const summary = summarizeTurn(entries, turnId);
+  const summary = summarizeTurn(entries, turnId, workspaceRoot);
   const recorded = summary.changedFiles.length + summary.unlistedChanges;
   const failed = terminal.status === "error";
   const outcome =

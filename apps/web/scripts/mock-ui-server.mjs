@@ -7291,6 +7291,22 @@ function streamTurn(socket, sessionId, params, nextCursor) {
       status: "complete",
       output_preview: "weekly.md written",
     });
+    // Core reports the write as a file mutation, by the path the tool used.
+    socket.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "progress/updated",
+        params: {
+          session_id: sessionId,
+          turn_id: turnId,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            kind: "file_mutation",
+            file_mutation: { path: "weekly.md", operation: "create" },
+          },
+        },
+      }),
+    );
     const segment = `${turnId}:assistant:delivery`;
     notify(
       socket,

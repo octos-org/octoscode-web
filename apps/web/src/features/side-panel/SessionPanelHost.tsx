@@ -7,6 +7,7 @@ import { ChangesView } from "../review/ChangesView.tsx";
 import type { DiffReviewRuntimeState } from "../review/use-coding-safety.ts";
 import type { SupervisedTask } from "../supervision/model.ts";
 import type { AttachmentAccess } from "../timeline/attachment-access.ts";
+import { outputFileKey } from "../timeline/session-file-read.ts";
 import type { WorkspaceBrowseAdapter } from "../workspace-create/workspace-browse.ts";
 import type { AutonomyClient } from "../autonomy/binding.ts";
 import { AutomationTab } from "./AutomationTab.tsx";
@@ -173,12 +174,18 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
   const missing =
     props.selectedPath !== null && !selected.found && !workspaceReadable;
 
-  const written = props.changes.filter(
-    (change) => change.operation !== "delete",
-  ).length;
+  // One count per file: a file written here and also sent to you is one
+  // output listed under both sources (T-0629).
+  const outputFiles = new Set(
+    [
+      ...props.changes
+        .filter((change) => change.operation !== "delete")
+        .map((change) => change.path),
+      ...props.delivered,
+    ].map((path) => outputFileKey(path, props.workspaceRoot)),
+  );
   const outputs =
-    written +
-    props.delivered.length +
+    outputFiles.size +
     props.tasks.filter((task) => task.outputFiles.length).length;
 
   return (
@@ -299,6 +306,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
           headerNote={props.headerNote}
           changes={props.changes}
           delivered={props.delivered}
+          workspaceRoot={props.workspaceRoot}
           access={props.access}
           workspaceListed={treeListed}
           tasks={props.tasks}

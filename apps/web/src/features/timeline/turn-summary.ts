@@ -1,5 +1,6 @@
 import type { TimelineEntry } from "./entry-model.ts";
 import { toolTargetFull } from "./folds.ts";
+import { outputFileKey } from "./session-file-read.ts";
 
 export interface TurnSummaryData {
   seconds?: number | undefined;
@@ -82,11 +83,16 @@ export function commandReceipt(
 export function summarizeTurn(
   entries: readonly TimelineEntry[],
   turnId: string,
+  workspaceRoot = "",
 ): TurnSummaryData {
   const turn = entries.filter((entry) => entry.turnId === turnId);
   const terminal = turn.find((entry) => entry.id === `terminal:${turnId}`);
   const changed = new Set<string>();
+  // One entry per file: a file the turn wrote by its relative path and sent
+  // by its absolute one (T-0629) is listed once, as the workspace names it.
   const output = new Set<string>();
+  const addOutput = (path: string) =>
+    output.add(outputFileKey(path, workspaceRoot));
   const recovered = recoveredFailures(turn);
   let failedSteps = 0;
   let retriedSteps = 0;
@@ -95,7 +101,7 @@ export function summarizeTurn(
   for (const entry of turn) {
     // What the user attached is an input, however the turn used it.
     if (entry.kind !== "user")
-      for (const path of entry.media ?? []) output.add(path);
+      for (const path of entry.media ?? []) addOutput(path);
     if (entry.kind !== "tool") continue;
     if (entry.status === "error") {
       if (recovered.has(entry.id)) retriedSteps += 1;
@@ -127,7 +133,7 @@ export function summarizeTurn(
       entry.status === "complete" &&
       (name === "write_file" || name === "send_file")
     ) {
-      if (target) output.add(target);
+      if (target) addOutput(target);
     }
   }
   const starts = turn.flatMap((entry) =>

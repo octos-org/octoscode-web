@@ -76,6 +76,17 @@ export function workspaceRelativeArtifactPath(
   return isWorkspaceRelativePath(relative) ? relative : null;
 }
 
+/**
+ * Which file an output path names, so the same file reached by its relative
+ * path and by its absolute one counts once: the workspace-relative path when
+ * it lies in the workspace, otherwise the path itself. Different files never
+ * share a key.
+ */
+export function outputFileKey(path: string, workspaceRoot: string): string {
+  const plain = path.replace(/^(\.\/)+/, "");
+  return workspaceRelativeArtifactPath(plain, workspaceRoot) ?? path;
+}
+
 /** Read one byte to obtain authoritative size without downloading the file. */
 export async function readSessionFileSize(
   client: OctosUiClient,
