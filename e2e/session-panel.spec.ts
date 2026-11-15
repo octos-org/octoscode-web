@@ -1,8 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { startSession } from "./fixture-session";
+import { sessionPanelToggle, startSession } from "./fixture-session";
 
-const toggle = (page: Page) =>
-  page.getByRole("button", { name: /^Session panel/ });
 const panel = (page: Page) =>
   page.getByRole("complementary", { name: "Session panel" });
 
@@ -12,7 +10,7 @@ test("Files browses the real workspace tree and previews any file in it", async 
   // T-0417: the server lists the workspace (dirs AND files); the panel
   // browses folders, pages, and opens a plain workspace file for preview.
   await startSession(page, `/workspace/file-tree-${Date.now()}`);
-  await toggle(page).click();
+  await sessionPanelToggle(page).click();
   await panel(page).getByRole("tab", { name: "Files" }).click();
   const files = panel(page).getByRole("tabpanel");
   await expect(files).toContainText(

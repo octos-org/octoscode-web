@@ -102,6 +102,10 @@ export function runFolder(name: string): string {
   return `/srv/work/${name}-run${repeatEachIndex}-${retry}`;
 }
 
+/** The session panel's toggle; its name carries the panel's counts. */
+export const sessionPanelToggle = (page: Page) =>
+  page.getByRole("button", { name: /^Session panel/ });
+
 /** The open Session's id, read from the `?s=` reference in the address. */
 export async function openSessionId(page: Page): Promise<string> {
   let reference: string | null = null;

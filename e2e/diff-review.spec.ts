@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { startSession } from "./fixture-session";
+import { sessionPanelToggle, startSession } from "./fixture-session";
 
 type PreviewLine = {
   kind: string;
@@ -37,18 +37,15 @@ async function openReview(page: Page, lines: PreviewLine[]) {
   await composer.fill("Review syntax fixture");
   await composer.press("Enter");
   // The turn's file mutation counts on the toggle before anything opens.
-  await expect(panelToggle(page)).toHaveAccessibleName(
+  await expect(sessionPanelToggle(page)).toHaveAccessibleName(
     "Session panel, 1 changed",
   );
   return openChanges(page);
 }
 
-const panelToggle = (page: Page) =>
-  page.getByRole("button", { name: /^Session panel/ });
-
 /** Opens the session panel on its Changes tab: the diff sits beside the chat. */
 async function openChanges(page: Page) {
-  await panelToggle(page).click();
+  await sessionPanelToggle(page).click();
   await page.getByRole("tab", { name: /^Changes/ }).click();
   const changes = page.getByRole("tabpanel", { name: /^Changes/ });
   await expect(changes).toBeVisible();
@@ -130,7 +127,7 @@ test("diff syntax and word marks keep inert, selectable text beside the chat and
   await expect(dialog).toBeHidden();
   // On a phone the same tab opens as a drawer that fits the screen.
   await page.setViewportSize({ width: 320, height: 480 });
-  await panelToggle(page).click();
+  await sessionPanelToggle(page).click();
   const drawer = page.getByRole("dialog", { name: "Session panel" });
   await expect(drawer.getByRole("tab", { name: /^Changes/ })).toHaveAttribute(
     "aria-selected",
@@ -142,7 +139,7 @@ test("diff syntax and word marks keep inert, selectable text beside the chat and
   expect(close!.x + close!.width).toBeLessThanOrEqual(320);
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
-  await expect(panelToggle(page)).toBeFocused();
+  await expect(sessionPanelToggle(page)).toBeFocused();
   expect(errors).toEqual([]);
 });
 

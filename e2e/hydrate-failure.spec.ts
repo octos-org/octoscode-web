@@ -1,5 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
-import { connect } from "./fixture-session";
+import { connect, sessionPanelToggle } from "./fixture-session";
 import { sendError } from "./wire";
 
 async function controlledHydrates(page: Page) {
@@ -61,9 +61,7 @@ test("a cold hydrate failure stays honest and Start retries without a phantom re
   await expect(page.locator('[role="treeitem"][data-session-id]')).toHaveCount(
     0,
   );
-  await expect(
-    page.getByRole("button", { name: /^Session panel/ }),
-  ).toHaveCount(0);
+  await expect(sessionPanelToggle(page)).toHaveCount(0);
 
   await startButton.click();
   await expect(
