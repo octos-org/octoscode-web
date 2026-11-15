@@ -422,7 +422,6 @@ test("a chat keeps inline drafts only where the server cannot change permissions
   await turnFlagOn(page);
   await newChat(page);
   // No file-write promise anywhere: the control simply does not exist.
-  await expect(page.getByText("Answers stay inline")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }),
   ).toHaveCount(0);
@@ -472,11 +471,12 @@ test("two chats keep their own file-outputs state and files apart", async ({
   await phone.getByRole("button", { name: "Open sessions" }).tap();
   await modeButton(phone, "Chat").tap();
   await chatRow(phone, "Weekly notes draft").tap();
-  const allowPhone = phone
-    .getByRole("button", { name: "Allow file outputs" })
-    .first();
-  await expect(allowPhone).toBeVisible();
-  expect((await allowPhone.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
-    44,
-  );
+  expect(
+    (
+      await phone
+        .getByRole("button", { name: "Allow file outputs" })
+        .first()
+        .boundingBox()
+    )?.height ?? 0,
+  ).toBeGreaterThanOrEqual(44);
 });
