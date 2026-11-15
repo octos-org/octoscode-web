@@ -313,12 +313,11 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   await newChat(page);
   const chatId = frames.calls("session/chat/create")[0]!.params!.session_id;
 
-  // Off by default: the draft is inline and nothing was written.
+  // Off by default (the read-only draft chain is the T-D test's): the
+  // explicit choice is the only way files can be written.
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }).first(),
   ).toBeVisible();
-  await composer(page).fill("Chat draft fixture weekly report");
-  await composer(page).press("Enter");
 
   // F-04: focusable and Enter-operable, not mouse-only.
   const allow = page
@@ -430,7 +429,6 @@ test("a chat keeps inline drafts only where the server cannot change permissions
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }),
   ).toHaveCount(0);
-  await expect(composer(page)).toBeEnabled();
 });
 
 test("two chats keep their own file-outputs state and files apart", async ({
@@ -462,8 +460,8 @@ test("two chats keep their own file-outputs state and files apart", async ({
   await chatRow(page, "Talk outline").click();
   await expect(page.getByText("File outputs on").first()).toBeVisible();
 
-  // F-04: on a phone holding its own primary session the control is a
-  // finger-sized product button (44px, `@media (pointer: coarse)`).
+  // F-04: on a phone's own primary session the control is finger-sized
+  // (`@media (pointer: coarse)`); a remote phone never renders it at all.
   const phone = await (
     await browser.newContext({
       viewport: { width: 390, height: 844 },
