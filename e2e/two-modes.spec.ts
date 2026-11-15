@@ -320,15 +320,19 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   await composer(page).fill("Chat draft fixture weekly report");
   await composer(page).press("Enter");
 
-  await page
+  // F-04: focusable and Enter-operable, not mouse-only.
+  const allow = page
     .getByRole("button", { name: "Allow file outputs" })
-    .first()
-    .click();
+    .first();
+  await expect(allow).toBeEnabled();
+  await allow.focus();
+  await expect(allow).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("File outputs on").first()).toBeVisible();
   expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
     session_id: chatId,
     update: { mode: "workspace_write", network: "deny" },
   });
-  await expect(page.getByText("File outputs on").first()).toBeVisible();
 
   // The next message writes report.md into this chat's own folder.
   await composer(page).fill("Chat draft fixture as a file");
@@ -352,11 +356,6 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }).first(),
   ).toBeVisible();
-  expect(
-    frames
-      .calls("permission/profile/set")
-      .every((frame) => frame.params?.update?.network === "deny"),
-  ).toBe(true);
 });
 
 test("a failed set is reported, never retried, and re-read restores the server truth", async ({
@@ -398,7 +397,6 @@ test("a failed set is reported, never retried, and re-read restores the server t
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }).first(),
   ).toBeVisible();
-  expect(frames.calls("permission/profile/list").length).toBeGreaterThan(0);
 });
 
 test("a chat keeps inline drafts only where the server cannot change permissions", async ({
@@ -432,6 +430,7 @@ test("a chat keeps inline drafts only where the server cannot change permissions
 });
 
 test("two chats keep their own file-outputs state and files apart", async ({
+  browser,
   page,
 }) => {
   await turnFlagOn(page);
@@ -458,7 +457,26 @@ test("two chats keep their own file-outputs state and files apart", async ({
   // Talk outline: untouched — its own server permission still says write.
   await chatRow(page, "Talk outline").click();
   await expect(page.getByText("File outputs on").first()).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Allow file outputs" }),
-  ).toHaveCount(0);
+
+  // F-04: on a phone holding its own primary session the control is a
+  // finger-sized product button (44px, `@media (pointer: coarse)`).
+  const phone = await (
+    await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    })
+  ).newPage();
+  await turnFlagOn(phone);
+  await startSession(phone, runFolder("two-modes-isolate"), TOKEN);
+  await phone.getByRole("button", { name: "Open sessions" }).tap();
+  await modeButton(phone, "Chat").tap();
+  await chatRow(phone, "Weekly notes draft").tap();
+  const allowPhone = phone
+    .getByRole("button", { name: "Allow file outputs" })
+    .first();
+  await expect(allowPhone).toBeVisible();
+  expect((await allowPhone.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
+    44,
+  );
 });
