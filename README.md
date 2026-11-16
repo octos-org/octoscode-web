@@ -11,7 +11,8 @@ A focused Web client for the Octos coding UI Protocol.
 [![License](https://img.shields.io/github/license/octos-org/octoscode-web)](LICENSE)
 
 [Get started](docs/getting-started.md) · [Documentation](docs/README.md) ·
-[Releases](https://github.com/octos-org/octoscode-web/releases)
+[Releases](https://github.com/octos-org/octoscode-web/releases) ·
+[中文](README.zh-CN.md)
 
 </div>
 
@@ -32,6 +33,24 @@ octoscode-web ───┘                        agents · tools · sessions ·
 
 The two clients share server-owned runtime truth. The Web app does not contain a
 second agent loop, plugin host, sandbox, or session store.
+
+## Code mode today, Chat mode in preview
+
+Everything on this page is **Code mode**: pick a folder on the server and work
+in it. It is available now and is what every user sees.
+
+**Chat mode** is for everyday work without picking a folder: each chat gets its
+own folder that the server assigns. It is **not available to users yet**. It
+sits behind a per-browser preview flag that is off by default, needs Core
+features that have not shipped, and has only been tested against this
+repository's protocol fixture, whose files are simulated. octoscode-web 1.0 is
+planned for when Chat mode opens; it has not been released.
+
+- [Product scope](docs/product.md#code-and-chat-modes): what Chat mode does and
+  what has to happen before it opens.
+- [1.0 release notes draft](docs/release-notes-1.0-draft.md) and
+  [1.0 flag drill](docs/release-1.0-flag-drill.md): release preparation, in
+  Chinese.
 
 ## What is included
 

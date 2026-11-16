@@ -29,36 +29,93 @@ server does in the chosen folder.
 7. **Authentication is not work selection.** Connecting identifies an Octos
    server; Workspace and Session choices happen inside the product shell.
 
+## Code and Chat modes
+
+The product is moving to two modes in one app, switched at the top of the
+sidebar (also in the phone drawer). Chat mode is not the Chat view below, which
+shows a Session's conversation in either mode.
+
+- **Code** is the product described on this page: pick a folder on the server,
+  then work in it under the Session's permission, network setting, and
+  approvals. It is available today and is all a user sees by default.
+- **Chat** is for everyday work that needs no folder, such as a weekly report or
+  a cleaned-up list. Each chat gets a folder that the server assigns to it
+  alone; the page never asks for or shows a path. A new chat starts read-only
+  with the network blocked, answers stay inline, and the side panel shows only
+  Outputs. Saving files takes an explicit **Allow file outputs**, which asks the
+  server to make that one Session workspace-write with the network still
+  blocked, and **Turn off file outputs** returns it to read-only.
+
+Chat mode is **not available to users yet**. It sits behind a per-browser
+preview flag that is off by default, and it also needs a Core that offers
+`session.work_mode.v1` and `session.chat_workspace.v1` to this page. Without
+both, the page shows Code only, or a disabled Chat button that says the server
+cannot give each chat its own folder; it never falls back to a shared folder.
+Before Chat mode can open to users:
+
+- Core must ship the per-chat folder (T-B,
+  [octos#3256](https://github.com/octos-org/octos/pull/3256)), the Session
+  ownership check on permission changes
+  ([octos#3284](https://github.com/octos-org/octos/pull/3284)), and read-only
+  that survives a Core restart
+  ([octos#3285](https://github.com/octos-org/octos/pull/3285)). The Session
+  work-mode field (T-A,
+  [octos#3255](https://github.com/octos-org/octos/pull/3255)) is already in Core
+  main.
+- This page must request those two features when it connects. Core only reports
+  features a client asks for, and the default request list does not include them
+  yet, so Chat stays disabled even against a Core that supports it.
+- A permission safety review (T-0623) of the merged Core and Web must pass on a
+  real Core, then the [flag drill](release-1.0-flag-drill.md) must be run in a
+  designated test environment with evidence.
+
+Chat mode's full flow, file outputs included, has only passed against the
+repository's protocol fixture. The fixture returns simulated files and proves
+neither a real Core write nor real model output. Chat sources reuse the existing
+attachments (pasted text, images, Markdown, CSV, PDF; no Office files), and the
+network stays blocked in Chat mode. The release that opens it to users is
+planned as octoscode-web 1.0; its notes are a
+[draft](release-notes-1.0-draft.md) until then.
+
 ## Supported surface
 
-| Area          | Current behavior                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.       |
-| Start         | Empty Session home: code/general templates fill the composer (never sent, never raise permission); last-Session link.           |
-| Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.         |
-| Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback. |
-| Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown.     |
-| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.             |
-| Decisions     | Approvals with action/impact/risk, explicit deny/session/once choices, questions, and one-click write on a read-only denial.    |
-| Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.             |
-| Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.         |
-| Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.     |
-| Skills        | Capability-gated installed-skill list, typed action invocation, and background job progress/results in Settings.                |
-| Memory        | Capability-gated overview, entity/search detail, and ingest in Settings; optional request/promote only when advertised.         |
-| Connectors    | Manage HTTP and allowlisted stdio MCP connectors, sign them in with OAuth; saved-but-not-loaded ones stay visible.              |
-| Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                    |
-| Expert teams  | Sidebar page: built-in teams of three run side by side as peer sessions; per-member state, results, stop, merge into the chat.  |
-| Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.               |
-| Usage         | Context, token, and cost from typed server state; a labelled pre-send token estimate, never a pre-send price.                   |
-| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.      |
+| Area          | Current behavior                                                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Modes         | Code is the surface below. Chat is a preview behind a per-browser flag and two Core features; see Code and Chat modes above.      |
+| Connection    | Origin/token authentication gate, durable origin only, same-tab selected-Session restore, and Settings disconnect/forget.         |
+| Start         | Empty Session home: code/general templates fill the composer (never sent, never raise permission); last-Session link.             |
+| Navigation    | Workspace/Session sidebar with search, tab-confirmed Session refs, grouped or flat views, create, switch, and Settings.           |
+| Onboarding    | Two-step provider setup with domestic recommendations, advanced identity, custom endpoints, test-before-save, and TUI fallback.   |
+| Conversation  | Durable Chat with readable tool steps, per-turn file/token summaries, prominent failures, safe GFM, and streaming Markdown.       |
+| Trajectory    | Session-local plan, runtime policy, task lifecycle, bounded output, cancellation, and paged artifact/file previews.               |
+| Decisions     | Approvals with action/impact/risk, explicit deny/session/once choices, questions, and one-click write on a read-only denial.      |
+| Coding safety | Server-confirmed permission/network choices beside the composer, dangerous-access acknowledgement, and diff review.               |
+| Session panel | Beside the chat (a drawer on phones): live plan, folders plus files this Session changed, non-modal diffs, and outputs.           |
+| Models        | Effective Session runtime status in the composer; capability-gated provider configuration and Profile defaults in Settings.       |
+| Skills        | Capability-gated installed-skill list, reviewed install and remove, typed action invocation, and background job progress/results. |
+| Memory        | Capability-gated overview, search, ingest, export/import, and per-entry edit/delete; request/promote only when advertised.        |
+| Connectors    | Manage HTTP and allowlisted stdio MCP connectors, sign them in with OAuth; saved-but-not-loaded ones stay visible.                |
+| Scheduled     | Sidebar page: preset schedules, task templates, Cron under advanced; next run, last real result, jump to it.                      |
+| Expert teams  | Sidebar page: built-in teams of three run side by side as peer sessions; per-member state, results, stop, merge into the chat.    |
+| Workspace     | Folder-first picker with manual path fallback, server-confirmed paths, same-cwd Sessions, and per-Session drafts.                 |
+| Usage         | Context, token, and cost from typed server state; a labelled pre-send token estimate, never a pre-send price.                     |
+| Recovery      | Hydrate, cursor resume, dedupe, replay-loss detection, gap repair, reconnect, and explicit uncertain or interrupted state.        |
 
-Remote one-click skill installation is not part of the Settings Skills section:
-its supply-chain review is still open. Existing skills are read from the active
-server Profile; the browser does not install executable tools or dependencies.
+Skills install only as reviewed. When Core advertises
+`profile.skills.reviewed_install.v1`, the page shows what the server reports
+about a source (origin, version, permissions, code that will run) and offers
+Install only when Core can pin the reviewed commit and content digest; the
+server installs exactly that and refuses if the source changed. Sources that
+cannot be pinned, including the default public registry entries today, can be
+reviewed but not installed, and the page says why. The browser itself never
+installs executable tools or dependencies, and the older branch-following
+install method is not used.
 
-Memory edit and delete controls are not offered because the current protocol has
-no corresponding operations. Remember-this uses the explicit ingest RPC;
-accepted request/promote responses are described as accepted or staged, never as
+Memory entries can be edited and deleted (with confirmation) when Core
+advertises `memory/entries`, `memory/edit`, and `memory/delete`; every change is
+read back from the server, and a version conflict keeps the draft. Older Cores
+stay read-only and say so. Remember-this uses the explicit ingest RPC; accepted
+request/promote responses are described as accepted or staged, never as
 completed writes.
 
 Delivered files, supervised-task artifacts, and files explicitly written by
