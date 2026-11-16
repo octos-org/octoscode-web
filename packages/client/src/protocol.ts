@@ -15,6 +15,7 @@ export {
   CHAT_CREATE_METHOD,
   CHAT_WORKSPACE_UI_FEATURE,
   SESSION_WORK_MODE_UI_FEATURE,
+  WORK_MODE_UI_FEATURES,
 } from "./work-mode.ts";
 export type { WorkMode } from "./work-mode.ts";
 export {

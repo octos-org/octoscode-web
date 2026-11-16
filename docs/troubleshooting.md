@@ -126,10 +126,10 @@ at all, and that is the normal state for users.
 
 With the flag on, **Chat** is disabled and says the server cannot give every
 chat its own folder when the connection lacks `session.work_mode.v1` or
-`session.chat_workspace.v1`. With current builds this always happens against a
-real Core: the Core features are not released, and this page does not request
-them yet. It is not a connection fault, and Code mode is unaffected. The page
-never falls back to a shared folder to make Chat work.
+`session.chat_workspace.v1`. With the flag on, the page asks for both, but no
+released Core has them yet, so today this always happens against a real Core. It
+is not a connection fault, and Code mode is unaffected. The page never falls
+back to a shared folder to make Chat work.
 
 **Allow file outputs** appears only in a chat whose permission this tab may
 change and whose current permission is read-only, or workspace write with the

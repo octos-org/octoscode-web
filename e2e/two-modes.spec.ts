@@ -13,49 +13,28 @@ import {
   sessionRow,
   stopButton,
 } from "./sessions";
+import { disconnect } from "./fixture-controls";
 import { observeFrames } from "./turn-observers";
+import {
+  CHAT_FEATURES,
+  chatRow,
+  composer,
+  expectMode,
+  FLAG,
+  modeButton,
+  modeSwitch,
+  newChat,
+  TOKEN,
+  turnFlagOn,
+} from "./two-modes";
 import { interceptRequests, sendError } from "./wire";
-
-/**
- * Chat / Code navigation (two-modes proposal §6 T-C), behind the default-off
- * `octoscode-web.two-modes` flag. The fixture plays a server with the
- * provisional `session.work_mode.v1` + `session.chat_workspace.v1` features
- * for this token only: two chats, each in its own folder, and new chats made
- * with `session/chat/create` (T-D).
- */
-const TOKEN = "two-modes-e2e-token";
-const FLAG = "octoscode-web.two-modes";
-
-function turnFlagOn(page: Page) {
-  return page.addInitScript((key) => localStorage.setItem(key, "on"), FLAG);
-}
-
-const modeSwitch = (page: Page) =>
-  productNavigation(page).getByRole("group", { name: "Work mode" });
-const modeButton = (page: Page, name: "Chat" | "Code") =>
-  modeSwitch(page).getByRole("button", { name, exact: true });
-/** The message box by name: a chat has its own placeholder. */
-const composer = (page: Page) =>
-  page.getByRole("textbox", { name: "Message Octos" });
-const chatRow = (page: Page, title: string) =>
-  productNavigation(page).getByRole("treeitem", { name: new RegExp(title) });
-
-/** Chat mode, then a new chat from its home. */
-async function newChat(page: Page) {
-  await startSession(page, runFolder("two-modes-chat"), TOKEN);
-  await modeButton(page, "Chat").click();
-  await page.getByRole("button", { name: "New chat" }).last().click();
-  await expect(composer(page)).toHaveAttribute(
-    "placeholder",
-    "Ask Octos anything…",
-  );
-}
 
 const WCAG_AA = ["wcag2a", "wcag2aa"];
 
 test("Chat and Code keep their own lists and selections, across notifications, reloads and a phone", async ({
   browser,
   page,
+  request,
 }) => {
   await turnFlagOn(page);
   await instrument(page, "granted", true);
@@ -65,10 +44,7 @@ test("Chat and Code keep their own lists and selections, across notifications, r
   const codeId = await selectedSessionId(navigation);
 
   // Code: the project Session, no chats.
-  await expect(modeButton(page, "Code")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectMode(page, "Code");
   await expect(chatRow(page, "Weekly notes draft")).toHaveCount(0);
   // Office and general templates belong to Chat now (proposal §3).
   await expect(page.getByText("Write a weekly report")).toHaveCount(0);
@@ -78,10 +54,7 @@ test("Chat and Code keep their own lists and selections, across notifications, r
   await page.keyboard.press("Shift+Tab");
   await expect(modeButton(page, "Chat")).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(modeButton(page, "Chat")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectMode(page, "Chat");
   // Nothing of Chat's is selected yet: its home, not the Code Session.
   await expect(
     page.getByRole("heading", { name: "Chat", level: 1 }),
@@ -133,13 +106,20 @@ test("Chat and Code keep their own lists and selections, across notifications, r
     "page",
   );
 
-  // The server's word decides the mode after a reload.
+  // The server's word decides the mode after a reload and a reconnect, and
+  // every new socket asks for Chat's features again.
   await page.reload();
+  await expect(composer(page)).toBeEnabled();
+  const sockets = frames.features.length;
+  await disconnect(request);
+  await expect.poll(() => frames.features.length).toBeGreaterThan(sockets);
   await expect(composer(page)).toBeEnabled();
   await expect(chatRow(page, "Talk outline")).toHaveAttribute(
     "aria-current",
     "page",
   );
+  for (const features of frames.features)
+    expect(features).toEqual(expect.arrayContaining(CHAT_FEATURES));
 
   // Switching only navigates: no permission or profile change went out.
   expect(frames.sent.filter((frame) => frame.method?.endsWith("/set"))).toEqual(
@@ -157,10 +137,7 @@ test("Chat and Code keep their own lists and selections, across notifications, r
   await turnFlagOn(phone);
   await openLink(phone, page.url(), TOKEN);
   await phone.getByRole("button", { name: "Open sessions" }).tap();
-  await expect(modeButton(phone, "Chat")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectMode(phone, "Chat");
   await modeButton(phone, "Code").tap();
   await modeButton(phone, "Chat").tap();
   await chatRow(phone, "Weekly notes draft").tap();
@@ -173,28 +150,43 @@ test("Chat and Code keep their own lists and selections, across notifications, r
   await phone.close();
 });
 
-test("Chat stays off, and says why, on a server without chat folders", async ({
+test("Chat opens only when the page asked for both features and the server gave them", async ({
+  browser,
   page,
 }) => {
-  await startSession(page, runFolder("two-modes-off"), FIXTURE_TOKEN);
-  // Flag off: the sidebar is unchanged.
+  const frames = observeFrames(page);
+  // Flag off: the sidebar and request are unchanged, even where Chat exists.
+  await startSession(page, runFolder("two-modes-off"), TOKEN);
   await expect(modeSwitch(page)).toHaveCount(0);
+  const [plain] = frames.features;
+  for (const feature of CHAT_FEATURES) expect(plain).not.toContain(feature);
+  const open = frames.calls("session/open")[0]!;
+  await frames.settled(open);
+  expect(frames.replyTo(open)?.result).not.toHaveProperty("opened.work_mode");
 
+  // Flag on: the same request plus both features, and the answer enables Chat.
   await page.evaluate((key) => localStorage.setItem(key, "on"), FLAG);
   await page.reload();
   await expect(composer(page)).toBeEnabled();
-  const chat = modeButton(page, "Chat");
-  await expect(chat).toHaveAttribute("aria-disabled", "true");
-  await expect(chat).toHaveAccessibleDescription(
-    "Chat needs a server that gives every chat its own folder. This server does not yet.",
-  );
-  await chat.focus();
-  await page.keyboard.press("Enter");
-  await expect(modeButton(page, "Code")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(composer(page)).toBeEnabled();
+  expect(frames.features.at(-1)).toEqual([...plain!, ...CHAT_FEATURES]);
+  await expect(modeButton(page, "Chat")).not.toHaveAttribute("aria-disabled");
+
+  // An older server, and one with work modes but no folder per chat (T-A
+  // only): Chat stays off and says why.
+  for (const token of [FIXTURE_TOKEN, "two-modes-partial-e2e-token"]) {
+    const older = await browser.newPage();
+    await turnFlagOn(older);
+    await startSession(older, runFolder(`two-modes-${token}`), token);
+    const chat = modeButton(older, "Chat");
+    await expect(chat).toHaveAttribute("aria-disabled", "true");
+    await expect(chat).toHaveAccessibleDescription(
+      "Chat needs a server that gives every chat its own folder. This server does not yet.",
+    );
+    await chat.focus();
+    await older.keyboard.press("Enter");
+    await expectMode(older, "Code");
+    await older.close();
+  }
 });
 
 test("a new chat is read-only with no network, drafts in the conversation and keeps its steps folded", async ({
@@ -255,10 +247,7 @@ test("a new chat is read-only with no network, drafts in the conversation and ke
   await page.reload();
   await expect(composer(page)).toBeEnabled();
   await expect(page.getByRole("heading", { name: "Next week" })).toBeVisible();
-  await expect(modeButton(page, "Chat")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectMode(page, "Chat");
 });
 
 test("a chat sends nothing until the server confirms read-only, in either language", async ({

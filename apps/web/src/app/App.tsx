@@ -543,6 +543,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     disconnect,
     forgetConnection,
   } = gate;
+  // Chat / Code (two-modes flag, read once per page load). The connection
+  // asks for Chat's features only under the flag; Chat needs the server's
+  // durable work mode and a workspace per chat, and without them the switch
+  // shows Chat as unavailable and everything stays Code.
+  const [twoModes] = useState(twoModesFlagOn);
   const {
     connection: session,
     protocol,
@@ -553,7 +558,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     models,
     work,
     workspaceProduct,
-  } = useOctosSession();
+  } = useOctosSession({ twoModes });
   const draftRef = useRef("");
   const previousActiveSessionKeyRef = useRef<string | null>(null);
   const restoreAttemptedRef = useRef(false);
@@ -1359,10 +1364,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
           ),
     [deletedSessionIds, sessionCatalog],
   );
-  // Chat / Code (two-modes flag, read once per page load). Chat needs the
-  // server's durable work mode and a workspace per chat; without them the
-  // switch shows Chat as unavailable and everything stays Code.
-  const [twoModes] = useState(twoModesFlagOn);
   const chatAvailable = twoModes && chatModeSupported(session.capabilities);
   const [workMode, setWorkMode] = useState<WorkMode>("code");
   const [modeSelections, setModeSelections] = useState<ModeSelections>({

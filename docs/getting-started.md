@@ -328,8 +328,8 @@ on, never in someone else's browser or on a shared deployment.
 2. **Work mode** appears at the top of the sidebar (in the drawer on a phone),
    with **Code** and **Chat**.
 3. Against a real Core today, **Chat** stays disabled and explains that the
-   server cannot give each chat its own folder. That is expected: the Core
-   features are not released, and this page does not request them yet.
+   server cannot give each chat its own folder. That is expected: the page asks
+   for Chat's features when the flag is on, but no released Core has them yet.
 4. Against the fixture, connect with the token `two-modes-e2e-token`; only that
    token gets the Chat features. Chats, file outputs and Outputs then work end
    to end, but the fixture's files are simulated, so this is no evidence of how

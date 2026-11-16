@@ -14,7 +14,10 @@ The React-free client connects to `/api/ui-protocol/ws`, validates JSON-RPC
 frames, correlates responses, and requests Web features during the handshake.
 The application enables a method only after the server accepts or advertises it.
 Missing optional capabilities reduce the interface; they do not trigger a
-best-effort wire guess.
+best-effort wire guess. Core reports only the features a connection asks for.
+The request list is the client's `DEFAULT_UI_FEATURES`; a page loaded with the
+two-modes preview flag also asks for `session.work_mode.v1` and
+`session.chat_workspace.v1`, and Chat mode opens only when both come back.
 
 The generic request primitive is private. Every public method with a structured
 result applies a fail-closed decoder before returning. Cold receipt decoders
