@@ -11,8 +11,9 @@
 
 - 内核：T-B「每个对话一个服务器分配的文件夹」（[octos#3256](https://github.com/octos-org/octos/pull/3256)）合入并进入要部署的内核版本；Session 权限读写校验用户与 Session 归属（[octos#3284](https://github.com/octos-org/octos/pull/3284)）；显式只读、禁网在内核重启后保持（[octos#3285](https://github.com/octos-org/octos/pull/3285)）。T-A「会话的工作模式」（[octos#3255](https://github.com/octos-org/octos/pull/3255)）已在 octos
   main。
-- 网页：连接时向内核请求 `session.work_mode.v1` 和
-  `session.chat_workspace.v1`。内核只回报客户端请求过的能力，而当前网页的默认请求列表里**还没有这两项**，所以即使内核支持，对话入口也会一直禁用。这一步要等 T-B 合入后另做。
+- 网页：内核只回报客户端请求过的能力。flag 打开时，网页连接会请求
+  `session.work_mode.v1` 和
+  `session.chat_workspace.v1`（T-0635）；flag 关闭时请求列表和以前一样，不请求这两项。
 - 验收：T-0623 对实际合入的 T-B 和网页做真实内核上的权限安全复审，结论为可通过；随后在指定的体验环境按演练清单开 flag、冒烟、关回，证据齐全（T-0622 做普通用户的生产体验）。
 - 在这些完成之前，flag 只在测试用的单个浏览器里打开，默认值不变。
 

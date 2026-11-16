@@ -32,9 +32,11 @@ export interface WireFrame {
 export function observeFrames(page: Page) {
   const sent: WireFrame[] = [];
   const received: WireFrame[] = [];
+  const features: string[][] = [];
   let sockets = 0;
   page.on("websocket", (socket) => {
     const ordinal = sockets++;
+    features.push(new URL(socket.url()).searchParams.getAll("ui_feature"));
     const take =
       (into: WireFrame[]) =>
       ({ payload }: { payload: string | Buffer }) => {
@@ -57,6 +59,8 @@ export function observeFrames(page: Page) {
   return {
     sent,
     received,
+    /** The `ui_feature` list each socket asked for, in order. */
+    features,
     /** What the page sent as `method`, in order. */
     calls: (method: string) => sent.filter((frame) => frame.method === method),
     /** Notifications the page received as `method`, in order. */

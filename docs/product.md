@@ -51,7 +51,9 @@ preview flag that is off by default, and it also needs a Core that offers
 `session.work_mode.v1` and `session.chat_workspace.v1` to this page. Without
 both, the page shows Code only, or a disabled Chat button that says the server
 cannot give each chat its own folder; it never falls back to a shared folder.
-Before Chat mode can open to users:
+Core reports only the features a connection asks for: a page with the flag asks
+for both when it connects, and without the flag it asks for neither. Before Chat
+mode can open to users:
 
 - Core must ship the per-chat folder (T-B,
   [octos#3256](https://github.com/octos-org/octos/pull/3256)), the Session
@@ -62,9 +64,6 @@ Before Chat mode can open to users:
   work-mode field (T-A,
   [octos#3255](https://github.com/octos-org/octos/pull/3255)) is already in Core
   main.
-- This page must request those two features when it connects. Core only reports
-  features a client asks for, and the default request list does not include them
-  yet, so Chat stays disabled even against a Core that supports it.
 - A permission safety review (T-0623) of the merged Core and Web must pass on a
   real Core, then the [flag drill](release-1.0-flag-drill.md) must be run in a
   designated test environment with evidence.

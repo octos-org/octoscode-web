@@ -158,6 +158,7 @@ import {
   type TaskArtifactRecord,
   isProtocolUuid,
   type TurnMedia,
+  WORK_MODE_UI_FEATURES,
 } from "@octos-org/octoscode-client/protocol";
 import {
   useCodingSafety,
@@ -1326,18 +1327,27 @@ export function derivePeerControllerConsole(
 
 function noopCancelPendingNavigation(): void {}
 
-export function useOctosSession(): OctosSessionRuntime {
+export function useOctosSession({
+  twoModes = false,
+}: { twoModes?: boolean } = {}): OctosSessionRuntime {
   const runtimeEventSinkRef = useRef<
     (event: ActiveSessionRuntimeEvent<OctosUiClient>) => void
   >(() => undefined);
   const serverConnection = useServerConnection({
     loadClientFactory: async () => {
-      const { OctosUiClient } =
+      const { DEFAULT_UI_FEATURES, OctosUiClient } =
         await import("@octos-org/octoscode-client/transport");
+      // Core reports only the features a connection asks for, so the
+      // two-modes flag also asks for the work mode and a folder per chat.
+      // Without the flag the request list stays the client default.
+      const features = twoModes
+        ? [...DEFAULT_UI_FEATURES, ...WORK_MODE_UI_FEATURES]
+        : undefined;
       return (config) =>
         new OctosUiClient({
           endpoint: config.endpoint,
           token: config.token,
+          ...(features ? { features } : {}),
         });
     },
     validateServerCapabilities: assertCompatibleProtocol,

@@ -248,15 +248,20 @@ const heldGatherReplies = new Map();
 // the untouched typed-path form (no Browse affordance at all) with every other.
 const workspaceBrowseAuthToken = "workspace-browse-e2e-token";
 const workspaceBrowseSockets = new WeakSet();
-// Chat / Code (two-modes proposal T-A/T-B, names provisional): a connection
-// with this token sees sessions carry `work_mode`, a chat listing, and chats
-// that each live in their own workspace. Every other token sees neither.
-const twoModesAuthToken = "two-modes-e2e-token";
-const twoModesSockets = new WeakSet();
-const TWO_MODES_FEATURES = [
-  "session.work_mode.v1",
-  "session.chat_workspace.v1",
-];
+// Chat / Code (two-modes T-A/T-B, octos#3255/#3256): a connection with one of
+// these tokens plays a server supporting the listed features. Like Core it
+// reports only those the connection asked for (`ui_feature`), so the page's own
+// request decides: sessions carry `work_mode`, and with a folder per chat there
+// is a chat listing and `session/chat/create`. The partial server is T-A only.
+const WORK_MODE_FEATURE = "session.work_mode.v1";
+const CHAT_WORKSPACE_FEATURE = "session.chat_workspace.v1";
+const twoModesServerFeatures = new Map([
+  ["two-modes-e2e-token", [WORK_MODE_FEATURE, CHAT_WORKSPACE_FEATURE]],
+  ["two-modes-partial-e2e-token", [WORK_MODE_FEATURE]],
+]);
+const twoModesFeaturesBySocket = new WeakMap();
+const negotiatedTwoModes = (socket, feature) =>
+  twoModesFeaturesBySocket.get(socket)?.includes(feature) ?? false;
 const chatWorkspaceBySession = new Map();
 const chatSeededProfiles = new Set();
 /** Two chats for `profileId`, each in its own folder, seeded on first list. */
@@ -3182,17 +3187,14 @@ const baseCapabilities = {
 
 function capabilitiesFor(socket, state) {
   const capabilities = baseCapabilitiesFor(socket, state);
-  return twoModesSockets.has(socket)
+  const twoModes = twoModesFeaturesBySocket.get(socket) ?? [];
+  return twoModes.length
     ? {
         ...capabilities,
-        supported_methods: [
-          ...capabilities.supported_methods,
-          "session/chat/create",
-        ],
-        supported_features: [
-          ...capabilities.supported_features,
-          ...TWO_MODES_FEATURES,
-        ],
+        supported_methods: negotiatedTwoModes(socket, CHAT_WORKSPACE_FEATURE)
+          ? [...capabilities.supported_methods, "session/chat/create"]
+          : capabilities.supported_methods,
+        supported_features: [...capabilities.supported_features, ...twoModes],
       }
     : capabilities;
 }
@@ -3733,8 +3735,16 @@ sockets.on("connection", (socket, request) => {
   if (connectionAuthToken === workspaceBrowseAuthToken) {
     workspaceBrowseSockets.add(socket);
   }
-  if (connectionAuthToken === twoModesAuthToken) {
-    twoModesSockets.add(socket);
+  const twoModesServer = twoModesServerFeatures.get(connectionAuthToken);
+  if (twoModesServer) {
+    const requested = new URL(request.url ?? "/", "http://fixture")
+      .searchParams;
+    twoModesFeaturesBySocket.set(
+      socket,
+      twoModesServer.filter((feature) =>
+        requested.getAll("ui_feature").includes(feature),
+      ),
+    );
   }
   if (connectionAuthToken === planFixtureAuthToken) {
     planFixtureSockets.add(socket);
@@ -4668,7 +4678,7 @@ sockets.on("connection", (socket, request) => {
             seq: state.log.seq,
           },
           capabilities: capabilitiesFor(socket, state),
-          ...(twoModesSockets.has(socket)
+          ...(negotiatedTwoModes(socket, WORK_MODE_FEATURE)
             ? {
                 work_mode: chatWorkspaceBySession.has(sessionId)
                   ? "chat"
@@ -5696,7 +5706,7 @@ sockets.on("connection", (socket, request) => {
     // web narrows it to read-only itself and waits for the server to agree.
     if (
       request.method === "session/chat/create" &&
-      twoModesSockets.has(socket)
+      negotiatedTwoModes(socket, CHAT_WORKSPACE_FEATURE)
     ) {
       const sessionId = String(request.params?.session_id ?? "");
       const profileId = String(request.params?.profile_id ?? "");
@@ -5733,7 +5743,7 @@ sockets.on("connection", (socket, request) => {
     if (
       request.method === "session/list" &&
       request.params?.work_mode === "chat" &&
-      twoModesSockets.has(socket)
+      negotiatedTwoModes(socket, CHAT_WORKSPACE_FEATURE)
     ) {
       const profileId =
         request.params.profile_id ??

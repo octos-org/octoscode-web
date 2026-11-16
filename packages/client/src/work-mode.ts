@@ -1,8 +1,7 @@
 /**
- * Chat / Code work modes (docs: octoscode-web-vnext two-modes proposal, T-A
- * and T-B). PROVISIONAL: Core has not named these on the wire yet. The web
- * reads them only behind its two-modes flag; rename them here, and in the
- * fixture, once Core's protocol proposal lands.
+ * Chat / Code work modes (two-modes proposal T-A and T-B; Core names them in
+ * octos#3255 and octos#3256). The web asks for and reads them only behind its
+ * two-modes flag.
  */
 export type WorkMode = "chat" | "code";
 
@@ -11,6 +10,15 @@ export const SESSION_WORK_MODE_UI_FEATURE = "session.work_mode.v1";
 
 /** The server gives every chat its own workspace and lists chats (T-B). */
 export const CHAT_WORKSPACE_UI_FEATURE = "session.chat_workspace.v1";
+
+/**
+ * Core reports only the features a connection asks for, so Chat is possible
+ * only on a connection that requested both.
+ */
+export const WORK_MODE_UI_FEATURES = [
+  SESSION_WORK_MODE_UI_FEATURE,
+  CHAT_WORKSPACE_UI_FEATURE,
+] as const;
 
 /**
  * Creates a chat under a session id the client chose: the server makes the
