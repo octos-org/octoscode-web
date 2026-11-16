@@ -117,6 +117,26 @@ selecting it requires explicit risk acknowledgement. Durable policy and
 authenticated administration are tracked in
 [octos#2147](https://github.com/octos-org/octos/issues/2147).
 
+## Chat mode is disabled or missing
+
+Chat mode is a tester preview, off by default; see
+[Try Chat mode](getting-started.md#try-chat-mode-testers-only). Without the
+`octoscode-web.two-modes` flag in this browser there is no **Work mode** switch
+at all, and that is the normal state for users.
+
+With the flag on, **Chat** is disabled and says the server cannot give every
+chat its own folder when the connection lacks `session.work_mode.v1` or
+`session.chat_workspace.v1`. With current builds this always happens against a
+real Core: the Core features are not released, and this page does not request
+them yet. It is not a connection fault, and Code mode is unaffected. The page
+never falls back to a shared folder to make Chat work.
+
+**Allow file outputs** appears only in a chat whose permission this tab may
+change and whose current permission is read-only, or workspace write with the
+network blocked. It is not offered when viewing a chat remotely from a phone, or
+when the chat's permission is anything else, such as full access or network
+allowed.
+
 ## A model is missing or Profile default differs from Session runtime
 
 The composer reports the effective model from the selected Session's runtime; it

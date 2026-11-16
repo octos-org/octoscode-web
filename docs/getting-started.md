@@ -313,6 +313,36 @@ Use the fixture origin shown in its terminal output. The fixture contains a
 representative Markdown/code transcript, approvals, questions, task output,
 artifacts, and session state.
 
+## Try Chat mode (testers only)
+
+Everything above is Code mode, which every user gets. Chat mode, where each chat
+works in a folder the server assigns to it alone, is a preview for testers. It
+is off by default and not available to users yet; see
+[Code and Chat modes](product.md#code-and-chat-modes) for what has to happen
+first. Only try it in a test browser against a server you are allowed to test
+on, never in someone else's browser or on a shared deployment.
+
+1. In the test browser's console, run
+   `localStorage.setItem('octoscode-web.two-modes', 'on'); location.reload()`.
+   The page reads the flag only when it loads.
+2. **Work mode** appears at the top of the sidebar (in the drawer on a phone),
+   with **Code** and **Chat**.
+3. Against a real Core today, **Chat** stays disabled and explains that the
+   server cannot give each chat its own folder. That is expected: the Core
+   features are not released, and this page does not request them yet.
+4. Against the fixture, connect with the token `two-modes-e2e-token`; only that
+   token gets the Chat features. Chats, file outputs and Outputs then work end
+   to end, but the fixture's files are simulated, so this is no evidence of how
+   a real Core behaves.
+5. To turn it off, run
+   `localStorage.removeItem('octoscode-web.two-modes'); location.reload()`.
+   Chats stay on the server. Session links live in the tab, so chats this tab
+   opened still show as ordinary Sessions under their folders until you close
+   the tab or select **Forget server**.
+
+The [1.0 flag drill](release-1.0-flag-drill.md) is the full checklist for
+turning the flag on in a designated test environment.
+
 ## Common commands
 
 | Command                 | Purpose                                                                        |
