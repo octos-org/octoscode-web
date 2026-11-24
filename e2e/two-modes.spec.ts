@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { instrument } from "./attention-probe";
 import { axeViolations } from "./axe";
 import {
@@ -386,11 +386,22 @@ test("a chat sends nothing until the server confirms read-only, in either langua
 
 test("file outputs turn on through the real SET, write into Outputs, and turn off again", async ({
   page,
+  request,
 }) => {
   await turnFlagOn(page);
   const frames = observeFrames(page);
   await newChat(page);
   const chatId = frames.calls("session/chat/create")[0]!.params!.session_id;
+  // T-0671 (F-0634-2): every SET is counted with its parameters. One Allow or
+  // Turn off is exactly one SET; nothing follows its readback or a reconnect.
+  const sets = () =>
+    frames.calls("permission/profile/set").map((frame) => frame.params);
+  const reads = () => frames.calls("permission/profile/list").length;
+  const set = (mode: string) => ({
+    session_id: chatId,
+    update: { mode, network: "deny" },
+  });
+  await expect.poll(sets).toEqual([set("read_only")]);
 
   // Off by default (the read-only draft chain is the T-D test's).
   await expect(
@@ -404,12 +415,10 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   await expect(allow).toBeEnabled();
   await allow.focus();
   await expect(allow).toBeFocused();
+  let readsBefore = reads();
   await page.keyboard.press("Enter");
   await expect(page.getByText("File outputs on").first()).toBeVisible();
-  expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
-    session_id: chatId,
-    update: { mode: "workspace_write", network: "deny" },
-  });
+  await expect.poll(reads).toBeGreaterThan(readsBefore);
 
   // The next message writes report.md into this chat's own folder.
   await composer(page).fill("Chat draft fixture as a file");
@@ -422,17 +431,25 @@ test("file outputs turn on through the real SET, write into Outputs, and turn of
   expect(await axeViolations(page, "main", WCAG_AA)).toEqual([]);
 
   // Turn off through the same entry: the server is asked, never full access.
+  expect(sets()).toEqual([set("read_only"), set("workspace_write")]);
+  readsBefore = reads();
   await page
     .getByRole("button", { name: "Turn off file outputs" })
     .first()
     .click();
-  expect(frames.calls("permission/profile/set").at(-1)?.params).toEqual({
-    session_id: chatId,
-    update: { mode: "read_only", network: "deny" },
-  });
   await expect(
     page.getByRole("button", { name: "Allow file outputs" }).first(),
   ).toBeVisible();
+  await expect.poll(reads).toBeGreaterThan(readsBefore);
+  const sockets = frames.features.length;
+  await disconnect(request);
+  await expect.poll(() => frames.features.length).toBeGreaterThan(sockets);
+  await expect(composer(page)).toBeEnabled();
+  expect(sets()).toEqual([
+    set("read_only"),
+    set("workspace_write"),
+    set("read_only"),
+  ]);
 });
 
 test("a failed set is reported, never retried, and re-read restores the server truth", async ({
@@ -440,16 +457,17 @@ test("a failed set is reported, never retried, and re-read restores the server t
 }) => {
   await turnFlagOn(page);
   let failOnce = true;
-  let writeSets = 0;
+  const updates: unknown[] = [];
   let permissionReads = 0;
   // Count at the transport route (page-side WS listeners miss rerouted frames).
   await interceptRequests(page, (request, socket) => {
     if (request.method === "permission/profile/list") permissionReads += 1;
+    if (request.method === "permission/profile/set")
+      updates.push(request.params?.update);
     if (
       request.method === "permission/profile/set" &&
       request.params?.update?.mode === "workspace_write"
     ) {
-      writeSets += 1;
       if (failOnce) {
         failOnce = false;
         sendError(socket, request.id, {
@@ -460,15 +478,16 @@ test("a failed set is reported, never retried, and re-read restores the server t
       }
     }
   });
-  const frames = observeFrames(page);
   await newChat(page);
-  await page
+  const allow = page
     .getByRole("button", { name: "Allow file outputs" })
-    .first()
-    .click();
+    .first();
+  await allow.click();
   await expect(page.getByRole("alert")).toContainText("set incomplete");
   // The failure was reported once; the page sent exactly one write, no retry.
-  expect(writeSets).toBe(1);
+  const RO = { mode: "read_only", network: "deny" };
+  const RW = { mode: "workspace_write", network: "deny" };
+  expect(updates).toEqual([RO, RW]);
   // Re-read must really ask the server again and clear the failure: before
   // the click the button state was already off, so the alert clearing and a
   // NEW permission read are the observable proof.
@@ -478,6 +497,11 @@ test("a failed set is reported, never retried, and re-read restores the server t
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(permissionReads).toBeGreaterThan(readsBefore);
+  expect(updates).toEqual([RO, RW]);
+  // A second, explicit Allow is its own operation: one more SET, and it lands.
+  await allow.click();
+  await expect(page.getByText("File outputs on").first()).toBeVisible();
+  expect(updates).toEqual([RO, RW, RW]);
 });
 
 // T-0666 (audit T-0623 P1): Core can already write once it applied Allow, so
