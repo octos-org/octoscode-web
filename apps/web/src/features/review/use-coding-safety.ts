@@ -1,4 +1,10 @@
-import { useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   CORE_UI_METHODS,
   DIFF_WORKSPACE_GET,
@@ -13,6 +19,10 @@ import {
   type UiProtocolCapabilities,
 } from "@octos-org/octoscode-client/protocol";
 import { RequestAuthorityGate } from "../async/request-authority.ts";
+import type {
+  PermissionTransition,
+  PermissionTransitions,
+} from "./permission-transitions.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { SessionFileChange } from "../side-panel/session-changes.ts";
 
@@ -23,7 +33,11 @@ export interface PermissionRuntimeState {
   busy: boolean;
   result: PermissionProfileListResult | null;
   error: string | null;
+  /** The open Session's unconfirmed permission change: nothing dispatches. */
+  transition: PermissionTransition | null;
 }
+
+type PermissionReadState = Omit<PermissionRuntimeState, "transition">;
 
 export type DiffScope = "turn" | "workspace";
 
@@ -38,7 +52,7 @@ export interface DiffReviewRuntimeState {
   error: string | null;
 }
 
-const EMPTY_PERMISSION: PermissionRuntimeState = {
+const EMPTY_PERMISSION: PermissionReadState = {
   available: false,
   editable: false,
   loading: false,
@@ -64,6 +78,8 @@ interface CodingSafetyDependencies {
   profileId: () => string;
   capabilities: () => UiProtocolCapabilities | undefined;
   onPermissionApplied: (client: OctosUiClient) => void;
+  /** Per-Session dispatch gate every permission SET here goes through. */
+  transitions: PermissionTransitions;
 }
 
 export function useCodingSafety(dependencies: CodingSafetyDependencies) {
@@ -78,7 +94,11 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
   const dependenciesRef = useRef(dependencies);
   dependenciesRef.current = dependencies;
   const [permission, setPermission] =
-    useState<PermissionRuntimeState>(EMPTY_PERMISSION);
+    useState<PermissionReadState>(EMPTY_PERMISSION);
+  const transitions = dependencies.transitions;
+  const transition = useSyncExternalStore(transitions.subscribe, () =>
+    transitions.state(dependenciesRef.current.sessionId()),
+  );
   const [diffReview, setDiffReview] =
     useState<DiffReviewRuntimeState>(EMPTY_DIFF_REVIEW);
 
@@ -122,8 +142,10 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     }));
   };
 
+  /** `explicit`: the user asked, so it may also settle an unknown change. */
   const refreshPermission = async (
     client = dependenciesRef.current.client(),
+    explicit = false,
   ): Promise<void> => {
     const currentDependencies = dependenciesRef.current;
     const sessionId = currentDependencies.sessionId();
@@ -139,6 +161,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       return;
     }
     const request = permissionRequestsRef.current.begin(client, sessionId);
+    const read = currentDependencies.transitions.beginRead(sessionId, explicit);
     setPermission((current) => ({ ...current, loading: true, error: null }));
     try {
       const result = await client.listPermissionProfiles({
@@ -149,6 +172,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
         throw new Error("permission/profile/list returned another session");
       }
       setPermission((current) => ({ ...current, loading: false, result }));
+      currentDependencies.transitions.completeRead(read);
     } catch (reason) {
       if (!requestIsCurrent()) return;
       setPermission((current) => ({
@@ -174,9 +198,32 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     }
   };
 
+  /**
+   * Run one permission SET behind the Session's dispatch gate (T-0666).
+   * `apply` sends it and throws unless the receipt is the requested change,
+   * applied, for this Session. Nothing dispatches in the Session until a read
+   * started after that receipt lands; any other outcome keeps it closed until
+   * the user re-reads. Resolves whether the change was confirmed.
+   */
+  const gatePermissionSet = async (
+    client: OctosUiClient,
+    sessionId: string,
+    apply: () => Promise<void>,
+  ): Promise<boolean> => {
+    const ticket = transitions.begin(sessionId);
+    try {
+      await apply();
+      transitions.verified(ticket);
+      await refreshPermission(client);
+      return !transitions.blocked(sessionId);
+    } finally {
+      transitions.settle(ticket);
+    }
+  };
+
   const updatePermission = async (
     update: PermissionProfileUpdate,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const currentDependencies = dependenciesRef.current;
     const client = currentDependencies.client();
     const sessionId = currentDependencies.sessionId();
@@ -185,9 +232,11 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       !sessionId ||
       !permission.available ||
       !permission.editable ||
-      permissionBusyRef.current
+      permissionBusyRef.current ||
+      // An unconfirmed change is re-read, never sent again on top.
+      transitions.blocked(sessionId)
     ) {
-      return;
+      return false;
     }
     const current = permission.result?.current;
     const next = current
@@ -210,7 +259,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
         error:
           "The requested permission profile was not advertised for this session",
       }));
-      return;
+      return false;
     }
 
     // A mutation supersedes any older permission read. Otherwise a slow list
@@ -226,38 +275,51 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
       error: null,
     }));
     try {
-      const result = await client.setPermissionProfile({
-        session_id: sessionId,
-        update,
+      const confirmed = await gatePermissionSet(client, sessionId, async () => {
+        const result = await client.setPermissionProfile({
+          session_id: sessionId,
+          update,
+        });
+        if (!requestIsCurrent())
+          throw new Error("permission/profile/set lost its Session");
+        if (result.session_id !== sessionId) {
+          throw new Error("permission/profile/set returned another session");
+        }
+        if (!result.applied) {
+          throw new Error("The server did not apply the permission change");
+        }
+        // Network deny is never widened behind the user's back either.
+        if (
+          result.current.mode !== next.mode ||
+          result.current.network !== next.network
+        ) {
+          throw new Error(
+            "The server applied a different permission than requested",
+          );
+        }
+        setPermission((state) => ({
+          ...state,
+          busy: false,
+          result: state.result
+            ? { ...state.result, current: result.current }
+            : {
+                session_id: result.session_id,
+                current: result.current,
+                profiles: [],
+              },
+        }));
+        permissionBusyRef.current = false;
       });
-      if (!requestIsCurrent()) return;
-      if (result.session_id !== sessionId) {
-        throw new Error("permission/profile/set returned another session");
-      }
-      if (!result.applied) {
-        throw new Error("The server did not apply the permission change");
-      }
-      setPermission((state) => ({
-        ...state,
-        busy: false,
-        result: state.result
-          ? { ...state.result, current: result.current }
-          : {
-              session_id: result.session_id,
-              current: result.current,
-              profiles: [],
-            },
-      }));
-      permissionBusyRef.current = false;
-      await refreshPermission(client);
-      if (!requestIsCurrent()) return;
-      dependenciesRef.current.onPermissionApplied(client);
+      if (!requestIsCurrent()) return false;
+      if (confirmed) dependenciesRef.current.onPermissionApplied(client);
+      return confirmed;
     } catch (reason) {
-      if (!requestIsCurrent()) return;
+      if (!requestIsCurrent()) return false;
       setPermission((state) => ({
         ...state,
         error: errorMessage(reason),
       }));
+      return false;
     } finally {
       if (permissionMutationRef.current.finish(request)) {
         permissionBusyRef.current = false;
@@ -417,13 +479,31 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     }));
   };
 
+  const permissionView = useMemo<PermissionRuntimeState>(
+    () => ({ ...permission, transition }),
+    [permission, transition],
+  );
+  // Another tab confirmed its change to the open Session: read what it left.
+  const refreshRef = useRef(refreshPermission);
+  refreshRef.current = refreshPermission;
+  useEffect(
+    () =>
+      transitions.onSettledElsewhere((sessionId) => {
+        if (sessionId === dependenciesRef.current.sessionId())
+          void refreshRef.current();
+      }),
+    [transitions],
+  );
+
   return {
-    permission,
+    permission: permissionView,
     diffReview,
     reset,
     configureCapabilities,
     refreshPermission,
+    rereadPermission: () => refreshPermission(undefined, true),
     updatePermission,
+    gatePermissionSet,
     openDiffReview,
     closeDiffReview,
     observeNotification,

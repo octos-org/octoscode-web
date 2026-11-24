@@ -26,6 +26,19 @@ const catalog: Readonly<Record<string, string>> = {
     "正在把这个对话设为只读、禁止联网，服务器确认后才能发送。",
   "The server hasn't confirmed that this chat is read-only with no network, so sending is blocked in this chat.":
     "服务器还没确认这个对话是只读、禁止联网，所以这个对话暂时不能发送。",
+  // A permission change the server has not confirmed (T-0666).
+  "Changing the permission. Sending waits until the server confirms it.":
+    "正在更改权限，服务器确认后才能发送。",
+  "Another tab is changing the permission. Sending waits until the server confirms it.":
+    "另一个标签页正在更改权限，服务器确认后才能发送。",
+  "The server didn't confirm the permission change, so sending is paused until you re-read it.":
+    "服务器没有确认这次权限更改，重新读取之前暂停发送。",
+  "The server didn't confirm the permission change. Re-read it before sending.":
+    "服务器没有确认这次权限更改，请先重新读取再发送。",
+  "Another tab is changing this chat's permission.":
+    "另一个标签页正在更改这个对话的权限。",
+  "The server hasn't confirmed this chat's permission change.":
+    "服务器还没确认这个对话的权限更改。",
   "Shared model and memory · its own folder": "共用模型和记忆 · 独立文件夹",
   "Choose a session from the list, or start a new one.":
     "从列表里选一个会话，或者新建一个。",

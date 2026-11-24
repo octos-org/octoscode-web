@@ -4,12 +4,15 @@ import { axeViolations } from "./axe";
 import {
   FIXTURE_TOKEN,
   openLink,
+  openSessionId,
   runFolder,
   startSession,
 } from "./fixture-session";
+import { holdPermissionReceipt } from "./permission-receipt";
 import {
   productNavigation,
   selectedSessionId,
+  selectSession,
   sessionRow,
   stopButton,
 } from "./sessions";
@@ -388,6 +391,143 @@ test("a failed set is reported, never retried, and re-read restores the server t
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(permissionReads).toBeGreaterThan(readsBefore);
+});
+
+// T-0666 (audit T-0623 P1): Core can already write once it applied Allow, so
+// the page starts nothing until the receipt is verified and read back.
+test("nothing starts while a chat's permission change is unconfirmed, from Enter or Send", async ({
+  page,
+}) => {
+  await turnFlagOn(page);
+  const receipt = await holdPermissionReceipt(page);
+  await newChat(page);
+  const allow = page
+    .getByRole("button", { name: "Allow file outputs" })
+    .first();
+  const revoke = page
+    .getByRole("button", { name: "Turn off file outputs" })
+    .first();
+  const tryToSend = async (text: string) => {
+    await composer(page).fill(text);
+    await composer(page).press("Enter");
+    await expect(composer(page)).toHaveValue(text);
+    await page.getByRole("button", { name: "Send prompt" }).click();
+    await expect(composer(page)).toHaveValue(text);
+  };
+
+  receipt.arm();
+  await allow.click();
+  await expect.poll(receipt.isHeld).toBe(true);
+  await tryToSend("Chat draft fixture as a file");
+  await expect(
+    page.getByText(
+      "Changing the permission. Sending waits until the server confirms it.",
+    ),
+  ).toBeVisible();
+  receipt.release();
+  await expect(revoke).toBeEnabled();
+  expect(receipt.starts()).toBe(0);
+  await composer(page).press("Enter");
+  await expect(page.locator(".entry-user")).toHaveCount(1);
+  await expect(stopButton(page)).toHaveCount(0);
+
+  // A revoke the server does not confirm stays closed, is never sent again,
+  // and only a re-read of the server's own value opens the chat.
+  receipt.arm();
+  await revoke.click();
+  await expect.poll(receipt.isHeld).toBe(true);
+  await tryToSend("Still allowed to write?");
+  receipt.release((result) => {
+    result.applied = false;
+  });
+  await expect(
+    page.getByText(
+      "The server hasn't confirmed this chat's permission change.",
+    ),
+  ).toBeVisible();
+  await expect(allow.or(revoke)).toHaveCount(0);
+  await tryToSend("Still allowed to write?");
+  expect(receipt.starts()).toBe(1);
+  await page
+    .getByRole("button", { name: "Re-read the server's permission" })
+    .click();
+  await expect(allow).toBeVisible();
+  await composer(page).press("Enter");
+  await expect.poll(receipt.starts).toBe(2);
+  expect(receipt.updates).toEqual([
+    { mode: "workspace_write", network: "deny" },
+    { mode: "read_only", network: "deny" },
+  ]);
+});
+
+test("another tab waits for a chat's permission change, and a late receipt opens no other chat", async ({
+  page,
+}) => {
+  await turnFlagOn(page);
+  const receipt = await holdPermissionReceipt(page);
+  await newChat(page);
+  const chat = await openSessionId(page);
+  const row = await selectedSessionId(productNavigation(page));
+  const tab = await page.context().newPage();
+  await turnFlagOn(tab);
+  const other = await holdPermissionReceipt(tab);
+  await openLink(tab, page.url(), TOKEN);
+  await tab.getByRole("button", { name: "Take over here" }).click();
+
+  // This tab's Allow is outstanding: the other tab holds the same chat.
+  receipt.arm();
+  await page
+    .getByRole("button", { name: "Allow file outputs" })
+    .first()
+    .click();
+  await expect.poll(receipt.isHeld).toBe(true);
+  await expect(
+    tab.getByText("Another tab is changing this chat's permission."),
+  ).toBeVisible();
+  await composer(tab).fill("Chat draft fixture as a file");
+  await composer(tab).press("Enter");
+  receipt.release();
+  // Confirmed here, so it re-reads by itself and sends.
+  await expect(tab.getByText("File outputs on").first()).toBeVisible();
+  expect(other.starts()).toBe(0);
+  await composer(tab).press("Enter");
+  await expect.poll(other.starts).toBe(1);
+  await expect(tab.locator(".entry-user")).toHaveCount(1);
+  await expect(stopButton(tab)).toHaveCount(0);
+
+  // A revoke answered after this tab moved to a new chat leaves that chat
+  // alone and the first one unconfirmed in both tabs.
+  receipt.arm();
+  await page
+    .getByRole("button", { name: "Turn off file outputs" })
+    .first()
+    .click();
+  await expect.poll(receipt.isHeld).toBe(true);
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await expect.poll(() => openSessionId(page)).not.toBe(chat);
+  await composer(page).fill("A new chat sends at once");
+  await composer(page).press("Enter");
+  await expect.poll(receipt.starts).toBe(1);
+  receipt.release();
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+  await expect(
+    tab.getByText("The server hasn't confirmed this chat's permission change."),
+  ).toBeVisible();
+  await selectSession(productNavigation(page), row);
+  await expect(
+    page.getByText(
+      "The server hasn't confirmed this chat's permission change.",
+    ),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Re-read the server's permission" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Allow file outputs" }).first(),
+  ).toBeVisible();
+  expect(receipt.updates).toHaveLength(2);
 });
 
 test("a chat keeps inline drafts only where the server cannot change permissions", async ({

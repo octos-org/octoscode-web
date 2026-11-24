@@ -201,7 +201,10 @@ export function config(sessionId: string): SessionConnectionInput {
 }
 
 export function harness(
-  options: { presentation?: boolean } = {},
+  options: {
+    presentation?: boolean;
+    permissionHeld?: (scope: { sessionId: string }) => boolean;
+  } = {},
   client = new PooledClient(),
 ) {
   const pool = { client, epoch: 1, allowStart: true };
@@ -231,6 +234,9 @@ export function harness(
       if (options.presentation) mirror();
     },
     onBackgroundActivity: () => undefined,
+    ...(options.permissionHeld
+      ? { permissionHeld: options.permissionHeld }
+      : {}),
     cursorFor: (scope) =>
       manager.get(scope)?.runtime.getSnapshot().recovery.cursor,
     validateServerCapabilities: (value) => {

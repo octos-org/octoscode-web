@@ -137,6 +137,15 @@ network blocked. It is not offered when viewing a chat remotely from a phone, or
 when the chat's permission is anything else, such as full access or network
 allowed.
 
+After **Allow file outputs** or **Turn off file outputs**, sending waits until
+the server confirms the change. Every way of sending waits: Enter, the send
+button, and queued messages. If the confirmation never comes, for example when
+the request times out or you move to another chat first, the chat says the
+server has not confirmed its permission change. Choose **Re-read the server's
+permission**: the page shows what the server actually holds, and sending
+resumes. Another tab of the same browser changing that chat's permission also
+pauses sending in this tab until that change settles.
+
 ## A model is missing or Profile default differs from Session runtime
 
 The composer reports the effective model from the selected Session's runtime; it

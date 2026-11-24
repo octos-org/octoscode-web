@@ -1,4 +1,5 @@
 import type { PermissionProfileSelection } from "@octos-org/octoscode-client/protocol";
+import type { PermissionTransition } from "../review/permission-transitions.ts";
 
 /**
  * T-E (two-modes proposal §6): a chat drafts inline until the user explicitly
@@ -17,6 +18,11 @@ export type ChatFileOutputsState =
   | "on"
   /** A set is in flight for this Session (server has not answered yet). */
   | "applying"
+  /**
+   * A set's outcome is unknown, or another tab is changing it: re-read the
+   * server before anything else, never send it again (T-0666).
+   */
+  | "unconfirmed"
   /** danger_full_access or any other profile: out of the chat's scope. */
   | "managed"
   /** No server truth yet (still loading or never read). */
@@ -28,12 +34,16 @@ export interface ChatPermissionFacts {
   loading: boolean;
   busy: boolean;
   result: { current: PermissionProfileSelection } | null;
+  /** The Session's permission change this tab has not confirmed yet. */
+  transition?: PermissionTransition | null;
 }
 
 export function chatFileOutputsState(
   permission: ChatPermissionFacts,
 ): ChatFileOutputsState {
-  if (permission.busy) return "applying";
+  if (permission.busy || permission.transition === "applying")
+    return "applying";
+  if (permission.transition) return "unconfirmed";
   const current = permission.result?.current;
   if (!current) return "unknown";
   if (current.mode === "read_only") return "off";

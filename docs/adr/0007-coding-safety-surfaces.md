@@ -35,7 +35,10 @@ The Web permission panel is session scoped and capability gated. A choice is
 enabled only when the active server advertises both the method and a compatible
 profile selection. Mode changes carry the advertised network pair so the client
 cannot synthesize an unsupported combination. The server response, not the
-optimistic click, becomes current state.
+optimistic click, becomes current state. Until that response is verified
+(applied, the same Session, the requested profile) and a later read confirms it,
+the Session starts nothing from this browser. An unknown outcome stays paused
+until an explicit re-read, and the change is never resent (T-0666).
 
 The review surface uses the server's proposal-time diff snapshot. It does not
 run git in the browser, recursively scrape ids from text, or merge preview state
