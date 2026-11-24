@@ -2132,6 +2132,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       );
       return;
     }
+    // T-0666: nothing that can start model work runs while this Session's
+    // permission change is unconfirmed; the draft stays and the composer
+    // notice says why. Read live: the template branch above may have awaited
+    // its own receipt.
+    if (
+      safety.permissionHeld(opened.session_id) &&
+      (intent.kind === "prompt" ||
+        intent.kind === "btw" ||
+        intent.kind === "gather" ||
+        intent.kind === "native-review")
+    )
+      return;
     // Local admission may reject an incomplete upload or a retired Session.
     // Keep the original text and image drafts until that admission succeeds.
     if (
@@ -2530,23 +2542,30 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     setPermissionRetryBusyTurnId(denial.turnId);
     setReadOnlyNoticeError(null);
     try {
-      const result = await client.setPermissionProfile({
-        session_id: opened.session_id,
-        update: { mode: "workspace_write", network: option.network },
-      });
-      if (
-        !result.applied ||
-        result.session_id !== opened.session_id ||
-        result.current.mode !== "workspace_write" ||
-        result.current.network !== option.network
-      ) {
-        throw new Error(
-          t("The server did not apply workspace write permission."),
-        );
-      }
+      // Through the Session's dispatch gate: nothing else starts until the
+      // receipt is verified and read back (T-0666).
+      const confirmed = await safety.gatePermissionSet(
+        client,
+        opened.session_id,
+        async () => {
+          const result = await client.setPermissionProfile({
+            session_id: opened.session_id,
+            update: { mode: "workspace_write", network: option.network },
+          });
+          if (
+            !result.applied ||
+            result.session_id !== opened.session_id ||
+            result.current.mode !== "workspace_write" ||
+            result.current.network !== option.network
+          ) {
+            throw new Error(
+              t("The server did not apply workspace write permission."),
+            );
+          }
+        },
+      );
       if (!ownerIsCurrent()) return;
-      await safety.refreshPermission();
-      if (!ownerIsCurrent()) return;
+      if (!confirmed) throw new Error(permissionUnconfirmedError());
       // Queued, not steered: a steer would feed the running response, which
       // keeps its read-only access. Stopping it starts the queued request.
       if (!conversation.redoRequest(denial.prompt, denial.media)) {
@@ -3137,6 +3156,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     );
   const restorePermissionError = () =>
     t("Could not restore the permission from before this template.");
+  const permissionUnconfirmedError = () =>
+    t(
+      "The server didn't confirm the permission change. Re-read it before sending.",
+    );
   const ensureTemplateReadOnly = (
     template: TaskTemplate,
     sessionKey: string,
@@ -3180,10 +3203,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         templatePermissionRequestRef.current?.key === key;
       if (previous) await previous;
       try {
-        await applyTemplateReadOnly(client, opened.session_id);
+        const confirmed = await safety.gatePermissionSet(
+          client,
+          opened.session_id,
+          () => applyTemplateReadOnly(client, opened.session_id),
+        );
         if (!ownerIsCurrent()) return false;
-        await safety.refreshPermission();
-        if (!ownerIsCurrent()) return false;
+        if (!confirmed) throw new Error(permissionUnconfirmedError());
         templatePermissionRequestRef.current = null;
         setTemplatePermission(null);
         return true;
@@ -3254,14 +3280,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         templatePermissionRequestRef.current?.key === key;
       if (previous) await previous;
       try {
-        await applyTemplatePermission(
+        const confirmed = await safety.gatePermissionSet(
           client,
           opened.session_id,
-          origin.selection,
+          () =>
+            applyTemplatePermission(
+              client,
+              opened.session_id,
+              origin.selection,
+            ),
         );
         if (!ownerIsCurrent()) return false;
-        await safety.refreshPermission();
-        if (!ownerIsCurrent()) return false;
+        if (!confirmed) throw new Error(permissionUnconfirmedError());
         templatePermissionOriginRef.current = null;
         templatePermissionRequestRef.current = null;
         setTemplatePermission(null);
@@ -3922,6 +3952,8 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         withoutPermissionDefaultGate(gates, result.session_id),
       );
   }, [safety.permission.result, permissionDefaultGates]);
+  // T-0666: this Session's permission change is not confirmed yet.
+  const permissionTransition = safety.permission.transition;
   const openedSessionId = session.opened?.session_id;
   // Opened, but the apply effect above has not run yet: same matching.
   const pendingLaunchMatch =
@@ -4129,6 +4161,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         locked:
           runtimeMutationBlocked ||
           safety.permission.busy ||
+          Boolean(permissionTransition) ||
           (templatePermission?.sessionKey === activeSessionKey &&
             templatePermission.busy) ||
           !safety.permission.editable,
@@ -4140,7 +4173,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             network: option.network,
           });
         },
-        onRetry: () => void safety.refreshPermission(),
+        onRetry: () => void safety.rereadPermission(),
       }
     : null;
   // T-E: a chat's file outputs. Only offered where the server lets this tab
@@ -4167,7 +4200,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             network: "deny",
           })
         }
-        onRefresh={() => void safety.refreshPermission()}
+        onRefresh={() => void safety.rereadPermission()}
       />
     ) : null;
   // Only what the server proves about each model; see model-facts.ts.
@@ -5404,6 +5437,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                     ? {
                                         busy:
                                           safety.permission.busy ||
+                                          Boolean(permissionTransition) ||
                                           runtimeMutationBlocked,
                                         onAllow: () =>
                                           void safety.updatePermission(
@@ -5732,6 +5766,32 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         : t(
                             "Applying your new-session permission default. Sending waits until the server confirms it.",
                           )}
+                    </p>
+                  ) : permissionTransition === "applying" ? (
+                    <p className="field-note" role="status">
+                      {t(
+                        "Changing the permission. Sending waits until the server confirms it.",
+                      )}
+                    </p>
+                  ) : permissionTransition ? (
+                    <p className="field-note" role="status">
+                      {permissionTransition === "elsewhere"
+                        ? t(
+                            "Another tab is changing the permission. Sending waits until the server confirms it.",
+                          )
+                        : t(
+                            "The server didn't confirm the permission change, so sending is paused until you re-read it.",
+                          )}{" "}
+                      {/* A chat re-reads from its file-outputs control. */}
+                      {chatFileOutputsControl ? null : (
+                        <button
+                          type="button"
+                          className="field-note-action"
+                          onClick={() => void safety.rereadPermission()}
+                        >
+                          {t("Re-read the server's permission")}
+                        </button>
+                      )}
                     </p>
                   ) : null}
                   {draftCapacityBlocked ? (

@@ -61,6 +61,9 @@ export class LazySessionRecordManager<Client extends ActiveSessionClient> {
   records(): ReadonlyArray<SessionRecord<Client>> {
     return this.#engine?.records() ?? [];
   }
+  releasePermissionHold(sessionId: string): void {
+    this.#engine?.releasePermissionHold(sessionId);
+  }
   /** Nominal engine bridge for history/review: only a currently retained record qualifies. */
   engineFor(record: SessionRecord<Client>): Engine<Client> | null {
     return this.#engine?.get(record.scope) === record ? this.#engine : null;

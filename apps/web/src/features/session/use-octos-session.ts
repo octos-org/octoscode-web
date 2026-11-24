@@ -165,6 +165,10 @@ import {
   type DiffReviewRuntimeState,
   type PermissionRuntimeState,
 } from "../review/use-coding-safety.ts";
+import {
+  openPermissionChannel,
+  PermissionTransitions,
+} from "../review/permission-transitions.ts";
 import type { TurnRecoveryState } from "../composer/use-turn-controller.ts";
 import type { PromptTurnQueueSnapshot } from "../composer/turn-queue.ts";
 import type { TimelineEntry } from "../timeline/model.ts";
@@ -434,7 +438,18 @@ export interface OctosSessionRuntime {
     /** Files this Session's tools touched since this view opened it. */
     changes: readonly SessionFileChange[];
     refreshPermission: () => Promise<void>;
-    updatePermission: (update: PermissionProfileUpdate) => Promise<void>;
+    /** The user asked: may also settle an unconfirmed change (T-0666). */
+    rereadPermission: () => Promise<void>;
+    /** Resolves whether the server confirmed it (receipt and readback). */
+    updatePermission: (update: PermissionProfileUpdate) => Promise<boolean>;
+    /** Any other SET for the open Session goes through the same gate. */
+    gatePermissionSet: (
+      client: OctosUiClient,
+      sessionId: string,
+      apply: () => Promise<void>,
+    ) => Promise<boolean>;
+    /** Live: the Session's permission change is not confirmed yet. */
+    permissionHeld: (sessionId: string) => boolean;
     openDiffReview: (
       previewId?: string,
       scope?: "turn" | "workspace",
@@ -1377,6 +1392,20 @@ export function useOctosSession({
   // (useServerConnection's runtime) owns the single physical socket.
   const recordManagerRef =
     useRef<LazySessionRecordManager<OctosUiClient> | null>(null);
+  // T-0666: a Session whose permission change is unconfirmed starts nothing.
+  const [permissionTransitions] = useState(() => new PermissionTransitions());
+  useEffect(
+    () => permissionTransitions.connect(openPermissionChannel()),
+    [permissionTransitions],
+  );
+  useEffect(
+    () =>
+      permissionTransitions.subscribe((sessionId) => {
+        if (!permissionTransitions.blocked(sessionId))
+          recordManagerRef.current?.releasePermissionHold(sessionId);
+      }),
+    [permissionTransitions],
+  );
   const btwControllersRef = useRef(
     new Map<SessionRecord<OctosUiClient>, LazyBtwController>(),
   );
@@ -1459,6 +1488,7 @@ export function useOctosSession({
       },
       isFatalSessionError: (reason) =>
         isFatalSessionContractError(errorMessage(reason)),
+      permissionHeld: (scope) => permissionTransitions.blocked(scope.sessionId),
       controllerDependencies: (scope, recordClient) => ({
         onTurnSent: (turnId) => {
           const record = recordManagerRef.current?.get(scope);
@@ -2893,6 +2923,7 @@ export function useOctosSession({
     onPermissionApplied: (client) => {
       void supervisionController.refresh(client);
     },
+    transitions: permissionTransitions,
   });
   const permission = codingSafetyController.permission;
   const diffReview = codingSafetyController.diffReview;
@@ -4001,8 +4032,11 @@ export function useOctosSession({
       permission,
       diffReview,
       changes: viewRecord?.changes ?? [],
-      refreshPermission: codingSafetyController.refreshPermission,
+      refreshPermission: () => codingSafetyController.refreshPermission(),
+      rereadPermission: codingSafetyController.rereadPermission,
       updatePermission: codingSafetyController.updatePermission,
+      gatePermissionSet: codingSafetyController.gatePermissionSet,
+      permissionHeld: (sessionId) => permissionTransitions.blocked(sessionId),
       openDiffReview: codingSafetyController.openDiffReview,
       closeDiffReview: codingSafetyController.closeDiffReview,
     },

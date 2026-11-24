@@ -44,15 +44,20 @@ export function ChatFileOutputsControl({
     <section className="field-note" aria-label={t("File outputs")}>
       {error ? (
         <p role="alert">
-          {error}{" "}
-          <button
-            type="button"
-            className="button"
-            disabled={busy}
-            onClick={onRefresh}
-          >
-            {t("Re-read the server's permission")}
-          </button>
+          {error}
+          {state === "unconfirmed" ? null : (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="button"
+                disabled={busy}
+                onClick={onRefresh}
+              >
+                {t("Re-read the server's permission")}
+              </button>
+            </>
+          )}
         </p>
       ) : null}
       {state === "off" ? (
@@ -89,6 +94,23 @@ export function ChatFileOutputsControl({
       ) : null}
       {state === "applying" ? (
         <p role="status">{t("Waiting for the server…")}</p>
+      ) : null}
+      {state === "unconfirmed" ? (
+        <p>
+          {permission.transition === "elsewhere"
+            ? t("Another tab is changing this chat's permission.")
+            : t(
+                "The server hasn't confirmed this chat's permission change.",
+              )}{" "}
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={onRefresh}
+          >
+            {t("Re-read the server's permission")}
+          </button>
+        </p>
       ) : null}
       {state === "unknown" ? (
         <p>

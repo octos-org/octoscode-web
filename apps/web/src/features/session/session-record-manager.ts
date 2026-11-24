@@ -220,6 +220,11 @@ export interface SessionRecordManagerOptions<
     capabilities: UiProtocolCapabilities | undefined,
   ): void;
   isFatalSessionError?(reason: unknown): boolean;
+  /**
+   * The Session's permission change is not confirmed yet (T-0666): admit and
+   * start nothing in it until `releasePermissionHold`.
+   */
+  permissionHeld?(scope: SessionRuntimeScope): boolean;
 }
 
 /**
@@ -326,9 +331,13 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
           canEnqueue: () =>
             ready() &&
             !this.#historyBlocked(scope) &&
+            !this.#permissionHeld(scope) &&
             dependencies.canEnqueue(),
           canStart: () =>
-            !this.#historyBlocked(scope) && ready() && dependencies.canStart(),
+            !this.#historyBlocked(scope) &&
+            !this.#permissionHeld(scope) &&
+            ready() &&
+            dependencies.canStart(),
           canInterrupt: () => ready() && dependencies.canInterrupt(),
           setTimeline: (update) => {
             record.timeline =
@@ -1253,6 +1262,24 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
           source.authorityEpoch === target.authorityEpoch &&
           source.workspaceRoot === target.workspaceRoot
       : this.keyOf(source) === this.keyOf(target);
+  }
+
+  #permissionHeld(scope: SessionRuntimeScope): boolean {
+    return this.#options.permissionHeld?.(scope) ?? false;
+  }
+
+  /**
+   * The Session's permission change was confirmed: a queue head held back
+   * meanwhile (a release, a drain) goes now, through its controller's gates.
+   */
+  releasePermissionHold(sessionId: string): void {
+    for (const record of this.#records.values())
+      if (
+        !record.closed &&
+        record.scope.sessionId === sessionId &&
+        !this.#permissionHeld(record.scope)
+      )
+        record.controller.resumePendingTurn();
   }
 
   #historyBlocked(scope: SessionRuntimeScope): boolean {
