@@ -41,10 +41,13 @@ in it. It is available now and is what every user sees.
 
 **Chat mode** is for everyday work without picking a folder: each chat gets its
 own folder that the server assigns. It is **not available to users yet**. It
-sits behind a per-browser preview flag that is off by default, needs Core
-features that have not shipped, and has only been tested against this
-repository's protocol fixture, whose files are simulated. octoscode-web 1.0 is
-planned for when Chat mode opens; it has not been released.
+sits behind a per-browser preview flag that is off by default, and needs Core
+features that have not shipped in a release (they are in Core main). Beyond this
+repository's protocol fixture, whose files are simulated, the full flow has also
+run on an isolated real Core build from main (files really written, refusal
+really enforced), and the permission path has passed an independent real-Core
+security review. octoscode-web 1.0 is planned for when Chat mode opens; it has
+not been released.
 
 - [Product scope](docs/product.md#code-and-chat-modes): what Chat mode does and
   what has to happen before it opens.

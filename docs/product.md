@@ -74,13 +74,16 @@ mode can open to users:
   real Core, then the [flag drill](release-1.0-flag-drill.md) must be run in a
   designated test environment with evidence.
 
-Chat mode's full flow, file outputs included, has only passed against the
-repository's protocol fixture. The fixture returns simulated files and proves
-neither a real Core write nor real model output. Chat sources reuse the existing
-attachments (pasted text, images, Markdown, CSV, PDF; no Office files), and the
-network stays blocked in Chat mode. The release that opens it to users is
-planned as octoscode-web 1.0; its notes are a
-[draft](release-notes-1.0-draft.md) until then.
+Chat mode's full flow, file outputs included, has passed against the
+repository's protocol fixture (simulated files) and, since the Core
+preconditions merged, on an isolated real Core build from main where the server
+really writes and really refuses files. The permission path has also passed an
+independent real-Core security review. Neither run proves real model quality,
+and neither opens Chat to users: the flag stays off until the release gate below
+is cleared. Chat sources reuse the existing attachments (pasted text, images,
+Markdown, CSV, PDF; no Office files), and the network stays blocked in Chat
+mode. The release that opens it to users is planned as octoscode-web 1.0; its
+notes are a [draft](release-notes-1.0-draft.md) until then.
 
 ## Supported surface
 
