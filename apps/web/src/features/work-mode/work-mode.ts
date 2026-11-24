@@ -5,6 +5,7 @@ import {
   type UiProtocolCapabilities,
   type WorkMode,
 } from "@octos-org/octoscode-client/protocol";
+import type { StorageLike } from "../connection/preferences.ts";
 import type { UiLanguage } from "../preferences/model.ts";
 import type { SessionDefaults } from "../session-config/session-defaults.ts";
 
@@ -39,6 +40,110 @@ export function chatModeSupported(
 export interface ModeSelections {
   readonly chat: string | null;
   readonly code: string | null;
+}
+
+const MODE_SELECTIONS_KEY = "octoscode-web.mode-selections.v1";
+const MAX_SELECTION_KEY = 8_192;
+
+/**
+ * Each mode's last selection survives a reload of this tab (T-0668: a chat
+ * reloaded, then Code came back to its home). Tab-scoped like the tab's own
+ * Session reference, and per server: another tab starts with its own, and the
+ * keys name Sessions only, never a credential.
+ */
+export function loadModeSelections(
+  storage: StorageLike,
+  endpoint: string,
+): ModeSelections {
+  try {
+    const saved: unknown = JSON.parse(
+      storage.getItem(MODE_SELECTIONS_KEY) ?? "null",
+    );
+    if (
+      typeof saved !== "object" ||
+      saved === null ||
+      (saved as { endpoint?: unknown }).endpoint !== endpoint
+    )
+      return NO_SELECTIONS;
+    const read = (mode: WorkMode) => {
+      const key = (saved as Partial<Record<WorkMode, unknown>>)[mode];
+      return typeof key === "string" &&
+        key.length <= MAX_SELECTION_KEY &&
+        selectionScope(key)
+        ? key
+        : null;
+    };
+    return { chat: read("chat"), code: read("code") };
+  } catch {
+    return NO_SELECTIONS;
+  }
+}
+
+export function saveModeSelections(
+  storage: StorageLike,
+  endpoint: string,
+  selections: ModeSelections,
+): void {
+  try {
+    if (!selections.chat && !selections.code)
+      storage.removeItem(MODE_SELECTIONS_KEY);
+    else
+      storage.setItem(
+        MODE_SELECTIONS_KEY,
+        JSON.stringify({ endpoint, ...selections }),
+      );
+  } catch {
+    // Storage full or denied: the selections still hold for this page load.
+  }
+}
+
+export const NO_SELECTIONS: ModeSelections = { chat: null, code: null };
+
+/** A remembered key's workspace, profile and Session id, or null if malformed. */
+export function selectionScope(
+  key: string,
+): { workspaceRoot: string; profileId: string; sessionId: string } | null {
+  try {
+    const parts: unknown = JSON.parse(key);
+    return Array.isArray(parts) &&
+      parts.length === 3 &&
+      parts.every((part) => typeof part === "string" && part)
+      ? {
+          workspaceRoot: parts[0] as string,
+          profileId: parts[1] as string,
+          sessionId: parts[2] as string,
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether switching back can reopen a mode's remembered Session. `listed` is
+ * the server's listing that would hold it, fetched after the switch, or null
+ * while that listing is on its way. "gone" (deleted, hidden, another profile)
+ * opens nothing: reopening an id the server no longer lists could start an
+ * empty Session under it, and another Session is never put in its place.
+ */
+export function modeRestoreVerdict(
+  key: string,
+  listed:
+    | readonly { workspaceRoot: string; profileId: string; sessionId: string }[]
+    | null,
+  profileId: string,
+): "open" | "gone" | "wait" {
+  const scope = selectionScope(key);
+  if (!scope || scope.profileId !== profileId) return "gone";
+  if (listed === null) return "wait";
+  return listed.some(
+    (row) =>
+      row.workspaceRoot === scope.workspaceRoot &&
+      row.profileId === scope.profileId &&
+      row.sessionId === scope.sessionId,
+  )
+    ? "open"
+    : "gone";
 }
 
 /** What each mode had selected last, so switching back returns to it. */

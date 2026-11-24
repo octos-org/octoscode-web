@@ -155,6 +155,8 @@ import {
 } from "../features/session/durable-session-drafts.ts";
 import { mergeConfirmedRetainedSessions } from "../features/session/retained-session-catalog.ts";
 import {
+  catalogListing,
+  supportsWorkspaceSessionCatalog,
   useWorkspaceSessionCatalog,
   type WorkspaceSessionCatalogSnapshot,
 } from "../features/session/workspace-session-catalog.ts";
@@ -265,7 +267,12 @@ import productStyles from "./AppProduct.module.css";
 import {
   CHAT_PERMISSION_DEFAULTS,
   chatModeSupported,
+  loadModeSelections,
+  modeRestoreVerdict,
+  NO_SELECTIONS,
   rememberSelection,
+  saveModeSelections,
+  selectionScope,
   twoModesFlagOn,
   type ModeSelections,
 } from "../features/work-mode/work-mode.ts";
@@ -1334,6 +1341,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // conversation or a retitled one shows up without a reload. It is keyed to
   // the profile this connection opens sessions under; before the first open
   // there is nothing to scope it to and the sidebar stays tab-only.
+  const [workMode, setWorkMode] = useState<WorkMode>("code");
   const catalogProfileId =
     session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
   const sessionCatalog = useWorkspaceSessionCatalog({
@@ -1341,9 +1349,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     capabilities: session.capabilities,
     profileId: catalogProfileId,
     workspacePaths: recentWorkspaces.map((workspace) => workspace.path),
+    // A mode switch re-lists too: switching back reopens a Session only from
+    // a listing fetched after the switch (T-0668).
     refreshKey: `${protocol.authorityKey}\n${session.opened?.session_id ?? ""}\n${
       conversation.queue.active?.turnId ?? ""
-    }\n${catalogRefreshNonce}`,
+    }\n${catalogRefreshNonce}\n${workMode}`,
   });
   // Deleted rows stay hidden while the catalog re-lists, so the old listing
   // cannot flash them back into the sidebar.
@@ -1365,11 +1375,47 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     [deletedSessionIds, sessionCatalog],
   );
   const chatAvailable = twoModes && chatModeSupported(session.capabilities);
-  const [workMode, setWorkMode] = useState<WorkMode>("code");
-  const [modeSelections, setModeSelections] = useState<ModeSelections>({
-    chat: null,
-    code: null,
-  });
+  // Each mode's last selection, kept for this tab across reloads (T-0668).
+  const [modeSelectionState, setModeSelectionState] = useState(() => ({
+    endpoint: connection.endpoint,
+    ...loadModeSelections(
+      browserStorage("sessionStorage"),
+      connection.endpoint,
+    ),
+  }));
+  const modeSelections: ModeSelections =
+    modeSelectionState.endpoint === connection.endpoint
+      ? modeSelectionState
+      : NO_SELECTIONS;
+  useEffect(() => {
+    setModeSelectionState((current) =>
+      current.endpoint === connection.endpoint
+        ? current
+        : {
+            endpoint: connection.endpoint,
+            ...loadModeSelections(
+              browserStorage("sessionStorage"),
+              connection.endpoint,
+            ),
+          },
+    );
+  }, [connection.endpoint]);
+  useEffect(() => {
+    saveModeSelections(
+      browserStorage("sessionStorage"),
+      modeSelectionState.endpoint,
+      { chat: modeSelectionState.chat, code: modeSelectionState.code },
+    );
+  }, [modeSelectionState]);
+  // Switching back waits for the server's listing, then reopens that Session
+  // or says it is gone; it never opens another one in its place.
+  const [modeRestore, setModeRestore] = useState<{
+    mode: WorkMode;
+    key: string;
+    /** The listing on screen at the switch; only a newer one decides. */
+    before: unknown;
+  } | null>(null);
+  const [modeRestoreGone, setModeRestoreGone] = useState<WorkMode | null>(null);
   const [chatCreating, setChatCreating] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   // A chat's panel shows only Outputs and starts closed (T-D); the Code
@@ -2708,10 +2754,15 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   }, [modeSessionId, openedMode]);
   useEffect(() => {
     if (!modeSessionId || !activeSessionKey) return;
-    setModeSelections((current) =>
-      rememberSelection(current, openedMode, activeSessionKey),
-    );
-  }, [modeSessionId, openedMode, activeSessionKey]);
+    setModeSelectionState((current) => ({
+      endpoint: connection.endpoint,
+      ...rememberSelection(
+        current.endpoint === connection.endpoint ? current : NO_SELECTIONS,
+        openedMode,
+        activeSessionKey,
+      ),
+    }));
+  }, [modeSessionId, openedMode, activeSessionKey, connection.endpoint]);
   const chatKeys = useMemo(
     () =>
       new Set(
@@ -3984,20 +4035,100 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     if (next === mode) return;
     setWorkMode(next);
     setProductRoute(null);
+    setModeRestoreGone(null);
     const target = modeSelections[next];
-    if (
-      target &&
-      navigableSessions.some(
-        (ref) =>
-          workspaceSessionKey(
-            ref.workspaceRoot,
-            ref.profileId,
-            ref.sessionId,
-          ) === target,
-      )
-    )
-      void moveToProductSession(target);
+    const root = target ? selectionScope(target)?.workspaceRoot : undefined;
+    setModeRestore(
+      target
+        ? {
+            mode: next,
+            key: target,
+            before:
+              next === "chat"
+                ? chatCatalog
+                : root === undefined
+                  ? undefined
+                  : sessionCatalog.get(root),
+          }
+        : null,
+    );
   };
+  // The server's listing that would hold the remembered Session, fetched after
+  // the switch; null while it is on its way.
+  const restoreListing = (restore: {
+    mode: WorkMode;
+    key: string;
+    before: unknown;
+  }) => {
+    if (restore.mode === "chat") {
+      if (!chatAvailable) return [];
+      return chatCatalog.status === "off" || chatCatalog === restore.before
+        ? null
+        : chatSessions;
+    }
+    // Without the server's listing only this tab's own Sessions are known.
+    if (!supportsWorkspaceSessionCatalog(session.capabilities))
+      return navigableSessions;
+    const root = selectionScope(restore.key)?.workspaceRoot;
+    const listing = root === undefined ? undefined : sessionCatalog.get(root);
+    if (!listing)
+      return recentWorkspaces.some((workspace) => workspace.path === root)
+        ? null
+        : [];
+    if (catalogListing(listing)) return null;
+    // A server that lists no scope for this workspace: what this tab knows.
+    if (listing.status === "unscoped") return navigableSessions;
+    return listing === restore.before
+      ? null
+      : listing.sessions.filter(
+          (row) => !deletedSessionIds.includes(row.sessionId),
+        );
+  };
+  useEffect(() => {
+    if (!modeRestore) return;
+    // The user moved on, or that mode already shows one of its Sessions.
+    if (
+      mode !== modeRestore.mode ||
+      (openedMode === modeRestore.mode && activeSessionKey !== null)
+    ) {
+      setModeRestore(null);
+      return;
+    }
+    const verdict = modeRestoreVerdict(
+      modeRestore.key,
+      restoreListing(modeRestore),
+      catalogProfileId,
+    );
+    if (verdict === "wait") return;
+    setModeRestore(null);
+    if (verdict === "open") {
+      void moveToProductSession(modeRestore.key);
+      return;
+    }
+    const gone = modeRestore.mode;
+    setModeSelectionState((current) => ({ ...current, [gone]: null }));
+    setModeRestoreGone(gone);
+    // The server's own listing no longer has it (deleted in another tab, for
+    // one): this tab stops offering it as well.
+    const scope = selectionScope(modeRestore.key);
+    if (scope?.profileId === catalogProfileId)
+      setKnownSessions(
+        forgetKnownSession(
+          browserStorage("sessionStorage"),
+          connection,
+          scope.sessionId,
+        ),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    modeRestore,
+    mode,
+    openedMode,
+    activeSessionKey,
+    navigableSessions,
+    sessionCatalog,
+    chatCatalog,
+  ]);
   const openNotifiedSession = (scope: BackgroundTurnSessionScope) => {
     const key = workspaceSessionKey(
       scope.workspaceRoot,
@@ -6273,7 +6404,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   ? void createChat()
                   : requestNewSession(undefined, true)
               }
-              notice={mode === "chat" ? chatError : null}
+              notice={
+                (mode === "chat" ? chatError : null) ??
+                (modeRestoreGone !== mode
+                  ? null
+                  : mode === "chat"
+                    ? t(
+                        "The chat last open here is no longer available, so nothing was opened. Choose one from the list.",
+                      )
+                    : t(
+                        "The session last open in Code is no longer available, so nothing was opened. Choose one from the list.",
+                      ))
+              }
               navigationTriggerClassName={productStyles.navigationTrigger ?? ""}
             />
           ) : null}
