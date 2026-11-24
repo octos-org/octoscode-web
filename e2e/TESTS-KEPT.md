@@ -889,6 +889,17 @@ unacknowledged A1…」加入 recovery-soak 的 `peak() <= 1`（+8）
 | a new chat is read-only with no network, drafts in the conversation and keeps its steps folded | ①/③ | 64  | 留   | 双模式 T-D 主链：新对话由服务端建独立文件夹，网页经新会话权限闸门发 `read_only`+`deny` 并等服务端确认；锁定的权限条显示服务端实际值；无文件夹入口；只有「在对话里起草」模板；流式长回答的步骤在回合进行中就折进 Activity，完成不出回合卡片；面板只有 Outputs；服务端拒绝写入后不提供放宽权限；axe 0；刷新恢复。变异（各自单独打）全红：不设只读、不走闸门、显示文件夹、Chat 用 Code 模板、步骤不折叠、出完成卡片、面板全标签、出写入提议、权限可改          |
 | a chat sends nothing until the server confirms read-only, in either language                   | ③/④ | 43  | 留   | 失败与恢复：服务端拒绝只读时对话不发送并如实说明；刷新后（中文）仍拦着，重试后服务端确认、权限条显示「读取 · 禁止联网」。变异（不走闸门）红                                                                                                                                                                                                                                                                                                                 |
 
+T-0666 新增 2 个（审计 T-0623 P1，③/④，共约 125 行）：
+
+- 「nothing starts while a chat's permission change is unconfirmed, from Enter
+  or Send」：Allow 的回执被扣住时，Enter 和发送按钮都不发
+  `turn/start`，草稿留着；放行后也不偷偷补发；撤回的回执是 `applied:false`
+  时，对话保持关闭，不显示 Allow 或撤回（不会盲目重发 SET），只有 Re-read 读到服务端真实值后才能发；每个方向只发过一次 SET。
+- 「another tab waits for a chat's permission change, and a late receipt opens
+  no other
+  chat」：本页 Allow 未确认时，接管同一对话的另一个标签页也发不出；确认后它自己重读并能发送。撤回的回执在本页切到新对话之后才到：新对话照常发送且不受影响，原对话在两个标签页里都要 Re-read 才放行。
+- 变异（各自单独打）全红：不过闸、未确认时仍显示 Allow/撤回、去掉提交闸和记录层拦截、不连跨标签页通道（只红第二条）。真核复现（30 秒超时、迟到回执、磁盘无产物）另见 PR 正文。
+
 T-0635 抵平（行为不变）：two-modes 的共用 helper 挪进
 `two-modes.ts`（不计入行数口径），模式开关的 `aria-pressed` 断言收成
 `expectMode`；本 spec 净 −11 行。

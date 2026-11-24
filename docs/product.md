@@ -44,7 +44,10 @@ shows a Session's conversation in either mode.
   with the network blocked, answers stay inline, and the side panel shows only
   Outputs. Saving files takes an explicit **Allow file outputs**, which asks the
   server to make that one Session workspace-write with the network still
-  blocked, and **Turn off file outputs** returns it to read-only.
+  blocked, and **Turn off file outputs** returns it to read-only. Either way the
+  chat sends nothing until the server has confirmed the change and the page has
+  read it back. If no answer comes, the chat stays paused until you re-read the
+  server's permission; the change is never sent again on its own.
 
 Chat mode is **not available to users yet**. It sits behind a per-browser
 preview flag that is off by default, and it also needs a Core that offers

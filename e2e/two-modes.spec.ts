@@ -410,6 +410,7 @@ test("nothing starts while a chat's permission change is unconfirmed, from Enter
   const tryToSend = async (text: string) => {
     await composer(page).fill(text);
     await composer(page).press("Enter");
+    await expect(composer(page)).toHaveValue(text);
     await page.getByRole("button", { name: "Send prompt" }).click();
     await expect(composer(page)).toHaveValue(text);
   };
