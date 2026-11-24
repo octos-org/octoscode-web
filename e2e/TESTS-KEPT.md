@@ -900,6 +900,14 @@ T-0666 新增 2 个（审计 T-0623 P1，③/④，共约 125 行）：
   chat」：本页 Allow 未确认时，接管同一对话的另一个标签页也发不出；确认后它自己重读并能发送。撤回的回执在本页切到新对话之后才到：新对话照常发送且不受影响，原对话在两个标签页里都要 Re-read 才放行。
 - 变异（各自单独打）全红：不过闸、未确认时仍显示 Allow/撤回、去掉提交闸和记录层拦截、不连跨标签页通道（只红第二条）。真核复现（30 秒超时、迟到回执、磁盘无产物）另见 PR 正文。
 
+T-0668 新增 1 个（T-0622 dogfood F-01，②/④，约 95 行）：「each mode reopens its
+own last Session after a reload, a reconnect and in another tab, and never one
+that is gone」。覆盖原路径：Code 会话 → 新建 chat
+→ 刷新 → 切回 Code，打开的仍是原 Code 会话。还覆盖：回到 Chat；重连后两边各自恢复；chat 的未发草稿留在 chat，不串进 Code；只建了一个 chat，唯一的
+`*/set`
+是新 chat 的只读默认；第二个标签页保持自己的选择（落在 Chat 首页），并删掉这个 chat；本页再切到 Chat 时如实说明「已不在」，行被移除，不对已删的 chat 发
+`session/open`。变异（各自单独打）全红：不跨刷新保存、用陈旧的本页列表判断、不说明、继续列出已删行。
+
 T-0635 抵平（行为不变）：two-modes 的共用 helper 挪进
 `two-modes.ts`（不计入行数口径），模式开关的 `aria-pressed` 断言收成
 `expectMode`；本 spec 净 −11 行。

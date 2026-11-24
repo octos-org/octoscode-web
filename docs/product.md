@@ -33,7 +33,10 @@ server does in the chosen folder.
 
 The product is moving to two modes in one app, switched at the top of the
 sidebar (also in the phone drawer). Chat mode is not the Chat view below, which
-shows a Session's conversation in either mode.
+shows a Session's conversation in either mode. Switching back to a mode reopens
+the Session it last had selected in this tab, also after a reload, once the
+server's list shows it is still there. If the server no longer lists it, nothing
+is opened and the mode's home says so.
 
 - **Code** is the product described on this page: pick a folder on the server,
   then work in it under the Session's permission, network setting, and

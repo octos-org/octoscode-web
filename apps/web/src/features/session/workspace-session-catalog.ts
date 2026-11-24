@@ -150,6 +150,16 @@ const UNSCOPED: WorkspaceCatalogState = Object.freeze({
   status: "unscoped",
   sessions: [],
 });
+/** A workspace whose first listing is still on its way. */
+const LISTING: WorkspaceCatalogState = Object.freeze({
+  status: "unscoped",
+  sessions: [],
+});
+
+/** True until the server has answered for this workspace at least once. */
+export function catalogListing(state: WorkspaceCatalogState): boolean {
+  return state === LISTING;
+}
 
 export function createWorkspaceSessionCatalog(deps: {
   client: OctosUiClient;
@@ -182,7 +192,7 @@ export function createWorkspaceSessionCatalog(deps: {
       // (never a loading flash); workspaces no longer requested are dropped.
       const next = new Map<string, WorkspaceCatalogState>();
       for (const path of paths) {
-        next.set(path, snapshot.get(path) ?? UNSCOPED);
+        next.set(path, snapshot.get(path) ?? LISTING);
       }
       publish(next);
       await Promise.all(

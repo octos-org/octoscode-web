@@ -14,6 +14,10 @@ const catalog: Readonly<Record<string, string>> = {
   "Chat needs a server that gives every chat its own folder. This server does not yet.":
     "对话需要服务器为每个对话单独分配文件夹，这台服务器还不支持。",
   "Choose a chat from the list.": "从列表里选一个对话。",
+  "The session last open in Code is no longer available, so nothing was opened. Choose one from the list.":
+    "上次在编码里打开的会话已经不在了，所以什么都没打开。请从列表里选一个。",
+  "The chat last open here is no longer available, so nothing was opened. Choose one from the list.":
+    "上次打开的对话已经不在了，所以什么都没打开。请从列表里选一个。",
   "No chats yet.": "还没有对话。",
   "No chats yet. Start one to draft, summarize or plan.":
     "还没有对话。新开一个，起草、总结或者做计划都行。",

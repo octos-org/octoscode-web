@@ -153,6 +153,93 @@ test("Chat and Code keep their own lists and selections, across notifications, r
   await phone.close();
 });
 
+// T-0668 (T-0622 F-01): a reload in Chat forgot Code's Session, so switching
+// back landed on the Code home although the server still listed it.
+test("each mode reopens its own last Session after a reload, a reconnect and in another tab, and never one that is gone", async ({
+  page,
+  request,
+}) => {
+  await turnFlagOn(page);
+  const frames = observeFrames(page);
+  await startSession(page, runFolder("two-modes-restore"), TOKEN);
+  const navigation = productNavigation(page);
+  const codeRow = await selectedSessionId(navigation);
+  await modeButton(page, "Chat").click();
+  await page.getByRole("button", { name: "New chat" }).last().click();
+  await expect(composer(page)).toHaveAttribute(
+    "placeholder",
+    "Ask Octos anything…",
+  );
+  const chatRowId = await selectedSessionId(navigation);
+  const chatId = frames.calls("session/chat/create")[0]!.params!.session_id;
+  await composer(page).fill("An unsent chat draft");
+
+  await page.reload();
+  await expect(composer(page)).toBeEnabled();
+  await modeButton(page, "Code").click();
+  await expect(sessionRow(navigation, codeRow)).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(navigation.locator("[data-session-id]")).toHaveCount(1);
+  await disconnect(request);
+  await expect(composer(page)).toBeEnabled();
+  await modeButton(page, "Chat").click();
+  await expect(sessionRow(navigation, chatRowId)).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(composer(page)).toHaveValue("An unsent chat draft");
+  await modeButton(page, "Code").click();
+  await expect(composer(page)).toHaveValue("");
+  await expect(sessionRow(navigation, codeRow)).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  // Switching only navigated: one chat made, and the one SET is its
+  // read-only default.
+  expect(frames.calls("session/chat/create")).toHaveLength(1);
+  expect(
+    frames.sent
+      .filter((frame) => frame.method?.endsWith("/set"))
+      .map((frame) => frame.params?.session_id),
+  ).toEqual([chatId]);
+
+  // Another tab keeps its own selections, and deletes this tab's chat.
+  const tab = await page.context().newPage();
+  await turnFlagOn(tab);
+  await openLink(tab, page.url(), TOKEN);
+  await modeButton(tab, "Chat").click();
+  await expect(
+    tab.getByRole("heading", { name: "Chat", level: 1 }),
+  ).toBeVisible();
+  const tabNavigation = productNavigation(tab);
+  await sessionRow(tabNavigation, chatRowId).hover();
+  await sessionRow(tabNavigation, chatRowId)
+    .getByRole("button", { name: /^More actions for/ })
+    .click();
+  await tab.getByRole("menuitem", { name: /^Delete/ }).click();
+  await tab.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(sessionRow(tabNavigation, chatRowId)).toHaveCount(0);
+  await tab.close();
+
+  // Gone on the server: this tab opens nothing and says so.
+  const opens = frames.calls("session/open").length;
+  await modeButton(page, "Chat").click();
+  await expect(
+    page.getByText(
+      "The chat last open here is no longer available, so nothing was opened. Choose one from the list.",
+    ),
+  ).toBeVisible();
+  await expect(sessionRow(navigation, chatRowId)).toHaveCount(0);
+  expect(
+    frames
+      .calls("session/open")
+      .slice(opens)
+      .filter((frame) => frame.params?.session_id === chatId),
+  ).toEqual([]);
+});
+
 test("Chat opens only when the page asked for both features and the server gave them", async ({
   browser,
   page,
