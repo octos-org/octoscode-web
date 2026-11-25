@@ -908,6 +908,15 @@ that is gone」。覆盖原路径：Code 会话 → 新建 chat
 是新 chat 的只读默认；第二个标签页保持自己的选择（落在 Chat 首页），并删掉这个 chat；本页再切到 Chat 时如实说明「已不在」，行被移除，不对已删的 chat 发
 `session/open`。变异（各自单独打）全红：不跨刷新保存、用陈旧的本页列表判断、不说明、继续列出已删行。
 
+T-0671 加强 2 条，不新增（T-0634 F-0634-2）：
+
+- 「file outputs turn on through the real
+  SET…」：原来只断言最后一个 SET 的参数，改成断言 wire 上全部 SET 的数量和参数。新 chat 只发一次只读默认；一次 Allow 正好一个；回读之后、跑完回合、撤回以及重连之后，都不再多发。
+- 「a failed set is
+  reported…」：失败后不重试；Re-read 不发 SET；再明确点一次 Allow 是独立的一次操作，多一个 SET 并落地。
+
+变异全红：回读后补发一个相同 SET、吞掉第二次明确的 Allow。
+
 T-0635 抵平（行为不变）：two-modes 的共用 helper 挪进
 `two-modes.ts`（不计入行数口径），模式开关的 `aria-pressed` 断言收成
 `expectMode`；本 spec 净 −11 行。
