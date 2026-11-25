@@ -59,6 +59,10 @@ const catalog: Readonly<Record<string, string>> = {
   ". This Octos process is still serving": "。当前 Octos 进程仍在使用",
   "5m": "5m",
   "API key": "API 密钥",
+  "API key (optional)": "API 密钥（可选）",
+  "Leave it empty if your endpoint needs no key. A key is sent only to your Octos server for test and save; never stored by this browser client.":
+    "地址不需要密钥就留空。填了的密钥只发给你的 Octos 服务器用于测试和保存，浏览器客户端不会存储。",
+  "Included in plan": "套餐内",
   "API protocol": "API 协议",
   "API style:": "API 类型：",
   "Across recent sessions": "最近会话汇总",

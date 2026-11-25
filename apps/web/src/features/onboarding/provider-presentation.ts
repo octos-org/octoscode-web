@@ -2,11 +2,24 @@ import type { LlmCatalogResult } from "@octos-org/octoscode-client";
 
 export type CatalogFamily = LlmCatalogResult["families"][number];
 
-const PROVIDERS = [
+// `plan`: billed by a subscription, so no per-token price applies to its runs.
+const PROVIDERS: readonly {
+  aliases: readonly string[];
+  name: string;
+  tag: string;
+  plan?: boolean;
+}[] = [
   {
     aliases: ["zai-coding"],
     name: "Z.ai Coding Plan",
     tag: "GLM coding and agents",
+    plan: true,
+  },
+  {
+    aliases: ["moonshot-coding", "kimi-coding"],
+    name: "Kimi Coding Plan",
+    tag: "Kimi models for coding",
+    plan: true,
   },
   {
     aliases: ["deepseek"],
@@ -64,11 +77,6 @@ const PROVIDERS = [
     tag: "MiniMax models for the China region",
   },
   {
-    aliases: ["moonshot-coding", "kimi-coding"],
-    name: "Kimi Coding Plan",
-    tag: "Kimi models for coding",
-  },
-  {
     aliases: ["nvidia"],
     name: "NVIDIA NIM",
     tag: "Inference with NVIDIA NIM",
@@ -103,7 +111,7 @@ const PROVIDERS = [
     name: "vLLM",
     tag: "An OpenAI-compatible vLLM server",
   },
-] as const;
+];
 
 /** The first six are the curated first-run choices; everything remains
  * available under More providers in this stable order. */
@@ -127,6 +135,14 @@ export function providerPresentation(familyId: string) {
         name: familyId.replaceAll(/[-_]/g, " "),
         tag: "Model service supplied by the server catalog",
       };
+}
+
+/** A coding plan's runs have no per-token price, whatever the server estimates. */
+export function isSubscriptionPlan(familyId: string | undefined): boolean {
+  return PROVIDERS.some(
+    (candidate) =>
+      candidate.plan && candidate.aliases.some((alias) => alias === familyId),
+  );
 }
 
 function providerRank(familyId: string) {

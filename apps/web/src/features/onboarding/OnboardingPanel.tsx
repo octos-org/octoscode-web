@@ -251,7 +251,9 @@ export function OnboardingPanel({
               </div>
               {requiresApiKey ? (
                 <label className={styles.secret}>
-                  <span>{t("API key")}</span>
+                  <span>
+                    {customEndpoint ? t("API key (optional)") : t("API key")}
+                  </span>
                   <input
                     name="api-key"
                     type="password"
@@ -262,9 +264,13 @@ export function OnboardingPanel({
                     onChange={(event) => setApiKey(event.target.value)}
                   />
                   <small>
-                    {t(
-                      "Sent only to your Octos server for test and save; never stored by this browser client.",
-                    )}
+                    {customEndpoint
+                      ? t(
+                          "Leave it empty if your endpoint needs no key. A key is sent only to your Octos server for test and save; never stored by this browser client.",
+                        )
+                      : t(
+                          "Sent only to your Octos server for test and save; never stored by this browser client.",
+                        )}
                   </small>
                 </label>
               ) : (
@@ -345,7 +351,8 @@ export function OnboardingPanel({
                   !familyId ||
                   !modelId ||
                   (step === "connect" &&
-                    ((requiresApiKey && !apiKey.trim()) || !customUrlValid))
+                    ((requiresApiKey && !customEndpoint && !apiKey.trim()) ||
+                      !customUrlValid))
                 }
               >
                 {step === "service"

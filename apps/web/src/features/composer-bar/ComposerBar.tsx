@@ -529,7 +529,11 @@ export function UsageChip({
   const tokens = usage.inputTokens + usage.outputTokens;
   const summary = [
     t("{count} tokens", { count: formatTokenCount(tokens, locale) }),
-    usage.costUsd ? `≈${formatUsd(usage.costUsd)}` : null,
+    usage.plan
+      ? t("Included in plan")
+      : usage.costUsd
+        ? `≈${formatUsd(usage.costUsd)}`
+        : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -576,9 +580,11 @@ export function UsageChip({
             <div>
               <dt>{t("Estimated cost")}</dt>
               <dd>
-                {usage.costUsd !== undefined
-                  ? formatUsd(usage.costUsd)
-                  : t("Not reported")}
+                {usage.plan
+                  ? t("Included in plan")
+                  : usage.costUsd !== undefined
+                    ? formatUsd(usage.costUsd)
+                    : t("Not reported")}
               </dd>
             </div>
             {contextPercent !== null ? (

@@ -2,6 +2,7 @@ import type {
   SessionStatusReadResult,
   TokenCostUpdate,
 } from "@octos-org/octoscode-client/protocol";
+import { isSubscriptionPlan } from "../onboarding/provider-presentation.ts";
 
 /** Session totals as reported by the server; nothing here is estimated locally. */
 export interface SessionUsage {
@@ -10,6 +11,8 @@ export interface SessionUsage {
   cachedTokens: number;
   /** The server's estimate in USD; absent when it reported none. */
   costUsd?: number;
+  /** The Session runs on a subscription coding plan: no per-token price applies. */
+  plan?: boolean;
 }
 
 /**
@@ -24,9 +27,12 @@ export function sessionUsage(
   live: TokenCostUpdate | null | undefined,
 ): SessionUsage | null {
   if (!sessionId) return null;
+  const plan =
+    status?.session_id === sessionId &&
+    isSubscriptionPlan(status.model?.provider);
   if (live && live.sessionId === sessionId) {
     const usd = !live.currency || live.currency.toUpperCase() === "USD";
-    return anythingUsed({
+    return anythingUsed(plan, {
       inputTokens: live.inputTokens ?? 0,
       outputTokens: live.outputTokens ?? 0,
       cachedTokens: live.cacheReadTokens ?? 0,
@@ -37,7 +43,7 @@ export function sessionUsage(
   }
   if (!status || status.session_id !== sessionId) return null;
   const usage = status.usage ?? {};
-  return anythingUsed({
+  return anythingUsed(plan, {
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     cachedTokens: usage.cached_input_tokens ?? 0,
@@ -47,10 +53,17 @@ export function sessionUsage(
   });
 }
 
-/** The chip counts input + output; cached tokens are part of the input. */
-function anythingUsed(usage: SessionUsage): SessionUsage | null {
-  return usage.inputTokens + usage.outputTokens > 0 || (usage.costUsd ?? 0) > 0
-    ? usage
+/**
+ * The chip counts input + output; cached tokens are part of the input. A plan
+ * drops the server's per-token estimate, which would read as a charge.
+ */
+function anythingUsed(plan: boolean, usage: SessionUsage): SessionUsage | null {
+  const { inputTokens, outputTokens, cachedTokens } = usage;
+  const shown: SessionUsage = plan
+    ? { inputTokens, outputTokens, cachedTokens, plan }
+    : usage;
+  return shown.inputTokens + shown.outputTokens > 0 || (shown.costUsd ?? 0) > 0
+    ? shown
     : null;
 }
 
