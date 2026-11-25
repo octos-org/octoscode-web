@@ -287,10 +287,14 @@
 
 .actions {
   position: sticky;
-  bottom: 0;
+  /* Flush with the bottom of the scroll area: without this the bar stopped
+     above its bottom padding and the provider list showed through below it. */
+  bottom: calc(-1 * var(--conversation-scroll-end, 0px));
   z-index: 1;
-  padding-top: 10px;
+  margin-bottom: -12px;
+  padding: 10px 0 12px;
   background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 -1px 0 var(--dsw-alias-border-l1);
 }
 
 .actions > div {

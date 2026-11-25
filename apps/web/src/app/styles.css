@@ -523,7 +523,10 @@ label > span {
 .conversation-scroll {
   min-height: 0;
   overflow-y: auto;
-  padding: 32px max(24px, calc((100% - var(--dsw-layout-chat)) / 2)) 28px;
+  /* Sticky footers inside (the setup wizard's actions) sit flush with this. */
+  --conversation-scroll-end: 28px;
+  padding: 32px max(24px, calc((100% - var(--dsw-layout-chat)) / 2))
+    var(--conversation-scroll-end);
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
 }

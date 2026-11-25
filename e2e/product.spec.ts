@@ -711,6 +711,7 @@ test("onboards an empty solo server from workspace creation", async ({
   page,
 }) => {
   const openedSessions = observeSent(page, "session/open");
+  const providerTests = observeSent(page, "profile/llm/test");
   await page.emulateMedia({ colorScheme: "light" });
   await connectServer(page);
   await requestInitialWorkspace(page, "/srv/work/no-profile");
@@ -747,8 +748,19 @@ test("onboards an empty solo server from workspace creation", async ({
     "A retry only repeats provider test and save",
   );
 
-  await apiKey.fill("sk-e2e-valid");
-  await onboarding.getByRole("button", { name: "Test, save & open" }).click();
+  // The retry goes to a custom endpoint, which may need no key (T-0676); the
+  // official route still requires one. The server gets the keyless probe.
+  const save = onboarding.getByRole("button", { name: "Test, save & open" });
+  await apiKey.fill("");
+  await expect(save).toBeDisabled();
+  await onboarding
+    .getByLabel("Use a custom OpenAI-compatible endpoint")
+    .check();
+  await onboarding
+    .getByLabel("Custom OpenAI-compatible base URL")
+    .fill("http://127.0.0.1:11434/v1");
+  await expect(onboarding.getByLabel("API key (optional)")).toHaveValue("");
+  await save.click();
   await expect(
     page.getByText("/srv/work/no-profile", { exact: true }),
   ).toBeVisible();
@@ -762,6 +774,15 @@ test("onboards an empty solo server from workspace creation", async ({
   expect(openedSessions()[0]!.session_id).toMatch(
     /^coding-2:api:web-[0-9a-f-]{36}$/i,
   );
+  expect(providerTests().at(-1)).toMatchObject({
+    api_key: "octoscode-web-keyless-probe",
+    selection: {
+      route: {
+        route_id: "custom-openai",
+        base_url: "http://127.0.0.1:11434/v1",
+      },
+    },
+  });
   await expect(
     page.getByRole("heading", {
       name: "What can Octos help with?",

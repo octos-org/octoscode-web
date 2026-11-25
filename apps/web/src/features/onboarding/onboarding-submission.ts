@@ -38,7 +38,11 @@ export async function submitOnboarding({
   const profileName = submission.profileName.trim();
   const apiKey = submission.apiKey.trim();
   const selection = selectionFromCatalog(catalog, submission);
-  const requiresApiKey = Boolean(selection.route.api_key_env);
+  // A custom endpoint (a local server, a gateway that adds its own key) may
+  // need no key at all.
+  const requiresApiKey =
+    Boolean(selection.route.api_key_env) &&
+    submission.routeId !== CUSTOM_OPENAI_ROUTE;
   if (!profileId || !profileName || (requiresApiKey && !apiKey)) {
     throw new Error(
       requiresApiKey
@@ -48,7 +52,10 @@ export async function submitOnboarding({
   }
   // v2.0.3-rc.9 asks for a non-empty test value even when its registry
   // marks the family keyless (octos#2123). An empty key env means upsert
-  // never persists this non-secret compatibility probe.
+  // never persists this non-secret compatibility probe. A custom endpoint
+  // left without a key sends it too: Core cannot build a family that needs a
+  // key without one, and keeps it under the family's key env, which only that
+  // endpoint (which needs none) ever receives.
   const wireApiKey = apiKey || KEYLESS_CORE_PROBE;
   let createdProfile = binding.current;
   if (!createdProfile) {
