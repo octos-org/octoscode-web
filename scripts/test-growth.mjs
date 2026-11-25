@@ -15,20 +15,21 @@
 // modules. A file's lines are its newline count plus one.
 //
 // A pull request (or its merge group) that adds lines fails unless its last
-// LABEL event is a real `labeled` by a user, not a bot (shu, 11-10). The
-// pull request's author may add it: every agent works as the one shared
-// account anantheparty, and lead-web adds the label as that account after
-// reviewing the growth. Only lead-web may add it; this script cannot tell
-// lead-web from any other agent on that account, so that rule is procedure,
-// written down in docs/testing.md. A push to main only reports.
+// LABEL event is a real `labeled` by a user, not a bot (shu, 11-10). Up to
+// 150 lines the pull request's author may add it: every agent works as the
+// one shared account anantheparty, and lead-web adds the label as that
+// account after reviewing the growth. Only lead-web may add it; this script
+// cannot tell lead-web from any other agent on that account, so that rule is
+// procedure, written down in docs/testing.md. Above 150 lines only a label
+// added by a person counts (shu, 11-25); the rules are in
+// test-growth-approval.mjs. A push to main only reports.
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { promisify } from "node:util";
+import { LABEL, approval, growthError } from "./test-growth-approval.mjs";
 
 const execFileAsync = promisify(execFile);
-
-const LABEL = "test-growth-approved";
 
 const SCRIPT_TEST =
   /(\.(test|spec)\.(ts|tsx|js|jsx|mjs)$)|(^test_.*\.py$)|(_test\.py$)/;
@@ -83,18 +84,18 @@ if (!event.enforce) {
   console.log(`Not enforced on ${event.name}: reported only.`);
   process.exit(0);
 }
-const approval = await growthApproval(event.pullRequest);
-if (approval.approved) {
+const verdict = event.pullRequest
+  ? approval(growth, await labelEvents(event.pullRequest))
+  : { approved: false, note: "No pull request to read a label from." };
+if (verdict.approved) {
   console.log(
-    `Growth of ${signed(growth)} approved: ${LABEL} added by ${approval.by}.`,
+    `Growth of ${signed(growth)} approved: ${LABEL} added by ${verdict.by}.`,
   );
   process.exit(0);
 }
-if (approval.note) console.log(approval.note);
+console.log(verdict.note);
 const grown = changed.filter(({ delta }) => delta > 0).map(({ path }) => path);
-console.log(
-  `::error title=Test lines grew::This change adds ${growth} test lines on net (${format(before.total)} → ${format(after.total)}), in ${grown.join(", ")}. Delete as many test lines elsewhere in this pull request. If that cannot be done, list in its description what each added test guards and why it cannot be offset, ask lead-web to review it and add the ${LABEL} label, then re-run this job.`,
-);
+console.log(`::error title=Test lines grew::${growthError(growth, grown)}`);
 process.exit(1);
 
 /**
@@ -132,15 +133,10 @@ async function ciEvent() {
   };
 }
 
-/** The label's last addition, and whether it counts as an approval. */
-async function growthApproval(pullRequest) {
-  if (!pullRequest)
-    return {
-      approved: false,
-      note: "No pull request to read a label from.",
-    };
+/** The pull request's LABEL additions and removals, oldest first. */
+async function labelEvents(pullRequest) {
   const repository = process.env.GITHUB_REPOSITORY;
-  const events = (
+  return (
     await gh(
       `repos/${repository}/issues/${pullRequest.number}/events`,
       `.[] | select((.event == "labeled" or .event == "unlabeled") and .label.name == "${LABEL}") | {event, login: .actor.login, type: .actor.type}`,
@@ -150,15 +146,6 @@ async function growthApproval(pullRequest) {
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-  const last = events.at(-1);
-  if (!last || last.event !== "labeled")
-    return { approved: false, note: `No ${LABEL} label.` };
-  if (last.type === "Bot")
-    return {
-      approved: false,
-      note: `${LABEL} was added by ${last.login}, which does not count: a bot may not approve.`,
-    };
-  return { approved: true, by: last.login };
 }
 
 async function gh(endpoint, jq, paginate = false) {
