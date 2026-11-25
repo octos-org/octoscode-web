@@ -53,15 +53,20 @@ locally.
    assertions or drop key guards to pass the ratchet.
 2. When growth cannot be offset, the pull request description lists what each
    added test guards and why it cannot be offset.
-3. lead-web reviews that and, if it agrees, adds `test-growth-approved` as
-   anantheparty, then re-runs the job. The label counts even though anantheparty
-   also authored the pull request; a label added by a bot does not, and removing
-   the label withdraws the approval. No other approval is needed.
-4. Only lead-web adds this label. No agent adds it to its own pull request.
+3. Up to 150 test lines on net, lead-web reviews that and, if it agrees, adds
+   `test-growth-approved` as anantheparty, then re-runs the job. The label
+   counts even though anantheparty also authored the pull request; a label added
+   by a bot does not, and removing the label withdraws the approval. No other
+   approval is needed.
+4. Above 150 lines, only a label added by a person counts; anantheparty's does
+   not (shu, 11-25). Such a pull request goes back to its author to cut the
+   growth to 150 or less, not to lead-web for the label.
+5. Only lead-web adds this label. No agent adds it to its own pull request.
    Every agent works as anantheparty, so the script cannot tell lead-web from
    any other agent; this rule is procedure, not code.
-5. When an approved pull request adds more than 1,500 test lines, lead-web also
-   reports it to Claude. Merging does not wait for that.
+
+`scripts/test-growth.test.mjs`, run by `pnpm test`, pins who may approve at the
+150-line boundary.
 
 ## Multi-Session browser gate
 
