@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN } from "./fixture-session.ts";
-import { openMemory, startMemorySession } from "./memory-settings.ts";
+import {
+  doubleClick,
+  fillRememberForm,
+  memoryControl,
+  openMemory,
+  searchMemory,
+  startMemorySession,
+} from "./memory-settings.ts";
 import { observeFrames, observeSent } from "./turn-observers";
 
 const start = (page: Page, token = "memory-e2e-token") =>
@@ -13,57 +19,66 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
   const ingestCalls = observeSent(page, "memory/ingest");
   await start(page);
   const settings = await openMemory(page);
+  const searchSection = settings.getByRole("region", { name: "Search" });
+  const addSection = settings.getByRole("region", { name: "Add to memory" });
+  const detail = settings.getByRole("complementary", { name: "Memory detail" });
+  const rememberBtn = settings.getByRole("button", {
+    name: "Remember this",
+    exact: true,
+  });
 
   // Results are labeled with the query that answered them.
-  await settings.getByLabel("Search memories").fill("protocol");
-  await settings.getByRole("button", { name: "Search", exact: true }).click();
+  await searchMemory(settings, "protocol");
+  await expect(
+    settings.getByRole("button", { name: /T0008 protocol probe/ }),
+  ).toBeVisible();
+
+  // A failed search keeps those labeled facts and shows its error in Search.
+  await memoryControl(page, "fail-next?method=memory/search");
+  await searchMemory(settings, "other", false);
+  await expect(
+    searchSection.getByRole("alert").getByText("memory backend unavailable"),
+  ).toBeVisible();
   await expect(settings.getByText("Results for “protocol”")).toBeVisible();
   await expect(
     settings.getByRole("button", { name: /T0008 protocol probe/ }),
   ).toBeVisible();
 
-  // A failed search keeps those labeled facts and says so.
-  await page.request.post(
-    `${FIXTURE_ORIGIN}/__test__/memory/fail-next?method=memory/search`,
-  );
-  await settings.getByLabel("Search memories").fill("other");
-  await settings.getByRole("button", { name: "Search", exact: true }).click();
+  // Without request/promote, Add to memory states the limit honestly.
   await expect(
-    settings.getByRole("alert").getByText("memory backend unavailable"),
-  ).toBeVisible();
-  await expect(settings.getByText("Results for “protocol”")).toBeVisible();
-  await expect(
-    settings.getByRole("button", { name: /T0008 protocol probe/ }),
+    addSection.getByText(/doesn't support requesting long-term memories/),
   ).toBeVisible();
 
-  // Remember: one click chain submits exactly once, even double-clicked.
-  await settings.getByLabel("Title").fill("Refresh proof");
-  await settings.getByLabel("Summary").fill("survives a reload");
-  await settings.getByLabel("Memory content").fill("refresh-kept body");
-  await settings
-    .getByRole("button", { name: "Remember this", exact: true })
-    .evaluate((node: HTMLElement) => {
-      node.click();
-      node.click();
-    });
+  // Remember: one click chain submits exactly once, even double-clicked,
+  // shows its receipt in place, and keeps Detail visible with read-only note.
+  await fillRememberForm(settings, {
+    title: "Refresh proof",
+    summary: "survives a reload",
+    body: "refresh-kept body",
+  });
+  await doubleClick(rememberBtn);
   await expect(
-    settings.getByText(/^Saved “Refresh proof” .* It's open in Detail;/),
+    addSection.getByText(/^Saved “Refresh proof” .* It's open in Detail;/),
   ).toBeVisible();
-  await expect(settings.getByText("refresh-kept body")).toBeVisible();
+  await expect(detail.getByText("refresh-kept body")).toBeVisible();
+  await expect(
+    detail.getByText(
+      "Reference documents and entities can't be edited or deleted here.",
+    ),
+  ).toBeVisible();
+  await expect(detail).toBeInViewport();
   expect(ingestCalls()).toHaveLength(1);
 
-  // A failed ingest says so and keeps the form.
-  await settings.getByLabel("Title").fill("Will fail");
-  await settings.getByLabel("Summary").fill("kept on failure");
-  await settings.getByLabel("Memory content").fill("failure body kept");
-  await page.request.post(
-    `${FIXTURE_ORIGIN}/__test__/memory/fail-next?method=memory/ingest`,
-  );
-  await settings
-    .getByRole("button", { name: "Remember this", exact: true })
-    .click();
+  // A failed ingest says so inside Add to memory and keeps the form.
+  await fillRememberForm(settings, {
+    title: "Will fail",
+    summary: "kept on failure",
+    body: "failure body kept",
+  });
+  await memoryControl(page, "fail-next?method=memory/ingest");
+  await rememberBtn.click();
   await expect(
-    settings.getByRole("alert").getByText("memory backend unavailable"),
+    addSection.getByRole("alert").getByText("memory backend unavailable"),
   ).toBeVisible();
   await expect(settings.getByLabel("Title")).toHaveValue("Will fail");
 
@@ -75,8 +90,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
   ).toBeVisible();
   await page.reload();
   const again = await openMemory(page);
-  await again.getByLabel("Search memories").fill("Refresh proof");
-  await again.getByRole("button", { name: "Search", exact: true }).click();
+  await searchMemory(again, "Refresh proof", false);
   await again.getByRole("button", { name: /Refresh proof/ }).click();
   await expect(again.getByText("refresh-kept body")).toBeVisible();
 });
@@ -100,27 +114,33 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   page,
 }) => {
   const edits = observeSent(page, "memory/edit");
-  const control = (path: string) =>
-    page.request.post(`${FIXTURE_ORIGIN}/__test__/memory/${path}`);
-  await control("entries/reset");
+  await memoryControl(page, "entries/reset");
   await start(page, "memory-main-e2e-token");
   const settings = await openMemory(page);
   const entry = (text: string) =>
     settings.getByRole("listitem").filter({ hasText: text });
   const editor = settings.getByLabel("Edit memory");
+  const saveBtn = settings.getByRole("button", { name: "Save", exact: true });
   await expect(settings.getByText(/not available in the current/)).toHaveCount(
     0,
   );
 
-  // Requesting and promoting each say where the memory goes (F-005).
-  const request = settings.getByRole("button", { name: "Request memory" });
+  // Requesting and promoting each say where the memory goes (F-005),
+  // in place inside Add to memory, and an accepted request clears the draft.
+  const addSection = settings.getByRole("region", { name: "Add to memory" });
+  const request = addSection.getByRole("button", { name: "Request memory" });
   await expect(request).toHaveAccessibleDescription(/until Octos files it/);
-  await settings.getByLabel("Memory content").fill("prefers tea");
+  await addSection.getByLabel("Memory content").fill("prefers tea");
   await request.click();
-  const requested = settings.getByText(/^Octos will remember it\. .*Long-term/);
+  const requested = addSection.getByText(
+    /^Octos will remember it\. .*Long-term/,
+  );
   await expect(requested).toBeVisible();
-  await settings.getByRole("button", { name: "Promote to Knowledge" }).click();
-  await expect(settings.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
+  await expect(addSection.getByLabel("Memory content")).toHaveValue("");
+  await addSection
+    .getByRole("button", { name: "Promote to Knowledge" })
+    .click();
+  await expect(addSection.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
   await expect(requested).toHaveCount(0);
 
   // An edit sends the text verbatim against the version on screen; the list
@@ -130,7 +150,7 @@ test("long-term entries edit and delete on the server, and a failed change keeps
     "- prefers dark roast coffee (updated: 2026-11-01)",
   );
   await editor.fill("- prefers green tea");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await saveBtn.click();
   await expect(settings.getByText(/^Saved\./)).toBeVisible();
   await expect(entry("green tea").locator("p")).toHaveText(
     "- prefers green tea (updated: 2026-11-10)",
@@ -147,12 +167,13 @@ test("long-term entries edit and delete on the server, and a failed change keeps
 
   // Changed by another writer since it was loaded: refused, the server's
   // text is shown, the draft stays, and saving again applies it.
-  await control(
+  await memoryControl(
+    page,
     `entries/set?id=${encodeURIComponent("^mbbbbbb")}&text=${encodeURIComponent("- works on the ledger (updated: 2026-11-09) ^mbbbbbb")}`,
   );
   await entry("billing").getByRole("button", { name: "Edit" }).click();
   await editor.fill("- works on payments");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await saveBtn.click();
   await expect(settings.getByRole("alert")).toContainText(
     "changed on the server",
   );
@@ -162,30 +183,30 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   );
   await expect(settings.getByText("billing")).toHaveCount(0);
   // An unconfirmed save keeps the draft too.
-  await control("fail-next?method=memory/edit");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await memoryControl(page, "fail-next?method=memory/edit");
+  await saveBtn.click();
   await expect(settings.getByRole("alert")).toContainText("didn't confirm");
   await expect(editor).toHaveValue("- works on payments");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await saveBtn.click();
   await expect(entry("payments")).toBeVisible();
 
   // Delete asks first; keeping it changes nothing.
-  await entry("green tea")
-    .getByRole("button", { name: "Delete", exact: true })
-    .click();
+  const delGreen = entry("green tea").getByRole("button", {
+    name: "Delete",
+    exact: true,
+  });
+  await delGreen.click();
   await settings.getByRole("button", { name: "Keep it" }).click();
-  await entry("green tea")
-    .getByRole("button", { name: "Delete", exact: true })
-    .click();
+  await delGreen.click();
   await settings.getByRole("button", { name: "Delete memory" }).click();
   await expect(settings.getByText(/^Deleted\./)).toBeVisible();
   await expect(entry("green tea")).toHaveCount(0);
 
   // Gone from the server before the save: the text is offered back.
-  await control(`entries/set?id=${encodeURIComponent("^mbbbbbb")}`);
+  await memoryControl(page, `entries/set?id=${encodeURIComponent("^mbbbbbb")}`);
   await entry("payments").getByRole("button", { name: "Edit" }).click();
   await editor.fill("- works on refunds");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await saveBtn.click();
   await expect(settings.getByRole("alert")).toContainText(
     "no longer on the server",
   );

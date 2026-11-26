@@ -110,16 +110,39 @@ export function MemorySettingsContent({
   const busy = busyAction !== null;
   /** State settles after the event loop; a ref stops a same-tick second click. */
   const inflight = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const detailRef = useRef<HTMLElement>(null);
+  const [detailRevealSeq, setDetailRevealSeq] = useState(0);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addNotice, setAddNotice] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [abstract, setAbstract] = useState("");
   const [body, setBody] = useState("");
 
   useEffect(() => {
+    if (!detailRevealSeq) return;
+    const node = detailRef.current;
+    if (!node || typeof node.scrollIntoView !== "function") return;
+    const reduced =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    node.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [detailRevealSeq]);
+
+  useEffect(() => {
     let current = true;
     setLoading(true);
-    setError(null);
+    setOverviewError(null);
+    setSearchError(null);
+    setDetailError(null);
+    setAddError(null);
+    setAddNotice(null);
     setOverview(null);
     setHits(null);
     setEntity(null);
@@ -135,7 +158,7 @@ export function MemorySettingsContent({
         (commands) => commands.overview(),
         (reason: unknown) => {
           if (current) {
-            setError(errorMessage(reason));
+            setOverviewError(errorMessage(reason));
             setLoading(false);
           }
         },
@@ -149,7 +172,7 @@ export function MemorySettingsContent({
         },
         (reason: unknown) => {
           if (current) {
-            setError(errorMessage(reason));
+            setOverviewError(errorMessage(reason));
             setLoading(false);
           }
         },
@@ -165,8 +188,7 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("search");
-    setError(null);
-    setNotice(null);
+    setSearchError(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -178,9 +200,10 @@ export function MemorySettingsContent({
       setSearchedFor(query.trim());
       setRecord(null);
       setEntity(null);
+      setDetailError(null);
     } catch (reason) {
       // The old hits stay, labeled with the query they answered (T-0395).
-      setError(errorMessage(reason));
+      setSearchError(errorMessage(reason));
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -192,7 +215,7 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("entity");
-    setError(null);
+    setDetailError(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -200,8 +223,10 @@ export function MemorySettingsContent({
       );
       setEntity(await commands.entity(name));
       setRecord(null);
+      setDetailRevealSeq((seq) => seq + 1);
     } catch (reason) {
-      setError(errorMessage(reason));
+      setDetailError(errorMessage(reason));
+      setDetailRevealSeq((seq) => seq + 1);
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -213,7 +238,7 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("record");
-    setError(null);
+    setDetailError(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -221,8 +246,10 @@ export function MemorySettingsContent({
       );
       setRecord(await commands.load(id));
       setEntity(null);
+      setDetailRevealSeq((seq) => seq + 1);
     } catch (reason) {
-      setError(errorMessage(reason));
+      setDetailError(errorMessage(reason));
+      setDetailRevealSeq((seq) => seq + 1);
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -234,8 +261,8 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("ingest");
-    setError(null);
-    setNotice(null);
+    setAddError(null);
+    setAddNotice(null);
     try {
       const id = `doc:octoscode-web:${randomUUID()}`;
       const commands = await client.memoryCommands(
@@ -254,7 +281,7 @@ export function MemorySettingsContent({
         },
       ]);
       // Say where it went: Recall, found by search, not the editable list.
-      setNotice(
+      setAddNotice(
         canLoad
           ? t(
               "Saved “{title}” as a reference document. It's open in Detail; find it again with Search memories.",
@@ -265,14 +292,19 @@ export function MemorySettingsContent({
               { title: title.trim() },
             ),
       );
-      if (canLoad) setRecord(await commands.load(id));
-      else setRecord(null);
+      if (canLoad) {
+        setRecord(await commands.load(id));
+        setDetailError(null);
+        setDetailRevealSeq((seq) => seq + 1);
+      } else {
+        setRecord(null);
+      }
       setEntity(null);
       setTitle("");
       setAbstract("");
       setBody("");
     } catch (reason) {
-      setError(errorMessage(reason));
+      setAddError(errorMessage(reason));
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -284,15 +316,15 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("request");
-    setError(null);
-    setNotice(null);
+    setAddError(null);
+    setAddNotice(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
         memorySessionId,
       );
       const result = await commands.request(`web:${randomUUID()}`, body.trim());
-      setNotice(
+      setAddNotice(
         result.status !== "accepted"
           ? t("Octos didn't accept this request: {status}.", {
               status: result.status,
@@ -305,9 +337,10 @@ export function MemorySettingsContent({
                 "Octos received it, but background filing is off on this server, so it stays a staging note for now.",
               ),
       );
+      if (result.status === "accepted") setBody("");
       overviewAfterChange();
     } catch (reason) {
-      setError(errorMessage(reason));
+      setAddError(errorMessage(reason));
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -319,15 +352,15 @@ export function MemorySettingsContent({
     if (inflight.current) return;
     inflight.current = true;
     setBusyAction("promote");
-    setError(null);
-    setNotice(null);
+    setAddError(null);
+    setAddNotice(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
         memorySessionId,
       );
       const result = await commands.promote("octoscode-web");
-      setNotice(
+      setAddNotice(
         !result.count
           ? t(
               "Nothing to hand over yet: only documents saved here that have been opened at least twice qualify.",
@@ -344,7 +377,7 @@ export function MemorySettingsContent({
       );
       overviewAfterChange();
     } catch (reason) {
-      setError(errorMessage(reason));
+      setAddError(errorMessage(reason));
     } finally {
       inflight.current = false;
       setBusyAction(null);
@@ -486,8 +519,7 @@ export function MemorySettingsContent({
     if (busy || inflight.current || importRun(scopeKey)?.pending) return false;
     inflight.current = true;
     setBusyAction("import");
-    setError(null);
-    setNotice(null);
+    setOverviewError(null);
     return true;
   };
   const unlockImport = () => {
@@ -575,7 +607,7 @@ export function MemorySettingsContent({
     if (busy || refreshing || inflight.current) return;
     inflight.current = true;
     setRefreshing(true);
-    setError(null);
+    setOverviewError(null);
     try {
       const commands = await client.memoryCommands(
         capabilities,
@@ -584,7 +616,7 @@ export function MemorySettingsContent({
       setEntriesEpoch((epoch) => epoch + 1);
       setOverview(await commands.overview());
     } catch (reason) {
-      setError(errorMessage(reason));
+      setOverviewError(errorMessage(reason));
     } finally {
       inflight.current = false;
       setRefreshing(false);
@@ -636,6 +668,17 @@ export function MemorySettingsContent({
     );
   }
 
+  const editDeleteNotice =
+    !canEdit && !canDelete
+      ? t(
+          "Editing and deleting memories are not available in the current protocol.",
+        )
+      : !canEdit
+        ? t("Editing memories is not available in the current protocol.")
+        : !canDelete
+          ? t("Deleting memories is not available in the current protocol.")
+          : null;
+
   return (
     <div className={styles.page}>
       <header className={styles.heading}>
@@ -649,25 +692,21 @@ export function MemorySettingsContent({
         </div>
         <button
           type="button"
+          className={styles.refreshButton}
           disabled={loading || refreshing || busy}
           onClick={() => void refresh()}
         >
           {refreshing ? t("Refreshing…") : t("Refresh")}
         </button>
       </header>
-      {!canEdit && !canDelete ? (
-        <p className={styles.notice}>
-          {t(
-            "Editing and deleting memories are not available in the current protocol.",
-          )}
-        </p>
+      {editDeleteNotice ? (
+        <p className={styles.notice}>{editDeleteNotice}</p>
       ) : null}
-      {error ? (
+      {overviewError ? (
         <p className={styles.error} role="alert">
-          {error}
+          {overviewError}
         </p>
       ) : null}
-      {notice ? <p role="status">{notice}</p> : null}
       <div className={styles.layout}>
         <div className={styles.main}>
           <section aria-labelledby="memory-overview-heading">
@@ -722,7 +761,7 @@ export function MemorySettingsContent({
                   totalBytes={overview.todayTotalBytes}
                 />
                 <p className={styles.meta}>
-                  {t("{count} staging notes · Refresh {refresh}", {
+                  {t("{count} staging notes · Background filing {refresh}", {
                     count: overview.stagingNotes,
                     refresh: overview.refreshEnabled
                       ? t("enabled")
@@ -801,6 +840,11 @@ export function MemorySettingsContent({
                   {busyAction === "search" ? t("Searching…") : t("Search")}
                 </button>
               </form>
+              {searchError ? (
+                <p className={styles.error} role="alert">
+                  {searchError}
+                </p>
+              ) : null}
               {hits !== null ? (
                 <p className={styles.meta}>
                   {t("Results for “{query}”", { query: searchedFor ?? "" })}
@@ -852,50 +896,63 @@ export function MemorySettingsContent({
               ) : null}
             </section>
           ) : null}
-          {canIngest ? (
+          {canIngest || canRequest || canPromote ? (
             <section aria-labelledby="memory-ingest-heading">
               <h3 id="memory-ingest-heading">{t("Add to memory")}</h3>
               <div className={styles.form}>
-                <label htmlFor="memory-title">{t("Title")}</label>
-                <input
-                  id="memory-title"
-                  name="title"
-                  autoComplete="off"
-                  value={title}
-                  disabled={busy}
-                  onChange={(event) => setTitle(event.target.value)}
-                />
-                <label htmlFor="memory-abstract">{t("Summary")}</label>
-                <input
-                  id="memory-abstract"
-                  name="abstract"
-                  autoComplete="off"
-                  value={abstract}
-                  disabled={busy}
-                  onChange={(event) => setAbstract(event.target.value)}
-                />
-                <label htmlFor="memory-body">{t("Memory content")}</label>
-                <textarea
-                  id="memory-body"
-                  name="body"
-                  rows={4}
-                  value={body}
-                  disabled={busy}
-                  onChange={(event) => setBody(event.target.value)}
-                />
+                {canIngest ? (
+                  <>
+                    <label htmlFor="memory-title">{t("Title")}</label>
+                    <input
+                      id="memory-title"
+                      name="title"
+                      autoComplete="off"
+                      value={title}
+                      disabled={busy}
+                      onChange={(event) => setTitle(event.target.value)}
+                    />
+                    <label htmlFor="memory-abstract">{t("Summary")}</label>
+                    <input
+                      id="memory-abstract"
+                      name="abstract"
+                      autoComplete="off"
+                      value={abstract}
+                      disabled={busy}
+                      onChange={(event) => setAbstract(event.target.value)}
+                    />
+                  </>
+                ) : null}
+                {canIngest || canRequest ? (
+                  <>
+                    <label htmlFor="memory-body">{t("Memory content")}</label>
+                    <textarea
+                      id="memory-body"
+                      name="body"
+                      rows={4}
+                      value={body}
+                      disabled={busy}
+                      onChange={(event) => setBody(event.target.value)}
+                    />
+                  </>
+                ) : null}
                 <div className={styles.actions}>
-                  <button
-                    type="button"
-                    disabled={
-                      busy || !title.trim() || !abstract.trim() || !body.trim()
-                    }
-                    onClick={() => void ingest()}
-                    aria-describedby="memory-remember-help"
-                  >
-                    {busyAction === "ingest"
-                      ? t("Remembering…")
-                      : t("Remember this")}
-                  </button>
+                  {canIngest ? (
+                    <button
+                      type="button"
+                      disabled={
+                        busy ||
+                        !title.trim() ||
+                        !abstract.trim() ||
+                        !body.trim()
+                      }
+                      onClick={() => void ingest()}
+                      aria-describedby="memory-remember-help"
+                    >
+                      {busyAction === "ingest"
+                        ? t("Remembering…")
+                        : t("Remember this")}
+                    </button>
+                  ) : null}
                   {canRequest ? (
                     <button
                       type="button"
@@ -917,15 +974,29 @@ export function MemorySettingsContent({
                     </button>
                   ) : null}
                 </div>
+                {addError ? (
+                  <p className={styles.error} role="alert">
+                    {addError}
+                  </p>
+                ) : null}
+                {addNotice ? (
+                  <p className={styles.sectionStatus} role="status">
+                    {addNotice}
+                  </p>
+                ) : null}
                 {/* Each action says where its memory goes and whether it
                     can be changed later; they are three different stores. */}
                 <dl className={styles.choices}>
-                  <dt>{t("Remember this")}</dt>
-                  <dd id="memory-remember-help">
-                    {t(
-                      "Saves the title, summary and content as a reference document. Find it with Search memories. It can't be edited or deleted here.",
-                    )}
-                  </dd>
+                  {canIngest ? (
+                    <>
+                      <dt>{t("Remember this")}</dt>
+                      <dd id="memory-remember-help">
+                        {t(
+                          "Saves the title, summary and content as a reference document. Find it with Search memories. It can't be edited or deleted here.",
+                        )}
+                      </dd>
+                    </>
+                  ) : null}
                   {canRequest ? (
                     <>
                       <dt>{t("Request memory")}</dt>
@@ -947,6 +1018,13 @@ export function MemorySettingsContent({
                     </>
                   ) : null}
                 </dl>
+                {!canRequest && !canPromote ? (
+                  <p className={styles.meta}>
+                    {t(
+                      "This connection doesn't support requesting long-term memories or promoting documents.",
+                    )}
+                  </p>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -964,8 +1042,17 @@ export function MemorySettingsContent({
             onReadBack={readImportBack}
           />
         </div>
-        <aside className={styles.detail} aria-label={t("Memory detail")}>
+        <aside
+          ref={detailRef}
+          className={styles.detail}
+          aria-label={t("Memory detail")}
+        >
           <h3>{t("Detail")}</h3>
+          {detailError ? (
+            <p className={styles.error} role="alert">
+              {detailError}
+            </p>
+          ) : null}
           {entity ? (
             <>
               <h4>{entity.name}</h4>
@@ -1002,6 +1089,13 @@ export function MemorySettingsContent({
               {t("Choose an entity or search result to view its contents.")}
             </p>
           )}
+          {entity || record ? (
+            <p className={styles.meta}>
+              {t(
+                "Reference documents and entities can't be edited or deleted here.",
+              )}
+            </p>
+          ) : null}
           {detailExport ? (
             <MemoryExportActions
               scope={detailExport}

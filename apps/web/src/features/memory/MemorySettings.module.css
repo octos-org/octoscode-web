@@ -3,6 +3,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dsw-space-3);
+}
+
 .heading h2,
 .heading p {
   margin: 0;
@@ -11,6 +18,29 @@
 .heading h2 {
   font-size: 18px;
   line-height: 1.4;
+}
+
+.refreshButton {
+  flex: none;
+  min-height: 34px;
+  padding: 0 var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--dsw-font-size-button);
+  touch-action: manipulation;
+}
+
+.refreshButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refreshButton:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .heading p,
@@ -57,9 +87,14 @@
 }
 
 .detail {
+  position: sticky;
+  top: 0;
   align-self: start;
+  max-height: calc(100vh - 180px);
   padding-left: var(--dsw-space-4);
   border-left: 1px solid var(--dsw-alias-border-l1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .detail h3 {
@@ -157,6 +192,30 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--dsw-font-size-button);
+  touch-action: manipulation;
+}
+
+.refreshButton:focus-visible,
+.list > button:focus-visible,
+.search button:focus-visible,
+.actions button:focus-visible,
+.document summary:focus-visible,
+.list details summary:focus-visible,
+.search input:focus-visible,
+.form input:focus-visible,
+.form textarea:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.sectionStatus {
+  margin: 0;
+  padding: var(--dsw-space-2) var(--dsw-space-3);
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .search button:hover:not(:disabled),
@@ -261,19 +320,6 @@
   background: var(--dsw-alias-interactive-bg-hover-danger);
 }
 
-@media (max-width: 720px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .detail {
-    padding-top: var(--dsw-space-4);
-    padding-left: 0;
-    border-top: 1px solid var(--dsw-alias-border-l1);
-    border-left: 0;
-  }
-}
-
 .export {
   margin-top: var(--dsw-space-3);
 }
@@ -331,11 +377,51 @@
   font-size: 12px;
 }
 
-.form input[type="file"] {
-  min-height: auto;
-  padding: var(--dsw-space-2) 0;
+.filePicker {
+  position: relative;
+  display: inline-flex;
+  justify-self: start;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
   border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.form .fileButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 var(--dsw-space-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
   background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--dsw-font-size-button);
+  touch-action: manipulation;
+}
+
+.form .fileButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.filePicker:has(.fileInput:focus-visible) .fileButton {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.filePicker:has(.fileInput:disabled) .fileButton {
+  cursor: default;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .importOutcome {
@@ -345,4 +431,27 @@
 
 .importOutcome > .meta {
   margin: 0;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail {
+    position: static;
+    max-height: none;
+    padding-top: var(--dsw-space-4);
+    padding-left: 0;
+    border-top: 1px solid var(--dsw-alias-border-l1);
+    border-left: 0;
+    overflow-y: visible;
+  }
+
+  .refreshButton,
+  .search button,
+  .actions button,
+  .form .fileButton {
+    min-height: 44px;
+  }
 }

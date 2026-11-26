@@ -1,6 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { FIXTURE_ORIGIN } from "./fixture-session.ts";
-import { openMemory, startMemorySession } from "./memory-settings.ts";
+import {
+  chooseMemoryFile,
+  doubleClick,
+  dropIngestReply,
+  openMemory,
+  searchMemory,
+  startMemorySession,
+} from "./memory-settings.ts";
 import { observeSent } from "./turn-observers";
 
 /**
@@ -9,8 +15,6 @@ import { observeSent } from "./turn-observers";
  * server's own counts. Every ingest the page sends is counted here.
  */
 const TOKEN = "memory-e2e-token";
-
-type Frame = { method?: string; params?: { records?: { id: string }[] } };
 
 async function start(page: Page) {
   const ingests = observeSent(page, "memory/ingest");
@@ -29,22 +33,8 @@ const record = (mark: string, n: number, overrides = {}) => ({
   ...overrides,
 });
 
-async function choose(settings: Locator, name: string, content: string) {
-  await settings.getByLabel("Choose a JSON or Markdown file").setInputFiles({
-    name,
-    mimeType: name.endsWith(".json") ? "application/json" : "text/markdown",
-    buffer: Buffer.from(content, "utf8"),
-  });
-}
-
 const preview = (settings: Locator) =>
   settings.getByRole("region", { name: "Import preview" });
-
-async function search(settings: Locator, query: string) {
-  await settings.getByLabel("Search memories").fill(query);
-  await settings.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(settings.getByText(`Results for “${query}”`)).toBeVisible();
-}
 
 test("previews a file in full, writes nothing until confirmed, then reports the server's counts", async ({
   page,
@@ -61,7 +51,7 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
       record(mark, 2, { source: "mail", id: `doc:mail:${mark}-2` }),
     ]);
   const fields = { score: 3, visits: 9, trust: "trusted" };
-  await choose(settings, "notes.json", file(fields));
+  await chooseMemoryFile(settings, "notes.json", file(fields));
   const panel = preview(settings);
   await expect(panel).toContainText("notes.json");
   await expect(panel).toContainText("JSON record list");
@@ -79,14 +69,11 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   await expect(panel).toHaveCount(0);
   expect(ingests()).toHaveLength(0);
 
-  await choose(settings, "notes.json", file());
+  await chooseMemoryFile(settings, "notes.json", file());
   // Two clicks, one import.
-  await preview(settings)
-    .getByRole("button", { name: "Import 2 records" })
-    .evaluate((button) => {
-      (button as HTMLButtonElement).click();
-      (button as HTMLButtonElement).click();
-    });
+  await doubleClick(
+    preview(settings).getByRole("button", { name: "Import 2 records" }),
+  );
   await expect(
     settings.getByRole("status").filter({ hasText: "Imported" }),
   ).toHaveText("Imported 2 records: 2 new · 0 updated · 0 unchanged.");
@@ -102,7 +89,7 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
     expect(sent.fingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);
   await expect(preview(settings)).toHaveCount(0);
 
-  await search(settings, mark);
+  await searchMemory(settings, mark);
   await settings
     .getByRole("button", { name: new RegExp(`${mark} record 1`) })
     .click();
@@ -117,47 +104,15 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   );
 });
 
-/**
- * Passes every frame through, except that the reply to the `drop`-th
- * `memory/ingest` never arrives: the socket closes after Core committed it.
- */
-async function dropIngestReply(page: Page, drop: number) {
-  const sent: Frame[] = [];
-  const held = new Set<string>();
-  await page.routeWebSocket(
-    (url) => url.origin === FIXTURE_ORIGIN.replace("http:", "ws:"),
-    (route) => {
-      const server = route.connectToServer();
-      route.onMessage((message) => {
-        const frame = JSON.parse(String(message));
-        if (frame.method === "memory/ingest") {
-          sent.push(frame);
-          if (sent.length === drop) held.add(frame.id);
-        }
-        server.send(message);
-      });
-      server.onMessage((message) => {
-        const frame = JSON.parse(String(message));
-        if (frame.id !== undefined && held.delete(frame.id)) {
-          void route.close();
-          return;
-        }
-        route.send(message);
-      });
-    },
-  );
-  return sent;
-}
-
 test("a reply lost after the server wrote the batch is not sure, is read back, and is never resent on its own", async ({
   page,
 }) => {
   const mark = `lost${Date.now()}`;
   const sent = await dropIngestReply(page, 2);
   const { settings } = await start(page);
-  await search(settings, mark);
+  await searchMemory(settings, mark);
   await expect(settings.getByText("No matching memories.")).toBeVisible();
-  await choose(
+  await chooseMemoryFile(
     settings,
     "lost.json",
     JSON.stringify(Array.from({ length: 250 }, (_, i) => record(mark, i))),
