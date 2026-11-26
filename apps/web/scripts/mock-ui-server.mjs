@@ -15,6 +15,7 @@ let sockets;
 const sessionStateBySessionId = new Map();
 const skillJobsBySessionId = new Map();
 const memoryFailNext = new Set();
+let memoryRequestNextResult = null;
 const memoryRecords = new Map([
   [
     "doc:t0008:1",
@@ -2707,6 +2708,23 @@ const http = createServer(async (request, response) => {
     if (params.has("text"))
       memoryEntries.set(params.get("id"), params.get("text"));
     else memoryEntries.delete(params.get("id"));
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    new URL(request.url, "http://fixture").pathname ===
+      "/__test__/memory/request/next-result"
+  ) {
+    const params = new URL(request.url, "http://fixture").searchParams;
+    const status = params.get("status");
+    memoryRequestNextResult = status
+      ? {
+          status,
+          refresh_enabled: params.get("refresh_enabled") !== "false",
+          ...(params.has("reason") ? { reason: params.get("reason") } : {}),
+        }
+      : null;
     response.writeHead(204).end();
     return;
   }
@@ -6065,7 +6083,13 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "memory/request") {
-      reply(socket, request.id, { status: "accepted", refresh_enabled: true });
+      const next = memoryRequestNextResult;
+      memoryRequestNextResult = null;
+      reply(
+        socket,
+        request.id,
+        next ?? { status: "accepted", refresh_enabled: true },
+      );
       return;
     }
     if (request.method === "memory/entries") {

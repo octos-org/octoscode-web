@@ -25,6 +25,35 @@ export async function openMemory(page: Page, expectOverview = true) {
 export const memoryControl = (page: Page, path: string) =>
   page.request.post(`${FIXTURE_ORIGIN}/__test__/memory/${path}`);
 
+/** Sets or removes one long-term entry on the mock fixture. */
+export const setMemoryEntry = (page: Page, id: string, text?: string) =>
+  memoryControl(
+    page,
+    text === undefined
+      ? `entries/set?id=${encodeURIComponent(id)}`
+      : `entries/set?id=${encodeURIComponent(id)}&text=${encodeURIComponent(text)}`,
+  );
+
+/** Configures the next `memory/request` response on the mock fixture. */
+export const setNextMemoryRequestResult = (
+  page: Page,
+  status: string,
+  reason?: string,
+) => {
+  const params = new URLSearchParams({ status });
+  if (reason !== undefined) params.set("reason", reason);
+  return memoryControl(page, `request/next-result?${params.toString()}`);
+};
+
+/** Verifies none of `forbidden` appear in the URL or browser storage. */
+export async function expectNoStoredMemory(page: Page, forbidden: string[]) {
+  const kept = await page.evaluate(
+    () =>
+      location.href + JSON.stringify({ ...localStorage, ...sessionStorage }),
+  );
+  for (const value of forbidden) expect(kept).not.toContain(value);
+}
+
 /** Runs a search in Settings › Memory; optionally waits for the labeled results. */
 export async function searchMemory(
   settings: Locator,

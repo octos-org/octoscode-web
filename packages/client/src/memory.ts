@@ -75,6 +75,8 @@ export interface MemoryIngestResult {
 export interface MemoryRequestResult {
   status: string;
   refreshEnabled: boolean;
+  /** UPCR-2026-RDC3DC04D: why a `failed` request was not saved, if reported. */
+  reason?: string | undefined;
 }
 export interface MemoryPromoteResult {
   recordIds: string[];
@@ -287,11 +289,23 @@ export function parseMemoryIngest(value: unknown): MemoryIngestResult | null {
 }
 
 export function parseMemoryRequest(value: unknown): MemoryRequestResult | null {
-  return isRecord(value) &&
-    text(value.status) &&
-    typeof value.refresh_enabled === "boolean"
-    ? { status: value.status, refreshEnabled: value.refresh_enabled }
-    : null;
+  if (
+    !isRecord(value) ||
+    !nonEmpty(value.status) ||
+    typeof value.refresh_enabled !== "boolean" ||
+    !optionalText(value.reason)
+  ) {
+    return null;
+  }
+  const reason =
+    typeof value.reason === "string" && value.reason.trim().length > 0
+      ? value.reason.trim()
+      : undefined;
+  return {
+    status: value.status,
+    refreshEnabled: value.refresh_enabled,
+    ...(reason !== undefined ? { reason } : {}),
+  };
 }
 
 export function parseMemoryPromote(value: unknown): MemoryPromoteResult | null {
@@ -510,10 +524,13 @@ export function createMemoryCommands(
     async promote(source: string): Promise<MemoryPromoteResult> {
       available(APPUI_MEMORY_PROMOTE_METHOD);
       if (!nonEmpty(source)) throw new Error("A memory source is required");
+      // Core clamps min_visits to at least 1 (`recall.rs::nominate_from_sources`);
+      // send 1 explicitly and keep limit at 1 so each click stages at most one
+      // unpromoted document from this source.
       const value = await client.request(APPUI_MEMORY_PROMOTE_METHOD, {
         ...scope,
         sources: [source],
-        min_visits: 0,
+        min_visits: 1,
         limit: 1,
       });
       const parsed = parseMemoryPromote(value);

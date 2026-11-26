@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import {
   doubleClick,
+  expectNoStoredMemory,
   fillRememberForm,
   memoryControl,
   openMemory,
   searchMemory,
+  setMemoryEntry,
+  setNextMemoryRequestResult,
   startMemorySession,
 } from "./memory-settings.ts";
 import { observeFrames, observeSent } from "./turn-observers";
@@ -114,6 +117,7 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   page,
 }) => {
   const edits = observeSent(page, "memory/edit");
+  const promotes = observeSent(page, "memory/promote");
   await memoryControl(page, "entries/reset");
   await start(page, "memory-main-e2e-token");
   const settings = await openMemory(page);
@@ -125,23 +129,49 @@ test("long-term entries edit and delete on the server, and a failed change keeps
     0,
   );
 
-  // Requesting and promoting each say where the memory goes (F-005),
-  // in place inside Add to memory, and an accepted request clears the draft.
+  // Requesting surfaces failed reason / generic fallback while keeping draft;
+  // acceptance clears the draft; promote sends explicit Core params.
   const addSection = settings.getByRole("region", { name: "Add to memory" });
   const request = addSection.getByRole("button", { name: "Request memory" });
+  const promote = addSection.getByRole("button", {
+    name: "Promote to Knowledge",
+  });
+  const contentInput = addSection.getByLabel("Memory content");
   await expect(request).toHaveAccessibleDescription(/until Octos files it/);
-  await addSection.getByLabel("Memory content").fill("prefers tea");
+  await expect(promote).toHaveAccessibleDescription(
+    /one unpromoted document.*at least once/,
+  );
+  await contentInput.fill("prefers tea");
+  await setNextMemoryRequestResult(
+    page,
+    "failed",
+    "the memory model did not save it in 3 attempts",
+  );
+  await request.click();
+  await expect(addSection.getByRole("alert")).toContainText(
+    "the memory model did not save it in 3 attempts",
+  );
+  await expect(contentInput).toHaveValue("prefers tea");
+  await setNextMemoryRequestResult(page, "failed");
+  await request.click();
+  const genericAlert = addSection.getByRole("alert");
+  await expect(genericAlert).toContainText("couldn't save this memory request");
+  await expect(genericAlert).not.toContainText("memory-main-e2e-token");
+  await expect(contentInput).toHaveValue("prefers tea");
   await request.click();
   const requested = addSection.getByText(
     /^Octos will remember it\. .*Long-term/,
   );
   await expect(requested).toBeVisible();
-  await expect(addSection.getByLabel("Memory content")).toHaveValue("");
-  await addSection
-    .getByRole("button", { name: "Promote to Knowledge" })
-    .click();
+  await expect(contentInput).toHaveValue("");
+  await promote.click();
   await expect(addSection.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
   await expect(requested).toHaveCount(0);
+  expect(promotes()[0]).toMatchObject({
+    sources: ["octoscode-web"],
+    min_visits: 1,
+    limit: 1,
+  });
 
   // An edit sends the text verbatim against the version on screen; the list
   // then shows what the server stored, its own stamp included.
@@ -167,9 +197,10 @@ test("long-term entries edit and delete on the server, and a failed change keeps
 
   // Changed by another writer since it was loaded: refused, the server's
   // text is shown, the draft stays, and saving again applies it.
-  await memoryControl(
+  await setMemoryEntry(
     page,
-    `entries/set?id=${encodeURIComponent("^mbbbbbb")}&text=${encodeURIComponent("- works on the ledger (updated: 2026-11-09) ^mbbbbbb")}`,
+    "^mbbbbbb",
+    "- works on the ledger (updated: 2026-11-09) ^mbbbbbb",
   );
   await entry("billing").getByRole("button", { name: "Edit" }).click();
   await editor.fill("- works on payments");
@@ -203,7 +234,7 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await expect(entry("green tea")).toHaveCount(0);
 
   // Gone from the server before the save: the text is offered back.
-  await memoryControl(page, `entries/set?id=${encodeURIComponent("^mbbbbbb")}`);
+  await setMemoryEntry(page, "^mbbbbbb");
   await entry("payments").getByRole("button", { name: "Edit" }).click();
   await editor.fill("- works on refunds");
   await saveBtn.click();
@@ -221,10 +252,10 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await expect(
     (await openMemory(page)).getByText("No long-term memories yet."),
   ).toBeVisible();
-  const kept = await page.evaluate(
-    () =>
-      location.href + JSON.stringify({ ...localStorage, ...sessionStorage }),
-  );
-  for (const text of ["green tea", "payments", "refunds", "ledger"])
-    expect(kept).not.toContain(text);
+  await expectNoStoredMemory(page, [
+    "green tea",
+    "payments",
+    "refunds",
+    "ledger",
+  ]);
 });
