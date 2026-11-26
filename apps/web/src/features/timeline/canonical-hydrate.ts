@@ -299,15 +299,51 @@ export function restoreCanonicalHydrate(
   }
   // A not-yet-persisted active/interrupted thread has no durable anchor.
   // Its original question and stream still belong after prior history.
-  return placeRecoveredTerminalsBeforeNextPrompt(
-    [...entries, ...unanchored],
-    replayOrder,
-    new Set(
-      extras
-        .filter((entry) => entry.id.startsWith("terminal:"))
-        .map((entry) => entry.id),
+  return stabilizeTurnLedgerOrder(
+    placeRecoveredTerminalsBeforeNextPrompt(
+      [...entries, ...unanchored],
+      replayOrder,
+      new Set(
+        extras
+          .filter((entry) => entry.id.startsWith("terminal:"))
+          .map((entry) => entry.id),
+      ),
     ),
+    result.turns,
   );
+}
+
+/**
+ * T-0693 (N4-F01): the two projections can disagree across a turn boundary —
+ * Core can persist a finished turn's tail AFTER the next turn's prompt in the
+ * durable transcript, and the anchor merge keeps non-anchor rows at their
+ * durable slots while replay-only extras ride anchor boundaries. The turn
+ * ledger is the one order both projections answer to: a row never renders
+ * after a LATER turn's rows. Within a turn the merge order stands (stable
+ * sort), so same-turn user rows kept at durable slots and interleaved
+ * foreground/background threads are untouched; a row without a tracked turn
+ * inherits the previous row's rank and never jumps a boundary on its own.
+ */
+function stabilizeTurnLedgerOrder(
+  entries: TimelineEntry[],
+  turns: SessionHydrateResult["turns"],
+): TimelineEntry[] {
+  if (!turns?.length) return entries;
+  const rank = new Map(turns.map((turn, index) => [turn.turn_id, index]));
+  let carry = 0;
+  let disordered = false;
+  const keyed = entries.map((entry, index) => {
+    const own = entry.turnId === undefined ? undefined : rank.get(entry.turnId);
+    if (own !== undefined) {
+      if (own < carry) disordered = true;
+      carry = own;
+    }
+    return { entry, index, rank: carry };
+  });
+  if (!disordered) return entries;
+  return keyed
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ entry }) => entry);
 }
 
 /**
