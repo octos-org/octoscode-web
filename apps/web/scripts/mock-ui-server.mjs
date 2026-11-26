@@ -2964,6 +2964,30 @@ const http = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (
+    new URL(request.url, "http://fixture").pathname ===
+    "/__test__/hydrate/override"
+  ) {
+    // T-0693: install a verbatim session/hydrate result (e.g. a captured
+    // real-Core wire reply) so a reload replays the exact server truth.
+    if (request.method === "POST") {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        const parsed = JSON.parse(body);
+        hydrateOverrides.set(parsed.session_id, parsed);
+        response.writeHead(204).end();
+      });
+      return;
+    }
+    if (request.method === "DELETE") {
+      hydrateOverrides.clear();
+      response.writeHead(204).end();
+      return;
+    }
+    response.writeHead(405).end();
+    return;
+  }
   if (request.method === "POST" && request.url === "/__test__/peers/reset") {
     stagedPeers.clear();
     expertClashUsed = false;
@@ -3018,6 +3042,7 @@ const defaultSessions = [
 ];
 const sessionsByWorkspace = new Map([[defaultWorkspace, defaultSessions]]);
 const scopedListingWorkspaces = new Set();
+const hydrateOverrides = new Map(); // sessionId -> verbatim hydrate result
 
 // Durable per-Session projection log. The fixture records every projection
 // envelope a Session emits so a later hydrate of the same Session — from any
@@ -4730,6 +4755,10 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/hydrate") {
+      if (hydrateOverrides.has(sessionId)) {
+        reply(socket, request.id, hydrateOverrides.get(sessionId));
+        return;
+      }
       const openedSessionIds = openedSessionsBySocket.get(socket);
       if (
         !stagedPeers.get(sessionId)?.brief.startsWith(EXPERT_TEAM_HEADER) &&
