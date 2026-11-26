@@ -732,9 +732,17 @@ function renderFleetRow({
           </span>
           {t(peer.statusWord)}
         </span>
-        <span> · {formatElapsed(peer.elapsedMs)}</span>
+        <span>
+          {" "}
+          ·{" "}
+          {peer.elapsedMs === null
+            ? t("Elapsed unknown")
+            : formatElapsed(peer.elapsedMs)}
+        </span>
         <span data-peer-tokens>
-          {peer.tokens > 0 ? ` · ${formatPeerTokens(peer.tokens)}` : " · —"}
+          {peer.tokens !== null && peer.tokens > 0
+            ? ` · ${formatPeerTokens(peer.tokens)}`
+            : " · —"}
         </span>
         {sessionName !== "" ? <span> · {sessionName}</span> : null}
       </div>

@@ -106,13 +106,18 @@ export function TurnSummary({
           .filter(Boolean)
           .join(" · ")}
       </p>
-      <p className={styles.outputs}>
-        {summary.outputFiles.length
-          ? t("Output files: {files}", {
-              files: summary.outputFiles.join(", "),
-            })
-          : t("No output files")}
-      </p>
+      {/* T-0687 (R8-F03): "output files" means delivered/produced files; when
+          the turn only MODIFIED files the count line above already says so —
+          printing "No output files" next to file cards contradicts it. */}
+      {summary.outputFiles.length ? (
+        <p className={styles.outputs}>
+          {t("Output files: {files}", {
+            files: summary.outputFiles.join(", "),
+          })}
+        </p>
+      ) : recorded === 0 && !summary.changesUnknown ? (
+        <p className={styles.outputs}>{t("No output files")}</p>
+      ) : null}
       {terminal.latestTurnOutcome !== "completed" && terminal.body ? (
         <>
           <p className={failed ? styles.error : styles.meta}>

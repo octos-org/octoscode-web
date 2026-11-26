@@ -105,4 +105,36 @@ describe("peer lifecycle manager", () => {
     await flush();
     expect(h.onOpenPeer).toHaveBeenCalledOnce();
   });
+
+  // T-0687 (R8-F02): restored stats are unknown, never fabricated zeros.
+  it("a restored finished peer reports unknown stats, never fabricated zeros", () => {
+    const { manager } = setup();
+    const added = manager.restore(
+      {
+        profile_id: "dev",
+        peers: [
+          {
+            slug: "review",
+            topic: "peer-review",
+            brief: "Review this",
+            brief_truncated: false,
+            result: "Looks good",
+            result_truncated: false,
+            result_updated_unix: 1_700_000_000,
+            has_worktree: false,
+            closed: false,
+            master_session_id: "dev:local:tui",
+          },
+        ],
+      },
+      "/repo/wt",
+    );
+    expect(added).toEqual(["dev:local:tui#peer-review"]);
+    const row = manager
+      .getSnapshot()
+      .peers.find((peer) => peer.identity === "dev:local:tui#peer-review");
+    expect(row?.outputTokens).toBeUndefined();
+    expect(row?.openedAt).toBeNull();
+    expect(row?.finishedAt).toBe(1_700_000_000_000);
+  });
 });

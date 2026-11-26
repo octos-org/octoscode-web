@@ -12,6 +12,7 @@
 
 /** English source key → Simplified Chinese copy. */
 export const FLEET_ZH_COPY: Readonly<Record<string, string>> = Object.freeze({
+  "Elapsed unknown": "时长未知",
   Fleet: "多智能体",
   "Back to Fleet": "返回多智能体",
   "No peers yet": "还没有协作者",

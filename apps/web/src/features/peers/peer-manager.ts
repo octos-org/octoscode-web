@@ -786,7 +786,9 @@ export class PeerManager {
             activity === "done" && row.result_updated_unix !== null
               ? row.result_updated_unix * 1000
               : null,
-          outputTokens: 0,
+          // T-0687 (R8-F02): a restored row's token total is UNKNOWN — the
+          // gather result carries no usage — so the field stays absent; the
+          // dock renders nothing instead of a fabricated "0".
           requestId: null,
           requestKind: null,
           operationId: null,

@@ -89,10 +89,10 @@ export interface FleetRosterPeer {
   readonly sessionName: string;
   /** The dispatch's goal id when known, else null (flat group). */
   readonly goalId: string | null;
-  /** Elapsed ms since accepted. */
-  readonly elapsedMs: number;
-  /** Output tokens from the peer session's usage events; 0 until the first. */
-  readonly tokens: number;
+  /** Elapsed ms since accepted; null when the row was restored without one. */
+  readonly elapsedMs: number | null;
+  /** Output tokens from the peer session's usage events; null when unrestored. */
+  readonly tokens: number | null;
   /** Whether the server advertised the control methods the actions need. */
   readonly controlSupported: boolean;
   /** Phone remote control: its pending sandbox escalation can only be denied. */
@@ -436,8 +436,8 @@ export function fleetRosterFromController(input: {
       sessionId: `${master}#${row.slug}`,
       sessionName: facts?.sessionName ?? "",
       goalId: facts?.goalId ?? null,
-      elapsedMs: facts?.elapsedMs ?? 0,
-      tokens: facts?.tokens ?? 0,
+      elapsedMs: facts?.elapsedMs ?? null,
+      tokens: facts?.tokens ?? null,
       controlSupported: row.operationId !== "",
     };
   });
