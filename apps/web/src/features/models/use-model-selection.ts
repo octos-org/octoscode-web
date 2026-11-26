@@ -73,6 +73,13 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
     setState(EMPTY_MODEL_SELECTION);
   };
 
+  const cancelPending = () => {
+    refreshRequestsRef.current.invalidate();
+    setState((snapshot) =>
+      snapshot.loading ? { ...snapshot, loading: false } : snapshot,
+    );
+  };
+
   const configureCapabilities = (
     capabilities: UiProtocolCapabilities | undefined,
   ) => {
@@ -351,5 +358,12 @@ export function useModelSelection(dependencies: ModelSelectionDependencies) {
     }
   };
 
-  return { state, reset, configureCapabilities, refresh, select };
+  return {
+    state,
+    reset,
+    cancelPending,
+    configureCapabilities,
+    refresh,
+    select,
+  };
 }

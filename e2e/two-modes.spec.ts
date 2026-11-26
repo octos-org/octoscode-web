@@ -207,6 +207,7 @@ test("each mode reopens its own last Session after a reload, a reconnect and in 
 
   // Another tab keeps its own selections, and deletes this tab's chat.
   const tab = await page.context().newPage();
+  const tabFrames = observeFrames(tab);
   await turnFlagOn(tab);
   await openLink(tab, page.url(), TOKEN);
   await modeButton(tab, "Chat").click();
@@ -221,6 +222,17 @@ test("each mode reopens its own last Session after a reload, a reconnect and in 
   await tab.getByRole("menuitem", { name: /^Delete/ }).click();
   await tab.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(sessionRow(tabNavigation, chatRowId)).toHaveCount(0);
+  const deleteIdx = tabFrames.sent.findIndex(
+    (frame) =>
+      frame.method === "session/delete" && frame.params?.session_id === chatId,
+  );
+  expect(deleteIdx).toBeGreaterThanOrEqual(0);
+  expect(
+    tabFrames.sent
+      .slice(deleteIdx + 1)
+      .filter((frame) => frame.params?.session_id === chatId)
+      .map((frame) => frame.method),
+  ).toEqual([]);
   await tab.close();
 
   // Gone on the server: this tab opens nothing and says so.

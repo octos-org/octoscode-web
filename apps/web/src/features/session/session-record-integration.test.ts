@@ -3,6 +3,7 @@ import {
   CORE_UI_METHODS,
   type SessionHydrateResult,
 } from "@octos-org/octoscode-client";
+import { SessionDeletionFence } from "./session-deletion-fence.ts";
 import {
   deferred,
   enqueue,
@@ -135,5 +136,45 @@ describe("SessionRecordManager real record/controller/runtime integration", () =
     expect(h.view.timeline).toEqual(b.timeline);
     expect(b.timeline).toEqual([]);
     expect(h.client.opens.at(-2)?.after).toEqual({ stream: "A", seq: 1 });
+  });
+
+  it("fences deleting and deleted sessions from opening, ready events, and reconnect recovery", async () => {
+    const fence = new SessionDeletionFence();
+    expect(fence.begin("S1")).toBe(true);
+    expect(fence.begin("S1")).toBe(false);
+    expect(fence.isRetired("S1")).toBe(true);
+    fence.abort("S1");
+    expect(fence.isRetired("S1")).toBe(false);
+    expect(fence.begin("S1")).toBe(true);
+    fence.confirm("S1");
+    fence.abort("S1");
+    expect(fence.isRetired("S1")).toBe(true);
+
+    const h = harness({
+      presentation: true,
+      isSessionRetired: (id) => fence.isRetired(id),
+    });
+    const live = await open(h, "live");
+    h.manager.select(live.scope);
+    const racingHydrate = deferred<SessionHydrateResult>();
+    h.client.hydratedFor = (id) =>
+      id === "doomed" ? racingHydrate.promise : hydrate(id);
+    const opening = open(h, "doomed");
+    await flush();
+    expect(fence.begin("doomed")).toBe(true);
+    racingHydrate.resolve(hydrate("doomed"));
+    await expect(opening).rejects.toThrow(/being deleted/);
+    expect(h.manager.records().map((r) => r.scope.sessionId)).toEqual(["live"]);
+
+    fence.confirm("live");
+    h.client.setStatus("disconnected");
+    h.client.setStatus("connected");
+    const opensBefore = h.client.opens.length;
+    expect(
+      await h.manager.recoverRecords(new AbortController().signal),
+    ).toEqual([]);
+    expect(h.client.opens).toHaveLength(opensBefore);
+    fence.clear();
+    expect(fence.isRetired("S1")).toBe(false);
   });
 });

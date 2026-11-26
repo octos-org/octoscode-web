@@ -111,6 +111,17 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     setDiffReview(EMPTY_DIFF_REVIEW);
   };
 
+  const cancelPending = () => {
+    diffRequestsRef.current.invalidate();
+    permissionRequestsRef.current.invalidate();
+    setPermission((current) =>
+      current.loading ? { ...current, loading: false } : current,
+    );
+    setDiffReview((current) =>
+      current.loading ? { ...current, loading: false } : current,
+    );
+  };
+
   const configureCapabilities = (
     capabilities: UiProtocolCapabilities | undefined,
   ) => {
@@ -499,6 +510,7 @@ export function useCodingSafety(dependencies: CodingSafetyDependencies) {
     permission: permissionView,
     diffReview,
     reset,
+    cancelPending,
     configureCapabilities,
     refreshPermission,
     rereadPermission: () => refreshPermission(undefined, true),

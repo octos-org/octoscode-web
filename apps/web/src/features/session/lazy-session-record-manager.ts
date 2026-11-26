@@ -64,6 +64,9 @@ export class LazySessionRecordManager<Client extends ActiveSessionClient> {
   releasePermissionHold(sessionId: string): void {
     this.#engine?.releasePermissionHold(sessionId);
   }
+  cancelSessionActivity(sessionId: string): void {
+    this.#engine?.cancelSessionActivity(sessionId);
+  }
   /** Nominal engine bridge for history/review: only a currently retained record qualifies. */
   engineFor(record: SessionRecord<Client>): Engine<Client> | null {
     return this.#engine?.get(record.scope) === record ? this.#engine : null;

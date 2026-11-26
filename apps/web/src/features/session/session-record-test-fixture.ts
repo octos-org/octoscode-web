@@ -204,6 +204,7 @@ export function harness(
   options: {
     presentation?: boolean;
     permissionHeld?: (scope: { sessionId: string }) => boolean;
+    isSessionRetired?: (sessionId: string) => boolean;
   } = {},
   client = new PooledClient(),
 ) {
@@ -236,6 +237,9 @@ export function harness(
     onBackgroundActivity: () => undefined,
     ...(options.permissionHeld
       ? { permissionHeld: options.permissionHeld }
+      : {}),
+    ...(options.isSessionRetired
+      ? { isSessionRetired: options.isSessionRetired }
       : {}),
     cursorFor: (scope) =>
       manager.get(scope)?.runtime.getSnapshot().recovery.cursor,
