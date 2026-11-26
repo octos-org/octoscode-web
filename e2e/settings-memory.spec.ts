@@ -22,21 +22,30 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
     settings.getByRole("button", { name: /T0008 protocol probe/ }),
   ).toBeVisible();
 
-  // A failed search keeps those labeled facts and says so.
+  // A failed search keeps those labeled facts and shows its error in Search.
+  const searchSection = settings.getByRole("region", { name: "Search" });
+  const addSection = settings.getByRole("region", { name: "Add to memory" });
+  const detail = settings.getByRole("complementary", { name: "Memory detail" });
   await page.request.post(
     `${FIXTURE_ORIGIN}/__test__/memory/fail-next?method=memory/search`,
   );
   await settings.getByLabel("Search memories").fill("other");
   await settings.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
-    settings.getByRole("alert").getByText("memory backend unavailable"),
+    searchSection.getByRole("alert").getByText("memory backend unavailable"),
   ).toBeVisible();
   await expect(settings.getByText("Results for “protocol”")).toBeVisible();
   await expect(
     settings.getByRole("button", { name: /T0008 protocol probe/ }),
   ).toBeVisible();
 
-  // Remember: one click chain submits exactly once, even double-clicked.
+  // Without request/promote, Add to memory states the limit honestly.
+  await expect(
+    addSection.getByText(/doesn't support requesting long-term memories/),
+  ).toBeVisible();
+
+  // Remember: one click chain submits exactly once, even double-clicked,
+  // shows its receipt in place, and keeps Detail visible with read-only note.
   await settings.getByLabel("Title").fill("Refresh proof");
   await settings.getByLabel("Summary").fill("survives a reload");
   await settings.getByLabel("Memory content").fill("refresh-kept body");
@@ -47,12 +56,18 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
       node.click();
     });
   await expect(
-    settings.getByText(/^Saved “Refresh proof” .* It's open in Detail;/),
+    addSection.getByText(/^Saved “Refresh proof” .* It's open in Detail;/),
   ).toBeVisible();
-  await expect(settings.getByText("refresh-kept body")).toBeVisible();
+  await expect(detail.getByText("refresh-kept body")).toBeVisible();
+  await expect(
+    detail.getByText(
+      "Reference documents and entities can't be edited or deleted here.",
+    ),
+  ).toBeVisible();
+  await expect(detail).toBeInViewport();
   expect(ingestCalls()).toHaveLength(1);
 
-  // A failed ingest says so and keeps the form.
+  // A failed ingest says so inside Add to memory and keeps the form.
   await settings.getByLabel("Title").fill("Will fail");
   await settings.getByLabel("Summary").fill("kept on failure");
   await settings.getByLabel("Memory content").fill("failure body kept");
@@ -63,7 +78,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
     .getByRole("button", { name: "Remember this", exact: true })
     .click();
   await expect(
-    settings.getByRole("alert").getByText("memory backend unavailable"),
+    addSection.getByRole("alert").getByText("memory backend unavailable"),
   ).toBeVisible();
   await expect(settings.getByLabel("Title")).toHaveValue("Will fail");
 
@@ -112,15 +127,22 @@ test("long-term entries edit and delete on the server, and a failed change keeps
     0,
   );
 
-  // Requesting and promoting each say where the memory goes (F-005).
-  const request = settings.getByRole("button", { name: "Request memory" });
+  // Requesting and promoting each say where the memory goes (F-005),
+  // in place inside Add to memory, and an accepted request clears the draft.
+  const addSection = settings.getByRole("region", { name: "Add to memory" });
+  const request = addSection.getByRole("button", { name: "Request memory" });
   await expect(request).toHaveAccessibleDescription(/until Octos files it/);
-  await settings.getByLabel("Memory content").fill("prefers tea");
+  await addSection.getByLabel("Memory content").fill("prefers tea");
   await request.click();
-  const requested = settings.getByText(/^Octos will remember it\. .*Long-term/);
+  const requested = addSection.getByText(
+    /^Octos will remember it\. .*Long-term/,
+  );
   await expect(requested).toBeVisible();
-  await settings.getByRole("button", { name: "Promote to Knowledge" }).click();
-  await expect(settings.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
+  await expect(addSection.getByLabel("Memory content")).toHaveValue("");
+  await addSection
+    .getByRole("button", { name: "Promote to Knowledge" })
+    .click();
+  await expect(addSection.getByText(/^Handed 1 document\(s\)/)).toBeVisible();
   await expect(requested).toHaveCount(0);
 
   // An edit sends the text verbatim against the version on screen; the list

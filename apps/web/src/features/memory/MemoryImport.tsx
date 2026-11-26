@@ -226,20 +226,23 @@ export function MemoryImport({
         </p>
       )}
       <div className={styles.form}>
-        <label htmlFor="memory-import-file">
-          {t("Choose a JSON or Markdown file")}
-        </label>
-        <input
-          id="memory-import-file"
-          type="file"
-          accept=".json,.md,.markdown,application/json,text/markdown"
-          disabled={!canIngest || busy}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void choose(file);
-          }}
-        />
+        <div className={styles.filePicker}>
+          <input
+            id="memory-import-file"
+            className={styles.fileInput}
+            type="file"
+            accept=".json,.md,.markdown,application/json,text/markdown"
+            disabled={!canIngest || busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void choose(file);
+            }}
+          />
+          <label htmlFor="memory-import-file" className={styles.fileButton}>
+            {t("Choose a JSON or Markdown file")}
+          </label>
+        </div>
       </div>
       {problems ? (
         <div className={styles.error} role="alert">

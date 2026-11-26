@@ -1797,6 +1797,14 @@ const catalog: Readonly<Record<string, string>> = {
     "每条记录会带上内容指纹，服务器据此区分未变化和已更新。",
   "Editing and deleting memories are not available in the current protocol.":
     "当前协议不支持编辑或删除记忆。",
+  "Editing memories is not available in the current protocol.":
+    "当前协议不支持编辑记忆。",
+  "Deleting memories is not available in the current protocol.":
+    "当前协议不支持删除记忆。",
+  "Reference documents and entities can't be edited or deleted here.":
+    "参考资料和实体只能查看，不能在这里编辑或删除。",
+  "This connection doesn't support requesting long-term memories or promoting documents.":
+    "当前连接不支持请求写入长期记忆或提升为知识。",
   "Couldn't read the memories again: {reason}": "没能重新读取记忆：{reason}",
   "Delete memory": "删除这条记忆",
   "Delete this memory? Its archived copies go too, and it can't be undone.":
@@ -1839,8 +1847,8 @@ const catalog: Readonly<Record<string, string>> = {
   "Results for “{query}”": "“{query}”的结果",
   "Long-term memory": "长期记忆",
   Today: "今日",
-  "{count} staging notes · Refresh {refresh}":
-    "{count} 条暂存笔记 · 刷新{refresh}",
+  "{count} staging notes · Background filing {refresh}":
+    "{count} 条暂存笔记 · 后台整理{refresh}",
   enabled: "已启用",
   "(count is a lower bound)": "（数量仅为下限）",
   Entities: "实体",
