@@ -177,7 +177,7 @@ export function FleetPane({
 }
 
 /** Round 3 item 5: union rows → the FleetView roster shape (pure adapter). */
-function fleetRosterFromUnion(
+export function fleetRosterFromUnion(
   union: ReturnType<typeof unionFleetFacts>,
   workspacePath: string,
   nativeControlsAvailable: boolean,
@@ -194,9 +194,12 @@ function fleetRosterFromUnion(
       sessionId: row.adoptedSessionId,
       sessionName: workspaceName(row.fact?.workspaceRoot ?? workspacePath),
       goalId: row.goalId,
+      // T-0687 (R8-F02): a restored row has no acceptance stamp; null means
+      // "not restored", never a fabricated 0s.
       elapsedMs:
-        row.acceptedAtMs !== null ? Math.max(0, now - row.acceptedAtMs) : 0,
-      tokens: row.tokens ?? 0,
+        row.acceptedAtMs !== null ? Math.max(0, now - row.acceptedAtMs) : null,
+      // T-0687: null stays null — "—" is the unknown glyph, 0 is a measurement.
+      tokens: row.tokens,
       controlSupported: nativeControlsAvailable
         ? row.status === "started"
         : row.operationId !== null,
