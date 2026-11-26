@@ -4,7 +4,13 @@ import {
   connectAndStartWorkspace,
   runFolder,
 } from "./fixture-session.ts";
-import { productNavigation, sendPrompt } from "./sessions";
+import {
+  newSessionIn,
+  productNavigation,
+  selectSession,
+  selectedSessionId,
+  sendPrompt,
+} from "./sessions";
 import { observeFrames } from "./turn-observers";
 
 /**
@@ -223,6 +229,87 @@ test.describe("the peer dock follows each peer's own Session", () => {
     } finally {
       await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
       await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
+    }
+  });
+
+  // T-0682 (T-0679 burn-in F-02): a finished peer belongs in the Peers dock of
+  // its master, never in the workspace's plain session list — after a reload
+  // that lands on ANOTHER session of the same workspace, and again after a
+  // second reload back on the parent. Classification rides the server-attested
+  // `peer/gather` directory, not which Session this tab has open.
+  test("a finished peer stays out of the plain session list after a reload on another session", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    try {
+      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
+      const frames = observeFrames(page);
+      const folder = runFolder("peer-reload-list");
+      // Attested scoped listing, like the real Core's `session/list {cwd}`.
+      await request.post(
+        `${FIXTURE_ORIGIN}/__test__/session-list/scoped?workspace=${encodeURIComponent(folder)}`,
+      );
+      await connectAndStartWorkspace(page, folder);
+      const workspaceName = folder.split("/").pop() ?? folder;
+      const navigation = productNavigation(page);
+      const parentId = await selectedSessionId(navigation);
+
+      const slugs = await stagePeers(page, frames);
+      const primary = firstSlug(slugs);
+      await startPeerTurn(page, primary);
+      await sendPrompt(page, `Peer complete fixture ${primary}`);
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "done",
+      );
+
+      // Second session in the same workspace; reload with IT selected.
+      const secondId = await newSessionIn(navigation, workspaceName);
+      expect(secondId).not.toBe(parentId);
+      await page.reload();
+      await expect(
+        navigation.locator('[role="treeitem"][aria-current="page"]'),
+      ).toBeVisible({ timeout: 30_000 });
+
+      // The cold-restore coordinator asked the server which listed ids are
+      // peers (session-peer-coordinator.ts noteSessions -> peer/gather).
+      await expect
+        .poll(
+          () =>
+            frames.sent.filter(
+              (frame) =>
+                frame.method === "peer/gather" &&
+                JSON.stringify(frame.params).includes(primary),
+            ).length,
+          { timeout: 15_000 },
+        )
+        .toBeGreaterThan(0);
+      // And the peer never shows as a plain session row — by id or by name.
+      await expect(
+        navigation.locator(
+          `[role="treeitem"][data-session-id$="#peer-${primary}"]`,
+        ),
+      ).toHaveCount(0);
+      await expect(
+        navigation.getByRole("treeitem").filter({ hasText: primary }),
+      ).toHaveCount(0);
+      // The two plain sessions of the workspace remain listed.
+      await expect(
+        navigation.locator('[role="treeitem"][data-session-id]'),
+      ).toHaveCount(2);
+
+      // Back on the parent, the finished peer is a dock row again.
+      await selectSession(navigation, parentId);
+      await expect(dockRow(page, primary)).toBeVisible();
+      await expect(dockActivity(page, primary)).toHaveAttribute(
+        "data-activity",
+        "done",
+      );
+    } finally {
+      await request.post(FIXTURE_ORIGIN + "/__test__/peers/reset");
+      await request.post(FIXTURE_ORIGIN + "/__test__/terminal/reset");
+      await request.post(FIXTURE_ORIGIN + "/__test__/session-list/reset");
     }
   });
 });

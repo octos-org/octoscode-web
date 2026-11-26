@@ -148,9 +148,14 @@ export function SessionSidebar({
         turn,
       ]),
     );
-    const peerSessionIds = new Set(
-      (peerRoster ?? []).map((peer) => peer.identity),
-    );
+    // T-0682 (F-02): the roster only holds the OPEN master's peers, so a
+    // reloaded or second Session would list a finished peer as a plain row.
+    // The directory is `peer/gather`-attested and does not depend on which
+    // Session this tab opened.
+    const peerSessionIds = new Set([
+      ...(peerRoster ?? []).map((peer) => peer.identity),
+      ...(peerDirectory ? [...peerDirectory.keys()] : []),
+    ]);
     const projectRow = (
       workspaceRoot: string,
       item: { sessionId: string; profileId: string; title: string },
