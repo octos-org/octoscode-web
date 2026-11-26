@@ -3,6 +3,7 @@ import {
   createMemoryCommands,
   parseMemoryEntity,
   parseMemoryEntries,
+  parseMemoryRequest,
 } from "../src/memory.ts";
 import {
   CORE_UI_FEATURES,
@@ -124,6 +125,19 @@ describe("memory protocol", () => {
     await expect(
       receipts.edit({ ...shown, id: "^mbbbbbb" }, "x"),
     ).rejects.toThrow(/mismatched/);
+    for (const [wire, expected] of [
+      [
+        { status: "failed", refresh_enabled: true, reason: " model declined " },
+        { status: "failed", refreshEnabled: true, reason: "model declined" },
+      ],
+      [
+        { status: "failed", refresh_enabled: false, reason: "   " },
+        { status: "failed", refreshEnabled: false },
+      ],
+      [{ status: "failed", refresh_enabled: true, reason: 42 }, null],
+    ] as const) {
+      expect(parseMemoryRequest(wire)).toEqual(expected);
+    }
   });
 });
 
@@ -158,5 +172,11 @@ describe("session memory scope", () => {
     expect(request).toHaveBeenCalledTimes(10);
     for (const [, params] of request.mock.calls)
       expect(params.session_id).toBe("web-coding");
+    expect(request).toHaveBeenCalledWith("memory/promote", {
+      session_id: "web-coding",
+      sources: ["t0008"],
+      min_visits: 1,
+      limit: 1,
+    });
   });
 });

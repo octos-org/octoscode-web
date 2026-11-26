@@ -324,20 +324,37 @@ export function MemorySettingsContent({
         memorySessionId,
       );
       const result = await commands.request(`web:${randomUUID()}`, body.trim());
-      setAddNotice(
-        result.status !== "accepted"
-          ? t("Octos didn't accept this request: {status}.", {
-              status: result.status,
-            })
-          : result.refreshEnabled
+      if (result.status === "accepted") {
+        setAddNotice(
+          result.refreshEnabled
             ? t(
                 "Octos will remember it. It's a staging note until Octos files it into Long-term memory, where you can edit or delete it.",
               )
             : t(
                 "Octos received it, but background filing is off on this server, so it stays a staging note for now.",
               ),
-      );
-      if (result.status === "accepted") setBody("");
+        );
+        setBody("");
+      } else if (result.status === "failed") {
+        setAddError(
+          result.reason
+            ? t("Octos couldn't save this memory request: {reason}", {
+                reason: result.reason,
+              })
+            : t("Octos couldn't save this memory request. Try again later."),
+        );
+      } else {
+        setAddError(
+          result.reason
+            ? t("Octos didn't accept this request ({status}): {reason}", {
+                status: result.status,
+                reason: result.reason,
+              })
+            : t("Octos didn't accept this request: {status}.", {
+                status: result.status,
+              }),
+        );
+      }
       overviewAfterChange();
     } catch (reason) {
       setAddError(errorMessage(reason));
@@ -363,7 +380,7 @@ export function MemorySettingsContent({
       setAddNotice(
         !result.count
           ? t(
-              "Nothing to hand over yet: only documents saved here that have been opened at least twice qualify.",
+              "Nothing to hand over yet: only unpromoted documents saved here that have been opened at least once qualify.",
             )
           : result.refreshEnabled
             ? t(
@@ -1012,7 +1029,7 @@ export function MemorySettingsContent({
                       <dt>{t("Promote to Knowledge")}</dt>
                       <dd id="memory-promote-help">
                         {t(
-                          "Hands Octos the documents saved here that have been opened at least twice. What's worth keeping goes into Long-term memory.",
+                          "Hands Octos one unpromoted document saved here that has been opened at least once. What's worth keeping goes into Long-term memory.",
                         )}
                       </dd>
                     </>
