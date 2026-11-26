@@ -1219,6 +1219,20 @@ function stagePeers(
       cwd: workspaceRoot,
       brief_path: `${workspaceRoot}/.peers/${slug}/brief.md`,
     });
+    // Real Core lists a peer's Session in the workspace listing (T-0682's F-02
+    // proved it): the browser must classify it, not show it as a plain row.
+    const listed = sessionsByWorkspace.get(workspaceRoot) ?? [];
+    if (!listed.some((session) => session.id === sessionId)) {
+      sessionsByWorkspace.set(workspaceRoot, [
+        ...listed,
+        {
+          id: sessionId,
+          message_count: 0,
+          title: `Peer ${name ?? slug}`,
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+    }
   }
   return staged;
 }
