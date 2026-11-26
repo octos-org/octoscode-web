@@ -20,6 +20,7 @@ import {
 } from "./launch-transition.ts";
 import { launchFailureMessage } from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
+import { SessionDeletionFence } from "./session-deletion-fence.ts";
 import type {
   ActiveSessionAuthority,
   ActiveSessionDiagnostic,
@@ -1415,6 +1416,8 @@ export function useOctosSession({
   // an ordinary socket reconnect never invalidates their recovery.
   const authEpochRef = useRef(0);
   const watchAbortRef = useRef<AbortController | null>(null);
+  const candidateSessionIdRef = useRef<string | null>(null);
+  const deletionFenceRef = useRef(new SessionDeletionFence());
   const launchTransitionRef = useRef(
     new LaunchTransitionCoordinator<
       SessionConnectionInput,
@@ -1445,6 +1448,10 @@ export function useOctosSession({
   const currentClient = () => activeRuntime.currentAuthority()?.client ?? null;
   const currentSessionId = () =>
     selectedRecord()?.scope.sessionId ?? currentAuthority()?.sessionId ?? "";
+  const activeReadSessionId = () => {
+    const id = currentSessionId();
+    return deletionFenceRef.current.isRetired(id) ? "" : id;
+  };
   const currentCapabilities = () => currentAuthority()?.capabilities;
   // Turn receipts live in the tab envelope, keyed by the credential this tab
   // signed in with. A record's config never carries it (a record recovered
@@ -1489,6 +1496,8 @@ export function useOctosSession({
       isFatalSessionError: (reason) =>
         isFatalSessionContractError(errorMessage(reason)),
       permissionHeld: (scope) => permissionTransitions.blocked(scope.sessionId),
+      isSessionRetired: (sessionId) =>
+        deletionFenceRef.current.isRetired(sessionId),
       controllerDependencies: (scope, recordClient) => ({
         onTurnSent: (turnId) => {
           const record = recordManagerRef.current?.get(scope);
@@ -2907,7 +2916,7 @@ export function useOctosSession({
   };
   const supervisionController = useSupervision({
     client: currentClient,
-    sessionId: currentSessionId,
+    sessionId: activeReadSessionId,
     workspaceRoot: () =>
       currentAuthority()?.opened?.workspace_root ??
       currentAuthority()?.cwd ??
@@ -2917,7 +2926,7 @@ export function useOctosSession({
   const supervision = supervisionController.state;
   const codingSafetyController = useCodingSafety({
     client: currentClient,
-    sessionId: currentSessionId,
+    sessionId: activeReadSessionId,
     profileId: () => activeProfileId(),
     capabilities: currentCapabilities,
     onPermissionApplied: (client) => {
@@ -2940,7 +2949,7 @@ export function useOctosSession({
     "";
   const modelController = useModelSelection({
     client: currentClient,
-    sessionId: currentSessionId,
+    sessionId: activeReadSessionId,
     profileId: activeProfileId,
     capabilities: currentCapabilities,
   });
@@ -2980,7 +2989,10 @@ export function useOctosSession({
   useEffect(() => {
     return () => {
       candidateAbortRef.current?.abort();
+      candidateSessionIdRef.current = null;
+      watchAbortRef.current?.abort();
       recoveryAbortRef.current?.abort();
+      deletionFenceRef.current.clear();
       composerDrafts.clear();
       peerCoordinator.clear();
       recordManager.retireAll();
@@ -3015,6 +3027,7 @@ export function useOctosSession({
     const pending = refs
       .filter(
         (ref) =>
+          !deletionFenceRef.current.isRetired(ref.sessionId) &&
           !retained.includes(
             `${ref.workspaceRoot}\n${ref.profileId}\n${ref.sessionId}`,
           ),
@@ -3026,8 +3039,9 @@ export function useOctosSession({
     watchAbortRef.current = abort;
     for (const ref of pending) {
       if (abort.signal.aborted) return;
+      if (deletionFenceRef.current.isRetired(ref.sessionId)) continue;
       try {
-        await recordManager.openOnRecord(
+        const record = await recordManager.openOnRecord(
           {
             ...authority.config,
             sessionId: ref.sessionId,
@@ -3037,6 +3051,10 @@ export function useOctosSession({
           client,
           abort.signal,
         );
+        if (deletionFenceRef.current.isRetired(record.scope.sessionId)) {
+          recordManager.evict(record.scope);
+          continue;
+        }
       } catch {
         // An overview row that cannot be watched stays a plain catalog row.
         continue;
@@ -3118,7 +3136,8 @@ export function useOctosSession({
   function installSelectedRecord(
     record: ReturnType<SessionRecordManager<OctosUiClient>["selected"]>,
   ): void {
-    if (!record) return;
+    if (!record || deletionFenceRef.current.isRetired(record.scope.sessionId))
+      return;
     resumeHydrateRef.current = false;
     // These are selected-only read projections, not retained execution owners.
     // Reset them before reading B so A's settings/tasks cannot be shown in B.
@@ -3239,6 +3258,9 @@ export function useOctosSession({
     if (event.type === "raw-notification") {
       return;
     }
+    if (deletionFenceRef.current.isRetired(event.authority.sessionId)) {
+      return;
+    }
     if (event.type === "session-hydrate") {
       const resumeHydrate = resumeHydrateRef.current;
       resumeHydrateRef.current = false;
@@ -3333,6 +3355,9 @@ export function useOctosSession({
     restoreAfterAuthentication = false,
   ) => {
     recoveryAbortRef.current?.abort();
+    watchAbortRef.current?.abort();
+    watchAbortRef.current = null;
+    deletionFenceRef.current.clear();
     // Explicit login starts a new authenticated identity even at the same URL.
     // Automatic transport reconnect does not call beginConnection.
     authEpochRef.current += 1;
@@ -3343,6 +3368,7 @@ export function useOctosSession({
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    candidateSessionIdRef.current = null;
     candidateFailureRef.current = null;
     const config = normalizeConnectionInput(input);
     pendingRestoreConfigRef.current =
@@ -3461,6 +3487,11 @@ export function useOctosSession({
     requireExactWorkspace = false,
   ): Promise<WorkspaceOpenOutcome> {
     candidateFailureRef.current = null;
+    if (deletionFenceRef.current.isRetired(config.sessionId)) {
+      if (existingLease) launchTransitionRef.current.discard(existingLease);
+      markTransitioning(false);
+      return "failed";
+    }
     const lease = existingLease ?? launchTransitionRef.current.begin(config);
     if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
     // The record manager already requires the confirmed workspace root to
@@ -3495,6 +3526,7 @@ export function useOctosSession({
     candidateAbortRef.current?.abort();
     const abortController = new AbortController();
     candidateAbortRef.current = abortController;
+    candidateSessionIdRef.current = config.sessionId.trim() || null;
 
     markTransitioning(true);
     const choice = launchTransitionRef.current.restoreChoice(lease);
@@ -3515,6 +3547,10 @@ export function useOctosSession({
         pooledClient,
         abortController.signal,
       );
+      if (deletionFenceRef.current.isRetired(record.scope.sessionId)) {
+        recordManager.evict(record.scope);
+        return "failed";
+      }
       if (
         candidateAbortRef.current !== abortController ||
         !launchTransitionRef.current.isCurrent(lease) ||
@@ -3544,6 +3580,7 @@ export function useOctosSession({
     } finally {
       if (candidateAbortRef.current === abortController) {
         candidateAbortRef.current = null;
+        candidateSessionIdRef.current = null;
         markTransitioning(false);
       }
     }
@@ -3560,6 +3597,9 @@ export function useOctosSession({
 
   const disconnect = () => {
     recoveryAbortRef.current?.abort();
+    watchAbortRef.current?.abort();
+    watchAbortRef.current = null;
+    deletionFenceRef.current.clear();
     // Explicit disconnect retires every persistent record (and the pool closes
     // the shared socket via activeRuntime.disconnect()).
     composerDrafts.clear();
@@ -3569,6 +3609,7 @@ export function useOctosSession({
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    candidateSessionIdRef.current = null;
     pendingRestoreConfigRef.current = null;
     setRestoreRejected(false);
     markTransitioning(false);
@@ -3597,7 +3638,11 @@ export function useOctosSession({
   const openWorkspaceSession = (
     input: WorkspaceSessionOpenInput,
   ): Promise<WorkspaceOpenOutcome> => {
-    if (!input.sessionId.trim() || !input.cwd.trim())
+    if (
+      !input.sessionId.trim() ||
+      !input.cwd.trim() ||
+      deletionFenceRef.current.isRetired(input.sessionId)
+    )
       return Promise.resolve("failed");
     if (navigationBlockedByTurnRecovery()) return Promise.resolve("failed");
     const retained = recordManager
@@ -3615,6 +3660,7 @@ export function useOctosSession({
       // can be accepted after an earlier hydrate, making that hydrate ambiguous.
       candidateAbortRef.current?.abort();
       candidateAbortRef.current = null;
+      candidateSessionIdRef.current = null;
       launchTransitionRef.current.cancel();
       recordManager.select(retained.scope);
       installSelectedRecord(retained);
@@ -3656,6 +3702,7 @@ export function useOctosSession({
     };
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    candidateSessionIdRef.current = null;
     const lease = launchTransitionRef.current.begin(candidateConfig);
     // Switching sessions selects an existing persistent record (or opens a new
     // one). No source reset, no handoff, no eight-owner cap: the source record
@@ -3733,10 +3780,74 @@ export function useOctosSession({
     launchTransitionRef.current.cancel();
     candidateAbortRef.current?.abort();
     candidateAbortRef.current = null;
+    candidateSessionIdRef.current = null;
     onboardingController.reset();
     workspaceController.setError(null);
     setLaunch(EMPTY_LAUNCH_RUNTIME);
     markTransitioning(false);
+  };
+
+  function cancelSessionReads(sessionId: string): void {
+    if (candidateSessionIdRef.current === sessionId) {
+      candidateAbortRef.current?.abort();
+      candidateAbortRef.current = null;
+      candidateSessionIdRef.current = null;
+      launchTransitionRef.current.cancel();
+    }
+    watchAbortRef.current?.abort();
+    recordManager.cancelSessionActivity(sessionId);
+    if (currentSessionId() === sessionId) {
+      codingSafetyController.cancelPending();
+      supervisionController.cancelPending();
+      modelController.cancelPending();
+    }
+  }
+
+  const deleteSession = async (
+    sessionId: string,
+  ): Promise<SessionMutationOutcome> => {
+    const target = sessionId.trim();
+    if (!target || deletionFenceRef.current.isRetired(target)) {
+      return { kind: "skipped" };
+    }
+    const entered = deletionFenceRef.current.begin(target);
+    cancelSessionReads(target);
+    let outcome: SessionMutationOutcome;
+    try {
+      outcome = await workspaceController.deleteSession(target);
+    } catch (reason) {
+      if (entered) deletionFenceRef.current.abort(target);
+      throw reason;
+    }
+    if (outcome.kind === "done") {
+      deletionFenceRef.current.confirm(target);
+    } else if (entered) {
+      deletionFenceRef.current.abort(target);
+    }
+    return outcome;
+  };
+
+  const evictSession = (sessionId: string) => {
+    const target = sessionId.trim();
+    if (!target) return;
+    deletionFenceRef.current.confirm(target);
+    const wasSelected = selectedRecord()?.scope.sessionId === target;
+    cancelSessionReads(target);
+    for (const record of recordManager.records()) {
+      if (record.scope.sessionId === target) {
+        recordManager.evict(record.scope);
+      }
+    }
+    if (wasSelected) {
+      resumeHydrateRef.current = false;
+      setTimeline([]);
+      codingSafetyController.reset();
+      supervisionController.reset();
+      modelController.reset();
+      const capabilities = activeRuntime.currentAuthority()?.capabilities;
+      if (capabilities) configureCodingSurfaces(capabilities);
+    }
+    publishBackgroundTurns();
   };
 
   function applyProductNotification(
@@ -4091,14 +4202,8 @@ export function useOctosSession({
       watchSessions,
       switchSession,
       openSession: openWorkspaceSession,
-      deleteSession: workspaceController.deleteSession,
-      evictSession: (sessionId: string) => {
-        for (const record of recordManager.records()) {
-          if (record.scope.sessionId === sessionId) {
-            recordManager.evict(record.scope);
-          }
-        }
-      },
+      deleteSession,
+      evictSession,
       renameSession: workspaceController.renameSession,
       chooseLaunchProfile,
       cancelLaunch,
@@ -4124,6 +4229,7 @@ export function useOctosSession({
           !viewRecord ||
           recordManager.get(record.scope) !== record ||
           record.closed ||
+          deletionFenceRef.current.isRetired(record.scope.sessionId) ||
           !record.payload ||
           record.scope.endpoint !== viewRecord.scope.endpoint ||
           record.scope.authorityEpoch !== viewRecord.scope.authorityEpoch ||
@@ -4135,6 +4241,7 @@ export function useOctosSession({
           return false;
         candidateAbortRef.current?.abort();
         candidateAbortRef.current = null;
+        candidateSessionIdRef.current = null;
         launchTransitionRef.current.cancel();
         recordManager.select(record.scope);
         installSelectedRecord(record);

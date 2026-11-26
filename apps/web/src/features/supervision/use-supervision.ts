@@ -43,6 +43,7 @@ interface SupervisionDependencies {
 export interface SupervisionController {
   state: SupervisionRuntimeState;
   reset: () => void;
+  cancelPending: () => void;
   configureCapabilities: (
     capabilities: UiProtocolCapabilities | undefined,
   ) => void;
@@ -71,6 +72,22 @@ export function useSupervision(
     detailRequestsRef.current.invalidate();
     refreshRequestsRef.current.invalidate();
     setState(EMPTY_SUPERVISION);
+  };
+
+  const cancelPending = () => {
+    detailRequestsRef.current.invalidate();
+    refreshRequestsRef.current.invalidate();
+    setState((current) =>
+      current.loading || current.detail.loading
+        ? {
+            ...current,
+            loading: false,
+            detail: current.detail.loading
+              ? { ...current.detail, loading: false }
+              : current.detail,
+          }
+        : current,
+    );
   };
 
   const configureCapabilities = (
@@ -581,6 +598,7 @@ export function useSupervision(
   return {
     state,
     reset,
+    cancelPending,
     configureCapabilities,
     refresh,
     openTaskDetail,

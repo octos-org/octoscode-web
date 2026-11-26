@@ -225,6 +225,11 @@ export interface SessionRecordManagerOptions<
    * start nothing in it until `releasePermissionHold`.
    */
   permissionHeld?(scope: SessionRuntimeScope): boolean;
+  /**
+   * The Session is being deleted or has already been deleted: skip opens,
+   * recovery, ready-time refreshes, and driver discovery for it.
+   */
+  isSessionRetired?(sessionId: string): boolean;
 }
 
 /**
@@ -427,6 +432,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
         "authority" in event &&
         (this.get(record.scope) !== record ||
           record.closed ||
+          this.#isSessionRetired(record.scope.sessionId) ||
           this.#options.authorityEpoch() !== record.scope.authorityEpoch ||
           this.#options.pooledClient() !== event.authority.client ||
           !runtime.isCurrent(event.authority) ||
@@ -499,6 +505,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     const assertPoolCurrent = () => {
       if (signal.aborted || !authorizeCommit())
         throw new Error("Session opening authority changed");
+      if (this.#isSessionRetired(config.sessionId)) {
+        throw new Error("This Session is being deleted");
+      }
       if (this.#options.authorityEpoch() !== startEpoch) {
         throw new Error(
           "The authenticated authority changed while the Session was opening",
@@ -565,6 +574,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       sessionId: opened.session_id.trim(),
       authorityEpoch: startEpoch,
     };
+    if (this.#isSessionRetired(scope.sessionId)) {
+      throw new Error("This Session is being deleted");
+    }
     const record = this.ensure(scope);
     if (record.closed) throw new Error("This Session is closed");
     const current = record.runtime.currentAuthority();
@@ -637,6 +649,9 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       throw new Error("The pooled transport is not connected");
     }
     const assertPoolCurrent = () => {
+      if (this.#isSessionRetired(adoptedSessionId)) {
+        throw new Error("This Session is being deleted");
+      }
       if (this.#options.authorityEpoch() !== startEpoch) {
         throw new Error(
           "The authenticated authority changed while the adopted Session was opening",
@@ -761,7 +776,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     scope: SessionRuntimeScope,
   ): Promise<DriverInventoryState> {
     const record = this.get(scope);
-    if (!record || record.closed) {
+    if (!record || record.closed || this.#isSessionRetired(scope.sessionId)) {
       return { kind: "error", reason: "stale" } as DriverInventoryState;
     }
     const authority = record.runtime.currentAuthority();
@@ -874,6 +889,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     const fence = (): boolean =>
       Boolean(
         !record.closed &&
+        !this.#isSessionRetired(record.scope.sessionId) &&
         captured !== null &&
         this.get(record.scope) === record &&
         record.runtime.isCurrent(captured) &&
@@ -1159,6 +1175,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       return;
     }
     if (event.type === "session-ready") {
+      if (this.#isSessionRetired(record.scope.sessionId)) return;
       // The ONE controller drain, deferred until the record is actually ready
       // (canStart true). Fires exactly once per hydrate cycle.
       record.controller.resumePendingTurn();
@@ -1268,11 +1285,25 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     return this.#options.permissionHeld?.(scope) ?? false;
   }
 
+  #isSessionRetired(sessionId: string): boolean {
+    return this.#options.isSessionRetired?.(sessionId) ?? false;
+  }
+
+  /** Cancel in-flight observation walks for a session entering deletion. */
+  cancelSessionActivity(sessionId: string): void {
+    for (const record of this.#records.values()) {
+      if (record.scope.sessionId === sessionId) {
+        this.#cancelDriverInventoryWalk(record);
+      }
+    }
+  }
+
   /**
    * The Session's permission change was confirmed: a queue head held back
    * meanwhile (a release, a drain) goes now, through its controller's gates.
    */
   releasePermissionHold(sessionId: string): void {
+    if (this.#isSessionRetired(sessionId)) return;
     for (const record of this.#records.values())
       if (
         !record.closed &&
@@ -1458,7 +1489,8 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
     const pooled = this.#options.pooledClient();
     const results: SessionRecordRecoveryResult[] = [];
     for (const record of [...this.#records.values()].filter(
-      (record) => !record.closed,
+      (record) =>
+        !record.closed && !this.#isSessionRetired(record.scope.sessionId),
     )) {
       if (!pooled || pooled.status !== "connected") {
         results.push({
@@ -1479,6 +1511,7 @@ export class SessionRecordManager<Client extends ActiveSessionClient> {
       };
       const isCurrent = () =>
         !signal.aborted &&
+        !this.#isSessionRetired(record.scope.sessionId) &&
         this.#recoveryEpoch === recoveryEpoch &&
         this.#options.authorityEpoch() === authorityEpoch &&
         record.scope.authorityEpoch === authorityEpoch &&
