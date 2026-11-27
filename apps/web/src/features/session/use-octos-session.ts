@@ -4,6 +4,8 @@ import {
   wasTurnSentFromTab,
 } from "../connection/preferences.ts";
 import { randomUUID } from "../../shared/uuid.ts";
+import { OctosUiProtocolError } from "@octos-org/octoscode-client";
+import { isRecord } from "@octos-org/octoscode-client/protocol";
 import {
   useEffect,
   useRef,
@@ -352,6 +354,13 @@ export interface OctosSessionRuntime {
       | null;
     authenticated: boolean;
     restoreRejected: boolean;
+    /**
+     * T-0707: the startup restore target answered `unknown_session` — the
+     * Session is gone. The App clears the stale persisted selection, forgets
+     * the id, and reloads the listing, then acknowledges via the clear call.
+     */
+    restoreGoneSessionId: string | null;
+    clearRestoreGone(): void;
     connected: boolean;
     closed: boolean;
     /**
@@ -550,7 +559,15 @@ export interface OctosSessionRuntime {
   };
 }
 
-export type WorkspaceOpenOutcome = "opened" | "awaiting_choice" | "failed";
+export type WorkspaceOpenOutcome =
+  | "opened"
+  | "awaiting_choice"
+  | "failed"
+  // T-0707 (r9 F-01): the server answered `unknown_session` — the Session is
+  // gone (its delete raced this tab's reload, or another tab deleted it).
+  // Callers clear the stale persisted selection and reload the authoritative
+  // listing instead of parking on the error.
+  | "gone";
 
 /** Empty FIFO mirror shown before any Session record is selected. */
 const EMPTY_QUEUE: PromptTurnQueueSnapshot = {
@@ -1427,6 +1444,13 @@ export function useOctosSession({
   const pendingRestoreConfigRef = useRef<SessionConnectionInput | null>(null);
   const resumeHydrateRef = useRef(false);
   const [restoreRejected, setRestoreRejected] = useState(false);
+  // T-0707 (r9 F-01): the remembered Session answered `unknown_session` on
+  // startup restore (its delete raced this tab's reload). App clears the
+  // persisted selection and reloads the authoritative listing; the hook only
+  // reports it.
+  const [restoreGoneSessionId, setRestoreGoneSessionId] = useState<
+    string | null
+  >(null);
   const [transitioning, setTransitioning] = useState(false);
   const [backgroundTurns, setBackgroundTurns] = useState<
     readonly BackgroundSessionSnapshot[]
@@ -3387,6 +3411,12 @@ export function useOctosSession({
         if (!restoreTarget) return;
         void openCandidateSession(restoreTarget).then((outcome) => {
           if (outcome === "opened") return;
+          if (outcome === "gone") {
+            // Not a rejection: the Session is deleted. The App clears the
+            // stale persisted selection and reloads the listing; no banner.
+            setRestoreGoneSessionId(restoreTarget.sessionId);
+            return;
+          }
           if (
             activeRuntime.isCurrent(authority) &&
             authority.client.status === "connected" &&
@@ -3479,6 +3509,17 @@ export function useOctosSession({
       void onboardingController.prepare();
     }
     return null;
+  }
+
+  // Core reports a deleted/never-known Session as -32100 with
+  // `data.kind: "unknown_session"` — the ONLY error that means "gone"; every
+  // other failure (connection, permission, server) stays a loud failure.
+  function isUnknownSessionError(reason: unknown): boolean {
+    return (
+      reason instanceof OctosUiProtocolError &&
+      isRecord(reason.data) &&
+      reason.data.kind === "unknown_session"
+    );
   }
 
   async function openCandidateSession(
@@ -3574,6 +3615,16 @@ export function useOctosSession({
         launchTransitionRef.current.isCurrent(lease)
       ) {
         candidateFailureRef.current = reason;
+        if (isUnknownSessionError(reason)) {
+          // T-0707 (r9 F-01): gone, not an error — fence it so nothing
+          // retries the open loop, and let the caller recover the selection
+          // from the server's listing. No fabricated "deleted" banner either.
+          deletionFenceRef.current.confirm(config.sessionId);
+          launchTransitionRef.current.discard(lease);
+          setLaunch(EMPTY_LAUNCH_RUNTIME);
+          markTransitioning(false);
+          return "gone";
+        }
         failLaunchTransition(lease, reason);
       }
       return "failed";
@@ -4014,6 +4065,8 @@ export function useOctosSession({
         recovery: serverConnection.snapshot.recovery,
       },
       restoreRejected,
+      restoreGoneSessionId,
+      clearRestoreGone: () => setRestoreGoneSessionId(null),
       recoveryNotice,
       dismissRecoveryNotice: () => setRecoveryNotice(null),
       recoveryPending,
