@@ -592,7 +592,7 @@ export function MemorySettingsContent({
     };
     startImportRun(run);
     await importStep(run, (current) => sendFrom(current, 0));
-    return true;
+    return !run.outcome.stop;
   };
 
   /** By hand only: nothing is ever sent again on its own. */
