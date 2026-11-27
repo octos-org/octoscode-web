@@ -876,9 +876,15 @@ function PlanBlock({
       <summary className={styles.stepGroupHeader}>
         <strong>{t("Plan")}</strong>
         <span className={styles.toolStatusLabel}>
-          {ended && done === 0
-            ? t("{count} plan items", { count: plan.items.length })
-            : t("{done} of {total} done", { done, total: plan.items.length })}
+          {
+            // T-0695 (N4-F05): an ended turn with unticked items must not read
+            // as partial delivery ("1 of 3 done" after a completed handoff).
+            // The live fraction stays while the turn runs; the detail list
+            // below keeps every item's real state.
+            ended && done < plan.items.length
+              ? t("{count} plan items", { count: plan.items.length })
+              : t("{done} of {total} done", { done, total: plan.items.length })
+          }
         </span>
         {ended ? (
           <span className={styles.toolStatusLabel}>{t("Turn ended")}</span>

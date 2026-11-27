@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { WorkspaceTreeEntry } from "@octos-org/octoscode-client/session-files";
 import { ArrowLeftIcon, FileIcon } from "../../ui/Icon.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import type { SupervisedTask } from "../supervision/model.ts";
@@ -24,6 +25,13 @@ export interface OutputsTabProps {
   selected: ReturnType<typeof resolvePanelFile>;
   /** The server listed this workspace's tree (T-0417) — plain files preview. */
   workspaceListed?: boolean | undefined;
+  /**
+   * The folder's top-level entries (T-0695, N4-F04): a Chat's drawer shows
+   * only Outputs, so user-supplied inputs living beside the model's files
+   * need their own section — clearly apart from what the Session produced.
+   * Null when the tree is unavailable.
+   */
+  folderEntries?: readonly WorkspaceTreeEntry[] | null | undefined;
   onSelectPath: (path: string | null) => void;
   onOpenDelivered: (reference: string) => void;
   onOpenTask?: ((taskId: string) => void) | undefined;
@@ -48,6 +56,18 @@ export function OutputsTab(props: OutputsTabProps) {
     written.map((change) => outputFileKey(change.path, root)),
   );
   const taskOutputs = props.tasks.filter((task) => task.outputFiles.length);
+  // Plain files the user already had in the folder: not this Session's
+  // writes or sends (one listing each), never directories or dot-internals.
+  const folderInputs = (props.folderEntries ?? []).filter(
+    (entry) =>
+      entry.kind === "file" &&
+      !entry.name.startsWith(".") &&
+      !writtenHere.has(outputFileKey(entry.path, root)) &&
+      !props.delivered.some(
+        (reference) =>
+          outputFileKey(reference, root) === outputFileKey(entry.path, root),
+      ),
+  );
 
   if (props.selectedPath) {
     const { change, reference, found } = props.selected;
@@ -123,7 +143,12 @@ export function OutputsTab(props: OutputsTabProps) {
     );
   }
 
-  if (!written.length && !props.delivered.length && !taskOutputs.length)
+  if (
+    !written.length &&
+    !props.delivered.length &&
+    !taskOutputs.length &&
+    !folderInputs.length
+  )
     return (
       <p className={styles.empty}>
         {t(
@@ -225,6 +250,33 @@ export function OutputsTab(props: OutputsTabProps) {
                     <small>
                       {task.outputFiles.map(attachmentName).join(", ")}
                     </small>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {folderInputs.length ? (
+        <section className={styles.section} aria-labelledby="outputs-folder">
+          <div className={styles.sectionTitle}>
+            <h3 id="outputs-folder">{t("Already in this folder")}</h3>
+            <span>{folderInputs.length}</span>
+          </div>
+          <ul className={styles.rows}>
+            {folderInputs.map((entry) => (
+              <li key={entry.path}>
+                <button
+                  type="button"
+                  className={styles.row}
+                  title={entry.path}
+                  onClick={() => props.onSelectPath(entry.path)}
+                >
+                  <FileIcon />
+                  <span className={styles.rowText}>
+                    <strong>{entry.name}</strong>
+                    <small>{t("Not written by Octos")}</small>
                   </span>
                 </button>
               </li>

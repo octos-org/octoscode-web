@@ -2966,6 +2966,36 @@ const http = createServer(async (request, response) => {
   }
   if (
     new URL(request.url, "http://fixture").pathname ===
+    "/__test__/chat-folder/stage"
+  ) {
+    if (request.method !== "POST") {
+      response.writeHead(405).end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      const {
+        session_id,
+        path: filePath,
+        content,
+        encoding,
+      } = JSON.parse(body);
+      const files =
+        chatFolderFilesBySession.get(session_id) ??
+        chatFolderFilesBySession.set(session_id, new Map()).get(session_id);
+      files.set(
+        filePath,
+        encoding === "base64"
+          ? Buffer.from(content, "base64")
+          : Buffer.from(String(content)),
+      );
+      response.writeHead(204).end();
+    });
+    return;
+  }
+  if (
+    new URL(request.url, "http://fixture").pathname ===
     "/__test__/hydrate/override"
   ) {
     // T-0693: install a verbatim session/hydrate result (e.g. a captured
@@ -3043,6 +3073,10 @@ const defaultSessions = [
 const sessionsByWorkspace = new Map([[defaultWorkspace, defaultSessions]]);
 const scopedListingWorkspaces = new Set();
 const hydrateOverrides = new Map(); // sessionId -> verbatim hydrate result
+// T-0695 (N4-F04): files the user already had in a Chat's folder (inputs the
+// model never wrote). Staged per session; listed by the tree branch and read
+// by files.read, exactly like a real chat workspace.
+const chatFolderFilesBySession = new Map(); // sessionId -> Map(path -> content)
 
 // Durable per-Session projection log. The fixture records every projection
 // envelope a Session emits so a later hydrate of the same Session — from any
@@ -6216,6 +6250,21 @@ sockets.on("connection", (socket, request) => {
         "docs/notes.md": "# Notes\n",
         "docs/spec.md": "# Spec\n",
       };
+      const stagedChat = chatFolderFilesBySession.get(sessionId)?.get(path);
+      if (stagedChat !== undefined) {
+        const bytes = stagedChat;
+        reply(socket, request.id, {
+          session_id: sessionId,
+          path,
+          size_bytes: bytes.length,
+          offset: 0,
+          eof: true,
+          mime_type: "text/plain",
+          encoding: "base64",
+          content_base64: bytes.toString("base64"),
+        });
+        return;
+      }
       const treeContent = (openedWorkspaceBySocket.get(socket) ?? "").includes(
         "file-tree",
       )
@@ -6781,6 +6830,22 @@ sockets.on("connection", (socket, request) => {
       // T-0417 tree listing (UPCR-2026-RDA916EB5 shape): only workspaces
       // marked "file-tree" answer the tree fields; everyone else gets the
       // legacy flat listing, so the web's fallback stays exercised.
+      const chatFolderFiles = chatFolderFilesBySession.get(sessionId);
+      if (
+        (request.params.prefix !== undefined ||
+          request.params.depth !== undefined) &&
+        chatFolderFiles
+      ) {
+        // A Chat's folder lists what the user staged; one flat page.
+        reply(socket, request.id, {
+          files: [...chatFolderFiles.keys()].map((filePath) => ({
+            filename: filePath.split("/").at(-1),
+            path: filePath,
+            kind: "file",
+          })),
+        });
+        return;
+      }
       if (
         (request.params.prefix !== undefined ||
           request.params.depth !== undefined) &&
@@ -7152,6 +7217,13 @@ function streamTurn(socket, sessionId, params, nextCursor) {
     text,
     files: [],
   });
+  if (
+    text.startsWith(CHAT_PLAN_PROMPT) &&
+    chatWorkspaceBySession.has(sessionId)
+  ) {
+    streamChatPlan(socket, sessionId, turnId, nextCursor);
+    return null;
+  }
   if (
     text.startsWith(CHAT_DRAFT_PROMPT) &&
     chatWorkspaceBySession.has(sessionId)
@@ -7778,6 +7850,23 @@ function streamTurn(socket, sessionId, params, nextCursor) {
 // One read step, the draft streamed in pieces, then persisted whole so a
 // reload shows the same answer. Nothing is written to a file.
 const CHAT_DRAFT_PROMPT = "Chat draft fixture";
+// T-0695 (N4-F05): a chat turn whose plan keeps unticked items while the
+// deliverable lands and the turn ends — the card must not read "1 of 3".
+const CHAT_PLAN_PROMPT = "Chat plan fixture";
+
+function streamChatPlan(socket, sessionId, turnId, nextCursor) {
+  let seq = 1;
+  const send = (type, data) =>
+    notify(socket, sessionId, turnId, turnId, ++seq, nextCursor(), type, data);
+  send("assistant_delta", {
+    text: "Plan:\n- [x] Locate the CSV\n- [ ] Clean the rows\n- [ ] Save the cleaned file\n\nAll done — 清洗后客户台账.csv is saved.",
+  });
+  send("assistant_persisted", {
+    text: "Plan:\n- [x] Locate the CSV\n- [ ] Clean the rows\n- [ ] Save the cleaned file\n\nAll done — 清洗后客户台账.csv is saved.",
+    meta: { message_id: `${turnId}-plan` },
+  });
+  send("turn_terminal", { outcome: "completed" });
+}
 const CHAT_DRAFT_PARTS = [
   "# Week 43 report\n\n## Highlights\n\n",
   "- Revenue $184,300, up 12.4% on last week\n- 37 new customers, 9 of them online\n- Support backlog down to 14 tickets\n\n",

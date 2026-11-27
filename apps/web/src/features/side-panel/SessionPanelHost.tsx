@@ -309,6 +309,7 @@ export function SessionPanelHost(props: SessionPanelHostProps) {
           workspaceRoot={props.workspaceRoot}
           access={props.access}
           workspaceListed={treeListed}
+          folderEntries={treeListed ? (treePage?.entries ?? null) : null}
           tasks={props.tasks}
           selectedPath={props.selectedPath}
           selected={selected}
