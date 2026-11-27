@@ -314,13 +314,14 @@ export function restoreCanonicalHydrate(
 }
 
 /**
- * T-0693 (N4-F01): the two projections can disagree across a turn boundary —
- * Core can persist a finished turn's tail AFTER the next turn's prompt in the
- * durable transcript, and the anchor merge keeps non-anchor rows at their
- * durable slots while replay-only extras ride anchor boundaries. The turn
- * ledger is the one order both projections answer to: a row never renders
- * after a LATER turn's rows. Within a turn the merge order stands (stable
- * sort), so same-turn user rows kept at durable slots and interleaved
+ * T-0693 (N4-F01): the merge can place the two projections' rows differently
+ * across a turn boundary — a matched user prompt keeps its durable slot while
+ * replay-only extras ride the nearest anchor boundary, so a finished turn's
+ * leftover rows can end up below the next turn's prompt even though both
+ * projections arrive in turn order (verified on the captured N4/T-0693
+ * hydrates). The turn ledger is the one cross-turn authority: a row never
+ * renders after a LATER turn's rows. Within a turn the merge order stands
+ * (stable sort), so same-turn user rows kept at durable slots and interleaved
  * foreground/background threads are untouched; a row without a tracked turn
  * inherits the previous row's rank and never jumps a boundary on its own.
  */
