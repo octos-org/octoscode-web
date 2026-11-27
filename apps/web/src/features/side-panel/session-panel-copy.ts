@@ -65,6 +65,8 @@ export const SESSION_PANEL_ZH_COPY: Readonly<Record<string, string>> =
     "Nothing yet. Files Octos writes or sends in this session show here.":
       "还没有产物。本会话里 Octos 写出或发给你的文件会显示在这里。",
     "Written in this folder": "写在工作区里",
+    "Already in this folder": "文件夹里已有",
+    "Not written by Octos": "非本次会话产出",
     "Sent to you": "发给你的",
     "Also written in this folder": "也写在工作区里",
     "From background tasks": "后台任务产出",
