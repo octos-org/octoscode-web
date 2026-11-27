@@ -15,14 +15,13 @@
 // modules. A file's lines are its newline count plus one.
 //
 // A pull request (or its merge group) that adds lines fails unless its last
-// LABEL event is a real `labeled` by a user, not a bot (shu, 11-10). Up to
-// 150 lines the pull request's author may add it: every agent works as the
-// one shared account anantheparty, and lead-web adds the label as that
-// account after reviewing the growth. Only lead-web may add it; this script
-// cannot tell lead-web from any other agent on that account, so that rule is
-// procedure, written down in docs/testing.md. Above 150 lines only a label
-// added by a person counts (shu, 11-25); the rules are in
-// test-growth-approval.mjs. A push to main only reports.
+// LABEL event is a real `labeled` by a valid approver, not a bot (shu, 11-10,
+// 11-25, 11-27): a human author's own label never counts; the shared agent
+// account (anantheparty) approves someone else's PR with no line cap and its
+// own PRs up to 150 lines (lead-web review, written down in docs/testing.md);
+// any other person (non-author, non-bot) approves any PR. Missing author fails
+// closed. Exact rules are in test-growth-approval.mjs. A push to main only
+// reports.
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
@@ -85,7 +84,11 @@ if (!event.enforce) {
   process.exit(0);
 }
 const verdict = event.pullRequest
-  ? approval(growth, await labelEvents(event.pullRequest))
+  ? approval(
+      growth,
+      await labelEvents(event.pullRequest),
+      event.pullRequest.author,
+    )
   : { approved: false, note: "No pull request to read a label from." };
 if (verdict.approved) {
   console.log(
@@ -113,7 +116,10 @@ async function ciEvent() {
       name,
       enforce: true,
       base: "HEAD^1",
-      pullRequest: { number: payload.pull_request.number },
+      pullRequest: {
+        number: payload.pull_request.number,
+        author: payload.pull_request?.user?.login ?? null,
+      },
     };
   if (name === "merge_group") {
     const number = /\/pr-(\d+)-/.exec(payload.merge_group.head_ref)?.[1];
@@ -121,7 +127,7 @@ async function ciEvent() {
       name,
       enforce: true,
       base: payload.merge_group.base_sha,
-      pullRequest: number ? { number: Number(number) } : null,
+      pullRequest: number ? { number: Number(number), author: null } : null,
     };
   }
   const before = payload.before;
