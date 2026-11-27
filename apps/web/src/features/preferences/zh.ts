@@ -1715,13 +1715,21 @@ const catalog: Readonly<Record<string, string>> = {
   "Markdown export": "Markdown 导出",
   "{count} records will be written to Profile {profileId}.":
     "将写入配置档案 {profileId}：{count} 条。",
+  "No records selected. Select at least one record to import.":
+    "尚未选择任何记录。至少勾选一条才能导入。",
   "Sources: {sources}.": "来源：{sources}。",
   "{count} later records repeat an id already in this file and are skipped: {ids}.":
     "文件里有 {count} 条与前面的 id 重复，会跳过：{ids}。",
-  "{count} of these ids were loaded on this page, so they are on the server and will be replaced: {ids}.":
-    "其中 {count} 个 id 本页已从服务器读到过，说明服务器上已有，会被替换：{ids}。",
-  "A record already on the server with one of these ids is replaced by the version here. Afterwards the server reports how many were new, updated or unchanged.":
-    "服务器上已有同 id 的记录会被这里的版本替换。导入后服务器会报告新增、更新和未变化各多少条。",
+  "Will overwrite existing records:": "将会覆盖已有记录：",
+  "{count} selected records match ids already loaded on this page and will replace the server's version: {ids}.":
+    "已选中有 {count} 条的 id 本页已从服务器读到过，导入后会直接覆盖服务器上的版本：{ids}。",
+  "{count} selected records were not loaded on this page. The server doesn't support a side-effect-free preflight check, so any of them whose id already exists on the server will also be overwritten.":
+    "已选中有 {count} 条未在本页加载。服务器不支持无副作用预检，若这些 id 在服务器上已存在，同样会被覆盖。",
+  "Selected {selected} of {total} records": "已选 {selected} / {total} 条",
+  "Select all": "全选",
+  "Clear selection": "清除选择",
+  "Will overwrite": "将会覆盖",
+  "Not checked on server": "未预检服务器",
   "Not sent: {fields}. The server keeps its own trust, visits and dates for every record.":
     "不会发送：{fields}。每条记录的可信度、访问次数和时间由服务器自己维护。",
   "The server will shorten {count} records whose title, summary or content is longer than it keeps: {ids}.":

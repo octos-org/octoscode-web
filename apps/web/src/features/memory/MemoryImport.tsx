@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUiText, type UiText } from "../preferences/ui-text.tsx";
 import {
   IMPORT_BATCH,
@@ -153,7 +153,7 @@ export function MemoryImport({
   knownIds: ReadonlySet<string>;
   /** This scope's last import, which outlives a remount of this page. */
   lastImport: ImportRunView | null;
-  /** True once the import has started; its outcome arrives in `lastImport`. */
+  /** True once the import finished without stopping; outcome arrives in `lastImport`. */
   onImport: (name: string, records: ImportRecord[]) => Promise<boolean>;
   onClear: () => void;
   /** Sends the stopped import on from where it stopped, by hand only. */
@@ -167,15 +167,33 @@ export function MemoryImport({
     size: number;
     plan: ImportPlan;
   } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [problems, setProblems] = useState<{
     name: string;
     problems: ImportProblem[];
   } | null>(null);
+  const wasPending = useRef(false);
+
+  // If a stopped import run is resumed from ImportOutcomeNotice and finishes
+  // cleanly, close any preview that was kept around for that file.
+  useEffect(() => {
+    const pending = Boolean(lastImport?.pending);
+    if (
+      wasPending.current &&
+      lastImport &&
+      !pending &&
+      !lastImport.outcome.stop
+    ) {
+      setPreview(null);
+      setSelectedIds(new Set());
+    }
+    wasPending.current = pending;
+  }, [lastImport]);
 
   const choose = async (file: File) => {
-    setPreview(null);
     setProblems(null);
-    onClear();
     const refused = importFileProblem(file);
     if (refused) {
       setProblems({ name: file.name, problems: [refused] });
@@ -187,27 +205,78 @@ export function MemoryImport({
       return;
     }
     const parsed = parseMemoryImport(file.name, text);
-    if (parsed.ok)
+    if (parsed.ok) {
+      onClear();
       setPreview({ name: file.name, size: file.size, plan: parsed.plan });
-    else setProblems({ name: file.name, problems: parsed.problems });
-  };
-
-  const confirm = async () => {
-    if (!preview) return;
-    const { name, plan } = preview;
-    if (await onImport(name, plan.records)) setPreview(null);
+      setSelectedIds(new Set(parsed.plan.records.map((record) => record.id)));
+    } else {
+      setProblems({ name: file.name, problems: parsed.problems });
+    }
   };
 
   const plan = preview?.plan;
-  const known = plan?.records.filter((record) => knownIds.has(record.id)) ?? [];
-  const sources = plan
-    ? Object.entries(
-        plan.records.reduce<Record<string, number>>((counts, record) => {
+  const selectedRecords = useMemo(
+    () =>
+      plan ? plan.records.filter((record) => selectedIds.has(record.id)) : [],
+    [plan, selectedIds],
+  );
+  const selectedKnown = useMemo(
+    () => selectedRecords.filter((record) => knownIds.has(record.id)),
+    [selectedRecords, knownIds],
+  );
+  const selectedUnknown = useMemo(
+    () => selectedRecords.filter((record) => !knownIds.has(record.id)),
+    [selectedRecords, knownIds],
+  );
+  const selectedTrimmed = useMemo(
+    () =>
+      plan ? plan.trimmed.filter((entry) => selectedIds.has(entry.id)) : [],
+    [plan, selectedIds],
+  );
+  const sources = useMemo(
+    () =>
+      Object.entries(
+        selectedRecords.reduce<Record<string, number>>((counts, record) => {
           counts[record.source] = (counts[record.source] ?? 0) + 1;
           return counts;
         }, {}),
-      ).map(([source, count]) => `${source} (${count})`)
-    : [];
+      ).map(([source, count]) => `${source} (${count})`),
+    [selectedRecords],
+  );
+
+  const toggleRecord = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!plan) return;
+    setSelectedIds(new Set(plan.records.map((record) => record.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const cancelPreview = () => {
+    setPreview(null);
+    setSelectedIds(new Set());
+    setProblems(null);
+  };
+
+  const confirm = async () => {
+    if (!preview || selectedRecords.length === 0) return;
+    setProblems(null);
+    const { name } = preview;
+    if (await onImport(name, selectedRecords)) {
+      setPreview(null);
+      setSelectedIds(new Set());
+    }
+  };
 
   return (
     <section aria-labelledby="memory-import-heading">
@@ -276,13 +345,19 @@ export function MemoryImport({
               format: formatName(plan.format, t),
             })}
           </p>
-          <p>
-            {t("{count} records will be written to Profile {profileId}.", {
-              count: plan.records.length,
-              profileId,
-            })}{" "}
-            {t("Sources: {sources}.", { sources: sources.join(", ") })}
-          </p>
+          {selectedRecords.length > 0 ? (
+            <p>
+              {t("{count} records will be written to Profile {profileId}.", {
+                count: selectedRecords.length,
+                profileId,
+              })}{" "}
+              {t("Sources: {sources}.", { sources: sources.join(", ") })}
+            </p>
+          ) : (
+            <p className={styles.meta}>
+              {t("No records selected. Select at least one record to import.")}
+            </p>
+          )}
           {plan.skippedDuplicates.length ? (
             <p>
               {t(
@@ -294,19 +369,26 @@ export function MemoryImport({
               )}
             </p>
           ) : null}
-          {known.length ? (
-            <p>
+          {selectedKnown.length ? (
+            <p className={styles.importWarn}>
+              <strong>{t("Will overwrite existing records:")}</strong>{" "}
               {t(
-                "{count} of these ids were loaded on this page, so they are on the server and will be replaced: {ids}.",
-                { count: known.length, ids: list(known.map((r) => r.id)) },
+                "{count} selected records match ids already loaded on this page and will replace the server's version: {ids}.",
+                {
+                  count: selectedKnown.length,
+                  ids: list(selectedKnown.map((r) => r.id)),
+                },
               )}
             </p>
           ) : null}
-          <p className={styles.meta}>
-            {t(
-              "A record already on the server with one of these ids is replaced by the version here. Afterwards the server reports how many were new, updated or unchanged.",
-            )}
-          </p>
+          {selectedUnknown.length ? (
+            <p className={styles.meta}>
+              {t(
+                "{count} selected records were not loaded on this page. The server doesn't support a side-effect-free preflight check, so any of them whose id already exists on the server will also be overwritten.",
+                { count: selectedUnknown.length },
+              )}
+            </p>
+          ) : null}
           <p className={styles.meta}>
             {t(
               "Each record goes with a fingerprint of its content, so the server can tell an unchanged record from an updated one.",
@@ -320,46 +402,107 @@ export function MemoryImport({
               )}
             </p>
           ) : null}
-          {plan.trimmed.length ? (
+          {selectedTrimmed.length ? (
             <p>
               {t(
                 "The server will shorten {count} records whose title, summary or content is longer than it keeps: {ids}.",
                 {
-                  count: plan.trimmed.length,
-                  ids: list(plan.trimmed.map((entry) => entry.id)),
+                  count: selectedTrimmed.length,
+                  ids: list(selectedTrimmed.map((entry) => entry.id)),
                 },
               )}
             </p>
           ) : null}
+          <div className={styles.importToolbar}>
+            <span className={styles.importCount}>
+              {t("Selected {selected} of {total} records", {
+                selected: selectedRecords.length,
+                total: plan.records.length,
+              })}
+            </span>
+            <div className={styles.importToolbarActions}>
+              <button
+                type="button"
+                disabled={
+                  importing || selectedRecords.length === plan.records.length
+                }
+                onClick={selectAll}
+              >
+                {t("Select all")}
+              </button>
+              <button
+                type="button"
+                disabled={importing || selectedRecords.length === 0}
+                onClick={clearSelection}
+              >
+                {t("Clear selection")}
+              </button>
+            </div>
+          </div>
           <ol className={styles.importList}>
-            {plan.records.map((record) => (
-              <li key={record.id}>
-                <strong>{record.title || record.id}</strong>
-                <span>
-                  <code>{record.id}</code> · {record.kind} · {record.source} ·{" "}
-                  {record.timestamp} ·{" "}
-                  {t("{size} B of content", {
-                    size: new TextEncoder().encode(record.body).length,
-                  })}
-                </span>
-              </li>
-            ))}
+            {plan.records.map((record) => {
+              const checked = selectedIds.has(record.id);
+              const knownOnPage = knownIds.has(record.id);
+              return (
+                <li
+                  key={record.id}
+                  className={
+                    checked
+                      ? knownOnPage
+                        ? styles.importItemKnown
+                        : styles.importItem
+                      : styles.importItemExcluded
+                  }
+                >
+                  <label className={styles.importRow}>
+                    <input
+                      type="checkbox"
+                      className={styles.importCheck}
+                      checked={checked}
+                      disabled={importing}
+                      onChange={() => toggleRecord(record.id)}
+                    />
+                    <span className={styles.importRowBody}>
+                      <span className={styles.importRowHead}>
+                        <strong>{record.title || record.id}</strong>
+                        <span
+                          className={
+                            knownOnPage
+                              ? styles.importBadgeOverwrite
+                              : styles.importBadgeUnknown
+                          }
+                        >
+                          {knownOnPage
+                            ? t("Will overwrite")
+                            : t("Not checked on server")}
+                        </span>
+                      </span>
+                      <span className={styles.importRowMeta}>
+                        <code>{record.id}</code> · {record.kind} ·{" "}
+                        {record.source} · {record.timestamp} ·{" "}
+                        {t("{size} B of content", {
+                          size: new TextEncoder().encode(record.body).length,
+                        })}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
           </ol>
           <div className={styles.actions}>
             <button
               type="button"
-              disabled={busy || importing}
+              disabled={busy || importing || selectedRecords.length === 0}
               onClick={() => void confirm()}
             >
               {importing
                 ? t("Importing…")
-                : t("Import {count} records", { count: plan.records.length })}
+                : t("Import {count} records", {
+                    count: selectedRecords.length,
+                  })}
             </button>
-            <button
-              type="button"
-              disabled={importing}
-              onClick={() => setPreview(null)}
-            >
+            <button type="button" disabled={importing} onClick={cancelPreview}>
               {t("Cancel import")}
             </button>
           </div>

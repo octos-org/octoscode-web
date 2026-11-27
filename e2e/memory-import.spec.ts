@@ -165,3 +165,91 @@ test("a reply lost after the server wrote the batch is not sure, is read back, a
     `doc:octoscode-web:${mark}-200`,
   ]);
 });
+
+test("preview selection excludes unchecked records, discloses overwrite boundaries without preflight loads, and preserves preview on bad re-pick", async ({
+  page,
+}) => {
+  const mark = `sel${Date.now()}`;
+  const loads = observeSent(page, "memory/load");
+  const { settings, ingests } = await start(page);
+  const existing = record(mark, 1, { title: `${mark} existing` });
+  await chooseMemoryFile(settings, "seed.json", JSON.stringify([existing]));
+  await preview(settings)
+    .getByRole("button", { name: "Import 1 records" })
+    .click();
+  await expect(
+    settings.getByRole("status").filter({ hasText: "Imported 1 records" }),
+  ).toBeVisible();
+  await searchMemory(settings, mark);
+  await expect(
+    settings.getByRole("button", { name: new RegExp(`${mark} existing`) }),
+  ).toBeVisible();
+  const loadsBeforePreview = loads().length;
+  const ingestsBefore = ingests().length;
+
+  const fresh = record(mark, 2, { title: `${mark} fresh` });
+  const skipped = record(mark, 3, { title: `${mark} skipped` });
+  await chooseMemoryFile(
+    settings,
+    "mixed.json",
+    JSON.stringify([
+      { ...existing, body: `${mark} updated body` },
+      fresh,
+      skipped,
+    ]),
+  );
+  const panel = preview(settings);
+  await expect(panel).toContainText("Will overwrite existing records:");
+  await expect(panel).toContainText(existing.id);
+  await expect(panel).toContainText(
+    "2 selected records were not loaded on this page. The server doesn't support a side-effect-free preflight check, so any of them whose id already exists on the server will also be overwritten.",
+  );
+  await expect(panel.getByRole("listitem").first()).toContainText(
+    "Will overwrite",
+  );
+  await expect(panel.getByRole("listitem").nth(1)).toContainText(
+    "Not checked on server",
+  );
+
+  // Empty selection disables Import; Select all restores it.
+  await panel.getByRole("button", { name: "Clear selection" }).click();
+  await expect(panel).toContainText("Selected 0 of 3 records");
+  await expect(
+    panel.getByRole("button", { name: "Import 0 records" }),
+  ).toBeDisabled();
+  await panel.getByRole("button", { name: "Select all" }).click();
+  await expect(
+    panel.getByRole("button", { name: "Import 3 records" }),
+  ).toBeEnabled();
+
+  // Exclude the known-overwrite record and the third record.
+  await panel
+    .getByRole("checkbox", { name: new RegExp(`${mark} existing`) })
+    .uncheck();
+  await panel
+    .getByRole("checkbox", { name: new RegExp(`${mark} skipped`) })
+    .uncheck();
+  await expect(panel).toContainText("Selected 1 of 3 records");
+  await expect(panel).not.toContainText("Will overwrite existing records:");
+
+  // A parse error on another file must not wipe the current preview/selection.
+  await chooseMemoryFile(settings, "broken.json", "{not-json");
+  await expect(
+    settings
+      .getByRole("alert")
+      .filter({ hasText: "broken.json can't be imported:" }),
+  ).toBeVisible();
+  await expect(panel).toContainText("mixed.json");
+  await expect(panel).toContainText("Selected 1 of 3 records");
+  expect(loads()).toHaveLength(loadsBeforePreview);
+
+  await panel.getByRole("button", { name: "Import 1 records" }).click();
+  await expect(
+    settings.getByRole("status").filter({ hasText: "Imported 1 records" }),
+  ).toHaveText("Imported 1 records: 1 new · 0 updated · 0 unchanged.");
+  expect(ingests()).toHaveLength(ingestsBefore + 1);
+  const sent = ingests()[ingestsBefore]!.records as Record<string, unknown>[];
+  expect(sent.map((entry) => entry.id)).toEqual([fresh.id]);
+  expect(sent[0]!.fingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(loads()).toHaveLength(loadsBeforePreview);
+});
