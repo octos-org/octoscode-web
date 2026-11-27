@@ -2996,6 +2996,25 @@ const http = createServer(async (request, response) => {
   }
   if (
     new URL(request.url, "http://fixture").pathname ===
+    "/__test__/delete/hold-next"
+  ) {
+    heldDeleteReceipt = "armed";
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    new URL(request.url, "http://fixture").pathname ===
+    "/__test__/delete/release"
+  ) {
+    if (heldDeleteReceipt && heldDeleteReceipt !== "armed") {
+      reply(heldDeleteReceipt.socket, heldDeleteReceipt.id, {});
+    }
+    heldDeleteReceipt = null;
+    response.writeHead(204).end();
+    return;
+  }
+  if (
+    new URL(request.url, "http://fixture").pathname ===
     "/__test__/hydrate/override"
   ) {
     // T-0693: install a verbatim session/hydrate result (e.g. a captured
@@ -3077,6 +3096,11 @@ const hydrateOverrides = new Map(); // sessionId -> verbatim hydrate result
 // model never wrote). Staged per session; listed by the tree branch and read
 // by files.read, exactly like a real chat workspace.
 const chatFolderFilesBySession = new Map(); // sessionId -> Map(path -> content)
+// T-0707 (r9 F-01): sessions the fixture deleted (Core answers their open
+// with unknown_session), plus a one-shot held delete receipt so a test can
+// reload before the confirmation arrives.
+const fixtureDeletedSessionIds = new Set();
+let heldDeleteReceipt = null; // { socket, id } held until release
 
 // Durable per-Session projection log. The fixture records every projection
 // envelope a Session emits so a later hydrate of the same Session — from any
@@ -4646,6 +4670,20 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/open") {
+      if (fixtureDeletedSessionIds.has(sessionId)) {
+        // Core's exact answer for a deleted Session (r9 wire frame 1661).
+        replyError(
+          socket,
+          request.id,
+          -32_100,
+          `unknown session: ${sessionId}`,
+          {
+            kind: "unknown_session",
+            session_id: sessionId,
+          },
+        );
+        return;
+      }
       const scope = sessionScopeFor(
         sessionId,
         request.params,
@@ -5912,6 +5950,11 @@ sockets.on("connection", (socket, request) => {
           openedSessions?.delete(request.params.session_id);
         }
         sessionStateBySessionId.delete(request.params.session_id);
+      }
+      fixtureDeletedSessionIds.add(request.params.session_id);
+      if (heldDeleteReceipt === "armed") {
+        heldDeleteReceipt = { socket, id: request.id };
+        return;
       }
       reply(socket, request.id, {});
       return;

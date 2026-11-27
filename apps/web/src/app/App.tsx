@@ -1342,8 +1342,18 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   // the profile this connection opens sessions under; before the first open
   // there is nothing to scope it to and the sidebar stays tab-only.
   const [workMode, setWorkMode] = useState<WorkMode>("code");
+  // T-0707 (r9 F-01): before any Session is opened this connection (e.g. a
+  // reload that lands on a deleted selection), the profile is unknown and the
+  // scoped catalog would never list — the sidebar would sit on placeholders.
+  // A single profile shared by every Session this tab opened is
+  // unambiguous; mixed profiles still wait for the authoritative one.
+  const knownProfiles = new Set(
+    knownSessions.map((ref) => ref.profileId).filter(Boolean),
+  );
   const catalogProfileId =
-    session.opened?.active_profile_id?.trim() || protocol.profileId.trim();
+    session.opened?.active_profile_id?.trim() ||
+    protocol.profileId.trim() ||
+    (knownProfiles.size === 1 ? [...knownProfiles][0]! : "");
   const sessionCatalog = useWorkspaceSessionCatalog({
     client: protocol.client,
     capabilities: session.capabilities,
@@ -1725,6 +1735,24 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [connection, session]);
+
+  // T-0707 (r9 F-01): the startup restore hit a Session the server no longer
+  // has (its delete raced this reload). Clear the stale persisted selection
+  // (so the next reload does not retry it), forget the id locally, and reload
+  // the authoritative listing — the sidebar settles from the server, no
+  // unknown-session banner, no resurrected row. Only Core's typed
+  // `unknown_session` lands here; real errors keep their restoreRejected path.
+  useEffect(() => {
+    const gone = session.restoreGoneSessionId;
+    if (!gone) return;
+    setConnection((current) => ({ ...current, sessionId: "" }));
+    setKnownSessions((current) =>
+      current.filter((ref) => ref.sessionId !== gone),
+    );
+    forgetKnownSession(browserStorage("sessionStorage"), connection, gone);
+    setCatalogRefreshNonce((nonce) => nonce + 1);
+    session.clearRestoreGone();
+  }, [session, connection]);
 
   useEffect(() => {
     if (session.authenticated) {
@@ -3639,6 +3667,25 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
       profileId: target.profileId,
       resolveLaunch: false,
     });
+    if (outcome === "gone") {
+      // T-0707 (r9 F-01): the server no longer has this Session (its delete
+      // raced this tab's reload, or another tab deleted it). Drop the stale
+      // persisted selection for this mode, forget the id locally, and reload
+      // the authoritative listing — other rows' titles settle from the
+      // server, and nothing re-opens the deleted id. Real errors never take
+      // this arm; only Core's typed `unknown_session` does.
+      setKnownSessions(
+        forgetKnownSession(
+          browserStorage("sessionStorage"),
+          connection,
+          target.sessionId,
+        ),
+      );
+      if (mode)
+        setModeSelectionState((current) => ({ ...current, [mode]: null }));
+      setCatalogRefreshNonce((nonce) => nonce + 1);
+      return false;
+    }
     if (outcome !== "opened") return false;
     if (compact) setSidebarCollapsed(true);
     return true;
