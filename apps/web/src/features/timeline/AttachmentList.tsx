@@ -284,6 +284,12 @@ function AttachmentItem({
           }
           aria-expanded={previewOpen}
           aria-controls={previewId}
+          aria-label={t(
+            previewOpen ? "Hide preview for {name}" : "Preview {name}",
+            {
+              name,
+            },
+          )}
           data-attachment-preview
           onClick={() => setPreviewOpen((value) => !value)}
         >

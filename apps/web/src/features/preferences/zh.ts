@@ -2218,6 +2218,7 @@ const catalog: Readonly<Record<string, string>> = {
   // Artifact preview (T-0012).
   Preview: "预览",
   "Hide preview": "收起预览",
+  "Hide preview for {name}": "收起预览 {name}",
   "Preview {name}": "预览 {name}",
   File: "文件",
   "Show in folder": "在文件夹中显示",

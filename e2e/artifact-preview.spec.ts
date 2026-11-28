@@ -17,7 +17,9 @@ test("keeps a structured write artifact and its preview after reload", async ({
   await expect(item).toBeVisible();
   await page.reload();
   await expect(item).toBeVisible();
-  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  await item
+    .getByRole("button", { name: "Preview report.md", exact: true })
+    .click();
   const preview = item
     .locator(".artifact-preview, [data-artifact-kind]")
     .last();
@@ -37,7 +39,9 @@ test("keeps a structured write artifact and its preview after reload", async ({
   );
   expect(delivered.ok()).toBe(true);
   const huge = page.locator('[data-attachment="huge.csv"]');
-  await huge.getByRole("button", { name: "Preview", exact: true }).click();
+  await huge
+    .getByRole("button", { name: "Preview huge.csv", exact: true })
+    .click();
   await expect(huge.locator('[data-artifact-kind="csv"]')).toContainText(
     "This file is larger than 32 MiB, too large to preview here.",
   );
