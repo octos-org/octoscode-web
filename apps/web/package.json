@@ -31,12 +31,12 @@
   },
   "devDependencies": {
     "@types/papaparse": "5.5.2",
-    "@types/react": "^19.3.0",
+    "@types/react": "^19.3.1",
     "@types/react-dom": "^19.3.0",
-    "@types/react-test-renderer": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@types/react-test-renderer": "^19.3.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "react-test-renderer": "19.3.1",
-    "vite": "^8.3.5",
-    "ws": "^8.22.0"
+    "vite": "^8.3.8",
+    "ws": "^8.23.0"
   }
 }
