@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { startSession } from "./fixture-session";
+import { connect, startSession } from "./fixture-session";
 import { interceptRequests, sendEnvelope, sendResult } from "./wire";
 import { stopButton } from "./sessions";
 import { axeViolations } from "./axe";
@@ -159,4 +159,27 @@ test("keeps the mobile composer on screen and makes navigation an accessible dra
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     320,
   );
+});
+
+test("an open folder dialog does not fake 'sessions unavailable' behind it", async ({
+  page,
+}) => {
+  await connect(page);
+  const hero = page.getByRole("region", {
+    name: /Choose a workspace|Add workspace/,
+  });
+  await expect(hero).toBeVisible();
+  await page
+    .getByRole("button", { name: "Add workspace", exact: true })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await expect(dialog).toBeVisible();
+  // T-0743 F1: the hero slot stays empty behind the dialog; the bogus
+  // "sessions unavailable" card belongs to a server that truly cannot start
+  // sessions, not to an open picker.
+  await expect(page.getByText("Coding sessions unavailable")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(hero).toBeVisible();
 });

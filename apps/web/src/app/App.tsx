@@ -5492,51 +5492,52 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         target={resumeTarget}
                       />
                     ) : null}
-                    {codingCapabilities.sessionCreationAvailable &&
-                    !workspacePicker.open ? (
-                      <div
-                        ref={heroPickerRef}
-                        className={productStyles.heroPickerSlot}
-                      >
-                        <SurfaceBoundary
-                          fallback={
-                            <DeferredSurface label="Loading workspaces…" />
-                          }
+                    {codingCapabilities.sessionCreationAvailable ? (
+                      !workspacePicker.open ? (
+                        <div
+                          ref={heroPickerRef}
+                          className={productStyles.heroPickerSlot}
                         >
-                          <NewSessionWorkspacePicker
-                            presentation="hero"
-                            cancelLabel={t("Change server")}
-                            workspaces={recentWorkspaces.map((workspace) => ({
-                              id: workspace.id,
-                              name: workspace.name,
-                              path: workspace.path,
-                            }))}
-                            {...(serverWorkingDirectory
-                              ? { serverWorkingDirectory }
-                              : {})}
-                            {...(recentWorkspaces[0]
-                              ? { recentWorkspaceId: recentWorkspaces[0].id }
-                              : {})}
-                            {...(workspaceBrowse
-                              ? { browse: workspaceBrowse }
-                              : {})}
-                            error={workspaceError}
-                            errorKind={workspaceErrorKind}
-                            creating={
-                              session.status === "connecting" ||
-                              workspaceProduct.transitioning
+                          <SurfaceBoundary
+                            fallback={
+                              <DeferredSurface label="Loading workspaces…" />
                             }
-                            onCancel={disconnect}
-                            onCreate={({ workspacePath }) =>
-                              createSessionInWorkspace(
-                                workspacePath,
-                                undefined,
-                                { preferExisting: true },
-                              )
-                            }
-                          />
-                        </SurfaceBoundary>
-                      </div>
+                          >
+                            <NewSessionWorkspacePicker
+                              presentation="hero"
+                              cancelLabel={t("Change server")}
+                              workspaces={recentWorkspaces.map((workspace) => ({
+                                id: workspace.id,
+                                name: workspace.name,
+                                path: workspace.path,
+                              }))}
+                              {...(serverWorkingDirectory
+                                ? { serverWorkingDirectory }
+                                : {})}
+                              {...(recentWorkspaces[0]
+                                ? { recentWorkspaceId: recentWorkspaces[0].id }
+                                : {})}
+                              {...(workspaceBrowse
+                                ? { browse: workspaceBrowse }
+                                : {})}
+                              error={workspaceError}
+                              errorKind={workspaceErrorKind}
+                              creating={
+                                session.status === "connecting" ||
+                                workspaceProduct.transitioning
+                              }
+                              onCancel={disconnect}
+                              onCreate={({ workspacePath }) =>
+                                createSessionInWorkspace(
+                                  workspacePath,
+                                  undefined,
+                                  { preferExisting: true },
+                                )
+                              }
+                            />
+                          </SurfaceBoundary>
+                        </div>
+                      ) : null
                     ) : (
                       <section
                         className={productStyles.sessionUnavailable}

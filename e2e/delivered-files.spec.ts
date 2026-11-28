@@ -97,7 +97,9 @@ test("shows files the agent delivers, previews images, downloads them, and keeps
   });
   await page.reload();
   const reloaded = page.locator('[data-attachment="p20-art.png"]');
-  await reloaded.getByRole("button", { name: "Preview", exact: true }).click();
+  await reloaded
+    .getByRole("button", { name: "Preview p20-art.png", exact: true })
+    .click();
   await expect(
     reloaded.locator('[data-artifact-kind="image"] img'),
   ).toBeVisible();

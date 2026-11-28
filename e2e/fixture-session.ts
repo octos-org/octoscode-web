@@ -132,7 +132,9 @@ export async function previewDelivery(
   expect(response.ok()).toBe(true);
   const item = page.locator(`[data-attachment="${name}"]`);
   await expect(item).toBeVisible();
-  await item.getByRole("button", { name: "Preview", exact: true }).click();
+  await item
+    .getByRole("button", { name: `Preview ${name}`, exact: true })
+    .click();
   const preview = item
     .locator(".artifact-preview, [data-artifact-kind]")
     .last();
