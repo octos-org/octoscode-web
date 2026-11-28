@@ -1510,7 +1510,24 @@ const catalog: Readonly<Record<string, string>> = {
   "Previous match": "上一个匹配",
   "Next match": "下一个匹配",
   "Keyboard shortcuts": "键盘快捷键",
-  "Close shortcuts help": "关闭快捷键帮助",
+  "Close help": "关闭帮助",
+  "Open this help, outside the message box": "打开本帮助（在输入框外按）",
+  "Start a task": "开始一项任务",
+  "Pick a template on the home page, or describe the task in your own words. A template only fills in the message box, so you can edit it before sending.":
+    "在首页选一个模板，或者直接用自己的话描述任务。模板只会填进输入框，发送前可以修改。",
+  "Get files back": "拿到文件",
+  "A new chat answers in the conversation and saves no files.":
+    "新对话只在对话里回答，不保存文件。",
+  "Select {allow} to let this chat save files in its own folder. The network stays blocked, and the chat waits until the server confirms the change.":
+    "点{allow}后，这个对话才能把文件存进它自己的文件夹。网络仍然禁止；服务器确认这项改动之前，对话不会发送。",
+  "{turnOff} makes the chat read-only again. Files it already saved stay.":
+    "点{turnOff}回到只读，已经存下的文件还在。",
+  "In Code, Octos works in the folder you chose, with the permission shown under the message box. A change there applies to this session only.":
+    "在编码模式里，Octos 在你选的文件夹里工作，权限显示在输入框下方。在那里改权限只影响当前会话。",
+  "Octos works in the folder you chose, with the permission shown under the message box. A change there applies to this session only.":
+    "Octos 在你选的文件夹里工作，权限显示在输入框下方。在那里改权限只影响当前会话。",
+  "Attach files with {files} in the message box, by dragging, or by pasting: text, images, Markdown, CSV and PDF, not Office files. Your attachments and the files Octos sends or saves appear in the conversation with {preview} and {download}. Files from Octos are also listed under {outputs}.":
+    "附件可以用输入框里的{files}添加，也可以拖进来或粘贴：支持文本、图片、Markdown、CSV 和 PDF，不支持 Office 文件。你的附件，以及 Octos 发给你或存下的文件，都会显示在对话里，带{preview}和{download}。Octos 给的文件也会列在{outputs}里。",
   "While a turn is running": "这一轮运行期间",
   "Command palette": "命令面板",
   "Search conversation (palette)": "搜索对话",
