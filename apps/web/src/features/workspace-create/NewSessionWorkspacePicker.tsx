@@ -53,6 +53,8 @@ export interface NewSessionWorkspacePickerProps {
   recentWorkspaceId?: string;
   loading?: boolean;
   error?: string | null;
+  /** Typed cause of `error`; "chat_workspace_reserved" shows the folder-swap recovery. */
+  errorKind?: string | null;
   creating?: boolean;
   cancelLabel?: string;
   /** The server's verbatim path rejection ("not a directory", …). */
@@ -102,6 +104,7 @@ function PickerBody({
   recentWorkspaceId,
   loading = false,
   error = null,
+  errorKind = null,
   creating = false,
   cancelLabel = "Cancel",
   serverPathError = null,
@@ -180,6 +183,15 @@ function PickerBody({
               role="alert"
             >
               <span>{error}</span>
+              {errorKind === "chat_workspace_reserved" ? (
+                <button
+                  type="button"
+                  className={styles.retry}
+                  onClick={() => onViewChange("browse")}
+                >
+                  {t("Choose a different folder")}
+                </button>
+              ) : null}
               {onRetry ? (
                 <button
                   type="button"
