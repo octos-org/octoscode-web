@@ -27,7 +27,7 @@ const VERBATIM = new Set([
   // The language picker names each language in itself.
   "English",
   // A command the user types.
-  "octoscode onboard",
+  "octos init",
   // The case-sensitive search toggle's glyph.
   "Aa",
 ]);

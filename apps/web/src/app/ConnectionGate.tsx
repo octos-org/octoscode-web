@@ -34,7 +34,7 @@ import {
   durableDraftScope,
 } from "../features/session/durable-session-drafts.ts";
 import {
-  claimPairingCode,
+  claimPairingCodeOnce,
   consumePairingLink,
   loopbackOrigin,
   pairingErrorCopy,
@@ -245,27 +245,32 @@ export function ConnectionGate() {
       setPairingClaiming(false);
       return;
     }
+    // The claim POST itself is shared page-wide (claimPairingCodeOnce): a
+    // StrictMode cleanup must not cancel it, or the server may consume the
+    // single-use code with the client never reading the token back. The
+    // controller still marks THIS mount's interest, so a disconnect (which
+    // aborts it) drops the result without connecting.
     const controller = new AbortController();
     pairingAbortRef.current = controller;
-    void claimPairingCode(pairingLink, { signal: controller.signal }).then(
-      (result) => {
-        if (controller.signal.aborted) return;
-        pairingAbortRef.current = null;
-        if (!result.ok) {
-          changeConnection({ ...initialConnection, endpoint: origin });
-          setPairingError(pairingErrorCopy(result.kind));
-          setPairingClaiming(false);
-          return;
-        }
-        const next = {
-          ...initialConnection,
-          endpoint: result.claim.serverOrigin,
-          token: result.claim.token,
-        };
-        changeConnection(next);
-        requestConnect(next);
-      },
-    );
+    void claimPairingCodeOnce(pairingLink).then((result) => {
+      if (controller.signal.aborted) return;
+      pairingAbortRef.current = null;
+      if (!result.ok) {
+        changeConnection({ ...initialConnection, endpoint: origin });
+        setPairingError(pairingErrorCopy(result.kind));
+        setPairingClaiming(false);
+        return;
+      }
+      const next = {
+        ...initialConnection,
+        endpoint: result.claim.serverOrigin,
+        token: result.claim.token,
+      };
+      changeConnection(next);
+      requestConnect(next);
+    });
+    // StrictMode (dev) cleanup: only this mount's interest ends — the shared
+    // claim keeps running for the remount.
     return () => controller.abort();
   }, [pairingLink]);
 

@@ -726,8 +726,10 @@ const catalog: Readonly<Record<string, string>> = {
   "Route identity is fixed for existing configurations.":
     "现有配置的路由身份不可更改。",
   "Route label": "路由标签",
-  "Run the canonical setup on the server, then reconnect this workspace.":
-    "请在服务器上运行原生设置流程，然后重新连接此工作区。",
+  "Run the setup on the server, then reconnect this workspace.":
+    "请在服务器上完成初始化，然后重新连接此工作区。",
+  "For a server you run on this machine, restart it with `octos serve --solo` instead and finish setup here.":
+    "本机自己运行的服务器，可改用 `octos serve --solo` 重新启动，然后在这里完成设置。",
   "Run the checks and summarize drift": "运行检查并总结偏差",
   "Run the server's native review specialists on the current project changes. This starts a Session turn; it is not a diff preview.":
     "使用服务器的原生审查专家检查当前项目更改。这会启动一个会话轮次，而不是仅显示差异预览。",

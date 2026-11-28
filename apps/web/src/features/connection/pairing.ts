@@ -176,7 +176,15 @@ export interface PairingRequestOptions {
   readonly signal?: AbortSignal;
 }
 
-/** POST the code to `<octos>/pair/claim` and read back the API token. */
+/**
+ * POST the code to `<octos>/pair/claim` and read back the API token.
+ *
+ * The code is SINGLE-USE on the server. Do not call this twice for one link:
+ * the second POST comes back "already used" even when the first was aborted
+ * on the client (an aborted fetch may still have consumed the code). The
+ * connection gate therefore claims through {@link claimPairingCodeOnce},
+ * which shares one in-flight request across React StrictMode remounts.
+ */
 export async function claimPairingCode(
   link: PairingLink,
   options: PairingRequestOptions = {},
@@ -202,6 +210,31 @@ export async function claimPairingCode(
   }
   const claim = readClaim(body, origin);
   return claim ? { ok: true, claim } : { ok: false, kind: "pair_unreachable" };
+}
+
+/**
+ * One in-flight claim per link, page-wide. React StrictMode (dev) mounts the
+ * claim effect, cleans it up, and mounts it again; a per-effect request would
+ * POST the single-use code twice and surface "already used" from the second.
+ * Held here — NOT behind an AbortSignal the effect cleanup cancels — so the
+ * remount shares the same request instead of re-posting, and each caller
+ * decides independently whether its (stale) mount still applies the result.
+ */
+const inflightClaims = new Map<string, Promise<PairingResult>>();
+
+/** The single-use claim, issued at most once per link per page. */
+export function claimPairingCodeOnce(
+  link: PairingLink,
+): Promise<PairingResult> {
+  const key = `${link.origin}
+${link.code}`;
+  const inflight = inflightClaims.get(key);
+  if (inflight) return inflight;
+  const claim = claimPairingCode(link).finally(() => {
+    if (inflightClaims.get(key) === claim) inflightClaims.delete(key);
+  });
+  inflightClaims.set(key, claim);
+  return claim;
 }
 
 export interface PairingInfo {
