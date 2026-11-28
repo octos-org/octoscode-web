@@ -34,23 +34,25 @@ octoscode-web ───┘                        agents · tools · sessions ·
 The two clients share server-owned runtime truth. The Web app does not contain a
 second agent loop, plugin host, sandbox, or session store.
 
-## Code mode today, Chat mode in preview
+## Code and Chat modes
 
-Everything on this page is **Code mode**: pick a folder on the server and work
-in it. It is available now and is what every user sees.
+The app has two modes, switched under **Work mode** at the top of the sidebar
+(in the drawer on a phone):
 
-**Chat mode** is for everyday work without picking a folder: each chat gets its
-own folder that the server assigns. It is **not available to users yet**. It
-sits behind a per-browser preview flag that is off by default, and needs Core
-features that have not shipped in a release (they are in Core main). Beyond this
-repository's protocol fixture, whose files are simulated, the full flow has also
-run on an isolated real Core build from main (files really written, refusal
-really enforced), and the permission path has passed an independent real-Core
-security review. octoscode-web 1.0 is planned for when Chat mode opens; it has
-not been released.
+- **Code**: pick a folder on the server and work in it. Needs Octos v2.0.3 or
+  newer.
+- **Chat**: everyday work without picking a folder, such as a weekly report or a
+  cleaned-up list. Each chat gets its own folder that the server assigns. A new
+  chat is read-only; **Allow file outputs** lets it save files, which you then
+  preview and download under **Outputs**. Needs Octos v2.1.0 or newer.
+
+From octoscode-web 1.0, both modes are on by default. **1.0 has not been
+released yet.** Until it is, releases up to v0.22 have Code mode only, and
+builds of `main` show Code only unless a tester turns on the Chat preview in
+that browser. See [Use Chat mode](docs/getting-started.md#use-chat-mode).
 
 - [Product scope](docs/product.md#code-and-chat-modes): what Chat mode does and
-  what has to happen before it opens.
+  how it is kept apart from Code.
 - [1.0 release notes draft](docs/release-notes-1.0-draft.md) and
   [1.0 flag drill](docs/release-1.0-flag-drill.md): release preparation, in
   Chinese.
@@ -104,34 +106,79 @@ passes do not establish complete TUI parity or acceptance of the live soak. See
 
 ### First time, against a real Octos server
 
-Four steps. Each was run exactly as written from an empty home directory. Pick a
-token — any string — and use the same one everywhere.
+Five steps, from an empty home directory on Linux or a Mac. Pick a token — any
+string — and use the same one everywhere.
 
-You need Node.js 22+ and pnpm (`corepack enable` installs the right pnpm), and
-an `octos` binary. Running the
-[Octoscode TUI](https://github.com/octos-org/octoscode) once downloads one to
-`~/.octos/bin/octos`. It is **not** added to your `PATH`, so the commands below
-use the full path.
+You need:
 
-**1. Start the server:**
+- Git, curl, and Node.js 22 or newer.
+- pnpm 11.5.2. On Node.js 22 or 24, `corepack enable` provides it; if that fails
+  with a permission error, Node.js is installed for all users, so run it with
+  `sudo` or use a per-user Node.js such as nvm. Node.js 25 and newer no longer
+  include Corepack: run `npm install -g pnpm@11.5.2` instead.
+- Octos v2.0.3 or newer for Code mode, v2.1.0 or newer for Chat mode. Step 1
+  installs it.
+
+**1. Install the Octos server.** Download the bundle for your computer from
+[Octos releases](https://github.com/octos-org/octos/releases), check it, and
+unpack it into `~/.octos/bin`:
+
+```sh
+VERSION=v2.1.0
+ASSET=octos-bundle-x86_64-unknown-linux-gnu.tar.gz
+mkdir -p ~/.octos/bin
+cd "$(mktemp -d)"
+curl -fLO "https://github.com/octos-org/octos/releases/download/$VERSION/$ASSET"
+curl -fLO "https://github.com/octos-org/octos/releases/download/$VERSION/$ASSET.sha256"
+sha256sum -c "$ASSET.sha256"
+tar -xzf "$ASSET" -C ~/.octos/bin
+~/.octos/bin/octos --version
+```
+
+On Linux ARM64, set `ASSET=octos-bundle-aarch64-unknown-linux-gnu.tar.gz`. On an
+Apple silicon Mac, set `ASSET=octos-bundle-aarch64-apple-darwin.tar.gz` and
+check it with `shasum -a 256 -c "$ASSET.sha256"`. Windows x64 has
+`octos-bundle-x86_64-pc-windows-msvc.zip`; the commands here are for Linux and
+macOS shells. v2.1.0 is the first Octos release with Chat mode; until it is
+published, `VERSION=v2.0.3` gives you Code mode. `~/.octos/bin` is **not** added
+to your `PATH`, so the commands below use the full path.
+
+The [Octoscode TUI](https://github.com/octos-org/octoscode) also installs a
+server into `~/.octos/bin` the first time it runs, but only the version that TUI
+release was built for. Check it with `~/.octos/bin/octos --version`, and install
+the bundle above if it is older than you need.
+
+**2. Start the server:**
 
 ```sh
 export OCTOS_AUTH_TOKEN=my-local-token
-~/.octos/bin/octos serve --host 127.0.0.1 --port 50080 \
-  --auth-token "$OCTOS_AUTH_TOKEN" --solo
+~/.octos/bin/octos serve --host 127.0.0.1 --port 50080 --solo
 ```
 
-`--solo` lets this app create your profile on first run. Without it a fresh
-server answers "This server cannot onboard from the Web".
+The server reads the token from `OCTOS_AUTH_TOKEN`. Do not also pass
+`--auth-token`: it puts the token in the process list, and the server warns
+about that. `--solo` lets this app create your profile on first run. Without it
+a fresh server answers "This server cannot onboard from the Web". The server
+keeps its data in `~/.octos`.
 
-**2. Start this app**, in another terminal:
+**3. Get and start this app**, in another terminal:
 
 ```sh
+git clone --branch v1.0.0 https://github.com/octos-org/octoscode-web.git
+cd octoscode-web
 pnpm install --frozen-lockfile
+pnpm build
 OCTOSCODE_DEV_PROXY_TARGET=http://127.0.0.1:50080 \
 OCTOSCODE_DEV_PROXY_ORIGIN=http://127.0.0.1:50080 \
-pnpm dev
+pnpm --filter @octos-org/octoscode-web exec vite preview --host 127.0.0.1
 ```
+
+`--branch` picks a release;
+[Releases](https://github.com/octos-org/octoscode-web/releases) lists them, and
+`main` is unreleased work. Until 1.0 is published, use `--branch v0.22.0`, which
+has Code mode only. Each release also has an archive,
+`octoscode-web-<tag>.tar.gz`, with the same app already built, for hosting
+behind a web server; see [Deployment](docs/deployment.md).
 
 Keep both `OCTOSCODE_DEV_PROXY_*` variables. They make the browser talk only to
 this app's own address, which forwards to the server. Leave them out and the
@@ -139,40 +186,61 @@ server refuses the browser, because by default it trusts only its own address �
 and the page reports a connection failure that blames your server and token,
 though both are fine.
 
-**3. Open the address step 2 prints** — usually <http://127.0.0.1:4173>. Leave
-**Server origin** as it is, paste the token into **Auth token**, and select
-**Connect**. Under **Add workspace** enter a project folder's full path and
-select **Start session**. The first time, **Create your local coding profile**
-opens: set **Profile ID** to `main`, pick a **Provider** and **Model**, and
-paste the provider's API key.
+**4. Open <http://127.0.0.1:4173>**, the address step 3 prints. Leave **Server
+origin** as it is, paste the token into **Auth token**, and select **Connect**.
+Under **Add workspace** enter a project folder's full path, or select
+**Browse…**, then select **Start session**. The first time, **Set up your coding
+assistant** opens:
 
-**4. Optionally attach the terminal too:**
+1. **Step 1 of 2 · Model service**: choose a provider and a **Model**, then
+   select **Continue**. You can leave **Advanced** closed: it holds the
+   profile's ID, which is `coding` unless you change it.
+2. **Step 2 of 2 · Connect**: paste the provider's API key and select **Test,
+   save & open**. The key is tested with the provider before anything is saved.
+   Octos keeps it; the browser does not.
+
+The conversation then opens. For a Kimi Coding Plan key, see
+[Kimi](docs/getting-started.md#kimi). For Chat mode, see
+[Use Chat mode](docs/getting-started.md#use-chat-mode).
+
+**5. Optionally attach the terminal too:**
 
 ```sh
 OCTOS_AUTH_TOKEN=my-local-token octoscode \
-  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws --profile-id main
+  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws --profile-id coding
 ```
 
-It reports "Pass --session to open an interactive session." That is expected:
-type `/resume` to join the conversation from the browser. See
+If you changed the profile ID in step 4, use yours. It reports "Pass --session
+to open an interactive session." That is expected: type `/resume` to join the
+conversation from the browser. See
 [Share a session with the terminal](#share-a-session-with-the-terminal).
 
-| You see                                                         | Fix                                                                       |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `command not found: octos`                                      | Use the full path, `~/.octos/bin/octos`                                   |
-| "This server cannot onboard from the Web"                       | Restart the server with `--solo`                                          |
-| A connection failure, though the server runs and token is right | Restart step 2 with both `OCTOSCODE_DEV_PROXY_*` variables set            |
-| Nothing to pick after `/resume` in the terminal                 | Send one message in the browser first; a session lists once it has a turn |
+| You see                                                                        | Fix                                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `command not found: octos`                                                     | Use the full path, `~/.octos/bin/octos`                                   |
+| `corepack: command not found`                                                  | Node.js 25 and newer: `npm install -g pnpm@11.5.2`                        |
+| `sha256sum: command not found` on a Mac                                        | `shasum -a 256 -c "$ASSET.sha256"`                                        |
+| "This server cannot onboard from the Web"                                      | Restart the server with `--solo`                                          |
+| A connection failure, though the server runs and token is right                | Restart step 3 with both `OCTOSCODE_DEV_PROXY_*` variables set            |
+| **Chat** is disabled and says the server cannot give every chat its own folder | The server is older than v2.1.0: install v2.1.0 (step 1) and restart it   |
+| Nothing to pick after `/resume` in the terminal                                | Send one message in the browser first; a session lists once it has a turn |
 
 Serving this app somewhere without that proxy? Tell the server to trust its
 address: `OCTOS_APPUI_ALLOWED_ORIGINS=http://<host>:<port>` on the server, or
 `appui.allowed_origins` in its config.
 
-### Developing this app, without Octos
+To upgrade either part or go back to an earlier release, see
+[Upgrade or roll back](docs/getting-started.md#upgrade-or-roll-back).
 
-The deterministic fixture stands in for a server. It listens on port 50080 by
-default — the same port as step 1 — so run one or the other, or move the fixture
-with `OCTOSCODE_MOCK_PORT`:
+### Developing this app
+
+To work on the app against a real server, run `pnpm dev` in place of
+`pnpm build` and the preview in step 3, with the same two variables. It serves
+the same address and reloads as you edit.
+
+Without Octos, a deterministic fixture can stand in for the server. It listens
+on port 50080 by default — the same port as step 2 — so run one or the other, or
+move the fixture with `OCTOSCODE_MOCK_PORT`:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -187,7 +255,7 @@ and connect.
 ### The server must be listening on a port
 
 A browser can only reach Octos over HTTP, so `octos serve` has to be bound to a
-host and port, as in step 1 above.
+host and port, as in step 2 above.
 
 **Not `--stdio`.** That mode runs the UI Protocol over the process's stdin and
 stdout _instead of_ binding HTTP, so it serves exactly one client — the one that
@@ -212,26 +280,34 @@ browser are peers on one server. See
 Run `octos serve` separately. There are two ways to connect it.
 
 **From a pairing link, when the server offers one.** Start the server with the
-address this app is served from:
+address this app is served from. The link connects the page to the server
+directly, not through the proxy of step 3, so the server must also trust that
+address:
 
 ```sh
-octos serve --web-url http://127.0.0.1:5173
+export OCTOS_AUTH_TOKEN=my-local-token
+OCTOS_APPUI_ALLOWED_ORIGINS=http://127.0.0.1:4173 \
+  ~/.octos/bin/octos serve --host 127.0.0.1 --port 50080 --solo \
+  --web-url http://127.0.0.1:4173
 ```
 
 It prints one line:
 
 ```
-Open the web client: http://127.0.0.1:5173/?octos=http://127.0.0.1:53124&pair=EMX3MBRB
+Open the web client: http://127.0.0.1:4173/?octos=http://127.0.0.1:50080&pair=EMX3MBRB
 ```
 
-Open that link and the app connects on its own. The code works once, expires
-five minutes after the server starts, and is only accepted over loopback. The
-link's parameters are removed from the address bar before the first render. The
-page also suppresses referrers while its resources load. The auth token stays in
-this browser tab; it is never saved to localStorage. **Cancel** stops the
-current claim, and **Forget saved connection** removes this tab's saved
-connection and any legacy device token. Without `--web-url`, servers supporting
-pairing print their origin and code as separate labelled lines instead.
+Open that link in the app built in step 3 and it connects on its own. Without
+`OCTOS_APPUI_ALLOWED_ORIGINS` the page says it could not reach the server. The
+development server (`pnpm dev`) currently reports a fresh link as already used;
+connect by hand there. The code works once, expires five minutes after the
+server starts, and is only accepted over loopback. The link's parameters are
+removed from the address bar before the first render. The page also suppresses
+referrers while its resources load. The auth token stays in this browser tab; it
+is never saved to localStorage. **Cancel** stops the current claim, and **Forget
+saved connection** removes this tab's saved connection and any legacy device
+token. Without `--web-url`, servers supporting pairing print their origin and
+code as separate labelled lines instead.
 
 **By hand, which always works.** Enter the server's origin and auth token. The
 connection form defaults to this page's origin; **Use this page** restores that
@@ -291,10 +367,11 @@ the same token, and both are live against the same agent, sessions and
 workspace:
 
 ```sh
-octoscode \
-  --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws \
-  --auth-token "$OCTOS_AUTH_TOKEN"
+export OCTOS_AUTH_TOKEN=my-local-token
+octoscode --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws
 ```
+
+Like the server, the TUI reads the token from `OCTOS_AUTH_TOKEN`.
 
 Add `--session <id>` to open one specific conversation in both places. Each
 client's `session/open` is an _attach_, not a claim, and the server fans every
