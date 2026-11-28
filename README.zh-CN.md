@@ -106,6 +106,14 @@ pnpm --filter @octos-org/octoscode-web exec vite preview --host 127.0.0.1
 `--branch v0.22.0`，它只有编码模式。每个发布还带一个已经构建好的压缩包
 `octoscode-web-<tag>.tar.gz`，用于放在网页服务器后面部署，见[部署](docs/deployment.md)（英文）。
 
+用 Corepack 的话，在 `pnpm install` 之前先在仓库目录里运行
+`corepack install`：它会直接下载仓库指定的 pnpm 版本，不再询问。不运行的话，第一次执行 pnpm 时会提示
+`Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.5.2.tgz`
+和 `Do you want to continue? [Y/n]`，输入 `Y`
+即可。这是一次性的下载，不是出错。v0.22 及更早的版本还会警告 pnpm 不再读取 package.json 里的
+`"pnpm"` 字段：没有影响，锁文件里的版本是一样的；之后的版本把这项设置放在
+`pnpm-workspace.yaml` 里。
+
 两个 `OCTOSCODE_DEV_PROXY_*`
 变量都要带：它们让浏览器只连本应用自己的地址，再由本应用转发给服务器。不带的话，服务器默认只信任它自己的地址，会拒绝浏览器，页面报连接失败，看起来像服务器或令牌有问题，其实都没问题。
 

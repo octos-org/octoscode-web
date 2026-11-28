@@ -6,3 +6,13 @@ allowBuilds:
   esbuild: true
   # tesseract.js only runs an opencollective banner; the OCR assets need no build step.
   tesseract.js: false
+
+# rehype-katex renders with its own katex dependency. Keep it on the version
+# whose stylesheet the app ships, so the two cannot drift apart (#178).
+# pnpm 11 reads overrides here; it ignores package.json's "pnpm" field.
+overrides:
+  katex: 0.16.47
+
+# The package manager is pinned in package.json. Do not invite a new user to
+# upgrade it on every install.
+updateNotifier: false

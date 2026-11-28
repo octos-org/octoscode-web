@@ -73,6 +73,15 @@ the same app already built. It is for hosting behind a web server, over HTTPS;
 see the [deployment contract](deployment.md). On your own computer, use the
 checkout.
 
+With Corepack, run `corepack install` in the checkout before `pnpm install`. It
+downloads the pnpm version the repository pins, without asking. Skip it and the
+first pnpm command asks
+`Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.5.2.tgz`
+and `Do you want to continue? [Y/n]`: answer `Y`. That is a one-time download,
+not an error. Releases up to v0.22 also print a warning that pnpm no longer
+reads the `"pnpm"` field in package.json. It is harmless: the lockfile pins the
+same versions, and later releases keep that setting in `pnpm-workspace.yaml`.
+
 ## Connect to Octos
 
 1. Start the server, **bound to a port** so a browser can reach it, on the

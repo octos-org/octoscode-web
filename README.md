@@ -180,6 +180,13 @@ has Code mode only. Each release also has an archive,
 `octoscode-web-<tag>.tar.gz`, with the same app already built, for hosting
 behind a web server; see [Deployment](docs/deployment.md).
 
+With Corepack, run `corepack install` in the checkout before `pnpm install`. It
+downloads the pnpm version the repository pins, without asking. Skip it and the
+first pnpm command asks
+`Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.5.2.tgz`
+and `Do you want to continue? [Y/n]`: answer `Y`. That is a one-time download,
+not an error.
+
 Keep both `OCTOSCODE_DEV_PROXY_*` variables. They make the browser talk only to
 this app's own address, which forwards to the server. Leave them out and the
 server refuses the browser, because by default it trusts only its own address —
@@ -215,15 +222,17 @@ to open an interactive session." That is expected: type `/resume` to join the
 conversation from the browser. See
 [Share a session with the terminal](#share-a-session-with-the-terminal).
 
-| You see                                                                        | Fix                                                                       |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `command not found: octos`                                                     | Use the full path, `~/.octos/bin/octos`                                   |
-| `corepack: command not found`                                                  | Node.js 25 and newer: `npm install -g pnpm@11.5.2`                        |
-| `sha256sum: command not found` on a Mac                                        | `shasum -a 256 -c "$ASSET.sha256"`                                        |
-| "This server cannot onboard from the Web"                                      | Restart the server with `--solo`                                          |
-| A connection failure, though the server runs and token is right                | Restart step 3 with both `OCTOSCODE_DEV_PROXY_*` variables set            |
-| **Chat** is disabled and says the server cannot give every chat its own folder | The server is older than v2.1.0: install v2.1.0 (step 1) and restart it   |
-| Nothing to pick after `/resume` in the terminal                                | Send one message in the browser first; a session lists once it has a turn |
+| You see                                                                        | Fix                                                                                                      |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `command not found: octos`                                                     | Use the full path, `~/.octos/bin/octos`                                                                  |
+| `corepack: command not found`                                                  | Node.js 25 and newer: `npm install -g pnpm@11.5.2`                                                       |
+| Corepack asks `Do you want to continue? [Y/n]`                                 | Answer `Y`: it downloads pnpm once. `corepack install` in the checkout does it without asking            |
+| pnpm warns that the `"pnpm"` field in package.json is no longer read (v0.22)   | Harmless: the lockfile pins the same versions. Later releases keep that setting in `pnpm-workspace.yaml` |
+| `sha256sum: command not found` on a Mac                                        | `shasum -a 256 -c "$ASSET.sha256"`                                                                       |
+| "This server cannot onboard from the Web"                                      | Restart the server with `--solo`                                                                         |
+| A connection failure, though the server runs and token is right                | Restart step 3 with both `OCTOSCODE_DEV_PROXY_*` variables set                                           |
+| **Chat** is disabled and says the server cannot give every chat its own folder | The server is older than v2.1.0: install v2.1.0 (step 1) and restart it                                  |
+| Nothing to pick after `/resume` in the terminal                                | Send one message in the browser first; a session lists once it has a turn                                |
 
 Serving this app somewhere without that proxy? Tell the server to trust its
 address: `OCTOS_APPUI_ALLOWED_ORIGINS=http://<host>:<port>` on the server, or
