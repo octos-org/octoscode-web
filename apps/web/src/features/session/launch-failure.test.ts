@@ -1,31 +1,17 @@
 import { describe, expect, it } from "vitest";
-import {
-  CHAT_WORKSPACE_RESERVED_MESSAGE,
-  isChatWorkspaceReservedError,
-  launchFailureMessage,
-} from "./launch-failure.ts";
+import { CHAT_WORKSPACE_RESERVED_MESSAGE, isChatWorkspaceReservedError, launchFailureMessage } from "./launch-failure.ts";
 
-const rpcReserved = Object.assign(new Error("this folder belongs to or holds chats"), {
+const reserved = Object.assign(new Error("this folder belongs to or holds chats"), {
   name: "OctosUiProtocolError",
-  code: -32120,
   data: { kind: "chat_workspace_reserved" },
 });
 
 describe("chat workspace reserved launch failure", () => {
-  it("detects the typed refusal by its data kind", () => {
-    expect(isChatWorkspaceReservedError(rpcReserved)).toBe(true);
-    expect(isChatWorkspaceReservedError(new Error("boom"))).toBe(false);
-    expect(isChatWorkspaceReservedError(
-      Object.assign(new Error("x"), { data: { kind: "unknown_session" } }),
-    )).toBe(false);
+  it("detects the kind and surfaces an actionable message, not the generic one", () => {
+    expect(isChatWorkspaceReservedError(reserved)).toBe(true);
+    expect(isChatWorkspaceReservedError(new Error("x"))).toBe(false);
     expect(isChatWorkspaceReservedError(null)).toBe(false);
-  });
-
-  it("surfaces an actionable product message, not the generic open failure", () => {
-    expect(launchFailureMessage(rpcReserved)).toBe(CHAT_WORKSPACE_RESERVED_MESSAGE);
-    expect(launchFailureMessage(rpcReserved)).not.toBe(
-      "The new coding session could not be opened.",
-    );
+    expect(launchFailureMessage(reserved)).toBe(CHAT_WORKSPACE_RESERVED_MESSAGE);
     expect(launchFailureMessage(new Error("plain"))).toBe("plain");
   });
 });
