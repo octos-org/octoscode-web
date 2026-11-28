@@ -253,6 +253,23 @@
   padding: 8px 10px;
 }
 
+/* Folder-swap recovery inside the typed error (T-0740). */
+.swapFolder {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-container-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsw-font-size-micro);
+  cursor: pointer;
+}
+
+.swapFolder:hover:not(:disabled) {
+  border-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-container-hover);
+}
+
 .error {
   border: 1px solid
     color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);

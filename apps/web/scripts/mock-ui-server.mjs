@@ -374,7 +374,24 @@ const workspaceBrowseUnreadable = new Set(["/srv/fixture/restricted"]);
 
 function freshWorkspaceBrowseTree() {
   return new Map([
-    ["/", { writable: false, dirs: ["srv"], hidden: 4, truncated: false }],
+    // T-0740: a user home root — Core refuses it with chat_workspace_reserved,
+    // and the client must disable the main button + offer folder swap.
+    [
+      "/home",
+      { writable: false, dirs: ["t0740-user"], hidden: 0, truncated: false },
+    ],
+    [
+      "/home/t0740-user",
+      { writable: true, dirs: ["project"], hidden: 0, truncated: false },
+    ],
+    [
+      "/home/t0740-user/project",
+      { writable: true, dirs: [], hidden: 0, truncated: false },
+    ],
+    [
+      "/",
+      { writable: false, dirs: ["srv", "home"], hidden: 4, truncated: false },
+    ],
     [
       "/srv",
       { writable: false, dirs: ["fixture"], hidden: 1, truncated: false },
@@ -4395,19 +4412,20 @@ sockets.on("connection", (socket, request) => {
     if (request.method === "launch/resolve") {
       const cwd = request.params?.cwd ?? "";
       const profile = request.params?.profile_id || "_main";
-      const result = cwd.endsWith("/no-profile")
-        ? createdProfileId
-          ? { decision: "activate", resolved_profile: createdProfileId }
-          : { decision: "no_profile" }
-        : cwd.endsWith("/cross")
-          ? {
-              decision: "cross_profile",
-              resolved_profile: profile,
-              existing_profiles: ["review"],
-            }
-          : cwd.endsWith("/new")
-            ? { decision: "activate", resolved_profile: profile }
-            : { decision: "resume", resolved_profile: profile };
+      const result =
+        cwd === "/home/t0740-fresh" || cwd.endsWith("/no-profile")
+          ? createdProfileId
+            ? { decision: "activate", resolved_profile: createdProfileId }
+            : { decision: "no_profile" }
+          : cwd.endsWith("/cross")
+            ? {
+                decision: "cross_profile",
+                resolved_profile: profile,
+                existing_profiles: ["review"],
+              }
+            : cwd.endsWith("/new")
+              ? { decision: "activate", resolved_profile: profile }
+              : { decision: "resume", resolved_profile: profile };
       reply(socket, request.id, result);
       return;
     }
@@ -4676,6 +4694,20 @@ sockets.on("connection", (socket, request) => {
       return;
     }
     if (request.method === "session/open") {
+      const requestedCwd = request.params?.cwd ?? "";
+      if (
+        /^\/home\/[^/]+$/.test(requestedCwd) ||
+        requestedCwd === "/home/t0740-fresh"
+      ) {
+        replyError(
+          socket,
+          request.id,
+          -32_120,
+          "folder is reserved for Chat workspaces",
+          { kind: "chat_workspace_reserved" },
+        );
+        return;
+      }
       if (fixtureDeletedSessionIds.has(sessionId)) {
         // Core's exact answer for a deleted Session (r9 wire frame 1661).
         replyError(

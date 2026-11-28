@@ -5475,6 +5475,10 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                         void workspaceProduct.chooseLaunchProfile(profileId)
                       }
                       onCancel={workspaceProduct.cancelLaunch}
+                      onChangeFolder={() => {
+                        workspaceProduct.cancelLaunch();
+                        setWorkspacePicker({ open: true, view: "browse" });
+                      }}
                     />
                   </SurfaceBoundary>
                 ) : !session.opened && savedLink ? (

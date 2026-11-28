@@ -20,6 +20,8 @@ interface OnboardingPanelProps {
   onSubmit: (submission: OnboardingSubmission) => void;
   onRetry: () => void;
   onCancel: () => void;
+  /** Folder-swap recovery when the chosen folder is reserved for Chat. */
+  onChangeFolder: () => void;
 }
 
 export function OnboardingPanel({
@@ -27,6 +29,7 @@ export function OnboardingPanel({
   onSubmit,
   onRetry,
   onCancel,
+  onChangeFolder,
 }: OnboardingPanelProps) {
   const t = useUiText();
   const families = useMemo(
@@ -316,7 +319,19 @@ export function OnboardingPanel({
               ) : null}
               {state.error ? (
                 <div className={styles.error} role="alert">
-                  {state.error}
+                  <span>{t(state.error)}</span>
+                  {state.errorKind === "chat_workspace_reserved" ? (
+                    <>
+                      <br />
+                      <button
+                        type="button"
+                        className={styles.swapFolder}
+                        onClick={onChangeFolder}
+                      >
+                        {t("Choose a different folder")}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </>
