@@ -3855,6 +3855,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const createSessionInWorkspace = async (
     workspacePath: string,
     template?: TaskTemplate,
+    options?: { preferExisting?: boolean },
   ): Promise<WorkspaceOpenOutcome | null> => {
     if (
       !codingCapabilities.sessionCreationAvailable ||
@@ -3864,6 +3865,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     )
       return null;
     const path = workspacePath.trim();
+    const preferExisting =
+      options?.preferExisting === true &&
+      !template &&
+      templateNotice?.kind !== "pending" &&
+      !carryDraftRef.current;
     let attempt = sessionCreationRef.current;
     if (attempt?.connection !== connectionIdentity || attempt.path !== path) {
       const saved = loadTemplateLaunch(
@@ -3923,7 +3929,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
         setRemoteTemplateDraft(null);
         setTemplateNotice(null);
       }
-      const outcome = await openSessionWithDefaults(attempt.id, path);
+      const outcome = await openSessionWithDefaults(
+        attempt.id,
+        path,
+        preferExisting,
+      );
       if (outcome !== "opened" && outcome !== "awaiting_choice") return outcome;
       if (template)
         setTemplateNotice({
@@ -3972,6 +3982,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   const openSessionWithDefaults = async (
     sessionId: string,
     workspacePath: string,
+    preferExisting = false,
   ): Promise<WorkspaceOpenOutcome> => {
     const defaults = sessionDefaults;
     if (defaults && !appliedDefaultsForSession.current.has(sessionId))
@@ -3979,6 +3990,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     return workspaceProduct.openSession({
       sessionId,
       cwd: workspacePath,
+      ...(preferExisting ? { preferExisting: true } : {}),
       ...(defaults?.sandbox.enabled
         ? {
             sandbox: {
@@ -5488,7 +5500,11 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                             }
                             onCancel={disconnect}
                             onCreate={({ workspacePath }) =>
-                              createSessionInWorkspace(workspacePath)
+                              createSessionInWorkspace(
+                                workspacePath,
+                                undefined,
+                                { preferExisting: true },
+                              )
                             }
                           />
                         </SurfaceBoundary>
@@ -7165,7 +7181,13 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               setWorkspacePicker((current) => ({ ...current, open: false }));
             }}
             onCreate={({ workspacePath }) =>
-              createSessionInWorkspace(workspacePath)
+              createSessionInWorkspace(workspacePath, undefined, {
+                preferExisting:
+                  workspacePicker.view !== "choose" &&
+                  !recentWorkspaces.some(
+                    (workspace) => workspace.path === workspacePath.trim(),
+                  ),
+              })
             }
           />
         </SurfaceBoundary>

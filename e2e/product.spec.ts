@@ -363,27 +363,68 @@ test("lists a workspace's server-attested history in a fresh tab and opens a row
   );
   const fresh = await browser.newContext();
   try {
-    // Tab A creates the history.
+    // Tab A creates two existing sessions in the workspace.
+    const tabAOpens = observeSent(page, "session/open");
     await connectAndStartWorkspace(page, cwd);
-    // Tab B has none of A's tab storage; only the server's attested listing
-    // can tell it about A's Session.
+    await productNavigation(page)
+      .getByRole("button", { name: "New session", exact: true })
+      .click();
+    await expect.poll(() => tabAOpens().length).toBe(2);
+    const createdSids = tabAOpens().map((p) => String(p.session_id));
+    const tabASessions = productNavigation(page).locator(
+      '[role="treeitem"][data-session-id]',
+    );
+    await expect(tabASessions).toHaveCount(2);
+
+    // Tab B has none of A's tab storage: before choosing a project it guides
+    // the user, and choosing the project lists BEFORE session/open and opens
+    // an existing canonical session without creating a third empty session.
     const tabB = await fresh.newPage();
-    await connectAndStartWorkspace(tabB, cwd);
+    const sent: string[] = [];
+    const tabBOpens = observeSent(tabB, "session/open");
+    tabB.on("websocket", (ws) => {
+      ws.on("framesent", ({ payload }) => {
+        if (typeof payload !== "string") return;
+        const frame = JSON.parse(payload) as { method?: string };
+        if (frame.method) sent.push(frame.method);
+      });
+    });
+    await connectServer(tabB);
+    await expect(
+      productNavigation(tabB).getByText(
+        "Choose a project folder to load its existing sessions.",
+      ),
+    ).toBeVisible();
+    await startWorkspace(tabB, cwd);
+
+    const listIndex = sent.indexOf("session/list");
+    const openIndex = sent.indexOf("session/open");
+    expect(listIndex).toBeGreaterThan(-1);
+    expect(openIndex).toBeGreaterThan(listIndex);
+    expect(createdSids).toContain(String(tabBOpens()[0]?.session_id));
+
     const sessions = productNavigation(tabB).locator(
       '[role="treeitem"][data-session-id]',
     );
     await expect(sessions).toHaveCount(2);
-    const history = productNavigation(tabB).locator(
+    const other = productNavigation(tabB).locator(
       '[role="treeitem"][data-session-id]:not([aria-current="page"])',
     );
-    await expect(history).toHaveCount(1);
-    const historyId = await history.getAttribute("id");
-    expect(historyId).toBeTruthy();
-    await history.click();
+    await expect(other).toHaveCount(1);
+    const otherId = await other.getAttribute("id");
+    expect(otherId).toBeTruthy();
+    await other.click();
     // Row ids embed a JSON tuple, so quote them as a CSS string.
     await expect(
-      tabB.locator(`[id=${JSON.stringify(historyId)}]`),
+      tabB.locator(`[id=${JSON.stringify(otherId)}]`),
     ).toHaveAttribute("aria-current", "page");
+
+    // Reloading Tab B stays on the chosen canonical session without adding rows.
+    await tabB.reload();
+    await expect(
+      tabB.locator(`[id=${JSON.stringify(otherId)}]`),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(sessions).toHaveCount(2);
   } finally {
     await fresh.close();
     await request.post(`${FIXTURE_ORIGIN}/__test__/session-list/reset`);

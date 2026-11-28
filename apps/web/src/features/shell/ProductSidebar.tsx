@@ -1268,7 +1268,14 @@ export function ProductSidebar({
               !normalizedQuery &&
               workspaces.length === 0 ? (
                 <div className={styles.emptyState}>
-                  <p>{t("No workspaces yet.")}</p>
+                  <p className={styles.emptyStateTitle}>
+                    {t("No workspaces yet.")}
+                  </p>
+                  <p className={styles.emptyStateHint}>
+                    {t(
+                      "Choose a project folder to load its existing sessions.",
+                    )}
+                  </p>
                   <button type="button" onClick={onAddWorkspace}>
                     {t("Add workspace")}
                   </button>

@@ -1388,6 +1388,8 @@ const catalog: Readonly<Record<string, string>> = {
   // rendered.
   "Browse…": "浏览…",
   "Browse server folders": "浏览服务器文件夹",
+  "Pick a folder on the Octos server to open existing sessions or start a new one.":
+    "选择 Octos 服务器上的文件夹，以加载已有会话或开始新会话。",
   "Pick a folder on the Octos server.": "请选择 Octos 服务器上的文件夹。",
   "Back to the workspace path": "返回工作区路径",
   "Back to the path": "返回路径",
@@ -1968,6 +1970,10 @@ const catalog: Readonly<Record<string, string>> = {
     "正在核对会话并加载对话。",
   "Checking whether Octos is still working or has finished. Your message will not be sent again.":
     "正在确认 Octos 还在处理还是已经完成。你的消息不会被重复发送。",
+  "Choose a project folder to load its existing sessions.":
+    "选择项目文件夹以加载已有会话。",
+  "Choose a project folder to open existing sessions or start a new one.":
+    "选择项目文件夹以加载已有会话或开始新会话。",
   "Choose a project folder to start your coding session.":
     "选一个工作文件夹，开始一个会话。",
   "Clear search": "清除搜索",

@@ -148,13 +148,15 @@ test("shows the server's totals by model, date and session, and switches without
   expect(readSessions()).toBe(8);
 
   // The page's rows are not the totals: the server's count stays 5.
+  // T-0734: opening the seeded workspace resumes an existing session instead of
+  // creating a phantom 11th empty session, so page 2 holds the remaining 2 of 10.
   await usage.getByRole("button", { name: "Next page" }).click();
   await expect(usage.getByText("Page 2 of 2")).toBeVisible();
-  await expect(sessions).toHaveCount(3);
+  await expect(sessions).toHaveCount(2);
   await expect(usage.locator(`[data-usage-session="${ids[9]}"]`)).toBeVisible();
   await expect(figure(usage, "Runs")).toHaveText("5");
   log = await reads(request);
-  expect(readSessions()).toBe(11);
+  expect(readSessions()).toBe(10);
   await usage.getByRole("button", { name: "Previous page" }).click();
 
   // One Session's share, then back to all of them.

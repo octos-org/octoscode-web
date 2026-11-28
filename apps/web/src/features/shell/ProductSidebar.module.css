@@ -774,6 +774,16 @@
   margin: 0 0 8px;
 }
 
+.emptyStateTitle {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.emptyStateHint {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .emptyState button,
 .errorState button {
   padding: 0;
