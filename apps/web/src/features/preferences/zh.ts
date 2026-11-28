@@ -25,6 +25,8 @@ const catalog: Readonly<Record<string, string>> = {
     "从列表里选一个对话，或者新开一个。",
   "Ask Octos anything…": "想问 Octos 什么都可以…",
   "Could not open the new chat. Try again.": "新对话没能打开，请重试。",
+  "No usable model setup yet. Open a Code session once to finish setup, then start a chat.":
+    "还没有可用的模型配置。先在「编码」里完成一次设置，再回来开对话。",
   "Could not start a new chat. Try again.": "没能新建对话，请重试。",
   "Making this chat read-only with no network. Sending waits until the server confirms it.":
     "正在把这个对话设为只读、禁止联网，服务器确认后才能发送。",

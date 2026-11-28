@@ -26,6 +26,8 @@ const fixtureAuthTokens = [
   // Chat / Code: a server with both features, then one with work modes only.
   "two-modes-e2e-token",
   "two-modes-partial-e2e-token",
+  // T-0731: both two-modes and folder browse, like a real solo Core.
+  "two-modes-browse-e2e-token",
   fixtureProfileAuthToken,
 ];
 const e2eChannel = explicitBrowserChannel("OCTOSCODE_E2E_CHANNEL");

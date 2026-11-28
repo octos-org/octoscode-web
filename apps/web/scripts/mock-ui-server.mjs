@@ -259,6 +259,9 @@ const CHAT_WORKSPACE_FEATURE = "session.chat_workspace.v1";
 const twoModesServerFeatures = new Map([
   ["two-modes-e2e-token", [WORK_MODE_FEATURE, CHAT_WORKSPACE_FEATURE]],
   ["two-modes-partial-e2e-token", [WORK_MODE_FEATURE]],
+  // T-0731: two-modes AND folder browse on one connection, like the real
+  // solo Core (onboarding/workspace_list + launch/resolve before any Session).
+  ["two-modes-browse-e2e-token", [WORK_MODE_FEATURE, CHAT_WORKSPACE_FEATURE]],
 ]);
 const twoModesFeaturesBySocket = new WeakMap();
 const negotiatedTwoModes = (socket, feature) =>
@@ -3847,7 +3850,10 @@ function handleNativeRequest(socket, request, state) {
 sockets.on("connection", (socket, request) => {
   socketOrigins.set(socket, request.headers.origin ?? null);
   const connectionAuthToken = authTokenFromUpgradeRequest(request);
-  if (connectionAuthToken === workspaceBrowseAuthToken) {
+  if (
+    connectionAuthToken === workspaceBrowseAuthToken ||
+    connectionAuthToken === "two-modes-browse-e2e-token"
+  ) {
     workspaceBrowseSockets.add(socket);
   }
   const twoModesServer = twoModesServerFeatures.get(connectionAuthToken);
