@@ -4203,21 +4203,58 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
    * A new chat: the server makes its folder, then it opens like any Session,
    * gated until the server confirms read-only with no network.
    */
+  // T-0731 (T-0720 F-02): a fresh tab without any opened Session has no
+  // profile id in scope (opened/profile/known-Session fallbacks are all
+  // empty), and a silent no-op was the button's only answer. Resolve the
+  // server's default profile the same way a launch does: `launch/resolve`
+  // against the remembered workspace — or, when this tab remembers none, the
+  // server's own current folder (the directory the chooser is showing).
+  const resolveChatProfile = async (
+    client: NonNullable<typeof protocol.client>,
+  ): Promise<string | null> => {
+    if (!supportsMethod(session.capabilities, CORE_UI_METHODS.LAUNCH_RESOLVE))
+      return null;
+    let cwd =
+      activeWorkspacePath || connection.cwd || recentWorkspaces[0]?.path || "";
+    if (!cwd) {
+      if (!supportsMethod(session.capabilities, "onboarding/workspace_list"))
+        return null;
+      try {
+        const listed = await client.listWorkspaceFolders({ path: null });
+        cwd = listed.canonical_path;
+      } catch {
+        return null;
+      }
+    }
+    try {
+      const decision = await client.resolveLaunch({ cwd });
+      return decision.decision === "resume" || decision.decision === "activate"
+        ? (decision.resolved_profile ?? null)
+        : null;
+    } catch {
+      return null;
+    }
+  };
   const createChat = async () => {
     const client = protocol.client;
-    const profileId = catalogProfileId;
-    if (
-      !newChatAvailable ||
-      !client ||
-      !profileId ||
-      chatCreating ||
-      navigationBlocked
-    )
+    if (!newChatAvailable || !client || chatCreating || navigationBlocked)
       return;
     const fail = (text: string) =>
       chatOnScreen ? setCommandError(text) : setChatError(text);
     setChatCreating(true);
     setChatError(null);
+    // A missing profile is RESOLVABLE, not a silent no-op (F-02); when the
+    // server genuinely has none, the guidance says what to do next.
+    const profileId = catalogProfileId || (await resolveChatProfile(client));
+    if (!profileId) {
+      setChatCreating(false);
+      fail(
+        t(
+          "No usable model setup yet. Open a Code session once to finish setup, then start a chat.",
+        ),
+      );
+      return;
+    }
     const launchId = freshWebSessionId();
     const sessionId = bindWebSessionIdToProfile(launchId, profileId);
     try {
