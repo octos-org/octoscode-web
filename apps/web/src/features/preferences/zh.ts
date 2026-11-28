@@ -1579,14 +1579,15 @@ const catalog: Readonly<Record<string, string>> = {
   "Installing isn't offered: the platform artifact is missing its checksum or signature.":
     "这里不提供安装：该平台的产物缺少校验值或签名。",
   "Reviewed commit": "审查的 commit",
-  "File outputs": "文件产出",
-  "Allow file outputs": "允许文件产出",
-  "Turn off file outputs": "关闭文件产出",
-  "File outputs on": "文件产出已开启",
+  Outputs: "产物",
+  "File outputs": "文件产物",
+  "Allow file outputs": "允许生成产物",
+  "Turn off file outputs": "关闭生成产物",
+  "File outputs on": "已允许生成产物",
   "Answers stay inline in this chat. Allow file outputs to let Octos save files you ask for into this chat's own folder — the network stays off.":
-    "回答默认以内联形式留在本次对话里。允许文件产出后，Octos 才能把你要求的文件保存到本对话专属文件夹——网络仍然关闭。",
+    "回答默认留在本次对话里。允许生成产物后，Octos 才能把你要求的文件保存到本对话专属文件夹——网络仍然关闭。",
   "New files this chat produces are saved in its own folder and listed in Outputs.":
-    "本次对话新产生的文件会保存到它自己的文件夹，并显示在产出列表里。",
+    "本次对话新生成的文件会保存到它自己的文件夹，并显示在「产物」里。",
   "Re-read the server's permission": "重新读取服务器的权限",
   "The server has not reported this chat's permission yet.":
     "服务器还没有上报本次对话的权限。",
@@ -2641,8 +2642,8 @@ const catalog: Readonly<Record<string, string>> = {
     "已切到写入，但没能重新发送你的请求。",
   "{input} tokens in · {output} tokens out":
     "输入 {input} token · 输出 {output} token",
-  "Output files: {files}": "产出文件：{files}",
-  "No output files": "无产出文件",
+  "Output files: {files}": "产物文件：{files}",
+  "No output files": "无产物文件",
   "Completed with failed steps": "已完成，但有步骤失败",
   // Quieter turn close and folded steps (T-0076).
   "Ran {count} steps": "执行了 {count} 步",
