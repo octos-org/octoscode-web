@@ -1,5 +1,13 @@
 import { randomUUID } from "../../shared/uuid.ts";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   APPUI_MEMORY_ENTRY_METHODS,
   APPUI_MEMORY_PROMOTE_METHOD,
@@ -38,7 +46,11 @@ import {
   type ImportRecord,
 } from "./memory-import.ts";
 import { MemoryEntries } from "./MemoryEntries.tsx";
-import { MemoryImport, type ImportOutcome } from "./MemoryImport.tsx";
+import {
+  isDefaultMemoryProfile,
+  MemoryImport,
+  type ImportOutcome,
+} from "./MemoryImport.tsx";
 import {
   dropImportRun,
   importRun,
@@ -48,8 +60,8 @@ import {
   type ImportRun,
 } from "./import-runs.ts";
 
-/** How many results a search asks for; a full page may not be all of them. */
-const SEARCH_LIMIT = 20;
+/** How many results a search asks for (Core's upper bound is 50; no paging). */
+const SEARCH_LIMIT = 50;
 
 const MarkdownBody = lazy(() =>
   import("../markdown/MarkdownBody.tsx").then((module) => ({
@@ -63,6 +75,12 @@ interface MemorySettingsContentProps {
   sessionProfileId: string;
   sessionId: string;
   capabilities: UiProtocolCapabilities;
+  /** Reports whether an active long-term memory edit has unsaved changes. */
+  onUnsavedEditChange?: (dirty: boolean) => void;
+  /** Pending dialog close or section switch waiting on unsaved-draft confirmation. */
+  leaveIntent?: "close" | "section" | null;
+  onCancelLeave?: () => void;
+  onConfirmLeave?: () => void;
 }
 
 export function MemorySettingsContent({
@@ -71,6 +89,10 @@ export function MemorySettingsContent({
   sessionProfileId,
   sessionId,
   capabilities,
+  onUnsavedEditChange,
+  leaveIntent = null,
+  onCancelLeave,
+  onConfirmLeave,
 }: MemorySettingsContentProps) {
   const t = useUiText();
   const sessionScoped = supportsFeature(
@@ -99,6 +121,31 @@ export function MemorySettingsContent({
     supportsMethod(capabilities, APPUI_MEMORY_ENTRY_METHODS.DELETE);
   /** Bumped by Refresh so the entry list reads the server again too. */
   const [entriesEpoch, setEntriesEpoch] = useState(0);
+  const [discardEpoch, setDiscardEpoch] = useState(0);
+  const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
+  const [pendingRefresh, setPendingRefresh] = useState(false);
+  const leaveGuardRef = useRef<HTMLDivElement>(null);
+  const onUnsavedEditChangeRef = useRef(onUnsavedEditChange);
+  onUnsavedEditChangeRef.current = onUnsavedEditChange;
+  const handleUnsavedEditChange = useCallback((dirty: boolean) => {
+    setHasUnsavedEdit(dirty);
+    onUnsavedEditChangeRef.current?.(dirty);
+    if (!dirty) setPendingRefresh(false);
+  }, []);
+  useEffect(() => () => onUnsavedEditChangeRef.current?.(false), []);
+  useEffect(() => {
+    if (!pendingRefresh && !leaveIntent) return;
+    const node = leaveGuardRef.current;
+    if (!node || typeof node.scrollIntoView !== "function") return;
+    const reduced =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    node.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [pendingRefresh, leaveIntent]);
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MemoryRecord[] | null>(null);
@@ -208,6 +255,17 @@ export function MemorySettingsContent({
       inflight.current = false;
       setBusyAction(null);
     }
+  };
+
+  const clearSearch = () => {
+    if (busy) return;
+    setQuery("");
+    setHits(null);
+    setSearchedFor(null);
+    setSearchError(null);
+    setHitsBeforeImport(false);
+    setRecord(null);
+    setDetailError(null);
   };
 
   const openEntity = async (name: string) => {
@@ -664,6 +722,24 @@ export function MemorySettingsContent({
       );
   };
 
+  const requestRefresh = () => {
+    if (busy || refreshing || inflight.current) return;
+    if (hasUnsavedEdit) {
+      setPendingRefresh(true);
+      return;
+    }
+    void refresh();
+  };
+
+  const confirmRefreshDiscard = () => {
+    setPendingRefresh(false);
+    setDiscardEpoch((epoch) => epoch + 1);
+    void refresh();
+  };
+
+  const formatMemoryProfile = (id: string | null) =>
+    !id ? t("unverified") : isDefaultMemoryProfile(id) ? t("default") : id;
+
   if (!scopeVerified) {
     return (
       <div className={styles.page}>
@@ -674,10 +750,10 @@ export function MemorySettingsContent({
         </header>
         <p className={styles.notice} role="status">
           {t(
-            "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Update the Octos server to use this Session’s memory. Read and write are disabled.",
+            "Memory ownership is not confirmed for this connection. Authenticated memory: {authenticated}; session memory: {session}. Update the Octos server to use this session's memory. Read and write are disabled.",
             {
-              authenticated: authenticatedProfileId ?? t("unverified"),
-              session: sessionProfileId,
+              authenticated: formatMemoryProfile(authenticatedProfileId),
+              session: formatMemoryProfile(sessionProfileId),
             },
           )}
         </p>
@@ -696,26 +772,80 @@ export function MemorySettingsContent({
           ? t("Deleting memories is not available in the current protocol.")
           : null;
 
+  const activeLeaveGuard = leaveIntent ?? (pendingRefresh ? "refresh" : null);
+
   return (
     <div className={styles.page}>
       <header className={styles.heading}>
         <div>
           <h2>{t("Memory")}</h2>
           <p>
-            {t("Read and remember information in Session Profile {profileId}", {
-              profileId: sessionProfileId,
-            })}
+            {isDefaultMemoryProfile(sessionProfileId)
+              ? t(
+                  "Read and remember information in this server's default memory",
+                )
+              : t(
+                  "Read and remember information in this session's memory ({profileId})",
+                  { profileId: sessionProfileId },
+                )}
           </p>
         </div>
         <button
           type="button"
           className={styles.refreshButton}
           disabled={loading || refreshing || busy}
-          onClick={() => void refresh()}
+          onClick={requestRefresh}
         >
           {refreshing ? t("Refreshing…") : t("Refresh")}
         </button>
       </header>
+      {activeLeaveGuard ? (
+        <div
+          ref={leaveGuardRef}
+          className={styles.leaveGuard}
+          role="alertdialog"
+          aria-label={t("Unsaved memory edit")}
+        >
+          <p>
+            {activeLeaveGuard === "close"
+              ? t(
+                  "You have unsaved changes to a long-term memory. Close settings and discard your draft?",
+                )
+              : activeLeaveGuard === "section"
+                ? t(
+                    "You have unsaved changes to a long-term memory. Leave Memory and discard your draft?",
+                  )
+                : t(
+                    "You have unsaved changes to a long-term memory. Refresh and discard your draft?",
+                  )}
+          </p>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.danger}
+              onClick={() => {
+                if (activeLeaveGuard === "refresh") confirmRefreshDiscard();
+                else onConfirmLeave?.();
+              }}
+            >
+              {activeLeaveGuard === "close"
+                ? t("Discard & close")
+                : activeLeaveGuard === "section"
+                  ? t("Discard & leave")
+                  : t("Discard & refresh")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeLeaveGuard === "refresh") setPendingRefresh(false);
+                else onCancelLeave?.();
+              }}
+            >
+              {t("Keep editing")}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {editDeleteNotice ? (
         <p className={styles.notice}>{editDeleteNotice}</p>
       ) : null}
@@ -742,10 +872,12 @@ export function MemorySettingsContent({
                     canEdit={canEdit}
                     canDelete={canDelete}
                     epoch={entriesEpoch}
+                    discardEpoch={discardEpoch}
                     disabled={busy || refreshing}
                     claim={claimAction}
                     release={releaseAction}
                     onChanged={overviewAfterChange}
+                    onUnsavedChange={handleUnsavedEditChange}
                     unlisted={
                       overview.longTerm ? (
                         <>
@@ -853,10 +985,27 @@ export function MemorySettingsContent({
                   disabled={busy}
                   onChange={(event) => setQuery(event.target.value)}
                 />
-                <button type="submit" disabled={busy || !query.trim()}>
-                  {busyAction === "search" ? t("Searching…") : t("Search")}
-                </button>
+                <div className={styles.searchActions}>
+                  <button type="submit" disabled={busy || !query.trim()}>
+                    {busyAction === "search" ? t("Searching…") : t("Search")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      busy || (!query && hits === null && searchError === null)
+                    }
+                    onClick={clearSearch}
+                  >
+                    {t("Clear search")}
+                  </button>
+                </div>
               </form>
+              <p className={styles.meta}>
+                {t(
+                  "Searches return up to {limit} matching reference documents at once. This server can't list all reference documents, page through more results, or delete them here.",
+                  { limit: SEARCH_LIMIT },
+                )}
+              </p>
               {searchError ? (
                 <p className={styles.error} role="alert">
                   {searchError}

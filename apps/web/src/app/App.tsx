@@ -653,6 +653,14 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     ReadonlySet<string>
   >(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [memoryUnsavedEdit, setMemoryUnsavedEdit] = useState(false);
+  const [pendingMemoryLeave, setPendingMemoryLeave] = useState<
+    { kind: "close" } | { kind: "section"; section: SettingsSectionId } | null
+  >(null);
+  const handleMemoryUnsavedEditChange = useCallback((dirty: boolean) => {
+    setMemoryUnsavedEdit(dirty);
+    if (!dirty) setPendingMemoryLeave(null);
+  }, []);
   const [leaveConnectionAction, setLeaveConnectionAction] = useState<
     "disconnect" | "forget" | null
   >(null);
@@ -2716,14 +2724,20 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     ),
   );
   useEffect(() => {
-    if (!hasUnfinishedWork && draftSaved && !cleanupFailed) return;
+    if (
+      !hasUnfinishedWork &&
+      draftSaved &&
+      !cleanupFailed &&
+      !memoryUnsavedEdit
+    )
+      return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnBeforeLeaving);
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [hasUnfinishedWork, draftSaved, cleanupFailed]);
+  }, [hasUnfinishedWork, draftSaved, cleanupFailed, memoryUnsavedEdit]);
   const navigationPending = workspaceProduct.pendingNavigation;
   const suggestedCommands =
     commandPaletteDismissed || navigationPending
@@ -7341,6 +7355,19 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                           authenticatedProfileId={authenticatedMemoryProfileId}
                           sessionProfileId={memoryProfileId}
                           capabilities={session.capabilities!}
+                          onUnsavedEditChange={handleMemoryUnsavedEditChange}
+                          leaveIntent={pendingMemoryLeave?.kind ?? null}
+                          onCancelLeave={() => setPendingMemoryLeave(null)}
+                          onConfirmLeave={() => {
+                            const pending = pendingMemoryLeave;
+                            setPendingMemoryLeave(null);
+                            setMemoryUnsavedEdit(false);
+                            if (pending?.kind === "section") {
+                              setSettingsSection(pending.section);
+                            } else {
+                              setSettingsOpen(false);
+                            }
+                          }}
                         />
                       </Suspense>
                     ),
@@ -7367,8 +7394,26 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                   }
                 : {}),
             }}
-            onSectionChange={setSettingsSection}
-            onClose={() => setSettingsOpen(false)}
+            onSectionChange={(next) => {
+              if (
+                settingsSection === "memory" &&
+                next !== "memory" &&
+                memoryUnsavedEdit
+              ) {
+                setPendingMemoryLeave({ kind: "section", section: next });
+                return;
+              }
+              setPendingMemoryLeave(null);
+              setSettingsSection(next);
+            }}
+            onClose={() => {
+              if (settingsSection === "memory" && memoryUnsavedEdit) {
+                setPendingMemoryLeave({ kind: "close" });
+                return;
+              }
+              setPendingMemoryLeave(null);
+              setSettingsOpen(false);
+            }}
           />
         </SurfaceBoundary>
       ) : null}

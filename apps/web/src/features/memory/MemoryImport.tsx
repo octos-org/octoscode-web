@@ -45,6 +45,12 @@ export interface ImportStop {
 
 const LISTED = 5;
 
+/** Internal default profile ids that should not leak raw into user prose. */
+export function isDefaultMemoryProfile(profileId: string): boolean {
+  const trimmed = profileId.trim();
+  return !trimmed || trimmed === "_main" || trimmed === "default";
+}
+
 function list(values: readonly string[]): string {
   return values.length > LISTED
     ? `${values.slice(0, LISTED).join(", ")} …`
@@ -347,10 +353,18 @@ export function MemoryImport({
           </p>
           {selectedRecords.length > 0 ? (
             <p>
-              {t("{count} records will be written to Profile {profileId}.", {
-                count: selectedRecords.length,
-                profileId,
-              })}{" "}
+              {isDefaultMemoryProfile(profileId)
+                ? t(
+                    "{count} records will be written to this server's default memory.",
+                    { count: selectedRecords.length },
+                  )
+                : t(
+                    "{count} records will be written to this session's memory ({profileId}).",
+                    {
+                      count: selectedRecords.length,
+                      profileId,
+                    },
+                  )}{" "}
               {t("Sources: {sources}.", { sources: sources.join(", ") })}
             </p>
           ) : (

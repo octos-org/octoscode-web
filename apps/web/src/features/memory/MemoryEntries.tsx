@@ -25,6 +25,8 @@ interface MemoryEntriesProps {
   canDelete: boolean;
   /** Bumped by the page's Refresh: read the list again. */
   epoch: number;
+  /** Bumped when the user confirms discarding an unsaved edit before Refresh. */
+  discardEpoch?: number;
   /** The page's other actions are running; take no new one. */
   disabled: boolean;
   /** Takes the page's single action slot; false when it is taken. */
@@ -32,6 +34,8 @@ interface MemoryEntriesProps {
   release: () => void;
   /** After an edit or delete, kept or not: the page reads the rest again. */
   onChanged: () => void;
+  /** Reports whether an active long-term memory edit has unsaved changes. */
+  onUnsavedChange?: (dirty: boolean) => void;
   /** Shown when the server lists no entries but holds long-term memory. */
   unlisted: ReactNode;
 }
@@ -65,10 +69,12 @@ export function MemoryEntries({
   canEdit,
   canDelete,
   epoch,
+  discardEpoch = 0,
   disabled,
   claim,
   release,
   onChanged,
+  onUnsavedChange,
   unlisted,
 }: MemoryEntriesProps) {
   const t = useUiText();
@@ -86,6 +92,32 @@ export function MemoryEntries({
   const [notice, setNotice] = useState<string | null>(null);
   const live = useRef(commands);
   live.current = commands;
+  const onUnsavedChangeRef = useRef(onUnsavedChange);
+  onUnsavedChangeRef.current = onUnsavedChange;
+  const lastDiscardEpoch = useRef(discardEpoch);
+
+  const editingEntry = editing
+    ? (list?.entries.find((item) => item.id === editing.id) ?? null)
+    : null;
+  const hasUnsavedEdit =
+    unsaved !== null ||
+    (editing !== null &&
+      working !== "save" &&
+      (editingEntry === null || editing.draft !== editingEntry.body));
+
+  useEffect(() => {
+    onUnsavedChangeRef.current?.(hasUnsavedEdit);
+  }, [hasUnsavedEdit]);
+
+  useEffect(() => () => onUnsavedChangeRef.current?.(false), []);
+
+  useEffect(() => {
+    if (discardEpoch === lastDiscardEpoch.current) return;
+    lastDiscardEpoch.current = discardEpoch;
+    setEditing(null);
+    setUnsaved(null);
+    setError(null);
+  }, [discardEpoch]);
 
   /** The server's list, or why it couldn't be read; never a local edit. */
   const reload = async (): Promise<MemoryEntryList | null> => {

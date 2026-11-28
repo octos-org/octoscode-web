@@ -20,6 +20,7 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
   page,
 }) => {
   const ingestCalls = observeSent(page, "memory/ingest");
+  const searchCalls = observeSent(page, "memory/search");
   await start(page);
   const settings = await openMemory(page);
   const searchSection = settings.getByRole("region", { name: "Search" });
@@ -30,8 +31,18 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
     exact: true,
   });
 
-  // Results are labeled with the query that answered them.
+  // Default profile prose hides internal `_main` and discloses Core's 50-result search cap.
+  await expect(settings).not.toContainText("_main");
+  await expect(
+    settings.getByText(/this server's default memory/),
+  ).toBeVisible();
+  await expect(
+    searchSection.getByText(/up to 50 matching reference documents/),
+  ).toBeVisible();
+
+  // Results are labeled with the query that answered them, requesting limit 50.
   await searchMemory(settings, "protocol");
+  expect(searchCalls()[0]).toMatchObject({ query: "protocol", limit: 50 });
   await expect(
     settings.getByRole("button", { name: /T0008 protocol probe/ }),
   ).toBeVisible();
@@ -46,6 +57,19 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
   await expect(
     settings.getByRole("button", { name: /T0008 protocol probe/ }),
   ).toBeVisible();
+
+  // Clear search restores empty search state with no stale results or error.
+  const clearSearchBtn = searchSection.getByRole("button", {
+    name: "Clear search",
+  });
+  await clearSearchBtn.click();
+  await expect(searchSection.getByLabel("Search memories")).toHaveValue("");
+  await expect(settings.getByText("Results for “protocol”")).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: /T0008 protocol probe/ }),
+  ).toHaveCount(0);
+  await expect(searchSection.getByRole("alert")).toHaveCount(0);
+  await expect(clearSearchBtn).toBeDisabled();
 
   // Without request/promote, Add to memory states the limit honestly.
   await expect(
@@ -173,6 +197,38 @@ test("long-term entries edit and delete on the server, and a failed change keeps
     limit: 1,
   });
 
+  // Opening Edit with no changes does not block Refresh; unsaved edits guard
+  // both Refresh and Close settings and keep the draft when cancelled.
+  const refreshBtn = settings.getByRole("button", {
+    name: "Refresh",
+    exact: true,
+  });
+  const closeSettingsBtn = settings.getByRole("button", {
+    name: "Close settings",
+  });
+  const leaveGuard = settings.getByRole("alertdialog", {
+    name: "Unsaved memory edit",
+  });
+  await entry("dark roast").getByRole("button", { name: "Edit" }).click();
+  await expect(editor).toHaveValue(
+    "- prefers dark roast coffee (updated: 2026-11-01)",
+  );
+  await refreshBtn.click();
+  await expect(leaveGuard).toHaveCount(0);
+  await editor.fill("- prefers unsaved oolong");
+  await refreshBtn.click();
+  await expect(leaveGuard).toBeVisible();
+  await leaveGuard.getByRole("button", { name: "Keep editing" }).click();
+  await expect(editor).toHaveValue("- prefers unsaved oolong");
+  await closeSettingsBtn.click();
+  await expect(leaveGuard).toBeVisible();
+  await leaveGuard.getByRole("button", { name: "Keep editing" }).click();
+  await expect(settings).toBeVisible();
+  await expect(editor).toHaveValue("- prefers unsaved oolong");
+  await refreshBtn.click();
+  await leaveGuard.getByRole("button", { name: "Discard & refresh" }).click();
+  await expect(editor).toHaveCount(0);
+
   // An edit sends the text verbatim against the version on screen; the list
   // then shows what the server stored, its own stamp included.
   await entry("dark roast").getByRole("button", { name: "Edit" }).click();
@@ -185,6 +241,11 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await expect(entry("green tea").locator("p")).toHaveText(
     "- prefers green tea (updated: 2026-11-10)",
   );
+  // After a successful save, Refresh does not prompt.
+  await refreshBtn.click();
+  await expect(leaveGuard).toHaveCount(0);
+  await expect(refreshBtn).toBeEnabled();
+  await expect(settings.getByText("Waiting for the server…")).toHaveCount(0);
   const edit = edits()[0]!;
   expect(edit).toMatchObject({
     entry_id: "^maaaaaa",
@@ -232,6 +293,10 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   await settings.getByRole("button", { name: "Delete memory" }).click();
   await expect(settings.getByText(/^Deleted\./)).toBeVisible();
   await expect(entry("green tea")).toHaveCount(0);
+  // Completed delete does not block closing Settings.
+  await closeSettingsBtn.click();
+  await expect(settings).toHaveCount(0);
+  await openMemory(page);
 
   // Gone from the server before the save: the text is offered back.
   await setMemoryEntry(page, "^mbbbbbb");
@@ -254,6 +319,7 @@ test("long-term entries edit and delete on the server, and a failed change keeps
   ).toBeVisible();
   await expectNoStoredMemory(page, [
     "green tea",
+    "oolong",
     "payments",
     "refunds",
     "ledger",
