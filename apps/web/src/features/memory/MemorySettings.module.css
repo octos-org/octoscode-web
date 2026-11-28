@@ -361,6 +361,11 @@
   margin: var(--dsw-space-1) 0 0;
 }
 
+/* The long-term export sits between two documents in the overview. */
+.export + .document {
+  margin-top: var(--dsw-space-3);
+}
+
 .importPreview {
   margin-top: var(--dsw-space-3);
   padding: var(--dsw-space-3);

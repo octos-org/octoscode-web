@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import {
   doubleClick,
@@ -23,6 +24,10 @@ test("ingest → search → detail survives a page refresh, and failures stay ho
   const searchCalls = observeSent(page, "memory/search");
   await start(page);
   const settings = await openMemory(page);
+  // This server sends no update time: it is unknown, not zero.
+  await expect(
+    settings.getByText("Long-term memory updated: unknown"),
+  ).toBeVisible();
   const searchSection = settings.getByRole("region", { name: "Search" });
   const addSection = settings.getByRole("region", { name: "Add to memory" });
   const detail = settings.getByRole("complementary", { name: "Memory detail" });
@@ -324,4 +329,75 @@ test("long-term entries edit and delete on the server, and a failed change keeps
     "refunds",
     "ledger",
   ]);
+});
+
+test("long-term memory and daily notes export as the page shows them, with the server's update time", async ({
+  page,
+}) => {
+  await memoryControl(page, "entries/reset");
+  const chinese = "- 偏好中文回复 (updated: 2026-11-03)";
+  await setMemoryEntry(page, "^mzh0001", `${chinese} ^mzh0001`);
+  await start(page, "memory-main-e2e-token");
+  const settings = await openMemory(page);
+  await expect(settings.locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-10-28T00:00:00Z",
+  );
+  const bodies = [
+    "- prefers dark roast coffee (updated: 2026-11-01)",
+    "- works on the billing service (updated: 2026-11-02)",
+    chinese,
+  ];
+  for (const body of bodies)
+    await expect(settings.getByText(body)).toBeVisible();
+  const save = async (group: string, format: string) => {
+    const download = page.waitForEvent("download");
+    await settings
+      .getByRole("group", { name: group })
+      .getByRole("button", { name: format, exact: true })
+      .click();
+    const file = await download;
+    const bytes = await readFile((await file.path())!);
+    return { name: file.suggestedFilename(), text: bytes.toString("utf8") };
+  };
+  const longJson = await save("Export long-term memory", "JSON");
+  expect(longJson.name).toMatch(/^octos-memory-long-term-.+\.json$/);
+  const long = JSON.parse(longJson.text);
+  expect(long.scope).toMatchObject({
+    what: "long_term_memory",
+    updated_at: "2026-10-28T00:00:00Z",
+    source: "entries",
+  });
+  expect(long.entries.map((entry: { text: string }) => entry.text)).toEqual(
+    bodies.map(
+      (body, index) => `${body} ${["^maaaaaa", "^mbbbbbb", "^mzh0001"][index]}`,
+    ),
+  );
+  const longMd = await save("Export long-term memory", "Markdown");
+  expect(longMd.name).toMatch(/\.md$/);
+  for (const body of bodies)
+    expect(longMd.text).toContain(`\`\`\`text\n${body}\n\`\`\``);
+  const daily = JSON.parse((await save("Export daily notes", "JSON")).text);
+  expect(daily).toMatchObject({
+    scope: { what: "daily_notes" },
+    today: { content: "Today’s memory note." },
+    recent: [{ date: "2026-10-28", content: "Recent memory note." }],
+  });
+  const dailyMd = (await save("Export daily notes", "Markdown")).text;
+  expect(dailyMd).toContain("## Today\n\n```text\nToday’s memory note.\n```");
+  expect(dailyMd).toContain(
+    "## 2026-10-28\n\n```text\nRecent memory note.\n```",
+  );
+
+  // With nothing to export, the page says so instead of making an empty file.
+  for (const id of ["^maaaaaa", "^mbbbbbb", "^mzh0001"])
+    await setMemoryEntry(page, id);
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click();
+  const longTerm = settings.getByRole("group", {
+    name: "Export long-term memory",
+  });
+  await expect(longTerm.getByRole("button", { name: "JSON" })).toBeDisabled();
+  await expect(
+    settings.getByText("There is no long-term memory to export yet."),
+  ).toBeVisible();
 });

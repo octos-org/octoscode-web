@@ -38,6 +38,8 @@ interface MemoryEntriesProps {
   onUnsavedChange?: (dirty: boolean) => void;
   /** Shown when the server lists no entries but holds long-term memory. */
   unlisted: ReactNode;
+  /** The list on screen and whether it may be out of date, for its export. */
+  onList?: (list: MemoryEntryList | null, stale: boolean) => void;
 }
 
 type Outcome = "conflict" | "missing" | "refused" | "uncertain";
@@ -76,6 +78,7 @@ export function MemoryEntries({
   onChanged,
   onUnsavedChange,
   unlisted,
+  onList,
 }: MemoryEntriesProps) {
   const t = useUiText();
   const [list, setList] = useState<MemoryEntryList | null>(null);
@@ -118,6 +121,9 @@ export function MemoryEntries({
     setUnsaved(null);
     setError(null);
   }, [discardEpoch]);
+  const report = useRef(onList);
+  report.current = onList;
+  useEffect(() => report.current?.(list, stale), [list, stale]);
 
   /** The server's list, or why it couldn't be read; never a local edit. */
   const reload = async (): Promise<MemoryEntryList | null> => {
