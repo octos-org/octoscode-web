@@ -14,6 +14,8 @@ interface LaunchDecisionPanelProps {
   onRetryOnboarding: () => void;
   onChooseProfile: (profileId: string) => void;
   onCancel: () => void;
+  /** Folder-swap recovery when the chosen folder is reserved for Chat. */
+  onChangeFolder: () => void;
 }
 
 export function LaunchDecisionPanel({
@@ -24,6 +26,7 @@ export function LaunchDecisionPanel({
   onRetryOnboarding,
   onChooseProfile,
   onCancel,
+  onChangeFolder,
 }: LaunchDecisionPanelProps) {
   const t = useUiText();
   const decision = state.decision;
@@ -33,7 +36,7 @@ export function LaunchDecisionPanel({
   if (decision.decision === "no_profile") {
     return (
       <>
-        {error ? (
+        {error && !onboarding.error ? (
           <p className="launch-error" role="alert">
             {error}
           </p>
@@ -43,6 +46,7 @@ export function LaunchDecisionPanel({
           onSubmit={onSubmitOnboarding}
           onRetry={onRetryOnboarding}
           onCancel={onCancel}
+          onChangeFolder={onChangeFolder}
         />
       </>
     );

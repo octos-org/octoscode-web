@@ -8,6 +8,10 @@ import {
 } from "@octos-org/octoscode-client/protocol";
 import { RequestGate } from "../async/request-gate.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import {
+  isChatWorkspaceReservedError,
+  launchFailureMessage,
+} from "../session/launch-failure.ts";
 
 const REQUIRED_METHODS = Object.values(APPUI_ONBOARDING_METHODS);
 
@@ -26,6 +30,8 @@ export interface OnboardingRuntimeState {
   catalog: LlmCatalogResult | null;
   createdProfileId: string | null;
   error: string | null;
+  /** Typed cause of `error`; "chat_workspace_reserved" unlocks folder-swap recovery. */
+  errorKind: string | null;
 }
 
 export interface OnboardingSubmission {
@@ -56,6 +62,7 @@ const EMPTY_ONBOARDING: OnboardingRuntimeState = {
   catalog: null,
   createdProfileId: null,
   error: null,
+  errorKind: null,
 };
 
 export function useOnboarding(options: UseOnboardingOptions) {
@@ -91,6 +98,7 @@ export function useOnboarding(options: UseOnboardingOptions) {
       catalog: null,
       createdProfileId: null,
       error: null,
+      errorKind: null,
     });
     try {
       const catalog = await client.getLlmCatalog();
@@ -106,6 +114,7 @@ export function useOnboarding(options: UseOnboardingOptions) {
         catalog,
         createdProfileId: null,
         error: null,
+        errorKind: null,
       });
     } catch (reason) {
       if (
@@ -120,6 +129,7 @@ export function useOnboarding(options: UseOnboardingOptions) {
         catalog: null,
         createdProfileId: null,
         error: errorMessage(reason),
+        errorKind: null,
       });
     }
   };
@@ -166,7 +176,10 @@ export function useOnboarding(options: UseOnboardingOptions) {
         ...current,
         phase: "ready",
         createdProfileId: createdProfileRef.current?.profileId ?? null,
-        error: redactSecret(errorMessage(reason), apiKey),
+        error: redactSecret(launchFailureMessage(reason), apiKey),
+        errorKind: isChatWorkspaceReservedError(reason)
+          ? "chat_workspace_reserved"
+          : null,
       }));
     } finally {
       if (requestsRef.current.isCurrent(generation)) {

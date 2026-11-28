@@ -3006,13 +3006,19 @@ export function useOctosSession({
         if (outcome !== "opened") {
           // Surface the typed refusal (e.g. chat_workspace_reserved) so the
           // wizard shows the real reason and its recovery, not a generic
-          // dead end.
+          // dead end. Carry the typed kind on the thrown Error so the wizard
+          // can also show the folder-swap recovery (T-0740).
           const stored = candidateFailureRef.current;
-          throw new Error(
+          const message =
             stored !== null
               ? launchFailureMessage(stored)
-              : "The new coding session could not be opened.",
-          );
+              : "The new coding session could not be opened.";
+          const thrown = new Error(message) as Error & {
+            data?: { kind: string };
+          };
+          if (isChatWorkspaceReservedError(stored))
+            thrown.data = { kind: "chat_workspace_reserved" };
+          throw thrown;
         }
         onboardingController.reset();
       } catch (reason) {

@@ -399,6 +399,15 @@ function PickerBody({
               role="alert"
             >
               <span>{error}</span>
+              {errorKind === "chat_workspace_reserved" ? (
+                <button
+                  type="button"
+                  className={styles.retry}
+                  onClick={() => onViewChange("browse")}
+                >
+                  {t("Choose a different folder")}
+                </button>
+              ) : null}
               {onRetry ? (
                 <button
                   type="button"

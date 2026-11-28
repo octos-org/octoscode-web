@@ -63,6 +63,7 @@ export async function submitOnboarding({
       ...current,
       phase: "creating_profile",
       error: null,
+      errorKind: null,
     }));
     const created = await client.createLocalProfile({
       requested_id: profileId,
@@ -94,6 +95,7 @@ export async function submitOnboarding({
     ...current,
     phase: "testing_provider",
     error: null,
+    errorKind: null,
   }));
   const tested = await client.testLlmProfile({
     profile_id: createdProfileId,
@@ -117,6 +119,7 @@ export async function submitOnboarding({
     ...current,
     phase: "saving_provider",
     error: null,
+    errorKind: null,
   }));
   const saved = await client.upsertLlmProfile({
     profile_id: createdProfileId,
@@ -135,6 +138,7 @@ export async function submitOnboarding({
     ...current,
     phase: "opening_session",
     error: null,
+    errorKind: null,
   }));
   await onConfigured(createdProfileId, client);
 }
