@@ -155,8 +155,12 @@ function PickerBody({
             {view === "choose"
               ? t("Choose where this coding session will run.")
               : view === "browse"
-                ? t("Pick a folder on the Octos server.")
-                : t("Choose a project folder to start your coding session.")}
+                ? t(
+                    "Pick a folder on the Octos server to open existing sessions or start a new one.",
+                  )
+                : t(
+                    "Choose a project folder to open existing sessions or start a new one.",
+                  )}
           </p>
         </div>
       </header>

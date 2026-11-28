@@ -22,6 +22,7 @@ import {
 } from "./launch-transition.ts";
 import { launchFailureMessage } from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
+import { findExistingWorkspaceSession } from "./workspace-recovery.ts";
 import { SessionDeletionFence } from "./session-deletion-fence.ts";
 import type {
   ActiveSessionAuthority,
@@ -217,6 +218,8 @@ export interface WorkspaceSessionOpenInput {
   profileId?: string;
   resolveLaunch?: boolean;
   requireExactWorkspace?: boolean;
+  /** When true and `launch/resolve` reports `resume`, open the newest existing session instead of creating a new empty one. */
+  preferExisting?: boolean;
 }
 
 export interface PendingWorkspaceNavigation {
@@ -3463,6 +3466,7 @@ export function useOctosSession({
     authority: ActiveSessionAuthority<OctosUiClient>,
     config: SessionConnectionInput,
     lease: LaunchTransitionLease,
+    preferExisting = false,
   ): Promise<SessionConnectionInput | null> {
     const stillOwnsTransition = () =>
       launchTransitionRef.current.isCurrent(lease) &&
@@ -3494,6 +3498,29 @@ export function useOctosSession({
         ? decision.resolved_profile
         : undefined;
     if (automaticProfile) {
+      if (preferExisting && decision.decision === "resume") {
+        const existing = await findExistingWorkspaceSession(
+          authority.client,
+          capabilities,
+          config.cwd,
+          automaticProfile,
+          (sessionId) => deletionFenceRef.current.isRetired(sessionId),
+        );
+        if (!stillOwnsTransition()) return null;
+        if (existing) {
+          setLaunch({
+            phase: "opening",
+            cwd: existing.workspaceRoot,
+            decision: null,
+          });
+          return {
+            ...config,
+            sessionId: existing.sessionId,
+            cwd: existing.workspaceRoot,
+            profileId: existing.profileId,
+          };
+        }
+      }
       setLaunch({ phase: "opening", cwd: config.cwd, decision: null });
       return launchProfileConfig(config, automaticProfile);
     }
@@ -3778,6 +3805,7 @@ export function useOctosSession({
         authority,
         candidateConfig,
         lease,
+        input.preferExisting === true,
       );
       if (!launchTransitionRef.current.isCurrent(lease)) return "failed";
       if (!resolved) return "awaiting_choice";
