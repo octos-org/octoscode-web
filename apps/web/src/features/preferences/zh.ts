@@ -1654,11 +1654,27 @@ const catalog: Readonly<Record<string, string>> = {
   Abandoned: "已中断",
   // Settings memory (T-0024).
   Memory: "记忆",
-  "Read and remember information in Session Profile {profileId}":
-    "查看并记住会话配置文件 {profileId} 中的信息",
-  "Memory ownership is not confirmed for this connection. Authenticated Profile {authenticated}; Session Profile {session}. Update the Octos server to use this Session’s memory. Read and write are disabled.":
-    "无法确认此连接的记忆归属。认证配置文件：{authenticated}；会话配置文件：{session}。请升级 Octos 服务端以使用此会话的记忆。已禁用读写。",
+  "Read and remember information in this server's default memory":
+    "查看并记住这个服务器的默认记忆",
+  "Read and remember information in this session's memory ({profileId})":
+    "查看并记住这个会话的记忆（{profileId}）",
+  "Memory ownership is not confirmed for this connection. Authenticated memory: {authenticated}; session memory: {session}. Update the Octos server to use this session's memory. Read and write are disabled.":
+    "无法确认此连接的记忆归属。已认证记忆：{authenticated}；当前会话记忆：{session}。请更新 Octos 服务器以使用这个会话的记忆。已禁用读写。",
+  default: "默认",
   unverified: "未验证",
+  "Searches return up to {limit} matching reference documents at once. This server can't list all reference documents, page through more results, or delete them here.":
+    "每次搜索最多返回 {limit} 条匹配的参考资料。服务器不支持列出全部参考资料、翻页查看更多结果，或在这里删除参考资料。",
+  "Unsaved memory edit": "未保存的记忆编辑",
+  "You have unsaved changes to a long-term memory. Close settings and discard your draft?":
+    "你正在编辑的长期记忆尚未保存。关闭设置并放弃草稿吗？",
+  "You have unsaved changes to a long-term memory. Leave Memory and discard your draft?":
+    "你正在编辑的长期记忆尚未保存。离开记忆页并放弃草稿吗？",
+  "You have unsaved changes to a long-term memory. Refresh and discard your draft?":
+    "你正在编辑的长期记忆尚未保存。刷新并放弃草稿吗？",
+  "Discard & close": "放弃草稿并关闭",
+  "Discard & leave": "放弃草稿并离开",
+  "Discard & refresh": "放弃草稿并刷新",
+  "Keep editing": "继续编辑",
   "This server cannot load entity details.": "此服务器无法加载实体详情。",
   "This server cannot load full record details.":
     "此服务器无法加载完整记录详情。",
@@ -1713,8 +1729,10 @@ const catalog: Readonly<Record<string, string>> = {
   "JSON export": "JSON 导出",
   "JSON record list": "JSON 记录列表",
   "Markdown export": "Markdown 导出",
-  "{count} records will be written to Profile {profileId}.":
-    "将写入配置档案 {profileId}：{count} 条。",
+  "{count} records will be written to this server's default memory.":
+    "将写入这个服务器的默认记忆：{count} 条。",
+  "{count} records will be written to this session's memory ({profileId}).":
+    "将写入这个会话的记忆（{profileId}）：{count} 条。",
   "No records selected. Select at least one record to import.":
     "尚未选择任何记录。至少勾选一条才能导入。",
   "Sources: {sources}.": "来源：{sources}。",

@@ -55,7 +55,9 @@ test("previews a file in full, writes nothing until confirmed, then reports the 
   const panel = preview(settings);
   await expect(panel).toContainText("notes.json");
   await expect(panel).toContainText("JSON record list");
-  await expect(panel).toContainText("2 records will be written to Profile");
+  await expect(panel).toContainText(
+    "2 records will be written to this server's default memory.",
+  );
   await expect(panel).toContainText("Sources: octoscode-web (1), mail (1).");
   await expect(panel).toContainText("Not sent: score, trust, visits.");
   await expect(panel.getByRole("listitem")).toHaveCount(2);
