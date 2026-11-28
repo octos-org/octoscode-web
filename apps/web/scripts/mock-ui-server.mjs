@@ -6104,7 +6104,10 @@ sockets.on("connection", (socket, request) => {
       reply(socket, request.id, {
         overview: {
           long_term: longTerm,
-          long_term_updated_at: "2026-10-28T00:00:00Z",
+          // An older Core, without entries, sends no update time.
+          ...(memoryMainSockets.has(socket)
+            ? { long_term_updated_at: "2026-10-28T00:00:00Z" }
+            : {}),
           long_term_truncated: false,
           long_term_total_bytes: Buffer.byteLength(longTerm),
           today: "Today’s memory note.",

@@ -24,8 +24,10 @@ import type {
   MemoryLoadResult,
   MemoryOverview,
   MemoryRecord,
+  MemoryEntries as MemoryEntryList,
 } from "@octos-org/octoscode-client/memory";
 import { errorMessage } from "../../shared/errors.ts";
+import { usePreferences } from "../preferences/preferences.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
 import styles from "./MemorySettings.module.css";
 import {
@@ -147,6 +149,11 @@ export function MemorySettingsContent({
     });
   }, [pendingRefresh, leaveIntent]);
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
+  /** The long-term entries on screen, as the list reported them. */
+  const [listed, setListed] = useState<{
+    list: MemoryEntryList | null;
+    stale: boolean;
+  } | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MemoryRecord[] | null>(null);
   const [entity, setEntity] = useState<MemoryEntityDetail | null>(null);
@@ -472,6 +479,68 @@ export function MemorySettingsContent({
           }
         : null,
     [hits, searchedFor, sessionProfileId],
+  );
+  // Long-term memory exports what the page shows: the listed entries or, where
+  // the server lists none (or cannot), the document. Nothing is read for it.
+  const longTermExport = useMemo<ExportOrReason | null>(() => {
+    if (!overview) return null;
+    const base = {
+      kind: "long-term" as const,
+      profileId: sessionProfileId,
+      updatedAt: overview.longTermUpdatedAt,
+    };
+    if (canEntries) {
+      if (listed?.stale)
+        return {
+          reason: t(
+            "This list may be out of date. Use Refresh to read it from the server.",
+          ),
+        };
+      if (!listed?.list) return { reason: t("Waiting for the server…") };
+      const { entries, total, truncated } = listed.list;
+      if (entries.length)
+        return {
+          scope: {
+            ...base,
+            content: { source: "entries", entries, total, truncated },
+          },
+        };
+    }
+    return overview.longTerm
+      ? {
+          scope: {
+            ...base,
+            content: {
+              source: "document",
+              document: {
+                text: overview.longTerm,
+                truncated: overview.longTermTruncated,
+                totalBytes: overview.longTermTotalBytes,
+              },
+            },
+          },
+        }
+      : { reason: t("There is no long-term memory to export yet.") };
+  }, [overview, listed, canEntries, sessionProfileId, t]);
+  const dailyExport = useMemo<ExportOrReason | null>(
+    () =>
+      !overview
+        ? null
+        : overview.today || overview.recent.length
+          ? {
+              scope: {
+                kind: "daily",
+                profileId: sessionProfileId,
+                today: {
+                  text: overview.today,
+                  truncated: overview.todayTruncated,
+                  totalBytes: overview.todayTotalBytes,
+                },
+                recent: overview.recent,
+              },
+            }
+          : { reason: t("There are no daily notes to export yet.") },
+    [overview, sessionProfileId, t],
   );
   const detailExport = useMemo<MemoryExportScope | null>(
     () =>
@@ -878,6 +947,7 @@ export function MemorySettingsContent({
                     release={releaseAction}
                     onChanged={overviewAfterChange}
                     onUnsavedChange={handleUnsavedEditChange}
+                    onList={(list, stale) => setListed({ list, stale })}
                     unlisted={
                       overview.longTerm ? (
                         <>
@@ -903,6 +973,16 @@ export function MemorySettingsContent({
                     totalBytes={overview.longTermTotalBytes}
                   />
                 )}
+                <LongTermUpdated at={overview.longTermUpdatedAt} />
+                {longTermExport ? (
+                  <MemoryExportActions
+                    {...longTermExport}
+                    label={t("Export long-term memory")}
+                    note={t(
+                      "The long-term memory this page shows, as the server sent it. Not a backup of all memories.",
+                    )}
+                  />
+                ) : null}
                 <MemoryDocument
                   title={t("Today")}
                   text={overview.today}
@@ -963,6 +1043,15 @@ export function MemorySettingsContent({
                     </details>
                   ))}
                 </div>
+                {dailyExport ? (
+                  <MemoryExportActions
+                    {...dailyExport}
+                    label={t("Export daily notes")}
+                    note={t(
+                      "Today's note and the recent notes this page shows, as the server sent them. Not a backup of all memories.",
+                    )}
+                  />
+                ) : null}
               </>
             ) : null}
           </section>
@@ -1277,19 +1366,26 @@ export function MemorySettingsContent({
   );
 }
 
+/** A scope to export, or why there is nothing the page can honestly export. */
+type ExportOrReason = { scope: MemoryExportScope } | { reason: string };
+
 function MemoryExportActions({
-  scope,
   label,
   note,
+  ...what
 }: {
-  scope: MemoryExportScope;
   label: string;
   note: string;
-}) {
+} & (
+  | { scope: MemoryExportScope; reason?: never }
+  | { reason: string; scope?: never }
+)) {
   const t = useUiText();
   const [failure, setFailure] = useState<string | null>(null);
+  const { scope } = what;
   useEffect(() => setFailure(null), [scope]);
   const save = (format: MemoryExportFormat) => {
+    if (!scope) return;
     setFailure(null);
     try {
       const exportedAt = new Date();
@@ -1314,20 +1410,55 @@ function MemoryExportActions({
     <div className={styles.export}>
       <div className={styles.actions} role="group" aria-label={label}>
         <span>{label}</span>
-        <button type="button" onClick={() => save("json")}>
+        <button type="button" disabled={!scope} onClick={() => save("json")}>
           {t("JSON")}
         </button>
-        <button type="button" onClick={() => save("markdown")}>
+        <button
+          type="button"
+          disabled={!scope}
+          onClick={() => save("markdown")}
+        >
           {t("Markdown")}
         </button>
       </div>
-      <p className={styles.meta}>{note}</p>
+      <p className={styles.meta}>{scope ? note : what.reason}</p>
       {failure ? (
         <p className={styles.error} role="alert">
           {failure}
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** The server's own time, or "unknown" when it sent none; never a guess. */
+function LongTermUpdated({ at }: { at: string | undefined }) {
+  const t = useUiText();
+  const { language } = usePreferences();
+  if (!at)
+    return (
+      <p className={styles.meta}>
+        {t("Long-term memory updated: {time}", { time: t("unknown") })}
+      </p>
+    );
+  const date = new Date(at);
+  // The translation places the time, so each language keeps its own spacing.
+  const [before, after] = t("Long-term memory updated: {time}", {
+    time: "\u0000",
+  }).split("\u0000");
+  return (
+    <p className={styles.meta}>
+      {before}
+      <time dateTime={at}>
+        {Number.isNaN(date.getTime())
+          ? at
+          : new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(date)}
+      </time>
+      {after}
+    </p>
   );
 }
 

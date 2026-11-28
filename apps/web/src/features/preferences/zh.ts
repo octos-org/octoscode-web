@@ -1680,6 +1680,25 @@ const catalog: Readonly<Record<string, string>> = {
     "此服务器无法加载完整记录详情。",
   "Export these {count} results": "导出这 {count} 条结果",
   "Export this detail": "导出这条详情",
+  "Export long-term memory": "导出长期记忆",
+  "The long-term memory this page shows, as the server sent it. Not a backup of all memories.":
+    "本页显示的长期记忆，内容以服务器发来的为准。这不是全部记忆的备份。",
+  "Export daily notes": "导出每日笔记",
+  "Today's note and the recent notes this page shows, as the server sent them. Not a backup of all memories.":
+    "本页显示的今日笔记和近期笔记，内容以服务器发来的为准。这不是全部记忆的备份。",
+  "There is no long-term memory to export yet.": "还没有可导出的长期记忆。",
+  "There are no daily notes to export yet.": "还没有可导出的每日笔记。",
+  "Long-term memory updated: {time}": "长期记忆更新时间：{time}",
+  "Memory export: long-term memory": "记忆导出：长期记忆",
+  "Memory export: daily notes": "记忆导出：每日笔记",
+  "the long-term memory document, as the server sent it.":
+    "长期记忆文档，内容以服务器发来的为准。",
+  "the first {count} of the {total} long-term memories the server lists; it sent no more.":
+    "服务器列出的 {total} 条长期记忆中的前 {count} 条；其余没有发来。",
+  "the {count} long-term memories the server lists.":
+    "服务器列出的 {count} 条长期记忆。",
+  "today's note and the {count} recent notes the server sent.":
+    "今日笔记和服务器发来的 {count} 条近期笔记。",
   "The page asks for at most {limit} results, so there may be more. Search results carry titles and summaries only. Not a backup of all memories.":
     "页面最多取 {limit} 条，可能还有更多。搜索结果只有标题和摘要。这不是全部记忆的备份。",
   "Search results carry titles and summaries only. Not a backup of all memories.":

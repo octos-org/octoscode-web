@@ -1,5 +1,7 @@
 import type {
+  MemoryDailyNote,
   MemoryEntityDetail,
+  MemoryEntry,
   MemoryLoadResult,
   MemoryRecord,
 } from "@octos-org/octoscode-client/memory";
@@ -19,7 +21,35 @@ export type MemoryExportScope =
       limit: number;
     }
   | { kind: "record"; profileId: string; loaded: MemoryLoadResult }
-  | { kind: "entity"; profileId: string; entity: MemoryEntityDetail };
+  | { kind: "entity"; profileId: string; entity: MemoryEntityDetail }
+  | {
+      kind: "long-term";
+      profileId: string;
+      /** The server's `long_term_updated_at`; absent means it is unknown. */
+      updatedAt: string | undefined;
+      /** The entries the page lists or, where it lists none, the document it shows. */
+      content:
+        | {
+            source: "entries";
+            entries: readonly MemoryEntry[];
+            total: number;
+            truncated: boolean;
+          }
+        | { source: "document"; document: MemoryText };
+    }
+  | {
+      kind: "daily";
+      profileId: string;
+      today: MemoryText;
+      recent: readonly MemoryDailyNote[];
+    };
+
+/** A text as the overview sent it, cut or whole. */
+export interface MemoryText {
+  text: string;
+  truncated: boolean;
+  totalBytes: number;
+}
 
 export type MemoryExportFormat = "json" | "markdown";
 
@@ -77,6 +107,39 @@ export function memoryExportJson(
       ...(scope.loaded.page !== undefined ? { page: scope.loaded.page } : {}),
       page_truncated: scope.loaded.pageTruncated,
     });
+  if (scope.kind === "long-term") {
+    const { content } = scope;
+    return json({
+      ...header,
+      scope: {
+        what: "long_term_memory",
+        profile_id: scope.profileId,
+        updated_at: scope.updatedAt ?? null,
+        source: content.source,
+      },
+      ...(content.source === "entries"
+        ? {
+            entries: content.entries.map(({ id, text }) => ({ id, text })),
+            total: content.total,
+            truncated: content.truncated,
+          }
+        : { document: textJson(content.document) }),
+    });
+  }
+  if (scope.kind === "daily")
+    return json({
+      ...header,
+      scope: { what: "daily_notes", profile_id: scope.profileId },
+      today: textJson(scope.today),
+      recent: scope.recent.map((note) => ({
+        date: note.date,
+        ...textJson({
+          text: note.content,
+          truncated: note.contentTruncated,
+          totalBytes: note.contentTotalBytes,
+        }),
+      })),
+    });
   return json({
     ...header,
     scope: { what: "memory_entity", profile_id: scope.profileId },
@@ -87,6 +150,14 @@ export function memoryExportJson(
       content_total_bytes: scope.entity.contentTotalBytes,
     },
   });
+}
+
+function textJson({ text, truncated, totalBytes }: MemoryText) {
+  return {
+    content: text,
+    content_truncated: truncated,
+    content_total_bytes: totalBytes,
+  };
 }
 
 function json(value: unknown): string {
@@ -155,6 +226,17 @@ export function memoryExportMarkdown(
     meta(t("Profile"), code(scope.profileId));
     meta(t("Exported at"), code(exportedAt.toISOString()));
   };
+  const truncatedNote = (size: number) =>
+    t(
+      "The server truncated this content ({size} B in full). Only what it sent is here.",
+      { size },
+    );
+  // Every text sits in its own fence, with no `- id:` line an import could
+  // mistake for one record.
+  const textBlock = ({ text, truncated, totalBytes }: MemoryText) => {
+    lines.push(text ? fenced(text) : t("No content yet."));
+    if (truncated) lines.push("", truncatedNote(totalBytes));
+  };
   if (scope.kind === "search") {
     header(t("Memory export: search “{query}”", { query: plain(scope.query) }));
     meta(
@@ -198,6 +280,53 @@ export function memoryExportMarkdown(
         "",
         t("The server truncated this content. Only what it sent is here."),
       );
+  } else if (scope.kind === "long-term") {
+    const { content } = scope;
+    header(t("Memory export: long-term memory"));
+    meta(
+      t("Updated at"),
+      scope.updatedAt ? code(scope.updatedAt) : t("unknown"),
+    );
+    meta(
+      t("Scope"),
+      content.source === "document"
+        ? t("the long-term memory document, as the server sent it.")
+        : content.truncated
+          ? t(
+              "the first {count} of the {total} long-term memories the server lists; it sent no more.",
+              { count: content.entries.length, total: content.total },
+            )
+          : t("the {count} long-term memories the server lists.", {
+              count: content.entries.length,
+            }),
+    );
+    lines.push("", t("This is not a backup of all memories."));
+    if (content.source === "document") {
+      lines.push("", `${t("Content")}:`, "");
+      textBlock(content.document);
+    } else
+      content.entries.forEach((entry, index) => {
+        lines.push("", `## ${index + 1}`, "", fenced(entry.body));
+      });
+  } else if (scope.kind === "daily") {
+    header(t("Memory export: daily notes"));
+    meta(
+      t("Scope"),
+      t("today's note and the {count} recent notes the server sent.", {
+        count: scope.recent.length,
+      }),
+    );
+    lines.push("", t("This is not a backup of all memories."));
+    lines.push("", `## ${t("Today")}`, "");
+    textBlock(scope.today);
+    for (const note of scope.recent) {
+      lines.push("", `## ${plain(note.date)}`, "");
+      textBlock({
+        text: note.content,
+        truncated: note.contentTruncated,
+        totalBytes: note.contentTotalBytes,
+      });
+    }
   } else {
     const { entity } = scope;
     header(t("Memory export: {title}", { title: plain(entity.name) }));
@@ -226,7 +355,9 @@ export function memoryExportFileName(
       ? scope.query
       : scope.kind === "record"
         ? scope.loaded.record.title || scope.loaded.record.id
-        : scope.entity.name;
+        : scope.kind === "entity"
+          ? scope.entity.name
+          : scope.profileId;
   const slug =
     [...subject.normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, "-")]
       .slice(0, 40)
