@@ -139,6 +139,8 @@ export interface ProductSidebarProps {
    * Delete action.
    */
   onSessionDelete?: ((sessionId: string) => Promise<string | null>) | undefined;
+  /** Opens Help: starting a task, getting files back, and shortcuts. */
+  onHelp?: (() => void) | undefined;
   onSettings: () => void;
   onFleet?: (() => void) | undefined;
   onRetry?: () => void;
@@ -225,6 +227,7 @@ export function ProductSidebar({
   onSessionSelect,
   onSessionRename,
   onSessionDelete,
+  onHelp,
   onSettings,
   onFleet,
   onRetry,
@@ -1403,6 +1406,19 @@ export function ProductSidebar({
             ) : null}
           </>
         ) : null}
+        {onHelp ? (
+          <button
+            type="button"
+            className={styles.settings}
+            aria-label={t("Help")}
+            title={collapsed ? t("Help") : undefined}
+            aria-haspopup="dialog"
+            onClick={onHelp}
+          >
+            <HelpIcon />
+            {!collapsed ? <span>{t("Help")}</span> : null}
+          </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.settings} ${settingsActive ? styles.settingsActive : ""}`}
@@ -1915,6 +1931,16 @@ function MoreIcon() {
       <circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </SvgIcon>
+  );
+}
+
+function HelpIcon() {
+  return (
+    <SvgIcon>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6" />
+      <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
     </SvgIcon>
   );
 }

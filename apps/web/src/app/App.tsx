@@ -5206,6 +5206,9 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                     }
                   : undefined
               }
+              // Help opens over the phone drawer rather than closing it, so
+              // closing Help returns focus to its button.
+              onHelp={() => setShortcutHelpOpen(true)}
               onSettings={() => {
                 if (compact) setSidebarCollapsed(true);
                 setSettingsOpen(true);
@@ -5615,11 +5618,6 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                                 composerRef.current?.focus(),
                               );
                             }}
-                          />
-                        ) : null}
-                        {shortcutHelpOpen ? (
-                          <ShortcutHelp
-                            onClose={() => setShortcutHelpOpen(false)}
                           />
                         ) : null}
                         <Timeline
@@ -7210,6 +7208,12 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
             }
           />
         </SurfaceBoundary>
+      ) : null}
+      {shortcutHelpOpen ? (
+        <ShortcutHelp
+          chat={twoModes}
+          onClose={() => setShortcutHelpOpen(false)}
+        />
       ) : null}
       {settingsOpen ? (
         <SurfaceBoundary
