@@ -6,24 +6,87 @@ repository's narrow fixture server.
 
 ## Requirements
 
-- Node.js 22 or newer
-- pnpm 11.5.2
-- Chromium only when running the browser test suite
+- Git, curl, and Node.js 22 or newer.
+- pnpm 11.5.2. On Node.js 22 or 24, `corepack enable` provides it; if that fails
+  with a permission error, Node.js is installed for all users, so run it with
+  `sudo` or use a per-user Node.js such as nvm. Node.js 25 and newer no longer
+  include Corepack: run `npm install -g pnpm@11.5.2` instead.
+- An Octos server on the machine that owns your files: v2.0.3 or newer for Code
+  mode, v2.1.0 or newer for Chat mode.
+- Chromium, only when running the browser test suite.
 
-Install the workspace exactly from the lockfile:
+## Install
+
+### The Octos server
+
+Download the server bundle for your computer from
+[Octos releases](https://github.com/octos-org/octos/releases), check it, and
+unpack it into `~/.octos/bin`:
 
 ```sh
-pnpm install --frozen-lockfile
+VERSION=v2.1.0
+ASSET=octos-bundle-x86_64-unknown-linux-gnu.tar.gz
+mkdir -p ~/.octos/bin
+cd "$(mktemp -d)"
+curl -fLO "https://github.com/octos-org/octos/releases/download/$VERSION/$ASSET"
+curl -fLO "https://github.com/octos-org/octos/releases/download/$VERSION/$ASSET.sha256"
+sha256sum -c "$ASSET.sha256"
+tar -xzf "$ASSET" -C ~/.octos/bin
+~/.octos/bin/octos --version
 ```
+
+| Computer          | `ASSET`                                         |
+| ----------------- | ----------------------------------------------- |
+| Linux x64         | `octos-bundle-x86_64-unknown-linux-gnu.tar.gz`  |
+| Linux ARM64       | `octos-bundle-aarch64-unknown-linux-gnu.tar.gz` |
+| Apple silicon Mac | `octos-bundle-aarch64-apple-darwin.tar.gz`      |
+| Windows x64       | `octos-bundle-x86_64-pc-windows-msvc.zip`       |
+
+On a Mac, check the download with `shasum -a 256 -c "$ASSET.sha256"`. The
+commands on this page are for Linux and macOS shells. v2.1.0 is the first Octos
+release with Chat mode; until it is published, `VERSION=v2.0.3` gives you Code
+mode. The bundle holds the `octos` server, its sandbox helper, the tools it
+runs, and its model catalog. `~/.octos/bin` is not added to your `PATH`, so this
+page uses the full path.
+
+The [Octoscode TUI](https://github.com/octos-org/octoscode) also installs a
+server into `~/.octos/bin` the first time it runs, but only the version that TUI
+release was built for. Check it with `~/.octos/bin/octos --version`, and install
+the bundle if it is older than you need.
+
+### This app
+
+Check out a release and install its dependencies exactly from the lockfile:
+
+```sh
+git clone --branch v1.0.0 https://github.com/octos-org/octoscode-web.git
+cd octoscode-web
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+`--branch` picks a release from
+[Releases](https://github.com/octos-org/octoscode-web/releases); `main` is
+unreleased work. Until 1.0 is published, use `--branch v0.22.0`, which has Code
+mode only. Each release also has an archive, `octoscode-web-<tag>.tar.gz`, with
+the same app already built. It is for hosting behind a web server, over HTTPS;
+see the [deployment contract](deployment.md). On your own computer, use the
+checkout.
 
 ## Connect to Octos
 
-1. Start a compatible `octos serve` on the machine that owns the workspace,
-   **bound to a port** so a browser can reach it:
+1. Start the server, **bound to a port** so a browser can reach it, on the
+   machine that owns the workspace. Pick a token — any string:
 
    ```sh
-   octos serve --host 127.0.0.1 --port 50080
+   export OCTOS_AUTH_TOKEN=my-local-token
+   ~/.octos/bin/octos serve --host 127.0.0.1 --port 50080 --solo
    ```
+
+   The server reads the token from `OCTOS_AUTH_TOKEN`; do not also pass
+   `--auth-token`, which puts the token in the process list. `--solo` lets this
+   app create your profile on first run; without it a fresh server answers "This
+   server cannot onboard from the Web". The server keeps its data in `~/.octos`.
 
    `--stdio` will not work here: it runs the protocol over the process's stdin
    and stdout instead of binding HTTP, which serves only the process that
@@ -32,29 +95,51 @@ pnpm install --frozen-lockfile
    on its own. A port-bound server accepts both, at the same time — see
    [Share a session with the terminal](#share-a-session-with-the-terminal).
 
-2. Start the Web development server:
+2. In the checkout, serve the built app with the server behind it:
 
    ```sh
-   pnpm dev
+   OCTOSCODE_DEV_PROXY_TARGET=http://127.0.0.1:50080 \
+   OCTOSCODE_DEV_PROXY_ORIGIN=http://127.0.0.1:50080 \
+   pnpm --filter @octos-org/octoscode-web exec vite preview --host 127.0.0.1
    ```
 
-3. Open the displayed local URL. The connection gate has two fields:
+   Keep both variables. They make the browser talk only to this app's address,
+   which forwards to the server. Without them the server refuses the browser,
+   because by default it trusts only its own address. To serve the app another
+   way, set `OCTOS_APPUI_ALLOWED_ORIGINS=http://<host>:<port>` on the server
+   instead. While changing the app itself, `pnpm dev` with the same variables
+   serves the same address and reloads as you edit.
+
+3. Open <http://127.0.0.1:4173>. The connection gate has two fields:
 
    | Field         | Meaning                                                             |
    | ------------- | ------------------------------------------------------------------- |
    | Server origin | HTTP(S) origin for the Octos server.                                |
    | Auth token    | Credential when the server requires one; retained only in this tab. |
 
-4. Select **Connect** or press Enter. The address defaults to this page's
-   origin; **Use this page** restores it after a custom address was saved.
-   Authentication happens before work selection; there are no Workspace path,
-   profile, or Session identity fields on this screen.
-5. On your first connection, enter a workspace path and select **Start
-   session**. For later conversations, select **New Session** in the sidebar and
-   choose a recent Workspace, or select **Add workspace**. Enter paths on the
-   **Octos server host**, not the browser device. Add workspace validates that
-   path and creates a fresh Session; it is not Workspace-registry CRUD.
-6. Select any Session this tab has already confirmed to reopen it. Chat and
+4. Leave **Server origin** as it is, enter the token, and select **Connect** or
+   press Enter. The address defaults to this page's origin; **Use this page**
+   restores it after a custom address was saved. Authentication happens before
+   work selection; there are no Workspace path, profile, or Session identity
+   fields on this screen.
+5. On your first connection, enter a workspace path, or select **Browse…**, and
+   select **Start session**. For later conversations, select **New Session** in
+   the sidebar and choose a recent Workspace, or select **Add workspace**. Enter
+   paths on the **Octos server host**, not the browser device. Add workspace
+   validates that path and creates a fresh Session; it is not Workspace-registry
+   CRUD.
+6. The first time, **Set up your coding assistant** opens:
+   1. **Step 1 of 2 · Model service**: choose a provider and a **Model**, then
+      select **Continue**. **More providers** lists the rest. **Advanced** holds
+      the profile's ID and name; the ID is `coding` unless you change it.
+   2. **Step 2 of 2 · Connect**: paste the provider's API key, or select **Use a
+      custom OpenAI-compatible endpoint** and enter its base URL, and select
+      **Test, save & open**. The key is tested with the provider before the
+      profile is saved. Octos keeps the key; the browser does not.
+
+   The conversation then opens. [Kimi](#kimi) covers the Kimi Coding Plan.
+
+7. Select any Session this tab has already confirmed to reopen it. Chat and
    Trajectory both follow the selected Session. Multiple Sessions can share the
    same Workspace path without replacing one another. Do not assume the list is
    complete on Core rc.9; unscoped/admin connections can misroute a known-path
@@ -87,11 +172,13 @@ The terminal client and this app are peers on one server, not alternatives.
 Point the TUI at the same origin with the same token:
 
 ```sh
+export OCTOS_AUTH_TOKEN=my-local-token
 octoscode \
   --endpoint ws://127.0.0.1:50080/api/ui-protocol/ws \
-  --auth-token "$OCTOS_AUTH_TOKEN" \
   --session <session id>
 ```
+
+Like the server, the TUI reads the token from `OCTOS_AUTH_TOKEN`.
 
 `session/open` attaches; it does not claim. The server replays what you missed
 from your cursor and then pushes every later event to every attached connection,
@@ -278,10 +365,32 @@ not currently named there. Use a normal API key/endpoint for Octos unless Z.AI
 has separately authorized this integration. Endpoint compatibility alone does
 not grant Coding Plan usage rights.
 
-An empty solo server can offer profile and provider onboarding after a Workspace
-is selected. Provider data comes from Core, the credential is tested before
-saving, and the API key is never written to browser storage. Older servers
-display the canonical `octoscode onboard` fallback instead.
+### Kimi
+
+The setup wizard and **Settings → Models** list two Kimi entries. Pick the one
+that matches your key:
+
+| Entry                | Key                                                      | Models                                              | Endpoint                         |
+| -------------------- | -------------------------------------------------------- | --------------------------------------------------- | -------------------------------- |
+| **Kimi Coding Plan** | A Kimi Coding Plan subscription key, starting `sk-kimi-` | `k3` (the default), `kimi-for-coding-highspeed`     | `https://api.kimi.com/coding/v1` |
+| **Kimi 月之暗面**    | A Moonshot open platform API key                         | `kimi-k2.5` (the default) and newer `kimi-*` models | `https://api.moonshot.ai/v1`     |
+
+Octos fills in the endpoint; leave **Use a custom OpenAI-compatible endpoint**
+off. The two kinds of key are not interchangeable: the Moonshot endpoint rejects
+Coding Plan keys, so with the wrong entry the key test fails. In the setup
+wizard, select **Back**, pick the other entry, and try again. Use a key from
+your own Kimi account, and check that your plan's terms allow its use with
+Octos. From octoscode-web 1.0, **Kimi Coding Plan** is in the first row of the
+wizard; in v0.22 it is under **More providers**.
+
+An empty solo server offers profile and provider onboarding after a Workspace is
+selected. Provider data comes from Core, the credential is tested before saving,
+and the API key is never written to browser storage. A server started without
+`--solo`, or one too old for Web onboarding, shows **This server cannot onboard
+from the Web** and names `octoscode onboard`. Octoscode has no such subcommand.
+Restart the server with `--solo` instead, or set up from the terminal: run
+`octoscode` on the server machine and finish its first-launch setup (`/onboard`
+in the TUI reopens it later), then restart `octos serve` and reconnect.
 
 After a successful connection, refreshing the same tab reopens the established
 Session. Only the server origin and explicitly saved local display preferences
@@ -313,41 +422,128 @@ Use the fixture origin shown in its terminal output. The fixture contains a
 representative Markdown/code transcript, approvals, questions, task output,
 artifacts, and session state.
 
-## Try Chat mode (testers only)
+## Use Chat mode
 
-Everything above is Code mode, which every user gets. Chat mode, where each chat
-works in a folder the server assigns to it alone, is a preview for testers. It
-is off by default and not available to users yet; see
-[Code and Chat modes](product.md#code-and-chat-modes) for what has to happen
-first. Only try it in a test browser against a server you are allowed to test
-on, never in someone else's browser or on a shared deployment.
+Chat mode is for everyday work that needs no folder, such as a weekly report, a
+summary of a PDF, or a cleaned-up table. Each chat works in a folder that the
+server assigns to it alone; the page never asks for or shows a path. It needs
+octoscode-web 1.0 or newer and Octos v2.1.0 or newer.
+[Before 1.0](#before-10-the-chat-preview) covers earlier builds.
+
+1. Under **Work mode** at the top of the sidebar (in the drawer on a phone),
+   select **Chat**, then **New chat**. If **Chat** is disabled and says the
+   server cannot give every chat its own folder, the server is older than
+   v2.1.0: [install v2.1.0](#the-octos-server) and restart it. Code mode works
+   either way.
+2. Pick a template on the chat's home or type a request. A new chat is read-only
+   with the network blocked: answers stay in the conversation and nothing is
+   written. You can attach pasted text, images, Markdown, CSV, and PDF files,
+   but not Office files. Attachments can be previewed and downloaded from the
+   conversation.
+3. To let Octos save files, select **Allow file outputs**. This changes only
+   this chat, to writing in its own folder with the network still blocked. The
+   chat sends nothing until the server has confirmed the change; then it shows
+   **File outputs on**.
+4. Ask for a file, for example "save the weekly report as a markdown file". The
+   file appears in the conversation and under **Outputs** at the top right, each
+   with **Preview** and **Download**.
+5. **Turn off file outputs** returns the chat to read-only. Files it already
+   saved stay under **Outputs**.
+
+The network stays blocked in Chat mode; switching modes, picking a template, or
+allowing file outputs does not open it. Chats share the connection, the
+Profile's models, saved memory, installed skills, and connectors with Code mode,
+but not their files.
+
+### Turn Chat mode off
+
+From 1.0, Chat mode is on unless a browser opts out. To opt out, run this in the
+browser's developer console:
+
+```js
+localStorage.setItem("octoscode-web.two-modes", "off");
+location.reload();
+```
+
+**Work mode** disappears and the page stops asking the server for Chat features.
+Chats stay on the server; nothing is deleted. Session links live in the tab, so
+chats this tab opened still show as ordinary Sessions under their folders until
+you close the tab or select **Forget server**. To return to the default, run
+`localStorage.removeItem("octoscode-web.two-modes")` and reload. Phones have no
+developer console; there, choose **Code** under **Work mode** instead.
+
+### Before 1.0: the Chat preview
+
+Releases up to v0.22 have Code mode only. Builds of `main` before 1.0 show Code
+only unless a tester turns the Chat preview on, in a test browser against a
+server they may test on, never in someone else's browser or on a shared
+deployment:
 
 1. In the test browser's console, run
    `localStorage.setItem('octoscode-web.two-modes', 'on'); location.reload()`.
    The page reads the flag only when it loads.
-2. **Work mode** appears at the top of the sidebar (in the drawer on a phone),
-   with **Code** and **Chat**.
-3. Against a real Core today, **Chat** stays disabled and explains that the
-   server cannot give each chat its own folder. That is expected: the page asks
-   for Chat's features when the flag is on, but no released Core has them yet.
-4. Against the fixture, connect with the token `two-modes-e2e-token`; only that
-   token gets the Chat features. Chats, file outputs and Outputs then work end
-   to end, but the fixture's files are simulated, so this is no evidence of how
-   a real Core behaves.
-5. To turn it off, run
+2. **Work mode** appears, and Chat works as above against Octos v2.1.0 or a Core
+   build from `main` that has the per-chat folders.
+3. Against the fixture, connect with the token `two-modes-e2e-token`; only that
+   token gets the Chat features. The fixture's files are simulated, so this is
+   no evidence of how a real Core behaves.
+4. To turn the preview off, run
    `localStorage.removeItem('octoscode-web.two-modes'); location.reload()`.
-   Chats stay on the server. Session links live in the tab, so chats this tab
-   opened still show as ordinary Sessions under their folders until you close
-   the tab or select **Forget server**.
 
 The [1.0 flag drill](release-1.0-flag-drill.md) is the full checklist for
-turning the flag on in a designated test environment.
+turning the flag on in a designated test environment before the release.
+
+## Upgrade or roll back
+
+Code mode needs Octos v2.0.3 or newer; Chat mode needs octoscode-web 1.0 and
+Octos v2.1.0 or newer. Sessions, chats, and their files live on the server, so
+changing the app's version never moves or deletes them.
+
+**This app, from a checkout.** Stop the preview, then:
+
+```sh
+git fetch --tags
+git checkout v1.0.0
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+and start the preview again with the same two variables. To roll back, do the
+same with the earlier tag, for example `git checkout v0.22.0`. Going back to
+v0.22 removes **Work mode**; your chats stay on the server and reappear when you
+upgrade again.
+
+**This app, hosted from a release archive.** Download the new
+`octoscode-web-<tag>.tar.gz` and its `.sha256` from
+[Releases](https://github.com/octos-org/octoscode-web/releases), verify them,
+extract next to the current directory, and switch the web server to it. Keep the
+previous directory: rolling back means serving it again. The
+[deployment contract](deployment.md#rollback-and-health) lists the checks.
+
+**The Octos server.** Read the
+[Octos upgrade guide](https://github.com/octos-org/octos/blob/main/docs/UPGRADE-v2.1.0.md)
+first. Then stop `octos serve`, keep a copy of the current binaries, install the
+new bundle with the commands in [The Octos server](#the-octos-server), and start
+the server again:
+
+```sh
+cp -a ~/.octos/bin ~/.octos/bin-previous
+```
+
+To roll back, stop the server, put the copy back
+(`rm -rf ~/.octos/bin && mv ~/.octos/bin-previous ~/.octos/bin`), and start it
+again. Their files stay in place, but a server older than v2.1.0 cannot see the
+chats v2.1.0 created, and the page shows **Chat** as unavailable. Code mode
+works with v2.0.3 or newer.
+
+## Common commands
 
 ## Common commands
 
 | Command                 | Purpose                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------ |
 | `pnpm dev`              | Start the Vite development server.                                             |
+| `pnpm build`            | Build the app into `apps/web/dist`.                                            |
 | `pnpm mock:server`      | Start the deterministic AppUI fixture.                                         |
 | `pnpm check`            | Format-check, lint, typecheck, unit-test, build, and verify deployment output. |
 | `pnpm test:e2e`         | Run Chromium product and accessibility flows.                                  |
@@ -383,6 +579,11 @@ profile save without contacting a model service.
   and are never written to browser storage; after Save, Core owns the credential
   and returns only whether it is configured.
 - Unsupported methods and malformed safety-bearing payloads fail closed.
+- Browsers: the product suite runs in Chromium, with smoke tests in Firefox and
+  WebKit. Playwright's WebKit is not Safari on a Mac, iPhone, or iPad, and these
+  instructions have not been checked there. Nothing on this page needs a
+  developer console except opting out of Chat mode or turning on the preview,
+  which phones cannot do.
 
 For production hosting, continue with the [deployment contract](deployment.md).
 For protocol behavior, see [Protocol integration](protocol.md).

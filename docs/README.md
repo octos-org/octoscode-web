@@ -6,15 +6,15 @@ your question.
 
 ## Use and operate
 
-| Document                                              | Purpose                                                                          |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [Getting started](getting-started.md)                 | Connect, choose a Workspace, start a Session, use the fixture, or try Chat mode. |
-| [Product scope](product.md)                           | Supported workflows, Code and Chat modes, principles, and non-goals.             |
-| [Deployment contract](deployment.md)                  | Build identity, hosting, security headers, health, and rollback.                 |
-| [Troubleshooting](troubleshooting.md)                 | Connection, recovery, onboarding, and command diagnostics.                       |
-| [1.0 release notes draft](release-notes-1.0-draft.md) | Unreleased draft for Code and Chat modes (Chinese).                              |
-| [1.0 flag drill](release-1.0-flag-drill.md)           | Turning Chat mode on and off in a test environment (Chinese).                    |
-| [Security policy](../SECURITY.md)                     | Supported versions and private vulnerability reporting.                          |
+| Document                                              | Purpose                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [Getting started](getting-started.md)                 | Install, connect, choose a Workspace, use Chat mode, configure Kimi, upgrade or roll back. |
+| [Product scope](product.md)                           | Supported workflows, Code and Chat modes, principles, and non-goals.                       |
+| [Deployment contract](deployment.md)                  | Build identity, hosting, security headers, health, and rollback.                           |
+| [Troubleshooting](troubleshooting.md)                 | Connection, recovery, onboarding, and command diagnostics.                                 |
+| [1.0 release notes draft](release-notes-1.0-draft.md) | Unreleased draft for Code and Chat modes (Chinese).                                        |
+| [1.0 flag drill](release-1.0-flag-drill.md)           | Turning Chat mode on and off in a test environment (Chinese).                              |
+| [Security policy](../SECURITY.md)                     | Supported versions and private vulnerability reporting.                                    |
 
 ## Understand and change
 

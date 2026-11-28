@@ -62,8 +62,8 @@ path. There is no user-entered Session identity and neither action means “resu
 the canonical TUI coding Session.” The adapter waits for Core's Profile decision
 before forming the profile-routable Web identity. If creation is rejected,
 verify that the server path remains accessible and has a usable Octos coding
-profile. An empty server may open onboarding or direct you to
-`octoscode onboard`.
+profile. An empty server may open onboarding or fall back to the terminal setup;
+see [Onboarding falls back to the TUI](#onboarding-falls-back-to-the-tui).
 
 Older clients that opened a bare `web-*` identity through an unscoped admin
 credential may have created a Session that Core can open but cannot hydrate. The
@@ -119,17 +119,20 @@ authenticated administration are tracked in
 
 ## Chat mode is disabled or missing
 
-Chat mode is a tester preview, off by default; see
-[Try Chat mode](getting-started.md#try-chat-mode-testers-only). Without the
-`octoscode-web.two-modes` flag in this browser there is no **Work mode** switch
-at all, and that is the normal state for users.
+From octoscode-web 1.0, **Work mode** with **Code** and **Chat** is at the top
+of the sidebar unless this browser opted out with the `octoscode-web.two-modes`
+value `off`; see [Turn Chat mode off](getting-started.md#turn-chat-mode-off).
+Releases up to v0.22 have no Chat mode, and builds of `main` before 1.0 show it
+only with the tester preview on; see
+[Before 1.0](getting-started.md#before-10-the-chat-preview).
 
-With the flag on, **Chat** is disabled and says the server cannot give every
-chat its own folder when the connection lacks `session.work_mode.v1` or
-`session.chat_workspace.v1`. With the flag on, the page asks for both, but no
-released Core has them yet, so today this always happens against a real Core. It
-is not a connection fault, and Code mode is unaffected. The page never falls
-back to a shared folder to make Chat work.
+**Chat** is disabled and says the server cannot give every chat its own folder
+when the connection lacks `session.work_mode.v1` or `session.chat_workspace.v1`.
+Octos v2.1.0 is the first release with both; an older server always shows this.
+Upgrade the server
+([Upgrade or roll back](getting-started.md#upgrade-or-roll-back)). It is not a
+connection fault, and Code mode is unaffected. The page never falls back to a
+shared folder to make Chat work.
 
 **Allow file outputs** appears only in a chat whose permission this tab may
 change and whose current permission is read-only, or workspace write with the
@@ -198,8 +201,15 @@ navigation references, and preferences.
 ## Onboarding falls back to the TUI
 
 Browser onboarding appears only if the server advertises the complete solo
-onboarding method set. Upgrade Core or run `octoscode onboard`; the client does
-not guess missing provider APIs.
+onboarding method set; the client does not guess missing provider APIs. Without
+it the page shows **This server cannot onboard from the Web** and names
+`octoscode onboard`, which is not an Octoscode subcommand. Instead:
+
+- Restart the server with `--solo`; a fresh server needs it to onboard from the
+  Web. Upgrade Core if it is older than v2.0.3.
+- Or set up from the terminal: run `octoscode` on the server machine and finish
+  its first-launch setup (`/onboard` in the TUI reopens it later), then restart
+  `octos serve` and reconnect.
 
 ## A slash or bang command is unavailable
 

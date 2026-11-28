@@ -100,9 +100,12 @@ otherwise valid images larger than 1 MiB will be rejected before reaching Core.
 
 ## Octos runtime boundary
 
-Run a compatible `octos serve` separately. The connection gate asks for its
-origin and, when configured, an auth token. Workspace selection happens after
-authentication: New Session chooses a known Workspace, while Add workspace
+Run a compatible `octos serve` separately: Octos v2.0.3 or newer for Code mode,
+v2.1.0 or newer for Chat mode. Upgrade and roll it back as in the
+[Octos upgrade guide](https://github.com/octos-org/octos/blob/main/docs/UPGRADE-v2.1.0.md);
+an older Octos cannot see chats that v2.1.0 created. The connection gate asks
+for its origin and, when configured, an auth token. Workspace selection happens
+after authentication: New Session chooses a known Workspace, while Add workspace
 accepts a path on the server host and creates a fresh Web Session. Session
 identity is never an operator-facing login field. Same-origin reverse proxying
 is recommended because it simplifies TLS, origin policy, and CSP. A cross-origin
@@ -172,7 +175,10 @@ see [Feature parity](feature-parity.md).
 
 Keep the preceding immutable archive available. Rollback consists of serving the
 preceding extracted bundle; server-owned sessions and task state are not stored
-in the static deployment and are therefore unaffected. A deployment is healthy
-when `index.html`, one hashed asset, and `octoscode-web-build.json` return
-successfully and a browser can complete capability negotiation with its target
-Octos server.
+in the static deployment and are therefore unaffected. Rolling back from 1.0 to
+v0.22 removes Chat mode from the page; chats and their files stay on the server.
+To keep 1.0 and hide Chat in one browser only, that browser can opt out instead
+([Turn Chat mode off](getting-started.md#turn-chat-mode-off)). A deployment is
+healthy when `index.html`, one hashed asset, and `octoscode-web-build.json`
+return successfully and a browser can complete capability negotiation with its
+target Octos server.

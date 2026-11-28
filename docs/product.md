@@ -40,7 +40,7 @@ is opened and the mode's home says so.
 
 - **Code** is the product described on this page: pick a folder on the server,
   then work in it under the Session's permission, network setting, and
-  approvals. It is available today and is all a user sees by default.
+  approvals. It needs Octos v2.0.3 or newer.
 - **Chat** is for everyday work that needs no folder, such as a weekly report or
   a cleaned-up list. Each chat gets a folder that the server assigns to it
   alone; the page never asks for or shows a path. A new chat starts read-only
@@ -52,14 +52,18 @@ is opened and the mode's home says so.
   read it back. If no answer comes, the chat stays paused until you re-read the
   server's permission; the change is never sent again on its own.
 
-Chat mode is **not available to users yet**. It sits behind a per-browser
-preview flag that is off by default, and it also needs a Core that offers
-`session.work_mode.v1` and `session.chat_workspace.v1` to this page. Without
-both, the page shows Code only, or a disabled Chat button that says the server
-cannot give each chat its own folder; it never falls back to a shared folder.
-Core reports only the features a connection asks for: a page with the flag asks
-for both when it connects, and without the flag it asks for neither. Before Chat
-mode can open to users:
+From octoscode-web 1.0, both modes are on by default; a browser can opt out with
+the `octoscode-web.two-modes` value `off`
+([how](getting-started.md#turn-chat-mode-off)). **1.0 has not been released
+yet**: releases up to v0.22 have Code mode only, and builds of `main` before 1.0
+keep Chat behind a per-browser preview flag that is off by default. Chat also
+needs a Core that offers `session.work_mode.v1` and `session.chat_workspace.v1`
+to this page, which Octos v2.1.0 is the first release to do. Without both, the
+page shows a disabled Chat button that says the server cannot give each chat its
+own folder; it never falls back to a shared folder. Core reports only the
+features a connection asks for: a page with Chat on asks for both when it
+connects, and with Chat off it asks for neither. Before Chat mode can open to
+users:
 
 - Core must ship the per-chat folder (T-B,
   [octos#3256](https://github.com/octos-org/octos/pull/3256)), the Session
