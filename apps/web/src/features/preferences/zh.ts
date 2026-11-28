@@ -1397,9 +1397,11 @@ const catalog: Readonly<Record<string, string>> = {
   "Open folder {value0}": "打开文件夹 {value0}",
   "Use folder {value0}": "使用文件夹 {value0}",
   "Use this folder": "使用此文件夹",
-  "The home folder cannot be used directly — pick a subfolder below.": "主目录不能直接用作工作区——请在下方选择一个子文件夹。",
+  "The home folder cannot be used directly — pick a subfolder below.":
+    "主目录不能直接用作工作区——请在下方选择一个子文件夹。",
   "Choose a different folder": "更换文件夹",
-  "This folder contains or belongs to a protected Chat workspace and cannot be used for coding. Choose a different folder — for example a project subfolder.": "这个文件夹属于或包含受保护的 Chat 工作区，不能用作编程会话的工作区。请更换文件夹，例如选择一个项目子目录。",
+  "This folder contains or belongs to a protected Chat workspace and cannot be used for coding. Choose a different folder — for example a project subfolder.":
+    "这个文件夹属于或包含受保护的 Chat 工作区，不能用作编程会话的工作区。请更换文件夹，例如选择一个项目子目录。",
   Use: "使用",
   "New folder": "新建文件夹",
   "New folder name": "新文件夹名称",

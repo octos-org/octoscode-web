@@ -36,7 +36,8 @@ export function isChatWorkspaceReservedError(reason: unknown): boolean {
 }
 
 export function launchFailureMessage(reason: unknown): string {
-  if (isChatWorkspaceReservedError(reason)) return CHAT_WORKSPACE_RESERVED_MESSAGE;
+  if (isChatWorkspaceReservedError(reason))
+    return CHAT_WORKSPACE_RESERVED_MESSAGE;
   if (
     reason instanceof Error &&
     reason.name === "OctosUiConnectionClosedError" &&

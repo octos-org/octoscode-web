@@ -9,6 +9,8 @@
  */
 export function isUserHomeRoot(path: string): boolean {
   const normalized = path.replaceAll("\\", "/");
-  return /^\/(home|Users)\/[^/]+\/?$/.test(normalized) ||
-    /^[A-Za-z]:\/Users\/[^/]+\/?$/.test(normalized);
+  return (
+    /^\/(home|Users)\/[^/]+\/?$/.test(normalized) ||
+    /^[A-Za-z]:\/Users\/[^/]+\/?$/.test(normalized)
+  );
 }

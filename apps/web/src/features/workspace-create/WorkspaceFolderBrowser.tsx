@@ -286,7 +286,9 @@ export function WorkspaceFolderBrowser({
 
       {listing && homeRoot ? (
         <p className={styles.pathHelp} data-browse-home-root="true">
-          {t("The home folder cannot be used directly — pick a subfolder below.")}
+          {t(
+            "The home folder cannot be used directly — pick a subfolder below.",
+          )}
         </p>
       ) : null}
 
@@ -304,7 +306,13 @@ export function WorkspaceFolderBrowser({
           type="button"
           className={styles.primaryButton}
           disabled={busy || !listing || homeRoot}
-          title={homeRoot ? t("The home folder cannot be used directly — pick a subfolder below.") : undefined}
+          title={
+            homeRoot
+              ? t(
+                  "The home folder cannot be used directly — pick a subfolder below.",
+                )
+              : undefined
+          }
           onClick={() => {
             if (listing && !homeRoot) onChoose(listing.canonicalPath);
           }}

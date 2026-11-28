@@ -20,7 +20,10 @@ import {
   LaunchTransitionCoordinator,
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
-import { isChatWorkspaceReservedError, launchFailureMessage } from "./launch-failure.ts";
+import {
+  isChatWorkspaceReservedError,
+  launchFailureMessage,
+} from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
 import { SessionDeletionFence } from "./session-deletion-fence.ts";
 import type {
@@ -3003,7 +3006,9 @@ export function useOctosSession({
           // dead end.
           const stored = candidateFailureRef.current;
           throw new Error(
-            stored !== null ? launchFailureMessage(stored) : "The new coding session could not be opened.",
+            stored !== null
+              ? launchFailureMessage(stored)
+              : "The new coding session could not be opened.",
           );
         }
         onboardingController.reset();
@@ -3361,7 +3366,9 @@ export function useOctosSession({
     if (reason !== undefined)
       workspaceController.setError(
         launchFailureMessage(reason),
-        isChatWorkspaceReservedError(reason) ? "chat_workspace_reserved" : undefined,
+        isChatWorkspaceReservedError(reason)
+          ? "chat_workspace_reserved"
+          : undefined,
       );
     if (!restoreLaunchChoice(lease)) {
       launchTransitionRef.current.discard(lease);

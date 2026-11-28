@@ -208,7 +208,11 @@ export function useWorkspaceProduct(
     deleteSession,
     renameSession,
     setError: (message, kind) =>
-      setState((current) => ({ ...current, error: message, errorKind: kind ?? null })),
+      setState((current) => ({
+        ...current,
+        error: message,
+        errorKind: kind ?? null,
+      })),
     // Returning `current` untouched skips the render: an unconditional clear
     // re-renders the sidebar tree on every healthy recovery.
     clearError: (owned) =>
