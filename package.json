@@ -37,10 +37,5 @@
     "prettier": "^3.9.10",
     "typescript": "~7.0.2",
     "vitest": "^5.0.5"
-  },
-  "pnpm": {
-    "overrides": {
-      "katex": "0.16.47"
-    }
   }
 }
