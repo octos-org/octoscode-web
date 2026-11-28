@@ -10,6 +10,7 @@ import { useEffect, useReducer, useRef, type FormEvent } from "react";
 import { ArrowUpIcon, FolderIcon, PlusIcon } from "../../ui/Icon.tsx";
 import { SkeletonRows } from "../../ui/Skeleton.tsx";
 import { useUiText } from "../preferences/ui-text.tsx";
+import { isUserHomeRoot } from "./home-path.ts";
 import styles from "./NewSessionWorkspacePicker.module.css";
 import {
   IDLE_WORKSPACE_BROWSE,
@@ -122,6 +123,10 @@ export function WorkspaceFolderBrowser({
   };
 
   const listing = state.listing;
+  // T-0730: the wizard must not offer $HOME as a directly usable main option
+  // — Core refuses it with chat_workspace_reserved. The recovery is a
+  // subfolder (the entries below) or a typed path.
+  const homeRoot = listing !== null && isUserHomeRoot(listing.canonicalPath);
   const busy = disabled || state.loading || state.creating;
   const failure = state.failure ? workspaceBrowseCopy(state.failure) : null;
   const notices = listing ? workspaceListingNotices(listing) : [];
@@ -279,6 +284,12 @@ export function WorkspaceFolderBrowser({
         )
       ) : null}
 
+      {listing && homeRoot ? (
+        <p className={styles.pathHelp} data-browse-home-root="true">
+          {t("The home folder cannot be used directly — pick a subfolder below.")}
+        </p>
+      ) : null}
+
       <div className={styles.formSpacer} />
       <div className={styles.footer}>
         <button
@@ -292,9 +303,10 @@ export function WorkspaceFolderBrowser({
         <button
           type="button"
           className={styles.primaryButton}
-          disabled={busy || !listing}
+          disabled={busy || !listing || homeRoot}
+          title={homeRoot ? t("The home folder cannot be used directly — pick a subfolder below.") : undefined}
           onClick={() => {
-            if (listing) onChoose(listing.canonicalPath);
+            if (listing && !homeRoot) onChoose(listing.canonicalPath);
           }}
         >
           {t("Use this folder")}

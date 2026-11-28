@@ -20,7 +20,7 @@ import {
   LaunchTransitionCoordinator,
   type LaunchTransitionLease,
 } from "./launch-transition.ts";
-import { launchFailureMessage } from "./launch-failure.ts";
+import { isChatWorkspaceReservedError, launchFailureMessage } from "./launch-failure.ts";
 import { bindWebSessionIdToProfile } from "./session-identity.ts";
 import { SessionDeletionFence } from "./session-deletion-fence.ts";
 import type {
@@ -2998,7 +2998,13 @@ export function useOctosSession({
         const outcome = await opening;
         if (!launchTransitionRef.current.isCurrent(lease)) return;
         if (outcome !== "opened") {
-          throw new Error("The new coding session could not be opened.");
+          // Surface the typed refusal (e.g. chat_workspace_reserved) so the
+          // wizard shows the real reason and its recovery, not a generic
+          // dead end.
+          const stored = candidateFailureRef.current;
+          throw new Error(
+            stored !== null ? launchFailureMessage(stored) : "The new coding session could not be opened.",
+          );
         }
         onboardingController.reset();
       } catch (reason) {
@@ -3353,7 +3359,10 @@ export function useOctosSession({
     // error (notably the retained-owner capacity boundary). Do not replace it
     // with a generic transition failure while still cleaning up the lease.
     if (reason !== undefined)
-      workspaceController.setError(launchFailureMessage(reason));
+      workspaceController.setError(
+        launchFailureMessage(reason),
+        isChatWorkspaceReservedError(reason) ? "chat_workspace_reserved" : undefined,
+      );
     if (!restoreLaunchChoice(lease)) {
       launchTransitionRef.current.discard(lease);
       setLaunch(EMPTY_LAUNCH_RUNTIME);

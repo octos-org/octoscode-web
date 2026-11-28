@@ -37,6 +37,8 @@ export interface WorkspaceProductState {
   activityTasksBySession: Record<string, TaskListEntry[]>;
   activityUpdatedAt: number | null;
   error: string | null;
+  /** Typed cause of `error` when the failure has a dedicated recovery. */
+  errorKind: string | null;
 }
 
 export const EMPTY_WORKSPACE_PRODUCT: WorkspaceProductState = {
@@ -57,6 +59,7 @@ export const EMPTY_WORKSPACE_PRODUCT: WorkspaceProductState = {
   activityTasksBySession: {},
   activityUpdatedAt: null,
   error: null,
+  errorKind: null,
 };
 
 export function mergeTokenCost(

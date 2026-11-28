@@ -3811,6 +3811,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
     workspaceProduct.state.error === null
       ? null
       : t(workspaceProduct.state.error);
+  const workspaceErrorKind = workspaceProduct.state.errorKind;
   // A launch surface shows the failure beside its exact Session retry action;
   // the sidebar would announce the same failure a second time.
   const launchSurfaceShowsError =
@@ -5445,6 +5446,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
                               ? { browse: workspaceBrowse }
                               : {})}
                             error={workspaceError}
+                            errorKind={workspaceErrorKind}
                             creating={
                               session.status === "connecting" ||
                               workspaceProduct.transitioning
@@ -7120,6 +7122,7 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
               : {})}
             {...(workspaceBrowse ? { browse: workspaceBrowse } : {})}
             error={workspaceError}
+            errorKind={workspaceErrorKind}
             creating={
               session.status === "connecting" || workspaceProduct.transitioning
             }
