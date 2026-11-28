@@ -390,11 +390,14 @@ function OnboardingFallback({ onCancel }: { onCancel: () => void }) {
     <div className={styles.failure}>
       <strong>{t("This server cannot onboard from the Web")}</strong>
       <span>
+        {t("Run the setup on the server, then reconnect this workspace.")}
+      </span>
+      <code>octos init</code>
+      <span>
         {t(
-          "Run the canonical setup on the server, then reconnect this workspace.",
+          "For a server you run on this machine, restart it with `octos serve --solo` instead and finish setup here.",
         )}
       </span>
-      <code>octoscode onboard</code>
       <div className={`launch-actions ${styles.actions}`}>
         <button className="button" type="button" autoFocus onClick={onCancel}>
           {t("Disconnect")}

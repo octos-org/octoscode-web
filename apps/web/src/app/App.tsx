@@ -170,6 +170,7 @@ import {
   rememberKnownSession,
   rememberDraftPrincipal,
   saveComposerDrafts,
+  loadAutoConnect,
   setAutoConnect,
 } from "../features/connection/preferences.ts";
 import {
@@ -1711,15 +1712,33 @@ export function App({ gate }: { gate: ConnectionGateApi }) {
   }, []);
 
   useEffect(() => {
+    // changeConnection parks this ref false while THIS mount is connecting.
+    // A later shell remount — React StrictMode replays mounts in dev — is a
+    // new mount: re-read the persisted autoConnect, or a remount after a
+    // completed wizard drops the tab on the workspace picker with its
+    // Session gone.
+    if (loadAutoConnect(browserStorage("sessionStorage"))) {
+      restoreConnectionRef.current = true;
+    }
+    // Mount only: re-arms once per mount, never after this mount connects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (restoreAttemptedRef.current) return;
-    // A pairing link drives its own connect; nothing else may race it.
-    if (pairingLink) return;
+    // A pairing link drives its own connect; nothing else may race it — but
+    // only while that claim is in flight. Once the claimed connect settled
+    // (the gate clears its claim state), a shell remount — React StrictMode
+    // replays mounts in development — must restore the work instead of
+    // dropping the tab on the workspace picker with its Session gone.
+    const pairingClaimInFlight = pairingLink !== null && gate.panel.pairing;
+    if (pairingClaimInFlight) return;
     if (!restoreConnectionRef.current) return;
     const timer = window.setTimeout(() => {
       if (restoreAttemptedRef.current) return;
       restoreAttemptedRef.current = true;
       const start = autoStartKind({
-        pairingLink: pairingLink !== null,
+        pairingLink: pairingClaimInFlight,
         restoreConnection: restoreConnectionRef.current,
         endpoint: connection.endpoint,
         sessionId: connection.sessionId,
